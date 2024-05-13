@@ -1,0 +1,22 @@
+name = "prunt"
+description = ""
+version = "0.1.0-dev"
+
+authors = ["Liam Powell"]
+maintainers = ["Liam Powell <liam@liampll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "GPL-3.0-or-later"
+website = ""
+tags = []
+
+[build-switches]
+release.optimization = ["-O3", "-gnatn", "-fdata-sections", "-ffunction-sections", "-flto=auto", "-fuse-linker-plugin", "-ffat-lto-objects"]
+development.contracts = "Yes"
+
+[[depends-on]]
+ada_toml = "~0.3.0"
+gnoga = "^2.1.2"
+
+[[pins]]
+gnoga = { path = "../gnoga" }
+# gnoga = { url = "https://github.com/Prunt3D/gnoga.git", branch = "prunt" }

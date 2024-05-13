@@ -1,0 +1,234 @@
+-----------------------------------------------------------------------------
+--                                                                         --
+--                   Part of the Prunt Motion Controller                   --
+--                                                                         --
+--            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--                                                                         --
+--  This program is free software: you can redistribute it and/or modify   --
+--  it under the terms of the GNU General Public License as published by   --
+--  the Free Software Foundation, either version 3 of the License, or      --
+--  (at your option) any later version.                                    --
+--                                                                         --
+--  This program is distributed in the hope that it will be useful,        --
+--  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
+--  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
+--  GNU General Public License for more details.                           --
+--                                                                         --
+--  You should have received a copy of the GNU General Public License      --
+--  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
+--                                                                         --
+-----------------------------------------------------------------------------
+
+with Ada.Numerics.Generic_Elementary_Functions;
+with Ada.Exceptions.Is_Null_Occurrence;
+
+package body Prunt is
+
+   protected body Fatal_Exception_Occurrence_Holder_Type is
+      procedure Set
+        (Cause      : Ada.Task_Termination.Cause_Of_Termination;
+         ID         : Ada.Task_Identification.Task_Id;
+         Occurrence : Ada.Exceptions.Exception_Occurrence)
+      is
+      begin
+         if Ada.Exceptions.Is_Null_Occurrence (Data) then
+            Ada.Exceptions.Save_Occurrence (Data, Occurrence);
+         end if;
+
+         --  Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
+      end Set;
+
+      entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence)
+        when not Ada.Exceptions.Is_Null_Occurrence (Data)
+      is
+      begin
+         Ada.Exceptions.Save_Occurrence (Occurrence, Data);
+      end Get;
+
+      function Is_Set return Boolean is (not Ada.Exceptions.Is_Null_Occurrence (Data));
+   end Fatal_Exception_Occurrence_Holder_Type;
+
+   package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
+   use Math;
+
+   function "*" (Left : Position; Right : Position_Scale) return Scaled_Position is
+   begin
+      return [for I in Axis_Name => Left (I) * Right (I)];
+   end "*";
+
+   function "*" (Left : Position_Offset; Right : Position_Scale) return Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) * Right (I)];
+   end "*";
+
+   function "*" (Left : Position_Scale; Right : Dimensionless) return Position_Scale is
+   begin
+      return [for I in Axis_Name => Left (I) * Right];
+   end "*";
+
+   function "*" (Left : Position_Scale; Right : Length) return Scaled_Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) * Right];
+   end "*";
+
+   function "*" (Left : Position_Scale; Right : Velocity) return Axial_Velocities is
+   begin
+      return [for I in Axis_Name => Left (I) * Right];
+   end "*";
+
+   function "*" (Left : Scaled_Position; Right : Position_Scale) return Scaled_Position is
+   begin
+      return [for I in Axis_Name => Left (I) * Right (I)];
+   end "*";
+
+   function "*" (Left : Scaled_Position; Right : Dimensionless) return Scaled_Position is
+   begin
+      return [for I in Axis_Name => Left (I) * Right];
+   end "*";
+
+   function "*" (Left : Scaled_Position_Offset; Right : Position_Scale) return Scaled_Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) * Right (I)];
+   end "*";
+
+   function "*" (Left : Scaled_Position_Offset; Right : Dimensionless) return Scaled_Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) * Right];
+   end "*";
+
+   function "+" (Left : Scaled_Position; Right : Scaled_Position_Offset) return Scaled_Position is
+   begin
+      return [for I in Axis_Name => Left (I) + Right (I)];
+   end "+";
+
+   function "+" (Left, Right : Position_Scale) return Position_Scale is
+   begin
+      return [for I in Axis_Name => Left (I) + Right (I)];
+   end "+";
+
+   function "+" (Left : Position; Right : Position_Offset) return Position is
+   begin
+      return [for I in Axis_Name => Left (I) + Right (I)];
+   end "+";
+
+   function "-" (Left, Right : Position) return Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) - Right (I)];
+   end "-";
+
+   function "-" (Left, Right : Position_Scale) return Position_Scale is
+   begin
+      return [for I in Axis_Name => Left (I) - Right (I)];
+   end "-";
+
+   function "-" (Left, Right : Scaled_Position) return Scaled_Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) - Right (I)];
+   end "-";
+
+   function "-" (Left, Right : Scaled_Position_Offset) return Scaled_Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) - Right (I)];
+   end "-";
+
+   function "-" (Left : Scaled_Position; Right : Scaled_Position_Offset) return Scaled_Position is
+   begin
+      return [for I in Axis_Name => Left (I) - Right (I)];
+   end "-";
+
+   function "-" (Left : Position; Right : Position_Offset) return Position is
+   begin
+      return [for I in Axis_Name => Left (I) - Right (I)];
+   end "-";
+
+   function "/" (Left : Axial_Velocities; Right : Position_Scale) return Axial_Velocities is
+   begin
+      return [for I in Axis_Name => Left (I) / Right (I)];
+   end "/";
+
+   function "/" (Left : Position_Offset; Right : Length) return Position_Scale is
+   begin
+      return [for I in Axis_Name => Left (I) / Right];
+   end "/";
+
+   function "/" (Left : Position_Scale; Right : Dimensionless) return Position_Scale is
+   begin
+      return [for I in Axis_Name => Left (I) / Right];
+   end "/";
+
+   function "/" (Left : Scaled_Position_Offset; Right : Length) return Position_Scale is
+   begin
+      return [for I in Axis_Name => Left (I) / Right];
+   end "/";
+
+   function "/" (Left : Scaled_Position; Right : Dimensionless) return Scaled_Position is
+   begin
+      return [for I in Axis_Name => Left (I) / Right];
+   end "/";
+
+   function "/" (Left : Scaled_Position; Right : Position_Scale) return Scaled_Position is
+   begin
+      return [for I in Axis_Name => Left (I) / Right (I)];
+   end "/";
+
+   function "abs" (Left : Position_Offset) return Length is
+      Square_Sum : Area := 0.0 * mm**2;
+   begin
+      for X of Left loop
+         Square_Sum := Square_Sum + X * X;
+      end loop;
+
+      return Sqrt (Square_Sum);
+   end "abs";
+
+   function "abs" (Left : Position_Scale) return Dimensionless is
+      Square_Sum : Dimensionless := 0.0;
+   begin
+      for X of Left loop
+         Square_Sum := Square_Sum + X * X;
+      end loop;
+
+      return Sqrt (Square_Sum);
+   end "abs";
+
+   function "abs" (Left : Scaled_Position_Offset) return Length is
+      Square_Sum : Area := 0.0 * mm**2;
+   begin
+      for X of Left loop
+         Square_Sum := Square_Sum + X * X;
+      end loop;
+
+      return Sqrt (Square_Sum);
+   end "abs";
+
+   function Dot (Left, Right : Position_Scale) return Dimensionless is
+      Sum : Dimensionless := 0.0;
+   begin
+      for I in Axis_Name loop
+         Sum := Sum + Left (I) * Right (I);
+      end loop;
+
+      return Sum;
+   end Dot;
+
+   function Dot (Left : Scaled_Position_Offset; Right : Position_Scale) return Length is
+      Sum : Length := 0.0 * mm;
+   begin
+      for I in Axis_Name loop
+         Sum := Sum + Left (I) * Right (I);
+      end loop;
+
+      return Sum;
+   end Dot;
+
+   function Dot (Left, Right : Scaled_Position_Offset) return Area is
+      Sum : Area := 0.0 * mm**2;
+   begin
+      for I in Axis_Name loop
+         Sum := Sum + Left (I) * Right (I);
+      end loop;
+
+      return Sum;
+   end Dot;
+
+end Prunt;
