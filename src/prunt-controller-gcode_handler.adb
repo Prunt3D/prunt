@@ -22,6 +22,9 @@
 with Prunt.Gcode_Parser; use Prunt.Gcode_Parser;
 with Ada.Text_IO;        use Ada.Text_IO;
 with Ada.Exceptions;
+with Prunt.TMC_Types.TMC2240;
+
+use type Prunt.TMC_Types.TMC2240.UART_CRC;
 
 package body Prunt.Controller.Gcode_Handler is
 
@@ -245,6 +248,35 @@ package body Prunt.Controller.Gcode_Handler is
                      Is_Homed := [others => False];
                      raise;
                end;
+            when TMC_Dump_Kind =>
+               for S in Generic_Types.Stepper_Name loop
+                  if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
+                     Ada.Text_IO.Put_Line ("TMC dump for " & S'Image & ":");
+                     for R in TMC_Types.TMC2240.UART_Register_Address loop
+                        declare
+                           Query          : TMC_Types.TMC2240.UART_Query_Message :=
+                             (Bytes_Mode => False,
+                              Content    =>
+                                (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
+                                 Register => R,
+                                 others   => <>));
+                           Reply          : TMC_Types.TMC2240.UART_Data_Message;
+                           Receive_Failed : Boolean;
+                        begin
+                           Ada.Text_IO.Put_Line (R'Image);
+                           Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                           Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
+                           if Receive_Failed then
+                              Ada.Text_IO.Put_Line ("No response.");
+                           elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
+                              Ada.Text_IO.Put_Line ("Bad CRC.");
+                           else
+                              Ada.Text_IO.Put_Line (Reply.Content'Image);
+                           end if;
+                        end;
+                     end loop;
+                  end if;
+               end loop;
 
             when others =>
                raise Constraint_Error with "Command not implemented.";

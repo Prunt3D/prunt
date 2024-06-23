@@ -332,6 +332,8 @@ package body Prunt.Gcode_Parser is
                Comm := (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0);
             when 109 =>
                Comm := (Kind => Wait_Hotend_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
+            when 122 =>
+               Comm := (Kind => TMC_Dump_Kind);
             when 140 =>
                Comm := (Kind => Set_Bed_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
             when 141 =>

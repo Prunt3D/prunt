@@ -37,13 +37,14 @@ package Prunt.Gcode_Parser is
       Wait_Bed_Temperature_Kind,
       Set_Chamber_Temperature_Kind,
       Wait_Chamber_Temperature_Kind,
-      Set_Fan_Speed_Kind);
+      Set_Fan_Speed_Kind,
+      TMC_Dump_Kind);
 
    type Axes_Set is array (Axis_Name) of Boolean;
 
    type Command (Kind : Command_Kind := None_Kind) is record
       case Kind is
-         when None_Kind | Pause_Kind =>
+         when None_Kind | Pause_Kind | TMC_Dump_Kind =>
             null;
          when Move_Kind =>
             Old_Pos  : Position;
