@@ -156,8 +156,6 @@ package body Prunt.Controller is
                               Receive_Failed : Boolean;
                            begin
                               Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-                              Ada.Text_IO.Put_Line (Query.Content'Image);
-                              Ada.Text_IO.Put_Line (Query.Bytes'Image);
                               Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
                               if Receive_Failed then
                                  raise TMC_UART_Error with "No response from stepper " & S'Image;
@@ -169,8 +167,6 @@ package body Prunt.Controller is
                                  raise TMC_UART_Error
                                    with "Unexpected version from " & S'Image & " (" &
                                    Reply.Content.IOIN_Data.Version'Image & ")";
-                              else
-                                 Ada.Text_IO.Put_Line (Reply.Content'Image);
                               end if;
                            end;
 
