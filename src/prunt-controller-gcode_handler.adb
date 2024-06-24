@@ -61,6 +61,8 @@ package body Prunt.Controller.Gcode_Handler is
       Axial_Homing_Params      : array (Axis_Name) of My_Config.Homing_Parameters;
       Switchwise_Switch_Params : array (Generic_Types.Input_Switch_Name) of My_Config.Input_Switch_Parameters;
 
+      G_Code_Assignment_Params : My_Config.G_Code_Assignment_Parameters;
+
       Command_Constraint_Error : exception;
 
       procedure Double_Tap_Home_Axis (Axis : Axis_Name; Pos_After : in out Position) is
@@ -302,6 +304,22 @@ package body Prunt.Controller.Gcode_Handler is
                      Stepper_Hardware (S).Disable_Stepper (S);
                   end if;
                end loop;
+            when Set_Hotend_Temperature_Kind =>
+               Corner_Data.Heaters (G_Code_Assignment_Params.Hotend_Heater) := Command.Target_Temperature;
+               My_Planner.Enqueue
+                 ((Kind              => My_Planner.Move_Kind,
+                   Pos               => Command.Pos,
+                   Feedrate          => 0.000_1 * mm / s,
+                   Corner_Extra_Data => Corner_Data));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+            when Set_Bed_Temperature_Kind =>
+               Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
+               My_Planner.Enqueue
+                 ((Kind              => My_Planner.Move_Kind,
+                   Pos               => Command.Pos,
+                   Feedrate          => 0.000_1 * mm / s,
+                   Corner_Extra_Data => Corner_Data));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             when TMC_Dump_Kind =>
                for S in Generic_Types.Stepper_Name loop
                   if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
@@ -339,6 +357,7 @@ package body Prunt.Controller.Gcode_Handler is
    begin
       accept Start do
          My_Config.Config_File.Read (Kinematics_Params);
+         My_Config.Config_File.Read (G_Code_Assignment_Params);
 
          for I in Generic_Types.Input_Switch_Name loop
             My_Config.Config_File.Read (Switchwise_Switch_Params (I), I);
