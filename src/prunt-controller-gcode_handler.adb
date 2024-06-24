@@ -272,6 +272,36 @@ package body Prunt.Controller.Gcode_Handler is
                      Stepper_Hardware (S).Enable_Stepper (S);
                   end if;
                end loop;
+            when Disable_Steppers_Kind =>
+               for A in Axis_Name loop
+                  if Command.Axes (A) then
+                     Is_Homed (A) := False;
+                  end if;
+               end loop;
+
+               for S in Generic_Types.Stepper_Name loop
+                  case Kinematics_Params.Kind is
+                     when My_Config.Core_XY_Kind =>
+                        if (Command.Axes (X_Axis) or Command.Axes (Y_Axis)) and
+                          (Kinematics_Params.A_Steppers (S) or Kinematics_Params.B_Steppers (S))
+                        then
+                           Stepper_Hardware (S).Disable_Stepper (S);
+                        end if;
+                     when My_Config.Cartesian_Kind =>
+                        if Command.Axes (X_Axis) and Kinematics_Params.X_Steppers (S) then
+                           Stepper_Hardware (S).Disable_Stepper (S);
+                        end if;
+                        if Command.Axes (Y_Axis) and Kinematics_Params.Y_Steppers (S) then
+                           Stepper_Hardware (S).Disable_Stepper (S);
+                        end if;
+                  end case;
+                  if Command.Axes (E_Axis) and Kinematics_Params.E_Steppers (S) then
+                     Stepper_Hardware (S).Disable_Stepper (S);
+                  end if;
+                  if Command.Axes (Z_Axis) and Kinematics_Params.Z_Steppers (S) then
+                     Stepper_Hardware (S).Disable_Stepper (S);
+                  end if;
+               end loop;
             when TMC_Dump_Kind =>
                for S in Generic_Types.Stepper_Name loop
                   if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
