@@ -46,7 +46,11 @@ package body Prunt.Gcode_Parser is
 
    function Make_Context (Initial_Position : Position; Initial_Feedrate : Velocity) return Context is
    begin
-      return (Relative_Mode => False, Pos => Initial_Position, Feedrate => Initial_Feedrate);
+      return
+        (XYZ_Relative_Mode => False,
+         E_Relative_Mode   => False,
+         Pos               => Initial_Position,
+         Feedrate          => Initial_Feedrate);
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Comm : out Command) is
@@ -258,17 +262,22 @@ package body Prunt.Gcode_Parser is
          case Params ('G').Integer_Value is
             when 0 | 1 =>
                Comm := (Kind => Move_Kind, others => <>);
-               if Ctx.Relative_Mode then
+               if Ctx.XYZ_Relative_Mode then
                   Comm.Pos (X_Axis) := Comm.Pos (X_Axis) + Floatify_Or_Default ('X', 0.0) * mm;
                   Comm.Pos (Y_Axis) := Comm.Pos (Y_Axis) + Floatify_Or_Default ('Y', 0.0) * mm;
                   Comm.Pos (Z_Axis) := Comm.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
-                  Comm.Pos (E_Axis) := Comm.Pos (E_Axis) + Floatify_Or_Default ('E', 0.0) * mm;
                else
                   Comm.Pos (X_Axis) := Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm;
                   Comm.Pos (Y_Axis) := Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm;
                   Comm.Pos (Z_Axis) := Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm;
+               end if;
+
+               if Ctx.E_Relative_Mode then
+                  Comm.Pos (E_Axis) := Comm.Pos (E_Axis) + Floatify_Or_Default ('E', 0.0) * mm;
+               else
                   Comm.Pos (E_Axis) := Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm;
                end if;
+
                Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
             when 4 =>
                Comm := (Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s);
@@ -284,10 +293,12 @@ package body Prunt.Gcode_Parser is
                     Z_Axis  => No_Value_Or_False_Or_Error ('Z')],
                   Pos_Before => Ctx.Pos);
             when 90 =>
-               Ctx.Relative_Mode := False;
+               Ctx.XYZ_Relative_Mode := False;
+               Ctx.E_Relative_Mode   := False;
                Comm := (Kind => None_Kind);
             when 91 =>
-               Ctx.Relative_Mode := True;
+               Ctx.XYZ_Relative_Mode := True;
+               Ctx.E_Relative_Mode   := True;
                Comm := (Kind => None_Kind);
             when 92 =>
                Comm :=
@@ -322,6 +333,12 @@ package body Prunt.Gcode_Parser is
                     X_Axis  => No_Value_Or_False_Or_Error ('X'),
                     Y_Axis  => No_Value_Or_False_Or_Error ('Y'),
                     Z_Axis  => No_Value_Or_False_Or_Error ('Z')]);
+            when 82 =>
+               Ctx.E_Relative_Mode := False;
+               Comm := (Kind => None_Kind);
+            when 83 =>
+               Ctx.E_Relative_Mode := True;
+               Comm := (Kind => None_Kind);
             when 104 =>
                Comm := (Kind => Set_Hotend_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
             when 106 =>

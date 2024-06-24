@@ -1,4 +1,3 @@
-
 -----------------------------------------------------------------------------
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
@@ -86,9 +85,10 @@ package Prunt.Gcode_Parser is
 private
 
    type Context is record
-      Relative_Mode : Boolean;
-      Pos           : Position;
-      Feedrate      : Velocity;
+      XYZ_Relative_Mode : Boolean;
+      E_Relative_Mode   : Boolean;
+      Pos               : Position;
+      Feedrate          : Velocity;
    end record;
 
 end Prunt.Gcode_Parser;
