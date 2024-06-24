@@ -280,30 +280,31 @@ package body Prunt.Gcode_Parser is
 
                Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
             when 4 =>
-               Comm := (Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s);
+               Comm := (Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s, Pos => Ctx.Pos);
             when 21 =>
-               Comm := (Kind => None_Kind);
+               Comm := (Kind => None_Kind, Pos => Ctx.Pos);
             when 28 =>
                Comm :=
                  (Kind       => Home_Kind,
                   Axes       =>
                     [E_Axis => No_Value_Or_False_Or_Error ('E'),
-                    X_Axis  => No_Value_Or_False_Or_Error ('X'),
-                    Y_Axis  => No_Value_Or_False_Or_Error ('Y'),
-                    Z_Axis  => No_Value_Or_False_Or_Error ('Z')],
-                  Pos_Before => Ctx.Pos);
+                     X_Axis => No_Value_Or_False_Or_Error ('X'),
+                     Y_Axis => No_Value_Or_False_Or_Error ('Y'),
+                     Z_Axis => No_Value_Or_False_Or_Error ('Z')],
+                  Pos_Before => Ctx.Pos,
+                  Pos        => Ctx.Pos);
             when 90 =>
                Ctx.XYZ_Relative_Mode := False;
                Ctx.E_Relative_Mode   := False;
-               Comm := (Kind => None_Kind);
+               Comm := (Kind => None_Kind, Pos => Ctx.Pos);
             when 91 =>
                Ctx.XYZ_Relative_Mode := True;
                Ctx.E_Relative_Mode   := True;
-               Comm := (Kind => None_Kind);
+               Comm := (Kind => None_Kind, Pos => Ctx.Pos);
             when 92 =>
                Comm :=
                  (Kind    => Reset_Position_Kind,
-                  New_Pos => (Ctx.Pos with delta E_Axis => Floatify_Or_Error ('E')));
+                  New_Pos => (Ctx.Pos with delta E_Axis => Floatify_Or_Error ('E')), Pos => Ctx.Pos);
             when others =>
                raise Bad_Line with "Unknown G code: " & Params ('G').Integer_Value'Image;
          end case;
@@ -316,55 +317,76 @@ package body Prunt.Gcode_Parser is
 
          case Params ('M').Integer_Value is
             when 0 | 1 =>
-               Comm := (Kind => Pause_Kind);
+               Comm := (Kind => Pause_Kind, Pos => Ctx.Pos);
             when 17 =>
                Comm :=
                  (Kind => Enable_Steppers_Kind,
                   Axes =>
                     [E_Axis => No_Value_Or_False_Or_Error ('E'),
-                    X_Axis  => No_Value_Or_False_Or_Error ('X'),
-                    Y_Axis  => No_Value_Or_False_Or_Error ('Y'),
-                    Z_Axis  => No_Value_Or_False_Or_Error ('Z')]);
+                     X_Axis => No_Value_Or_False_Or_Error ('X'),
+                     Y_Axis => No_Value_Or_False_Or_Error ('Y'),
+                     Z_Axis => No_Value_Or_False_Or_Error ('Z')],
+                  Pos  => Ctx.Pos);
             when 18 | 84 =>
                Comm :=
                  (Kind => Disable_Steppers_Kind,
                   Axes =>
                     [E_Axis => No_Value_Or_False_Or_Error ('E'),
-                    X_Axis  => No_Value_Or_False_Or_Error ('X'),
-                    Y_Axis  => No_Value_Or_False_Or_Error ('Y'),
-                    Z_Axis  => No_Value_Or_False_Or_Error ('Z')]);
+                     X_Axis => No_Value_Or_False_Or_Error ('X'),
+                     Y_Axis => No_Value_Or_False_Or_Error ('Y'),
+                     Z_Axis => No_Value_Or_False_Or_Error ('Z')],
+                  Pos  => Ctx.Pos);
             when 82 =>
                Ctx.E_Relative_Mode := False;
-               Comm := (Kind => None_Kind);
+               Comm                := (Kind => None_Kind, Pos => Ctx.Pos);
             when 83 =>
                Ctx.E_Relative_Mode := True;
-               Comm := (Kind => None_Kind);
+               Comm                := (Kind => None_Kind, Pos => Ctx.Pos);
             when 104 =>
-               Comm := (Kind => Set_Hotend_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
+               Comm :=
+                 (Kind               => Set_Hotend_Temperature_Kind,
+                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                  Pos                => Ctx.Pos);
             when 106 =>
                Comm :=
                  (Kind      => Set_Fan_Speed_Kind,
-                  Fan_Speed => Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0)));
+                  Fan_Speed =>
+                    Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0)),
+                  Pos       => Ctx.Pos);
             when 107 =>
-               Comm := (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0);
+               Comm := (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Pos => Ctx.Pos);
             when 109 =>
-               Comm := (Kind => Wait_Hotend_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
+               Comm :=
+                 (Kind               => Wait_Hotend_Temperature_Kind,
+                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                  Pos                => Ctx.Pos);
             when 122 =>
-               Comm := (Kind => TMC_Dump_Kind);
+               Comm := (Kind => TMC_Dump_Kind, Pos => Ctx.Pos);
             when 140 =>
-               Comm := (Kind => Set_Bed_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
+               Comm :=
+                 (Kind               => Set_Bed_Temperature_Kind,
+                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                  Pos                => Ctx.Pos);
             when 141 =>
-               Comm := (Kind => Set_Chamber_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
+               Comm :=
+                 (Kind               => Set_Chamber_Temperature_Kind,
+                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                  Pos                => Ctx.Pos);
             when 190 =>
-               Comm := (Kind => Wait_Bed_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
+               Comm :=
+                 (Kind               => Wait_Bed_Temperature_Kind,
+                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                  Pos                => Ctx.Pos);
             when 191 =>
                Comm :=
-                 (Kind => Wait_Chamber_Temperature_Kind, Target_Temperature => Floatify_Or_Error ('S') * celcius);
+                 (Kind               => Wait_Chamber_Temperature_Kind,
+                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                  Pos                => Ctx.Pos);
             when others =>
                raise Bad_Line with "Unknown M code: " & Params ('M').Integer_Value'Image;
          end case;
       else
-         Comm := (Kind => None_Kind);
+         Comm := (Kind => None_Kind, Pos => Ctx.Pos);
       end if;
 
       for I in Params'Range loop
@@ -382,6 +404,7 @@ package body Prunt.Gcode_Parser is
          end if;
       end if;
 
+      Comm.Pos := Ctx.Pos;
    end Parse_Line;
 
    procedure Reset_Position (Ctx : in out Context; Pos : Position) is

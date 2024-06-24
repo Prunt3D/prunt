@@ -42,12 +42,12 @@ package Prunt.Gcode_Parser is
    type Axes_Set is array (Axis_Name) of Boolean;
 
    type Command (Kind : Command_Kind := None_Kind) is record
+      Pos : Position;
       case Kind is
          when None_Kind | Pause_Kind | TMC_Dump_Kind =>
             null;
          when Move_Kind =>
             Old_Pos  : Position;
-            Pos      : Position;
             Feedrate : Velocity;
          when Reset_Position_Kind =>
             New_Pos : Position;
