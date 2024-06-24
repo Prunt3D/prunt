@@ -386,6 +386,10 @@ package body Prunt.Controller is
          Wait_Until_Idle (Last_Command_Index);
       end if;
 
+      if Data.Wait_For_Heater then
+         Wait_Until_Heater_Stable (Last_Command_Index, Data.Wait_For_Heater_Name);
+      end if;
+
       My_Gcode_Handler.Finished_Block (Data, First_Accel_Distance);
       Reset_Position (Next_Block_Pos);
    end Finish_Planner_Block;

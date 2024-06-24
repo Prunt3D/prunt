@@ -312,6 +312,13 @@ package body Prunt.Controller.Gcode_Handler is
                    Feedrate          => 0.000_1 * mm / s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+            when Wait_Hotend_Temperature_Kind =>
+               My_Planner.Enqueue
+                 ((Kind             => My_Planner.Flush_Kind,
+                   Flush_Extra_Data =>
+                     (Wait_For_Heater      => True,
+                      Wait_For_Heater_Name => G_Code_Assignment_Params.Hotend_Heater,
+                      others               => <>)));
             when Set_Bed_Temperature_Kind =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
@@ -320,6 +327,13 @@ package body Prunt.Controller.Gcode_Handler is
                    Feedrate          => 0.000_1 * mm / s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+            when Wait_Bed_Temperature_Kind =>
+               My_Planner.Enqueue
+                 ((Kind             => My_Planner.Flush_Kind,
+                   Flush_Extra_Data =>
+                     (Wait_For_Heater      => True,
+                      Wait_For_Heater_Name => G_Code_Assignment_Params.Bed_Heater,
+                      others               => <>)));
             when TMC_Dump_Kind =>
                for S in Generic_Types.Stepper_Name loop
                   if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then

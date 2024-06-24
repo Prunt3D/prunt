@@ -133,6 +133,8 @@ private
       Is_Conditional_Move      : Boolean           := False;
       Conditional_Switch       : Input_Switch_Name := Input_Switch_Name'First;
       Conditional_Hit_On_State : Pin_State         := High_State;
+      Wait_For_Heater          : Boolean           := False;
+      Wait_For_Heater_Name     : Heater_Name       := Heater_Name'First;
    end record;
 
    type Corner_Extra_Data is record
