@@ -212,6 +212,10 @@ package body Prunt.Controller.Gcode_Handler is
                    Reset_Pos       => Command.New_Pos,
                   Flush_Extra_Data => (others => <>)));
                Gcode_Parser.Reset_Position (Parser_Context, Command.New_Pos);
+            when Dwell_Kind =>
+               My_Planner.Enqueue
+                 ((Kind             => My_Planner.Flush_Kind,
+                   Flush_Extra_Data => (Dwell_Time => Command.Dwell_Time, others => <>)));
             when Home_Kind =>
                declare
                   Pos_After    : Position                                := Command.Pos_Before;
@@ -363,7 +367,6 @@ package body Prunt.Controller.Gcode_Handler is
                      end loop;
                   end if;
                end loop;
-
             when others =>
                raise Constraint_Error with "Command not implemented.";
          end case;

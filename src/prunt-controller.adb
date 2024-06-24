@@ -386,6 +386,12 @@ package body Prunt.Controller is
          Wait_Until_Idle (Last_Command_Index);
       end if;
 
+      --  TODO: Should we require the user to implement this instead?
+      if Data.Dwell_Time /= Time (0.0) then
+         Wait_Until_Idle (Last_Command_Index);
+         delay Duration (Data.Dwell_Time / s);
+      end if;
+
       if Data.Wait_For_Heater then
          Wait_Until_Heater_Stable (Last_Command_Index, Data.Wait_For_Heater_Name);
       end if;
