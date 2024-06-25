@@ -24,6 +24,8 @@ with TOML;
 with Ada.Strings.Bounded;
 with Prunt.Thermistors; use Prunt.Thermistors;
 
+--  Serialises and deserialises records to and from a TOML file.
+
 generic
    type Stepper_Name is (<>);
    type Stepper_Kinds_Type is array (Stepper_Name) of Stepper_Kind;

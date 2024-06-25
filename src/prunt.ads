@@ -34,12 +34,17 @@ package Prunt is
    type Pin_State is (High_State, Low_State);
 
    protected type Fatal_Exception_Occurrence_Holder_Type is
+      function Is_Set return Boolean;
+      --  Check if any exceptions have been stored.
+
       procedure Set
         (Cause      : Ada.Task_Termination.Cause_Of_Termination;
          ID         : Ada.Task_Identification.Task_Id;
-         Occurrence : Ada.Exceptions.Exception_Occurrence);
+         Occurrence : Ada.Exceptions.Exception_Occurrence) with Post => Is_Set;
+      --  Store an exception if no exception has been stored previously. Also prints all exceptions.
+
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence);
-      function Is_Set return Boolean;
+      --  Get the stored exception, or Null_Occurrence if none have been stored.
    private
       function Null_Occurrence return Ada.Exceptions.Exception_Occurrence;
       Data : aliased Ada.Exceptions.Exception_Occurrence := Null_Occurrence;

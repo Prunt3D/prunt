@@ -25,9 +25,15 @@ private generic
 package Prunt.Controller.Gcode_Handler is
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean);
+   --  Try to enqueue a file to be executed. Succeeded will be set False if there is already a file running.
+
    procedure Try_Queue_Command (Command : String; Succeeded : out Boolean);
+   --  Try to enqueue a command to be executed. Succeeded will be set False if there is already a file or command
+   --  running.
 
    procedure Finished_Block (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Length);
+   --  Report that a block has finished executing. First_Segment_Accel_Distance should be set to the distance of the
+   --  first acceleration profile, this is used to determine at what point a homing loop move started in homing blocks.
 
    task Runner is
       entry Start;
@@ -36,6 +42,7 @@ package Prunt.Controller.Gcode_Handler is
 private
 
    protected Gcode_Queue is
+      --  TODO: Currently we use a delay loop for getting files and commands. We should use entries here instead.
       procedure Try_Set_File (In_File : String; Succeeded : out Boolean);
       procedure Clear_File;
       function Get_File return String;

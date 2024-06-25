@@ -32,16 +32,32 @@ generic
 package Prunt.Controller_Generic_Types is
 
    type Stepper_Position is array (Stepper_Name) of Dimensionless;
+   --  Position multiplied by mm/step values provided by the user. This array is using floating point types and the
+   --  numbers are not rounded. An implementation is allowed to round these values if the decimal part is not useful.
+
    type Fan_PWMs is array (Fan_Name) of PWM_Scale;
    type Heater_Targets is array (Heater_Name) of Temperature;
 
    type Queued_Command is record
       Index           : Command_Index;
+      --  Monotonically increasing identifier.
       Pos             : Stepper_Position;
+      --  Position to move to.
       Fans            : Fan_PWMs;
+      --  Fan PWMs to set.
       Heaters         : Heater_Targets;
+      --  Temperatures for heaters to target. In the case that a value is too low, it should be clipped. In the case
+      --  that a value is too high, an exception should be raised.
+      --
+      --  TODO: We should accept a maximum value here and raise the exception within Prunt.
       Safe_Stop_After : Boolean;
+      --  If True then the machine can stop after executing this move without violating kinematic constraints. If the
+      --  implementation runs out of moves to execute before receiving a Safe_Stop_After move then an exception should
+      --  be raised. It is recommended that an implementation buffers moves until a Safe_Stop_After move is received,
+      --  at which point it should begin executing the buffer, if a buffer becomes full then execution should of course
+      --  be started at that point instead.
       Loop_Until_Hit  : Boolean;
+      --  If True then this move should be looped until the condition set in Setup_For_Loop_Move is met.
    end record;
 
    --  Vendor defined parameters:

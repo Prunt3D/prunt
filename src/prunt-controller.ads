@@ -34,11 +34,17 @@ generic
    use Generic_Types;
 
    Stepper_Hardware : Generic_Types.Stepper_Hardware_Parameters_Array_Type;
+   --  The parameters of the stepper drivers installed on the hardware that the implementation is designed for.
 
-   Interpolation_Time      : Time;
+   Interpolation_Time : Time;
+   --  The time delta for all moves except loop moves.
+
    Loop_Interpolation_Time : Time;
+   --  The time delta for loop moves.
 
    with procedure Setup (Heaters : Heater_Parameters_Array_Type; Thermistors : Thermistor_Parameters_Array_Type);
+   --  Run any required setup and store parameters for later use. This procedure will only be called once and will be
+   --  called before any other procedures.
 
    with procedure Setup_For_Loop_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
    --  Setup the step generator for an upcoming loop move. A loop move should stop looping when the state of Switch =
@@ -101,6 +107,7 @@ generic
 package Prunt.Controller is
 
    procedure Run;
+   --  Start the controller. Does not return while the controller is running.
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature);
    --  Report the current thermistor output. There are no restrictions on how often this procedure needs to be called.
@@ -122,6 +129,7 @@ private
    --  plain variable but that is a GNAT extension and of course introduces the risk of dangling pointers.
 
    Config_Constraint_Error : exception;
+   --  Raised when the configuration file is found to be invalid during setup.
 
    procedure Helper_Lock_Memory with
      Import => True, Convention => C, External_Name => "prunt_controller_helper_lock_memory";

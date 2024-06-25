@@ -25,6 +25,9 @@ package body Prunt.Motion_Planner.PH_Beziers is
 
    function Distance_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length is
       --  Note that this assumes symmetrical curves as it makes the computation significantly faster.
+
+      --  The details of this implementation are here:
+      --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
       L : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
       B : constant Length := abs (Bez.Control_Points (4) - Bez.Control_Points (5));
    begin
@@ -44,6 +47,9 @@ package body Prunt.Motion_Planner.PH_Beziers is
    end Distance_At_T;
 
    function T_At_Distance (Bez : PH_Bezier; Distance : Length) return Curve_Parameter is
+      --  TODO: Currently we use a binary search to solve this, maybe there is some clever analytical solution that we
+      --  could use instead.
+
       Result : Curve_Parameter;
       Lower  : Curve_Parameter := 0.0;
       Upper  : Curve_Parameter := 1.0;
@@ -81,18 +87,18 @@ package body Prunt.Motion_Planner.PH_Beziers is
    end Inverse_Curvature;
 
    function Midpoint (Bez : PH_Bezier) return Scaled_Position is
-   begin
       --  It is possible to compute the midpoint by multiplying the corner deviation by the unit bisector of the two
       --  vectors from the corner to the start/finish. The corner deviation may be computed by the following equation:
       --  Midpoint = (Sine_Secondary_Angle / 2.0**14) * Base_Length *
       --    ((397.0 / 429.0) + 10_207.0 + (2.0**14 * 1_225.0) / (858.8 * Cosine_Secondary_Angle))
       --
       --  This method may be used if a speed improvement is needed.
-
+   begin
       return Point_At_T (Bez, 0.5);
    end Midpoint;
 
    function Point_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position is
+      --  Uses De Casteljau's algorithm.
       Bez_2 : PH_Control_Points := Bez.Control_Points;
    begin
       for J in reverse Bez_2'First .. Bez_2'Last - 1 loop
@@ -105,6 +111,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
    end Point_At_T;
 
    function Tangent_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position_Offset is
+      --  Uses De Casteljau's algorithm and returns the vector between the two points at the second last iteration.
       Bez_2 : PH_Control_Points := Bez.Control_Points;
    begin
       for J in reverse Bez_2'First + 1 .. Bez_2'Last - 1 loop
@@ -116,10 +123,13 @@ package body Prunt.Motion_Planner.PH_Beziers is
       return Bez_2 (Bez_2'First + 1) - Bez_2 (Bez_2'First);
    end Tangent_At_T;
 
-   --  This method is slower than Point_At_T on most CPUs, but may be useful if this code is ported to a GPU or FPGA.
-   --  It may also be faster for cases where T is known at compile time, but I am not aware of any methods to detect
-   --  that with GCC.
    function Point_At_T_V2 (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position is
+      --  This method is slower than Point_At_T on most CPUs, but may be useful if this code is ported to a GPU or
+      --  FPGA. It may also be faster for cases where T is known at compile time, but I am not aware of any methods to
+      --  detect that with GCC.
+
+      --  The details of this implementation are here:
+      --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
    begin
       return
         Bez.Control_Points (0) * ((1.0 - T)**15) +
