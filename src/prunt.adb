@@ -47,6 +47,13 @@ package body Prunt is
       end Get;
 
       function Is_Set return Boolean is (not Ada.Exceptions.Is_Null_Occurrence (Data));
+
+      function Null_Occurrence return Ada.Exceptions.Exception_Occurrence is
+      begin
+         return X : Ada.Exceptions.Exception_Occurrence do
+            Ada.Exceptions.Save_Occurrence (X, Ada.Exceptions.Null_Occurrence);
+         end return;
+      end Null_Occurrence;
    end Fatal_Exception_Occurrence_Holder_Type;
 
    package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);

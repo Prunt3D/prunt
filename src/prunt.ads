@@ -41,7 +41,8 @@ package Prunt is
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence);
       function Is_Set return Boolean;
    private
-      Data : aliased Ada.Exceptions.Exception_Occurrence;
+      function Null_Occurrence return Ada.Exceptions.Exception_Occurrence;
+      Data : aliased Ada.Exceptions.Exception_Occurrence := Null_Occurrence;
    end Fatal_Exception_Occurrence_Holder_Type;
 
    --  You may notice a lot of math similar to 5.0**(1/2) here when using the below types. This may seem like it should
