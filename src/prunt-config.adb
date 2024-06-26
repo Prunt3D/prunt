@@ -449,8 +449,8 @@ package body Prunt.Config is
                Write (Data, Thermistor, Append_Only => True);
                Table     := TOML_Data.Get ("Thermistor").Get (Thermistor'Image);
                Data.SH_A := From_TOML (Table.Get ("SH_A"));
-               Data.SH_C := From_TOML (Table.Get ("SH_B"));
-               Data.SH_B := From_TOML (Table.Get ("SH_C"));
+               Data.SH_B := From_TOML (Table.Get ("SH_B"));
+               Data.SH_C := From_TOML (Table.Get ("SH_C"));
             when Callendar_Van_Dusen_Kind =>
                Data := (Kind => Callendar_Van_Dusen_Kind, others => <>);
                Write (Data, Thermistor, Append_Only => True);
