@@ -38,6 +38,9 @@ package body Prunt.Controller is
      Atomic_Components, Volatile_Components;
    Last_Position : Atomic_Volatile_Position := (others => Length (0.0));
 
+   Last_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0)) with
+     Atomic_Components, Volatile_Components;
+
    package My_Gcode_Handler is new Gcode_Handler;
 
    function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean is
@@ -323,8 +326,12 @@ package body Prunt.Controller is
       end Get;
    end Status_Message;
 
+   procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
+   begin
+      Last_Temperatures (Thermistor) := Temp;
+   end Report_Temperature;
+
    --  TODO
-   procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is null;
    procedure Report_Last_Command_Executed (Index : Command_Index) is null;
 
    procedure Report_External_Error (Message : String) is
