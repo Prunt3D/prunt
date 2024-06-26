@@ -20,10 +20,13 @@
 -----------------------------------------------------------------------------
 
 private with Ada.Text_IO;
+private with UXStrings;
 
 package Prunt.GUI is
 
 private
+
+   use UXStrings;
 
    Nice_Axis_Names : constant array (Axis_Name) of String (1 .. 6) :=
      [X_Axis => "X Axis", Y_Axis => "Y Axis", Z_Axis => "Z Axis", E_Axis => "E Axis"];
@@ -36,6 +39,9 @@ private
       Aft         : Ada.Text_IO.Field := Number'Digits - 1;
       Exp         : Ada.Text_IO.Field := 3;
       Zero_Filled : Boolean           := False)
-      return String;
+     return String;
+
+   --  The default 'Image outputs scientific notion, which isn't very user friendly, so we use this instead.
+   function DF_Image (Number : Dimensioned_Float) return UXString;
 
 end Prunt.GUI;

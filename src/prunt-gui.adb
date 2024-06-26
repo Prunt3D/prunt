@@ -72,4 +72,26 @@ package body Prunt.GUI is
       return Adjust (Image (Start .. Image'Last), Width, Value < 0.0, Zero_Filled);
    end Float_Image;
 
+   function DF_Image (Number : Dimensioned_Float) return UXString is
+      function Dimensioned_Float_Image is new Float_Image (Dimensioned_Float);
+      Raw : constant String :=
+        Dimensioned_Float_Image (Number, Fore => 1, Aft => Dimensioned_Float'Digits - 1, Exp => 0);
+   begin
+      for I in reverse Raw'Range loop
+         if Raw (I) /= '0' then
+            if Raw (I) = '.' then
+               if I - Raw'First > Dimensioned_Float'Digits + 1 then
+                  return UXStrings.From_UTF_8 (Number'Image).Trim (Ada.Strings.Both);
+               else
+                  return UXStrings.From_UTF_8 (Raw (Raw'First .. I + 1)).Trim (Ada.Strings.Both);
+               end if;
+            else
+               return UXStrings.From_UTF_8 (Raw (Raw'First .. I)).Trim (Ada.Strings.Both);
+            end if;
+         end if;
+      end loop;
+
+      raise Program_Error;
+   end DF_Image;
+
 end Prunt.GUI;

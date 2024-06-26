@@ -63,6 +63,11 @@ package body Prunt.Controller is
       return (for A in Axis_Name => Last_Position (A));
    end Get_Position;
 
+   function Get_Temperature (Thermistor : Thermistor_Name) return Temperature is
+   begin
+      return Last_Temperatures (Thermistor);
+   end Get_Temperature;
+
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean) is
    begin
       My_Gcode_Handler.Try_Queue_Command (Command, Succeeded);

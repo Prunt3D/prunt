@@ -29,29 +29,6 @@ package body Prunt.GUI.Config_Editor is
 
    pragma Unsuppress (All_Checks);
 
-   --  The default 'Image outputs scientific notion, which isn't very user friendly, so we use this instead.
-   function Image (Number : Dimensioned_Float) return UXString is
-      function Dimensioned_Float_Image is new Float_Image (Dimensioned_Float);
-      Raw : constant String :=
-        Dimensioned_Float_Image (Number, Fore => 1, Aft => Dimensioned_Float'Digits - 1, Exp => 0);
-   begin
-      for I in reverse Raw'Range loop
-         if Raw (I) /= '0' then
-            if Raw (I) = '.' then
-               if I - Raw'First > Dimensioned_Float'Digits + 1 then
-                  return UXStrings.From_UTF_8 (Number'Image).Trim (Ada.Strings.Both);
-               else
-                  return UXStrings.From_UTF_8 (Raw (Raw'First .. I + 1)).Trim (Ada.Strings.Both);
-               end if;
-            else
-               return UXStrings.From_UTF_8 (Raw (Raw'First .. I)).Trim (Ada.Strings.Both);
-            end if;
-         end if;
-      end loop;
-
-      raise Program_Error;
-   end Image;
-
    package body Basic_Inputs is
 
       function Get (Input : Length_Input) return Length is
@@ -61,7 +38,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Length_Input; Value : Length) is
       begin
-         Input.Value (Image (Value / mm));
+         Input.Value (DF_Image (Value / mm));
       end Set;
 
       function Get (Input : Time_Input) return Time is
@@ -71,7 +48,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Time_Input; Value : Time) is
       begin
-         Input.Value (Image (Value / s));
+         Input.Value (DF_Image (Value / s));
       end Set;
 
       function Get (Input : Temperature_Input) return Temperature is
@@ -81,7 +58,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Temperature_Input; Value : Temperature) is
       begin
-         Input.Value (Image (Value / celcius));
+         Input.Value (DF_Image (Value / celcius));
       end Set;
 
       function Get (Input : Dimensionless_Input) return Dimensionless is
@@ -91,7 +68,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Dimensionless_Input; Value : Dimensionless) is
       begin
-         Input.Value (Image (Value));
+         Input.Value (DF_Image (Value));
       end Set;
 
       function Get (Input : PWM_Scale_Input) return PWM_Scale is
@@ -101,7 +78,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out PWM_Scale_Input; Value : PWM_Scale) is
       begin
-         Input.Value (Image (Value));
+         Input.Value (DF_Image (Value));
       end Set;
 
       function Get (Input : Voltage_Input) return Voltage is
@@ -111,7 +88,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Voltage_Input; Value : Voltage) is
       begin
-         Input.Value (Image (Value / volt));
+         Input.Value (DF_Image (Value / volt));
       end Set;
 
       function Get (Input : Velocity_Input) return Velocity is
@@ -121,7 +98,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Velocity_Input; Value : Velocity) is
       begin
-         Input.Value (Image (Value / (mm / s)));
+         Input.Value (DF_Image (Value / (mm / s)));
       end Set;
 
       function Get (Input : Acceleration_Input) return Acceleration is
@@ -131,7 +108,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Acceleration_Input; Value : Acceleration) is
       begin
-         Input.Value (Image (Value / (mm / s**2)));
+         Input.Value (DF_Image (Value / (mm / s**2)));
       end Set;
 
       function Get (Input : Jerk_Input) return Jerk is
@@ -141,7 +118,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Jerk_Input; Value : Jerk) is
       begin
-         Input.Value (Image (Value / (mm / s**3)));
+         Input.Value (DF_Image (Value / (mm / s**3)));
       end Set;
 
       function Get (Input : Snap_Input) return Snap is
@@ -151,7 +128,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Snap_Input; Value : Snap) is
       begin
-         Input.Value (Image (Value / (mm / s**4)));
+         Input.Value (DF_Image (Value / (mm / s**4)));
       end Set;
 
       function Get (Input : Crackle_Input) return Crackle is
@@ -161,7 +138,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Crackle_Input; Value : Crackle) is
       begin
-         Input.Value (Image (Value / (mm / s**5)));
+         Input.Value (DF_Image (Value / (mm / s**5)));
       end Set;
 
       function Get (Input : Resistance_Input) return Resistance is
@@ -171,7 +148,7 @@ package body Prunt.GUI.Config_Editor is
 
       procedure Set (Input : in out Resistance_Input; Value : Resistance) is
       begin
-         Input.Value (Image (Value / ohm));
+         Input.Value (DF_Image (Value / ohm));
       end Set;
 
       function Get (Input : Path_String_Input) return My_Config.Path_Strings.Bounded_String is
@@ -292,7 +269,7 @@ package body Prunt.GUI.Config_Editor is
       procedure Set (Widget : in out Position_Widget; Pos : Prunt.Position) is
       begin
          for I in Pos'Range loop
-            Widget.Rows (I).Input.Value (Image (Pos (I) / mm));
+            Widget.Rows (I).Input.Value (DF_Image (Pos (I) / mm));
          end loop;
       end Set;
 
@@ -322,7 +299,7 @@ package body Prunt.GUI.Config_Editor is
       procedure Set (Widget : in out Position_Scale_Widget; Scale : Position_Scale) is
       begin
          for I in Scale'Range loop
-            Widget.Rows (I).Input.Value (Image (Scale (I)));
+            Widget.Rows (I).Input.Value (DF_Image (Scale (I)));
          end loop;
       end Set;
 
@@ -352,7 +329,7 @@ package body Prunt.GUI.Config_Editor is
       procedure Set (Widget : in out Axial_Velocities_Widget; Vels : Axial_Velocities) is
       begin
          for I in Vels'Range loop
-            Widget.Rows (I).Input.Value (Image (Vels (I) / (mm / s)));
+            Widget.Rows (I).Input.Value (DF_Image (Vels (I) / (mm / s)));
          end loop;
       end Set;
 
@@ -533,8 +510,8 @@ package body Prunt.GUI.Config_Editor is
            (Parent      => View.Widget_Table,
             Name        => "Lower Position Limit:",
             Description =>
-              "Minimum position that the printer may move to. The E axis may be set to " & Image (Length'First / 2.0) &
-              " for effectively infinite range.",
+              "Minimum position that the printer may move to. The E axis may be set to " &
+              DF_Image (Length'First / 2.0) & " for effectively infinite range.",
             Data        => View.Lower_Pos_Limit_Input);
 
          View.Upper_Pos_Limit_Input.Create (Parent => View.Widget_Table, Form => View);
@@ -542,8 +519,8 @@ package body Prunt.GUI.Config_Editor is
            (Parent      => View.Widget_Table,
             Name        => "Upper Position Limit:",
             Description =>
-              "Maximum position that the printer may move to. The E axis may be set to " & Image (Length'Last / 2.0) &
-              " for effectively infinite range.",
+              "Maximum position that the printer may move to. The E axis may be set to " &
+              DF_Image (Length'Last / 2.0) & " for effectively infinite range.",
             Data        => View.Upper_Pos_Limit_Input);
 
          View.Tangential_Velocity_Max_Input.Create (Form => View);

@@ -25,6 +25,7 @@ with Gnoga.Gui.View.Card;
 with Gnoga.Gui.Base;
 with Gnoga.Server;
 with Ada.Directories;
+with Ada.Characters.Latin_1;
 
 package body Prunt.GUI.GUI is
 
@@ -72,9 +73,28 @@ package body Prunt.GUI.GUI is
             exit;
          or
             delay 0.5;
-            App.Status_Message_Text.Inner_HTML (To_HTML (From_UTF_8 ("Status: " & Get_Status_Message)));
-            App.Status_Position_Text.Inner_HTML
-              (To_HTML (From_UTF_8 ("Position: " & Prunt.Position'Image (Get_Position))));
+            declare
+               Pos  : Position := Get_Position;
+               Text : UXString := From_UTF_8 ("");
+               CR   : Character renames Ada.Characters.Latin_1.CR;
+            begin
+               Append (Text, From_UTF_8 ("Status:" & CR & "    " & Get_Status_Message & CR & CR));
+
+               Append (Text, From_UTF_8 ("Position:" & CR));
+               for A in Axis_Name loop
+                  Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & CR));
+               end loop;
+
+               Append (Text, From_UTF_8 (CR & "Temperatures:" & CR));
+               for T in My_Config.Thermistor_Name loop
+                  Append
+                    (Text,
+                     From_UTF_8 (T'Image & ": ") & DF_Image (Get_Temperature (T) / celcius) &
+                     From_UTF_8 (" C" & CR));
+               end loop;
+
+               App.Status_Message_Text.Inner_HTML (To_HTML (Text));
+            end;
          end select;
       end loop;
    end Status_Updater;
@@ -174,8 +194,6 @@ package body Prunt.GUI.GUI is
 
                App.Status_Message_Row.Create (App.Status_Table);
                App.Status_Message_Text.Create (App.Status_Message_Row);
-               App.Status_Position_Row.Create (App.Status_Table);
-               App.Status_Position_Text.Create (App.Status_Position_Row);
 
                Status_Updater_Task.Start (App);
             end;

@@ -38,6 +38,7 @@ generic
    with package My_Config is new Prunt.Config (<>);
    with function Get_Status_Message return String;
    with function Get_Position return Prunt.Position;
+   with function Get_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
    Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;
@@ -93,8 +94,6 @@ private
       Status_Table         : aliased Gnoga.Gui.Element.Table.Table_Type;
       Status_Message_Row   : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
       Status_Message_Text  : aliased Gnoga.Gui.Element.Common.DIV_Type;
-      Status_Position_Row  : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
-      Status_Position_Text : aliased Gnoga.Gui.Element.Common.DIV_Type;
 
       Manual_Gcode_Table              : aliased Gnoga.Gui.Element.Table.Table_Type;
       Manual_Gcode_Log_Row            : aliased Gnoga.Gui.Element.Table.Table_Row_Type;

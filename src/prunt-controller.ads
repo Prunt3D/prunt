@@ -206,6 +206,8 @@ private
 
    function Get_Position return Position;
 
+   function Get_Temperature (Thermistor : Thermistor_Name) return Temperature;
+
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
@@ -213,6 +215,7 @@ private
      (My_Config                         => My_Config,
       Get_Status_Message                => Get_Status_Message,
       Get_Position                      => Get_Position,
+      Get_Temperature                   => Get_Temperature,
       Submit_Gcode_Command              => Submit_Gcode_Command,
       Submit_Gcode_File                 => Submit_Gcode_File,
       Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
