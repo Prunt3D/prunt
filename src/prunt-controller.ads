@@ -164,7 +164,8 @@ private
 
    procedure Start_Planner_Block (Data : Flush_Extra_Data);
    procedure Enqueue_Command_Internal
-     (Pos             : Stepper_Position;
+     (Pos             : Position;
+      Stepper_Pos     : Stepper_Position;
       Data            : Corner_Extra_Data;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;

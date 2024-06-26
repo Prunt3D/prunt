@@ -34,6 +34,10 @@ use type Prunt.TMC_Types.Unsigned_8;
 
 package body Prunt.Controller is
 
+   type Atomic_Volatile_Position is new Position with
+     Atomic_Components, Volatile_Components;
+   Last_Position : Atomic_Volatile_Position := (others => Length (0.0));
+
    package My_Gcode_Handler is new Gcode_Handler;
 
    function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean is
@@ -53,8 +57,7 @@ package body Prunt.Controller is
 
    function Get_Position return Position is
    begin
-      --  TODO
-      return [others => Length (0.0)];
+      return (for A in Axis_Name => Last_Position (A));
    end Get_Position;
 
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean) is
@@ -359,7 +362,8 @@ package body Prunt.Controller is
    end Start_Planner_Block;
 
    procedure Enqueue_Command_Internal
-     (Pos             : Stepper_Position;
+     (Pos             : Position;
+      Stepper_Pos     : Stepper_Position;
       Data            : Corner_Extra_Data;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
@@ -368,11 +372,12 @@ package body Prunt.Controller is
    begin
       Enqueue_Command
         ((Index           => Index,
-          Pos             => Pos,
+          Pos             => Stepper_Pos,
           Fans            => Data.Fans,
           Heaters         => Data.Heaters,
           Safe_Stop_After => Safe_Stop_After,
           Loop_Until_Hit  => Loop_Until_Hit));
+      Last_Position := (for A in Axis_Name => Pos (A));
    end Enqueue_Command_Internal;
 
    procedure Finish_Planner_Block

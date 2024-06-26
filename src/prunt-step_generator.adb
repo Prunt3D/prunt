@@ -68,10 +68,12 @@ package body Prunt.Step_Generator is
             loop
                declare
                   Is_Past_Accel_Part : Boolean;
+                  Pos                : constant Position :=
+                    Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
                begin
                   Enqueue_Command
-                    (Pos             =>
-                       To_Stepper_Position (Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part), Pos_Map),
+                    (Pos             => Pos,
+                     Stepper_Pos     => To_Stepper_Position (Pos, Pos_Map),
                      Data            => Corner_Extra_Data (Block, I),
                      Index           => Current_Command_Index,
                      Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
