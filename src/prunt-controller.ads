@@ -218,6 +218,8 @@ private
       Get_Temperature                   => Get_Temperature,
       Submit_Gcode_Command              => Submit_Gcode_Command,
       Submit_Gcode_File                 => Submit_Gcode_File,
+      Pause_Stepgen                     => My_Step_Generator.Pause,
+      Resume_Stepgen                    => My_Step_Generator.Resume,
       Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
 
    protected Status_Message is

@@ -109,6 +109,16 @@ package body Prunt.GUI.GUI is
 
       procedure Free_Data is new Ada.Unchecked_Deallocation (App_Data, App_Access);
 
+      procedure On_Pause_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+      begin
+         Pause_Stepgen;
+      end On_Pause_Submit;
+
+      procedure On_Resume_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+      begin
+         Resume_Stepgen;
+      end On_Resume_Submit;
+
       procedure On_Manual_Gcode_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
          Command   : constant UXString := App.Manual_Gcode_Form_Entry.Value;
          Succeeded : Boolean;
@@ -196,6 +206,15 @@ package body Prunt.GUI.GUI is
                App.Status_Message_Text.Create (App.Status_Message_Row);
 
                Status_Updater_Task.Start (App);
+
+               App.Status_Pause_Resume_Row.Create (App.Status_Table);
+               App.Status_Pause_Resume_Div.Create (App.Status_Pause_Resume_Row);
+               App.Status_Pause_Form.Create (App.Status_Pause_Resume_Div);
+               App.Status_Pause_Button.Create (App.Status_Pause_Form, Value => "Pause");
+               App.Status_Pause_Form.On_Submit_Handler (On_Pause_Submit'Unrestricted_Access);
+               App.Status_Resume_Form.Create (App.Status_Pause_Resume_Div);
+               App.Status_Resume_Button.Create (App.Status_Resume_Form, Value => "Resume");
+               App.Status_Resume_Form.On_Submit_Handler (On_Resume_Submit'Unrestricted_Access);
             end;
 
             --  Config Editor

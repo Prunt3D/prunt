@@ -41,6 +41,8 @@ generic
    with function Get_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
+   with procedure Pause_Stepgen;
+   with procedure Resume_Stepgen;
    Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;
 package Prunt.GUI.GUI is
 
@@ -91,9 +93,15 @@ private
 
       Log_Widget : aliased Gnoga.Gui.View.Console.Console_View_Type;
 
-      Status_Table         : aliased Gnoga.Gui.Element.Table.Table_Type;
-      Status_Message_Row   : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
-      Status_Message_Text  : aliased Gnoga.Gui.Element.Common.DIV_Type;
+      Status_Table            : aliased Gnoga.Gui.Element.Table.Table_Type;
+      Status_Message_Row      : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
+      Status_Message_Text     : aliased Gnoga.Gui.Element.Common.DIV_Type;
+      Status_Pause_Resume_Row : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
+      Status_Pause_Resume_Div : aliased Gnoga.Gui.Element.Common.DIV_Type;
+      Status_Pause_Form       : aliased Gnoga.Gui.Element.Form.Form_Type;
+      Status_Pause_Button     : aliased Gnoga.Gui.Element.Form.Submit_Button_Type;
+      Status_Resume_Form      : aliased Gnoga.Gui.Element.Form.Form_Type;
+      Status_Resume_Button    : aliased Gnoga.Gui.Element.Form.Submit_Button_Type;
 
       Manual_Gcode_Table              : aliased Gnoga.Gui.Element.Table.Table_Type;
       Manual_Gcode_Log_Row            : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
