@@ -336,7 +336,24 @@ package body Prunt.Controller is
                   My_Step_Generator.Runner.Setup (Map);
                end;
 
-               My_Gcode_Handler.Runner.Start;
+               declare
+                  Corner_Data : Corner_Extra_Data :=
+                    (Fans => (others => 0.0), Heaters => (others => Temperature (0.0)));
+                  Fan_Params  : My_Config.Fan_Parameters;
+               begin
+                  for F in Fan_Name loop
+                     My_Config.Config_File.Read (Fan_Params, F);
+                     case Fan_Params.Kind is
+                        when My_Config.Disabled_Kind =>
+                           Corner_Data.Fans (F) := 0.0;
+                        when My_Config.Dynamic_PWM_Kind =>
+                           Corner_Data.Fans (F) := 0.0;
+                        when My_Config.Always_On_Kind =>
+                           Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
+                     end case;
+                  end loop;
+                  My_Gcode_Handler.Runner.Start (Corner_Data);
+               end;
 
             exception
                when E : Config_Constraint_Error =>

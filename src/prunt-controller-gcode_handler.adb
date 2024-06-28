@@ -372,7 +372,9 @@ package body Prunt.Controller.Gcode_Handler is
          end case;
       end Run_Command;
    begin
-      accept Start do
+      accept Start (Initial_Data : Corner_Extra_Data) do
+         Corner_Data := Initial_Data;
+
          My_Config.Config_File.Read (Kinematics_Params);
          My_Config.Config_File.Read (G_Code_Assignment_Params);
 
@@ -424,6 +426,20 @@ package body Prunt.Controller.Gcode_Handler is
             end case;
          end loop;
       end Start;
+
+      My_Planner.Enqueue
+        ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
+          Flush_Extra_Data => (others => <>),
+          Reset_Pos        => Zero_Pos));
+      My_Planner.Enqueue
+        ((Kind              => My_Planner.Move_Kind,
+          Pos               => Zero_Pos,
+          Feedrate          => Velocity'Last,
+          Corner_Extra_Data => Corner_Data));
+      My_Planner.Enqueue
+        ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
+          Flush_Extra_Data => (others => <>),
+          Reset_Pos        => Zero_Pos));
 
       loop
          delay 0.1;
