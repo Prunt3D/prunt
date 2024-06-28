@@ -88,6 +88,16 @@ package body Prunt.Step_Generator is
       loop
          Dequeue (Block);
 
+         if Do_Pause then
+            Paused := True;
+            loop
+               exit when not Do_Pause;
+            end loop;
+            Paused := False;
+         end if;
+         Pausing_State := Running_Kind;
+         Pause_Slew := Pause_Slew_Index'First;
+
          Start_Planner_Block (Flush_Extra_Data (Block));
 
          if Is_Homing_Move (Flush_Extra_Data (Block)) then
