@@ -87,7 +87,11 @@ package Prunt.Controller_Generic_Types is
    type Heater_Kind is (Disabled_Kind, PID_Kind, Bang_Bang_Kind);
 
    type Heater_Parameters (Kind : Heater_Kind := Disabled_Kind) is record
-      Thermistor : Thermistor_Name := Thermistor_Name'First;
+      Thermistor           : Thermistor_Name := Thermistor_Name'First;
+      Max_Cumulative_Error : Temperature     := 120.0 * celcius;
+      Check_Gain_Time      : Time            := 20.0 * s;
+      Check_Minimum_Gain   : Temperature     := 2.0 * celcius;
+      Hysteresis           : Temperature     := 3.0 * celcius;
       case Kind is
          when Disabled_Kind =>
             null;
@@ -97,7 +101,7 @@ package Prunt.Controller_Generic_Types is
             Derivative_Scale            : Dimensionless := 0.0;
             Proportional_On_Measurement : Boolean       := True;
          when Bang_Bang_Kind =>
-            Max_Delta : Temperature := 2.0 * celcius;
+            null;
       end case;
    end record;
 

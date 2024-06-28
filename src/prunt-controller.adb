@@ -107,20 +107,33 @@ package body Prunt.Controller is
                         case Heater_Params.Kind is
                            when My_Config.Disabled_Kind =>
                               Heater_Params_Array (H) :=
-                                (Kind => Disabled_Kind, Thermistor => Heater_Params.Thermistor);
+                                (Kind                 => Disabled_Kind,
+                                 Thermistor           => Heater_Params.Thermistor,
+                                 Max_Cumulative_Error => Heater_Params.Max_Cumulative_Error,
+                                 Check_Gain_Time      => Heater_Params.Check_Gain_Time,
+                                 Check_Minimum_Gain   => Heater_Params.Check_Minimum_Gain,
+                                 Hysteresis           => Heater_Params.Hysteresis);
                            when My_Config.PID_Kind =>
                               Heater_Params_Array (H) :=
                                 (Kind                        => PID_Kind,
                                  Thermistor                  => Heater_Params.Thermistor,
+                                 Max_Cumulative_Error => Heater_Params.Max_Cumulative_Error,
+                                 Check_Gain_Time             => Heater_Params.Check_Gain_Time,
+                                 Check_Minimum_Gain          => Heater_Params.Check_Minimum_Gain,
+                                 Hysteresis                  => Heater_Params.Hysteresis,
                                  Proportional_Scale          => Heater_Params.Proportional_Scale,
                                  Integral_Scale              => Heater_Params.Integral_Scale,
                                  Derivative_Scale            => Heater_Params.Derivative_Scale,
-                                 Proportional_On_Measurement => Heater_Params.Proportional_On_Measurement);
+                                 Proportional_On_Measurement =>
+                                   Heater_Params.Proportional_On_Measurement);
                            when My_Config.Bang_Bang_Kind =>
                               Heater_Params_Array (H) :=
-                                (Kind       => Bang_Bang_Kind,
-                                 Thermistor => Heater_Params.Thermistor,
-                                 Max_Delta  => Heater_Params.Max_Delta);
+                                (Kind                 => Bang_Bang_Kind,
+                                 Thermistor           => Heater_Params.Thermistor,
+                                 Max_Cumulative_Error => Heater_Params.Max_Cumulative_Error,
+                                 Check_Gain_Time      => Heater_Params.Check_Gain_Time,
+                                 Check_Minimum_Gain   => Heater_Params.Check_Minimum_Gain,
+                                 Hysteresis           => Heater_Params.Hysteresis);
                         end case;
                      end;
                   end loop;

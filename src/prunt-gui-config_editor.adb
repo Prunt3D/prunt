@@ -1132,6 +1132,37 @@ package body Prunt.GUI.Config_Editor is
             Description => "Thermistor associated with this heater.",
             Data        => View.Thermistor_Input);
 
+         View.Max_Cumulative_Error_Input.Create (Form => View);
+         View.Max_Cumulative_Error_Row.Create
+           (Parent      => View.Widget_Table,
+            Name        => UXStrings.From_UTF_8 ("Max Cumulative Error (C):"),
+            Description => "Maximum cumulative error before a failure is detected.",
+            Data        => View.Max_Cumulative_Error_Input);
+
+         View.Check_Gain_Time_Input.Create (Form => View);
+         View.Check_Gain_Time_Row.Create
+           (Parent      => View.Widget_Table,
+            Name        => UXStrings.From_UTF_8 ("Check Gain Time (s):"),
+            Description => "Period to check for temperature rise over during heating to detect failures.",
+            Data        => View.Check_Gain_Time_Input);
+
+         View.Check_Minimum_Gain_Input.Create (Form => View);
+         View.Check_Minimum_Gain_Row.Create
+           (Parent      => View.Widget_Table,
+            Name        => UXStrings.From_UTF_8 ("Check Minimum Gain (C):"),
+            Description => "Minium temperature rise required in gain period to reset cumulative error.",
+            Data        => View.Check_Minimum_Gain_Input);
+
+         View.Hysteresis_Input.Create (Form => View);
+         View.Hysteresis_Row.Create
+           (Parent      => View.Widget_Table,
+            Name        => UXStrings.From_UTF_8 ("Hysteresis (C):"),
+            Description =>
+              "Maximum temperature below or above the setpoint where " &
+              "the heater is considered to be at temperature. " &
+              "Also used bang-bang mode to determine when to switch on and off.",
+            Data        => View.Hysteresis_Input);
+
          View.Kind_Table.Create (View);
          View.Kind_Table.Style ("width", "100%");
          View.Kind_Table.Place_After (View.Widget_Table);
@@ -1180,15 +1211,6 @@ package body Prunt.GUI.Config_Editor is
          View.Bang_Bang_Table.Style ("border-collapse", "collapse");
          View.Kind_Table.Add_Tab ("Bang Bang", View.Bang_Bang_Table'Access);
 
-         View.Max_Delta_Input.Create (Form => View);
-         View.Max_Delta_Row.Create
-           (Parent      => View.Bang_Bang_Table,
-            Name        => UXStrings.From_UTF_8 ("Max Delta (C):"),
-            Description =>
-              "Maximum temperature below or above the target temperature where " &
-              "the heater will be switched on or off respectively.",
-            Data        => View.Max_Delta_Input);
-
          View.Read_Data;
 
          View.On_Submit_Handler (Outer_Section_Widgets.On_Submit'Unrestricted_Access);
@@ -1212,9 +1234,12 @@ package body Prunt.GUI.Config_Editor is
                View.Proportional_On_Measurement_Input.Set (Params.Proportional_On_Measurement);
             when My_Config.Bang_Bang_Kind =>
                View.Kind_Table.Tabs.Select_Tab ("Bang Bang");
-               View.Max_Delta_Input.Set (Params.Max_Delta);
          end case;
          View.Thermistor_Input.Set (Params.Thermistor);
+         View.Max_Cumulative_Error_Input.Set (Params.Max_Cumulative_Error);
+         View.Check_Gain_Time_Input.Set (Params.Check_Gain_Time);
+         View.Check_Minimum_Gain_Input.Set (Params.Check_Minimum_Gain);
+         View.Hysteresis_Input.Set (Params.Hysteresis);
       end Read_Data;
 
       overriding procedure Save_Data (View : in out Heater_Widget; Image : out UXString) is
@@ -1229,13 +1254,16 @@ package body Prunt.GUI.Config_Editor is
             Params.Derivative_Scale            := View.Derivative_Scale_Input.Get;
             Params.Proportional_On_Measurement := View.Proportional_On_Measurement_Input.Get;
          elsif View.Kind_Table.Cards.Current_Card = View.Bang_Bang_Table'Unrestricted_Access then
-            Params           := (Kind => My_Config.Bang_Bang_Kind, others => <>);
-            Params.Max_Delta := View.Max_Delta_Input.Get;
+            Params := (Kind => My_Config.Bang_Bang_Kind, others => <>);
          else
             raise Constraint_Error with "Heater type must be selected.";
          end if;
 
-         Params.Thermistor := View.Thermistor_Input.Get;
+         Params.Thermistor           := View.Thermistor_Input.Get;
+         Params.Max_Cumulative_Error := View.Max_Cumulative_Error_Input.Get;
+         Params.Check_Gain_Time      := View.Check_Gain_Time_Input.Get;
+         Params.Check_Minimum_Gain   := View.Check_Minimum_Gain_Input.Get;
+         Params.Hysteresis           := View.Hysteresis_Input.Get;
 
          My_Config.Config_File.Write (Params, View.Heater);
 

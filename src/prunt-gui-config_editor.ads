@@ -463,9 +463,17 @@ package Prunt.GUI.Config_Editor is
       type Heater_Widget is new Parent_Type with record
          Heater : My_Config.Heater_Name;
 
-         Widget_Table     : Gnoga.Gui.Element.Table.Table_Type;
-         Thermistor_Row   : Parameter_Rows.Parameter_Row;
-         Thermistor_Input : Basic_Inputs.Thermistor_Name_Input.Discrete_Input;
+         Widget_Table               : Gnoga.Gui.Element.Table.Table_Type;
+         Thermistor_Row             : Parameter_Rows.Parameter_Row;
+         Thermistor_Input           : Basic_Inputs.Thermistor_Name_Input.Discrete_Input;
+         Max_Cumulative_Error_Row   : Parameter_Rows.Parameter_Row;
+         Max_Cumulative_Error_Input : Basic_Inputs.Temperature_Input;
+         Check_Gain_Time_Row        : Parameter_Rows.Parameter_Row;
+         Check_Gain_Time_Input      : Basic_Inputs.Time_Input;
+         Check_Minimum_Gain_Row     : Parameter_Rows.Parameter_Row;
+         Check_Minimum_Gain_Input   : Basic_Inputs.Temperature_Input;
+         Hysteresis_Row             : Parameter_Rows.Parameter_Row;
+         Hysteresis_Input           : Basic_Inputs.Temperature_Input;
 
          Kind_Table : Cards_Table_Type;
 
@@ -482,8 +490,6 @@ package Prunt.GUI.Config_Editor is
          Proportional_On_Measurement_Input : Basic_Inputs.Boolean_Input;
 
          Bang_Bang_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Max_Delta_Row   : Parameter_Rows.Parameter_Row;
-         Max_Delta_Input : Basic_Inputs.Temperature_Input;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
