@@ -63,7 +63,16 @@ package Prunt.Step_Generator is
       entry Setup (Map : Stepper_Pos_Map);
    end Runner;
 
+   procedure Pause;
+   procedure Resume;
+   function Is_Paused return Boolean;
+
 private
+
+   type Pause_Slew_Index is new Integer range 0 .. Integer (10.0 * s / Interpolation_Time);
+   --  Max at paused end of slew.
+
+   function Pause_Slew_Interpolation_Time (Index : Pause_Slew_Index) return Time;
 
    function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position;
 

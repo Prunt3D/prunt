@@ -19,7 +19,36 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Numerics.Generic_Elementary_Functions;
+
 package body Prunt.Step_Generator is
+
+   package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+
+   Do_Pause : Boolean := False with
+     Atomic, Volatile;
+   Paused   : Boolean := False with
+     Atomic, Volatile;
+
+   procedure Pause is
+   begin
+      Do_Pause := True;
+   end Pause;
+
+   procedure Resume is
+   begin
+      Do_Pause := False;
+   end Resume;
+
+   function Is_Paused return Boolean is
+   begin
+      return Paused;
+   end Is_Paused;
+
+   function Pause_Slew_Interpolation_Time (Index : Pause_Slew_Index) return Time is
+   begin
+      return Math.Cos (Dimensionless (Index), 4.0 * Dimensionless (Pause_Slew_Index'Last)) * Interpolation_Time;
+   end Pause_Slew_Interpolation_Time;
 
    function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position is
       Ret : Stepper_Position := [others => 0.0];
@@ -40,6 +69,10 @@ package body Prunt.Step_Generator is
 
       type Homing_Move_When_Kind is (Not_Pending_Kind, This_Block_Kind, This_Move_Kind);
       Homing_Move_When : Homing_Move_When_Kind := Not_Pending_Kind;
+
+      type Pausing_State_Kind is (Running_Kind, Pausing_Kind, Paused_Kind, Resuming_Kind);
+      Pausing_State : Pausing_State_Kind := Running_Kind;
+      Pause_Slew    : Pause_Slew_Index   := Pause_Slew_Index'First;
 
       type Block_Wrapper is record
          Block : aliased Execution_Block;
@@ -66,10 +99,35 @@ package body Prunt.Step_Generator is
 
          for I in 2 .. Block.N_Corners loop
             loop
+               case Pausing_State is
+                  when Running_Kind =>
+                     if Do_Pause and then Homing_Move_When = Not_Pending_Kind then
+                        Pausing_State := Pausing_Kind;
+                     end if;
+                  when Pausing_Kind =>
+                     if Pause_Slew = Pause_Slew_Index'Last then
+                        Pausing_State := Paused_Kind;
+                     else
+                        Pause_Slew := @ + 1;
+                     end if;
+                  when Paused_Kind =>
+                     Paused := True;
+                     loop
+                        exit when not Do_Pause;
+                     end loop;
+                     Paused := False;
+                     Pausing_State := Resuming_Kind;
+                  when Resuming_Kind =>
+                     if Pause_Slew = Pause_Slew_Index'First then
+                        Pausing_State := Running_Kind;
+                     else
+                        Pause_Slew := @ - 1;
+                     end if;
+               end case;
+
                declare
                   Is_Past_Accel_Part : Boolean;
-                  Pos                : constant Position :=
-                    Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
+                  Pos : constant Position := Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
                begin
                   Enqueue_Command
                     (Pos             => Pos,
@@ -77,7 +135,9 @@ package body Prunt.Step_Generator is
                      Data            => Corner_Extra_Data (Block, I),
                      Index           => Current_Command_Index,
                      Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                     Safe_Stop_After => I = Block.N_Corners and Current_Time >= Segment_Time (Block, I));
+                     Safe_Stop_After =>
+                       Pausing_State = Paused_Kind
+                       or else (I = Block.N_Corners and Current_Time >= Segment_Time (Block, I)));
 
                   case Homing_Move_When is
                      when This_Block_Kind =>
@@ -101,7 +161,7 @@ package body Prunt.Step_Generator is
                   if Homing_Move_When = This_Move_Kind then
                      Current_Time := Current_Time + Loop_Interpolation_Time;
                   else
-                     Current_Time := Current_Time + Interpolation_Time;
+                     Current_Time := Current_Time + Pause_Slew_Interpolation_Time (Pause_Slew);
                   end if;
                end if;
 
