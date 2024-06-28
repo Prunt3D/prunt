@@ -19,3 +19,4 @@ gnoga = "*"
 
 [[pins]]
 gnoga = { url = "https://github.com/Prunt3D/gnoga.git", branch = "prunt" }
+ada_toml = { url = "https://github.com/liampwll/ada-toml.git", commit = "366b09185a44978196a1c396b9199c75b606a148" }
