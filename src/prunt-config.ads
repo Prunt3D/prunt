@@ -100,7 +100,7 @@ package Prunt.Config is
       Filament_Diameter : Length := 1.75 * mm;
    end record;
 
-   --  Themistor_Parameters in Prunt.Thermistors.
+   --  Thermistor_Parameters in Prunt.Thermistors.
 
    type Heater_Kind is (Disabled_Kind, PID_Kind, Bang_Bang_Kind);
 
