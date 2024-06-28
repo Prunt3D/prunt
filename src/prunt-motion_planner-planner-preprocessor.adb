@@ -88,7 +88,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   Next_Params      := Next_Command.New_Params;
                   exit;
                when Move_Kind =>
-                  if abs (Last_Pos - Next_Command.Pos) >= Preprocessor_Minimum_Move_Distance then
+                  --  if abs (Last_Pos - Next_Command.Pos) >= Preprocessor_Minimum_Move_Distance then
                      N_Corners                      := N_Corners + 1;
                      Corners (N_Corners)            := Next_Command.Pos * Params.Higher_Order_Scaler;
                      Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
@@ -112,7 +112,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      Last_Pos := Next_Command.Pos;
 
                      exit when N_Corners = Corners_Index'Last;
-                  end if;
+                  --  end if;
             end case;
          end;
       end loop;

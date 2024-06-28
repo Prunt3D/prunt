@@ -1070,6 +1070,10 @@ package body Prunt.Motion_Planner is
          raise Constraint_Error with "Max_Vel can not be smaller than End_Vel.";
       end if;
 
+      if Distance = 0.0 * mm then
+         return (Accel => (others => 0.0 * s), Coast => 0.0 * s, Decel => (others => 0.0 * s));
+      end if;
+
       declare
          Profile : constant Feedrate_Profile_Times :=
            Optimal_Profile_For_Delta_V (Start_Vel - End_Vel, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);

@@ -29,7 +29,7 @@ generic
    Home_Move_Minimum_Coast_Time : Time;
    with function Is_Homing_Move (Data : Flush_Extra_Data_Type) return Boolean;
    Max_Corners : Max_Corners_Type := 50_000;
-   Preprocessor_Minimum_Move_Distance : Length := 0.001 * mm;
+   --  Preprocessor_Minimum_Move_Distance : Length := 0.001 * mm;
    Corner_Blender_Max_Computational_Error : Length := 0.001 * mm;
    Corner_Blender_Max_Secondary_Angle_To_Blend : Angle := 89.5 * deg;
    Input_Queue_Length : Ada.Containers.Count_Type := 1_000;
