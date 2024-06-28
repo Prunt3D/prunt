@@ -15,8 +15,7 @@ development.contracts = "Yes"
 
 [[depends-on]]
 ada_toml = "~0.3.0"
-gnoga = "^2.1.2"
+gnoga = "*"
 
 [[pins]]
-gnoga = { path = "../gnoga" }
-# gnoga = { url = "https://github.com/Prunt3D/gnoga.git", branch = "prunt" }
+gnoga = { url = "https://github.com/Prunt3D/gnoga.git", branch = "prunt" }
