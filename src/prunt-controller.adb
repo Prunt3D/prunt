@@ -222,6 +222,33 @@ package body Prunt.Controller is
                   Kinematics_Params : My_Config.Kinematics_Parameters;
                begin
                   My_Config.Config_File.Read (Kinematics_Params);
+
+                  if Kinematics_Params.Planner_Parameters.Tangential_Velocity_Max <= 0.0 * mm / s then
+                     raise Config_Constraint_Error with "Max velocity must be greater than 0.";
+                  end if;
+
+                  if Kinematics_Params.Planner_Parameters.Acceleration_Max <= 0.0 * mm / s**2 then
+                     raise Config_Constraint_Error with "Max acceleration must be greater than 0.";
+                  end if;
+
+                  if Kinematics_Params.Planner_Parameters.Jerk_Max <= 0.0 * mm / s**3 then
+                     raise Config_Constraint_Error with "Max jerk must be greater than 0.";
+                  end if;
+
+                  if Kinematics_Params.Planner_Parameters.Snap_Max <= 0.0 * mm / s**4 then
+                     raise Config_Constraint_Error with "Max snap must be greater than 0.";
+                  end if;
+
+                  if Kinematics_Params.Planner_Parameters.Crackle_Max <= 0.0 * mm / s**5 then
+                     raise Config_Constraint_Error with "Max crackle must be greater than 0.";
+                  end if;
+
+                  for A in Axis_Name loop
+                     if Kinematics_Params.Planner_Parameters.Axial_Velocity_Maxes (A) <= 0.0 * mm / s then
+                        raise Config_Constraint_Error with "Max " & A'Image & " velocity must be greater than 0.";
+                     end if;
+                  end loop;
+
                   My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
                end;
 
