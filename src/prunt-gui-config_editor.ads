@@ -29,6 +29,9 @@ with UXStrings;             use UXStrings;
 with Gnoga.Types;
 with Prunt.GUI.Cards_Table; use Prunt.GUI.Cards_Table;
 with Prunt.GUI.Discrete_Inputs;
+with Prunt.GUI.Numeric_Discrete_Inputs;
+with Prunt.GUI.Numeric_Floating_Inputs;
+with Prunt.GUI.Parameter_Rows;
 
 private generic
    with package My_Config is new Prunt.Config (<>);
@@ -37,195 +40,163 @@ package Prunt.GUI.Config_Editor is
 
    package Basic_Inputs is
 
-      type Length_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Length_Input) return Length;
-      procedure Set (Input : in out Length_Input; Value : Length);
+      package Length_Inputs is new Numeric_Floating_Inputs (Length);
+      use Length_Inputs;
+      package Length_Rows is new Parameter_Rows (Length, "mm", Length_Inputs.Numeric_Input);
 
-      type Time_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Time_Input) return Time;
-      procedure Set (Input : in out Time_Input; Value : Time);
+      package Time_Inputs is new Numeric_Floating_Inputs (Time);
+      use Time_Inputs;
+      package Time_Rows is new Parameter_Rows (Time, "s", Time_Inputs.Numeric_Input);
 
-      type Temperature_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Temperature_Input) return Temperature;
-      procedure Set (Input : in out Temperature_Input; Value : Temperature);
+      package Temperature_Inputs is new Numeric_Floating_Inputs (Temperature);
+      use Temperature_Inputs;
+      package Temperature_Rows is new Parameter_Rows (Temperature, "C", Temperature_Inputs.Numeric_Input);
 
-      type Dimensionless_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Dimensionless_Input) return Dimensionless;
-      procedure Set (Input : in out Dimensionless_Input; Value : Dimensionless);
+      package Dimensionless_Inputs is new Numeric_Floating_Inputs (Dimensionless);
+      use Dimensionless_Inputs;
+      package Dimensionless_Rows is new Parameter_Rows (Dimensionless, "", Dimensionless_Inputs.Numeric_Input);
 
-      type PWM_Scale_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : PWM_Scale_Input) return PWM_Scale;
-      procedure Set (Input : in out PWM_Scale_Input; Value : PWM_Scale);
+      package PWM_Scale_Inputs is new Numeric_Floating_Inputs (PWM_Scale);
+      use PWM_Scale_Inputs;
+      package PWM_Scale_Rows is new Parameter_Rows (PWM_Scale, "", PWM_Scale_Inputs.Numeric_Input);
 
-      type Voltage_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Voltage_Input) return Voltage;
-      procedure Set (Input : in out Voltage_Input; Value : Voltage);
+      package Voltage_Inputs is new Numeric_Floating_Inputs (Voltage);
+      use Voltage_Inputs;
+      package Voltage_Rows is new Parameter_Rows (Voltage, "V", Voltage_Inputs.Numeric_Input);
 
-      type Velocity_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Velocity_Input) return Velocity;
-      procedure Set (Input : in out Velocity_Input; Value : Velocity);
+      package Velocity_Inputs is new Numeric_Floating_Inputs (Velocity);
+      use Velocity_Inputs;
+      package Velocity_Rows is new Parameter_Rows (Velocity, "mm/s", Velocity_Inputs.Numeric_Input);
 
-      type Acceleration_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Acceleration_Input) return Acceleration;
-      procedure Set (Input : in out Acceleration_Input; Value : Acceleration);
+      package Acceleration_Inputs is new Numeric_Floating_Inputs (Acceleration);
+      use Acceleration_Inputs;
+      package Acceleration_Rows is new Parameter_Rows (Acceleration, "mm/s^2", Acceleration_Inputs.Numeric_Input);
 
-      type Jerk_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Jerk_Input) return Jerk;
-      procedure Set (Input : in out Jerk_Input; Value : Jerk);
+      package Jerk_Inputs is new Numeric_Floating_Inputs (Jerk);
+      use Jerk_Inputs;
+      package Jerk_Rows is new Parameter_Rows (Jerk, "mm/s^3", Jerk_Inputs.Numeric_Input);
 
-      type Snap_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Snap_Input) return Snap;
-      procedure Set (Input : in out Snap_Input; Value : Snap);
+      package Snap_Inputs is new Numeric_Floating_Inputs (Snap);
+      use Snap_Inputs;
+      package Snap_Rows is new Parameter_Rows (Snap, "mm/s^4", Snap_Inputs.Numeric_Input);
 
-      type Crackle_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Crackle_Input) return Crackle;
-      procedure Set (Input : in out Crackle_Input; Value : Crackle);
+      package Crackle_Inputs is new Numeric_Floating_Inputs (Crackle);
+      use Crackle_Inputs;
+      package Crackle_Rows is new Parameter_Rows (Crackle, "mm/s^5", Crackle_Inputs.Numeric_Input);
 
-      type Resistance_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
-      function Get (Input : Resistance_Input) return Resistance;
-      procedure Set (Input : in out Resistance_Input; Value : Resistance);
+      package Resistance_Inputs is new Numeric_Floating_Inputs (Resistance);
+      use Resistance_Inputs;
+      package Resistance_Rows is new Parameter_Rows (Resistance, "ohm", Resistance_Inputs.Numeric_Input);
 
       type Path_String_Input is new Gnoga.Gui.Element.Form.Text_Type with null record;
       function Get (Input : Path_String_Input) return My_Config.Path_Strings.Bounded_String;
       procedure Set (Input : in out Path_String_Input; Value : My_Config.Path_Strings.Bounded_String);
+      procedure Create_For_Parameter_Row
+        (Element : in out Path_String_Input;
+         Parent  : in out Gnoga.Gui.Element.Element_Type'Class;
+         Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+      package Path_String_Rows is new Parameter_Rows (My_Config.Path_Strings.Bounded_String, "", Path_String_Input);
 
       type Boolean_Input is new Gnoga.Gui.Element.Form.Check_Box_Type with null record;
       function Get (Input : Boolean_Input) return Boolean;
       procedure Set (Input : in out Boolean_Input; Value : Boolean);
+      procedure Create_For_Parameter_Row
+        (Element : in out Boolean_Input;
+         Parent  : in out Gnoga.Gui.Element.Element_Type'Class;
+         Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+      package Boolean_Rows is new Parameter_Rows (Boolean, "", Boolean_Input);
 
-      package Stepper_Name_Input is new Discrete_Inputs (My_Config.Stepper_Name);
-      package Heater_Name_Input is new Discrete_Inputs (My_Config.Heater_Name);
-      package Thermistor_Name_Input is new Discrete_Inputs (My_Config.Thermistor_Name);
-      package Fan_Name_Input is new Discrete_Inputs (My_Config.Fan_Name);
-      package Input_Switch_Name_Input is new Discrete_Inputs (My_Config.Input_Switch_Name);
+      package Stepper_Name_Inputs is new Discrete_Inputs (My_Config.Stepper_Name);
+      use Stepper_Name_Inputs;
+      package Stepper_Name_Rows is new Parameter_Rows (My_Config.Stepper_Name, "", Stepper_Name_Inputs.Discrete_Input);
+
+      package Heater_Name_Inputs is new Discrete_Inputs (My_Config.Heater_Name);
+      use Heater_Name_Inputs;
+      package Heater_Name_Rows is new Parameter_Rows (My_Config.Heater_Name, "", Heater_Name_Inputs.Discrete_Input);
+
+      package Thermistor_Name_Inputs is new Discrete_Inputs (My_Config.Thermistor_Name);
+      use Thermistor_Name_Inputs;
+      package Thermistor_Name_Rows is new Parameter_Rows
+        (My_Config.Thermistor_Name, "", Thermistor_Name_Inputs.Discrete_Input);
+
+      package Fan_Name_Inputs is new Discrete_Inputs (My_Config.Fan_Name);
+      use Fan_Name_Inputs;
+      package Fan_Name_Rows is new Parameter_Rows (My_Config.Fan_Name, "", Fan_Name_Inputs.Discrete_Input);
+
+      package Input_Switch_Name_Inputs is new Discrete_Inputs (My_Config.Input_Switch_Name);
+      use Input_Switch_Name_Inputs;
+      package Input_Switch_Name_Rows is new Parameter_Rows
+        (My_Config.Input_Switch_Name, "", Input_Switch_Name_Inputs.Discrete_Input);
 
    end Basic_Inputs;
 
-   package Parameter_Rows is
-
-      subtype Parent_Type is Gnoga.Gui.Element.Table.Table_Row_Type;
-
-      type Parameter_Row is new Parent_Type with private;
-
-      procedure Create
-        (Row         : in out Parameter_Row;
-         Parent      : in out Gnoga.Gui.Element.Element_Type'Class;
-         Name        :        UXString;
-         Description :        UXString;
-         Data        : in out Gnoga.Gui.Element.Element_Type'Class;
-         ID          :        UXString := "");
-
-   private
-
-      overriding procedure Create
-        (Row : in out Parameter_Row; Parent : in out Gnoga.Gui.Element.Element_Type'Class; ID : UXString := "");
-
-      type Parameter_Row is new Parent_Type with record
-         Name        : Gnoga.Gui.Element.Common.DIV_Type;
-         Description : Gnoga.Gui.Element.Common.DIV_Type;
-
-         Name_Col        : Gnoga.Gui.Element.Table.Table_Column_Type;
-         Description_Col : Gnoga.Gui.Element.Table.Table_Column_Type;
-         Data_Col        : Gnoga.Gui.Element.Table.Table_Column_Type;
-      end record;
-
-   end Parameter_Rows;
-
    package Grouped_Element_Widgets is
 
-      type Position_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+      package Plain_Widgets is
 
-      procedure Create
-        (Widget : in out Position_Widget;
-         Parent : in out Gnoga.Gui.Element.Element_Type'Class;
-         Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-         ID     :        UXString := "");
+         type Position_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+         procedure Create_For_Parameter_Row
+           (Widget : in out Position_Widget;
+            Parent : in out Gnoga.Gui.Element.Element_Type'Class;
+            Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+         function Get (Widget : Position_Widget) return Prunt.Position;
+         procedure Set (Widget : in out Position_Widget; Pos : Prunt.Position);
 
-      function Get (Widget : Position_Widget) return Prunt.Position;
-      procedure Set (Widget : in out Position_Widget; Pos : Prunt.Position);
+         type Position_Scale_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+         procedure Create_For_Parameter_Row
+           (Widget : in out Position_Scale_Widget;
+            Parent : in out Gnoga.Gui.Element.Element_Type'Class;
+            Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+         function Get (Widget : Position_Scale_Widget) return Position_Scale;
+         procedure Set (Widget : in out Position_Scale_Widget; Scale : Position_Scale);
 
-      type Position_Scale_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+         type Axial_Velocities_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+         procedure Create_For_Parameter_Row
+           (Widget : in out Axial_Velocities_Widget;
+            Parent : in out Gnoga.Gui.Element.Element_Type'Class;
+            Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+         function Get (Widget : Axial_Velocities_Widget) return Axial_Velocities;
+         procedure Set (Widget : in out Axial_Velocities_Widget; Vels : Axial_Velocities);
 
-      procedure Create
-        (Widget : in out Position_Scale_Widget;
-         Parent : in out Gnoga.Gui.Element.Element_Type'Class;
-         Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-         ID     :        UXString := "");
+         type Attached_Steppers_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+         procedure Create_For_Parameter_Row
+           (Widget : in out Attached_Steppers_Widget;
+            Parent : in out Gnoga.Gui.Element.Element_Type'Class;
+            Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+         function Get (Widget : Attached_Steppers_Widget) return My_Config.Attached_Steppers;
+         procedure Set (Widget : in out Attached_Steppers_Widget; Steppers : My_Config.Attached_Steppers);
 
-      function Get (Widget : Position_Scale_Widget) return Position_Scale;
-      procedure Set (Widget : in out Position_Scale_Widget; Scale : Position_Scale);
+      private
 
-      type Axial_Velocities_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+         type Position_Rows is array (Axis_Name) of Basic_Inputs.Length_Rows.Parameter_Row;
+         type Position_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
+            Rows : Position_Rows;
+         end record;
 
-      procedure Create
-        (Widget : in out Axial_Velocities_Widget;
-         Parent : in out Gnoga.Gui.Element.Element_Type'Class;
-         Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-         ID     :        UXString := "");
+         type Position_Scale_Rows is array (Axis_Name) of Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         type Position_Scale_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
+            Rows : Position_Scale_Rows;
+         end record;
 
-      function Get (Widget : Axial_Velocities_Widget) return Axial_Velocities;
-      procedure Set (Widget : in out Axial_Velocities_Widget; Vels : Axial_Velocities);
+         type Axial_Velocities_Rows is array (Axis_Name) of Basic_Inputs.Velocity_Rows.Parameter_Row;
+         type Axial_Velocities_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
+            Rows : Axial_Velocities_Rows;
+         end record;
 
-      type Attached_Steppers_Widget is new Gnoga.Gui.Element.Table.Table_Type with private;
+         type Stepper_Rows is array (My_Config.Stepper_Name) of Basic_Inputs.Boolean_Rows.Parameter_Row;
+         type Attached_Steppers_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
+            Rows : Stepper_Rows;
+         end record;
 
-      procedure Create
-        (Widget : in out Attached_Steppers_Widget;
-         Parent : in out Gnoga.Gui.Element.Element_Type'Class;
-         Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-         ID     :        UXString := "");
+      end Plain_Widgets;
 
-      function Get (Widget : Attached_Steppers_Widget) return My_Config.Attached_Steppers;
-      procedure Set (Widget : in out Attached_Steppers_Widget; Steppers : My_Config.Attached_Steppers);
+      use Plain_Widgets;
 
-   private
-
-      type Numeric_Row is new Gnoga.Gui.Element.Table.Table_Row_Type with record
-         Name      : Gnoga.Gui.Element.Common.DIV_Type;
-         Name_Col  : Gnoga.Gui.Element.Table.Table_Column_Type;
-         Input_Col : Gnoga.Gui.Element.Table.Table_Column_Type;
-         Input     : Gnoga.Gui.Element.Form.Number_Type;
-      end record;
-
-      procedure Create
-        (Row    : in out Numeric_Row;
-         Parent : in out Gnoga.Gui.Element.Element_Type'Class;
-         Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-         Name   :        UXString;
-         ID     :        UXString := "");
-
-      type Check_Box_Row is new Gnoga.Gui.Element.Table.Table_Row_Type with record
-         Name      : Gnoga.Gui.Element.Common.DIV_Type;
-         Name_Col  : Gnoga.Gui.Element.Table.Table_Column_Type;
-         Input_Col : Gnoga.Gui.Element.Table.Table_Column_Type;
-         Input     : Gnoga.Gui.Element.Form.Check_Box_Type;
-      end record;
-
-      procedure Create
-        (Row    : in out Check_Box_Row;
-         Parent : in out Gnoga.Gui.Element.Element_Type'Class;
-         Form   : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-         Name   :        UXString;
-         ID     :        UXString := "");
-
-      type Position_Rows is array (Axis_Name) of Numeric_Row;
-      type Position_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
-         Rows : Position_Rows;
-      end record;
-
-      type Position_Scale_Rows is array (Axis_Name) of Numeric_Row;
-      type Position_Scale_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
-         Rows : Position_Scale_Rows;
-      end record;
-
-      type Axial_Velocities_Rows is array (Axis_Name) of Numeric_Row;
-      type Axial_Velocities_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
-         Rows : Axial_Velocities_Rows;
-      end record;
-
-      type Stepper_Rows is array (My_Config.Stepper_Name) of Check_Box_Row;
-      type Attached_Steppers_Widget is new Gnoga.Gui.Element.Table.Table_Type with record
-         Rows : Stepper_Rows;
-      end record;
+      package Position_Widget_Rows is new Parameter_Rows (Prunt.Position, "", Position_Widget);
+      package Position_Scale_Widget_Rows is new Parameter_Rows (Position_Scale, "", Position_Scale_Widget);
+      package Axial_Velocities_Widget_Rows is new Parameter_Rows (Axial_Velocities, "", Axial_Velocities_Widget);
+      package Attached_Steppers_Widget_Rows is new Parameter_Rows
+        (My_Config.Attached_Steppers, "", Attached_Steppers_Widget);
 
    end Grouped_Element_Widgets;
 
@@ -306,9 +277,8 @@ package Prunt.GUI.Config_Editor is
    private
 
       type Prunt_Widget is new Parent_Type with record
-         Widget_Table  : Gnoga.Gui.Element.Table.Table_Type;
-         Enabled_Row   : Parameter_Rows.Parameter_Row;
-         Enabled_Input : Basic_Inputs.Boolean_Input;
+         Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
+         Enabled      : Basic_Inputs.Boolean_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
@@ -316,63 +286,40 @@ package Prunt.GUI.Config_Editor is
       type Stepper_Widget is new Parent_Type with record
          Stepper : My_Config.Stepper_Name;
 
-         Widget_Table      : Gnoga.Gui.Element.Table.Table_Type;
-         Enabled_Row       : Parameter_Rows.Parameter_Row;
-         Enabled_Input     : Basic_Inputs.Boolean_Input;
-         Mm_Per_Step_Row   : Parameter_Rows.Parameter_Row;
-         Mm_Per_Step_Input : Basic_Inputs.Length_Input;
+         Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
+         Enabled      : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         Mm_Per_Step  : Basic_Inputs.Length_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
 
       type Kinematics_Widget is new Parent_Type with record
-         Widget_Table                  : Gnoga.Gui.Element.Table.Table_Type;
-         Lower_Pos_Limit_Row           : Parameter_Rows.Parameter_Row;
-         Lower_Pos_Limit_Input         : Grouped_Element_Widgets.Position_Widget;
-         Upper_Pos_Limit_Row           : Parameter_Rows.Parameter_Row;
-         Upper_Pos_Limit_Input         : Grouped_Element_Widgets.Position_Widget;
-         Tangential_Velocity_Max_Row   : Parameter_Rows.Parameter_Row;
-         Tangential_Velocity_Max_Input : Basic_Inputs.Velocity_Input;
-         Acceleration_Max_Row          : Parameter_Rows.Parameter_Row;
-         Acceleration_Max_Input        : Basic_Inputs.Acceleration_Input;
-         Jerk_Max_Row                  : Parameter_Rows.Parameter_Row;
-         Jerk_Max_Input                : Basic_Inputs.Jerk_Input;
-         Snap_Max_Row                  : Parameter_Rows.Parameter_Row;
-         Snap_Max_Input                : Basic_Inputs.Snap_Input;
-         Crackle_Max_Row               : Parameter_Rows.Parameter_Row;
-         Crackle_Max_Input             : Basic_Inputs.Crackle_Input;
-         Pop_Max_Row                   : Parameter_Rows.Parameter_Row;
-         Pop_Max_Input                 : Basic_Inputs.Crackle_Input;
-         Axial_Velocity_Maxes_Row      : Parameter_Rows.Parameter_Row;
-         Axial_Velocity_Maxes_Input    : Grouped_Element_Widgets.Axial_Velocities_Widget;
-         Ignore_E_In_XYZE_Row          : Parameter_Rows.Parameter_Row;
-         Ignore_E_In_XYZE_Input        : Basic_Inputs.Boolean_Input;
-         Shift_Blended_Corners_Row     : Parameter_Rows.Parameter_Row;
-         Shift_Blended_Corners_Input   : Basic_Inputs.Boolean_Input;
-         Pressure_Advance_Time_Row     : Parameter_Rows.Parameter_Row;
-         Pressure_Advance_Time_Input   : Basic_Inputs.Time_Input;
-         Chord_Error_Max_Row           : Parameter_Rows.Parameter_Row;
-         Chord_Error_Max_Input         : Basic_Inputs.Length_Input;
-         Higher_Order_Scaler_Row       : Parameter_Rows.Parameter_Row;
-         Higher_Order_Scaler_Input     : Grouped_Element_Widgets.Position_Scale_Widget;
-         Z_Steppers_Row                : Parameter_Rows.Parameter_Row;
-         Z_Steppers_Input              : Grouped_Element_Widgets.Attached_Steppers_Widget;
-         E_Steppers_Row                : Parameter_Rows.Parameter_Row;
-         E_Steppers_Input              : Grouped_Element_Widgets.Attached_Steppers_Widget;
+         Widget_Table            : Gnoga.Gui.Element.Table.Table_Type;
+         Lower_Pos_Limit         : Grouped_Element_Widgets.Position_Widget_Rows.Parameter_Row;
+         Upper_Pos_Limit         : Grouped_Element_Widgets.Position_Widget_Rows.Parameter_Row;
+         Tangential_Velocity_Max : Basic_Inputs.Velocity_Rows.Parameter_Row;
+         Acceleration_Max        : Basic_Inputs.Acceleration_Rows.Parameter_Row;
+         Jerk_Max                : Basic_Inputs.Jerk_Rows.Parameter_Row;
+         Snap_Max                : Basic_Inputs.Snap_Rows.Parameter_Row;
+         Crackle_Max             : Basic_Inputs.Crackle_Rows.Parameter_Row;
+         Axial_Velocity_Maxes    : Grouped_Element_Widgets.Axial_Velocities_Widget_Rows.Parameter_Row;
+         Ignore_E_In_XYZE        : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         Shift_Blended_Corners   : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         Pressure_Advance_Time   : Basic_Inputs.Time_Rows.Parameter_Row;
+         Chord_Error_Max         : Basic_Inputs.Length_Rows.Parameter_Row;
+         Higher_Order_Scaler     : Grouped_Element_Widgets.Position_Scale_Widget_Rows.Parameter_Row;
+         Z_Steppers              : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
+         E_Steppers              : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
 
          Kind_Table : Cards_Table_Type;
 
-         Cartesian_Table  : aliased Gnoga.Gui.Element.Table.Table_Type;
-         X_Steppers_Row   : Parameter_Rows.Parameter_Row;
-         X_Steppers_Input : Grouped_Element_Widgets.Attached_Steppers_Widget;
-         Y_Steppers_Row   : Parameter_Rows.Parameter_Row;
-         Y_Steppers_Input : Grouped_Element_Widgets.Attached_Steppers_Widget;
+         Cartesian_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
+         X_Steppers      : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
+         Y_Steppers      : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
 
-         Core_XY_Table    : aliased Gnoga.Gui.Element.Table.Table_Type;
-         A_Steppers_Row   : Parameter_Rows.Parameter_Row;
-         A_Steppers_Input : Grouped_Element_Widgets.Attached_Steppers_Widget;
-         B_Steppers_Row   : Parameter_Rows.Parameter_Row;
-         B_Steppers_Input : Grouped_Element_Widgets.Attached_Steppers_Widget;
+         Core_XY_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
+         A_Steppers    : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
+         B_Steppers    : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
@@ -380,11 +327,9 @@ package Prunt.GUI.Config_Editor is
       type Input_Switch_Widget is new Parent_Type with record
          Input_Switch : My_Config.Input_Switch_Name;
 
-         Widget_Table      : Gnoga.Gui.Element.Table.Table_Type;
-         Enabled_Row       : Parameter_Rows.Parameter_Row;
-         Enabled_Input     : Basic_Inputs.Boolean_Input;
-         Hit_On_High_Row   : Parameter_Rows.Parameter_Row;
-         Hit_On_High_Input : Basic_Inputs.Boolean_Input;
+         Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
+         Enabled      : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         Hit_On_High  : Basic_Inputs.Boolean_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
@@ -396,33 +341,24 @@ package Prunt.GUI.Config_Editor is
 
          Kind_Table : Cards_Table_Type;
 
-         Double_Tap_Table             : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Switch_Row                   : Parameter_Rows.Parameter_Row;
-         Switch_Input                 : Basic_Inputs.Input_Switch_Name_Input.Discrete_Input;
-         First_Move_Distance_Row      : Parameter_Rows.Parameter_Row;
-         First_Move_Distance_Input    : Basic_Inputs.Length_Input;
-         Back_Off_Move_Distance_Row   : Parameter_Rows.Parameter_Row;
-         Back_Off_Move_Distance_Input : Basic_Inputs.Length_Input;
-         Second_Move_Distance_Row     : Parameter_Rows.Parameter_Row;
-         Second_Move_Distance_Input   : Basic_Inputs.Length_Input;
-         Switch_Position_Row          : Parameter_Rows.Parameter_Row;
-         Switch_Position_Input        : Basic_Inputs.Length_Input;
+         Double_Tap_Table       : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Switch                 : Basic_Inputs.Input_Switch_Name_Rows.Parameter_Row;
+         First_Move_Distance    : Basic_Inputs.Length_Rows.Parameter_Row;
+         Back_Off_Move_Distance : Basic_Inputs.Length_Rows.Parameter_Row;
+         Second_Move_Distance   : Basic_Inputs.Length_Rows.Parameter_Row;
+         Switch_Position        : Basic_Inputs.Length_Rows.Parameter_Row;
 
          Set_To_Value_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Value_Row          : Parameter_Rows.Parameter_Row;
-         Value_Input        : Basic_Inputs.Length_Input;
+         Value              : Basic_Inputs.Length_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
 
       type Extruder_Widget is new Parent_Type with record
-         Widget_Table                         : Gnoga.Gui.Element.Table.Table_Type;
-         Nozzle_Diameter_Row                  : Parameter_Rows.Parameter_Row;
-         Nozzle_Diameter_Input                : Basic_Inputs.Length_Input;
-         Filament_Diameter_Row                : Parameter_Rows.Parameter_Row;
-         Filament_Diameter_Input              : Basic_Inputs.Length_Input;
-         Starting_Pressure_Advance_Time_Row   : Parameter_Rows.Parameter_Row;
-         Starting_Pressure_Advance_Time_Input : Basic_Inputs.Time_Input;
+         Widget_Table                   : Gnoga.Gui.Element.Table.Table_Type;
+         Nozzle_Diameter                : Basic_Inputs.Length_Rows.Parameter_Row;
+         Filament_Diameter              : Basic_Inputs.Length_Rows.Parameter_Row;
+         Starting_Pressure_Advance_Time : Basic_Inputs.Time_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
@@ -432,30 +368,22 @@ package Prunt.GUI.Config_Editor is
 
          Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
 
-         Minimum_Temperature_Row   : Parameter_Rows.Parameter_Row;
-         Minimum_Temperature_Input : Basic_Inputs.Temperature_Input;
-         Maximum_Temperature_Row   : Parameter_Rows.Parameter_Row;
-         Maximum_Temperature_Input : Basic_Inputs.Temperature_Input;
+         Minimum_Temperature : Basic_Inputs.Temperature_Rows.Parameter_Row;
+         Maximum_Temperature : Basic_Inputs.Temperature_Rows.Parameter_Row;
 
          Kind_Table : Cards_Table_Type;
 
          Disabled_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
 
          Steinhart_Hart_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
-         SH_A_Row             : Parameter_Rows.Parameter_Row;
-         SH_A_Input           : Basic_Inputs.Dimensionless_Input;
-         SH_B_Row             : Parameter_Rows.Parameter_Row;
-         SH_B_Input           : Basic_Inputs.Dimensionless_Input;
-         SH_C_Row             : Parameter_Rows.Parameter_Row;
-         SH_C_Input           : Basic_Inputs.Dimensionless_Input;
+         SH_A                 : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         SH_B                 : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         SH_C                 : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
 
          Callendar_Van_Dusen_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
-         CVD_R0_Row                : Parameter_Rows.Parameter_Row;
-         CVD_R0_Input              : Basic_Inputs.Resistance_Input;
-         CVD_A_Row                 : Parameter_Rows.Parameter_Row;
-         CVD_A_Input               : Basic_Inputs.Dimensionless_Input;
-         CVD_B_Row                 : Parameter_Rows.Parameter_Row;
-         CVD_B_Input               : Basic_Inputs.Dimensionless_Input;
+         CVD_R0                    : Basic_Inputs.Resistance_Rows.Parameter_Row;
+         CVD_A                     : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         CVD_B                     : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
@@ -463,29 +391,21 @@ package Prunt.GUI.Config_Editor is
       type Heater_Widget is new Parent_Type with record
          Heater : My_Config.Heater_Name;
 
-         Widget_Table               : Gnoga.Gui.Element.Table.Table_Type;
-         Thermistor_Row             : Parameter_Rows.Parameter_Row;
-         Thermistor_Input           : Basic_Inputs.Thermistor_Name_Input.Discrete_Input;
-         Max_Cumulative_Error_Row   : Parameter_Rows.Parameter_Row;
-         Max_Cumulative_Error_Input : Basic_Inputs.Temperature_Input;
-         Check_Gain_Time_Row        : Parameter_Rows.Parameter_Row;
-         Check_Gain_Time_Input      : Basic_Inputs.Time_Input;
-         Check_Minimum_Gain_Row     : Parameter_Rows.Parameter_Row;
-         Check_Minimum_Gain_Input   : Basic_Inputs.Temperature_Input;
-         Hysteresis_Row             : Parameter_Rows.Parameter_Row;
-         Hysteresis_Input           : Basic_Inputs.Temperature_Input;
+         Widget_Table         : Gnoga.Gui.Element.Table.Table_Type;
+         Thermistor           : Basic_Inputs.Thermistor_Name_Rows.Parameter_Row;
+         Max_Cumulative_Error : Basic_Inputs.Temperature_Rows.Parameter_Row;
+         Check_Gain_Time      : Basic_Inputs.Time_Rows.Parameter_Row;
+         Check_Minimum_Gain   : Basic_Inputs.Temperature_Rows.Parameter_Row;
+         Hysteresis           : Basic_Inputs.Temperature_Rows.Parameter_Row;
 
          Kind_Table : Cards_Table_Type;
 
          Disabled_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
 
-         PID_Table                : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Proportional_Scale_Row   : Parameter_Rows.Parameter_Row;
-         Proportional_Scale_Input : Basic_Inputs.Dimensionless_Input;
-         Integral_Scale_Row       : Parameter_Rows.Parameter_Row;
-         Integral_Scale_Input     : Basic_Inputs.Dimensionless_Input;
-         Derivative_Scale_Row     : Parameter_Rows.Parameter_Row;
-         Derivative_Scale_Input   : Basic_Inputs.Dimensionless_Input;
+         PID_Table          : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Proportional_Scale : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         Integral_Scale     : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         Derivative_Scale   : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
 
          Bang_Bang_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
 
@@ -499,19 +419,13 @@ package Prunt.GUI.Config_Editor is
 
          No_Mesh_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
 
-         Beacon_Table               : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Serial_Port_Path_Row       : Parameter_Rows.Parameter_Row;
-         Serial_Port_Path_Input     : Basic_Inputs.Path_String_Input;
-         X_Offset_Row               : Parameter_Rows.Parameter_Row;
-         X_Offset_Input             : Basic_Inputs.Length_Input;
-         Y_Offset_Row               : Parameter_Rows.Parameter_Row;
-         Y_Offset_Input             : Basic_Inputs.Length_Input;
-         Calibration_Floor_Row      : Parameter_Rows.Parameter_Row;
-         Calibration_Floor_Input    : Basic_Inputs.Length_Input;
-         Calibration_Ceiling_Row    : Parameter_Rows.Parameter_Row;
-         Calibration_Ceiling_Input  : Basic_Inputs.Length_Input;
-         Calibration_Feedrate_Row   : Parameter_Rows.Parameter_Row;
-         Calibration_Feedrate_Input : Basic_Inputs.Velocity_Input;
+         Beacon_Table         : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Serial_Port_Path     : Basic_Inputs.Path_String_Rows.Parameter_Row;
+         X_Offset             : Basic_Inputs.Length_Rows.Parameter_Row;
+         Y_Offset             : Basic_Inputs.Length_Rows.Parameter_Row;
+         Calibration_Floor    : Basic_Inputs.Length_Rows.Parameter_Row;
+         Calibration_Ceiling  : Basic_Inputs.Length_Rows.Parameter_Row;
+         Calibration_Feedrate : Basic_Inputs.Velocity_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
@@ -525,27 +439,21 @@ package Prunt.GUI.Config_Editor is
 
          Disabled_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
 
-         Dynamic_PWM_Table       : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Disable_Below_PWM_Row   : Parameter_Rows.Parameter_Row;
-         Disable_Below_PWM_Input : Basic_Inputs.PWM_Scale_Input;
-         Max_PWM_Row             : Parameter_Rows.Parameter_Row;
-         Max_PWM_Input           : Basic_Inputs.PWM_Scale_Input;
+         Dynamic_PWM_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Disable_Below_PWM : Basic_Inputs.PWM_Scale_Rows.Parameter_Row;
+         Max_PWM           : Basic_Inputs.PWM_Scale_Rows.Parameter_Row;
 
-         Always_On_Table     : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Always_On_PWM_Row   : Parameter_Rows.Parameter_Row;
-         Always_On_PWM_Input : Basic_Inputs.PWM_Scale_Input;
+         Always_On_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Always_On_PWM   : Basic_Inputs.PWM_Scale_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
 
       type G_Code_Assignment_Widget is new Parent_Type with record
-         Widget_Table        : Gnoga.Gui.Element.Table.Table_Type;
-         Bed_Heater_Row      : Parameter_Rows.Parameter_Row;
-         Bed_Heater_Input    : Basic_Inputs.Heater_Name_Input.Discrete_Input;
-         --  Chamber_Heater_Row   : Parameter_Rows.Parameter_Row;
-         --  Chamber_Heater_Input : Basic_Inputs.Heater_Name_Input.Discrete_Input;
-         Hotend_Heater_Row   : Parameter_Rows.Parameter_Row;
-         Hotend_Heater_Input : Basic_Inputs.Heater_Name_Input.Discrete_Input;
+         Widget_Table  : Gnoga.Gui.Element.Table.Table_Type;
+         Bed_Heater    : Basic_Inputs.Heater_Name_Rows.Parameter_Row;
+         --  Chamber_Heater : Basic_Inputs.Heater_Name_Rows.Parameter_Row;
+         Hotend_Heater : Basic_Inputs.Heater_Name_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;

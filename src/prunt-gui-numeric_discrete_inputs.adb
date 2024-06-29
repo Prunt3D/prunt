@@ -19,32 +19,45 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Gnoga.Gui.Element.Form;
-with UXStrings; use UXStrings;
+with Ada.Strings;
 
-generic
-   type T is (<>);
-package Prunt.GUI.Discrete_Inputs is
+package body Prunt.GUI.Numeric_Discrete_Inputs is
 
    pragma Unsuppress (All_Checks);
 
-   type Discrete_Input is new Gnoga.Gui.Element.Form.Selection_Type with null record;
-
    overriding procedure Create
-     (Element         : in out Discrete_Input;
-      Form            : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-      Multiple_Select :        Boolean  := False;
-      Visible_Lines   :        Positive := 1;
-      Name            :        UXString := "";
-      ID              :        UXString := "");
+     (Element : in out Numeric_Input;
+      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class;
+      Value   :        UXString := "";
+      Name    :        UXString := "";
+      ID      :        UXString := "")
+   is
+   begin
+      Gnoga.Gui.Element.Form.Number_Type (Element).Create (Form => Form, Value => Value, Name => Name, ID => ID);
+      Gnoga.Gui.Element.Form.Number_Type (Element).Minimum
+        (UXStrings.From_UTF_8 (T'First'Image).Trim (Ada.Strings.Both));
+      Gnoga.Gui.Element.Form.Number_Type (Element).Maximum
+        (UXStrings.From_UTF_8 (T'Last'Image).Trim (Ada.Strings.Both));
+   end Create;
 
    procedure Create_For_Parameter_Row
-     (Element : in out Discrete_Input;
+     (Element : in out Numeric_Input;
       Parent  : in out Gnoga.Gui.Element.Element_Type'Class;
-      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class)
+   is
+      pragma Unreferenced (Parent);
+   begin
+      Create (Element, Form);
+   end Create_For_Parameter_Row;
 
-   function Get (Input : Discrete_Input) return T;
+   function Get (Input : Numeric_Input) return T is
+   begin
+      return T'Value (Input.Value.To_UTF_8);
+   end Get;
 
-   procedure Set (Input : in out Discrete_Input; Value : T);
+   procedure Set (Input : in out Numeric_Input; Value : T) is
+   begin
+      Input.Value (UXStrings.From_UTF_8 (Value'Image).Trim (Ada.Strings.Both));
+   end Set;
 
-end Prunt.GUI.Discrete_Inputs;
+end Prunt.GUI.Numeric_Discrete_Inputs;

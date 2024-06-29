@@ -19,32 +19,49 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Gnoga.Gui.Element.Form;
-with UXStrings; use UXStrings;
-
-generic
-   type T is (<>);
-package Prunt.GUI.Discrete_Inputs is
-
-   pragma Unsuppress (All_Checks);
-
-   type Discrete_Input is new Gnoga.Gui.Element.Form.Selection_Type with null record;
+package body Prunt.GUI.Parameter_Rows is
 
    overriding procedure Create
-     (Element         : in out Discrete_Input;
-      Form            : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-      Multiple_Select :        Boolean  := False;
-      Visible_Lines   :        Positive := 1;
-      Name            :        UXString := "";
-      ID              :        UXString := "");
+     (Row : in out Parameter_Row; Parent : in out Gnoga.Gui.Element.Element_Type'Class; ID : UXString := "")
+   is
+   begin
+      Parent_Type (Row).Create (Parent, ID);
+      Row.Name_Col.Create (Row);
+      Row.Name.Create (Row.Name_Col);
+      Row.Data_Col.Create (Row);
+      Row.Description_Col.Create (Row);
+      Row.Description.Create (Row.Description_Col);
+      Row.Style ("border", "1px solid black");
+   end Create;
 
-   procedure Create_For_Parameter_Row
-     (Element : in out Discrete_Input;
-      Parent  : in out Gnoga.Gui.Element.Element_Type'Class;
-      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class);
+   procedure Create
+     (Row         : in out Parameter_Row;
+      Parent      : in out Gnoga.Gui.Element.Element_Type'Class;
+      Form        : in out Gnoga.Gui.Element.Form.Form_Type'Class;
+      Name        :        UXString;
+      Description :        UXString;
+      ID          :        UXString := "")
+   is
+   begin
+      Create_For_Parameter_Row (Row.Data, Parent, Form);
+      Row.Create (Parent, ID);
+      if Unit_Name = "" then
+         Row.Name.Text (Name & ":");
+      else
+         Row.Name.Text (Name & " (" & Unit_Name & "):");
+      end if;
+      Row.Description.Text (Description);
+      Row.Data.Place_Inside_Top_Of (Row.Data_Col);
+   end Create;
 
-   function Get (Input : Discrete_Input) return T;
+   function Get_Data (Input : Parameter_Row) return T is
+   begin
+      return Get (Input.Data);
+   end Get_Data;
 
-   procedure Set (Input : in out Discrete_Input; Value : T);
+   procedure Set_Data (Input : in out Parameter_Row; Value : T) is
+   begin
+      Set (Input.Data, Value);
+   end Set_Data;
 
-end Prunt.GUI.Discrete_Inputs;
+end Prunt.GUI.Parameter_Rows;

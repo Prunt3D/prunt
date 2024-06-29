@@ -23,28 +23,27 @@ with Gnoga.Gui.Element.Form;
 with UXStrings; use UXStrings;
 
 generic
-   type T is (<>);
-package Prunt.GUI.Discrete_Inputs is
+   type T is digits <>;
+package Prunt.GUI.Numeric_Floating_Inputs is
 
    pragma Unsuppress (All_Checks);
 
-   type Discrete_Input is new Gnoga.Gui.Element.Form.Selection_Type with null record;
+   type Numeric_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
 
    overriding procedure Create
-     (Element         : in out Discrete_Input;
-      Form            : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-      Multiple_Select :        Boolean  := False;
-      Visible_Lines   :        Positive := 1;
-      Name            :        UXString := "";
-      ID              :        UXString := "");
+     (Element : in out Numeric_Input;
+      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class;
+      Value   :        UXString := "";
+      Name    :        UXString := "";
+      ID      :        UXString := "");
 
    procedure Create_For_Parameter_Row
-     (Element : in out Discrete_Input;
+     (Element : in out Numeric_Input;
       Parent  : in out Gnoga.Gui.Element.Element_Type'Class;
       Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class);
 
-   function Get (Input : Discrete_Input) return T;
+   function Get (Input : Numeric_Input) return T;
 
-   procedure Set (Input : in out Discrete_Input; Value : T);
+   procedure Set (Input : in out Numeric_Input; Value : T);
 
-end Prunt.GUI.Discrete_Inputs;
+end Prunt.GUI.Numeric_Floating_Inputs;

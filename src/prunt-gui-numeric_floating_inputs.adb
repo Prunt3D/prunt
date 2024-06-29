@@ -19,29 +19,30 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.GUI.Discrete_Inputs is
+with Ada.Strings;
 
-   pragma Unsuppress (All_Checks);
+package body Prunt.GUI.Numeric_Floating_Inputs is
+
+   pragma Warnings (Off, "dimensions mismatch");
 
    overriding procedure Create
-     (Element         : in out Discrete_Input;
-      Form            : in out Gnoga.Gui.Element.Form.Form_Type'Class;
-      Multiple_Select :        Boolean  := False;
-      Visible_Lines   :        Positive := 1;
-      Name            :        UXString := "";
-      ID              :        UXString := "")
+     (Element : in out Numeric_Input;
+      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class;
+      Value   :        UXString := "";
+      Name    :        UXString := "";
+      ID      :        UXString := "")
    is
    begin
-      Gnoga.Gui.Element.Form.Selection_Type (Element).Create
-        (Form => Form, Multiple_Select => Multiple_Select, Visible_Lines => Visible_Lines, Name => Name, ID => ID);
-
-      for I in T loop
-         Element.Add_Option (Value => UXStrings.From_UTF_8 (I'Image), Text => UXStrings.From_UTF_8 (I'Image));
-      end loop;
+      Gnoga.Gui.Element.Form.Number_Type (Element).Create (Form => Form, Value => Value, Name => Name, ID => ID);
+      Gnoga.Gui.Element.Form.Number_Type (Element).Minimum
+        (UXStrings.From_UTF_8 (T'First'Image).Trim (Ada.Strings.Both));
+      Gnoga.Gui.Element.Form.Number_Type (Element).Maximum
+        (UXStrings.From_UTF_8 (T'Last'Image).Trim (Ada.Strings.Both));
+      Gnoga.Gui.Element.Form.Number_Type (Element).Step ("any");
    end Create;
 
    procedure Create_For_Parameter_Row
-     (Element : in out Discrete_Input;
+     (Element : in out Numeric_Input;
       Parent  : in out Gnoga.Gui.Element.Element_Type'Class;
       Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class)
    is
@@ -50,16 +51,35 @@ package body Prunt.GUI.Discrete_Inputs is
       Create (Element, Form);
    end Create_For_Parameter_Row;
 
-   function Get (Input : Discrete_Input) return T is
+   function Get (Input : Numeric_Input) return T is
    begin
       return T'Value (Input.Value.To_UTF_8);
    end Get;
 
-   procedure Set (Input : in out Discrete_Input; Value : T) is
+   function Nice_Image (Number : T) return UXString is
+      function T_Image is new Float_Image (T);
+      Raw : constant String := T_Image (Number, Fore => 1, Aft => T'Digits - 1, Exp => 0);
    begin
-      for I in 1 .. Input.Length loop
-         Input.Selected (I, Input.Value (I) = UXStrings.From_UTF_8 (Value'Image));
+      for I in reverse Raw'Range loop
+         if Raw (I) /= '0' then
+            if Raw (I) = '.' then
+               if I - Raw'First > T'Digits + 1 then
+                  return UXStrings.From_UTF_8 (Number'Image).Trim (Ada.Strings.Both);
+               else
+                  return UXStrings.From_UTF_8 (Raw (Raw'First .. I + 1)).Trim (Ada.Strings.Both);
+               end if;
+            else
+               return UXStrings.From_UTF_8 (Raw (Raw'First .. I)).Trim (Ada.Strings.Both);
+            end if;
+         end if;
       end loop;
+
+      raise Program_Error;
+   end Nice_Image;
+
+   procedure Set (Input : in out Numeric_Input; Value : T) is
+   begin
+      Input.Value (Nice_Image (Value));
    end Set;
 
-end Prunt.GUI.Discrete_Inputs;
+end Prunt.GUI.Numeric_Floating_Inputs;
