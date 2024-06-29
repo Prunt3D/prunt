@@ -1196,17 +1196,6 @@ package body Prunt.GUI.Config_Editor is
             Description => "Coefficient for the derivative term.",
             Data        => View.Derivative_Scale_Input);
 
-         View.Proportional_On_Measurement_Input.Create (Form => View);
-         View.Proportional_On_Measurement_Row.Create
-           (Parent      => View.PID_Table,
-            Name        => "Proportional On Measurement:",
-            Description =>
-              "Use the incoming measurement rather than the error for the proportional term. " &
-              "This drastically changes how the PID algorithm works and as such most common PID " &
-              "tuning methods will not work. When tuning these values note that a higher " &
-              "proportional scale will make the algorithm more conservative.",
-            Data        => View.Proportional_On_Measurement_Input);
-
          View.Bang_Bang_Table.Create (View.Kind_Table);
          View.Bang_Bang_Table.Style ("border-collapse", "collapse");
          View.Kind_Table.Add_Tab ("Bang Bang", View.Bang_Bang_Table'Access);
@@ -1231,7 +1220,6 @@ package body Prunt.GUI.Config_Editor is
                View.Proportional_Scale_Input.Set (Params.Proportional_Scale);
                View.Integral_Scale_Input.Set (Params.Integral_Scale);
                View.Derivative_Scale_Input.Set (Params.Derivative_Scale);
-               View.Proportional_On_Measurement_Input.Set (Params.Proportional_On_Measurement);
             when My_Config.Bang_Bang_Kind =>
                View.Kind_Table.Tabs.Select_Tab ("Bang Bang");
          end case;
@@ -1248,11 +1236,10 @@ package body Prunt.GUI.Config_Editor is
          if View.Kind_Table.Cards.Current_Card = View.Disabled_Table'Unrestricted_Access then
             Params := (Kind => My_Config.Disabled_Kind, others => <>);
          elsif View.Kind_Table.Cards.Current_Card = View.PID_Table'Unrestricted_Access then
-            Params                             := (Kind => My_Config.PID_Kind, others => <>);
-            Params.Proportional_Scale          := View.Proportional_Scale_Input.Get;
-            Params.Integral_Scale              := View.Integral_Scale_Input.Get;
-            Params.Derivative_Scale            := View.Derivative_Scale_Input.Get;
-            Params.Proportional_On_Measurement := View.Proportional_On_Measurement_Input.Get;
+            Params                    := (Kind => My_Config.PID_Kind, others => <>);
+            Params.Proportional_Scale := View.Proportional_Scale_Input.Get;
+            Params.Integral_Scale     := View.Integral_Scale_Input.Get;
+            Params.Derivative_Scale   := View.Derivative_Scale_Input.Get;
          elsif View.Kind_Table.Cards.Current_Card = View.Bang_Bang_Table'Unrestricted_Access then
             Params := (Kind => My_Config.Bang_Bang_Kind, others => <>);
          else

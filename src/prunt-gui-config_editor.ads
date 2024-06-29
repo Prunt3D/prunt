@@ -479,15 +479,13 @@ package Prunt.GUI.Config_Editor is
 
          Disabled_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
 
-         PID_Table                         : aliased Gnoga.Gui.Element.Table.Table_Type;
-         Proportional_Scale_Row            : Parameter_Rows.Parameter_Row;
-         Proportional_Scale_Input          : Basic_Inputs.Dimensionless_Input;
-         Integral_Scale_Row                : Parameter_Rows.Parameter_Row;
-         Integral_Scale_Input              : Basic_Inputs.Dimensionless_Input;
-         Derivative_Scale_Row              : Parameter_Rows.Parameter_Row;
-         Derivative_Scale_Input            : Basic_Inputs.Dimensionless_Input;
-         Proportional_On_Measurement_Row   : Parameter_Rows.Parameter_Row;
-         Proportional_On_Measurement_Input : Basic_Inputs.Boolean_Input;
+         PID_Table                : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Proportional_Scale_Row   : Parameter_Rows.Parameter_Row;
+         Proportional_Scale_Input : Basic_Inputs.Dimensionless_Input;
+         Integral_Scale_Row       : Parameter_Rows.Parameter_Row;
+         Integral_Scale_Input     : Basic_Inputs.Dimensionless_Input;
+         Derivative_Scale_Row     : Parameter_Rows.Parameter_Row;
+         Derivative_Scale_Input   : Basic_Inputs.Dimensionless_Input;
 
          Bang_Bang_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
 

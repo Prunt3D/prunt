@@ -517,21 +517,20 @@ package body Prunt.Config is
             when PID_Kind =>
                Data := (Kind => PID_Kind, others => <>);
                Write (Data, Heater, Append_Only => True);
-               Table                            := TOML_Data.Get ("Heater").Get (Heater'Image);
-               Data.Proportional_Scale          := From_TOML (Table.Get ("Proportional_Scale"));
-               Data.Integral_Scale              := From_TOML (Table.Get ("Integral_Scale"));
-               Data.Derivative_Scale            := From_TOML (Table.Get ("Derivative_Scale"));
-               Data.Proportional_On_Measurement := From_TOML (Table.Get ("Proportional_On_Measurement"));
+               Table                   := TOML_Data.Get ("Heater").Get (Heater'Image);
+               Data.Proportional_Scale := From_TOML (Table.Get ("Proportional_Scale"));
+               Data.Integral_Scale     := From_TOML (Table.Get ("Integral_Scale"));
+               Data.Derivative_Scale   := From_TOML (Table.Get ("Derivative_Scale"));
             when Bang_Bang_Kind =>
                Data := (Kind => Bang_Bang_Kind, others => <>);
                Write (Data, Heater, Append_Only => True);
-               Table          := TOML_Data.Get ("Heater").Get (Heater'Image);
+               Table := TOML_Data.Get ("Heater").Get (Heater'Image);
          end case;
-         Data.Thermistor := From_TOML (Table.Get ("Thermistor"));
+         Data.Thermistor           := From_TOML (Table.Get ("Thermistor"));
          Data.Max_Cumulative_Error := From_TOML (Table.Get ("Max_Cumulative_Error")) * celcius;
-         Data.Check_Gain_Time := From_TOML (Table.Get ("Check_Gain_Time")) * s;
-         Data.Check_Minimum_Gain := From_TOML (Table.Get ("Check_Minimum_Gain")) * celcius;
-         Data.Hysteresis := From_TOML (Table.Get ("Hysteresis")) * celcius;
+         Data.Check_Gain_Time      := From_TOML (Table.Get ("Check_Gain_Time")) * s;
+         Data.Check_Minimum_Gain   := From_TOML (Table.Get ("Check_Minimum_Gain")) * celcius;
+         Data.Hysteresis           := From_TOML (Table.Get ("Hysteresis")) * celcius;
       end Read;
 
       procedure Write (Data : Heater_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) is
@@ -545,7 +544,6 @@ package body Prunt.Config is
                Table.Set ("Proportional_Scale", To_TOML (Data.Proportional_Scale));
                Table.Set ("Integral_Scale", To_TOML (Data.Integral_Scale));
                Table.Set ("Derivative_Scale", To_TOML (Data.Derivative_Scale));
-               Table.Set ("Proportional_On_Measurement", To_TOML (Data.Proportional_On_Measurement));
             when Bang_Bang_Kind =>
                null;
          end case;

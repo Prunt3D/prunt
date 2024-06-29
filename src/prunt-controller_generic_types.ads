@@ -96,10 +96,9 @@ package Prunt.Controller_Generic_Types is
          when Disabled_Kind =>
             null;
          when PID_Kind =>
-            Proportional_Scale          : Dimensionless := 0.0;
-            Integral_Scale              : Dimensionless := 0.0;
-            Derivative_Scale            : Dimensionless := 0.0;
-            Proportional_On_Measurement : Boolean       := True;
+            Proportional_Scale : Dimensionless := 0.0;
+            Integral_Scale     : Dimensionless := 0.0;
+            Derivative_Scale   : Dimensionless := 0.0;
          when Bang_Bang_Kind =>
             null;
       end case;

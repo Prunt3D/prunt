@@ -123,9 +123,7 @@ package body Prunt.Controller is
                                  Hysteresis                  => Heater_Params.Hysteresis,
                                  Proportional_Scale          => Heater_Params.Proportional_Scale,
                                  Integral_Scale              => Heater_Params.Integral_Scale,
-                                 Derivative_Scale            => Heater_Params.Derivative_Scale,
-                                 Proportional_On_Measurement =>
-                                   Heater_Params.Proportional_On_Measurement);
+                                 Derivative_Scale            => Heater_Params.Derivative_Scale);
                            when My_Config.Bang_Bang_Kind =>
                               Heater_Params_Array (H) :=
                                 (Kind                 => Bang_Bang_Kind,
