@@ -193,6 +193,113 @@ package body Prunt.Config is
          Higher_Order_Scaler     => From_TOML (Table.Get ("Higher_Order_Scaler")));
    end From_TOML;
 
+   function To_TOML (V : TMC_Types.Unsigned_1) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_1 is (TMC_Types.Unsigned_1 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_2) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_2 is (TMC_Types.Unsigned_2 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_3) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_3 is (TMC_Types.Unsigned_3 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_4) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_4 is (TMC_Types.Unsigned_4 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_5) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_5 is (TMC_Types.Unsigned_5 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_6) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_6 is (TMC_Types.Unsigned_6 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_7) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_7 is (TMC_Types.Unsigned_7 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_8) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_8 is (TMC_Types.Unsigned_8 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_9) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_9 is (TMC_Types.Unsigned_9 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_10) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_10 is (TMC_Types.Unsigned_10 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_11) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_11 is (TMC_Types.Unsigned_11 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_12) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_12 is (TMC_Types.Unsigned_12 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_13) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_13 is (TMC_Types.Unsigned_13 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_14) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_14 is (TMC_Types.Unsigned_14 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_15) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_15 is (TMC_Types.Unsigned_15 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_16) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_16 is (TMC_Types.Unsigned_16 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_17) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_17 is (TMC_Types.Unsigned_17 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_18) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_18 is (TMC_Types.Unsigned_18 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_19) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_19 is (TMC_Types.Unsigned_19 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_20) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_20 is (TMC_Types.Unsigned_20 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_21) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_21 is (TMC_Types.Unsigned_21 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_22) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_22 is (TMC_Types.Unsigned_22 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_23) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_23 is (TMC_Types.Unsigned_23 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_24) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_24 is (TMC_Types.Unsigned_24 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_25) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_25 is (TMC_Types.Unsigned_25 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_26) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_26 is (TMC_Types.Unsigned_26 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_27) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_27 is (TMC_Types.Unsigned_27 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_28) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_28 is (TMC_Types.Unsigned_28 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_29) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_29 is (TMC_Types.Unsigned_29 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_30) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_30 is (TMC_Types.Unsigned_30 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_31) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_31 is (TMC_Types.Unsigned_31 (V.As_Integer));
+
+   function To_TOML (V : TMC_Types.Unsigned_32) return TOML_Value is (Create_Integer (Any_Integer (V)));
+   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_32 is (TMC_Types.Unsigned_32 (V.As_Integer));
+
+   package TMC2240_Slope_Control_Type_TOML_Conversion is new Discrete_TOML_Conversion
+     (TMC_Types.TMC2240.Slope_Control_Type);
+   use TMC2240_Slope_Control_Type_TOML_Conversion;
+
+   package TMC2240_Microstep_Resolution_Type_TOML_Conversion is new Discrete_TOML_Conversion
+     (TMC_Types.TMC2240.Microstep_Resolution_Type);
+   use TMC2240_Microstep_Resolution_Type_TOML_Conversion;
+
+   package TMC2240_Freewheel_Type_TOML_Conversion is new Discrete_TOML_Conversion (TMC_Types.TMC2240.Freewheel_Type);
+   use TMC2240_Freewheel_Type_TOML_Conversion;
+
    --  TODO: It might make sense to make these recursively merge tables.
    function Left (Key : Unbounded_UTF8_String; L, R : TOML_Value) return TOML_Value is
       pragma Unreferenced (Key, R);
@@ -236,12 +343,43 @@ package body Prunt.Config is
          case Stepper_Kinds (Stepper) is
             when Basic_Kind =>
                Data := (Kind => Basic_Kind, others => <>);
+               Write (Data, Stepper, Append_Only => True);
+               Table := TOML_Data.Get ("Stepper").Get (Stepper'Image);
             when TMC2240_UART_Kind =>
                Data := (Kind => TMC2240_UART_Kind, others => <>);
+               Write (Data, Stepper, Append_Only => True);
+               Table                     := TOML_Data.Get ("Stepper").Get (Stepper'Image);
+               Data.Output_Current       := From_TOML (Table.Get ("Output_Current")) * amp;
+               Data.Slope_Control        := From_TOML (Table.Get ("Slope_Control"));
+               Data.I_Hold               := From_TOML (Table.Get ("I_Hold"));
+               Data.I_Run                := From_TOML (Table.Get ("I_Run"));
+               Data.I_Hold_Delay         := From_TOML (Table.Get ("I_Hold_Delay"));
+               Data.I_Run_Delay          := From_TOML (Table.Get ("I_Run_Delay"));
+               Data.T_Power_Down         := From_TOML (Table.Get ("T_Power_Down"));
+               Data.T_PWM_Thrs           := From_TOML (Table.Get ("T_PWM_Thrs"));
+               Data.T_Cool_Thrs          := From_TOML (Table.Get ("T_Cool_Thrs"));
+               Data.T_High               := From_TOML (Table.Get ("T_High"));
+               Data.TOFF                 := From_TOML (Table.Get ("TOFF"));
+               Data.HSTRT_TFD210         := From_TOML (Table.Get ("HSTRT_TFD210"));
+               Data.HEND_OFFSET          := From_TOML (Table.Get ("HEND_OFFSET"));
+               Data.FD3                  := From_TOML (Table.Get ("FD3"));
+               Data.DISFDCC              := From_TOML (Table.Get ("DISFDCC"));
+               Data.CHM                  := From_TOML (Table.Get ("CHM"));
+               Data.VHIGHFS              := From_TOML (Table.Get ("VHIGHFS"));
+               Data.VHIGHCHM             := From_TOML (Table.Get ("VHIGHCHM"));
+               Data.TPFD                 := From_TOML (Table.Get ("TPFD"));
+               Data.Microstep_Resolution := From_TOML (Table.Get ("Microstep_Resolution"));
+               Data.PWM_OFS              := From_TOML (Table.Get ("PWM_OFS"));
+               Data.PWM_Grad             := From_TOML (Table.Get ("PWM_Grad"));
+               Data.PWM_Freq             := From_TOML (Table.Get ("PWM_Freq"));
+               Data.PWM_Auto_Scale       := From_TOML (Table.Get ("PWM_Auto_Scale"));
+               Data.PWM_Auto_Grad        := From_TOML (Table.Get ("PWM_Auto_Grad"));
+               Data.Freewheel            := From_TOML (Table.Get ("Freewheel"));
+               Data.PWM_Meas_SD_Enable   := From_TOML (Table.Get ("PWM_Meas_SD_Enable"));
+               Data.PWM_Dis_Reg_Stst     := From_TOML (Table.Get ("PWM_Dis_Reg_Stst"));
+               Data.PWM_Reg              := From_TOML (Table.Get ("PWM_Reg"));
+               Data.PWM_Lim              := From_TOML (Table.Get ("PWM_Lim"));
          end case;
-         Write (Data, Stepper, Append_Only => True);
-         Table := TOML_Data.Get ("Stepper").Get (Stepper'Image);
-
          Data.Enabled     := From_TOML (Table.Get ("Enabled"));
          Data.Mm_Per_Step := From_TOML (Table.Get ("Mm_Per_Step")) * mm;
 
@@ -260,6 +398,42 @@ package body Prunt.Config is
               with "Provided Stepper_Parameters has wrong discriminant. Expected " & Stepper_Kinds (Stepper)'Image &
               " but got " & Data.Kind'Image & " for stepper " & Stepper'Image & ".";
          end if;
+
+         case Data.Kind is
+            when Basic_Kind =>
+               null;
+            when TMC2240_UART_Kind =>
+               Table.Set ("Output_Current", To_TOML (Data.Output_Current / amp));
+               Table.Set ("Slope_Control", To_TOML (Data.Slope_Control));
+               Table.Set ("I_Hold", To_TOML (Data.I_Hold));
+               Table.Set ("I_Run", To_TOML (Data.I_Run));
+               Table.Set ("I_Hold_Delay", To_TOML (Data.I_Hold_Delay));
+               Table.Set ("I_Run_Delay", To_TOML (Data.I_Run_Delay));
+               Table.Set ("T_Power_Down", To_TOML (Data.T_Power_Down));
+               Table.Set ("T_PWM_Thrs", To_TOML (Data.T_PWM_Thrs));
+               Table.Set ("T_Cool_Thrs", To_TOML (Data.T_Cool_Thrs));
+               Table.Set ("T_High", To_TOML (Data.T_High));
+               Table.Set ("TOFF", To_TOML (Data.TOFF));
+               Table.Set ("HSTRT_TFD210", To_TOML (Data.HSTRT_TFD210));
+               Table.Set ("HEND_OFFSET", To_TOML (Data.HEND_OFFSET));
+               Table.Set ("FD3", To_TOML (Data.FD3));
+               Table.Set ("DISFDCC", To_TOML (Data.DISFDCC));
+               Table.Set ("CHM", To_TOML (Data.CHM));
+               Table.Set ("VHIGHFS", To_TOML (Data.VHIGHFS));
+               Table.Set ("VHIGHCHM", To_TOML (Data.VHIGHCHM));
+               Table.Set ("TPFD", To_TOML (Data.TPFD));
+               Table.Set ("Microstep_Resolution", To_TOML (Data.Microstep_Resolution));
+               Table.Set ("PWM_OFS", To_TOML (Data.PWM_OFS));
+               Table.Set ("PWM_Grad", To_TOML (Data.PWM_Grad));
+               Table.Set ("PWM_Freq", To_TOML (Data.PWM_Freq));
+               Table.Set ("PWM_Auto_Scale", To_TOML (Data.PWM_Auto_Scale));
+               Table.Set ("PWM_Auto_Grad", To_TOML (Data.PWM_Auto_Grad));
+               Table.Set ("Freewheel", To_TOML (Data.Freewheel));
+               Table.Set ("PWM_Meas_SD_Enable", To_TOML (Data.PWM_Meas_SD_Enable));
+               Table.Set ("PWM_Dis_Reg_Stst", To_TOML (Data.PWM_Dis_Reg_Stst));
+               Table.Set ("PWM_Reg", To_TOML (Data.PWM_Reg));
+               Table.Set ("PWM_Lim", To_TOML (Data.PWM_Lim));
+         end case;
 
          Table.Set ("Enabled", To_TOML (Data.Enabled));
          Table.Set ("Mm_Per_Step", To_TOML (Data.Mm_Per_Step / mm));

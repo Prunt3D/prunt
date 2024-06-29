@@ -366,13 +366,17 @@ package Prunt.TMC_Types.TMC2240 is
    end record with
      Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
+   type Freewheel_Type is (Normal, Freewheel, Short_Via_LS, Short_Via_HS) with
+     Size => 2;
+   for Freewheel_Type use (Normal => 0, Freewheel => 1, Short_Via_LS => 2, Short_Via_HS => 3);
+
    type PWMCONF is record
       PWM_OFS            : Unsigned_8;
       PWM_Grad           : Unsigned_8;
       PWM_Freq           : Unsigned_2;
       PWM_AutoScale      : TMC_Boolean;
       PWM_AutoGrad       : TMC_Boolean;
-      Freewheel          : Unsigned_2;
+      Freewheel          : Freewheel_Type;
       PWM_Meas_SD_Enable : TMC_Boolean;
       PWM_Dis_Reg_Stst   : TMC_Boolean;
       PWM_Reg            : Unsigned_4;

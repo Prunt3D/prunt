@@ -23,6 +23,8 @@ with Prunt.Motion_Planner;
 with TOML;
 with Ada.Strings.Bounded;
 with Prunt.Thermistors; use Prunt.Thermistors;
+with Prunt.TMC_Types;
+with Prunt.TMC_Types.TMC2240;
 
 --  Serialises and deserialises records to and from a TOML file.
 
@@ -55,7 +57,36 @@ package Prunt.Config is
          when Basic_Kind =>
             null;
          when TMC2240_UART_Kind =>
-            null; --  TODO
+            Output_Current       : Current                                     := 0.15 * amp;
+            Slope_Control        : TMC_Types.TMC2240.Slope_Control_Type        := TMC_Types.TMC2240.Slope_100V_Per_us;
+            I_Hold               : TMC_Types.Unsigned_5                        := 16;
+            I_Run                : TMC_Types.Unsigned_5                        := 31;
+            I_Hold_Delay         : TMC_Types.Unsigned_4                        := 1;
+            I_Run_Delay          : TMC_Types.Unsigned_4                        := 4;
+            T_Power_Down         : TMC_Types.Unsigned_8                        := 10;
+            T_PWM_Thrs           : TMC_Types.Unsigned_20                       := 0;
+            T_Cool_Thrs          : TMC_Types.Unsigned_20                       := 0;
+            T_High               : TMC_Types.Unsigned_20                       := 0;
+            TOFF                 : TMC_Types.Unsigned_4                        := 3;
+            HSTRT_TFD210         : TMC_Types.Unsigned_3                        := 5;
+            HEND_OFFSET          : TMC_Types.Unsigned_4                        := 2;
+            FD3                  : TMC_Types.Unsigned_1                        := 0;
+            DISFDCC              : Boolean                                     := False;
+            CHM                  : Boolean                                     := False;
+            VHIGHFS              : Boolean                                     := False;
+            VHIGHCHM             : Boolean                                     := False;
+            TPFD                 : TMC_Types.Unsigned_4                        := 4;
+            Microstep_Resolution : TMC_Types.TMC2240.Microstep_Resolution_Type := TMC_Types.TMC2240.MS_256;
+            PWM_OFS              : TMC_Types.Unsigned_8                        := 29;
+            PWM_Grad             : TMC_Types.Unsigned_8                        := 0;
+            PWM_Freq             : TMC_Types.Unsigned_2                        := 0;
+            PWM_Auto_Scale       : Boolean                                     := True;
+            PWM_Auto_Grad        : Boolean                                     := True;
+            Freewheel            : TMC_Types.TMC2240.Freewheel_Type            := TMC_Types.TMC2240.Normal;
+            PWM_Meas_SD_Enable   : Boolean                                     := False;
+            PWM_Dis_Reg_Stst     : Boolean                                     := False;
+            PWM_Reg              : TMC_Types.Unsigned_4                        := 4;
+            PWM_Lim              : TMC_Types.Unsigned_4                        := 12;
       end case;
    end record;
 
