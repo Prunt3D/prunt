@@ -26,6 +26,7 @@ with Gnoga.Gui.Base;
 with Gnoga.Server;
 with Ada.Directories;
 with Ada.Characters.Latin_1;
+with Gnoga.Server.Connection;
 
 package body Prunt.GUI.GUI is
 
@@ -381,6 +382,8 @@ package body Prunt.GUI.GUI is
             Main_Window.Buffer_Connection (False);
          end if;
       exception
+         when E : Gnoga.Server.Connection.Connection_Error =>
+            null; --  We ignore this error because it can be caused by a connection being closed during loading.
          when E : others =>
             Fatal_Exception_Occurrence_Holder.Set
               (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
