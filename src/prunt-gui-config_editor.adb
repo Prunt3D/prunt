@@ -298,6 +298,193 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Mm Per Step",
             Description => "The distance moved by the stepper for each step signal.");
 
+         case My_Config.Stepper_Kinds (Stepper) is
+            when Basic_Kind =>
+               null;
+            when TMC2240_UART_Kind =>
+               View.Output_Current.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "Output_Current",
+                  Description =>
+                    "Target output current for the motor. The lowest suitable Current_Range will be chosen " &
+                    "and the Global_Scaler will be adjusted to a suitable value.");
+
+               View.Slope_Control.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "Slope_Control",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.I_Hold.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "I_Hold",
+                  Description => "Standstill current (0 = 1/32 ... 31 = 32/32).");
+
+               View.I_Run.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "I_Run",
+                  Description => "Run current (0 = 1/32 ... 31 = 32/32).");
+
+               View.I_Hold_Delay.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "I_Hold_Delay",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.I_Run_Delay.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "I_Run_Delay",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.T_Power_Down.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "T_Power_Down",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.T_PWM_Thrs.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "T_PWM_Thrs",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.T_Cool_Thrs.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "T_Cool_Thrs",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.T_High.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "T_High",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.TOFF.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "TOFF",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.HSTRT_TFD210.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "HSTRT_TFD210",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.HEND_OFFSET.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "HEND_OFFSET",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.FD3.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "FD3",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.DISFDCC.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "DISFDCC",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.CHM.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "CHM",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.VHIGHFS.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "VHIGHFS",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.VHIGHCHM.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "VHIGHCHM",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.TPFD.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "TPFD",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.Microstep_Resolution.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "Microstep_Resolution",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_OFS.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_OFS",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Grad.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Grad",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Freq.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Freq",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Auto_Scale.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Auto_Scale",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Auto_Grad.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Auto_Grad",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.Freewheel.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "Freewheel",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Meas_SD_Enable.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Meas_SD_Enable",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Dis_Reg_Stst.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Dis_Reg_Stst",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Reg.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Reg",
+                  Description => "As described in TMC2240 datasheet.");
+
+               View.PWM_Lim.Create
+                 (Parent      => View.Widget_Table,
+                  Form        => View,
+                  Name        => "PWM_Lim",
+                  Description => "As described in TMC2240 datasheet.");
+         end case;
+
          View.Read_Data;
 
          View.On_Submit_Handler (Outer_Section_Widgets.On_Submit'Unrestricted_Access);
@@ -310,6 +497,41 @@ package body Prunt.GUI.Config_Editor is
       begin
          My_Config.Config_File.Read (Params, View.Stepper);
 
+         case My_Config.Stepper_Kinds (View.Stepper) is
+            when Basic_Kind =>
+               null;
+            when TMC2240_UART_Kind =>
+               View.Output_Current.Set_Data (Params.Output_Current);
+               View.Slope_Control.Set_Data (Params.Slope_Control);
+               View.I_Hold.Set_Data (Params.I_Hold);
+               View.I_Run.Set_Data (Params.I_Run);
+               View.I_Hold_Delay.Set_Data (Params.I_Hold_Delay);
+               View.I_Run_Delay.Set_Data (Params.I_Run_Delay);
+               View.T_Power_Down.Set_Data (Params.T_Power_Down);
+               View.T_PWM_Thrs.Set_Data (Params.T_PWM_Thrs);
+               View.T_Cool_Thrs.Set_Data (Params.T_Cool_Thrs);
+               View.T_High.Set_Data (Params.T_High);
+               View.TOFF.Set_Data (Params.TOFF);
+               View.HSTRT_TFD210.Set_Data (Params.HSTRT_TFD210);
+               View.HEND_OFFSET.Set_Data (Params.HEND_OFFSET);
+               View.FD3.Set_Data (Params.FD3);
+               View.DISFDCC.Set_Data (Params.DISFDCC);
+               View.CHM.Set_Data (Params.CHM);
+               View.VHIGHFS.Set_Data (Params.VHIGHFS);
+               View.VHIGHCHM.Set_Data (Params.VHIGHCHM);
+               View.TPFD.Set_Data (Params.TPFD);
+               View.Microstep_Resolution.Set_Data (Params.Microstep_Resolution);
+               View.PWM_OFS.Set_Data (Params.PWM_OFS);
+               View.PWM_Grad.Set_Data (Params.PWM_Grad);
+               View.PWM_Freq.Set_Data (Params.PWM_Freq);
+               View.PWM_Auto_Scale.Set_Data (Params.PWM_Auto_Scale);
+               View.PWM_Auto_Grad.Set_Data (Params.PWM_Auto_Grad);
+               View.Freewheel.Set_Data (Params.Freewheel);
+               View.PWM_Meas_SD_Enable.Set_Data (Params.PWM_Meas_SD_Enable);
+               View.PWM_Dis_Reg_Stst.Set_Data (Params.PWM_Dis_Reg_Stst);
+               View.PWM_Reg.Set_Data (Params.PWM_Reg);
+               View.PWM_Lim.Set_Data (Params.PWM_Lim);
+         end case;
          View.Enabled.Set_Data (Params.Enabled);
          View.Mm_Per_Step.Set_Data (Params.Mm_Per_Step);
       end Read_Data;
@@ -317,9 +539,42 @@ package body Prunt.GUI.Config_Editor is
       overriding procedure Save_Data (View : in out Stepper_Widget; Image : out UXString) is
          Params : My_Config.Stepper_Parameters;
       begin
-         My_Config.Config_File.Read (Params, View.Stepper);
-         --  TODO: Remove this after we add parameters per stepper kind.
-
+         case My_Config.Stepper_Kinds (View.Stepper) is
+            when Basic_Kind =>
+               Params := (Kind => Basic_Kind, others => <>);
+            when TMC2240_UART_Kind =>
+               Params                      := (Kind => TMC2240_UART_Kind, others => <>);
+               Params.Output_Current       := View.Output_Current.Get_Data;
+               Params.Slope_Control        := View.Slope_Control.Get_Data;
+               Params.I_Hold               := View.I_Hold.Get_Data;
+               Params.I_Run                := View.I_Run.Get_Data;
+               Params.I_Hold_Delay         := View.I_Hold_Delay.Get_Data;
+               Params.I_Run_Delay          := View.I_Run_Delay.Get_Data;
+               Params.T_Power_Down         := View.T_Power_Down.Get_Data;
+               Params.T_PWM_Thrs           := View.T_PWM_Thrs.Get_Data;
+               Params.T_Cool_Thrs          := View.T_Cool_Thrs.Get_Data;
+               Params.T_High               := View.T_High.Get_Data;
+               Params.TOFF                 := View.TOFF.Get_Data;
+               Params.HSTRT_TFD210         := View.HSTRT_TFD210.Get_Data;
+               Params.HEND_OFFSET          := View.HEND_OFFSET.Get_Data;
+               Params.FD3                  := View.FD3.Get_Data;
+               Params.DISFDCC              := View.DISFDCC.Get_Data;
+               Params.CHM                  := View.CHM.Get_Data;
+               Params.VHIGHFS              := View.VHIGHFS.Get_Data;
+               Params.VHIGHCHM             := View.VHIGHCHM.Get_Data;
+               Params.TPFD                 := View.TPFD.Get_Data;
+               Params.Microstep_Resolution := View.Microstep_Resolution.Get_Data;
+               Params.PWM_OFS              := View.PWM_OFS.Get_Data;
+               Params.PWM_Grad             := View.PWM_Grad.Get_Data;
+               Params.PWM_Freq             := View.PWM_Freq.Get_Data;
+               Params.PWM_Auto_Scale       := View.PWM_Auto_Scale.Get_Data;
+               Params.PWM_Auto_Grad        := View.PWM_Auto_Grad.Get_Data;
+               Params.Freewheel            := View.Freewheel.Get_Data;
+               Params.PWM_Meas_SD_Enable   := View.PWM_Meas_SD_Enable.Get_Data;
+               Params.PWM_Dis_Reg_Stst     := View.PWM_Dis_Reg_Stst.Get_Data;
+               Params.PWM_Reg              := View.PWM_Reg.Get_Data;
+               Params.PWM_Lim              := View.PWM_Lim.Get_Data;
+         end case;
          Params.Enabled     := View.Enabled.Get_Data;
          Params.Mm_Per_Step := View.Mm_Per_Step.Get_Data;
 

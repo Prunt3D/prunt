@@ -32,6 +32,8 @@ with Prunt.GUI.Discrete_Inputs;
 with Prunt.GUI.Numeric_Discrete_Inputs;
 with Prunt.GUI.Numeric_Floating_Inputs;
 with Prunt.GUI.Parameter_Rows;
+with Prunt.TMC_Types;
+with Prunt.TMC_Types.TMC2240;
 
 private generic
    with package My_Config is new Prunt.Config (<>);
@@ -63,6 +65,10 @@ package Prunt.GUI.Config_Editor is
       package Voltage_Inputs is new Numeric_Floating_Inputs (Voltage);
       use Voltage_Inputs;
       package Voltage_Rows is new Parameter_Rows (Voltage, "V", Voltage_Inputs.Numeric_Input);
+
+      package Current_Inputs is new Numeric_Floating_Inputs (Current);
+      use Current_Inputs;
+      package Current_Rows is new Parameter_Rows (Current, "A", Current_Inputs.Numeric_Input);
 
       package Velocity_Inputs is new Numeric_Floating_Inputs (Velocity);
       use Velocity_Inputs;
@@ -127,6 +133,181 @@ package Prunt.GUI.Config_Editor is
       use Input_Switch_Name_Inputs;
       package Input_Switch_Name_Rows is new Parameter_Rows
         (My_Config.Input_Switch_Name, "", Input_Switch_Name_Inputs.Discrete_Input);
+
+      package TMC_Unsigned_1_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_1);
+      use TMC_Unsigned_1_Inputs;
+      package TMC_Unsigned_1_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_1, "", TMC_Unsigned_1_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_2_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_2);
+      use TMC_Unsigned_2_Inputs;
+      package TMC_Unsigned_2_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_2, "", TMC_Unsigned_2_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_3_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_3);
+      use TMC_Unsigned_3_Inputs;
+      package TMC_Unsigned_3_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_3, "", TMC_Unsigned_3_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_4_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_4);
+      use TMC_Unsigned_4_Inputs;
+      package TMC_Unsigned_4_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_4, "", TMC_Unsigned_4_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_5_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_5);
+      use TMC_Unsigned_5_Inputs;
+      package TMC_Unsigned_5_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_5, "", TMC_Unsigned_5_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_6_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_6);
+      use TMC_Unsigned_6_Inputs;
+      package TMC_Unsigned_6_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_6, "", TMC_Unsigned_6_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_7_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_7);
+      use TMC_Unsigned_7_Inputs;
+      package TMC_Unsigned_7_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_7, "", TMC_Unsigned_7_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_8_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_8);
+      use TMC_Unsigned_8_Inputs;
+      package TMC_Unsigned_8_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_8, "", TMC_Unsigned_8_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_9_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_9);
+      use TMC_Unsigned_9_Inputs;
+      package TMC_Unsigned_9_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_9, "", TMC_Unsigned_9_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_10_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_10);
+      use TMC_Unsigned_10_Inputs;
+      package TMC_Unsigned_10_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_10, "", TMC_Unsigned_10_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_11_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_11);
+      use TMC_Unsigned_11_Inputs;
+      package TMC_Unsigned_11_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_11, "", TMC_Unsigned_11_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_12_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_12);
+      use TMC_Unsigned_12_Inputs;
+      package TMC_Unsigned_12_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_12, "", TMC_Unsigned_12_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_13_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_13);
+      use TMC_Unsigned_13_Inputs;
+      package TMC_Unsigned_13_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_13, "", TMC_Unsigned_13_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_14_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_14);
+      use TMC_Unsigned_14_Inputs;
+      package TMC_Unsigned_14_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_14, "", TMC_Unsigned_14_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_15_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_15);
+      use TMC_Unsigned_15_Inputs;
+      package TMC_Unsigned_15_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_15, "", TMC_Unsigned_15_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_16_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_16);
+      use TMC_Unsigned_16_Inputs;
+      package TMC_Unsigned_16_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_16, "", TMC_Unsigned_16_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_17_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_17);
+      use TMC_Unsigned_17_Inputs;
+      package TMC_Unsigned_17_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_17, "", TMC_Unsigned_17_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_18_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_18);
+      use TMC_Unsigned_18_Inputs;
+      package TMC_Unsigned_18_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_18, "", TMC_Unsigned_18_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_19_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_19);
+      use TMC_Unsigned_19_Inputs;
+      package TMC_Unsigned_19_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_19, "", TMC_Unsigned_19_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_20_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_20);
+      use TMC_Unsigned_20_Inputs;
+      package TMC_Unsigned_20_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_20, "", TMC_Unsigned_20_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_21_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_21);
+      use TMC_Unsigned_21_Inputs;
+      package TMC_Unsigned_21_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_21, "", TMC_Unsigned_21_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_22_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_22);
+      use TMC_Unsigned_22_Inputs;
+      package TMC_Unsigned_22_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_22, "", TMC_Unsigned_22_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_23_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_23);
+      use TMC_Unsigned_23_Inputs;
+      package TMC_Unsigned_23_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_23, "", TMC_Unsigned_23_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_24_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_24);
+      use TMC_Unsigned_24_Inputs;
+      package TMC_Unsigned_24_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_24, "", TMC_Unsigned_24_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_25_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_25);
+      use TMC_Unsigned_25_Inputs;
+      package TMC_Unsigned_25_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_25, "", TMC_Unsigned_25_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_26_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_26);
+      use TMC_Unsigned_26_Inputs;
+      package TMC_Unsigned_26_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_26, "", TMC_Unsigned_26_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_27_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_27);
+      use TMC_Unsigned_27_Inputs;
+      package TMC_Unsigned_27_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_27, "", TMC_Unsigned_27_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_28_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_28);
+      use TMC_Unsigned_28_Inputs;
+      package TMC_Unsigned_28_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_28, "", TMC_Unsigned_28_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_29_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_29);
+      use TMC_Unsigned_29_Inputs;
+      package TMC_Unsigned_29_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_29, "", TMC_Unsigned_29_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_30_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_30);
+      use TMC_Unsigned_30_Inputs;
+      package TMC_Unsigned_30_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_30, "", TMC_Unsigned_30_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_31_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_31);
+      use TMC_Unsigned_31_Inputs;
+      package TMC_Unsigned_31_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_31, "", TMC_Unsigned_31_Inputs.Numeric_Input);
+
+      package TMC_Unsigned_32_Inputs is new Numeric_Discrete_Inputs (TMC_Types.Unsigned_32);
+      use TMC_Unsigned_32_Inputs;
+      package TMC_Unsigned_32_Rows is new Parameter_Rows
+        (TMC_Types.Unsigned_32, "", TMC_Unsigned_32_Inputs.Numeric_Input);
+
+      package TMC2240_Slope_Control_Inputs is new Discrete_Inputs (TMC_Types.TMC2240.Slope_Control_Type);
+      use TMC2240_Slope_Control_Inputs;
+      package TMC2240_Slope_Control_Rows is new Parameter_Rows
+        (TMC_Types.TMC2240.Slope_Control_Type, "", TMC2240_Slope_Control_Inputs.Discrete_Input);
+
+      package TMC2240_Microstep_Resolution_Inputs is new Discrete_Inputs (TMC_Types.TMC2240.Microstep_Resolution_Type);
+      use TMC2240_Microstep_Resolution_Inputs;
+      package TMC2240_Microstep_Resolution_Rows is new Parameter_Rows
+        (TMC_Types.TMC2240.Microstep_Resolution_Type, "", TMC2240_Microstep_Resolution_Inputs.Discrete_Input);
+
+      package TMC2240_Freewheel_Inputs is new Discrete_Inputs (TMC_Types.TMC2240.Freewheel_Type);
+      use TMC2240_Freewheel_Inputs;
+      package TMC2240_Freewheel_Rows is new Parameter_Rows
+        (TMC_Types.TMC2240.Freewheel_Type, "", TMC2240_Freewheel_Inputs.Discrete_Input);
 
    end Basic_Inputs;
 
@@ -289,6 +470,38 @@ package Prunt.GUI.Config_Editor is
          Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
          Enabled      : Basic_Inputs.Boolean_Rows.Parameter_Row;
          Mm_Per_Step  : Basic_Inputs.Length_Rows.Parameter_Row;
+
+         --  TMC2240
+         Output_Current       : Basic_Inputs.Current_Rows.Parameter_Row;
+         Slope_Control        : Basic_Inputs.TMC2240_Slope_Control_Rows.Parameter_Row;
+         I_Hold               : Basic_Inputs.TMC_Unsigned_5_Rows.Parameter_Row;
+         I_Run                : Basic_Inputs.TMC_Unsigned_5_Rows.Parameter_Row;
+         I_Hold_Delay         : Basic_Inputs.TMC_Unsigned_4_Rows.Parameter_Row;
+         I_Run_Delay          : Basic_Inputs.TMC_Unsigned_4_Rows.Parameter_Row;
+         T_Power_Down         : Basic_Inputs.TMC_Unsigned_8_Rows.Parameter_Row;
+         T_PWM_Thrs           : Basic_Inputs.TMC_Unsigned_20_Rows.Parameter_Row;
+         T_Cool_Thrs          : Basic_Inputs.TMC_Unsigned_20_Rows.Parameter_Row;
+         T_High               : Basic_Inputs.TMC_Unsigned_20_Rows.Parameter_Row;
+         TOFF                 : Basic_Inputs.TMC_Unsigned_4_Rows.Parameter_Row;
+         HSTRT_TFD210         : Basic_Inputs.TMC_Unsigned_3_Rows.Parameter_Row;
+         HEND_OFFSET          : Basic_Inputs.TMC_Unsigned_4_Rows.Parameter_Row;
+         FD3                  : Basic_Inputs.TMC_Unsigned_1_Rows.Parameter_Row;
+         DISFDCC              : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         CHM                  : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         VHIGHFS              : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         VHIGHCHM             : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         TPFD                 : Basic_Inputs.TMC_Unsigned_4_Rows.Parameter_Row;
+         Microstep_Resolution : Basic_Inputs.TMC2240_Microstep_Resolution_Rows.Parameter_Row;
+         PWM_OFS              : Basic_Inputs.TMC_Unsigned_8_Rows.Parameter_Row;
+         PWM_Grad             : Basic_Inputs.TMC_Unsigned_8_Rows.Parameter_Row;
+         PWM_Freq             : Basic_Inputs.TMC_Unsigned_2_Rows.Parameter_Row;
+         PWM_Auto_Scale       : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         PWM_Auto_Grad        : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         Freewheel            : Basic_Inputs.TMC2240_Freewheel_Rows.Parameter_Row;
+         PWM_Meas_SD_Enable   : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         PWM_Dis_Reg_Stst     : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         PWM_Reg              : Basic_Inputs.TMC_Unsigned_4_Rows.Parameter_Row;
+         PWM_Lim              : Basic_Inputs.TMC_Unsigned_4_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
