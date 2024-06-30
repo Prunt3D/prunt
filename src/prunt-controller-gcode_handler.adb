@@ -446,7 +446,7 @@ package body Prunt.Controller.Gcode_Handler is
 
          if Gcode_Queue.Get_Command /= "" then
             declare
-               Command : Gcode_Parser.Command := (others => <>);
+               Command : Gcode_Parser.Command;
                Line    : constant String      := Gcode_Queue.Get_Command;
             begin
                Parse_Line (Parser_Context, Line, Command);
@@ -467,7 +467,7 @@ package body Prunt.Controller.Gcode_Handler is
 
                declare
                   type File_Line_Count is range 1 .. 2**63 - 1;
-                  Command           : Gcode_Parser.Command     := (others => <>);
+                  Command           : Gcode_Parser.Command;
                   Current_Line      : constant File_Line_Count := 1;
                   Command_Succeeded : Boolean                  := True;
                begin
