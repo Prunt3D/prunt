@@ -192,8 +192,10 @@ package Prunt.Config is
    protected Config_File is
       procedure Read (Data : out Prunt_Parameters);
       procedure Write (Data : Prunt_Parameters; Append_Only : Boolean := False);
-      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name);
-      procedure Write (Data : Stepper_Parameters; Stepper : Stepper_Name; Append_Only : Boolean := False);
+      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
+        Post => Data.Kind = Stepper_Kinds (Stepper);
+      procedure Write (Data : Stepper_Parameters; Stepper : Stepper_Name; Append_Only : Boolean := False) with
+        Pre => Data.Kind = Stepper_Kinds (Stepper);
       procedure Read (Data : out Kinematics_Parameters);
       procedure Write (Data : Kinematics_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
