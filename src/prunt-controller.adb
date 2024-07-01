@@ -89,50 +89,25 @@ package body Prunt.Controller is
          Ada.Task_Termination.Set_Specific_Handler
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
+         My_GUI.Run;
+
          My_Config.Config_File.Read (Prunt_Params);
 
          if not Prunt_Params.Enabled then
             Status_Message.Set ("Prunt is disabled. Enable in config editor after setting other settings.");
          else
             begin
+               Status_Message.Set ("Running setup.");
                declare
                   Thermistor_Params_Array : Thermistor_Parameters_Array_Type;
-                  Heater_Params_Array     : Heater_Parameters_Array_Type;
+                  Heater_Thermistors     : Heater_Thermistor_Map;
                begin
                   for H in Heater_Name loop
                      declare
-                        Heater_Params : My_Config.Heater_Parameters;
+                        Heater_Params : My_Config.Heater_Full_Parameters;
                      begin
                         My_Config.Config_File.Read (Heater_Params, H);
-                        case Heater_Params.Kind is
-                           when My_Config.Disabled_Kind =>
-                              Heater_Params_Array (H) :=
-                                (Kind                 => Disabled_Kind,
-                                 Thermistor           => Heater_Params.Thermistor,
-                                 Max_Cumulative_Error => Heater_Params.Max_Cumulative_Error,
-                                 Check_Gain_Time      => Heater_Params.Check_Gain_Time,
-                                 Check_Minimum_Gain   => Heater_Params.Check_Minimum_Gain,
-                                 Hysteresis           => Heater_Params.Hysteresis);
-                           when My_Config.PID_Kind =>
-                              Heater_Params_Array (H) :=
-                                (Kind                        => PID_Kind,
-                                 Thermistor                  => Heater_Params.Thermistor,
-                                 Max_Cumulative_Error => Heater_Params.Max_Cumulative_Error,
-                                 Check_Gain_Time             => Heater_Params.Check_Gain_Time,
-                                 Check_Minimum_Gain          => Heater_Params.Check_Minimum_Gain,
-                                 Hysteresis                  => Heater_Params.Hysteresis,
-                                 Proportional_Scale          => Heater_Params.Proportional_Scale,
-                                 Integral_Scale              => Heater_Params.Integral_Scale,
-                                 Derivative_Scale            => Heater_Params.Derivative_Scale);
-                           when My_Config.Bang_Bang_Kind =>
-                              Heater_Params_Array (H) :=
-                                (Kind                 => Bang_Bang_Kind,
-                                 Thermistor           => Heater_Params.Thermistor,
-                                 Max_Cumulative_Error => Heater_Params.Max_Cumulative_Error,
-                                 Check_Gain_Time      => Heater_Params.Check_Gain_Time,
-                                 Check_Minimum_Gain   => Heater_Params.Check_Minimum_Gain,
-                                 Hysteresis           => Heater_Params.Hysteresis);
-                        end case;
+                        Heater_Thermistors (H) := Heater_Params.Thermistor;
                      end;
                   end loop;
 
@@ -140,8 +115,17 @@ package body Prunt.Controller is
                      My_Config.Config_File.Read (Thermistor_Params_Array (T), T);
                   end loop;
 
-                  Setup (Heater_Params_Array, Thermistor_Params_Array);
+                  Setup (Heater_Thermistors, Thermistor_Params_Array);
                end;
+
+               for H in Heater_Name loop
+                  declare
+                     Heater_Params : My_Config.Heater_Full_Parameters;
+                  begin
+                     My_Config.Config_File.Read (Heater_Params, H);
+                     Reconfigure_Heater (H, Heater_Params.Params);
+                  end;
+               end loop;
 
                for S in Stepper_Name loop
                   declare
@@ -365,13 +349,13 @@ package body Prunt.Controller is
                   raise;
             end;
          end if;
+
+         Status_Message.Set ("Setup done");
       exception
          when E : others =>
             Fatal_Exception_Occurrence_Holder.all.Set
               (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
       end;
-
-      My_GUI.Run;
    end Run;
 
    protected body Status_Message is

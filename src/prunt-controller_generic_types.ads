@@ -21,6 +21,7 @@
 
 with Prunt.Thermistors;
 with Prunt.TMC_Types.TMC2240;
+with Prunt.Heaters;
 
 generic
    --  'Image of each value of these types will be shown in the GUI. The names should correspond to names on the board.
@@ -84,28 +85,7 @@ package Prunt.Controller_Generic_Types is
 
    --  User defined parameters:
 
-   type Heater_Kind is (Disabled_Kind, PID_Kind, Bang_Bang_Kind);
-
-   type Heater_Parameters (Kind : Heater_Kind := Disabled_Kind) is record
-      Thermistor           : Thermistor_Name := Thermistor_Name'First;
-      Max_Cumulative_Error : Temperature     := 120.0 * celcius;
-      Check_Gain_Time      : Time            := 20.0 * s;
-      Check_Minimum_Gain   : Temperature     := 2.0 * celcius;
-      Hysteresis           : Temperature     := 3.0 * celcius;
-      case Kind is
-         when Disabled_Kind =>
-            null;
-         when PID_Kind =>
-            Proportional_Scale : Dimensionless := 0.0;
-            Integral_Scale     : Dimensionless := 0.0;
-            Derivative_Scale   : Dimensionless := 0.0;
-         when Bang_Bang_Kind =>
-            null;
-      end case;
-   end record;
-
-   type Heater_Parameters_Array_Type is array (Heater_Name) of Heater_Parameters;
-
+   type Heater_Thermistor_Map is array (Heater_Name) of Thermistor_Name;
    type Thermistor_Parameters_Array_Type is array (Thermistor_Name) of Thermistors.Thermistor_Parameters;
 
 end Prunt.Controller_Generic_Types;

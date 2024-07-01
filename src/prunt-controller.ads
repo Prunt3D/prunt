@@ -28,6 +28,7 @@ with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
 with Prunt.Step_Generator;
+with Prunt.Heaters;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -42,9 +43,13 @@ generic
    Loop_Interpolation_Time : Time;
    --  The time delta for loop moves.
 
-   with procedure Setup (Heaters : Heater_Parameters_Array_Type; Thermistors : Thermistor_Parameters_Array_Type);
+   with procedure Setup (Heater_Thermistors : Heater_Thermistor_Map; Thermistors : Thermistor_Parameters_Array_Type);
    --  Run any required setup and store parameters for later use. This procedure will only be called once and will be
-   --  called before any other procedures.
+   --  called before any other procedures. Should configure all heaters as disabled until Reconfigure_Heater is called.
+
+   with procedure Reconfigure_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters);
+   -- Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from any
+   -- task.
 
    with procedure Setup_For_Loop_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
    --  Setup the step generator for an upcoming loop move. A loop move should stop looping when the state of Switch =

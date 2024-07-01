@@ -676,7 +676,7 @@ package body Prunt.Config is
          Write_File;
       end Write;
 
-      procedure Read (Data : out Heater_Parameters; Heater : Heater_Name) is
+      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) is
          Table : TOML_Value;
       begin
          Data := (others => <>);
@@ -685,47 +685,47 @@ package body Prunt.Config is
 
          case Heater_Kind'Value (Table.Get ("Kind").As_String) is
             when Disabled_Kind =>
-               Data := (Kind => Disabled_Kind, others => <>);
+               Data := (Params => (Kind => Disabled_Kind, others => <>), others => <>);
                Write (Data, Heater, Append_Only => True);
                Table := TOML_Data.Get ("Heater").Get (Heater'Image);
             when PID_Kind =>
-               Data := (Kind => PID_Kind, others => <>);
+               Data := (Params => (Kind => PID_Kind, others => <>), others => <>);
                Write (Data, Heater, Append_Only => True);
-               Table                   := TOML_Data.Get ("Heater").Get (Heater'Image);
-               Data.Proportional_Scale := From_TOML (Table.Get ("Proportional_Scale"));
-               Data.Integral_Scale     := From_TOML (Table.Get ("Integral_Scale"));
-               Data.Derivative_Scale   := From_TOML (Table.Get ("Derivative_Scale"));
+               Table                          := TOML_Data.Get ("Heater").Get (Heater'Image);
+               Data.Params.Proportional_Scale := From_TOML (Table.Get ("Proportional_Scale"));
+               Data.Params.Integral_Scale     := From_TOML (Table.Get ("Integral_Scale"));
+               Data.Params.Derivative_Scale   := From_TOML (Table.Get ("Derivative_Scale"));
             when Bang_Bang_Kind =>
-               Data := (Kind => Bang_Bang_Kind, others => <>);
+               Data := (Params => (Kind => Bang_Bang_Kind, others => <>), others => <>);
                Write (Data, Heater, Append_Only => True);
                Table := TOML_Data.Get ("Heater").Get (Heater'Image);
          end case;
-         Data.Thermistor           := From_TOML (Table.Get ("Thermistor"));
-         Data.Max_Cumulative_Error := From_TOML (Table.Get ("Max_Cumulative_Error")) * celcius;
-         Data.Check_Gain_Time      := From_TOML (Table.Get ("Check_Gain_Time")) * s;
-         Data.Check_Minimum_Gain   := From_TOML (Table.Get ("Check_Minimum_Gain")) * celcius;
-         Data.Hysteresis           := From_TOML (Table.Get ("Hysteresis")) * celcius;
+         Data.Thermistor                  := From_TOML (Table.Get ("Thermistor"));
+         Data.Params.Max_Cumulative_Error := From_TOML (Table.Get ("Max_Cumulative_Error")) * celcius;
+         Data.Params.Check_Gain_Time      := From_TOML (Table.Get ("Check_Gain_Time")) * s;
+         Data.Params.Check_Minimum_Gain   := From_TOML (Table.Get ("Check_Minimum_Gain")) * celcius;
+         Data.Params.Hysteresis           := From_TOML (Table.Get ("Hysteresis")) * celcius;
       end Read;
 
-      procedure Write (Data : Heater_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) is
+      procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) is
          Table : constant TOML_Value := Create_Table;
       begin
-         Table.Set ("Kind", To_TOML (Data.Kind));
-         case Data.Kind is
+         Table.Set ("Kind", To_TOML (Data.Params.Kind));
+         case Data.Params.Kind is
             when Disabled_Kind =>
                null;
             when PID_Kind =>
-               Table.Set ("Proportional_Scale", To_TOML (Data.Proportional_Scale));
-               Table.Set ("Integral_Scale", To_TOML (Data.Integral_Scale));
-               Table.Set ("Derivative_Scale", To_TOML (Data.Derivative_Scale));
+               Table.Set ("Proportional_Scale", To_TOML (Data.Params.Proportional_Scale));
+               Table.Set ("Integral_Scale", To_TOML (Data.Params.Integral_Scale));
+               Table.Set ("Derivative_Scale", To_TOML (Data.Params.Derivative_Scale));
             when Bang_Bang_Kind =>
                null;
          end case;
          Table.Set ("Thermistor", To_TOML (Data.Thermistor));
-         Table.Set ("Max_Cumulative_Error", To_TOML (Data.Max_Cumulative_Error / celcius));
-         Table.Set ("Check_Gain_Time", To_TOML (Data.Check_Gain_Time / s));
-         Table.Set ("Check_Minimum_Gain", To_TOML (Data.Check_Minimum_Gain / celcius));
-         Table.Set ("Hysteresis", To_TOML (Data.Hysteresis / celcius));
+         Table.Set ("Max_Cumulative_Error", To_TOML (Data.Params.Max_Cumulative_Error / celcius));
+         Table.Set ("Check_Gain_Time", To_TOML (Data.Params.Check_Gain_Time / s));
+         Table.Set ("Check_Minimum_Gain", To_TOML (Data.Params.Check_Minimum_Gain / celcius));
+         Table.Set ("Hysteresis", To_TOML (Data.Params.Hysteresis / celcius));
 
          Maybe_Read_File;
          TOML_Data.Set_Default ("Heater", Create_Table);

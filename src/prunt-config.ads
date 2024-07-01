@@ -23,6 +23,7 @@ with Prunt.Motion_Planner;
 with TOML;
 with Ada.Strings.Bounded;
 with Prunt.Thermistors; use Prunt.Thermistors;
+with Prunt.Heaters;     use Prunt.Heaters;
 with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
 
@@ -133,24 +134,9 @@ package Prunt.Config is
 
    --  Thermistor_Parameters in Prunt.Thermistors.
 
-   type Heater_Kind is (Disabled_Kind, PID_Kind, Bang_Bang_Kind);
-
-   type Heater_Parameters (Kind : Heater_Kind := Disabled_Kind) is record
-      Thermistor           : Thermistor_Name := Thermistor_Name'First;
-      Max_Cumulative_Error : Temperature     := 120.0 * celcius;
-      Check_Gain_Time      : Time            := 20.0 * s;
-      Check_Minimum_Gain   : Temperature     := 2.0 * celcius;
-      Hysteresis           : Temperature     := 3.0 * celcius;
-      case Kind is
-         when Disabled_Kind =>
-            null;
-         when PID_Kind =>
-            Proportional_Scale : Dimensionless := 0.0;
-            Integral_Scale     : Dimensionless := 0.0;
-            Derivative_Scale   : Dimensionless := 0.0;
-         when Bang_Bang_Kind =>
-            null;
-      end case;
+   type Heater_Full_Parameters is record
+      Thermistor : Thermistor_Name := Thermistor_Name'First;
+      Params     : Heaters.Heater_Parameters;
    end record;
 
    type Bed_Mesh_Kind is (No_Mesh_Kind, Beacon_Kind);
@@ -207,8 +193,8 @@ package Prunt.Config is
       procedure Write (Data : Extruder_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
       procedure Write (Data : Thermistor_Parameters; Thermistor : Thermistor_Name; Append_Only : Boolean := False);
-      procedure Read (Data : out Heater_Parameters; Heater : Heater_Name);
-      procedure Write (Data : Heater_Parameters; Heater : Heater_Name; Append_Only : Boolean := False);
+      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name);
+      procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False);
       procedure Read (Data : out Bed_Mesh_Parameters);
       procedure Write (Data : Bed_Mesh_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
