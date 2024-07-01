@@ -174,7 +174,7 @@ private
      (Data                 : Flush_Extra_Data;
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index);
+      Next_Command_Index   : Command_Index);
 
    package My_Step_Generator is new Step_Generator
      (Planner                 => My_Planner,

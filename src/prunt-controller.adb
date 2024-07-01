@@ -451,21 +451,21 @@ package body Prunt.Controller is
      (Data                 : Flush_Extra_Data;
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index)
+      Next_Command_Index   : Command_Index)
    is
    begin
       if Data.Is_Conditional_Move or Data.Is_Homing_Move then
-         Wait_Until_Idle (Last_Command_Index);
+         Wait_Until_Idle (Next_Command_Index - 1);
       end if;
 
       --  TODO: Should we require the user to implement this instead?
       if Data.Dwell_Time /= Time (0.0) then
-         Wait_Until_Idle (Last_Command_Index);
+         Wait_Until_Idle (Next_Command_Index - 1);
          delay Duration (Data.Dwell_Time / s);
       end if;
 
       if Data.Wait_For_Heater then
-         Wait_Until_Heater_Stable (Last_Command_Index, Data.Wait_For_Heater_Name);
+         Wait_Until_Heater_Stable (Next_Command_Index - 1, Data.Wait_For_Heater_Name);
       end if;
 
       My_Gcode_Handler.Finished_Block (Data, First_Accel_Distance);

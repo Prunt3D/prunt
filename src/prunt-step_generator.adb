@@ -63,7 +63,7 @@ package body Prunt.Step_Generator is
    end To_Stepper_Position;
 
    task body Runner is
-      Current_Command_Index : Command_Index := 2;
+      Current_Command_Index : Command_Index := 1;
       Current_Time          : Time          := 0.0 * s;
       Pos_Map               : Stepper_Pos_Map;
 
@@ -199,7 +199,7 @@ package body Prunt.Step_Generator is
               (Flush_Extra_Data (Block),
                To_Stepper_Position (Next_Block_Pos (Block), Pos_Map),
                First_Accel_Distance,
-               Current_Command_Index - 1);
+               Current_Command_Index);
          end;
       end loop;
    end Runner;
