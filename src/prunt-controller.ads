@@ -59,12 +59,12 @@ generic
    --  or many times for each loop move. The last parameters of this call before an Enqueue_Move call containing a loop
    --  move should always be the values used for the given loop move. This procedure will not be called if the last
    --  call to Enqueue_Move had the Safe_Stop_After parameter set to False. This procedure may be called before any
-   --  moves are queued.
+   --  moves are queued. Wait_Until_Idle will always be called before this procedure.
 
    with procedure Setup_For_Conditional_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
    --  Ignore all commands until after the next command where Safe_Stop_After = True if the Switch is currently in
    --  Hit_State. This procedure will not be called if the last call to Enqueue_Command had the Safe_Stop_After
-   --  parameter set to False.
+   --  parameter set to False. Wait_Until_Idle will always be called before this procedure.
 
    with procedure Enqueue_Command (Command : Queued_Command);
    --  Enqueue a command to be executed.
@@ -169,7 +169,7 @@ private
       Is_Homing_Move               => Is_Homing_Move,
       Home_Move_Minimum_Coast_Time => 2.5 * Loop_Interpolation_Time);
 
-   procedure Start_Planner_Block (Data : Flush_Extra_Data);
+   procedure Start_Planner_Block (Data : Flush_Extra_Data; Last_Command_Index : Command_Index);
    procedure Enqueue_Command_Internal
      (Pos             : Position;
       Stepper_Pos     : Stepper_Position;

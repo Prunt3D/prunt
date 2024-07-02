@@ -28,7 +28,7 @@ package Prunt is
 
    type Stepper_Kind is (Basic_Kind, TMC2240_UART_Kind);
 
-   type Command_Index is range 1 .. 2**58 - 2;
+   type Command_Index is range 0 .. 2**58 - 2;
    --  2**58 chosen to leave a few bits for packing of flags by a given implementation.
 
    type Pin_State is (High_State, Low_State);

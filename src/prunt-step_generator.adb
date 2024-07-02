@@ -63,7 +63,7 @@ package body Prunt.Step_Generator is
    end To_Stepper_Position;
 
    task body Runner is
-      Current_Command_Index : Command_Index := 1;
+      Current_Command_Index : Command_Index := 0;
       Current_Time          : Time          := 0.0 * s;
       Pos_Map               : Stepper_Pos_Map;
 
@@ -98,7 +98,7 @@ package body Prunt.Step_Generator is
          Pausing_State := Running_Kind;
          Pause_Slew := Pause_Slew_Index'First;
 
-         Start_Planner_Block (Flush_Extra_Data (Block));
+         Start_Planner_Block (Flush_Extra_Data (Block), Current_Command_Index);
 
          if Is_Homing_Move (Flush_Extra_Data (Block)) then
             if Block.N_Corners /= 2 then
@@ -109,6 +109,8 @@ package body Prunt.Step_Generator is
 
          for I in 2 .. Block.N_Corners loop
             loop
+               Current_Command_Index := Current_Command_Index + 1;
+
                case Pausing_State is
                   when Running_Kind =>
                      if Do_Pause and then Homing_Move_When = Not_Pending_Kind then
@@ -160,8 +162,6 @@ package body Prunt.Step_Generator is
                         Homing_Move_When := Not_Pending_Kind;
                   end case;
                end;
-
-               Current_Command_Index := Current_Command_Index + 1;
 
                if Homing_Move_When /= Not_Pending_Kind and Current_Time >= Segment_Time (Block, I) then
                   raise Constraint_Error with "Homing move queued but end of block reached before execution.";

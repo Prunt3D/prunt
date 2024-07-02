@@ -216,7 +216,7 @@ package body Prunt.Controller is
 
    First_Block : Boolean := True;
 
-   procedure Start_Planner_Block (Data : Flush_Extra_Data) is
+   procedure Start_Planner_Block (Data : Flush_Extra_Data; Last_Command_Index : Command_Index) is
    begin
       if First_Block then
          Reset_Position ([others => 0.0]);
@@ -224,10 +224,12 @@ package body Prunt.Controller is
       end if;
 
       if Data.Is_Homing_Move then
+         Wait_Until_Idle (Last_Command_Index);
          Setup_For_Loop_Move (Data.Home_Switch, Data.Home_Hit_On_State);
       end if;
 
       if Data.Is_Conditional_Move then
+         Wait_Until_Idle (Last_Command_Index);
          Setup_For_Conditional_Move (Data.Conditional_Switch, Data.Conditional_Hit_On_State);
       end if;
    end Start_Planner_Block;
