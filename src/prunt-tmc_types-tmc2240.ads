@@ -374,8 +374,8 @@ package Prunt.TMC_Types.TMC2240 is
       PWM_OFS            : Unsigned_8;
       PWM_Grad           : Unsigned_8;
       PWM_Freq           : Unsigned_2;
-      PWM_AutoScale      : TMC_Boolean;
-      PWM_AutoGrad       : TMC_Boolean;
+      PWM_Auto_Scale     : TMC_Boolean;
+      PWM_Auto_Grad      : TMC_Boolean;
       Freewheel          : Freewheel_Type;
       PWM_Meas_SD_Enable : TMC_Boolean;
       PWM_Dis_Reg_Stst   : TMC_Boolean;
@@ -491,7 +491,7 @@ package Prunt.TMC_Types.TMC2240 is
       THIGH_Address           => 16#15#,
       DIRECT_MODE_Address     => 16#2D#,
       ENCMODE_Address         => 16#38#,
-      X_ENC_Address            => 16#39#,
+      X_ENC_Address           => 16#39#,
       ENC_CONST_Address       => 16#3A#,
       ENC_STATUS_Address      => 16#3B#,
       ENC_LATCH_Address       => 16#3C#,
@@ -512,9 +512,9 @@ package Prunt.TMC_Types.TMC2240 is
       MSCURACT_Address        => 16#6B#,
       CHOPCONF_Address        => 16#6C#,
       COOLCONF_Address        => 16#6D#,
-      DRV_STATUS_Address       => 16#6F#,
+      DRV_STATUS_Address      => 16#6F#,
       PWMCONF_Address         => 16#70#,
-      PWM_SCALE_Address        => 16#71#,
+      PWM_SCALE_Address       => 16#71#,
       PWM_AUTO_Address        => 16#72#,
       SG4_THRS_Address        => 16#74#,
       SG4_RESULT_Address      => 16#75#,

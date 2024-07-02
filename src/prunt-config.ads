@@ -58,16 +58,23 @@ package Prunt.Config is
          when Basic_Kind =>
             null;
          when TMC2240_UART_Kind =>
+            --  GLOBALSCALER and DRVCONF:
             Output_Current       : Current                                     := 0.15 * amp;
             Slope_Control        : TMC_Types.TMC2240.Slope_Control_Type        := TMC_Types.TMC2240.Slope_100V_Per_us;
+            --  IHOLDIRUN:
             I_Hold               : TMC_Types.Unsigned_5                        := 16;
             I_Run                : TMC_Types.Unsigned_5                        := 31;
             I_Hold_Delay         : TMC_Types.Unsigned_4                        := 1;
             I_Run_Delay          : TMC_Types.Unsigned_4                        := 4;
+            --  TPOWERDOWN:
             T_Power_Down         : TMC_Types.Unsigned_8                        := 10;
+            --  TPWMTHRS:
             T_PWM_Thrs           : TMC_Types.Unsigned_20                       := 0;
+            --  TCOOLTHRS:
             T_Cool_Thrs          : TMC_Types.Unsigned_20                       := 0;
+            --  THIGH:
             T_High               : TMC_Types.Unsigned_20                       := 0;
+            --  CHOPCONF:
             TOFF                 : TMC_Types.Unsigned_4                        := 3;
             HSTRT_TFD210         : TMC_Types.Unsigned_3                        := 5;
             HEND_OFFSET          : TMC_Types.Unsigned_4                        := 2;
@@ -78,6 +85,7 @@ package Prunt.Config is
             VHIGHCHM             : Boolean                                     := False;
             TPFD                 : TMC_Types.Unsigned_4                        := 4;
             Microstep_Resolution : TMC_Types.TMC2240.Microstep_Resolution_Type := TMC_Types.TMC2240.MS_256;
+            --  PWMCONF:
             PWM_OFS              : TMC_Types.Unsigned_8                        := 29;
             PWM_Grad             : TMC_Types.Unsigned_8                        := 0;
             PWM_Freq             : TMC_Types.Unsigned_2                        := 0;

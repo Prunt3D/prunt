@@ -29,6 +29,8 @@ with Ada.Exceptions;
 with System.Multiprocessors;
 with Prunt.Step_Generator;
 with Prunt.Heaters;
+with Prunt.TMC_Types;
+with Prunt.TMC_Types.TMC2240;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -233,5 +235,17 @@ private
    private
       Local : Unbounded_String := To_Unbounded_String ("");
    end Status_Message;
+
+   procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
+   procedure Setup_Thermistors_And_Heater_Assignments;
+   procedure Setup_Stepper (Stepper : Stepper_Name);
+   procedure Setup_Planner;
+   procedure Setup_Step_Generator;
+   procedure Setup_Gcode_Handler;
+
+   task GUI_Runner is
+      entry Start;
+      entry Finish;
+   end GUI_Runner;
 
 end Prunt.Controller;
