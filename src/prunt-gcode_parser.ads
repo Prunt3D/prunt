@@ -37,7 +37,8 @@ package Prunt.Gcode_Parser is
       Set_Chamber_Temperature_Kind,
       Wait_Chamber_Temperature_Kind,
       Set_Fan_Speed_Kind,
-      TMC_Dump_Kind);
+      TMC_Dump_Kind,
+      Heater_Autotune_Kind);
 
    type Axes_Set is array (Axis_Name) of Boolean;
 
@@ -70,6 +71,9 @@ package Prunt.Gcode_Parser is
             Target_Temperature : Temperature;
          when Set_Fan_Speed_Kind =>
             Fan_Speed : PWM_Scale;
+         when Heater_Autotune_Kind =>
+            Tuning_Temperature : Temperature;
+            --  TODO: Allow specification of heater.
       end case;
    end record;
 

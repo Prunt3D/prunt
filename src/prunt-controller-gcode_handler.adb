@@ -367,6 +367,8 @@ package body Prunt.Controller.Gcode_Handler is
                      end loop;
                   end if;
                end loop;
+            when Heater_Autotune_Kind =>
+               Autotune_Heater (G_Code_Assignment_Params.Hotend_Heater, Command.Tuning_Temperature);
             when others =>
                raise Constraint_Error with "Command not implemented.";
          end case;

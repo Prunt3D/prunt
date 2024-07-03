@@ -382,6 +382,11 @@ package body Prunt.Gcode_Parser is
                  (Kind               => Wait_Chamber_Temperature_Kind,
                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
                   Pos                => Ctx.Pos);
+            when 303 =>
+               Comm :=
+                 (Kind               => Heater_Autotune_Kind,
+                  Tuning_Temperature => Floatify_Or_Error ('S') * celcius,
+                  Pos                => Ctx.Pos);
             when others =>
                raise Bad_Line with "Unknown M code: " & Params ('M').Integer_Value'Image;
          end case;

@@ -50,8 +50,12 @@ generic
    --  called before any other procedures. Should configure all heaters as disabled until Reconfigure_Heater is called.
 
    with procedure Reconfigure_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters);
-   -- Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from any
-   -- task.
+   --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from any
+   --  task.
+
+   with procedure Autotune_Heater (Heater : Heater_Name; Setpoint : Temperature);
+   --  Run autotuning for the given heater and setpoint.
+   --  TODO: Save the results to the config file.
 
    with procedure Setup_For_Loop_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
    --  Setup the step generator for an upcoming loop move. A loop move should stop looping when the state of Switch =
