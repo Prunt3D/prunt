@@ -317,6 +317,12 @@ package body Prunt.Controller.Gcode_Handler is
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             when Wait_Hotend_Temperature_Kind =>
+               Corner_Data.Heaters (G_Code_Assignment_Params.Hotend_Heater) := Command.Target_Temperature;
+               My_Planner.Enqueue
+                 ((Kind              => My_Planner.Move_Kind,
+                   Pos               => Command.Pos,
+                   Feedrate          => 0.000_1 * mm / s,
+                   Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue
                  ((Kind             => My_Planner.Flush_Kind,
                    Flush_Extra_Data =>
@@ -332,6 +338,12 @@ package body Prunt.Controller.Gcode_Handler is
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             when Wait_Bed_Temperature_Kind =>
+               Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
+               My_Planner.Enqueue
+                 ((Kind              => My_Planner.Move_Kind,
+                   Pos               => Command.Pos,
+                   Feedrate          => 0.000_1 * mm / s,
+                   Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue
                  ((Kind             => My_Planner.Flush_Kind,
                    Flush_Extra_Data =>
