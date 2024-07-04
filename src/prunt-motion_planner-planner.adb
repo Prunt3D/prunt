@@ -144,13 +144,22 @@ package body Prunt.Motion_Planner.Planner is
              (Block.Beziers (Finishing_Corner - 1),
               Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
       elsif Distance < Start_Curve_Half_Distance + Mid_Distance or End_Curve_Half_Distance = 0.0 * mm then
-         Pos     :=
-           Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0) +
-           (Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
-              Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)) *
-             ((Distance - Start_Curve_Half_Distance) / Mid_Distance);
+         if Mid_Distance = 0.0 * mm then
+            Pos     := Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
          Tangent :=
-           Point_At_T (Block.Beziers (Finishing_Corner), 0.0) - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
+           Tangent_At_Distance
+             (Block.Beziers (Finishing_Corner - 1),
+              Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
+         else
+            Pos     :=
+              Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0) +
+              (Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
+                 Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)) *
+              ((Distance - Start_Curve_Half_Distance) / Mid_Distance);
+            Tangent :=
+              Point_At_T
+                (Block.Beziers (Finishing_Corner), 0.0) - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
+         end if;
       else
          Pos     :=
            Point_At_Distance (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);

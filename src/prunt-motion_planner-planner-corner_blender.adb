@@ -126,7 +126,9 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       A  : constant Area                   := Dot (V1, V2);
       B  : constant Area                   := 2.0 * (abs V1) * (abs V2);
    begin
-      if 0.5 + A / B < 0.0 then
+      if B = 0.0 then
+         return 1.0;
+      elsif 0.5 + A / B < 0.0 then
          return 0.0;
       elsif (0.5 + A / B)**(1 / 2) > 1.0 then
          return 1.0;
@@ -138,7 +140,8 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
    function Unit_Bisector (Start, Corner, Finish : Scaled_Position) return Position_Scale is
       A        : constant Scaled_Position_Offset := Start - Corner;
       B        : constant Scaled_Position_Offset := Finish - Corner;
-      Bisector : constant Position_Scale         := A / abs A + B / abs B;
+      Bisector : constant Position_Scale         :=
+        (if abs A = 0.0 or abs B = 0.0 then (others => 0.0) else A / abs A + B / abs B);
    begin
       if abs Bisector = 0.0 then
          return Bisector;
