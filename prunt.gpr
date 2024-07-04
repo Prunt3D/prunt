@@ -18,7 +18,8 @@ project Prunt is
       for Default_Switches ("Ada") use Prunt_Config.Ada_Compiler_Switches &
         ("-gnatyM119",
          "-gnat2022",
-         "-gnaty-B");
+         "-gnaty-B",
+         "-gnatW8");
    end Compiler;
 
    package Binder is
