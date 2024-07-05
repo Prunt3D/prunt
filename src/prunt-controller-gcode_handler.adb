@@ -94,7 +94,7 @@ package body Prunt.Controller.Gcode_Handler is
              Flush_Extra_Data =>
                (Is_Conditional_Move      => True,
                 Conditional_Switch       => Switch,
-                Conditional_Hit_On_State => Hit_State,
+                Conditional_Hit_On_State => (if Hit_State = High_State then Low_State else High_State),
                 others                   => <>),
              Reset_Pos        => Zero_Pos),
             Ignore_Bounds => True);
