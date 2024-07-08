@@ -46,8 +46,10 @@ package body Prunt.Motion_Planner.Planner is
          Block : aliased Execution_Block;
       end record;
 
+      pragma Warnings (Off, "use of an anonymous access type allocator");
       Working_Block_Wrapper : constant access Block_Wrapper := new Block_Wrapper;
       Block renames Working_Block_Wrapper.Block;
+      pragma Warnings (On, "use of an anonymous access type allocator");
    begin
       accept Setup (In_Params : Kinematic_Parameters) do
          My_Preprocessor.Setup (In_Params);

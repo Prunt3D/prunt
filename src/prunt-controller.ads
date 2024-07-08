@@ -133,11 +133,13 @@ package Prunt.Controller is
 
 private
 
+   pragma Warnings (Off, "use of an anonymous access type allocator");
    Fatal_Exception_Occurrence_Holder : constant access Fatal_Exception_Occurrence_Holder_Type :=
      new Fatal_Exception_Occurrence_Holder_Type;
    --  The only reason that this is an allocation is so that we can safely call 'Access on the Set procedure to be
    --  passed to Ada.Task_Termination.Set_Specific_Handler. 'Unrestricted_Access works if we replace this with just a
    --  plain variable but that is a GNAT extension and of course introduces the risk of dangling pointers.
+   pragma Warnings (On, "use of an anonymous access type allocator");
 
    Config_Constraint_Error : exception;
    --  Raised when the configuration file is found to be invalid during setup.

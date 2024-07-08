@@ -33,6 +33,8 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
 
 private
 
+   pragma Warnings (Off, "use of an anonymous access type allocator");
+
    package Command_Queues_Interface is new Ada.Containers.Synchronized_Queue_Interfaces (Command);
    package Command_Queues is new Ada.Containers.Bounded_Synchronized_Queues
      (Command_Queues_Interface, Input_Queue_Length);
@@ -47,6 +49,8 @@ private
    Corners            : access Block_Plain_Corners      := new Block_Plain_Corners (1 .. Corners_Index'Last);
    Segment_Feedrates  : access Block_Segment_Feedrates  := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
    Corners_Extra_Data : access Block_Corners_Extra_Data := new Block_Corners_Extra_Data (2 .. Corners_Index'Last);
+
+   pragma Warnings (On, "use of an anonymous access type allocator");
 
    procedure Check_Bounds (Pos : Position);
    function Enforce_Feedrate_Limits (Offset : Position_Offset; Feedrate : Velocity) return Velocity;

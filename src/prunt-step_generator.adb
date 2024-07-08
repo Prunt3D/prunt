@@ -78,7 +78,9 @@ package body Prunt.Step_Generator is
          Block : aliased Execution_Block;
       end record;
 
+      pragma Warnings (Off, "use of an anonymous access type allocator");
       Working_Block_Wrapper : constant access Block_Wrapper := new Block_Wrapper;
+      pragma Warnings (On, "use of an anonymous access type allocator");
       Block renames Working_Block_Wrapper.Block;
    begin
       accept Setup (Map : Stepper_Pos_Map) do
