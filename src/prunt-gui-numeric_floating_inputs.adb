@@ -23,8 +23,6 @@ with Ada.Strings;
 
 package body Prunt.GUI.Numeric_Floating_Inputs is
 
-   pragma Warnings (Off, "dimensions mismatch");
-
    overriding procedure Create
      (Element : in out Numeric_Input;
       Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class;
