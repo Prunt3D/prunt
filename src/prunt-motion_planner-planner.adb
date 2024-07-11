@@ -116,9 +116,9 @@ package body Prunt.Motion_Planner.Planner is
            Block.Corner_Velocity_Limits (Finishing_Corner - 1),
            Is_Past_Accel_Part);
 
-      Pos                       : Scaled_Position;
-      Tangent                   : Scaled_Position_Offset;
-      Unscaled_Velocity_Tangent : Axial_Velocities;
+      Pos                     : Scaled_Position;
+      Tangent                 : Scaled_Position_Offset;
+      Scaled_Velocity_Tangent : Axial_Velocities;
    begin
       if Time_Into_Segment = Total_Time (Block.Feedrate_Profiles (Finishing_Corner)) and
         Finishing_Corner = Block.N_Corners
@@ -169,16 +169,14 @@ package body Prunt.Motion_Planner.Planner is
            Tangent_At_Distance (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
       end if;
 
-      Unscaled_Velocity_Tangent :=
+      Scaled_Velocity_Tangent :=
         (Tangent / abs Tangent) *
         Velocity_At_Time
           (Block.Feedrate_Profiles (Finishing_Corner), Time_Into_Segment, Block.Params.Crackle_Max,
-           Block.Corner_Velocity_Limits (Finishing_Corner - 1)) /
-        Block.Params.Axial_Scaler;
+           Block.Corner_Velocity_Limits (Finishing_Corner - 1));
 
-      Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Unscaled_Velocity_Tangent (E_Axis);
+      Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Scaled_Velocity_Tangent (E_Axis);
 
-      return Position (Pos / Block.Params.Axial_Scaler);
    end Segment_Pos_At_Time;
 
    function Next_Block_Pos (Block : Execution_Block) return Position is
