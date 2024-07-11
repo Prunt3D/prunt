@@ -31,9 +31,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                Check_Bounds (Comm.Reset_Pos);
             end if;
          when Flush_And_Change_Parameters_Kind =>
-            if Comm.New_Params.Higher_Order_Scaler /= Params.Higher_Order_Scaler then
-               raise Constraint_Error with "Changing of the scaler at runtime is not currently supported.";
-            end if;
+            null;
          when Move_Kind =>
             if not Ignore_Bounds then
                Check_Bounds (Comm.Pos);
@@ -126,7 +124,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Block.Segment_Feedrates  := Segment_Feedrates (2 .. N_Corners);
       Block.Flush_Extra_Data   := Flush_Extra_Data;
       Block.Params             := Params;
-      Block.Next_Block_Pos     := Last_Pos * Params.Higher_Order_Scaler;
+      Block.Next_Block_Pos     := Last_Pos * Next_Params.Higher_Order_Scaler;
 
       Params := Next_Params;
    end Run;
