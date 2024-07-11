@@ -655,7 +655,7 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Axial Scaler",
             Description =>
               "Inside the motion planner, " &
-              "all positions are multiples by this value before applying motion profile limits, " &
+              "all positions are divided by this value before applying motion profile limits, " &
               "allowing for different limits on different axes. " &
               "You do not need to take this value in to account when setting position limits or mm per step values. " &
               "Corner deviation and feedrate, acceleration, etc. is based on scaled positions, " &

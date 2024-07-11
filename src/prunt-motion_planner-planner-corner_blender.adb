@@ -29,7 +29,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       Last_Comp_Error : Length := 0.0 * mm;
 
       function Allow_Corner_Shift (I : Corners_Index) return Boolean is
-         Unscaled_Corner : constant Position := Position (Block.Corners (I) / Block.Params.Axial_Scaler);
+         Unscaled_Corner : constant Position := Position (Block.Corners (I) * Block.Params.Axial_Scaler);
       begin
          if not Block.Params.Shift_Blended_Corners then
             return False;
