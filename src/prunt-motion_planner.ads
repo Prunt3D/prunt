@@ -33,7 +33,7 @@ package Prunt.Motion_Planner is
       Snap_Max                : Snap           := 0.0 * mm / s**4;
       Crackle_Max             : Crackle        := 0.0 * mm / s**5;
       Chord_Error_Max         : Length         := 0.0 * mm;
-      Higher_Order_Scaler     : Position_Scale := [others => 1.0];
+      Axial_Scaler            : Position_Scale := [others => 1.0];
    end record;
 
    type Max_Corners_Type is range 2 .. 2**63 - 1;

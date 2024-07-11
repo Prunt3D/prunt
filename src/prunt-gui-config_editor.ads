@@ -519,7 +519,7 @@ package Prunt.GUI.Config_Editor is
          Shift_Blended_Corners   : Basic_Inputs.Boolean_Rows.Parameter_Row;
          Pressure_Advance_Time   : Basic_Inputs.Time_Rows.Parameter_Row;
          Chord_Error_Max         : Basic_Inputs.Length_Rows.Parameter_Row;
-         Higher_Order_Scaler     : Grouped_Element_Widgets.Position_Scale_Widget_Rows.Parameter_Row;
+         Axial_Scaler            : Grouped_Element_Widgets.Position_Scale_Widget_Rows.Parameter_Row;
          Z_Steppers              : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
          E_Steppers              : Grouped_Element_Widgets.Attached_Steppers_Widget_Rows.Parameter_Row;
 

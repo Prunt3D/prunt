@@ -89,8 +89,8 @@ package body Prunt.Motion_Planner.Planner is
    begin
       return
         abs
-        (Block.Corners (Finishing_Corner) / Block.Params.Higher_Order_Scaler -
-         Block.Corners (Finishing_Corner - 1) / Block.Params.Higher_Order_Scaler);
+        (Block.Corners (Finishing_Corner) / Block.Params.Axial_Scaler -
+         Block.Corners (Finishing_Corner - 1) / Block.Params.Axial_Scaler);
    end Segment_Corner_Distance;
 
    function Segment_Pos_At_Time
@@ -135,7 +135,7 @@ package body Prunt.Motion_Planner.Planner is
          --  testing the error was always within 1E-14 of zero but there is no reason to check for that level of
          --  precision here.
 
-         return Position (Pos / Block.Params.Higher_Order_Scaler);
+         return Position (Pos / Block.Params.Axial_Scaler);
       elsif Distance < Start_Curve_Half_Distance then
          Pos     :=
            Point_At_Distance
@@ -174,16 +174,16 @@ package body Prunt.Motion_Planner.Planner is
         Velocity_At_Time
           (Block.Feedrate_Profiles (Finishing_Corner), Time_Into_Segment, Block.Params.Crackle_Max,
            Block.Corner_Velocity_Limits (Finishing_Corner - 1)) /
-        Block.Params.Higher_Order_Scaler;
+        Block.Params.Axial_Scaler;
 
       Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Unscaled_Velocity_Tangent (E_Axis);
 
-      return Position (Pos / Block.Params.Higher_Order_Scaler);
+      return Position (Pos / Block.Params.Axial_Scaler);
    end Segment_Pos_At_Time;
 
    function Next_Block_Pos (Block : Execution_Block) return Position is
    begin
-      return Position (Block.Next_Block_Pos / Block.Params.Higher_Order_Scaler);
+      return Position (Block.Next_Block_Pos / Block.Params.Axial_Scaler);
    end Next_Block_Pos;
 
    function Flush_Extra_Data (Block : Execution_Block) return Flush_Extra_Data_Type is

@@ -66,7 +66,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       Next_Params := Params;
 
-      Corners (1) := Last_Pos * Params.Higher_Order_Scaler;
+      Corners (1) := Last_Pos * Params.Axial_Scaler;
 
       loop
          declare
@@ -89,7 +89,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                when Move_Kind =>
                   --  if abs (Last_Pos - Next_Command.Pos) >= Preprocessor_Minimum_Move_Distance then
                      N_Corners                      := N_Corners + 1;
-                     Corners (N_Corners)            := Next_Command.Pos * Params.Higher_Order_Scaler;
+                     Corners (N_Corners)            := Next_Command.Pos * Params.Axial_Scaler;
                      Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
                      Segment_Feedrates (N_Corners)  := Next_Command.Feedrate;
 
@@ -110,7 +110,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Block.Segment_Feedrates  := Segment_Feedrates (2 .. N_Corners);
       Block.Flush_Extra_Data   := Flush_Extra_Data;
       Block.Params             := Params;
-      Block.Next_Block_Pos     := Last_Pos * Next_Params.Higher_Order_Scaler;
+      Block.Next_Block_Pos     := Last_Pos * Next_Params.Axial_Scaler;
 
       Params := Next_Params;
    end Run;

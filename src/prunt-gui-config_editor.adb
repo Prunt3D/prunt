@@ -649,10 +649,10 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Max Chord Error",
             Description => "Maximum distance that the path may deviate from the commanded path.");
 
-         View.Higher_Order_Scaler.Create
+         View.Axial_Scaler.Create
            (Parent      => View.Widget_Table,
             Form        => View,
-            Name        => "Higher Order Scaler",
+            Name        => "Axial Scaler",
             Description =>
               "Inside the motion planner, " &
               "all positions are multiples by this value before applying motion profile limits, " &
@@ -742,7 +742,7 @@ package body Prunt.GUI.Config_Editor is
          View.Shift_Blended_Corners.Set_Data (Params.Planner_Parameters.Shift_Blended_Corners);
          View.Pressure_Advance_Time.Set_Data (Params.Planner_Parameters.Pressure_Advance_Time);
          View.Chord_Error_Max.Set_Data (Params.Planner_Parameters.Chord_Error_Max);
-         View.Higher_Order_Scaler.Set_Data (Params.Planner_Parameters.Higher_Order_Scaler);
+         View.Axial_Scaler.Set_Data (Params.Planner_Parameters.Axial_Scaler);
          View.Z_Steppers.Set_Data (Params.Z_Steppers);
          View.E_Steppers.Set_Data (Params.E_Steppers);
       end Read_Data;
@@ -773,7 +773,7 @@ package body Prunt.GUI.Config_Editor is
          Params.Planner_Parameters.Shift_Blended_Corners   := View.Shift_Blended_Corners.Get_Data;
          Params.Planner_Parameters.Pressure_Advance_Time   := View.Pressure_Advance_Time.Get_Data;
          Params.Planner_Parameters.Chord_Error_Max         := View.Chord_Error_Max.Get_Data;
-         Params.Planner_Parameters.Higher_Order_Scaler     := View.Higher_Order_Scaler.Get_Data;
+         Params.Planner_Parameters.Axial_Scaler            := View.Axial_Scaler.Get_Data;
          Params.Z_Steppers                                 := View.Z_Steppers.Get_Data;
          Params.E_Steppers                                 := View.E_Steppers.Get_Data;
 

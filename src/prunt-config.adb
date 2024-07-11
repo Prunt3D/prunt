@@ -170,7 +170,7 @@ package body Prunt.Config is
       Table.Set ("Snap_Max", To_TOML (Params.Snap_Max / (mm / s**4)));
       Table.Set ("Crackle_Max", To_TOML (Params.Crackle_Max / (mm / s**5)));
       Table.Set ("Chord_Error_Max", To_TOML (Params.Chord_Error_Max / mm));
-      Table.Set ("Higher_Order_Scaler", To_TOML (Params.Higher_Order_Scaler));
+      Table.Set ("Axial_Scaler", To_TOML (Params.Axial_Scaler));
       return Table;
    end To_TOML;
 
@@ -188,7 +188,7 @@ package body Prunt.Config is
          Snap_Max                => From_TOML (Table.Get ("Snap_Max")) * mm / s**4,
          Crackle_Max             => From_TOML (Table.Get ("Crackle_Max")) * mm / s**5,
          Chord_Error_Max         => From_TOML (Table.Get ("Chord_Error_Max")) * mm,
-         Higher_Order_Scaler     => From_TOML (Table.Get ("Higher_Order_Scaler")));
+         Axial_Scaler            => From_TOML (Table.Get ("Axial_Scaler")));
    end From_TOML;
 
    function To_TOML (V : TMC_Types.Unsigned_1) return TOML_Value is (Create_Integer (Any_Integer (V)));
