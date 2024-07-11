@@ -515,7 +515,6 @@ package Prunt.GUI.Config_Editor is
          Jerk_Max                : Basic_Inputs.Jerk_Rows.Parameter_Row;
          Snap_Max                : Basic_Inputs.Snap_Rows.Parameter_Row;
          Crackle_Max             : Basic_Inputs.Crackle_Rows.Parameter_Row;
-         Axial_Velocity_Maxes    : Grouped_Element_Widgets.Axial_Velocities_Widget_Rows.Parameter_Row;
          Ignore_E_In_XYZE        : Basic_Inputs.Boolean_Rows.Parameter_Row;
          Shift_Blended_Corners   : Basic_Inputs.Boolean_Rows.Parameter_Row;
          Pressure_Advance_Time   : Basic_Inputs.Time_Rows.Parameter_Row;

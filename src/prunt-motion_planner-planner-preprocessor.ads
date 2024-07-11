@@ -53,6 +53,5 @@ private
    pragma Warnings (On, "use of an anonymous access type allocator");
 
    procedure Check_Bounds (Pos : Position);
-   function Enforce_Feedrate_Limits (Offset : Position_Offset; Feedrate : Velocity) return Velocity;
 
 end Prunt.Motion_Planner.Planner.Preprocessor;

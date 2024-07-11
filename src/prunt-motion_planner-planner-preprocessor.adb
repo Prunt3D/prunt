@@ -32,6 +32,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             end if;
          when Flush_And_Change_Parameters_Kind =>
             null;
+            --  TODO: Check that scaler will not cause max step rate to be exceeded.
          when Move_Kind =>
             if not Ignore_Bounds then
                Check_Bounds (Comm.Pos);
@@ -90,22 +91,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      N_Corners                      := N_Corners + 1;
                      Corners (N_Corners)            := Next_Command.Pos * Params.Higher_Order_Scaler;
                      Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
-
-                     --  Adjust tangential velocity limit to account for scale.
-                     declare
-                        Unscaled_Offset   : constant Position_Offset := Last_Pos - Next_Command.Pos;
-                        Unscaled_Distance : constant Length          := abs (Unscaled_Offset);
-                        Scaled_Distance   : constant Length          :=
-                          abs (Corners (N_Corners - 1) - Corners (N_Corners));
-                     begin
-                        if Unscaled_Distance = 0.0 * mm then
-                           Segment_Feedrates (N_Corners) := 0.0 * mm / s;
-                        else
-                           Segment_Feedrates (N_Corners) :=
-                             Enforce_Feedrate_Limits (Unscaled_Offset, Next_Command.Feedrate) *
-                             (Scaled_Distance / Unscaled_Distance);
-                        end if;
-                     end;
+                     Segment_Feedrates (N_Corners)  := Next_Command.Feedrate;
 
                      Last_Pos := Next_Command.Pos;
 
@@ -137,27 +123,5 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
       end loop;
    end Check_Bounds;
-
-   function Enforce_Feedrate_Limits (Offset : Position_Offset; Feedrate : Velocity) return Velocity is
-      Has_XYZ : constant Boolean := [Offset with delta E_Axis => 0.0 * mm] /= Position_Offset'[others => Length (0.0)];
-      Limited_Feedrate : Velocity := Feedrate;
-   begin
-      if Params.Ignore_E_In_XYZE and Has_XYZ and Limited_Feedrate /= Velocity'Last then
-         Limited_Feedrate := Limited_Feedrate * abs Offset / abs [Offset with delta E_Axis => 0.0 * mm];
-      end if;
-
-      if Limited_Feedrate > Params.Tangential_Velocity_Max then
-         Limited_Feedrate := Params.Tangential_Velocity_Max;
-      end if;
-
-      for I in Axis_Name loop
-         if abs Offset (I) > 0.0 * mm then
-            Limited_Feedrate :=
-              Velocity'Min (Limited_Feedrate, Params.Axial_Velocity_Maxes (I) * abs Offset / abs Offset (I));
-         end if;
-      end loop;
-
-      return Limited_Feedrate;
-   end Enforce_Feedrate_Limits;
 
 end Prunt.Motion_Planner.Planner.Preprocessor;

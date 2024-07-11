@@ -164,7 +164,6 @@ package body Prunt.Config is
       Table.Set ("Ignore_E_In_XYZE", To_TOML (Params.Ignore_E_In_XYZE));
       Table.Set ("Shift_Blended_Corners", To_TOML (Params.Shift_Blended_Corners));
       Table.Set ("Tangential_Velocity_Max", To_TOML (Params.Tangential_Velocity_Max / (mm / s)));
-      Table.Set ("Axial_Velocity_Maxes", To_TOML (Params.Axial_Velocity_Maxes));
       Table.Set ("Pressure_Advance_Time", To_TOML (Params.Pressure_Advance_Time / s));
       Table.Set ("Acceleration_Max", To_TOML (Params.Acceleration_Max / (mm / s**2)));
       Table.Set ("Jerk_Max", To_TOML (Params.Jerk_Max / (mm / s**3)));
@@ -183,7 +182,6 @@ package body Prunt.Config is
          Ignore_E_In_XYZE        => From_TOML (Table.Get ("Ignore_E_In_XYZE")),
          Shift_Blended_Corners   => From_TOML (Table.Get ("Shift_Blended_Corners")),
          Tangential_Velocity_Max => From_TOML (Table.Get ("Tangential_Velocity_Max")) * mm / s,
-         Axial_Velocity_Maxes    => From_TOML (Table.Get ("Axial_Velocity_Maxes")),
          Pressure_Advance_Time   => From_TOML (Table.Get ("Pressure_Advance_Time")) * s,
          Acceleration_Max        => From_TOML (Table.Get ("Acceleration_Max")) * mm / s**2,
          Jerk_Max                => From_TOML (Table.Get ("Jerk_Max")) * mm / s**3,
