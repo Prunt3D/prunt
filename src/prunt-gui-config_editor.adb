@@ -641,7 +641,7 @@ package body Prunt.GUI.Config_Editor is
            (Parent      => View.Widget_Table,
             Form        => View,
             Name        => "Pressure Advance Time",
-            Description => "The E axis velocity is multiplied by this value added to the E axis position.");
+            Description => "The E axis velocity is multiplied by this value and then added to the E axis position.");
 
          View.Chord_Error_Max.Create
            (Parent      => View.Widget_Table,
