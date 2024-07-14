@@ -1015,13 +1015,19 @@ package body Prunt.GUI.Config_Editor is
            (Parent      => View.Widget_Table,
             Form        => View,
             Name        => UXStrings.From_UTF_8 ("Minimum Temperature"),
-            Description => "Any temperature below this value indicates a failure.");
+            Description =>
+              "Any temperature below this value indicates a failure and will cause a shutdown. " &
+              "This should be set slightly lower than the lowest temperature that you expect this thermistor to " &
+              "experience during normal operation.");
 
          View.Maximum_Temperature.Create
            (Parent      => View.Widget_Table,
             Form        => View,
             Name        => UXStrings.From_UTF_8 ("Maximum Temperature"),
-            Description => "Any temperature above this value indicates a failure.");
+            Description =>
+              "Any temperature above this value indicates a failure and will cause a shutdown. " &
+              "This should be set to a value which is safe for the part that the thermistor is attached to " &
+              "experience for an extended period.");
 
          View.Kind_Table.Create (View);
          View.Kind_Table.Style ("width", "100%");
