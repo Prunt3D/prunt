@@ -603,12 +603,12 @@ package Prunt.GUI.Config_Editor is
       type Heater_Widget is new Parent_Type with record
          Heater : My_Config.Heater_Name;
 
-         Widget_Table         : Gnoga.Gui.Element.Table.Table_Type;
-         Thermistor           : Basic_Inputs.Thermistor_Name_Rows.Parameter_Row;
-         Max_Cumulative_Error : Basic_Inputs.Temperature_Rows.Parameter_Row;
-         Check_Gain_Time      : Basic_Inputs.Time_Rows.Parameter_Row;
-         Check_Minimum_Gain   : Basic_Inputs.Temperature_Rows.Parameter_Row;
-         Hysteresis           : Basic_Inputs.Temperature_Rows.Parameter_Row;
+         Widget_Table               : Gnoga.Gui.Element.Table.Table_Type;
+         Thermistor                 : Basic_Inputs.Thermistor_Name_Rows.Parameter_Row;
+         Check_Max_Cumulative_Error : Basic_Inputs.Temperature_Rows.Parameter_Row;
+         Check_Gain_Time            : Basic_Inputs.Time_Rows.Parameter_Row;
+         Check_Minimum_Gain         : Basic_Inputs.Temperature_Rows.Parameter_Row;
+         Check_Hysteresis           : Basic_Inputs.Temperature_Rows.Parameter_Row;
 
          Kind_Table : Cards_Table_Type;
 
@@ -619,7 +619,8 @@ package Prunt.GUI.Config_Editor is
          Integral_Scale     : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
          Derivative_Scale   : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
 
-         Bang_Bang_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Bang_Bang_Table      : aliased Gnoga.Gui.Element.Table.Table_Type;
+         Bang_Bang_Hysteresis : Basic_Inputs.Temperature_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;

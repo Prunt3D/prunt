@@ -65,11 +65,27 @@ use type Prunt.TMC_Types.Unsigned_32;
 
 package body Prunt.Controller is
 
+   --  Atomics are used rather than protected objects here to avoid any potential blocking in the stepgen task.
    type Atomic_Volatile_Position is new Position with
      Atomic_Components, Volatile_Components;
    Last_Position : Atomic_Volatile_Position := (others => Length (0.0));
+   --  Note that each element here is updated atomically, not the entire position. This value is only meant to be used
+   --  for displaying a value in the GUI, so it is not an issue if elements are out of sync.
+
+   type Atomic_Volatile_Heater_Targets is new Heater_Targets with
+     Atomic_Components, Volatile_Components;
+   Last_Heater_Targets : Atomic_Volatile_Heater_Targets := (others => Temperature (0.0));
 
    Last_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0)) with
+       Atomic_Components, Volatile_Components;
+
+   type Atomic_Volatile_Heater_Thermistor_Map is new Heater_Thermistor_Map with
+     Atomic_Components, Volatile_Components;
+   Stored_Heater_Thermistors : Atomic_Volatile_Heater_Thermistor_Map;
+
+   type Temperature_Report_Counter is mod 2**32;
+
+   Last_Temperatures_Counters : array (Thermistor_Name) of Temperature_Report_Counter := (others => 0) with
      Atomic_Components, Volatile_Components;
 
    package My_Gcode_Handler is new Gcode_Handler;
@@ -192,7 +208,8 @@ package body Prunt.Controller is
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
    begin
-      Last_Temperatures (Thermistor) := Temp;
+      Last_Temperatures (Thermistor)          := Temp;
+      Last_Temperatures_Counters (Thermistor) := @ + 1;
    end Report_Temperature;
 
    --  TODO
@@ -250,7 +267,8 @@ package body Prunt.Controller is
           Heaters         => Data.Heaters,
           Safe_Stop_After => Safe_Stop_After,
           Loop_Until_Hit  => Loop_Until_Hit));
-      Last_Position := (for A in Axis_Name => Pos (A));
+      Last_Position       := (for A in Axis_Name => Pos (A));
+      Last_Heater_Targets := (for H in Heater_Name => Data.Heaters (H));
    end Enqueue_Command_Internal;
 
    procedure Finish_Planner_Block
@@ -271,7 +289,19 @@ package body Prunt.Controller is
       end if;
 
       if Data.Wait_For_Heater then
-         Wait_Until_Heater_Stable (Next_Command_Index - 1, Data.Wait_For_Heater_Name);
+         declare
+            Start_Counter : constant Temperature_Report_Counter :=
+              Last_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name));
+         begin
+            loop
+               exit when Last_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) /=
+                 Start_Counter;
+            end loop;
+         end;
+         loop
+            exit when Last_Temperatures (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) >=
+              Last_Heater_Targets (Data.Wait_For_Heater_Name);
+         end loop;
       end if;
 
       My_Gcode_Handler.Finished_Block (Data, First_Accel_Distance);
@@ -287,13 +317,15 @@ package body Prunt.Controller is
             Heater_Params : My_Config.Heater_Full_Parameters;
          begin
             My_Config.Config_File.Read (Heater_Params, H);
-            Heater_Thermistors (H) := Heater_Params.Thermistor;
+            Heater_Thermistors (H)        := Heater_Params.Thermistor;
+            Stored_Heater_Thermistors (H) := Heater_Params.Thermistor;
          end;
       end loop;
 
       for T in Thermistor_Name loop
          My_Config.Config_File.Read (Thermistor_Params_Array (T), T);
       end loop;
+
 
       Setup (Heater_Thermistors, Thermistor_Params_Array);
    end Setup_Thermistors_And_Heater_Assignments;

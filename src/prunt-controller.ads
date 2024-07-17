@@ -49,12 +49,15 @@ generic
    --  Run any required setup and store parameters for later use. This procedure will only be called once and will be
    --  called before any other procedures. Should configure all heaters as disabled until Reconfigure_Heater is called.
 
-   with procedure Reconfigure_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters);
+   with procedure Reconfigure_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters) with
+     Pre => Params.Kind not in PID_Autotune_Kind;
    --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from any
    --  task.
 
-   with procedure Autotune_Heater (Heater : Heater_Name; Setpoint : Temperature);
-   --  Run autotuning for the given heater and setpoint.
+   with procedure Autotune_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters) with
+     Pre => Params.Kind in PID_Autotune_Kind;
+   --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
+   --
    --  TODO: Save the results to the config file.
 
    with procedure Setup_For_Loop_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
@@ -99,11 +102,6 @@ generic
    --  Enqueue_Command had the Safe_Stop_After parameter set to False. This procedure should not wait for heaters to
    --  reach targets. Last_Command indicates the last command index that was enqueued. May be called from any task.
 
-   with procedure Wait_Until_Heater_Stable (Last_Command : Command_Index; Heater : Heater_Name);
-   --  Block until the heater target temperature is hit. This procedure will not be called if the last call to
-   --  Enqueue_Command had the Safe_Stop_After parameter set to False. Last_Command indicates the last command index
-   --  that was enqueued. May be called from any task.
-
    Config_Path : String;
    --  Path of the printer configuration file.
 
@@ -121,7 +119,8 @@ package Prunt.Controller is
    --  Start the controller. Does not return while the controller is running.
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature);
-   --  Report the current thermistor output. There are no restrictions on how often this procedure needs to be called.
+   --  Report the current thermistor output. There are no restrictions on how often this procedure needs to be called
+   --  but some g-code commands will block until it is called after the start of command execution.
 
    procedure Report_Last_Command_Executed (Index : Command_Index);
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure

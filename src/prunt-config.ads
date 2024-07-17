@@ -201,8 +201,10 @@ package Prunt.Config is
       procedure Write (Data : Extruder_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
       procedure Write (Data : Thermistor_Parameters; Thermistor : Thermistor_Name; Append_Only : Boolean := False);
-      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name);
-      procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False);
+      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) with
+        Post => Data.Params.Kind not in PID_Autotune_Kind;
+      procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) with
+        Pre => Data.Params.Kind not in PID_Autotune_Kind;
       procedure Read (Data : out Bed_Mesh_Parameters);
       procedure Write (Data : Bed_Mesh_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);

@@ -23,6 +23,7 @@ with Prunt.Gcode_Parser; use Prunt.Gcode_Parser;
 with Ada.Text_IO;        use Ada.Text_IO;
 with Ada.Exceptions;
 with Prunt.TMC_Types.TMC2240;
+with Prunt.Heaters;      use Prunt.Heaters;
 
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
 
@@ -380,7 +381,12 @@ package body Prunt.Controller.Gcode_Handler is
                   end if;
                end loop;
             when Heater_Autotune_Kind =>
-               Autotune_Heater (G_Code_Assignment_Params.Hotend_Heater, Command.Tuning_Temperature);
+               Autotune_Heater
+                 (G_Code_Assignment_Params.Hotend_Heater,
+                  (Kind                   => PID_Autotune_Kind,
+                   PID_Tuning_Temperature => Command.Tuning_Temperature,
+                   others                 => <>));
+               --  TODO: Take parameters.
             when others =>
                raise Constraint_Error with "Command not implemented.";
          end case;

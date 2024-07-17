@@ -697,12 +697,15 @@ package body Prunt.Config is
                Data := (Params => (Kind => Bang_Bang_Kind, others => <>), others => <>);
                Write (Data, Heater, Append_Only => True);
                Table := TOML_Data.Get ("Heater").Get (Heater'Image);
+               Data.Params.Bang_Bang_Hysteresis := From_TOML (Table.Get ("Bang_Bang_Hysteresis")) * celcius;
+            when PID_Autotune_Kind =>
+               raise Constraint_Error with "PID_Autotune_Kind should not exist in config file.";
          end case;
-         Data.Thermistor                  := From_TOML (Table.Get ("Thermistor"));
-         Data.Params.Max_Cumulative_Error := From_TOML (Table.Get ("Max_Cumulative_Error")) * celcius;
-         Data.Params.Check_Gain_Time      := From_TOML (Table.Get ("Check_Gain_Time")) * s;
-         Data.Params.Check_Minimum_Gain   := From_TOML (Table.Get ("Check_Minimum_Gain")) * celcius;
-         Data.Params.Hysteresis           := From_TOML (Table.Get ("Hysteresis")) * celcius;
+         Data.Thermistor                        := From_TOML (Table.Get ("Thermistor"));
+         Data.Params.Check_Max_Cumulative_Error := From_TOML (Table.Get ("Check_Max_Cumulative_Error")) * celcius;
+         Data.Params.Check_Gain_Time            := From_TOML (Table.Get ("Check_Gain_Time")) * s;
+         Data.Params.Check_Minimum_Gain         := From_TOML (Table.Get ("Check_Minimum_Gain")) * celcius;
+         Data.Params.Check_Hysteresis           := From_TOML (Table.Get ("Check_Hysteresis")) * celcius;
       end Read;
 
       procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) is
@@ -717,13 +720,15 @@ package body Prunt.Config is
                Table.Set ("Integral_Scale", To_TOML (Data.Params.Integral_Scale));
                Table.Set ("Derivative_Scale", To_TOML (Data.Params.Derivative_Scale));
             when Bang_Bang_Kind =>
-               null;
+               Table.Set ("Bang_Bang_Hysteresis", To_TOML (Data.Params.Bang_Bang_Hysteresis / celcius));
+            when PID_Autotune_Kind =>
+               raise Constraint_Error with "PID_Autotune_Kind can not be written to config file.";
          end case;
          Table.Set ("Thermistor", To_TOML (Data.Thermistor));
-         Table.Set ("Max_Cumulative_Error", To_TOML (Data.Params.Max_Cumulative_Error / celcius));
+         Table.Set ("Check_Max_Cumulative_Error", To_TOML (Data.Params.Check_Max_Cumulative_Error / celcius));
          Table.Set ("Check_Gain_Time", To_TOML (Data.Params.Check_Gain_Time / s));
          Table.Set ("Check_Minimum_Gain", To_TOML (Data.Params.Check_Minimum_Gain / celcius));
-         Table.Set ("Hysteresis", To_TOML (Data.Params.Hysteresis / celcius));
+         Table.Set ("Check_Hysteresis", To_TOML (Data.Params.Check_Hysteresis / celcius));
 
          Maybe_Read_File;
          TOML_Data.Set_Default ("Heater", Create_Table);
