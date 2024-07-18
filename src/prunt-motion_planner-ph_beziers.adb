@@ -20,6 +20,7 @@
 -----------------------------------------------------------------------------
 
 with Ada.Unchecked_Conversion;
+with Ada.Containers.Generic_Constrained_Array_Sort;
 
 package body Prunt.Motion_Planner.PH_Beziers is
 
@@ -30,19 +31,44 @@ package body Prunt.Motion_Planner.PH_Beziers is
       --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
       L : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
       B : constant Length := abs (Bez.Control_Points (4) - Bez.Control_Points (5));
+
+      type Sum_Terms_Type_Index is range 1 .. 12;
+      type Sum_Terms_Type is array (Sum_Terms_Type_Index) of Area;
+
+      function Abs_Less_Then (Left, Right : Area) return Boolean is
+      begin
+         return abs Left < abs Right;
+      end Abs_Less_Then;
+
+      procedure Sort is new Ada.Containers.Generic_Constrained_Array_Sort
+        (Sum_Terms_Type_Index, Area, Sum_Terms_Type, Abs_Less_Then);
+
+      Sum_Terms : Sum_Terms_Type :=
+        (23_940.0 * L**2,
+         9_815_520.0 * T**14 * (-B**2 + L**2),
+         73_616_400.0 * T**13 * (B**2 - L**2),
+         233_873_640.0 * T**12 * (-B**2 + L**2),
+         403_663_260.0 * T**11 * (B**2 - L**2),
+         400_071_672.0 * T**10 * (-B**2 + L**2),
+         216_432_216.0 * T**9 * (B**2 - L**2),
+         50_100_050.0 * T**8 * (-B**2 + L**2),
+         920_205.0 * T**7 * (-B**2 + L**2),
+         3_680_820.0 * T**6 * (B**2 - L**2),
+         5_153_148.0 * T**5 * (-B**2 + L**2),
+         2_576_574.0 * T**4 * (B**2 - L**2));
    begin
       if L = 0.0 then
          return 0.0 * mm;
       else
-         return
-           T *
-           (23_940.0 * L**2 + 9_815_520.0 * T**14 * (-B**2 + L**2) + 73_616_400.0 * T**13 * (B**2 - L**2) +
-            233_873_640.0 * T**12 * (-B**2 + L**2) + 403_663_260.0 * T**11 * (B**2 - L**2) +
-            400_071_672.0 * T**10 * (-B**2 + L**2) + 216_432_216.0 * T**9 * (B**2 - L**2) +
-            50_100_050.0 * T**8 * (-B**2 + L**2) + 920_205.0 * T**7 * (-B**2 + L**2) +
-            3_680_820.0 * T**6 * (B**2 - L**2) + 5_153_148.0 * T**5 * (-B**2 + L**2) +
-            2_576_574.0 * T**4 * (B**2 - L**2)) /
-           (1_596.0 * L);
+         Sort (Sum_Terms);
+         declare
+            Sum : Area := 0.0 * mm**2;
+         begin
+            for X of Sum_Terms loop
+               Sum := Sum + X;
+            end loop;
+            return T * (Sum) / (1_596.0 * L);
+         end;
       end if;
    end Distance_At_T;
 
