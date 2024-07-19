@@ -122,6 +122,10 @@ package Prunt.Controller is
    --  Report the current thermistor output. There are no restrictions on how often this procedure needs to be called
    --  but some g-code commands will block until it is called after the start of command execution.
 
+   procedure Report_Heater_Power (Heater : Heater_Name; Power : PWM_Scale);
+   --  Report the current power setting of a heater. There are no restrictions on how often this procedure needs to be
+   --  called.
+
    procedure Report_Last_Command_Executed (Index : Command_Index);
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
@@ -220,6 +224,8 @@ private
 
    function Get_Temperature (Thermistor : Thermistor_Name) return Temperature;
 
+   function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale;
+
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
@@ -228,6 +234,7 @@ private
       Get_Status_Message                => Get_Status_Message,
       Get_Position                      => Get_Position,
       Get_Temperature                   => Get_Temperature,
+      Get_Heater_Power                  => Get_Heater_Power,
       Submit_Gcode_Command              => Submit_Gcode_Command,
       Submit_Gcode_File                 => Submit_Gcode_File,
       Pause_Stepgen                     => My_Step_Generator.Pause,

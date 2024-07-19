@@ -77,10 +77,9 @@ package body Prunt.GUI.GUI is
          or
             delay 0.5;
             declare
-               Pos     : Position := Get_Position;
-               Text    : UXString := From_UTF_8 ("");
-               CR      : Character renames Ada.Characters.Latin_1.CR;
-               JS_Text : UXString := From_UTF_8 ("");
+               Pos  : Position := Get_Position;
+               Text : UXString := From_UTF_8 ("");
+               CR   : Character renames Ada.Characters.Latin_1.CR;
             begin
                Append (Text, From_UTF_8 ("Status:" & CR & "    " & Get_Status_Message & CR & CR));
 
@@ -96,18 +95,44 @@ package body Prunt.GUI.GUI is
                      From_UTF_8 (T'Image & ": ") & DF_Image (Get_Temperature (T) / celcius) & From_UTF_8 (" C" & CR));
                end loop;
 
-               App.Status_Message_Text.Inner_HTML (To_HTML (Text));
-
-               for T in My_Config.Thermistor_Name loop
-                  Append (JS_Text, DF_Image (Get_Temperature (T) / celcius) & ",");
+               Append (Text, From_UTF_8 (CR & "Heater powers:" & CR));
+               for H in My_Config.Heater_Name loop
+                  Append (Text, From_UTF_8 (H'Image & ": ") & DF_Image (Get_Heater_Power (H)) & From_UTF_8 ("" & CR));
                end loop;
 
-               Gnoga.Server.Connection.Execute_Script
-                 (App.Status_Thermal_Chart_Div.Connection_ID,
-                  "window.status_thermal_chart_data.forEach(function (a) { if (a.length >= 1200) {a.splice(0, 1);} });" &
-                  "window.status_thermal_chart_data.forEach(function (a, i) { a.push({x: " &
-                  From_UTF_8 (Ada.Real_Time.Clock'Image) & " * 1000, y: [" & JS_Text & "][i]}); });" &
-                  "window.status_thermal_chart.update();");
+               App.Status_Message_Text.Inner_HTML (To_HTML (Text));
+
+               declare
+                  JS_Text : UXString := From_UTF_8 ("");
+               begin
+                  for T in My_Config.Thermistor_Name loop
+                     Append (JS_Text, DF_Image (Get_Temperature (T) / celcius) & ",");
+                  end loop;
+
+                  Gnoga.Server.Connection.Execute_Script
+                    (App.Status_Thermal_Chart_Div.Connection_ID,
+                     "window.status_thermal_chart_data" &
+                     ".forEach(function (a) { if (a.length >= 1200) {a.splice(0, 1);} });" &
+                     "window.status_thermal_chart_data.forEach(function (a, i) { a.push({x: " &
+                     From_UTF_8 (Ada.Real_Time.Clock'Image) & " * 1000, y: [" & JS_Text & "][i]}); });" &
+                     "window.status_thermal_chart.update();");
+               end;
+
+               declare
+                  JS_Text : UXString := From_UTF_8 ("");
+               begin
+                  for H in My_Config.Heater_Name loop
+                     Append (JS_Text, DF_Image (Get_Heater_Power (H)) & ",");
+                  end loop;
+
+                  Gnoga.Server.Connection.Execute_Script
+                    (App.Status_Heater_Power_Chart_Div.Connection_ID,
+                     "window.status_heater_power_chart_data" &
+                     ".forEach(function (a) { if (a.length >= 1200) {a.splice(0, 1);} });" &
+                     "window.status_heater_power_chart_data.forEach(function (a, i) { a.push({x: " &
+                     From_UTF_8 (Ada.Real_Time.Clock'Image) & " * 1000, y: [" & JS_Text & "][i]}); });" &
+                     "window.status_heater_power_chart.update();");
+               end;
             exception
                when E : Gnoga.Server.Connection.Connection_Error =>
                   null; --  We ignore this error because it can be caused by a connection being closed during loading.
@@ -288,6 +313,70 @@ package body Prunt.GUI.GUI is
                  --!pp on
                end;
 
+               declare
+                  JS_Names   : UXString := "";
+                  JS_Colours : UXString :=
+                    "d3.color('#e6194b'), d3.color('#3cb44b'), d3.color('#ffe119'), d3.color('#4363d8'), " &
+                    "d3.color('#f58231'), d3.color('#911eb4'), d3.color('#46f0f0'), d3.color('#f032e6'), " &
+                    "d3.color('#bcf60c'), d3.color('#fabebe'), d3.color('#008080'), d3.color('#e6beff'), " &
+                    "d3.color('#9a6324'), d3.color('#fffac8'), d3.color('#800000'), d3.color('#aaffc3'), " &
+                    "d3.color('#808000'), d3.color('#ffd8b1'), d3.color('#000075'), d3.color('#808080'), ";
+                  JS_Colour_Assignments : UXString := "";
+               begin
+                  for H in My_Config.Heater_Name loop
+                     JS_Names.Append (From_UTF_8 ("'" & H'Image & "', "));
+
+                     declare
+                        Params : My_Config.Heater_Full_Parameters;
+                     begin
+                        My_Config.Config_File.Read (Params, H);
+                        JS_Colour_Assignments.Append
+                          (From_UTF_8
+                             (My_Config.Thermistor_Name'Pos (Params.Thermistor)'Image & ", "));
+                     end;
+                  end loop;
+
+                  App.Status_Heater_Power_Chart_Row.Create (App.Status_Table);
+                  App.Status_Heater_Power_Chart_Div.Create (App.Status_Heater_Power_Chart_Row);
+                  App.Status_Heater_Power_Chart_Div.Style ("width", "500px");
+                  App.Status_Heater_Power_Chart_Div.Style ("height", "400px");
+                  --!pp off
+                  Gnoga.Server.Connection.Execute_Script
+                    (App.Status_Heater_Power_Chart_Div.Connection_ID,
+                     "window.status_heater_power_chart_data = Array.from(Array(" & From_UTF_8(My_Config.Heater_Name'Pos (My_Config.Heater_Name'Last)'Image) & " + 1), () => new Array(0));"
+                       & "window.status_heater_power_chart_base_time = Date.now() - 1000 * " & From_UTF_8(Ada.Real_Time.Clock'Image) & ";"
+                       & "window.status_heater_power_chart = new TimeChart(document.getElementById('" & App.Status_Heater_Power_Chart_Div.ID & "'), {"
+                       & "    series: window.status_heater_power_chart_data.map(function(a, i) {"
+                       & "        return {"
+                       & "            name: [" & JS_Names & "][i],"
+                       & "            data: a,"
+                       & "            visible: true,"
+                       & "            color: [" & JS_Colours & "][[" & JS_Colour_Assignments & "][i]],"
+                       & "            lineWidth: 1"
+                       & "        }"
+                       & "    }),"
+                       & "    realTime: true,"
+                       & "    xRange: {"
+                       & "        min: 0,"
+                       & "        max: 600000"
+                       & "    },"
+                       & "    yRange: 'auto',"
+                       & "    baseTime: window.status_heater_power_chart_base_time,"
+                       & "    legend: false,"
+                       & "    tooltip: {"
+                       & "        enabled: true,"
+                       & "        xFormatter: (x) => new Date(x + window.status_heater_power_chart_base_time).toLocaleString([], {"
+                       & "            hour: '2-digit',"
+                       & "            minute: '2-digit',"
+                       & "            second: '2-digit'"
+                       & "        }),"
+                       & "    }"
+                       & "});"
+                       & "window.status_heater_power_chart.update();"
+                       & "window.status_heater_power_chart.onResize();");
+                  --!pp on
+               end;
+
                App.Status_Pause_Resume_Row.Create (App.Status_Table);
                App.Status_Pause_Resume_Div.Create (App.Status_Pause_Resume_Row);
                App.Status_Pause_Form.Create (App.Status_Pause_Resume_Div);
@@ -465,6 +554,8 @@ package body Prunt.GUI.GUI is
 
             Gnoga.Server.Connection.Execute_Script
               (App.Status_Thermal_Chart_Div.Connection_ID, "window.status_thermal_chart.onResize();");
+            Gnoga.Server.Connection.Execute_Script
+              (App.Status_Heater_Power_Chart_Div.Connection_ID, "window.status_heater_power_chart.onResize();");
          end if;
       exception
          when E : Gnoga.Server.Connection.Connection_Error =>
