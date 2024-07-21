@@ -155,7 +155,7 @@ package Prunt is
    subtype Heat_Transfer_Coefficient is Dimensioned_Float with
        Dimension => (Symbol => "W/(mm²°C)", Volt => 1, Amp => 1, Millimeter => -2, Celcius => -1, others => 0);
 
-   subtype Specific_Heat_Transfer_Coefficient is Dimensioned_Float with
+   subtype Thermal_Conductivity is Dimensioned_Float with
        Dimension => (Symbol => "W/°C", Volt => 1, Amp => 1, Celcius => -1, others => 0);
 
    subtype Heat_Capacity is Dimensioned_Float with
