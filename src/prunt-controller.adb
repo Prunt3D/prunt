@@ -621,6 +621,12 @@ package body Prunt.Controller is
          raise Config_Constraint_Error with "Max crackle must be greater than 0.";
       end if;
 
+      for A in Axis_Name loop
+         if Kinematics_Params.Planner_Parameters.Axial_Velocity_Maxes (A) <= 0.0 * mm / s then
+            raise Config_Constraint_Error with "Max " & A'Image & " velocity must be greater than 0.";
+         end if;
+      end loop;
+
       --  TODO: Check that scaler will not cause max step rate to be exceeded.
 
       My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);

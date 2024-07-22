@@ -610,7 +610,9 @@ package body Prunt.GUI.Config_Editor is
            (Parent      => View.Widget_Table,
             Form        => View,
             Name        => "Max Feedrate",
-            Description => "Maximum tangential feedrate. Feedrates higher than this value will be clipped.");
+            Description =>
+              "Maximum tangential feedrate. Feedrates higher than this value will be clipped. " &
+              "Unlike axial limits, this limit is strictly enforced.");
 
          View.Acceleration_Max.Create
            (Parent => View.Widget_Table, Form => View, Name => "Max Acceleration", Description => "");
@@ -620,6 +622,15 @@ package body Prunt.GUI.Config_Editor is
          View.Snap_Max.Create (Parent => View.Widget_Table, Form => View, Name => "Max Snap", Description => "");
 
          View.Crackle_Max.Create (Parent => View.Widget_Table, Form => View, Name => "Max Crackle", Description => "");
+
+         View.Axial_Velocity_Maxes.Create
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "Axial Velocity Maxes",
+            Description =>
+              "Maximum axial velocities. " &
+              "Feedrates that result in axial velocities higher than these values will be clipped. " &
+              "These limits are not strictly enforced, especially in blended corners.");
 
          View.Ignore_E_In_XYZE.Create
            (Parent      => View.Widget_Table,
@@ -739,6 +750,7 @@ package body Prunt.GUI.Config_Editor is
          View.Jerk_Max.Set_Data (Params.Planner_Parameters.Jerk_Max);
          View.Snap_Max.Set_Data (Params.Planner_Parameters.Snap_Max);
          View.Crackle_Max.Set_Data (Params.Planner_Parameters.Crackle_Max);
+         View.Axial_Velocity_Maxes.Set_Data (Params.Planner_Parameters.Axial_Velocity_Maxes);
          View.Ignore_E_In_XYZE.Set_Data (Params.Planner_Parameters.Ignore_E_In_XYZE);
          View.Shift_Blended_Corners.Set_Data (Params.Planner_Parameters.Shift_Blended_Corners);
          View.Pressure_Advance_Time.Set_Data (Params.Planner_Parameters.Pressure_Advance_Time);
@@ -770,6 +782,7 @@ package body Prunt.GUI.Config_Editor is
          Params.Planner_Parameters.Jerk_Max                := View.Jerk_Max.Get_Data;
          Params.Planner_Parameters.Snap_Max                := View.Snap_Max.Get_Data;
          Params.Planner_Parameters.Crackle_Max             := View.Crackle_Max.Get_Data;
+         Params.Planner_Parameters.Axial_Velocity_Maxes    := View.Axial_Velocity_Maxes.Get_Data;
          Params.Planner_Parameters.Ignore_E_In_XYZE        := View.Ignore_E_In_XYZE.Get_Data;
          Params.Planner_Parameters.Shift_Blended_Corners   := View.Shift_Blended_Corners.Get_Data;
          Params.Planner_Parameters.Pressure_Advance_Time   := View.Pressure_Advance_Time.Get_Data;
