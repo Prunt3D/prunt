@@ -38,6 +38,24 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last)  := 0.0 * mm / s;
 
+      for I in Block.Segment_Feedrates'Range loop
+         declare
+            Offset   : constant Scaled_Position_Offset := Block.Corners (I - 1) - Block.Corners (I);
+            Has_XYZ  : constant Boolean                :=
+              (Offset with delta E_Axis => 0.0 * mm) /= Scaled_Position_Offset'(others => Length (0.0));
+
+            Feedrate : Velocity := Block.Segment_Feedrates (I);
+         begin
+            if Block.Params.Ignore_E_In_XYZE and Has_XYZ and Feedrate /= Velocity'Last then
+               Feedrate := Feedrate * (abs Offset / abs [Offset with delta E_Axis => 0.0 * mm]);
+            end if;
+
+            Feedrate := Velocity'Min (Feedrate, Block.Params.Tangential_Velocity_Max);
+
+            Block.Segment_Feedrates (I) := Feedrate;
+         end;
+      end loop;
+
       for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
          declare
             Limit           : Velocity := Velocity'Min (Block.Segment_Feedrates (I), Block.Segment_Feedrates (I + 1));

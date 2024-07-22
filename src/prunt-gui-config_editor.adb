@@ -626,8 +626,9 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => "Ignore E In XYZE",
             Description =>
-              "Ignore the E axis unless it is the only axis involved in a move. " &
-              "This behaviour is the default in some other 3D printer motion controllers.");
+              "Ignore the E axis feedrate unless it is the only axis involved in a move. " &
+              "This behaviour is the default in some other 3D printer motion controllers. " &
+              "The tangential feedrate limit in the settings always applies to all axes.");
 
          View.Shift_Blended_Corners.Create
            (Parent      => View.Widget_Table,
