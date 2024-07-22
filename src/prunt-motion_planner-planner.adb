@@ -169,13 +169,15 @@ package body Prunt.Motion_Planner.Planner is
            Tangent_At_Distance (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
       end if;
 
-      Scaled_Velocity_Tangent :=
-        (Tangent / abs Tangent) *
-        Velocity_At_Time
-          (Block.Feedrate_Profiles (Finishing_Corner), Time_Into_Segment, Block.Params.Crackle_Max,
-           Block.Corner_Velocity_Limits (Finishing_Corner - 1));
+      if abs Tangent /= 0.0 * mm then
+         Scaled_Velocity_Tangent :=
+         (Tangent / abs Tangent) *
+         Velocity_At_Time
+            (Block.Feedrate_Profiles (Finishing_Corner), Time_Into_Segment, Block.Params.Crackle_Max,
+            Block.Corner_Velocity_Limits (Finishing_Corner - 1));
 
-      Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Scaled_Velocity_Tangent (E_Axis);
+         Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Scaled_Velocity_Tangent (E_Axis);
+      end if;
 
       return Position (Pos * Block.Params.Axial_Scaler);
    end Segment_Pos_At_Time;
