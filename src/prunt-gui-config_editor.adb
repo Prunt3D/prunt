@@ -612,7 +612,9 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Max Feedrate",
             Description =>
               "Maximum tangential feedrate. Feedrates higher than this value will be clipped. " &
-              "Unlike axial limits, this limit is strictly enforced.");
+              "Unlike axial limits, this limit is strictly enforced and scales with the axial scaler. " &
+              "This always includes all axes. " &
+              "Most users will want to set this to a high value and rely on axial limits instead.");
 
          View.Acceleration_Max.Create
            (Parent => View.Widget_Table, Form => View, Name => "Max Acceleration", Description => "");
@@ -630,15 +632,17 @@ package body Prunt.GUI.Config_Editor is
             Description =>
               "Maximum axial velocities. " &
               "Feedrates that result in axial velocities higher than these values will be clipped. " &
-              "These limits are not strictly enforced, especially in blended corners.");
+              "These limits are not strictly enforced, especially in blended corners, however with reasonable " &
+              "parameters they will not be exceeded by a significant amount.");
 
          View.Ignore_E_In_XYZE.Create
            (Parent      => View.Widget_Table,
             Form        => View,
             Name        => "Ignore E In XYZE",
             Description =>
-              "Ignore the E axis feedrate unless it is the only axis involved in a move. " &
+              "Ignore the E axis component of the commanded feedrate unless it is the only axis involved in a move. " &
               "This behaviour is the default in some other 3D printer motion controllers. " &
+              "The axial velocity limit on the E axis still applies. " &
               "The tangential feedrate limit in the settings always applies to all axes.");
 
          View.Shift_Blended_Corners.Create
@@ -659,7 +663,9 @@ package body Prunt.GUI.Config_Editor is
            (Parent      => View.Widget_Table,
             Form        => View,
             Name        => "Max Chord Error",
-            Description => "Maximum distance that the path may deviate from the commanded path.");
+            Description =>
+              "Maximum distance that the path may deviate from the commanded path. " &
+              "Setting this very high may cause axial velocity limits to be exceeded.");
 
          View.Axial_Scaler.Create
            (Parent      => View.Widget_Table,
@@ -669,9 +675,10 @@ package body Prunt.GUI.Config_Editor is
               "Inside the motion planner, " &
               "all positions are divided by this value before applying motion profile limits, " &
               "allowing for different limits on different axes. " &
-              "You do not need to take this value in to account when setting position limits or mm per step values. " &
-              "Corner deviation and feedrate, acceleration, etc. is based on scaled positions, " &
-              "so a tangential feedrate of 10mm/s and a scaler of 0.5 will set the axial limit to 5mm/s.");
+              "You do not need to take this value in to account when setting position limits, mm per step values, " &
+              "axial velocity limits, or when setting the feedrate in g-code. " &
+              "Corner deviation and tangential feedrate, acceleration, etc. is based on scaled positions, " &
+              "so a tangential acceleration of 10mm/s^2 and a scaler of 0.5 will set the axial limit to 5mm/s^2.");
 
          View.Z_Steppers.Create
            (Parent      => View.Widget_Table,
