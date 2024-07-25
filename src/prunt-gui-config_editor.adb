@@ -630,7 +630,7 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => "Axial Velocity Maxes",
             Description =>
-              "Maximum axial velocities. " &
+              "Maximum axial velocities. Applied to unscaled positions. " &
               "Feedrates that result in axial velocities higher than these values will be clipped. " &
               "These limits are not strictly enforced, especially in blended corners, however with reasonable " &
               "parameters they will not be exceeded by a significant amount.");

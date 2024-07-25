@@ -55,7 +55,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
             for A in Axis_Name loop
                if abs Offset (A) > 0.0 * mm then
                   Feedrate :=
-                    Velocity'Min (Feedrate, Block.Params.Axial_Velocity_Maxes (A) * abs Offset / abs Offset (A));
+                    Velocity'Min
+                      (Feedrate,
+                       Block.Params.Axial_Velocity_Maxes (A) / Block.Params.Axial_Scaler (A) * abs Offset /
+                       abs Offset (A));
                end if;
             end loop;
 
