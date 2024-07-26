@@ -23,6 +23,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
    begin
+      if not Setup_Done then
+         raise Constraint_Error with "Setup not done.";
+      end if;
+
       case Comm.Kind is
          when Flush_Kind =>
             null;
