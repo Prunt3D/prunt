@@ -473,6 +473,9 @@ package body Prunt.Controller.Gcode_Handler is
                Run_Command (Command);
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             exception
+               when E : Command_Constraint_Error =>
+                  Set_Status_Message
+                    ("Error running manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
                when E : Bad_Line =>
                   Set_Status_Message
                     ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
@@ -498,6 +501,11 @@ package body Prunt.Controller.Gcode_Handler is
                         Parse_Line (Parser_Context, Line, Command);
                         Run_Command (Command);
                      exception
+                        when E : Command_Constraint_Error =>
+                           Set_Status_Message
+                             ("Error running line in file " & Gcode_Queue.Get_File & " on line " & Current_Line'Image &
+                              " (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
+                           Command_Succeeded := False;
                         when E : Bad_Line =>
                            Set_Status_Message
                              ("Error parsing line in file " & Gcode_Queue.Get_File & " on line " & Current_Line'Image &
