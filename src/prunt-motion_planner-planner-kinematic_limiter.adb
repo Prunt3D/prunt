@@ -59,6 +59,8 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                       (Feedrate,
                        Block.Params.Axial_Velocity_Maxes (A) / Block.Params.Axial_Scaler (A) * abs Offset /
                        abs Offset (A));
+
+                  Feedrate := Feedrate * abs (Offset) / abs (Offset * Block.Params.Axial_Scaler);
                end if;
             end loop;
 

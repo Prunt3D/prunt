@@ -140,7 +140,7 @@ private
       Next_Block_Pos     : Scaled_Position;
       Params             : Kinematic_Parameters;
       Corners            : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
-      Segment_Feedrates  : Block_Segment_Feedrates (2 .. N_Corners);
+      Segment_Feedrates  : Block_Segment_Feedrates (2 .. N_Corners);  --  Adjusted with scaler in Kinematic_Limiter.
       Corners_Extra_Data : Block_Corners_Extra_Data (2 .. N_Corners);
 
       --  Corner_Blender
