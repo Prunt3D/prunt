@@ -36,7 +36,6 @@ with Ada.Task_Termination;
 
 generic
    with package My_Config is new Prunt.Config (<>);
-   with function Get_Status_Message return String;
    with function Get_Position return Prunt.Position;
    with function Get_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;
    with function Get_Heater_Power (Heater : My_Config.Heater_Name) return Prunt.PWM_Scale;
@@ -51,7 +50,7 @@ package Prunt.GUI.GUI is
 
 private
 
-   procedure Log_And_Switch_Tab (Object : Gnoga.Types.Pointer_to_Connection_Data_Class; Message : UXString);
+   procedure Log_And_Switch_Tab (Object : Gnoga.Types.Pointer_to_Connection_Data_Class; Message : String);
 
    package My_Config_Editor is new Config_Editor (My_Config => My_Config, Log_And_Switch_Tab => Log_And_Switch_Tab);
 

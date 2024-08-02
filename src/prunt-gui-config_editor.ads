@@ -37,7 +37,7 @@ with Prunt.TMC_Types.TMC2240;
 
 private generic
    with package My_Config is new Prunt.Config (<>);
-   with procedure Log_And_Switch_Tab (Object : Gnoga.Types.Pointer_to_Connection_Data_Class; Message : UXString);
+   with procedure Log_And_Switch_Tab (Object : Gnoga.Types.Pointer_to_Connection_Data_Class; Message : String);
 package Prunt.GUI.Config_Editor is
 
    package Basic_Inputs is

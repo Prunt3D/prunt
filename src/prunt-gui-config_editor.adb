@@ -208,7 +208,7 @@ package body Prunt.GUI.Config_Editor is
             Log_And_Switch_Tab (App, "Saving. Please wait.");
             Save_Data (Section, Image);
             Log_And_Switch_Tab (App, "Save done.");
-            Log_And_Switch_Tab (App, Image);
+            --  Log_And_Switch_Tab (App, Image);
             begin
                Log_And_Switch_Tab (App, "Please wait for read-back.");
                Read_Data (Section);
@@ -220,12 +220,12 @@ package body Prunt.GUI.Config_Editor is
             exception
                when E : others =>
                   Log_And_Switch_Tab (App, "Read-back failed.");
-                  Log_And_Switch_Tab (App, UXStrings.From_UTF_8 (Ada.Exceptions.Exception_Information (E)));
+                  Log_And_Switch_Tab (App, Ada.Exceptions.Exception_Information (E));
             end;
          exception
             when E : others =>
                Log_And_Switch_Tab (App, "Save failed.");
-               Log_And_Switch_Tab (App, UXStrings.From_UTF_8 (Ada.Exceptions.Exception_Information (E)));
+               Log_And_Switch_Tab (App, Ada.Exceptions.Exception_Information (E));
          end Inner;
       begin
          Inner (Outer_Section_Widget'Class (Object));

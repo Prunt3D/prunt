@@ -24,17 +24,12 @@ with Ada.Text_IO;        use Ada.Text_IO;
 with Ada.Exceptions;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.Heaters;      use Prunt.Heaters;
+with Prunt.Logger;
+with Ada.IO_Exceptions;
 
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
 
 package body Prunt.Controller.Gcode_Handler is
-
-   procedure Set_Status_Message (S : String) is
-   begin
-      null;
-      Ada.Text_IO.Put_Line (S);
-      --  TODO
-   end Set_Status_Message;
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean) is
    begin
@@ -354,7 +349,7 @@ package body Prunt.Controller.Gcode_Handler is
             when TMC_Dump_Kind =>
                for S in Generic_Types.Stepper_Name loop
                   if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
-                     Ada.Text_IO.Put_Line ("TMC dump for " & S'Image & ":");
+                     Logger.Log ("TMC dump for " & S'Image & ":");
                      for R in TMC_Types.TMC2240.UART_Register_Address loop
                         declare
                            Query          : TMC_Types.TMC2240.UART_Query_Message :=
@@ -366,15 +361,15 @@ package body Prunt.Controller.Gcode_Handler is
                            Reply          : TMC_Types.TMC2240.UART_Data_Message;
                            Receive_Failed : Boolean;
                         begin
-                           Ada.Text_IO.Put_Line (R'Image);
+                           Logger.Log (R'Image);
                            Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
                            Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
                            if Receive_Failed then
-                              Ada.Text_IO.Put_Line ("No response.");
+                              Logger.Log ("No response.");
                            elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-                              Ada.Text_IO.Put_Line ("Bad CRC.");
+                              Logger.Log ("Bad CRC.");
                            else
-                              Ada.Text_IO.Put_Line (Reply.Content'Image);
+                              Logger.Log (Reply.Content'Image);
                            end if;
                         end;
                      end loop;
@@ -474,10 +469,10 @@ package body Prunt.Controller.Gcode_Handler is
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             exception
                when E : Command_Constraint_Error =>
-                  Set_Status_Message
+                  Logger.Log
                     ("Error running manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
                when E : Bad_Line =>
-                  Set_Status_Message
+                  Logger.Log
                     ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
             end;
 
@@ -502,14 +497,16 @@ package body Prunt.Controller.Gcode_Handler is
                         Run_Command (Command);
                      exception
                         when E : Command_Constraint_Error =>
-                           Set_Status_Message
-                             ("Error running line in file " & Gcode_Queue.Get_File & " on line " & Current_Line'Image &
-                              " (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
+                           Logger.Log
+                             ("Error running line in file " & Gcode_Queue.Get_File & " on line " &
+                              Current_Line'Image & " (" & Line & "): " &
+                              Ada.Exceptions.Exception_Information (E));
                            Command_Succeeded := False;
-                        when E : Bad_Line =>
-                           Set_Status_Message
-                             ("Error parsing line in file " & Gcode_Queue.Get_File & " on line " & Current_Line'Image &
-                              " (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
+                        when E : Bad_Line                 =>
+                           Logger.Log
+                             ("Error parsing line in file " & Gcode_Queue.Get_File & " on line " &
+                              Current_Line'Image & " (" & Line & "): " &
+                              Ada.Exceptions.Exception_Information (E));
                            Command_Succeeded := False;
                      end;
                   end loop;
@@ -519,9 +516,15 @@ package body Prunt.Controller.Gcode_Handler is
 
                Close (File);
             exception
-               --  TODO: Check what exceptions can actually come from file IO.
-               when E : others =>
-                  Set_Status_Message
+               when E : Ada.IO_Exceptions.Status_Error
+                 | Ada.IO_Exceptions.Mode_Error
+                 | Ada.IO_Exceptions.Name_Error
+                 | Ada.IO_Exceptions.Use_Error
+                 | Ada.IO_Exceptions.Device_Error
+                 | Ada.IO_Exceptions.End_Error
+                 | Ada.IO_Exceptions.Data_Error
+                 | Ada.IO_Exceptions.Layout_Error =>
+                  Logger.Log
                     ("IO error when processing file " & Gcode_Queue.Get_File & ": " &
                      Ada.Exceptions.Exception_Information (E));
             end;

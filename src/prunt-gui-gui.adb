@@ -29,6 +29,7 @@ with Ada.Characters.Latin_1;
 with Gnoga.Server.Connection;
 with Ada.Real_Time;
 with Prunt.Thermistors;
+with Prunt.Logger;
 
 package body Prunt.GUI.GUI is
 
@@ -81,8 +82,6 @@ package body Prunt.GUI.GUI is
                Text : UXString := From_UTF_8 ("");
                CR   : Character renames Ada.Characters.Latin_1.CR;
             begin
-               Append (Text, From_UTF_8 ("Status:" & CR & "    " & Get_Status_Message & CR & CR));
-
                Append (Text, From_UTF_8 ("Position:" & CR));
                for A in Axis_Name loop
                   Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & CR));
@@ -565,25 +564,39 @@ package body Prunt.GUI.GUI is
               (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
       end;
 
-      select
-         Connection.Hold;
-      then abort
-         declare
-            Occurrence : Ada.Exceptions.Exception_Occurrence;
+      declare
+         Log_Handle : Logger.Handle;
+
+         procedure Log_To_Tab (Message : String) is
          begin
-            Fatal_Exception_Occurrence_Holder.Get (Occurrence);
-            App.Fatal_Error_Div.Create
-              (App.Main_Window.all,
-               UXStrings.From_UTF_8 ("<h1>FATAL ERROR</h1><p>") &
-               To_HTML (UXStrings.From_UTF_8 (Ada.Exceptions.Exception_Information (Occurrence))) &
-               UXStrings.From_UTF_8 ("</p>"));
-            App.Fatal_Error_Div.Place_Inside_Top_Of (App.Main_Window.Document.Body_Element.all);
-            App.Main_Table.Hidden (True);
-            App.Loading_Div.Hidden (True);
-            Main_Window.Buffer_Connection (False);
-         end;
-         Connection.Hold;
-      end select;
+            App.Log_Widget.Put_Line (To_HTML (UXStrings.From_UTF_8 (Message)));
+            App.Log_Widget.New_Line;
+         end Log_To_Tab;
+      begin
+         Logger.Set_Receiver (Log_Handle, Log_To_Tab'Unrestricted_Access);
+
+         select
+            Connection.Hold;
+         then abort
+            declare
+               Occurrence : Ada.Exceptions.Exception_Occurrence;
+            begin
+               Fatal_Exception_Occurrence_Holder.Get (Occurrence);
+               App.Fatal_Error_Div.Create
+                 (App.Main_Window.all,
+                  UXStrings.From_UTF_8 ("<h1>FATAL ERROR</h1><p>") &
+                  To_HTML (UXStrings.From_UTF_8 (Ada.Exceptions.Exception_Information (Occurrence))) &
+                  UXStrings.From_UTF_8 ("</p>"));
+               App.Fatal_Error_Div.Place_Inside_Top_Of (App.Main_Window.Document.Body_Element.all);
+               App.Main_Table.Hidden (True);
+               App.Loading_Div.Hidden (True);
+               Main_Window.Buffer_Connection (False);
+            end;
+            Connection.Hold;
+         end select;
+
+         Logger.Set_Receiver (Log_Handle, null);
+      end;
 
       Status_Updater_Task.Stop;
 
@@ -591,11 +604,10 @@ package body Prunt.GUI.GUI is
       Free_Data (App);
    end On_Connect;
 
-   procedure Log_And_Switch_Tab (Object : Gnoga.Types.Pointer_to_Connection_Data_Class; Message : UXString) is
+   procedure Log_And_Switch_Tab (Object : Gnoga.Types.Pointer_to_Connection_Data_Class; Message : String) is
       procedure Inner (App : App_Access) is
       begin
-         App.Log_Widget.Put_Line (To_HTML (Message));
-         App.Log_Widget.New_Line;
+         Logger.Log (Message);
          App.Main_Table.Tabs.Select_Tab ("Log");
       end Inner;
    begin

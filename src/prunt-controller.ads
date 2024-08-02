@@ -218,8 +218,6 @@ private
 
    procedure Finished_Block (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Length);
 
-   function Get_Status_Message return String;
-
    function Get_Position return Position;
 
    function Get_Temperature (Thermistor : Thermistor_Name) return Temperature;
@@ -231,7 +229,6 @@ private
 
    package My_GUI is new GUI.GUI
      (My_Config                         => My_Config,
-      Get_Status_Message                => Get_Status_Message,
       Get_Position                      => Get_Position,
       Get_Temperature                   => Get_Temperature,
       Get_Heater_Power                  => Get_Heater_Power,
@@ -240,13 +237,6 @@ private
       Pause_Stepgen                     => My_Step_Generator.Pause,
       Resume_Stepgen                    => My_Step_Generator.Resume,
       Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
-
-   protected Status_Message is
-      procedure Set (S : String);
-      function Get return String;
-   private
-      Local : Unbounded_String := To_Unbounded_String ("");
-   end Status_Message;
 
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
    procedure Setup_Thermistors_And_Heater_Assignments;

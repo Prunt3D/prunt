@@ -22,6 +22,7 @@
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Text_IO;
+with Prunt.Logger;
 
 package body Prunt is
 
@@ -36,7 +37,7 @@ package body Prunt is
             Ada.Exceptions.Save_Occurrence (Data, Occurrence);
          end if;
 
-         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
+         Logger.Log (Ada.Exceptions.Exception_Information (Occurrence));
       end Set;
 
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence)

@@ -26,6 +26,7 @@ with Prunt.Thermistors;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.TMC_Types;
 with Ada.Text_IO;
+with Prunt.Logger;
 
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
 use type Prunt.TMC_Types.TMC2240.UART_Node_Address;
@@ -103,11 +104,6 @@ package body Prunt.Controller is
       My_Gcode_Handler.Finished_Block (Data, First_Segment_Accel_Distance);
    end Finished_Block;
 
-   function Get_Status_Message return String is
-   begin
-      return Status_Message.Get;
-   end Get_Status_Message;
-
    function Get_Position return Position is
    begin
       return (for A in Axis_Name => Last_Position (A));
@@ -157,10 +153,10 @@ package body Prunt.Controller is
          My_Config.Config_File.Read (Prunt_Params);
 
          if not Prunt_Params.Enabled then
-            Status_Message.Set ("Prunt is disabled. Enable in config editor after setting other settings.");
+            Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
          else
             begin
-               Status_Message.Set ("Running setup.");
+               Logger.Log ("Running setup.");
 
                Setup_Thermistors_And_Heater_Assignments;
                Setup_Planner;
@@ -192,7 +188,7 @@ package body Prunt.Controller is
             end;
          end if;
 
-         Status_Message.Set ("Setup done.");
+         Logger.Log ("Setup done.");
       exception
          when E : others =>
             Fatal_Exception_Occurrence_Holder.all.Set
@@ -201,18 +197,6 @@ package body Prunt.Controller is
 
       GUI_Runner.Finish;
    end Run;
-
-   protected body Status_Message is
-      procedure Set (S : String) is
-      begin
-         Set_Unbounded_String (Local, S);
-      end Set;
-
-      function Get return String is
-      begin
-         return To_String (Local);
-      end Get;
-   end Status_Message;
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
    begin
@@ -373,8 +357,9 @@ package body Prunt.Controller is
       end if;
    exception
       when E : TMC_UART_Error =>
-         Ada.Text_IO.Put_Line ("Sent: " & Message.Content'Image);
-         Ada.Text_IO.Put_Line ("Received: " & Reply.Content'Image);
+         Logger.Log ("Data from TMC2240_UART_Write_And_Validate after error:");
+         Logger.Log ("Sent: " & Message.Content'Image);
+         Logger.Log ("Received: " & Reply.Content'Image);
          raise;
    end TMC2240_UART_Write_And_Validate;
 
