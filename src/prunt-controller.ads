@@ -160,6 +160,7 @@ private
       Wait_For_Heater          : Boolean           := False;
       Wait_For_Heater_Name     : Heater_Name       := Heater_Name'First;
       Dwell_Time               : Time              := Time (0.0);
+      Pause_After              : Boolean           := False;
    end record;
 
    type Corner_Extra_Data is record

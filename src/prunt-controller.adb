@@ -279,10 +279,14 @@ package body Prunt.Controller is
          Wait_Until_Idle (Next_Command_Index - 1);
       end if;
 
-      --  TODO: Should we require the user to implement this instead?
+      --  TODO: Should we require the user to implement this instead for greater precision?
       if Data.Dwell_Time /= Time (0.0) then
          Wait_Until_Idle (Next_Command_Index - 1);
          delay Duration (Data.Dwell_Time / s);
+      end if;
+
+      if Data.Pause_After then
+         My_Step_Generator.Pause;
       end if;
 
       if Data.Wait_For_Heater then

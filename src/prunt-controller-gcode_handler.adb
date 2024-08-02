@@ -189,6 +189,10 @@ package body Prunt.Controller.Gcode_Handler is
          case Command.Kind is
             when None_Kind =>
                null;
+            when Pause_Kind =>
+               My_Planner.Enqueue
+                 ((Kind             => My_Planner.Flush_Kind,
+                   Flush_Extra_Data => (Pause_After => True, others => <>)));
             when Move_Kind =>
                if Command.Pos /= Command.Old_Pos then
                   for I in Axis_Name loop
