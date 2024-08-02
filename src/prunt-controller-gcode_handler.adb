@@ -190,18 +190,20 @@ package body Prunt.Controller.Gcode_Handler is
             when None_Kind =>
                null;
             when Move_Kind =>
-               for I in Axis_Name loop
-                  if not Is_Homed (I) then
-                     raise Command_Constraint_Error
-                       with "Must home all axes before moving. Axis " & I'Image & " is not homed.";
-                  end if;
-               end loop;
+               if Command.Pos /= Command.Old_Pos then
+                  for I in Axis_Name loop
+                     if not Is_Homed (I) then
+                        raise Command_Constraint_Error
+                          with "Must home all axes before moving. Axis " & I'Image & " is not homed.";
+                     end if;
+                  end loop;
 
-               My_Planner.Enqueue
-                 ((Kind              => My_Planner.Move_Kind,
-                   Pos               => Command.Pos,
-                   Feedrate          => Command.Feedrate,
-                   Corner_Extra_Data => Corner_Data));
+                  My_Planner.Enqueue
+                    ((Kind              => My_Planner.Move_Kind,
+                      Pos               => Command.Pos,
+                      Feedrate          => Command.Feedrate,
+                      Corner_Extra_Data => Corner_Data));
+               end if;
             when Reset_Position_Kind =>
                My_Planner.Enqueue
                  ((Kind            => My_Planner.Flush_And_Reset_Position_Kind,
