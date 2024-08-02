@@ -1,0 +1,243 @@
+| G-Code      | Short description               | Supported | Notes                                                          |
+|-------------+---------------------------------+-----------+----------------------------------------------------------------|
+| G0-G1       | Linear Move                     | Yes       | No S parameter                                                 |
+| G2-G3       | Arc or Circle Move              | No        |                                                                |
+| G4          | Dwell                           | Yes       | P parameter not supported, S allows for floats instead         |
+| G5          | Bézier cubic spline             | No        |                                                                |
+| G6          | Direct Stepper Move             | No        |                                                                |
+| G10         | Retract                         | No        |                                                                |
+| G11         | Recover                         | No        |                                                                |
+| G12         | Clean the Nozzle                | No        |                                                                |
+| G17-G19     | CNC Workspace Planes            | No        |                                                                |
+| G20         | Inch Units                      | No        |                                                                |
+| G21         | Millimeter Units                | Yes       |                                                                |
+| G26         | Mesh Validation Pattern         | No        |                                                                |
+| G27         | Park toolhead                   | No        |                                                                |
+| G28         | Auto Home                       | Yes       | LOR parameters not supported, E parameter added to home E axis |
+| G29         | Bed Leveling                    | No        |                                                                |
+| G29         | Bed Leveling (3-Point)          | No        |                                                                |
+| G29         | Bed Leveling (Linear)           | No        |                                                                |
+| G29         | Bed Leveling (Manual)           | No        |                                                                |
+| G29         | Bed Leveling (Bilinear)         | No        |                                                                |
+| G29         | Bed Leveling (Unified)          | No        |                                                                |
+| G30         | Single Z-Probe                  | No        |                                                                |
+| G31         | Dock Sled                       | No        |                                                                |
+| G32         | Undock Sled                     | No        |                                                                |
+| G33         | Delta Auto Calibration          | No        |                                                                |
+| G34         | Z Steppers Auto-Alignment       | No        |                                                                |
+| G34         | Mechanical Gantry Calibration   | No        |                                                                |
+| G35         | Tramming Assistant              | No        |                                                                |
+| G38.2-G38.5 | Probe target                    | No        |                                                                |
+| G42         | Move to mesh coordinate         | No        |                                                                |
+| G53         | Move in Machine Coordinates     | No        |                                                                |
+| G54-G59.3   | Workspace Coordinate System     | No        |                                                                |
+| G60         | Stored Positions                | No        |                                                                |
+| G61         | Return to Saved Position        | No        |                                                                |
+| G76         | Probe temperature calibration   | No        |                                                                |
+| G80         | Cancel Current Motion Mode      | No        |                                                                |
+| G90         | Absolute Positioning            | Yes       |                                                                |
+| G91         | Relative Positioning            | Yes       |                                                                |
+| G92         | Set Position                    | Yes       | E parameter only                                               |
+| G425        | Backlash Calibration            | No        |                                                                |
+| M0-M1       | Unconditional stop              | Yes       | No parameters                                                  |
+| M3          | Spindle CW / Laser On           | No        |                                                                |
+| M4          | Spindle CCW / Laser On          | No        |                                                                |
+| M5          | Spindle / Laser Off             | No        |                                                                |
+| M7-M9       | Coolant Controls                | No        |                                                                |
+| M10-M11     | Vacuum / Blower Control         | No        |                                                                |
+| M16         | Expected Printer Check          | No        |                                                                |
+| M17         | Enable Steppers                 | Yes       | XYZE parameters only                                           |
+| M18, M84    | Disable steppers                | Yes       | XYZE parameters only                                           |
+| M20         | List SD Card                    | No        |                                                                |
+| M21         | Init SD card                    | No        |                                                                |
+| M22         | Release SD card                 | No        |                                                                |
+| M23         | Select SD file                  | No        |                                                                |
+| M24         | Start or Resume SD print        | No        |                                                                |
+| M25         | Pause SD print                  | No        |                                                                |
+| M26         | Set SD position                 | No        |                                                                |
+| M27         | Report SD print status          | No        |                                                                |
+| M28         | Start SD write                  | No        |                                                                |
+| M29         | Stop SD write                   | No        |                                                                |
+| M30         | Delete SD file                  | No        |                                                                |
+| M31         | Print time                      | No        |                                                                |
+| M32         | Select and Start                | No        |                                                                |
+| M33         | Get Long Path                   | No        |                                                                |
+| M34         | SDCard Sorting                  | No        |                                                                |
+| M42         | Set Pin State                   | No        |                                                                |
+| M43         | Debug Pins                      | No        |                                                                |
+| M43 T       | Toggle Pins                     | No        |                                                                |
+| M48         | Probe Repeatability Test        | No        |                                                                |
+| M73         | Set Print Progress              | No        |                                                                |
+| M75         | Start Print Job Timer           | No        |                                                                |
+| M76         | Pause Print Job Timer           | No        |                                                                |
+| M77         | Stop Print Job Timer            | No        |                                                                |
+| M78         | Print Job Stats                 | No        |                                                                |
+| M80         | Power On                        | No        |                                                                |
+| M81         | Power Off                       | No        |                                                                |
+| M82         | E Absolute                      | Yes       |                                                                |
+| M83         | E Relative                      | Yes       |                                                                |
+| M85         | Inactivity Shutdown             | No        |                                                                |
+| M86         | Hotend Idle Timeout             | No        |                                                                |
+| M87         | Disable Hotend Idle Timeout     | No        |                                                                |
+| M92         | Set Axis Steps-per-unit         | No        |                                                                |
+| M100        | Free Memory                     | No        |                                                                |
+| M102        | Configure Bed Distance Sensor   | No        |                                                                |
+| M104        | Set Hotend Temperature          | Yes       | S parameter only                                               |
+| M105        | Report Temperatures             | No        |                                                                |
+| M106        | Set Fan Speed                   | Yes       | S parameter only                                               |
+| M107        | Fan Off                         | Yes       | No parameters                                                  |
+| M108        | Break and Continue              | No        |                                                                |
+| M109        | Wait for Hotend Temperature     | Yes       | S parameter only                                               |
+| M110        | Set / Get Line Number           | No        |                                                                |
+| M111        | Debug Level                     | No        |                                                                |
+| M112        | Full Shutdown                   | No        |                                                                |
+| M113        | Host Keepalive                  | No        |                                                                |
+| M114        | Get Current Position            | No        |                                                                |
+| M115        | Firmware Info                   | No        |                                                                |
+| M117        | Set LCD Message                 | No        |                                                                |
+| M118        | Serial print                    | No        |                                                                |
+| M119        | Endstop States                  | No        |                                                                |
+| M120        | Enable Endstops                 | No        |                                                                |
+| M121        | Disable Endstops                | No        |                                                                |
+| M122        | TMC Debugging                   | Yes       | No parameters, dumps all driver states                         |
+| M123        | Fan Tachometers                 | No        |                                                                |
+| M125        | Park Head                       | No        |                                                                |
+| M126        | Baricuda 1 Open                 | No        |                                                                |
+| M127        | Baricuda 1 Close                | No        |                                                                |
+| M128        | Baricuda 2 Open                 | No        |                                                                |
+| M129        | Baricuda 2 Close                | No        |                                                                |
+| M140        | Set Bed Temperature             | Yes       | S parameter only                                               |
+| M141        | Set Chamber Temperature         | No        |                                                                |
+| M143        | Set Laser Cooler Temperature    | No        |                                                                |
+| M145        | Set Material Preset             | No        |                                                                |
+| M149        | Set Temperature Units           | No        |                                                                |
+| M150        | Set RGB(W) Color                | No        |                                                                |
+| M154        | Position Auto-Report            | No        |                                                                |
+| M155        | Temperature Auto-Report         | No        |                                                                |
+| M163        | Set Mix Factor                  | No        |                                                                |
+| M164        | Save Mix                        | No        |                                                                |
+| M165        | Set Mix                         | No        |                                                                |
+| M166        | Gradient Mix                    | No        |                                                                |
+| M190        | Wait for Bed Temperature        | Yes       | S parameter only                                               |
+| M191        | Wait for Chamber Temperature    | No        |                                                                |
+| M192        | Wait for Probe temperature      | No        |                                                                |
+| M193        | Set Laser Cooler Temperature    | No        |                                                                |
+| M200        | Set Filament Diameter           | No        |                                                                |
+| M201        | Print / Travel Move Limits      | No        |                                                                |
+| M203        | Set Max Feedrate                | No        |                                                                |
+| M204        | Set Starting Acceleration       | No        |                                                                |
+| M205        | Set Advanced Settings           | No        |                                                                |
+| M206        | Set Home Offsets                | No        |                                                                |
+| M207        | Set Firmware Retraction         | No        |                                                                |
+| M208        | Firmware Recover                | No        |                                                                |
+| M209        | Set Auto Retract                | No        |                                                                |
+| M211        | Software Endstops               | No        |                                                                |
+| M217        | Filament swap parameters        | No        |                                                                |
+| M218        | Set Hotend Offset               | No        |                                                                |
+| M220        | Set Feedrate Percentage         | No        |                                                                |
+| M221        | Set Flow Percentage             | No        |                                                                |
+| M226        | Wait for Pin State              | No        |                                                                |
+| M240        | Trigger Camera                  | No        |                                                                |
+| M250        | LCD Contrast                    | No        |                                                                |
+| M255        | LCD Sleep/Backlight Timeout     | No        |                                                                |
+| M256        | LCD Brightness                  | No        |                                                                |
+| M260        | I2C Send                        | No        |                                                                |
+| M261        | I2C Request                     | No        |                                                                |
+| M280        | Servo Position                  | No        |                                                                |
+| M281        | Edit Servo Angles               | No        |                                                                |
+| M282        | Detach Servo                    | No        |                                                                |
+| M290        | Babystep                        | No        |                                                                |
+| M300        | Play Tone                       | No        |                                                                |
+| M301        | Set Hotend PID                  | No        |                                                                |
+| M302        | Cold Extrude                    | No        |                                                                |
+| M303        | PID autotune                    | Yes       | S parameter only                                               |
+| M304        | Set Bed PID                     | No        |                                                                |
+| M305        | User Thermistor Parameters      | No        |                                                                |
+| M306        | Model Predictive Temp. Control  | No        |                                                                |
+| M350        | Set micro-stepping              | No        |                                                                |
+| M351        | Set Microstep Pins              | No        |                                                                |
+| M355        | Case Light Control              | No        |                                                                |
+| M360        | SCARA Theta A                   | No        |                                                                |
+| M361        | SCARA Theta-B                   | No        |                                                                |
+| M362        | SCARA Psi-A                     | No        |                                                                |
+| M363        | SCARA Psi-B                     | No        |                                                                |
+| M364        | SCARA Psi-C                     | No        |                                                                |
+| M380        | Activate Solenoid               | No        |                                                                |
+| M381        | Deactivate Solenoids            | No        |                                                                |
+| M400        | Finish Moves                    | No        |                                                                |
+| M401        | Deploy Probe                    | No        |                                                                |
+| M402        | Stow Probe                      | No        |                                                                |
+| M403        | MMU2 Filament Type              | No        |                                                                |
+| M404        | Set Filament Diameter           | No        |                                                                |
+| M405        | Filament Width Sensor On        | No        |                                                                |
+| M406        | Filament Width Sensor Off       | No        |                                                                |
+| M407        | Filament Width                  | No        |                                                                |
+| M410        | Quickstop                       | No        |                                                                |
+| M412        | Filament Runout                 | No        |                                                                |
+| M413        | Power-loss Recovery             | No        |                                                                |
+| M420        | Bed Leveling State              | No        |                                                                |
+| M421        | Set Mesh Value                  | No        |                                                                |
+| M422        | Set Z Motor XY                  | No        |                                                                |
+| M423        | X Twist Compensation            | No        |                                                                |
+| M425        | Backlash compensation           | No        |                                                                |
+| M428        | Home Offsets Here               | No        |                                                                |
+| M430        | Power Monitor                   | No        |                                                                |
+| M486        | Cancel Objects                  | No        |                                                                |
+| M493        | Fixed-Time Motion               | No        |                                                                |
+| M500        | Save Settings                   | No        |                                                                |
+| M501        | Restore Settings                | No        |                                                                |
+| M502        | Factory Reset                   | No        |                                                                |
+| M503        | Report Settings                 | No        |                                                                |
+| M504        | Validate EEPROM contents        | No        |                                                                |
+| M510        | Lock Machine                    | No        |                                                                |
+| M511        | Unlock Machine                  | No        |                                                                |
+| M512        | Set Passcode                    | No        |                                                                |
+| M524        | Abort SD print                  | No        |                                                                |
+| M540        | Endstops Abort SD               | No        |                                                                |
+| M569        | Set TMC stepping mode           | No        |                                                                |
+| M575        | Serial baud rate                | No        |                                                                |
+| M592        | Nonlinear Extrusion Control     | No        |                                                                |
+| M593        | ZV Input Shaping                | No        |                                                                |
+| M600        | Filament Change                 | No        |                                                                |
+| M603        | Configure Filament Change       | No        |                                                                |
+| M605        | Multi Nozzle Mode               | No        |                                                                |
+| M665        | Delta Configuration             | No        |                                                                |
+| M665        | SCARA Configuration             | No        |                                                                |
+| M666        | Set Delta endstop adjustments   | No        |                                                                |
+| M666        | Set dual endstop offsets        | No        |                                                                |
+| M672        | Duet Smart Effector sensitivity | No        |                                                                |
+| M701        | Load filament                   | No        |                                                                |
+| M702        | Unload filament                 | No        |                                                                |
+| M710        | Controller Fan settings         | No        |                                                                |
+| M808        | Repeat Marker                   | No        |                                                                |
+| M810-M819   | G-code macros                   | No        |                                                                |
+| M851        | XYZ Probe Offset                | No        |                                                                |
+| M852        | Bed Skew Compensation           | No        |                                                                |
+| M860-M869   | I2C Position Encoders           | No        |                                                                |
+| M871        | Probe temperature config        | No        |                                                                |
+| M876        | Handle Prompt Response          | No        |                                                                |
+| M900        | Linear Advance Factor           | No        |                                                                |
+| M906        | Stepper Motor Current           | No        |                                                                |
+| M907        | Set Motor Current               | No        |                                                                |
+| M908        | Set Trimpot Pins                | No        |                                                                |
+| M909        | DAC Print Values                | No        |                                                                |
+| M910        | Commit DAC to EEPROM            | No        |                                                                |
+| M911        | TMC OT Pre-Warn Condition       | No        |                                                                |
+| M912        | Clear TMC OT Pre-Warn           | No        |                                                                |
+| M913        | Set Hybrid Threshold Speed      | No        |                                                                |
+| M914        | TMC Bump Sensitivity            | No        |                                                                |
+| M915        | TMC Z axis calibration          | No        |                                                                |
+| M916        | L6474 Thermal Warning Test      | No        |                                                                |
+| M917        | L6474 Overcurrent Warning Test  | No        |                                                                |
+| M918        | L6474 Speed Warning Test        | No        |                                                                |
+| M919        | TMC Chopper Timing              | No        |                                                                |
+| M928        | Start SD Logging                | No        |                                                                |
+| M951        | Magnetic Parking Extruder       | No        |                                                                |
+| M993        | Back up flash settings to SD    | No        |                                                                |
+| M994        | Restore flash from SD           | No        |                                                                |
+| M995        | Touch Screen Calibration        | No        |                                                                |
+| M997        | Firmware update                 | No        |                                                                |
+| M999        | STOP Restart                    | No        |                                                                |
+| M7219       | MAX7219 Control                 | No        |                                                                |
+| T0-T7       | Select or Report Tool           | No        |                                                                |
+| T?-Tx       | MMU2 Special Commands           | No        |                                                                |
