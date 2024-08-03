@@ -467,11 +467,9 @@ package body Prunt.Controller.Gcode_Handler is
 
          if Gcode_Queue.Get_Command /= "" then
             declare
-               Command : Gcode_Parser.Command;
-               Line    : constant String      := Gcode_Queue.Get_Command;
+               Line    : constant String := Gcode_Queue.Get_Command;
             begin
-               Parse_Line (Parser_Context, Line, Command);
-               Run_Command (Command);
+               Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             exception
                when E : Command_Constraint_Error =>
@@ -491,7 +489,6 @@ package body Prunt.Controller.Gcode_Handler is
 
                declare
                   type File_Line_Count is range 1 .. 2**63 - 1;
-                  Command           : Gcode_Parser.Command;
                   Current_Line      : constant File_Line_Count := 1;
                   Command_Succeeded : Boolean                  := True;
                begin
@@ -499,8 +496,7 @@ package body Prunt.Controller.Gcode_Handler is
                      declare
                         Line : constant String := Get_Line (File);
                      begin
-                        Parse_Line (Parser_Context, Line, Command);
-                        Run_Command (Command);
+                        Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
                      exception
                         when E : Command_Constraint_Error =>
                            Logger.Log

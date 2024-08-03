@@ -53,7 +53,7 @@ package body Prunt.Gcode_Parser is
          Feedrate          => Initial_Feedrate);
    end Make_Context;
 
-   procedure Parse_Line (Ctx : in out Context; Line : String; Comm : out Command) is
+   procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner) is
       Params : Parameters_Array := [others => (Kind => Non_Existant_Kind, Consumed => False)];
       I      : Positive         := Line'First;
 
@@ -261,50 +261,59 @@ package body Prunt.Gcode_Parser is
 
          case Params ('G').Integer_Value is
             when 0 | 1 =>
-               Comm := (Kind => Move_Kind, others => <>);
-               if Ctx.XYZ_Relative_Mode then
-                  Comm.Pos (X_Axis) := Comm.Pos (X_Axis) + Floatify_Or_Default ('X', 0.0) * mm;
-                  Comm.Pos (Y_Axis) := Comm.Pos (Y_Axis) + Floatify_Or_Default ('Y', 0.0) * mm;
-                  Comm.Pos (Z_Axis) := Comm.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
-               else
-                  Comm.Pos (X_Axis) := Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm;
-                  Comm.Pos (Y_Axis) := Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm;
-                  Comm.Pos (Z_Axis) := Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm;
-               end if;
+               declare
+                  Comm : Command;
+               begin
+                  Comm := (Kind => Move_Kind, others => <>);
+                  if Ctx.XYZ_Relative_Mode then
+                     Comm.Pos (X_Axis) := Comm.Pos (X_Axis) + Floatify_Or_Default ('X', 0.0) * mm;
+                     Comm.Pos (Y_Axis) := Comm.Pos (Y_Axis) + Floatify_Or_Default ('Y', 0.0) * mm;
+                     Comm.Pos (Z_Axis) := Comm.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
+                  else
+                     Comm.Pos (X_Axis) := Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm;
+                     Comm.Pos (Y_Axis) := Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm;
+                     Comm.Pos (Z_Axis) := Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm;
+                  end if;
 
-               if Ctx.E_Relative_Mode then
-                  Comm.Pos (E_Axis) := Comm.Pos (E_Axis) + Floatify_Or_Default ('E', 0.0) * mm;
-               else
-                  Comm.Pos (E_Axis) := Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm;
-               end if;
+                  if Ctx.E_Relative_Mode then
+                     Comm.Pos (E_Axis) := Ctx.Pos (E_Axis) + Floatify_Or_Default ('E', 0.0) * mm;
+                  else
+                     Comm.Pos (E_Axis) := Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm;
+                  end if;
 
-               Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
+                  Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
+
+                  Comm.Old_Pos := Ctx.Pos;
+                  Ctx.Pos      := Comm.Pos;
+
+                  Ctx.Feedrate := Comm.Feedrate;
+
+                  Runner (Comm);
+               end;
             when 4 =>
-               Comm := (Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s, Pos => Ctx.Pos);
+               Runner ((Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s, Pos => Ctx.Pos));
             when 21 =>
-               Comm := (Kind => None_Kind, Pos => Ctx.Pos);
+               null;
             when 28 =>
-               Comm :=
-                 (Kind       => Home_Kind,
-                  Axes       =>
-                    [E_Axis => No_Value_Or_False_Or_Error ('E'),
-                     X_Axis => No_Value_Or_False_Or_Error ('X'),
-                     Y_Axis => No_Value_Or_False_Or_Error ('Y'),
-                     Z_Axis => No_Value_Or_False_Or_Error ('Z')],
-                  Pos_Before => Ctx.Pos,
-                  Pos        => Ctx.Pos);
+               Runner
+                 ((Kind       => Home_Kind,
+                   Axes       =>
+                     (E_Axis => No_Value_Or_False_Or_Error ('E'),
+                      X_Axis => No_Value_Or_False_Or_Error ('X'),
+                      Y_Axis => No_Value_Or_False_Or_Error ('Y'),
+                      Z_Axis => No_Value_Or_False_Or_Error ('Z')),
+                   Pos_Before => Ctx.Pos,
+                   Pos        => Ctx.Pos));
             when 90 =>
                Ctx.XYZ_Relative_Mode := False;
                Ctx.E_Relative_Mode   := False;
-               Comm := (Kind => None_Kind, Pos => Ctx.Pos);
             when 91 =>
                Ctx.XYZ_Relative_Mode := True;
                Ctx.E_Relative_Mode   := True;
-               Comm := (Kind => None_Kind, Pos => Ctx.Pos);
             when 92 =>
-               Comm :=
-                 (Kind    => Reset_Position_Kind,
-                  New_Pos => (Ctx.Pos with delta E_Axis => Floatify_Or_Error ('E')), Pos => Ctx.Pos);
+               Runner
+                 ((Kind    => Reset_Position_Kind,
+                   New_Pos => (Ctx.Pos with delta E_Axis => Floatify_Or_Error ('E')), Pos => Ctx.Pos));
             when others =>
                raise Bad_Line with "Unknown G code: " & Params ('G').Integer_Value'Image;
          end case;
@@ -317,81 +326,77 @@ package body Prunt.Gcode_Parser is
 
          case Params ('M').Integer_Value is
             when 0 | 1 =>
-               Comm := (Kind => Pause_Kind, Pos => Ctx.Pos);
+               Runner ((Kind => Pause_Kind, Pos => Ctx.Pos));
             when 17 =>
-               Comm :=
-                 (Kind => Enable_Steppers_Kind,
-                  Axes =>
-                    [E_Axis => No_Value_Or_False_Or_Error ('E'),
-                     X_Axis => No_Value_Or_False_Or_Error ('X'),
-                     Y_Axis => No_Value_Or_False_Or_Error ('Y'),
-                     Z_Axis => No_Value_Or_False_Or_Error ('Z')],
-                  Pos  => Ctx.Pos);
+               Runner
+                 ((Kind => Enable_Steppers_Kind,
+                   Axes =>
+                     (E_Axis => No_Value_Or_False_Or_Error ('E'),
+                      X_Axis => No_Value_Or_False_Or_Error ('X'),
+                      Y_Axis => No_Value_Or_False_Or_Error ('Y'),
+                      Z_Axis => No_Value_Or_False_Or_Error ('Z')),
+                   Pos  => Ctx.Pos));
             when 18 | 84 =>
-               Comm :=
-                 (Kind => Disable_Steppers_Kind,
-                  Axes =>
-                    [E_Axis => No_Value_Or_False_Or_Error ('E'),
-                     X_Axis => No_Value_Or_False_Or_Error ('X'),
-                     Y_Axis => No_Value_Or_False_Or_Error ('Y'),
-                     Z_Axis => No_Value_Or_False_Or_Error ('Z')],
-                  Pos  => Ctx.Pos);
+               Runner
+                 ((Kind => Disable_Steppers_Kind,
+                   Axes =>
+                     (E_Axis => No_Value_Or_False_Or_Error ('E'),
+                      X_Axis => No_Value_Or_False_Or_Error ('X'),
+                      Y_Axis => No_Value_Or_False_Or_Error ('Y'),
+                      Z_Axis => No_Value_Or_False_Or_Error ('Z')),
+                   Pos  => Ctx.Pos));
             when 82 =>
                Ctx.E_Relative_Mode := False;
-               Comm                := (Kind => None_Kind, Pos => Ctx.Pos);
             when 83 =>
                Ctx.E_Relative_Mode := True;
-               Comm                := (Kind => None_Kind, Pos => Ctx.Pos);
             when 104 =>
-               Comm :=
-                 (Kind               => Set_Hotend_Temperature_Kind,
-                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
-                  Pos                => Ctx.Pos);
+               Runner
+                 ((Kind               => Set_Hotend_Temperature_Kind,
+                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Pos                => Ctx.Pos));
             when 106 =>
-               Comm :=
-                 (Kind      => Set_Fan_Speed_Kind,
-                  Fan_Speed =>
-                    Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0)),
-                  Pos       => Ctx.Pos);
+               Runner
+                 ((Kind      => Set_Fan_Speed_Kind,
+                   Fan_Speed =>
+                     Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0)),
+                   Pos       => Ctx.Pos));
             when 107 =>
-               Comm := (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Pos => Ctx.Pos);
+               Runner ((Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Pos => Ctx.Pos));
             when 109 =>
-               Comm :=
-                 (Kind               => Wait_Hotend_Temperature_Kind,
-                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
-                  Pos                => Ctx.Pos);
+               Runner
+                 ((Kind               => Wait_Hotend_Temperature_Kind,
+                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Pos                => Ctx.Pos));
             when 122 =>
-               Comm := (Kind => TMC_Dump_Kind, Pos => Ctx.Pos);
+               Runner ((Kind => TMC_Dump_Kind, Pos => Ctx.Pos));
             when 140 =>
-               Comm :=
-                 (Kind               => Set_Bed_Temperature_Kind,
-                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
-                  Pos                => Ctx.Pos);
+               Runner
+                 ((Kind               => Set_Bed_Temperature_Kind,
+                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Pos                => Ctx.Pos));
             when 141 =>
-               Comm :=
-                 (Kind               => Set_Chamber_Temperature_Kind,
-                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
-                  Pos                => Ctx.Pos);
+               Runner
+                 ((Kind               => Set_Chamber_Temperature_Kind,
+                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Pos                => Ctx.Pos));
             when 190 =>
-               Comm :=
-                 (Kind               => Wait_Bed_Temperature_Kind,
-                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
-                  Pos                => Ctx.Pos);
+               Runner
+                 ((Kind               => Wait_Bed_Temperature_Kind,
+                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Pos                => Ctx.Pos));
             when 191 =>
-               Comm :=
-                 (Kind               => Wait_Chamber_Temperature_Kind,
-                  Target_Temperature => Floatify_Or_Error ('S') * celcius,
-                  Pos                => Ctx.Pos);
+               Runner
+                 ((Kind               => Wait_Chamber_Temperature_Kind,
+                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Pos                => Ctx.Pos));
             when 303 =>
-               Comm :=
-                 (Kind               => Heater_Autotune_Kind,
-                  Tuning_Temperature => Floatify_Or_Error ('S') * celcius,
-                  Pos                => Ctx.Pos);
+               Runner
+                 ((Kind               => Heater_Autotune_Kind,
+                   Tuning_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Pos                => Ctx.Pos));
             when others =>
                raise Bad_Line with "Unknown M code: " & Params ('M').Integer_Value'Image;
          end case;
-      else
-         Comm := (Kind => None_Kind, Pos => Ctx.Pos);
       end if;
 
       for I in Params'Range loop
@@ -399,17 +404,6 @@ package body Prunt.Gcode_Parser is
             raise Bad_Line with "Parameter '" & Character (I) & "' not valid for command on line.";
          end if;
       end loop;
-
-      if Comm.Kind = Move_Kind then
-         Comm.Old_Pos := Ctx.Pos;
-         Ctx.Pos      := Comm.Pos;
-
-         if Params ('G').Kind = Integer_Kind and then Params ('G').Integer_Value in 0 .. 1 then
-            Ctx.Feedrate := Comm.Feedrate;
-         end if;
-      end if;
-
-      Comm.Pos := Ctx.Pos;
    end Parse_Line;
 
    procedure Reset_Position (Ctx : in out Context; Pos : Position) is

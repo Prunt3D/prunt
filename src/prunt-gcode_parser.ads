@@ -81,7 +81,9 @@ package Prunt.Gcode_Parser is
 
    function Make_Context (Initial_Position : Position; Initial_Feedrate : Velocity) return Context;
 
-   procedure Parse_Line (Ctx : in out Context; Line : String; Comm : out Command);
+   type Command_Runner is access procedure (Comm : Command);
+
+   procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner);
    procedure Reset_Position (Ctx : in out Context; Pos : Position);
 
    Bad_Line : exception;
