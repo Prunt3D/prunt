@@ -208,12 +208,6 @@ package body Prunt.Controller.Gcode_Handler is
                       Feedrate          => Command.Feedrate,
                       Corner_Extra_Data => Corner_Data));
                end if;
-            when Reset_Position_Kind =>
-               My_Planner.Enqueue
-                 ((Kind            => My_Planner.Flush_And_Reset_Position_Kind,
-                   Reset_Pos       => Command.New_Pos,
-                  Flush_Extra_Data => (others => <>)));
-               Gcode_Parser.Reset_Position (Parser_Context, Command.New_Pos);
             when Dwell_Kind =>
                My_Planner.Enqueue
                  ((Kind             => My_Planner.Flush_Kind,

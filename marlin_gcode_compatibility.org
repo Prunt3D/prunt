@@ -37,7 +37,7 @@
 | G80         | Cancel Current Motion Mode      | No        |                                                                |
 | G90         | Absolute Positioning            | Yes       |                                                                |
 | G91         | Relative Positioning            | Yes       |                                                                |
-| G92         | Set Position                    | Yes       | E parameter only                                               |
+| G92         | Set Position                    | Yes       |                                                                |
 | G425        | Backlash Calibration            | No        |                                                                |
 | M0-M1       | Unconditional stop              | Yes       | No parameters                                                  |
 | M3          | Spindle CW / Laser On           | No        |                                                                |

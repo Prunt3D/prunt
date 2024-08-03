@@ -50,7 +50,8 @@ package body Prunt.Gcode_Parser is
         (XYZ_Relative_Mode => False,
          E_Relative_Mode   => False,
          Pos               => Initial_Position,
-         Feedrate          => Initial_Feedrate);
+         Feedrate          => Initial_Feedrate,
+         G92_Offset        => (others => 0.0 * mm));
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner) is
@@ -270,15 +271,19 @@ package body Prunt.Gcode_Parser is
                      Comm.Pos (Y_Axis) := Comm.Pos (Y_Axis) + Floatify_Or_Default ('Y', 0.0) * mm;
                      Comm.Pos (Z_Axis) := Comm.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
                   else
-                     Comm.Pos (X_Axis) := Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm;
-                     Comm.Pos (Y_Axis) := Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm;
-                     Comm.Pos (Z_Axis) := Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm;
+                     Comm.Pos (X_Axis) :=
+                       Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm - Ctx.G92_Offset (X_Axis);
+                     Comm.Pos (Y_Axis) :=
+                       Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm - Ctx.G92_Offset (Y_Axis);
+                     Comm.Pos (Z_Axis) :=
+                       Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm - Ctx.G92_Offset (Z_Axis);
                   end if;
 
                   if Ctx.E_Relative_Mode then
                      Comm.Pos (E_Axis) := Ctx.Pos (E_Axis) + Floatify_Or_Default ('E', 0.0) * mm;
                   else
-                     Comm.Pos (E_Axis) := Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm;
+                     Comm.Pos (E_Axis) :=
+                       Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm - Ctx.G92_Offset (E_Axis);
                   end if;
 
                   Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
@@ -311,9 +316,12 @@ package body Prunt.Gcode_Parser is
                Ctx.XYZ_Relative_Mode := True;
                Ctx.E_Relative_Mode   := True;
             when 92 =>
-               Runner
-                 ((Kind    => Reset_Position_Kind,
-                   New_Pos => (Ctx.Pos with delta E_Axis => Floatify_Or_Error ('E')), Pos => Ctx.Pos));
+               Ctx.G92_Offset :=
+                 (X_Axis => Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm,
+                  Y_Axis => Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm,
+                  Z_Axis => Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm,
+                  E_Axis => Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm) -
+                 Ctx.Pos;
             when others =>
                raise Bad_Line with "Unknown G code: " & Params ('G').Integer_Value'Image;
          end case;

@@ -25,7 +25,6 @@ package Prunt.Gcode_Parser is
      (None_Kind,
       Pause_Kind,
       Move_Kind,
-      Reset_Position_Kind,
       Dwell_Kind,
       Home_Kind,
       Enable_Steppers_Kind,
@@ -50,8 +49,6 @@ package Prunt.Gcode_Parser is
          when Move_Kind =>
             Old_Pos  : Position;
             Feedrate : Velocity;
-         when Reset_Position_Kind =>
-            New_Pos : Position;
          when Dwell_Kind =>
             Dwell_Time : Time;
          when Home_Kind | Enable_Steppers_Kind | Disable_Steppers_Kind =>
@@ -95,6 +92,7 @@ private
       E_Relative_Mode   : Boolean;
       Pos               : Position;
       Feedrate          : Velocity;
+      G92_Offset        : Position_Offset;
    end record;
 
 end Prunt.Gcode_Parser;
