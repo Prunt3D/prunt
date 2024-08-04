@@ -75,13 +75,9 @@ package body Prunt.Gcode_Parser is
                Params (Param) := (Kind => Integer_Kind, Integer_Value => 0, Consumed => False);
             end if;
 
-            if Params (Param).Kind = Integer_Kind
-               and then (Params (Param).Integer_Value >= 100 or Line (I) = '.')
-            then
+            if Params (Param).Kind = Integer_Kind and then (Params (Param).Integer_Value >= 100 or Line (I) = '.') then
                Params (Param) :=
-                  (Kind        => Float_Kind,
-                  Float_Value => Dimensionless (Params (Param).Integer_Value),
-                  Consumed    => False);
+                 (Kind => Float_Kind, Float_Value => Dimensionless (Params (Param).Integer_Value), Consumed => False);
             end if;
 
             if Line (I) = '-' then
@@ -97,15 +93,15 @@ package body Prunt.Gcode_Parser is
             else
                if Params (Param).Kind = Integer_Kind then
                   Params (Param).Integer_Value :=
-                     @ * 10 + Parameter_Integer (Character'Pos (Line (I)) - Character'Pos ('0'));
+                    @ * 10 + Parameter_Integer (Character'Pos (Line (I)) - Character'Pos ('0'));
                else
                   if In_Decimal_Part then
                      Decimal_Digits             := @ + 1;
                      Params (Param).Float_Value :=
-                        @ + Dimensionless (Character'Pos (Line (I)) - Character'Pos ('0')) / 10.0**Decimal_Digits;
+                       @ + Dimensionless (Character'Pos (Line (I)) - Character'Pos ('0')) / 10.0**Decimal_Digits;
                   else
                      Params (Param).Float_Value :=
-                        @ * 10.0 + Dimensionless (Character'Pos (Line (I)) - Character'Pos ('0'));
+                       @ * 10.0 + Dimensionless (Character'Pos (Line (I)) - Character'Pos ('0'));
                   end if;
                end if;
             end if;
@@ -365,8 +361,7 @@ package body Prunt.Gcode_Parser is
             when 106 =>
                Runner
                  ((Kind      => Set_Fan_Speed_Kind,
-                   Fan_Speed =>
-                     Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0)),
+                   Fan_Speed => Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0)),
                    Pos       => Ctx.Pos));
             when 107 =>
                Runner ((Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Pos => Ctx.Pos));
