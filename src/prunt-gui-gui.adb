@@ -82,7 +82,7 @@ package body Prunt.GUI.GUI is
                Text : UXString := From_UTF_8 ("");
                CR   : Character renames Ada.Characters.Latin_1.CR;
             begin
-               Append (Text, From_UTF_8 ("Position:" & CR));
+               Append (Text, From_UTF_8 ("Machine position (not accounting for G92 or retraction):" & CR));
                for A in Axis_Name loop
                   Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & CR));
                end loop;
