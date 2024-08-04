@@ -47,11 +47,17 @@ package body Prunt.Gcode_Parser is
    function Make_Context (Initial_Position : Position; Initial_Feedrate : Velocity) return Context is
    begin
       return
-        (XYZ_Relative_Mode => False,
-         E_Relative_Mode   => False,
-         Pos               => Initial_Position,
-         Feedrate          => Initial_Feedrate,
-         G92_Offset        => (others => 0.0 * mm));
+        (XYZ_Relative_Mode         => False,
+         E_Relative_Mode           => False,
+         Pos                       => Initial_Position,
+         Feedrate                  => Initial_Feedrate,
+         G92_Offset                => (others => 0.0 * mm),
+         Is_Retracted              => False,
+         Current_Retraction_Offset => (others => 0.0 * mm),
+         M207_Offset               => (others => 0.0 * mm),
+         M207_Feedrate             => Velocity'Last,
+         M208_Offset               => (others => 0.0 * mm),
+         M208_Feedrate             => 0.0 * mm / s);
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner) is
@@ -268,31 +274,93 @@ package body Prunt.Gcode_Parser is
                      Comm.Pos (Z_Axis) := Comm.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
                   else
                      Comm.Pos (X_Axis) :=
-                       Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm - Ctx.G92_Offset (X_Axis);
+                       Floatify_Or_Default ('X', (Ctx.Pos (X_Axis) - Ctx.Current_Retraction_Offset (X_Axis)) / mm) * mm -
+                       Ctx.G92_Offset (X_Axis) + Ctx.Current_Retraction_Offset (X_Axis);
                      Comm.Pos (Y_Axis) :=
-                       Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm - Ctx.G92_Offset (Y_Axis);
+                       Floatify_Or_Default ('Y', (Ctx.Pos (Y_Axis) - Ctx.Current_Retraction_Offset (Y_Axis)) / mm) * mm -
+                       Ctx.G92_Offset (Y_Axis) + Ctx.Current_Retraction_Offset (Y_Axis);
                      Comm.Pos (Z_Axis) :=
-                       Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm - Ctx.G92_Offset (Z_Axis);
+                       Floatify_Or_Default ('Z', (Ctx.Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis)) / mm) * mm -
+                       Ctx.G92_Offset (Z_Axis) + Ctx.Current_Retraction_Offset (Z_Axis);
                   end if;
 
                   if Ctx.E_Relative_Mode then
                      Comm.Pos (E_Axis) := Ctx.Pos (E_Axis) + Floatify_Or_Default ('E', 0.0) * mm;
                   else
                      Comm.Pos (E_Axis) :=
-                       Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm - Ctx.G92_Offset (E_Axis);
+                       Floatify_Or_Default ('E', (Ctx.Pos (E_Axis) - Ctx.Current_Retraction_Offset (E_Axis)) / mm) * mm -
+                       Ctx.G92_Offset (E_Axis) + Ctx.Current_Retraction_Offset (E_Axis);
                   end if;
 
                   Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
 
                   Comm.Old_Pos := Ctx.Pos;
-                  Ctx.Pos      := Comm.Pos;
 
                   Ctx.Feedrate := Comm.Feedrate;
 
-                  Runner (Comm);
+                  --  A move may just contain a new feedrate, in which case we do not want to execute it. If a move is
+                  --  zero distance but XYZE parameters were specified then we still run the move as the user may be
+                  --  relying on this to prevent blending of a corner.
+                  if Params ('X').Kind /= Non_Existant_Kind or Params ('Y').Kind /= Non_Existant_Kind or
+                    Params ('Z').Kind /= Non_Existant_Kind or Params ('E').Kind /= Non_Existant_Kind
+                  then
+                     Runner (Comm);
+                     Ctx.Pos := Comm.Pos; --  Must occur here in case Runner raises an exception.
+                  end if;
                end;
             when 4 =>
                Runner ((Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s, Pos => Ctx.Pos));
+            when 10 =>
+               if not Ctx.Is_Retracted then
+                  declare
+                     New_Pos : Position := Ctx.Pos;
+                  begin
+                     if Ctx.M207_Offset (E_Axis) /= 0.0 * mm then
+                        New_Pos (E_Axis) := New_Pos (E_Axis) - Ctx.M207_Offset (E_Axis);
+                        Runner
+                          ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Ctx.M207_Feedrate));
+                        Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
+                        Ctx.Current_Retraction_Offset (E_Axis) :=
+                          Ctx.Current_Retraction_Offset (E_Axis) - Ctx.M207_Offset (E_Axis);
+                     end if;
+
+                     Ctx.Is_Retracted := True;
+
+                     if Ctx.M207_Offset (Z_Axis) /= 0.0 * mm then
+                        New_Pos (Z_Axis) := New_Pos (Z_Axis) + Ctx.M207_Offset (Z_Axis);
+                        Runner ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Velocity'Last));
+                        Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
+                        Ctx.Current_Retraction_Offset (Z_Axis) := Ctx.M207_Offset (Z_Axis);
+                     end if;
+                  end;
+               end if;
+            when 11 =>
+               if Ctx.Is_Retracted then
+                  declare
+                     New_Pos : Position := Ctx.Pos;
+                  begin
+                     if Ctx.Current_Retraction_Offset (Z_Axis) /= 0.0 * mm then
+                        New_Pos (Z_Axis) := New_Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis);
+                        Runner ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Velocity'Last));
+                        Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
+                        Ctx.Current_Retraction_Offset (Z_Axis) := 0.0 * mm;
+                     end if;
+
+                     if Ctx.M207_Offset (E_Axis) /= 0.0 * mm then
+                        New_Pos (E_Axis) := New_Pos (E_Axis) + Ctx.M207_Offset (E_Axis) + Ctx.M208_Offset (E_Axis);
+                        Runner
+                          ((Kind     => Move_Kind,
+                            Pos      => New_Pos,
+                            Old_Pos  => Ctx.Pos,
+                            Feedrate => Ctx.M207_Feedrate + Ctx.M208_Feedrate));
+                        Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
+                        Ctx.Current_Retraction_Offset (E_Axis) :=
+                          Ctx.Current_Retraction_Offset (E_Axis) + Ctx.M207_Offset (E_Axis) + Ctx.M208_Offset (E_Axis);
+                     end if;
+
+                     Ctx.Is_Retracted := False;
+                  end;
+               end if;
             when 21 =>
                null;
             when 28 =>
@@ -392,6 +460,13 @@ package body Prunt.Gcode_Parser is
                  ((Kind               => Wait_Chamber_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celcius,
                    Pos                => Ctx.Pos));
+            when 207 =>
+               Ctx.M207_Feedrate        := Floatify_Or_Default ('F', Ctx.M207_Feedrate / (mm / min)) * (mm / min);
+               Ctx.M207_Offset (E_Axis) := Floatify_Or_Default ('E', Ctx.M207_Offset (E_Axis) / mm) * mm;
+               Ctx.M207_Offset (Z_Axis) := Floatify_Or_Default ('Z', Ctx.M207_Offset (Z_Axis) / mm) * mm;
+            when 208 =>
+               Ctx.M208_Feedrate        := Floatify_Or_Default ('F', Ctx.M208_Feedrate / (mm / min)) * (mm / min);
+               Ctx.M208_Offset (E_Axis) := Floatify_Or_Default ('E', Ctx.M208_Offset (E_Axis) / mm) * mm;
             when 303 =>
                Runner
                  ((Kind               => Heater_Autotune_Kind,

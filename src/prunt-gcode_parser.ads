@@ -88,11 +88,17 @@ package Prunt.Gcode_Parser is
 private
 
    type Context is record
-      XYZ_Relative_Mode : Boolean;
-      E_Relative_Mode   : Boolean;
-      Pos               : Position;
-      Feedrate          : Velocity;
-      G92_Offset        : Position_Offset;
+      XYZ_Relative_Mode         : Boolean;
+      E_Relative_Mode           : Boolean;
+      Pos                       : Position;
+      Feedrate                  : Velocity;
+      G92_Offset                : Position_Offset;
+      Is_Retracted              : Boolean;
+      Current_Retraction_Offset : Position_Offset;
+      M207_Offset               : Position_Offset;
+      M207_Feedrate             : Velocity;
+      M208_Offset               : Position_Offset;
+      M208_Feedrate             : Velocity;
    end record;
 
 end Prunt.Gcode_Parser;

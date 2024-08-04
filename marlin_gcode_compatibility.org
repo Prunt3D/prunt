@@ -5,8 +5,8 @@
 | G4          | Dwell                           | Yes       | P parameter not supported, S allows for floats instead         |
 | G5          | Bézier cubic spline             | No        |                                                                |
 | G6          | Direct Stepper Move             | No        |                                                                |
-| G10         | Retract                         | No        |                                                                |
-| G11         | Recover                         | No        |                                                                |
+| G10         | Retract                         | Yes       | No parameters                                                  |
+| G11         | Recover                         | Yes       | No parameters                                                  |
 | G12         | Clean the Nozzle                | No        |                                                                |
 | G17-G19     | CNC Workspace Planes            | No        |                                                                |
 | G20         | Inch Units                      | No        |                                                                |
@@ -128,8 +128,8 @@
 | M204        | Set Starting Acceleration       | No        |                                                                |
 | M205        | Set Advanced Settings           | No        |                                                                |
 | M206        | Set Home Offsets                | No        |                                                                |
-| M207        | Set Firmware Retraction         | No        |                                                                |
-| M208        | Firmware Recover                | No        |                                                                |
+| M207        | Set Firmware Retraction         | Yes       | No W parameter. Latest E/F always used during recover.         |
+| M208        | Firmware Recover                | Yes       | No W parameter. Feedrate and lengths both add to M207.         |
 | M209        | Set Auto Retract                | No        |                                                                |
 | M211        | Software Endstops               | No        |                                                                |
 | M217        | Filament swap parameters        | No        |                                                                |
