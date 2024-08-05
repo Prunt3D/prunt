@@ -357,15 +357,25 @@ package body Prunt.Gcode_Parser is
             when 21 =>
                null;
             when 28 =>
-               Runner
-                 ((Kind       => Home_Kind,
-                   Axes       =>
-                     (E_Axis => No_Value_Or_False_Or_Error ('E'),
-                      X_Axis => No_Value_Or_False_Or_Error ('X'),
-                      Y_Axis => No_Value_Or_False_Or_Error ('Y'),
-                      Z_Axis => No_Value_Or_False_Or_Error ('Z')),
-                   Pos_Before => Ctx.Pos,
-                   Pos        => Ctx.Pos));
+               if Params ('E').Kind = Non_Existant_Kind and Params ('X').Kind = Non_Existant_Kind and
+                 Params ('Y').Kind = Non_Existant_Kind and Params ('Z').Kind = Non_Existant_Kind
+               then
+                  Runner
+                    ((Kind       => Home_Kind,
+                      Axes       => (others => True),
+                      Pos_Before => Ctx.Pos,
+                      Pos        => Ctx.Pos));
+               else
+                  Runner
+                    ((Kind       => Home_Kind,
+                      Axes       =>
+                        (E_Axis => No_Value_Or_False_Or_Error ('E'),
+                         X_Axis => No_Value_Or_False_Or_Error ('X'),
+                         Y_Axis => No_Value_Or_False_Or_Error ('Y'),
+                         Z_Axis => No_Value_Or_False_Or_Error ('Z')),
+                      Pos_Before => Ctx.Pos,
+                      Pos        => Ctx.Pos));
+               end if;
             when 90 =>
                Ctx.XYZ_Relative_Mode := False;
                Ctx.E_Relative_Mode   := False;
