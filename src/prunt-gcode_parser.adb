@@ -267,13 +267,28 @@ package body Prunt.Gcode_Parser is
                      Comm.Pos (Z_Axis) := Comm.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
                   else
                      Comm.Pos (X_Axis) :=
-                       Floatify_Or_Default ('X', (Ctx.Pos (X_Axis) - Ctx.Current_Retraction_Offset (X_Axis)) / mm) * mm -
+                       Floatify_Or_Default
+                         ('X',
+                          (Ctx.Pos (X_Axis) - Ctx.Current_Retraction_Offset (X_Axis) -
+                           Ctx.G92_Offset (X_Axis)) /
+                          mm) *
+                       mm +
                        Ctx.G92_Offset (X_Axis) + Ctx.Current_Retraction_Offset (X_Axis);
                      Comm.Pos (Y_Axis) :=
-                       Floatify_Or_Default ('Y', (Ctx.Pos (Y_Axis) - Ctx.Current_Retraction_Offset (Y_Axis)) / mm) * mm -
+                       Floatify_Or_Default
+                         ('Y',
+                          (Ctx.Pos (Y_Axis) - Ctx.Current_Retraction_Offset (Y_Axis) -
+                           Ctx.G92_Offset (Y_Axis)) /
+                          mm) *
+                       mm +
                        Ctx.G92_Offset (Y_Axis) + Ctx.Current_Retraction_Offset (Y_Axis);
                      Comm.Pos (Z_Axis) :=
-                       Floatify_Or_Default ('Z', (Ctx.Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis)) / mm) * mm -
+                       Floatify_Or_Default
+                         ('Z',
+                          (Ctx.Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis) -
+                           Ctx.G92_Offset (Z_Axis)) /
+                          mm) *
+                       mm +
                        Ctx.G92_Offset (Z_Axis) + Ctx.Current_Retraction_Offset (Z_Axis);
                   end if;
 
@@ -281,7 +296,12 @@ package body Prunt.Gcode_Parser is
                      Comm.Pos (E_Axis) := Ctx.Pos (E_Axis) + Floatify_Or_Default ('E', 0.0) * mm;
                   else
                      Comm.Pos (E_Axis) :=
-                       Floatify_Or_Default ('E', (Ctx.Pos (E_Axis) - Ctx.Current_Retraction_Offset (E_Axis)) / mm) * mm -
+                       Floatify_Or_Default
+                         ('E',
+                          (Ctx.Pos (E_Axis) - Ctx.Current_Retraction_Offset (E_Axis) -
+                           Ctx.G92_Offset (E_Axis)) /
+                          mm) *
+                       mm +
                        Ctx.G92_Offset (E_Axis) + Ctx.Current_Retraction_Offset (E_Axis);
                   end if;
 
@@ -383,12 +403,18 @@ package body Prunt.Gcode_Parser is
                Ctx.XYZ_Relative_Mode := True;
                Ctx.E_Relative_Mode   := True;
             when 92 =>
-               Ctx.G92_Offset :=
-                 (X_Axis => Floatify_Or_Default ('X', Ctx.Pos (X_Axis) / mm) * mm,
-                  Y_Axis => Floatify_Or_Default ('Y', Ctx.Pos (Y_Axis) / mm) * mm,
-                  Z_Axis => Floatify_Or_Default ('Z', Ctx.Pos (Z_Axis) / mm) * mm,
-                  E_Axis => Floatify_Or_Default ('E', Ctx.Pos (E_Axis) / mm) * mm) -
-                 Ctx.Pos;
+               if Params ('E').Kind /= Non_Existant_Kind then
+                  Ctx.G92_Offset (E_Axis) := Ctx.Pos (E_Axis) - Floatify_Or_Error ('E') * mm;
+               end if;
+               if Params ('X').Kind /= Non_Existant_Kind then
+                  Ctx.G92_Offset (X_Axis) := Ctx.Pos (X_Axis) - Floatify_Or_Error ('X') * mm;
+               end if;
+               if Params ('Y').Kind /= Non_Existant_Kind then
+                  Ctx.G92_Offset (Y_Axis) := Ctx.Pos (Y_Axis) - Floatify_Or_Error ('Y') * mm;
+               end if;
+               if Params ('Z').Kind /= Non_Existant_Kind then
+                  Ctx.G92_Offset (Z_Axis) := Ctx.Pos (Z_Axis) - Floatify_Or_Error ('Z') * mm;
+               end if;
             when others =>
                raise Bad_Line with "Unknown G code: " & Params ('G').Integer_Value'Image;
          end case;
