@@ -489,7 +489,9 @@ package body Prunt.Gcode_Parser is
 
    procedure Reset_Position (Ctx : in out Context; Pos : Position) is
    begin
-      Ctx.Pos := Pos;
+      Ctx.Pos                       := Pos;
+      Ctx.Current_Retraction_Offset := (others => 0.0 * mm);
+      Ctx.Is_Retracted              := False;
    end Reset_Position;
 
 end Prunt.Gcode_Parser;
