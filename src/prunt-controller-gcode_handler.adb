@@ -382,6 +382,32 @@ package body Prunt.Controller.Gcode_Handler is
                    PID_Tuning_Temperature => Command.Tuning_Temperature,
                    others                 => <>));
                --  TODO: Take parameters.
+            when Set_Acceleration_Max_Kind
+              | Set_Jerk_Max_Kind
+              | Set_Snap_Max_Kind
+              | Set_Crackle_Max_Kind
+              | Set_Chord_Error_Max_Kind
+              | Set_Pressure_Advance_Time_Kind =>
+               case Command.Kind is
+                  when Set_Acceleration_Max_Kind =>
+                     Kinematics_Params.Planner_Parameters.Acceleration_Max := Command.Acceleration_Max;
+                  when Set_Jerk_Max_Kind =>
+                     Kinematics_Params.Planner_Parameters.Jerk_Max := Command.Jerk_Max;
+                  when Set_Snap_Max_Kind =>
+                     Kinematics_Params.Planner_Parameters.Snap_Max := Command.Snap_Max;
+                  when Set_Crackle_Max_Kind =>
+                     Kinematics_Params.Planner_Parameters.Crackle_Max := Command.Crackle_Max;
+                  when Set_Chord_Error_Max_Kind =>
+                     Kinematics_Params.Planner_Parameters.Chord_Error_Max := Command.Chord_Error_Max;
+                  when Set_Pressure_Advance_Time_Kind =>
+                     Kinematics_Params.Planner_Parameters.Pressure_Advance_Time := Command.Pressure_Advance_Time;
+                  when others =>
+                     raise Constraint_Error with "Unreachable.";
+               end case;
+               My_Planner.Enqueue
+                 ((Kind            => My_Planner.Flush_And_Change_Parameters_Kind,
+                   New_Params      => Kinematics_Params.Planner_Parameters,
+                  Flush_Extra_Data => (others => <>)));
             when others =>
                raise Constraint_Error with "Command not implemented.";
          end case;

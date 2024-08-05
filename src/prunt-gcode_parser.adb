@@ -463,6 +463,48 @@ package body Prunt.Gcode_Parser is
                  ((Kind               => Wait_Chamber_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celcius,
                    Pos                => Ctx.Pos));
+            when 205 =>
+               declare
+                  Junk : constant Boolean := No_Value_Or_False_Or_Error ('P');
+               begin
+                  null;
+               exception
+                  when E : Bad_Line =>
+                     raise Bad_Line
+                       with "M205 requires P parameter with no value on Prunt to prevent conflicts with Marlin g-code.";
+               end;
+
+               if Params ('A').Kind /= Non_Existant_Kind then
+                  Runner
+                    ((Kind             => Set_Acceleration_Max_Kind,
+                      Pos              => Ctx.Pos,
+                      Acceleration_Max => Floatify_Or_Error ('A') * mm / s**2));
+               elsif Params ('J').Kind /= Non_Existant_Kind then
+                  Runner
+                    ((Kind     => Set_Jerk_Max_Kind,
+                      Pos      => Ctx.Pos,
+                      Jerk_Max => Floatify_Or_Error ('J') * mm / s**3));
+               elsif Params ('S').Kind /= Non_Existant_Kind then
+                  Runner
+                    ((Kind     => Set_Snap_Max_Kind,
+                      Pos      => Ctx.Pos,
+                      Snap_Max => Floatify_Or_Error ('S') * mm / s**4));
+               elsif Params ('C').Kind /= Non_Existant_Kind then
+                  Runner
+                    ((Kind        => Set_Crackle_Max_Kind,
+                      Pos         => Ctx.Pos,
+                      Crackle_Max => Floatify_Or_Error ('C') * mm / s**5));
+               elsif Params ('D').Kind /= Non_Existant_Kind then
+                  Runner
+                    ((Kind            => Set_Chord_Error_Max_Kind,
+                      Pos             => Ctx.Pos,
+                      Chord_Error_Max => Floatify_Or_Error ('D') * mm));
+               elsif Params ('L').Kind /= Non_Existant_Kind then
+                  Runner
+                    ((Kind                  => Set_Pressure_Advance_Time_Kind,
+                      Pos                   => Ctx.Pos,
+                      Pressure_Advance_Time => Floatify_Or_Error ('L') * s));
+               end if;
             when 207 =>
                Ctx.M207_Feedrate        := Floatify_Or_Default ('F', Ctx.M207_Feedrate / (mm / min)) * (mm / min);
                Ctx.M207_Offset (E_Axis) := Floatify_Or_Default ('E', Ctx.M207_Offset (E_Axis) / mm) * mm;

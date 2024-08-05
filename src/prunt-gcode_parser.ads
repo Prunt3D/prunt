@@ -37,7 +37,13 @@ package Prunt.Gcode_Parser is
       Wait_Chamber_Temperature_Kind,
       Set_Fan_Speed_Kind,
       TMC_Dump_Kind,
-      Heater_Autotune_Kind);
+      Heater_Autotune_Kind,
+      Set_Acceleration_Max_Kind,
+      Set_Jerk_Max_Kind,
+      Set_Snap_Max_Kind,
+      Set_Crackle_Max_Kind,
+      Set_Chord_Error_Max_Kind,
+      Set_Pressure_Advance_Time_Kind);
 
    type Axes_Set is array (Axis_Name) of Boolean;
 
@@ -71,6 +77,18 @@ package Prunt.Gcode_Parser is
          when Heater_Autotune_Kind =>
             Tuning_Temperature : Temperature;
             --  TODO: Allow specification of heater.
+         when Set_Acceleration_Max_Kind =>
+            Acceleration_Max : Acceleration;
+         when Set_Jerk_Max_Kind =>
+            Jerk_Max : Jerk;
+         when Set_Snap_Max_Kind =>
+            Snap_Max : Snap;
+         when Set_Crackle_Max_Kind =>
+            Crackle_Max : Crackle;
+         when Set_Chord_Error_Max_Kind =>
+            Chord_Error_Max : Length;
+         when Set_Pressure_Advance_Time_Kind =>
+            Pressure_Advance_Time : Time;
       end case;
    end record;
 
