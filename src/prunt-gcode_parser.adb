@@ -65,10 +65,10 @@ package body Prunt.Gcode_Parser is
       I      : Positive         := Line'First;
 
       procedure Parse_Number (Param : Parameters_Index) is
-         In_Decimal_Part : Boolean := False;
-         Is_Negative     : Boolean := False;
-         Is_First_Char   : Boolean := True;
-         Decimal_Digits  : Natural := 0;
+         In_Decimal_Part : Boolean  := False;
+         Is_Negative     : Boolean  := False;
+         Decimal_Digits  : Natural  := 0;
+         First_Char      : Positive := I + 1;
       begin
          Params (Param) := (Kind => No_Value_Kind, Consumed => False);
 
@@ -83,11 +83,11 @@ package body Prunt.Gcode_Parser is
 
             if Params (Param).Kind = Integer_Kind and then (Params (Param).Integer_Value >= 100 or Line (I) = '.') then
                Params (Param) :=
-                 (Kind => Float_Kind, Float_Value => Dimensionless (Params (Param).Integer_Value), Consumed => False);
+                 (Kind => Float_Kind, Float_Value => 0.0, Consumed => False);
             end if;
 
             if Line (I) = '-' then
-               if not Is_First_Char then
+               if I /= First_Char then
                   raise Bad_Line with "'-' only allowed as first character in number.";
                end if;
                Is_Negative := True;
@@ -101,19 +101,14 @@ package body Prunt.Gcode_Parser is
                   Params (Param).Integer_Value :=
                     @ * 10 + Parameter_Integer (Character'Pos (Line (I)) - Character'Pos ('0'));
                else
-                  if In_Decimal_Part then
-                     Decimal_Digits             := @ + 1;
-                     Params (Param).Float_Value :=
-                       @ + Dimensionless (Character'Pos (Line (I)) - Character'Pos ('0')) / 10.0**Decimal_Digits;
-                  else
-                     Params (Param).Float_Value :=
-                       @ * 10.0 + Dimensionless (Character'Pos (Line (I)) - Character'Pos ('0'));
-                  end if;
+                  null;
                end if;
             end if;
-
-            Is_First_Char := False;
          end loop;
+
+         if Params (Param).Kind = Float_Kind then
+            Params (Param).Float_Value := Dimensionless'Value (Line (First_Char .. I - 1));
+         end if;
 
          if Is_Negative then
             if Params (Param).Kind = No_Value_Kind then
@@ -121,8 +116,6 @@ package body Prunt.Gcode_Parser is
             elsif Params (Param).Kind = Integer_Kind then
                Params (Param) :=
                  (Kind => Float_Kind, Float_Value => -Dimensionless (Params (Param).Integer_Value), Consumed => False);
-            elsif Params (Param).Kind = Float_Kind then
-               Params (Param).Float_Value := -Params (Param).Float_Value;
             end if;
          end if;
       end Parse_Number;
