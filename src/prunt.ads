@@ -206,6 +206,7 @@ package Prunt is
    function "/" (Left : Scaled_Position; Right : Dimensionless) return Scaled_Position;
    function "/" (Left : Scaled_Position; Right : Position_Scale) return Scaled_Position;
    function "/" (Left : Position; Right : Position_Scale) return Scaled_Position;
+   function "/" (Left : Scaled_Position_Offset; Right : Position_Scale) return Scaled_Position_Offset;
    function "abs" (Left : Position_Offset) return Length;
    function "abs" (Left : Position_Scale) return Dimensionless;
    function "abs" (Left : Scaled_Position_Offset) return Length;

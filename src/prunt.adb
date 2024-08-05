@@ -185,6 +185,11 @@ package body Prunt is
       return [for I in Axis_Name => Left (I) / Right (I)];
    end "/";
 
+   function "/" (Left : Scaled_Position_Offset; Right : Position_Scale) return Scaled_Position_Offset is
+   begin
+      return [for I in Axis_Name => Left (I) / Right (I)];
+   end "/";
+
    function "abs" (Left : Position_Offset) return Length is
       Square_Sum : Area := 0.0 * mm**2;
    begin
