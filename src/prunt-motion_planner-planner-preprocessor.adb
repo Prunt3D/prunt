@@ -52,14 +52,14 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          raise Constraint_Error with "Setup already called.";
       end if;
 
-      Params := Initial_Parameters;
+      Params := Limit_Higher_Order_Params (Initial_Parameters);
 
       Setup_Done := True;
    end Setup;
 
    procedure Run (Block : aliased out Execution_Block) is
       Flush_Extra_Data : Flush_Extra_Data_Type := Flush_Extra_Data_Default;
-      N_Corners        : Corners_Index := 1;
+      N_Corners        : Corners_Index         := 1;
       Block_N_Corners  : Corners_Index with
         Address => Block.N_Corners'Address;
       Next_Params      : Kinematic_Parameters;
@@ -88,7 +88,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   exit;
                when Flush_And_Change_Parameters_Kind =>
                   Flush_Extra_Data := Next_Command.Flush_Extra_Data;
-                  Next_Params      := Next_Command.New_Params;
+                  Next_Params      := Limit_Higher_Order_Params (Next_Command.New_Params);
                   exit;
                when Move_Kind =>
                   --  if abs (Last_Pos - Next_Command.Pos) >= Preprocessor_Minimum_Move_Distance then
@@ -127,5 +127,21 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
       end loop;
    end Check_Bounds;
+
+   function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters is
+      New_Params : Kinematic_Parameters := Params;
+   begin
+      New_Params.Acceleration_Max :=
+        Acceleration'Min
+          (New_Params.Acceleration_Max, New_Params.Tangential_Velocity_Max / Interpolation_Time);
+      New_Params.Jerk_Max         :=
+        Jerk'Min (New_Params.Jerk_Max, New_Params.Acceleration_Max / Interpolation_Time);
+      New_Params.Snap_Max         :=
+        Snap'Min (New_Params.Snap_Max, New_Params.Jerk_Max / Interpolation_Time);
+      New_Params.Crackle_Max      :=
+        Crackle'Min (New_Params.Crackle_Max, New_Params.Snap_Max / Interpolation_Time);
+
+      return New_Params;
+   end Limit_Higher_Order_Params;
 
 end Prunt.Motion_Planner.Planner.Preprocessor;

@@ -617,13 +617,36 @@ package body Prunt.GUI.Config_Editor is
               "Most users will want to set this to a high value and rely on axial limits instead.");
 
          View.Acceleration_Max.Create
-           (Parent => View.Widget_Table, Form => View, Name => "Max Acceleration", Description => "");
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "Max Acceleration",
+            Description =>
+              "May safely be set to " & DF_Image (Acceleration'Last / 2.0) &
+              " for effectively infinite acceleration (to the extent allowed by other constraints).");
 
-         View.Jerk_Max.Create (Parent => View.Widget_Table, Form => View, Name => "Max Jerk", Description => "");
+         View.Jerk_Max.Create
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "Max Jerk",
+            Description =>
+              "May safely be set to " & DF_Image (Jerk'Last / 2.0) &
+              " for effectively infinite jerk (to the extent allowed by other constraints).");
 
-         View.Snap_Max.Create (Parent => View.Widget_Table, Form => View, Name => "Max Snap", Description => "");
+         View.Snap_Max.Create
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "Max Snap",
+            Description =>
+              "May safely be set to " & DF_Image (Snap'Last / 2.0) &
+              " for effectively infinite snap (to the extent allowed by other constraints).");
 
-         View.Crackle_Max.Create (Parent => View.Widget_Table, Form => View, Name => "Max Crackle", Description => "");
+         View.Crackle_Max.Create
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "Max Crackle",
+            Description =>
+              "May safely be set to " & DF_Image (Crackle'Last / 2.0) &
+              " for effectively infinite crackle (to the extent allowed by other constraints).");
 
          View.Axial_Velocity_Maxes.Create
            (Parent      => View.Widget_Table,

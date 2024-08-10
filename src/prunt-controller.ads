@@ -177,6 +177,7 @@ private
       Initial_Position             => [others => 0.0 * mm],
       Max_Corners                  => Max_Planner_Block_Corners,
       Is_Homing_Move               => Is_Homing_Move,
+      Interpolation_Time           => Interpolation_Time,
       Home_Move_Minimum_Coast_Time => 4.0 * Interpolation_Time + Loop_Interpolation_Time);
 
    procedure Start_Planner_Block (Data : Flush_Extra_Data; Last_Command_Index : Command_Index);

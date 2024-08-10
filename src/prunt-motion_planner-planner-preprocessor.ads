@@ -54,4 +54,8 @@ private
 
    procedure Check_Bounds (Pos : Position);
 
+   function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters;
+   --  Limit the higher order kinematic limits to those reachable within a single interpolation period. This may be
+   --  useful if the user chooses to enter an extremely large value.
+
 end Prunt.Motion_Planner.Planner.Preprocessor;
