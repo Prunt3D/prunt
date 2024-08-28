@@ -195,6 +195,10 @@ package body Prunt.Controller.Gcode_Handler is
                    Flush_Extra_Data => (Pause_After => True, others => <>)));
             when Move_Kind =>
                if Command.Pos /= Command.Old_Pos then
+                  if Command.Feedrate = 0.0 * mm / s then
+                     raise Command_Constraint_Error with "Feedrate of zero is not allowed.";
+                  end if;
+
                   for I in Axis_Name loop
                      if not Is_Homed (I) then
                         raise Command_Constraint_Error
