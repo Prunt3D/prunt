@@ -126,6 +126,10 @@ package Prunt.Controller is
    --  Report the current power setting of a heater. There are no restrictions on how often this procedure needs to be
    --  called.
 
+   procedure Report_Input_Switch_State (Switch : Input_Switch_Name; State : Pin_State);
+   --  Report the current state of an input switch. There are no restrictions on how often this procedure needs to be
+   --  called.
+
    procedure Report_Last_Command_Executed (Index : Command_Index);
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
@@ -226,6 +230,8 @@ private
 
    function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale;
 
+   function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State;
+
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
@@ -234,6 +240,7 @@ private
       Get_Position                      => Get_Position,
       Get_Temperature                   => Get_Temperature,
       Get_Heater_Power                  => Get_Heater_Power,
+      Get_Input_Switch_State            => Get_Input_Switch_State,
       Submit_Gcode_Command              => Submit_Gcode_Command,
       Submit_Gcode_File                 => Submit_Gcode_File,
       Pause_Stepgen                     => My_Step_Generator.Pause,

@@ -80,6 +80,9 @@ package body Prunt.Controller is
    Last_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0)) with
        Atomic_Components, Volatile_Components;
 
+   Last_Input_Switch_States : array (Input_Switch_Name) of Pin_State := (others => Low_State) with
+       Atomic_Components, Volatile_Components;
+
    Last_Heater_Powers : array (Heater_Name) of PWM_Scale := (others => PWM_Scale (0.0)) with
        Atomic_Components, Volatile_Components;
 
@@ -118,6 +121,11 @@ package body Prunt.Controller is
    begin
       return Last_Heater_Powers (Heater);
    end Get_Heater_Power;
+
+   function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State is
+   begin
+      return Last_Input_Switch_States (Switch);
+   end Get_Input_Switch_State;
 
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean) is
    begin
@@ -197,6 +205,11 @@ package body Prunt.Controller is
 
       GUI_Runner.Finish;
    end Run;
+
+   procedure Report_Input_Switch_State (Switch : Input_Switch_Name; State : Pin_State) is
+   begin
+      Last_Input_Switch_States (Switch) := State;
+   end Report_Input_Switch_State;
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
    begin

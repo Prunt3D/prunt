@@ -99,6 +99,11 @@ package body Prunt.GUI.GUI is
                   Append (Text, From_UTF_8 (H'Image & ": ") & DF_Image (Get_Heater_Power (H)) & From_UTF_8 ("" & CR));
                end loop;
 
+               Append (Text, From_UTF_8 (CR & "Input switch states:" & CR));
+               for S in My_Config.Input_Switch_Name loop
+                  Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & CR));
+               end loop;
+
                App.Status_Message_Text.Inner_HTML (To_HTML (Text));
 
                declare
