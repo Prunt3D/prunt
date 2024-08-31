@@ -50,12 +50,12 @@ generic
    --  called before any other procedures. Should configure all heaters as disabled until Reconfigure_Heater is called.
 
    with procedure Reconfigure_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters) with
-     Pre => Params.Kind not in PID_Autotune_Kind;
+     Pre => Params.Kind not in (Prunt.Heaters.PID_Autotune_Kind);
    --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from any
    --  task.
 
    with procedure Autotune_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters) with
-     Pre => Params.Kind in PID_Autotune_Kind;
+     Pre => Params.Kind in (Prunt.Heaters.PID_Autotune_Kind);
    --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
    --
    --  TODO: Save the results to the config file.
