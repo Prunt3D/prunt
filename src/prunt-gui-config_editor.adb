@@ -622,7 +622,8 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Max Acceleration",
             Description =>
               "May safely be set to " & DF_Image (Acceleration'Last / 2.0) &
-              " for effectively infinite acceleration (to the extent allowed by other constraints).");
+              " for effectively infinite acceleration (to the extent allowed by other constraints)." &
+              "Axial values will go above this value when corner blending is enabled.");
 
          View.Jerk_Max.Create
            (Parent      => View.Widget_Table,
@@ -630,7 +631,8 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Max Jerk",
             Description =>
               "May safely be set to " & DF_Image (Jerk'Last / 2.0) &
-              " for effectively infinite jerk (to the extent allowed by other constraints).");
+              " for effectively infinite jerk (to the extent allowed by other constraints). " &
+              "Axial values will go above this value when corner blending is enabled.");
 
          View.Snap_Max.Create
            (Parent      => View.Widget_Table,
@@ -638,7 +640,8 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Max Snap",
             Description =>
               "May safely be set to " & DF_Image (Snap'Last / 2.0) &
-              " for effectively infinite snap (to the extent allowed by other constraints).");
+              " for effectively infinite snap (to the extent allowed by other constraints)." &
+              "Axial values will go above this value when corner blending is enabled.");
 
          View.Crackle_Max.Create
            (Parent      => View.Widget_Table,
@@ -646,7 +649,8 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Max Crackle",
             Description =>
               "May safely be set to " & DF_Image (Crackle'Last / 2.0) &
-              " for effectively infinite crackle (to the extent allowed by other constraints).");
+              " for effectively infinite crackle (to the extent allowed by other constraints)." &
+              "Axial values will go above this value when corner blending is enabled.");
 
          View.Axial_Velocity_Maxes.Create
            (Parent      => View.Widget_Table,
