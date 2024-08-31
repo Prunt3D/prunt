@@ -19,7 +19,7 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Prunt.Gcode_Parser; use Prunt.Gcode_Parser;
+with Prunt.Gcode_Parser;
 with Ada.Text_IO;        use Ada.Text_IO;
 with Ada.Exceptions;
 with Prunt.TMC_Types.TMC2240;
@@ -30,6 +30,14 @@ with Ada.IO_Exceptions;
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
 
 package body Prunt.Controller.Gcode_Handler is
+
+   package My_Gcode_Parser is new Prunt.Gcode_Parser
+     (Stepper_Name      => Generic_Types.Stepper_Name,
+      Heater_Name       => Generic_Types.Heater_Name,
+      Thermistor_Name   => Generic_Types.Thermistor_Name,
+      Fan_Name          => Generic_Types.Fan_Name,
+      Input_Switch_Name => Generic_Types.Input_Switch_Name);
+   use My_Gcode_Parser;
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean) is
    begin
@@ -49,7 +57,7 @@ package body Prunt.Controller.Gcode_Handler is
       Zero_Pos_Offset : constant Position_Offset :=
         [X_Axis => 0.0 * mm, Y_Axis => 0.0 * mm, Z_Axis => 0.0 * mm, E_Axis => 0.0 * mm];
 
-      Parser_Context : Gcode_Parser.Context := Make_Context (Zero_Pos, 100.0 * mm / s);
+      Parser_Context : My_Gcode_Parser.Context := Make_Context (Zero_Pos, 100.0 * mm / s);
 
       Is_Homed : array (Axis_Name) of Boolean := [others => False];
 
@@ -181,10 +189,10 @@ package body Prunt.Controller.Gcode_Handler is
              Flush_Extra_Data => (others => <>),
              Reset_Pos        => Pos_After),
             Ignore_Bounds => True);
-         Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
+         My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
       end Double_Tap_Home_Axis;
 
-      procedure Run_Command (Command : Gcode_Parser.Command) is
+      procedure Run_Command (Command : My_Gcode_Parser.Command) is
       begin
          case Command.Kind is
             when None_Kind =>
@@ -230,7 +238,7 @@ package body Prunt.Controller.Gcode_Handler is
                                 ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
                                   Reset_Pos        => Pos_After,
                                   Flush_Extra_Data => (others => <>)));
-                              Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
+                              My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
                            when My_Config.Double_Tap_Kind =>
                               Double_Tap_Home_Axis (Axis, Pos_After);
                               if Axis = Z_Axis then
@@ -242,7 +250,7 @@ package body Prunt.Controller.Gcode_Handler is
                                      Corner_Extra_Data => Corner_Data));
                                  My_Planner.Enqueue
                                    ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
-                                 Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
+                                 My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
                               end if;
                         end case;
                         Is_Homed (Axis) := True;

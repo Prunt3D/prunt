@@ -19,6 +19,12 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+generic
+   type Stepper_Name is (<>);
+   type Heater_Name is (<>);
+   type Thermistor_Name is (<>);
+   type Fan_Name is (<>);
+   type Input_Switch_Name is (<>);
 package Prunt.Gcode_Parser is
 
    type Command_Kind is
@@ -73,7 +79,8 @@ package Prunt.Gcode_Parser is
            | Wait_Chamber_Temperature_Kind =>
             Target_Temperature : Temperature;
          when Set_Fan_Speed_Kind =>
-            Fan_Speed : PWM_Scale;
+            Fan_To_Set : Fan_Name;
+            Fan_Speed  : PWM_Scale;
          when Heater_Autotune_Kind =>
             Tuning_Temperature : Temperature;
             --  TODO: Allow specification of heater.

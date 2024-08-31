@@ -23,27 +23,6 @@ with Ada.Characters.Handling; use Ada.Characters.Handling;
 
 package body Prunt.Gcode_Parser is
 
-   type Parameter_Kind is (Non_Existant_Kind, No_Value_Kind, Integer_Kind, Float_Kind);
-
-   type Parameter_Integer is range 0 .. 999;
-
-   type Parameter (Kind : Parameter_Kind := Non_Existant_Kind) is record
-      Consumed : Boolean;
-      case Kind is
-         when Non_Existant_Kind =>
-            null;
-         when No_Value_Kind =>
-            null;
-         when Integer_Kind =>
-            Integer_Value : Parameter_Integer;
-         when Float_Kind =>
-            Float_Value : Dimensionless;
-      end case;
-   end record;
-
-   type Parameters_Index is new Character range 'A' .. 'Z';
-   type Parameters_Array is array (Parameters_Index) of Parameter;
-
    function Make_Context (Initial_Position : Position; Initial_Feedrate : Velocity) return Context is
    begin
       return
@@ -51,16 +30,40 @@ package body Prunt.Gcode_Parser is
          E_Relative_Mode           => False,
          Pos                       => Initial_Position,
          Feedrate                  => Initial_Feedrate,
-         G92_Offset                => (others => 0.0 * mm),
+         G92_Offset                => (others => Length (0.0)),
          Is_Retracted              => False,
-         Current_Retraction_Offset => (others => 0.0 * mm),
-         M207_Offset               => (others => 0.0 * mm),
+         Current_Retraction_Offset => (others => Length (0.0)),
+         M207_Offset               => (others => Length (0.0)),
          M207_Feedrate             => Velocity'Last,
-         M208_Offset               => (others => 0.0 * mm),
+         M208_Offset               => (others => Length (0.0)),
          M208_Feedrate             => 0.0 * mm / s);
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner) is
+      type Parameter_Kind is (Non_Existant_Kind, No_Value_Kind, Integer_Kind, Float_Kind, String_Kind);
+
+      type Parameter_Integer is range 0 .. 999;
+
+      type Parameter (Kind : Parameter_Kind := Non_Existant_Kind) is record
+         Consumed : Boolean;
+         case Kind is
+            when Non_Existant_Kind =>
+               null;
+            when No_Value_Kind =>
+               null;
+            when Integer_Kind =>
+               Integer_Value : Parameter_Integer;
+            when Float_Kind =>
+               Float_Value : Dimensionless;
+            when String_Kind =>
+               Begin_Quote : Positive;
+               End_Quote   : Positive;
+         end case;
+      end record;
+
+      type Parameters_Index is new Character range 'A' .. 'Z';
+      type Parameters_Array is array (Parameters_Index) of Parameter;
+
       Params : Parameters_Array := [others => (Kind => Non_Existant_Kind, Consumed => False)];
       I      : Positive         := Line'First;
 
@@ -68,12 +71,9 @@ package body Prunt.Gcode_Parser is
          In_Decimal_Part : Boolean  := False;
          Is_Negative     : Boolean  := False;
          Decimal_Digits  : Natural  := 0;
-         First_Char      : Positive := I + 1;
+         First_Char      : Positive := I;
       begin
-         Params (Param) := (Kind => No_Value_Kind, Consumed => False);
-
          loop
-            I := I + 1;
             exit when I = Line'Last + 1
               or else (Line (I) /= '.' and Line (I) /= '-' and not Is_Decimal_Digit (Line (I)));
 
@@ -82,8 +82,7 @@ package body Prunt.Gcode_Parser is
             end if;
 
             if Params (Param).Kind = Integer_Kind and then (Params (Param).Integer_Value >= 100 or Line (I) = '.') then
-               Params (Param) :=
-                 (Kind => Float_Kind, Float_Value => 0.0, Consumed => False);
+               Params (Param) := (Kind => Float_Kind, Float_Value => 0.0, Consumed => False);
             end if;
 
             if Line (I) = '-' then
@@ -104,6 +103,8 @@ package body Prunt.Gcode_Parser is
                   null;
                end if;
             end if;
+
+            I := I + 1;
          end loop;
 
          if Params (Param).Kind = Float_Kind then
@@ -120,6 +121,34 @@ package body Prunt.Gcode_Parser is
          end if;
       end Parse_Number;
 
+      procedure Parse_Argument (Param : Parameters_Index) is
+      begin
+         Params (Param) := (Kind => No_Value_Kind, Consumed => False);
+
+         loop
+            if I = Line'Last + 1 then
+               return;
+            end if;
+            exit when Line (I) /= ' ';
+            I := I + 1;
+         end loop;
+
+         if Line (I) = '"' then
+            Params (Param) := (Kind => String_Kind, Consumed => False, Begin_Quote => I, End_Quote => <>);
+            loop
+               I := I + 1;
+               if I = Line'Last + 1 then
+                  raise Bad_Line with "Unterminated string.";
+               end if;
+               exit when Line (I) = '"';
+            end loop;
+            Params (Param).End_Quote := I;
+            I := I + 1;
+         else
+            Parse_Number (Param);
+         end if;
+      end Parse_Argument;
+
       function Floatify_Or_Default (Param : Parameters_Index; Default : Dimensionless) return Dimensionless is
       begin
          if Params (Param).Consumed then
@@ -130,13 +159,15 @@ package body Prunt.Gcode_Parser is
          case Params (Param).Kind is
             when No_Value_Kind =>
                raise Bad_Line
-                 with "Parameter '" & Character (Param) & "' has no value in command requiring value or omission.";
+                 with "Parameter '" & Character (Param) & "' has no value in command requiring number or omission.";
             when Non_Existant_Kind =>
                return Default;
             when Integer_Kind =>
                return Dimensionless (Params (Param).Integer_Value);
             when Float_Kind =>
                return Params (Param).Float_Value;
+            when String_Kind =>
+               raise Bad_Line with "Parameter '" & Character (Param) & "' is string where number was expected.";
          end case;
       end Floatify_Or_Default;
 
@@ -149,13 +180,15 @@ package body Prunt.Gcode_Parser is
 
          case Params (Param).Kind is
             when No_Value_Kind =>
-               raise Bad_Line with "Parameter '" & Character (Param) & "' has no value in command requiring value.";
+               raise Bad_Line with "Parameter '" & Character (Param) & "' has no value in command requiring number.";
             when Non_Existant_Kind =>
-               raise Bad_Line with "Parameter '" & Character (Param) & "' missing in command requiring value.";
+               raise Bad_Line with "Parameter '" & Character (Param) & "' missing in command requiring number.";
             when Integer_Kind =>
                return Dimensionless (Params (Param).Integer_Value);
             when Float_Kind =>
                return Params (Param).Float_Value;
+            when String_Kind =>
+               raise Bad_Line with "Parameter '" & Character (Param) & "' is string where number was expected.";
          end case;
       end Floatify_Or_Error;
 
@@ -169,12 +202,12 @@ package body Prunt.Gcode_Parser is
          case Params (Param).Kind is
             when No_Value_Kind =>
                raise Bad_Line
-                 with "Parameter '" & Character (Param) & "' has no value in command requiring value or omission.";
+                 with "Parameter '" & Character (Param) & "' has no value in command requiring integer or omission.";
             when Non_Existant_Kind =>
                return Default;
             when Integer_Kind =>
                return Params (Param).Integer_Value;
-            when Float_Kind =>
+            when Float_Kind | String_Kind =>
                raise Bad_Line with "Parameter '" & Character (Param) & "' should be non-negative integer < 1000.";
          end case;
       end Integer_Or_Default;
@@ -193,10 +226,29 @@ package body Prunt.Gcode_Parser is
                raise Bad_Line with "Parameter '" & Character (Param) & "' missing in command requiring value.";
             when Integer_Kind =>
                return Params (Param).Integer_Value;
-            when Float_Kind =>
+            when Float_Kind | String_Kind =>
                raise Bad_Line with "Parameter '" & Character (Param) & "' should be non-negative integer < 1000.";
          end case;
       end Integer_Or_Error;
+
+      function String_Or_Error (Param : Parameters_Index) return String is
+      begin
+         if Params (Param).Consumed then
+            raise Program_Error with "Parameter '" & Character (Param) & "' already consumed.";
+         end if;
+         Params (Param).Consumed := True;
+
+         case Params (Param).Kind is
+            when No_Value_Kind =>
+               raise Bad_Line with "Parameter '" & Character (Param) & "' has no value in command requiring string.";
+            when Non_Existant_Kind =>
+               raise Bad_Line with "Parameter '" & Character (Param) & "' missing in command requiring string.";
+            when Integer_Kind | Float_Kind =>
+               raise Bad_Line with "Parameter '" & Character (Param) & "' should be a string surrounded by "".";
+            when String_Kind =>
+               return Line (Params (Param).Begin_Quote + 1 .. Params (Param).End_Quote - 1);
+         end case;
+      end String_Or_Error;
 
       function No_Value_Or_False_Or_Error (Param : Parameters_Index) return Boolean is
       begin
@@ -210,7 +262,7 @@ package body Prunt.Gcode_Parser is
                return True;
             when Non_Existant_Kind =>
                return False;
-            when Integer_Kind | Float_Kind =>
+            when Integer_Kind | Float_Kind | String_Kind =>
                raise Bad_Line with "Parameter '" & Character (Param) & "' not allowed to have a value here.";
          end case;
       end No_Value_Or_False_Or_Error;
@@ -235,7 +287,8 @@ package body Prunt.Gcode_Parser is
                   elsif Params (Parameters_Index (Char)).Kind /= Non_Existant_Kind then
                      raise Bad_Line with "Parameter letter '" & Char & "' encountered more than once on line.";
                   else
-                     Parse_Number (Parameters_Index (Char));
+                     I := I + 1;
+                     Parse_Argument (Parameters_Index (Char));
                   end if;
                end;
             end if;
@@ -269,25 +322,19 @@ package body Prunt.Gcode_Parser is
                      Comm.Pos (X_Axis) :=
                        Floatify_Or_Default
                          ('X',
-                          (Ctx.Pos (X_Axis) - Ctx.Current_Retraction_Offset (X_Axis) -
-                           Ctx.G92_Offset (X_Axis)) /
-                          mm) *
+                          (Ctx.Pos (X_Axis) - Ctx.Current_Retraction_Offset (X_Axis) - Ctx.G92_Offset (X_Axis)) / mm) *
                        mm +
                        Ctx.G92_Offset (X_Axis) + Ctx.Current_Retraction_Offset (X_Axis);
                      Comm.Pos (Y_Axis) :=
                        Floatify_Or_Default
                          ('Y',
-                          (Ctx.Pos (Y_Axis) - Ctx.Current_Retraction_Offset (Y_Axis) -
-                           Ctx.G92_Offset (Y_Axis)) /
-                          mm) *
+                          (Ctx.Pos (Y_Axis) - Ctx.Current_Retraction_Offset (Y_Axis) - Ctx.G92_Offset (Y_Axis)) / mm) *
                        mm +
                        Ctx.G92_Offset (Y_Axis) + Ctx.Current_Retraction_Offset (Y_Axis);
                      Comm.Pos (Z_Axis) :=
                        Floatify_Or_Default
                          ('Z',
-                          (Ctx.Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis) -
-                           Ctx.G92_Offset (Z_Axis)) /
-                          mm) *
+                          (Ctx.Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis) - Ctx.G92_Offset (Z_Axis)) / mm) *
                        mm +
                        Ctx.G92_Offset (Z_Axis) + Ctx.Current_Retraction_Offset (Z_Axis);
                   end if;
@@ -298,9 +345,7 @@ package body Prunt.Gcode_Parser is
                      Comm.Pos (E_Axis) :=
                        Floatify_Or_Default
                          ('E',
-                          (Ctx.Pos (E_Axis) - Ctx.Current_Retraction_Offset (E_Axis) -
-                           Ctx.G92_Offset (E_Axis)) /
-                          mm) *
+                          (Ctx.Pos (E_Axis) - Ctx.Current_Retraction_Offset (E_Axis) - Ctx.G92_Offset (E_Axis)) / mm) *
                        mm +
                        Ctx.G92_Offset (E_Axis) + Ctx.Current_Retraction_Offset (E_Axis);
                   end if;
@@ -328,7 +373,7 @@ package body Prunt.Gcode_Parser is
                   declare
                      New_Pos : Position := Ctx.Pos;
                   begin
-                     if Ctx.M207_Offset (E_Axis) /= 0.0 * mm then
+                     if Ctx.M207_Offset (E_Axis) /= Length (0.0) then
                         New_Pos (E_Axis) := New_Pos (E_Axis) - Ctx.M207_Offset (E_Axis);
                         Runner
                           ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Ctx.M207_Feedrate));
@@ -339,7 +384,7 @@ package body Prunt.Gcode_Parser is
 
                      Ctx.Is_Retracted := True;
 
-                     if Ctx.M207_Offset (Z_Axis) /= 0.0 * mm then
+                     if Ctx.M207_Offset (Z_Axis) /= Length (0.0) then
                         New_Pos (Z_Axis) := New_Pos (Z_Axis) + Ctx.M207_Offset (Z_Axis);
                         Runner ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Velocity'Last));
                         Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
@@ -352,14 +397,14 @@ package body Prunt.Gcode_Parser is
                   declare
                      New_Pos : Position := Ctx.Pos;
                   begin
-                     if Ctx.Current_Retraction_Offset (Z_Axis) /= 0.0 * mm then
+                     if Ctx.Current_Retraction_Offset (Z_Axis) /= Length (0.0) then
                         New_Pos (Z_Axis) := New_Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis);
                         Runner ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Velocity'Last));
                         Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
-                        Ctx.Current_Retraction_Offset (Z_Axis) := 0.0 * mm;
+                        Ctx.Current_Retraction_Offset (Z_Axis) := Length (0.0);
                      end if;
 
-                     if Ctx.M207_Offset (E_Axis) /= 0.0 * mm then
+                     if Ctx.M207_Offset (E_Axis) /= Length (0.0) then
                         New_Pos (E_Axis) := New_Pos (E_Axis) + Ctx.M207_Offset (E_Axis) + Ctx.M208_Offset (E_Axis);
                         Runner
                           ((Kind     => Move_Kind,
@@ -380,11 +425,7 @@ package body Prunt.Gcode_Parser is
                if Params ('E').Kind = Non_Existant_Kind and Params ('X').Kind = Non_Existant_Kind and
                  Params ('Y').Kind = Non_Existant_Kind and Params ('Z').Kind = Non_Existant_Kind
                then
-                  Runner
-                    ((Kind       => Home_Kind,
-                      Axes       => (others => True),
-                      Pos_Before => Ctx.Pos,
-                      Pos        => Ctx.Pos));
+                  Runner ((Kind => Home_Kind, Axes => (others => True), Pos_Before => Ctx.Pos, Pos => Ctx.Pos));
                else
                   Runner
                     ((Kind       => Home_Kind,
@@ -455,13 +496,50 @@ package body Prunt.Gcode_Parser is
                  ((Kind               => Set_Hotend_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celcius,
                    Pos                => Ctx.Pos));
-            when 106 =>
-               Runner
-                 ((Kind      => Set_Fan_Speed_Kind,
-                   Fan_Speed => Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0)),
-                   Pos       => Ctx.Pos));
-            when 107 =>
-               Runner ((Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Pos => Ctx.Pos));
+            when 106 | 107 =>
+               declare
+                  Comm : Command :=
+                    (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Fan_Name'First, Pos => Ctx.Pos);
+               begin
+                  if Params ('M').Integer_Value = 106 then
+                     Comm.Fan_Speed :=
+                       Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0));
+                  end if;
+
+                  case Params ('P').Kind is
+                     when No_Value_Kind =>
+                        raise Bad_Line with "Parameter 'P' has no value in command requiring value.";
+                     when Non_Existant_Kind =>
+                        Comm.Fan_To_Set := Fan_Name'First;
+                     when Integer_Kind =>
+                        begin
+                           Comm.Fan_To_Set := Fan_Name'Val (Integer_Or_Error ('P'));
+                           if not Comm.Fan_To_Set'Valid then
+                              raise Constraint_Error;
+                           end if;
+                        exception
+                           when Constraint_Error =>
+                              raise Bad_Line with "Invalid fan index (" & Params ('P').Integer_Value'Image & ").";
+                        end;
+                     when Float_Kind =>
+                        raise Bad_Line
+                          with "Parameter 'P' must be integer between 0 and 999 or string in this command.";
+                     when String_Kind =>
+                        declare
+                           Name : String := String_Or_Error ('P');
+                        begin
+                           Comm.Fan_To_Set := Fan_Name'Value (Name);
+                           if not Comm.Fan_To_Set'Valid then
+                              raise Constraint_Error;
+                           end if;
+                        exception
+                           when Constraint_Error =>
+                              raise Bad_Line with "Invalid fan name (" & Name & ").";
+                        end;
+                  end case;
+
+                  Runner (Comm);
+               end;
             when 109 =>
                Runner
                  ((Kind               => Wait_Hotend_Temperature_Kind,
@@ -502,34 +580,30 @@ package body Prunt.Gcode_Parser is
 
                if Params ('A').Kind /= Non_Existant_Kind then
                   Runner
-                    ((Kind             => Set_Acceleration_Max_Kind,
-                      Pos              => Ctx.Pos,
-                      Acceleration_Max => Floatify_Or_Error ('A') * mm / s**2));
+                    ((Kind            => Set_Acceleration_Max_Kind,
+                      Pos             => Ctx.Pos,
+                     Acceleration_Max => Floatify_Or_Error ('A') * mm / s**2));
                elsif Params ('J').Kind /= Non_Existant_Kind then
                   Runner
-                    ((Kind     => Set_Jerk_Max_Kind,
-                      Pos      => Ctx.Pos,
-                      Jerk_Max => Floatify_Or_Error ('J') * mm / s**3));
+                    ((Kind => Set_Jerk_Max_Kind, Pos => Ctx.Pos, Jerk_Max => Floatify_Or_Error ('J') * mm / s**3));
                elsif Params ('S').Kind /= Non_Existant_Kind then
                   Runner
-                    ((Kind     => Set_Snap_Max_Kind,
-                      Pos      => Ctx.Pos,
-                      Snap_Max => Floatify_Or_Error ('S') * mm / s**4));
+                    ((Kind => Set_Snap_Max_Kind, Pos => Ctx.Pos, Snap_Max => Floatify_Or_Error ('S') * mm / s**4));
                elsif Params ('C').Kind /= Non_Existant_Kind then
                   Runner
-                    ((Kind        => Set_Crackle_Max_Kind,
-                      Pos         => Ctx.Pos,
-                      Crackle_Max => Floatify_Or_Error ('C') * mm / s**5));
+                    ((Kind       => Set_Crackle_Max_Kind,
+                      Pos        => Ctx.Pos,
+                     Crackle_Max => Floatify_Or_Error ('C') * mm / s**5));
                elsif Params ('D').Kind /= Non_Existant_Kind then
                   Runner
-                    ((Kind            => Set_Chord_Error_Max_Kind,
-                      Pos             => Ctx.Pos,
-                      Chord_Error_Max => Floatify_Or_Error ('D') * mm));
+                    ((Kind           => Set_Chord_Error_Max_Kind,
+                      Pos            => Ctx.Pos,
+                     Chord_Error_Max => Floatify_Or_Error ('D') * mm));
                elsif Params ('L').Kind /= Non_Existant_Kind then
                   Runner
-                    ((Kind                  => Set_Pressure_Advance_Time_Kind,
-                      Pos                   => Ctx.Pos,
-                      Pressure_Advance_Time => Floatify_Or_Error ('L') * s));
+                    ((Kind                 => Set_Pressure_Advance_Time_Kind,
+                      Pos                  => Ctx.Pos,
+                     Pressure_Advance_Time => Floatify_Or_Error ('L') * s));
                end if;
             when 207 =>
                Ctx.M207_Feedrate        := Floatify_Or_Default ('F', Ctx.M207_Feedrate / (mm / min)) * (mm / min);
@@ -558,7 +632,7 @@ package body Prunt.Gcode_Parser is
    procedure Reset_Position (Ctx : in out Context; Pos : Position) is
    begin
       Ctx.Pos                       := Pos;
-      Ctx.Current_Retraction_Offset := (others => 0.0 * mm);
+      Ctx.Current_Retraction_Offset := (others => Length (0.0));
       Ctx.Is_Retracted              := False;
    end Reset_Position;
 
