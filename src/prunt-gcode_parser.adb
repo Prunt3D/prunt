@@ -350,11 +350,14 @@ package body Prunt.Gcode_Parser is
                        Ctx.G92_Offset (E_Axis) + Ctx.Current_Retraction_Offset (E_Axis);
                   end if;
 
-                  Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
+                  if Params ('G').Integer_Value = 0 then
+                     Comm.Feedrate := Floatify_Or_Default ('F', Velocity'Last / 100.0 / (mm / min)) * mm / min;
+                  else
+                     Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
+                     Ctx.Feedrate := Comm.Feedrate;
+                  end if;
 
                   Comm.Old_Pos := Ctx.Pos;
-
-                  Ctx.Feedrate := Comm.Feedrate;
 
                   --  A move may just contain a new feedrate, in which case we do not want to execute it. If a move is
                   --  zero distance but XYZE parameters were specified then we still run the move as the user may be
