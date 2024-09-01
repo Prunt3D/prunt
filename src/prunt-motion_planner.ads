@@ -24,8 +24,8 @@ package Prunt.Motion_Planner is
    type Kinematic_Parameters is record
       Lower_Pos_Limit         : Position         := [others => 0.0 * mm];
       Upper_Pos_Limit         : Position         := [others => 0.0 * mm];
-      Ignore_E_In_XYZE        : Boolean          := False;
-      Shift_Blended_Corners   : Boolean          := True;
+      Ignore_E_In_XYZE        : Boolean          := True;
+      Shift_Blended_Corners   : Boolean          := False;
       Tangential_Velocity_Max : Velocity         := 0.0 * mm / s;
       Axial_Velocity_Maxes    : Axial_Velocities := [others => 0.0 * mm / s];
       Pressure_Advance_Time   : Time             := 0.0 * s;
