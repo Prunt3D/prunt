@@ -199,8 +199,7 @@ package body Prunt.Controller.Gcode_Handler is
                null;
             when Pause_Kind =>
                My_Planner.Enqueue
-                 ((Kind             => My_Planner.Flush_Kind,
-                   Flush_Extra_Data => (Pause_After => True, others => <>)));
+                 ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (Pause_After => True, others => <>)));
             when Move_Kind =>
                if Command.Pos /= Command.Old_Pos then
                   if Command.Feedrate = 0.0 * mm / s then
@@ -222,8 +221,8 @@ package body Prunt.Controller.Gcode_Handler is
                end if;
             when Dwell_Kind =>
                My_Planner.Enqueue
-                 ((Kind             => My_Planner.Flush_Kind,
-                   Flush_Extra_Data => (Dwell_Time => Command.Dwell_Time, others => <>)));
+                 ((Kind            => My_Planner.Flush_Kind,
+                  Flush_Extra_Data => (Dwell_Time => Command.Dwell_Time, others => <>)));
             when Home_Kind =>
                declare
                   Pos_After    : Position                                := Command.Pos_Before;
@@ -266,53 +265,73 @@ package body Prunt.Controller.Gcode_Handler is
                for S in Generic_Types.Stepper_Name loop
                   case Kinematics_Params.Kind is
                      when My_Config.Core_XY_Kind =>
-                        if (Command.Axes (X_Axis) or Command.Axes (Y_Axis)) and
+                        if
+                          (Command.Axes (X_Axis) or Command.Axes (Y_Axis) or
+                           Command.Axes = Axes_Set'(others => False)) and
                           (Kinematics_Params.A_Steppers (S) or Kinematics_Params.B_Steppers (S))
                         then
                            Stepper_Hardware (S).Enable_Stepper (S);
                         end if;
                      when My_Config.Cartesian_Kind =>
-                        if Command.Axes (X_Axis) and Kinematics_Params.X_Steppers (S) then
+                        if (Command.Axes (X_Axis) and Kinematics_Params.X_Steppers (S)) or
+                          Command.Axes = Axes_Set'(others => False)
+                        then
                            Stepper_Hardware (S).Enable_Stepper (S);
                         end if;
-                        if Command.Axes (Y_Axis) and Kinematics_Params.Y_Steppers (S) then
+                        if (Command.Axes (Y_Axis) and Kinematics_Params.Y_Steppers (S)) or
+                          Command.Axes = Axes_Set'(others => False)
+                        then
                            Stepper_Hardware (S).Enable_Stepper (S);
                         end if;
                   end case;
-                  if Command.Axes (E_Axis) and Kinematics_Params.E_Steppers (S) then
+                  if (Command.Axes (E_Axis) and Kinematics_Params.E_Steppers (S)) or
+                    Command.Axes = Axes_Set'(others => False)
+                  then
                      Stepper_Hardware (S).Enable_Stepper (S);
                   end if;
-                  if Command.Axes (Z_Axis) and Kinematics_Params.Z_Steppers (S) then
+                  if (Command.Axes (Z_Axis) and Kinematics_Params.Z_Steppers (S)) or
+                    Command.Axes = Axes_Set'(others => False)
+                  then
                      Stepper_Hardware (S).Enable_Stepper (S);
                   end if;
                end loop;
             when Disable_Steppers_Kind =>
-               for A in Axis_Name loop
-                  if Command.Axes (A) then
-                     Is_Homed (A) := False;
-                  end if;
-               end loop;
-
                for S in Generic_Types.Stepper_Name loop
                   case Kinematics_Params.Kind is
                      when My_Config.Core_XY_Kind =>
-                        if (Command.Axes (X_Axis) or Command.Axes (Y_Axis)) and
+                        if
+                          (Command.Axes (X_Axis) or Command.Axes (Y_Axis) or
+                           Command.Axes = Axes_Set'(others => False)) and
                           (Kinematics_Params.A_Steppers (S) or Kinematics_Params.B_Steppers (S))
                         then
+                           Is_Homed (X_Axis) := False;
+                           Is_Homed (Y_Axis) := False;
                            Stepper_Hardware (S).Disable_Stepper (S);
                         end if;
                      when My_Config.Cartesian_Kind =>
-                        if Command.Axes (X_Axis) and Kinematics_Params.X_Steppers (S) then
+                        if (Command.Axes (X_Axis) and Kinematics_Params.X_Steppers (S)) or
+                          Command.Axes = Axes_Set'(others => False)
+                        then
+                           Is_Homed (X_Axis) := False;
                            Stepper_Hardware (S).Disable_Stepper (S);
                         end if;
-                        if Command.Axes (Y_Axis) and Kinematics_Params.Y_Steppers (S) then
+                        if (Command.Axes (Y_Axis) and Kinematics_Params.Y_Steppers (S)) or
+                          Command.Axes = Axes_Set'(others => False)
+                        then
+                           Is_Homed (Y_Axis) := False;
                            Stepper_Hardware (S).Disable_Stepper (S);
                         end if;
                   end case;
-                  if Command.Axes (E_Axis) and Kinematics_Params.E_Steppers (S) then
+                  if (Command.Axes (E_Axis) and Kinematics_Params.E_Steppers (S)) or
+                    Command.Axes = Axes_Set'(others => False)
+                  then
+                     Is_Homed (E_Axis) := False;
                      Stepper_Hardware (S).Disable_Stepper (S);
                   end if;
-                  if Command.Axes (Z_Axis) and Kinematics_Params.Z_Steppers (S) then
+                  if (Command.Axes (Z_Axis) and Kinematics_Params.Z_Steppers (S)) or
+                    Command.Axes = Axes_Set'(others => False)
+                  then
+                     Is_Homed (Z_Axis) := False;
                      Stepper_Hardware (S).Disable_Stepper (S);
                   end if;
                end loop;
@@ -390,7 +409,7 @@ package body Prunt.Controller.Gcode_Handler is
             when Heater_Autotune_Kind =>
                Autotune_Heater
                  (G_Code_Assignment_Params.Hotend_Heater,
-                  (Kind                   => PID_Autotune_Kind,
+                 (Kind                    => PID_Autotune_Kind,
                    PID_Tuning_Temperature => Command.Tuning_Temperature,
                    others                 => <>));
                --  TODO: Take parameters.
@@ -412,7 +431,8 @@ package body Prunt.Controller.Gcode_Handler is
                   when Set_Chord_Error_Max_Kind =>
                      Kinematics_Params.Planner_Parameters.Chord_Error_Max := Command.Chord_Error_Max;
                   when Set_Pressure_Advance_Time_Kind =>
-                     Kinematics_Params.Planner_Parameters.Pressure_Advance_Time := Command.Pressure_Advance_Time;
+                     Kinematics_Params.Planner_Parameters.Pressure_Advance_Time :=
+                       Command.Pressure_Advance_Time;
                   when others =>
                      raise Constraint_Error with "Unreachable.";
                end case;
