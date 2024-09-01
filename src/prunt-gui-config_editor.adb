@@ -1341,45 +1341,45 @@ package body Prunt.GUI.Config_Editor is
          View.No_Mesh_Table.Style ("border-collapse", "collapse");
          View.Kind_Table.Add_Tab ("No Mesh", View.No_Mesh_Table'Access);
 
-         View.Beacon_Table.Create (View.Kind_Table);
-         View.Beacon_Table.Style ("border-collapse", "collapse");
-         View.Kind_Table.Add_Tab ("Beacon", View.Beacon_Table'Access);
+         --  View.Beacon_Table.Create (View.Kind_Table);
+         --  View.Beacon_Table.Style ("border-collapse", "collapse");
+         --  View.Kind_Table.Add_Tab ("Beacon", View.Beacon_Table'Access);
 
-         View.Serial_Port_Path.Create
-           (Parent      => View.Beacon_Table,
-            Form        => View,
-            Name        => "Serial Port Path",
-            Description => "Path to the Beacon serial port.");
+         --  View.Serial_Port_Path.Create
+         --    (Parent      => View.Beacon_Table,
+         --     Form        => View,
+         --     Name        => "Serial Port Path",
+         --     Description => "Path to the Beacon serial port.");
 
-         View.X_Offset.Create
-           (Parent      => View.Beacon_Table,
-            Form        => View,
-            Name        => "X Offset",
-            Description => "Offset along the X axis of the probe to the nozzle.");
+         --  View.X_Offset.Create
+         --    (Parent      => View.Beacon_Table,
+         --     Form        => View,
+         --     Name        => "X Offset",
+         --     Description => "Offset along the X axis of the probe to the nozzle.");
 
-         View.Y_Offset.Create
-           (Parent      => View.Beacon_Table,
-            Form        => View,
-            Name        => "Y Offset",
-            Description => "Offset along the Y axis of the probe to the nozzle.");
+         --  View.Y_Offset.Create
+         --    (Parent      => View.Beacon_Table,
+         --     Form        => View,
+         --     Name        => "Y Offset",
+         --     Description => "Offset along the Y axis of the probe to the nozzle.");
 
-         View.Calibration_Floor.Create
-           (Parent      => View.Beacon_Table,
-            Form        => View,
-            Name        => "Calibration Floor",
-            Description => "Z axis value to use for lowest calibration point.");
+         --  View.Calibration_Floor.Create
+         --    (Parent      => View.Beacon_Table,
+         --     Form        => View,
+         --     Name        => "Calibration Floor",
+         --     Description => "Z axis value to use for lowest calibration point.");
 
-         View.Calibration_Ceiling.Create
-           (Parent      => View.Beacon_Table,
-            Form        => View,
-            Name        => "Calibration Ceiling",
-            Description => "Z axis value to use for highest calibration point.");
+         --  View.Calibration_Ceiling.Create
+         --    (Parent      => View.Beacon_Table,
+         --     Form        => View,
+         --     Name        => "Calibration Ceiling",
+         --     Description => "Z axis value to use for highest calibration point.");
 
-         View.Calibration_Feedrate.Create
-           (Parent      => View.Beacon_Table,
-            Form        => View,
-            Name        => "Calibration Feedrate",
-            Description => "Feedrate used for calibration sequence.");
+         --  View.Calibration_Feedrate.Create
+         --    (Parent      => View.Beacon_Table,
+         --     Form        => View,
+         --     Name        => "Calibration Feedrate",
+         --     Description => "Feedrate used for calibration sequence.");
 
          View.Read_Data;
 
