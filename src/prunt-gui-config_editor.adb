@@ -1133,7 +1133,7 @@ package body Prunt.GUI.Config_Editor is
 
          View.On_Submit_Handler (Outer_Section_Widgets.On_Submit'Unrestricted_Access);
          View.Submit_Button.Create (Form => View, Value => "Save");
-         View.Submit_Button.Place_After (View.Widget_Table);
+         View.Submit_Button.Place_After (View.Kind_Table);
       end Create_Widget;
 
       overriding procedure Read_Data (View : in out Thermistor_Widget) is
