@@ -62,7 +62,9 @@ package body Prunt.Motion_Planner is
 
    function Total_Time (Profile : Feedrate_Profile) return Time is
    begin
-      return Total_Time (Profile.Accel) + Profile.Coast + Total_Time (Profile.Decel);
+      return
+        Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel) +
+        Profile.End_Coast;
    end Total_Time;
 
    function Crackle_At_Time (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Crackle is
@@ -662,26 +664,39 @@ package body Prunt.Motion_Planner is
    begin
       pragma Assert (T <= Total_Time (Profile));
 
-      if T <= Total_Time (Profile.Accel) then
-         return Crackle_At_Time (Profile.Accel, T, Max_Crackle);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
+      if T < Profile.Start_Coast then
+         return 0.0 * mm / s**5;
+      elsif T <= Profile.Start_Coast + Total_Time (Profile.Accel) then
+         return Crackle_At_Time (Profile.Accel, T - Profile.Start_Coast, Max_Crackle);
+      elsif T < Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast then
+         return 0.0 * mm / s**5;
+      elsif T > Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel) then
          return 0.0 * mm / s**5;
       else
-         return Crackle_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         return
+           Crackle_At_Time
+             (Profile.Decel,
+              T - (Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast),
+              -Max_Crackle);
       end if;
    end Crackle_At_Time;
 
    function Snap_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Snap is
    begin
-      pragma Assert (T <= Total_Time (Profile.Accel) + Profile.Coast + Total_Time (Profile.Decel));
       pragma Assert (T <= Total_Time (Profile));
 
-      if T <= Total_Time (Profile.Accel) then
-         return Snap_At_Time (Profile.Accel, T, Max_Crackle);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
+      if T < Profile.Start_Coast then
+         return 0.0 * mm / s**4;
+      elsif T <= Profile.Start_Coast + Total_Time (Profile.Accel) then
+         return Snap_At_Time (Profile.Accel, T - Profile.Start_Coast, Max_Crackle);
+      elsif T < Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast then
+         return 0.0 * mm / s**4;
+      elsif T > Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel) then
          return 0.0 * mm / s**4;
       else
-         return Snap_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         return
+           Snap_At_Time
+             (Profile.Decel, T - (Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast), -Max_Crackle);
       end if;
    end Snap_At_Time;
 
@@ -689,25 +704,42 @@ package body Prunt.Motion_Planner is
    begin
       pragma Assert (T <= Total_Time (Profile));
 
-      if T <= Total_Time (Profile.Accel) then
-         return Jerk_At_Time (Profile.Accel, T, Max_Crackle);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
+      if T < Profile.Start_Coast then
+         return 0.0 * mm / s**3;
+      elsif T <= Profile.Start_Coast + Total_Time (Profile.Accel) then
+         return Jerk_At_Time (Profile.Accel, T - Profile.Start_Coast, Max_Crackle);
+      elsif T < Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast then
+         return 0.0 * mm / s**3;
+      elsif T > Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel) then
          return 0.0 * mm / s**3;
       else
-         return Jerk_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         return
+           Jerk_At_Time
+             (Profile.Decel,
+              T - (Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast),
+              -Max_Crackle);
       end if;
    end Jerk_At_Time;
 
-   function Acceleration_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Acceleration is
+   function Acceleration_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Acceleration
+   is
    begin
       pragma Assert (T <= Total_Time (Profile));
 
-      if T <= Total_Time (Profile.Accel) then
-         return Acceleration_At_Time (Profile.Accel, T, Max_Crackle);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
+      if T < Profile.Start_Coast then
+         return 0.0 * mm / s**2;
+      elsif T <= Profile.Start_Coast + Total_Time (Profile.Accel) then
+         return Acceleration_At_Time (Profile.Accel, T - Profile.Start_Coast, Max_Crackle);
+      elsif T < Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast then
+         return 0.0 * mm / s**2;
+      elsif T > Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel) then
          return 0.0 * mm / s**2;
       else
-         return Acceleration_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         return
+           Acceleration_At_Time
+             (Profile.Decel,
+              T - (Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast),
+              -Max_Crackle);
       end if;
    end Acceleration_At_Time;
 
@@ -719,36 +751,31 @@ package body Prunt.Motion_Planner is
    begin
       pragma Assert (T <= Total_Time (Profile));
 
-      if T <= Total_Time (Profile.Accel) then
-         return Velocity_At_Time (Profile.Accel, T, Max_Crackle, Start_Vel);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
+      if T < Profile.Start_Coast then
+         return Start_Vel;
+      elsif T <= Profile.Start_Coast + Total_Time (Profile.Accel) then
+         return Velocity_At_Time (Profile.Accel, T - Profile.Start_Coast, Max_Crackle, Start_Vel);
+      elsif T < Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast then
          return Mid_Vel;
+      elsif T > Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel)
+      then
+         return Velocity_At_Time (Profile.Decel, Total_Time (Profile.Decel), -Max_Crackle, Mid_Vel);
       else
          return
-           Velocity_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
+           Velocity_At_Time
+             (Profile.Decel,
+              T - (Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast),
+              -Max_Crackle,
+              Mid_Vel);
       end if;
    end Velocity_At_Time;
 
    function Distance_At_Time
      (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length
    is
-      Mid_Vel    : constant Velocity :=
-        Velocity_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Accel_Dist : constant Length   :=
-        Distance_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Mid_Dist   : constant Length   := Mid_Vel * Profile.Coast;
+      Is_Past_Accel_Part : Boolean;
    begin
-      pragma Assert (T <= Total_Time (Profile));
-
-      if T <= Total_Time (Profile.Accel) then
-         return Distance_At_Time (Profile.Accel, T, Max_Crackle, Start_Vel);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
-         return Accel_Dist + Mid_Vel * (T - Total_Time (Profile.Accel));
-      else
-         return
-           Accel_Dist + Mid_Dist +
-           Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
-      end if;
+      return Distance_At_Time (Profile, T, Max_Crackle, Start_Vel, Is_Past_Accel_Part);
    end Distance_At_Time;
 
    function Distance_At_Time
@@ -759,25 +786,43 @@ package body Prunt.Motion_Planner is
       Is_Past_Accel_Part : out Boolean)
       return Length
    is
+      Start_Dist : constant Length   := Profile.Start_Coast * Start_Vel;
       Mid_Vel    : constant Velocity :=
         Velocity_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
       Accel_Dist : constant Length   :=
         Distance_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Mid_Dist   : constant Length   := Mid_Vel * Profile.Coast;
+      Mid_Dist   : constant Length   := Mid_Vel * Profile.Mid_Coast;
+      Decel_Dist : constant Length   :=
+        Distance_At_Time (Profile.Decel, Total_Time (Profile.Decel), -Max_Crackle, Mid_Vel);
+      End_Vel    : constant Velocity :=
+        Velocity_At_Time (Profile.Decel, Total_Time (Profile.Decel), -Max_Crackle, Mid_Vel);
    begin
       pragma Assert (T <= Total_Time (Profile));
 
-      if T <= Total_Time (Profile.Accel) then
+      if T < Profile.Start_Coast then
          Is_Past_Accel_Part := False;
-         return Distance_At_Time (Profile.Accel, T, Max_Crackle, Start_Vel);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
+         return Start_Vel * T;
+      elsif T <= Profile.Start_Coast + Total_Time (Profile.Accel) then
+         Is_Past_Accel_Part := False;
+         return Start_Dist + Distance_At_Time (Profile.Accel, T - Profile.Start_Coast, Max_Crackle, Start_Vel);
+      elsif T < Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast then
          Is_Past_Accel_Part := True;
-         return Accel_Dist + Mid_Vel * (T - Total_Time (Profile.Accel));
+         return Start_Dist + Accel_Dist + Mid_Vel * (T - (Profile.Start_Coast + Total_Time (Profile.Accel)));
+      elsif T > Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel)
+      then
+         Is_Past_Accel_Part := True;
+         return
+           Start_Dist + Accel_Dist + Mid_Dist + Decel_Dist +
+           End_Vel *
+             (T -
+              (Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast + Total_Time (Profile.Decel)));
       else
          Is_Past_Accel_Part := True;
          return
-           Accel_Dist + Mid_Dist +
-           Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
+           Start_Dist + Accel_Dist + Mid_Dist +
+           Distance_At_Time
+             (Profile.Decel, T - (Profile.Start_Coast + Total_Time (Profile.Accel) + Profile.Mid_Coast),
+              -Max_Crackle, Mid_Vel);
       end if;
    end Distance_At_Time;
 
@@ -1050,14 +1095,16 @@ package body Prunt.Motion_Planner is
    end Optimal_Profile_For_Delta_V;
 
    function Optimal_Full_Profile
-     (Start_Vel        : Velocity;
-      Max_Vel          : Velocity;
-      End_Vel          : Velocity;
-      Distance         : Length;
-      Acceleration_Max : Acceleration;
-      Jerk_Max         : Jerk;
-      Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
+     (Start_Vel            : Velocity;
+      Start_Coast_Distance : Length;
+      Max_Vel              : Velocity;
+      End_Vel              : Velocity;
+      End_Coast_Distance   : Length;
+      Mid_Distance         : Length;
+      Acceleration_Max     : Acceleration;
+      Jerk_Max             : Jerk;
+      Snap_Max             : Snap;
+      Crackle_Max          : Crackle)
       return Feedrate_Profile
    is
       Profile : Feedrate_Profile;
@@ -1070,8 +1117,13 @@ package body Prunt.Motion_Planner is
          raise Constraint_Error with "Max_Vel can not be smaller than End_Vel.";
       end if;
 
-      if Distance = 0.0 * mm then
-         return (Accel => (others => 0.0 * s), Coast => 0.0 * s, Decel => (others => 0.0 * s));
+      if Mid_Distance = 0.0 * mm then
+         return
+           (Start_Coast => (if Start_Vel = 0.0 * mm / s then 0.0 * s else Start_Coast_Distance / Start_Vel),
+            Accel       => (others => 0.0 * s),
+            Mid_Coast   => 0.0 * s,
+            Decel       => (others => 0.0 * s),
+            End_Coast   => (if End_Vel = 0.0 * mm / s then 0.0 * s else End_Coast_Distance / End_Vel));
       end if;
 
       declare
@@ -1081,24 +1133,26 @@ package body Prunt.Motion_Planner is
          Profile_Distance : constant Length :=
            Fast_Distance_At_Max_Time (Profile, (if Start_Vel < End_Vel then Crackle_Max else -Crackle_Max), Start_Vel);
       begin
-         if Distance < Profile_Distance then
+         if Mid_Distance < Profile_Distance then
             raise Constraint_Error with "End_Vel is not reachable under given constraints.";
          end if;
       end;
 
-      Profile.Accel :=
+      Profile.Start_Coast := (if Start_Vel = 0.0 * mm / s then 0.0 * s else Start_Coast_Distance / Start_Vel);
+      Profile.End_Coast   := (if End_Vel = 0.0 * mm / s then 0.0 * s else End_Coast_Distance / End_Vel);
+      Profile.Accel       :=
         Optimal_Profile_For_Delta_V (Start_Vel - Max_Vel, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
-      Profile.Decel :=
+      Profile.Decel       :=
         Optimal_Profile_For_Delta_V (End_Vel - Max_Vel, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
 
       declare
          Accel_Distance : Length            := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
          Decel_Distance : Length            := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Max_Vel);
       begin
-         if Accel_Distance + Decel_Distance <= Distance then
-            Profile.Coast := (Distance - Accel_Distance - Decel_Distance) / Max_Vel;
+         if Accel_Distance + Decel_Distance <= Mid_Distance then
+            Profile.Mid_Coast := (Mid_Distance - Accel_Distance - Decel_Distance) / Max_Vel;
          else
-            Profile.Coast := 0.0 * s;
+            Profile.Mid_Coast := 0.0 * s;
             declare
                type Casted_Vel is mod 2**64;
                function Cast_Vel is new Ada.Unchecked_Conversion (Velocity, Casted_Vel);
@@ -1126,7 +1180,7 @@ package body Prunt.Motion_Planner is
                   Accel_Distance := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
                   Decel_Distance := Fast_Distance_At_Max_Time (Profile.Decel, Crackle_Max, End_Vel);
 
-                  if Accel_Distance + Decel_Distance <= Distance then
+                  if Accel_Distance + Decel_Distance <= Mid_Distance then
                      Lower := Mid;
                   else
                      Upper := Mid;

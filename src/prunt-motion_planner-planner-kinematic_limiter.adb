@@ -32,7 +32,8 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
            (Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
             Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
       begin
-         return Start_Curve_Half_Distance + Mid_Distance + End_Curve_Half_Distance;
+         return Mid_Distance;
+         --  return Start_Curve_Half_Distance + Mid_Distance + End_Curve_Half_Distance;
       end Curve_Corner_Distance;
    begin
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;

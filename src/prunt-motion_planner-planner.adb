@@ -69,7 +69,7 @@ package body Prunt.Motion_Planner.Planner is
             My_Feedrate_Profile_Generator.Run (Block);
 
             exit when (not Is_Homing_Move (Block.Flush_Extra_Data))
-              or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
+              or else Block.Feedrate_Profiles (2).Mid_Coast >= Home_Move_Minimum_Coast_Time;
 
             Block.Segment_Feedrates (2) := Block.Segment_Feedrates (2) * 0.9;
          end loop;

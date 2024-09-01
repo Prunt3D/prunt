@@ -32,20 +32,24 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
            (Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
             Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
       begin
-         return Start_Curve_Half_Distance + Mid_Distance + End_Curve_Half_Distance;
+         return Mid_Distance;
+         --  return Start_Curve_Half_Distance + Mid_Distance + End_Curve_Half_Distance;
       end Curve_Corner_Distance;
    begin
       for I in Block.Feedrate_Profiles'Range loop
          Block.Feedrate_Profiles (I) :=
            Optimal_Full_Profile
-             (Start_Vel        => Block.Corner_Velocity_Limits (I - 1),
-              Max_Vel          => Block.Segment_Feedrates (I),
-              End_Vel          => Block.Corner_Velocity_Limits (I),
-              Distance         => Curve_Corner_Distance (I),
-              Acceleration_Max => Block.Params.Acceleration_Max,
-              Jerk_Max         => Block.Params.Jerk_Max,
-              Snap_Max         => Block.Params.Snap_Max,
-              Crackle_Max      => Block.Params.Crackle_Max);
+             (Start_Vel            => Block.Corner_Velocity_Limits (I - 1),
+              Start_Coast_Distance =>
+                Distance_At_T (Block.Beziers (I - 1), 1.0) - Distance_At_T (Block.Beziers (I - 1), 0.5),
+              Max_Vel              => Block.Segment_Feedrates (I),
+              End_Vel              => Block.Corner_Velocity_Limits (I),
+              End_Coast_Distance   => Distance_At_T (Block.Beziers (I), 0.5),
+              Mid_Distance         => Curve_Corner_Distance (I),
+              Acceleration_Max     => Block.Params.Acceleration_Max,
+              Jerk_Max             => Block.Params.Jerk_Max,
+              Snap_Max             => Block.Params.Snap_Max,
+              Crackle_Max          => Block.Params.Crackle_Max);
       end loop;
    end Run;
 

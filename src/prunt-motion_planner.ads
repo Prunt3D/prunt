@@ -43,9 +43,11 @@ package Prunt.Motion_Planner is
    type Feedrate_Profile_Times is array (Feedrate_Profile_Times_Index) of Time;
 
    type Feedrate_Profile is tagged record
-      Accel : Feedrate_Profile_Times;
-      Coast : Time;
-      Decel : Feedrate_Profile_Times;
+      Start_Coast : Time;
+      Accel       : Feedrate_Profile_Times;
+      Mid_Coast   : Time;
+      Decel       : Feedrate_Profile_Times;
+      End_Coast   : Time;
    end record;
 
    function Fast_Distance_At_Max_Time
@@ -108,14 +110,16 @@ package Prunt.Motion_Planner is
    --  time without violating any of the given constraints. Note that there is no distance limit here.
 
    function Optimal_Full_Profile
-     (Start_Vel        : Velocity;
-      Max_Vel          : Velocity;
-      End_Vel          : Velocity;
-      Distance         : Length;
-      Acceleration_Max : Acceleration;
-      Jerk_Max         : Jerk;
-      Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
+     (Start_Vel            : Velocity;
+      Start_Coast_Distance : Length;
+      Max_Vel              : Velocity;
+      End_Vel              : Velocity;
+      End_Coast_Distance   : Length;
+      Mid_Distance         : Length;
+      Acceleration_Max     : Acceleration;
+      Jerk_Max             : Jerk;
+      Snap_Max             : Snap;
+      Crackle_Max          : Crackle)
   return Feedrate_Profile;
 --  Compute the feedrate profile with the minimal time without violating the given constraints. Raises Constraint_Error
 --  if there is no legal feedrate profile which can meet the given constraints, specifically regarding End_Vel being
