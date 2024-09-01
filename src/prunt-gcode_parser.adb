@@ -506,7 +506,7 @@ package body Prunt.Gcode_Parser is
                begin
                   if Params ('M').Integer_Value = 106 then
                      Comm.Fan_Speed :=
-                       Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0));
+                       Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Default ('S', 255.0) / 255.0));
                   end if;
 
                   case Params ('P').Kind is
