@@ -35,6 +35,7 @@ generic
    Corner_Blender_Max_Secondary_Angle_To_Blend : Angle := 89.5 * deg;
    Input_Queue_Length : Ada.Containers.Count_Type := 1_000;
    Initial_Position : Position := [others => 0.0 * mm];
+   Kinematic_Limiter_Fine_Error_Tolerance : Length := 0.000001 * mm;
 package Prunt.Motion_Planner.Planner is
 
    type Command_Kind is (Move_Kind, Flush_Kind, Flush_And_Reset_Position_Kind, Flush_And_Change_Parameters_Kind);

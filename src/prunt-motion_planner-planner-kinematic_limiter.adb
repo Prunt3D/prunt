@@ -85,8 +85,14 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
             Limit := Velocity'Min (Limit, Block.Params.Jerk_Max**(1 / 3) * Inverse_Curvature**(2 / 3));
             Limit := Velocity'Min (Limit, Block.Params.Snap_Max**(1 / 4) * Inverse_Curvature**(3 / 4));
             Limit := Velocity'Min (Limit, Block.Params.Crackle_Max**(1 / 5) * Inverse_Curvature**(4 / 5));
+            Limit :=
+              Velocity'Min
+                (Limit,
+                 2.0 / Interpolation_Time *
+                 (2.0 * Kinematic_Limiter_Fine_Error_Tolerance * Inverse_Curvature -
+                  Kinematic_Limiter_Fine_Error_Tolerance**2)**(1 / 2));
+            --  TODO: Ensure we do not try to take the root of a negative number in the above statement.
 
-            --  TODO: Add limit based on interpolation time.
             --  TODO: Snap and crackle limits currently do not match the paper and are likely overly conservative.
 
             Optimal_Profile :=
