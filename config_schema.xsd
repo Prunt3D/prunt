@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema
+	targetNamespace="http://xml.prunt3d.com/Prunt_Settings_Schema_Is_Unique_To_Each_Board_And_May_Change_Between_Versions"
+	elementFormDefault="qualified" xmlns="http://www.w3.org/2001/XMLSchema"
+	xmlns:tns="http://xml.prunt3d.com/Prunt_Settings_Schema_Is_Unique_To_Each_Board_And_May_Change_Between_Versions">
+
+	<simpleType name="Length" tns:unit="mm">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="TMC_Unsigned_1">
+		<restriction base="int">
+			<minInclusive value="0" />
+			<maxExclusive value="2" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC_Unsigned_2">
+		<restriction base="int">
+			<minInclusive value="0" />
+			<maxExclusive value="4" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC_Unsigned_3">
+		<restriction base="int">
+			<minInclusive value="0" />
+			<maxExclusive value="8" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC_Unsigned_4">
+		<restriction base="int">
+			<minInclusive value="0" />
+			<maxExclusive value="16" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC_Unsigned_5">
+		<restriction base="int">
+			<minInclusive value="0" />
+			<maxExclusive value="32" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC_Unsigned_8">
+		<restriction base="int">
+			<minInclusive value="0" />
+			<maxExclusive value="256" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC_Unsigned_20">
+		<restriction base="int">
+			<minInclusive value="0" />
+			<maxExclusive value="1048576" />
+		</restriction>
+	</simpleType>
+
+
+
+	<simpleType name="TMC2240_Slope_Control">
+		<restriction base="string">
+			<enumeration value="Slope_100V_Per_us" />
+			<enumeration value="Slope_200V_Per_us" />
+			<enumeration value="Slope_400V_Per_us" />
+			<enumeration value="Slope_800V_Per_us" />
+		</restriction>
+	</simpleType>
+
+
+	<complexType name="Individual_Stepper_Parameters_TMC2240_UART">
+		<sequence>
+			<element name="Enabled" type="boolean" />
+			<element name="Mm_Per_Step" type="tns:Length" />
+			<element name="Output_Current" type="tns:Current" />
+			<element name="Slope_Control" type="tns:TMC2240_Slope_Control" />
+			<element name="I_Hold" type="tns:TMC_Unsigned_5" />
+			<element name="I_Run" type="tns:TMC_Unsigned_5" />
+			<element name="I_Hold_Delay" type="tns:TMC_Unsigned_4" />
+			<element name="I_Run_Delay" type="tns:TMC_Unsigned_4" />
+			<element name="T_Power_Down" type="tns:TMC_Unsigned_8" />
+			<element name="T_PWM_Thrs" type="tns:TMC_Unsigned_20" />
+			<element name="T_Cool_Thrs" type="tns:TMC_Unsigned_20" />
+			<element name="T_High" type="tns:TMC_Unsigned_20" />
+			<element name="TOFF" type="tns:TMC_Unsigned_4" />
+			<element name="HSTRT_TFD210" type="tns:TMC_Unsigned_3" />
+			<element name="HEND_OFFSET" type="tns:TMC_Unsigned_4" />
+			<element name="FD3" type="tns:TMC_Unsigned_1" />
+			<element name="DISFDCC" type="boolean" />
+			<element name="CHM" type="boolean" />
+			<element name="VHIGHFS" type="boolean" />
+			<element name="VHIGHCHM" type="boolean" />
+			<element name="TPFD" type="tns:TMC_Unsigned_4" />
+			<element name="Microstep_Resolution" type="tns:TMC2240_Microstep_Resolution" />
+			<element name="PWM_OFS" type="tns:TMC_Unsigned_8" />
+			<element name="PWM_Grad" type="tns:TMC_Unsigned_8" />
+			<element name="PWM_Freq" type="tns:TMC_Unsigned_2" />
+			<element name="PWM_Auto_Scale" type="boolean" />
+			<element name="PWM_Auto_Grad" type="boolean" />
+			<element name="Freewheel" type="tns:TMC2240_Freewheel" />
+			<element name="PWM_Meas_SD_Enable" type="boolean" />
+			<element name="PWM_Dis_Reg_Stst" type="boolean" />
+			<element name="PWM_Reg" type="tns:TMC_Unsigned_4" />
+			<element name="PWM_Lim" type="tns:TMC_Unsigned_4" />
+		</sequence>
+	</complexType>
+
+
+	<complexType name="Stepper_Parameters">
+		<sequence>
+			<element name="Stepper_1" type="tns:Individual_Stepper_Parameters_TMC2240_UART" tns:localise="Stepper_1 (1)" />
+			<element name="Stepper_2" type="tns:Individual_Stepper_Parameters_TMC2240_UART" tns:localise="Stepper_2 (2)" />
+		</sequence>
+	</complexType>
+
+
+	<simpleType name="TMC2240_Microstep_Resolution">
+		<restriction base="string">
+			<enumeration value="MS_256" />
+			<enumeration value="MS_128" />
+			<enumeration value="MS_64" />
+			<enumeration value="MS_32" />
+			<enumeration value="MS_16" />
+			<enumeration value="MS_2" />
+			<enumeration value="MS_Full_Steps" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC2240_Freewheel">
+		<restriction base="string">
+			<enumeration value="Normal" />
+			<enumeration value="Freewheel" />
+			<enumeration value="Short_Via_LS" />
+			<enumeration value="Short_Via_HS" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="Current" tns:unit="A">
+		<restriction base="double">
+			<minInclusive value="0.125" />
+			<maxInclusive value="3" />
+		</restriction>
+	</simpleType>
+
+	<complexType name="Position">
+		<sequence>
+			<element name="X_Axis" type="tns:Length" />
+			<element name="Y_Axis" type="tns:Length" />
+			<element name="Z_Axis" type="tns:Length" />
+			<element name="E_Axis" type="tns:Length" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Axial_Velocities">
+		<sequence>
+			<element name="X_Axis" type="tns:Velocity" />
+			<element name="Y_Axis" type="tns:Velocity" />
+			<element name="Z_Axis" type="tns:Velocity" />
+			<element name="E_Axis" type="tns:Velocity" />
+		</sequence>
+	</complexType>
+
+	<simpleType name="Velocity" tns:unit="mm/s">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Acceleration" tns:unit="mm/s²">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Jerk" tns:unit="mm/s³">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Snap" tns:unit="mm/s⁴">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Crackle" tns:unit="mm/s⁵">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Time" tns:unit="s">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Temperature" tns:unit="°C">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Dimensionless">
+		<restriction base="double" />
+	</simpleType>
+
+	<complexType name="Position_Scale">
+		<sequence>
+			<element name="X_Axis" type="tns:Dimensionless" />
+			<element name="Y_Axis" type="tns:Dimensionless" />
+			<element name="Z_Axis" type="tns:Dimensionless" />
+			<element name="E_Axis" type="tns:Dimensionless" />
+		</sequence>
+	</complexType>
+
+	<simpleType name="Cartesian_Motor_Axis">
+		<restriction base="string">
+			<enumeration value="X_Axis" />
+			<enumeration value="Y_Axis" />
+			<enumeration value="Z_Axis" />
+			<enumeration value="E_Axis" />
+			<enumeration value="Unused" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="Core_XY_Motor_Axis">
+		<restriction base="string">
+			<enumeration value="X_Axis" />
+			<enumeration value="Y_Axis" />
+			<enumeration value="Z_Axis" />
+			<enumeration value="E_Axis" />
+			<enumeration value="Unused" />
+		</restriction>
+	</simpleType>
+
+	<complexType name="Cartesian_Motor_Axis_Assignments">
+		<sequence>
+			<element name="Stepper_1" type="tns:Cartesian_Motor_Axis" tns:localise="Stepper_1 (1)" />
+			<element name="Stepper_2" type="tns:Cartesian_Motor_Axis" tns:localise="Stepper_2 (2)" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Core_XY_Motor_Axis_Assignments">
+		<sequence>
+			<element name="Stepper_1" type="tns:Core_XY_Motor_Axis" tns:localise="Stepper_1 (1)" />
+			<element name="Stepper_2" type="tns:Core_XY_Motor_Axis" tns:localise="Stepper_2 (2)" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Kinematic_Parameters">
+		<sequence>
+			<element name="Lower_Pos_Limit" type="tns:Position" />
+			<element name="Upper_Pos_Limit" type="tns:Position" />
+			<element name="Ignore_E_In_XYZE" type="boolean" />
+			<element name="Shift_Blended_Corners" type="boolean" />
+			<element name="Tangential_Velocity_Max" type="tns:Velocity" />
+			<element name="Axial_Velocity_Maxes" type="tns:Axial_Velocities" />
+			<element name="Pressure_Advance_Time" type="tns:Time" />
+			<element name="Acceleration_Max" type="tns:Acceleration" />
+			<element name="Jerk_Max" type="tns:Jerk" />
+			<element name="Snap_Max" type="tns:Snap" />
+			<element name="Crackle_Max" type="tns:Crackle" />
+			<element name="Chord_Error_Max" type="tns:Length" />
+			<element name="Axial_Scaler" type="tns:Position_Scale" />
+			<choice>
+				<element name="Core_XY" type="tns:Core_XY_Motor_Axis_Assignments" />
+				<element name="Cartesian" type="tns:Cartesian_Motor_Axis_Assignments" />
+			</choice>
+		</sequence>
+	</complexType>
+
+	<complexType name="Input_Switch_Parameters">
+		<sequence>
+			<element name="Enabled" type="boolean" />
+			<element name="Hit_On_High" type="boolean" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Input_Switches">
+		<sequence>
+			<element name="Input_Switch_1" type="tns:Input_Switch_Parameters" tns:localise="Input_Switch_1 (1)" />
+			<element name="Input_Switch_2" type="tns:Input_Switch_Parameters" tns:localise="Input_Switch_2 (2)" />
+		</sequence>
+	</complexType>
+
+	<simpleType name="Input_Switch_Name">
+		<restriction base="string">
+			<enumeration value="Input_Switch_1" tns:localise="Input_Switch_1 (1)" />
+			<enumeration value="Input_Switch_2" tns:localise="Input_Switch_2 (2)" />
+		</restriction>
+	</simpleType>
+
+	<complexType name="Double_Tap_Homing_Parameters">
+		<sequence>
+			<element name="Switch" type="tns:Input_Switch_Name" />
+			<element name="First_Move_Distance" type="tns:Length" />
+			<element name="Back_Off_Move_Distance" type="tns:Length" />
+			<element name="Second_Move_Distance" type="tns:Length" />
+			<element name="Switch_Position" type="tns:Length" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Set_To_Value_Homing_Parameters">
+		<sequence>
+			<element name="Value" type="tns:Length" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Axis_Homing_Parameters">
+		<sequence>
+			<choice>
+				<element name="Double_Tap_Kind" type="tns:Double_Tap_Homing_Parameters" />
+				<element name="Set_To_Value_Kind" type="tns:Set_To_Value_Homing_Parameters" />
+			</choice>
+		</sequence>
+	</complexType>
+
+	<complexType name="Homing_Parameters">
+		<sequence>
+			<element name="X_Axis" type="tns:Axis_Homing_Parameters" />
+			<element name="Y_Axis" type="tns:Axis_Homing_Parameters" />
+			<element name="Z_Axis" type="tns:Axis_Homing_Parameters" />
+			<element name="E_Axis" type="tns:Axis_Homing_Parameters" />
+		</sequence>
+	</complexType>
+
+	<simpleType name="Thermistor_Name">
+		<restriction base="string">
+			<enumeration value="Thermistor_1" tns:localise="Thermistor_1 (1)" />
+			<enumeration value="Thermistor_2" tns:localise="Thermistor_2 (2)" />
+		</restriction>
+	</simpleType>
+
+	<complexType name="Disabled_Heater_Parameters">
+		<sequence />
+
+	</complexType>
+
+	<complexType name="PID_Heater_Parameters">
+		<sequence>
+			<element name="Proportional_Scale" type="tns:Dimensionless" />
+			<element name="Integral_Scale" type="tns:Dimensionless" />
+			<element name="Derivative_Scale" type="tns:Dimensionless" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Bang_Bang_Heater_Parameters">
+		<sequence>
+			<element name="Bang_Bang_Hysteresis" type="tns:Temperature" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Individual_Heater_Parameters">
+		<sequence>
+			<element name="Thermistor" type="tns:Thermistor_Name" />
+			<element name="Check_Max_Cumulative_Error" type="tns:Temperature" />
+			<element name="Check_Gain_Time" type="tns:Time" />
+			<element name="Check_Minimum_Gain" type="tns:Temperature" />
+			<element name="Check_Hysteresis" type="tns:Temperature" />
+			<choice>
+				<element name="Disabled_Kind" type="tns:Disabled_Heater_Parameters" />
+				<element name="PID_Kind" type="tns:PID_Heater_Parameters" />
+				<element name="Bang_Bang_Kind" type="tns:Bang_Bang_Heater_Parameters" />
+			</choice>
+		</sequence>
+	</complexType>
+
+	<complexType name="Heater_Parameters">
+		<sequence>
+			<element name="Heater_1" tns:localise="Heater_1 (1)" type="tns:Individual_Heater_Parameters" />
+			<element name="Heater_2" tns:localise="Heater_2 (2)" type="tns:Individual_Heater_Parameters" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Disabled_Fan_Parameters">
+		<sequence />
+	</complexType>
+
+	<complexType name="Dynamic_PWM_Fan_Parameters">
+		<sequence>
+			<element name="Proportional_Scale" type="tns:Dimensionless" />
+			<element name="Integral_Scale" type="tns:Dimensionless" />
+			<element name="Derivative_Scale" type="tns:Dimensionless" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Always_On_Fan_Parameters">
+		<sequence>
+			<element name="Bang_Bang_Hysteresis" type="tns:Temperature" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Individual_Fan_Parameters">
+		<sequence>
+			<choice>
+				<element name="Disabled_Kind" type="tns:Disabled_Fan_Parameters" />
+				<element name="Dynamic_PWM_Kind" type="tns:Dynamic_PWM_Fan_Parameters" />
+				<element name="Always_On_Kind" type="tns:Always_On_Fan_Parameters" />
+			</choice>
+		</sequence>
+	</complexType>
+
+	<complexType name="Fan_Parameters">
+		<sequence>
+			<element name="Fan_1" tns:localise="Fan_1 (1)" type="tns:Individual_Fan_Parameters" />
+			<element name="Fan_2" tns:localise="Fan_2 (2)" type="tns:Individual_Fan_Parameters" />
+		</sequence>
+	</complexType>
+
+	<simpleType name="Heater_Name">
+		<restriction base="string">
+			<enumeration value="Heater_1" tns:localise="Heater_1 (1)" />
+			<enumeration value="Heater_2" tns:localise="Heater_2 (2)" />
+		</restriction>
+	</simpleType>
+
+	<complexType name="Disabled_G_Code_Heater_Parameters">
+		<sequence />
+	</complexType>
+
+	<complexType name="Enabled_G_Code_Heater_Parameters">
+		<sequence>
+			<element name="Assigned_Heater" type="tns:Heater_Name" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Individual_G_Code_Heater_Parameters">
+		<sequence>
+			<choice>
+				<element name="Disabled_Kind" type="tns:Disabled_G_Code_Heater_Parameters" />
+				<element name="Enabled_Kind" type="tns:Enabled_G_Code_Heater_Parameters" />
+			</choice>
+		</sequence>
+	</complexType>
+
+	<complexType name="G_Code_Assignment_Parameters">
+		<sequence>
+			<element name="Bed_Heater" type="tns:Individual_G_Code_Heater_Parameters" />
+			<element name="Hotend_Heater" type="tns:Individual_G_Code_Heater_Parameters" />
+			<element name="Chamber_Heater" type="tns:Individual_G_Code_Heater_Parameters" />
+		</sequence>
+	</complexType>
+
+	<complexType name="Prunt_Parameters">
+		<sequence>
+			<element name="Enabled" type="boolean" />
+		</sequence>
+	</complexType>
+
+	<simpleType name="Schema_Version">
+		<restriction base="int">
+			<enumeration value="1" />
+		</restriction>
+	</simpleType>
+
+	<complexType name="Config">
+		<sequence>
+			<element name="Schema_Version" type="tns:Schema_Version" />
+			<element name="Prunt_Parameters" type="tns:Prunt_Parameters" />
+			<element name="Stepper_Parameters" type="tns:Stepper_Parameters" />
+			<element name="Kinematic_Parameters" type="tns:Kinematic_Parameters" />
+			<element name="Input_Switch_Parameters" type="tns:Input_Switch_Parameters" />
+			<element name="Homing_Parameters" type="tns:Homing_Parameters" />
+			<element name="Heater_Parameters" type="tns:Heater_Parameters" />
+			<element name="Fan_Parameters" type="tns:Fan_Parameters" />
+			<element name="G_Code_Assignment_Parameters" type="tns:G_Code_Assignment_Parameters" />
+		</sequence>
+	</complexType>
+	
+    <element name="Config" type="tns:Config" />
+</schema>

@@ -1,0 +1,40 @@
+openapi: 3.0.0
+info:
+  title: Prunt
+  version: '1.0'
+paths:
+  /config/config:
+    get:
+      summary: Get Config Data
+      responses:
+        '200':
+          description: OK
+          content:
+            application/xml:
+              schema:
+                type: object
+                properties: {}
+      operationId: get-config-config
+  /config/schema:
+    get:
+      summary: Get Config Schema
+      responses:
+        '200':
+          description: OK
+          content:
+            application/xml:
+              schema:
+                type: object
+                properties: {}
+              examples: {}
+      operationId: get-config-schema
+components:
+  schemas: {}
+  securitySchemes:
+    apiKey:
+      name: X-API-Key
+      type: apiKey
+      in: header
+  responses: {}
+security:
+  - apiKey: []
