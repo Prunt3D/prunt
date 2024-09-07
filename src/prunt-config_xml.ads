@@ -20,14 +20,14 @@
 -----------------------------------------------------------------------------
 
 with Prunt.Motion_Planner;
-with TOML;
 with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
+with Schema.Validators;
+with Schema.Dom_Readers;
+with DOM.Core;
 with Prunt.Thermistors;     use Prunt.Thermistors;
 with Prunt.Heaters;         use Prunt.Heaters;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
-with DOM.Readers;
-with DOM.Core;
 
 generic
    type Stepper_Name is (<>);
@@ -176,8 +176,12 @@ package Prunt.Config_XML is
       Chamber_Heater : G_Code_Heater_Assignment;
    end record;
 
+   function Build_Schema return Unbounded_String;
+   function Build_Schema return Schema.Validators.XML_Grammar;
+
    protected Config_File is
-      procedure Replace (Data : Unbounded_String);
+      function Read_File return Unbounded_String;
+      procedure Replace_File (Data : Unbounded_String);
       procedure Read (Data : out Prunt_Parameters);
       procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
         Post => Data.Kind = Stepper_Kinds (Stepper);
@@ -191,12 +195,13 @@ package Prunt.Config_XML is
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
       procedure Read (Data : out G_Code_Assignment_Parameters);
    private
-      procedure Maybe_Read_File;
-      function Get_Element_By_Path (Path : DOM.Core.DOM_String) return DOM_String;
-      XML_Reader : DOM.Readers.Tree_Reader;
-      File_Read  : Boolean := False;
-      --  File_Read should never be changed back to False after the initial read as we do not want to allow parameters
-      --  to change while Prunt is already running.
+      procedure Maybe_Read_Tree;
+      function Get_Node (Path : DOM.Core.DOM_String) return DOM.Core.DOM_String;
+      function Node_Exists (Path : DOM.Core.DOM_String) return Boolean;
+      procedure Generate_Initial_File;
+      XML_Reader : Schema.Dom_Readers.Tree_Reader;
+      Config_Schema_String  : Unbounded_String              := Build_Schema;
+      Config_Schema_Grammar : Schema.Validators.XML_Grammar := Build_Schema;
    end Config_File;
 
 end Prunt.Config_XML;

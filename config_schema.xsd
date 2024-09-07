@@ -4,6 +4,52 @@
 	elementFormDefault="qualified" xmlns="http://www.w3.org/2001/XMLSchema"
 	xmlns:tns="http://xml.prunt3d.com/Prunt_Settings_Schema_Is_Unique_To_Each_Board_And_May_Change_Between_Versions">
 
+	<simpleType name="Input_Switch_Name">
+		<restriction base="string">
+			<enumeration value="Input_Switch_1" tns:localise="Input_Switch_1 (1)" />
+			<enumeration value="Input_Switch_2" tns:localise="Input_Switch_2 (2)" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="Heater_Name">
+		<restriction base="string">
+			<enumeration value="Heater_1" tns:localise="Heater_1 (1)" />
+			<enumeration value="Heater_2" tns:localise="Heater_2 (2)" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="Velocity" tns:unit="mm/s">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Acceleration" tns:unit="mm/s²">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Jerk" tns:unit="mm/s³">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Snap" tns:unit="mm/s⁴">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Crackle" tns:unit="mm/s⁵">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Time" tns:unit="s">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Temperature" tns:unit="°C">
+		<restriction base="double" />
+	</simpleType>
+
+	<simpleType name="Dimensionless">
+		<restriction base="double" />
+	</simpleType>
+
 	<simpleType name="Length" tns:unit="mm">
 		<restriction base="double" />
 	</simpleType>
@@ -57,8 +103,6 @@
 		</restriction>
 	</simpleType>
 
-
-
 	<simpleType name="TMC2240_Slope_Control">
 		<restriction base="string">
 			<enumeration value="Slope_100V_Per_us" />
@@ -68,12 +112,39 @@
 		</restriction>
 	</simpleType>
 
+	<simpleType name="TMC2240_Microstep_Resolution">
+		<restriction base="string">
+			<enumeration value="MS_256" />
+			<enumeration value="MS_128" />
+			<enumeration value="MS_64" />
+			<enumeration value="MS_32" />
+			<enumeration value="MS_16" />
+			<enumeration value="MS_2" />
+			<enumeration value="MS_Full_Steps" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC2240_Freewheel">
+		<restriction base="string">
+			<enumeration value="Normal" />
+			<enumeration value="Freewheel" />
+			<enumeration value="Short_Via_LS" />
+			<enumeration value="Short_Via_HS" />
+		</restriction>
+	</simpleType>
+
+	<simpleType name="TMC2240_Current" tns:unit="A">
+		<restriction base="double">
+			<minInclusive value="0.125" />
+			<maxInclusive value="3" />
+		</restriction>
+	</simpleType>
 
 	<complexType name="Individual_Stepper_Parameters_TMC2240_UART">
 		<sequence>
 			<element name="Enabled" type="boolean" />
 			<element name="Mm_Per_Step" type="tns:Length" />
-			<element name="Output_Current" type="tns:Current" />
+			<element name="Output_Current" type="tns:TMC2240_Current" />
 			<element name="Slope_Control" type="tns:TMC2240_Slope_Control" />
 			<element name="I_Hold" type="tns:TMC_Unsigned_5" />
 			<element name="I_Run" type="tns:TMC_Unsigned_5" />
@@ -114,35 +185,6 @@
 		</sequence>
 	</complexType>
 
-
-	<simpleType name="TMC2240_Microstep_Resolution">
-		<restriction base="string">
-			<enumeration value="MS_256" />
-			<enumeration value="MS_128" />
-			<enumeration value="MS_64" />
-			<enumeration value="MS_32" />
-			<enumeration value="MS_16" />
-			<enumeration value="MS_2" />
-			<enumeration value="MS_Full_Steps" />
-		</restriction>
-	</simpleType>
-
-	<simpleType name="TMC2240_Freewheel">
-		<restriction base="string">
-			<enumeration value="Normal" />
-			<enumeration value="Freewheel" />
-			<enumeration value="Short_Via_LS" />
-			<enumeration value="Short_Via_HS" />
-		</restriction>
-	</simpleType>
-
-	<simpleType name="Current" tns:unit="A">
-		<restriction base="double">
-			<minInclusive value="0.125" />
-			<maxInclusive value="3" />
-		</restriction>
-	</simpleType>
-
 	<complexType name="Position">
 		<sequence>
 			<element name="X_Axis" type="tns:Length" />
@@ -160,38 +202,6 @@
 			<element name="E_Axis" type="tns:Velocity" />
 		</sequence>
 	</complexType>
-
-	<simpleType name="Velocity" tns:unit="mm/s">
-		<restriction base="double" />
-	</simpleType>
-
-	<simpleType name="Acceleration" tns:unit="mm/s²">
-		<restriction base="double" />
-	</simpleType>
-
-	<simpleType name="Jerk" tns:unit="mm/s³">
-		<restriction base="double" />
-	</simpleType>
-
-	<simpleType name="Snap" tns:unit="mm/s⁴">
-		<restriction base="double" />
-	</simpleType>
-
-	<simpleType name="Crackle" tns:unit="mm/s⁵">
-		<restriction base="double" />
-	</simpleType>
-
-	<simpleType name="Time" tns:unit="s">
-		<restriction base="double" />
-	</simpleType>
-
-	<simpleType name="Temperature" tns:unit="°C">
-		<restriction base="double" />
-	</simpleType>
-
-	<simpleType name="Dimensionless">
-		<restriction base="double" />
-	</simpleType>
 
 	<complexType name="Position_Scale">
 		<sequence>
@@ -272,13 +282,6 @@
 		</sequence>
 	</complexType>
 
-	<simpleType name="Input_Switch_Name">
-		<restriction base="string">
-			<enumeration value="Input_Switch_1" tns:localise="Input_Switch_1 (1)" />
-			<enumeration value="Input_Switch_2" tns:localise="Input_Switch_2 (2)" />
-		</restriction>
-	</simpleType>
-
 	<complexType name="Double_Tap_Homing_Parameters">
 		<sequence>
 			<element name="Switch" type="tns:Input_Switch_Name" />
@@ -322,7 +325,6 @@
 
 	<complexType name="Disabled_Heater_Parameters">
 		<sequence />
-
 	</complexType>
 
 	<complexType name="PID_Heater_Parameters">
@@ -396,13 +398,6 @@
 		</sequence>
 	</complexType>
 
-	<simpleType name="Heater_Name">
-		<restriction base="string">
-			<enumeration value="Heater_1" tns:localise="Heater_1 (1)" />
-			<enumeration value="Heater_2" tns:localise="Heater_2 (2)" />
-		</restriction>
-	</simpleType>
-
 	<complexType name="Disabled_G_Code_Heater_Parameters">
 		<sequence />
 	</complexType>
@@ -445,14 +440,14 @@
 	<complexType name="Config">
 		<sequence>
 			<element name="Schema_Version" type="tns:Schema_Version" />
-			<element name="Prunt_Parameters" type="tns:Prunt_Parameters" />
-			<element name="Stepper_Parameters" type="tns:Stepper_Parameters" />
-			<element name="Kinematic_Parameters" type="tns:Kinematic_Parameters" />
-			<element name="Input_Switch_Parameters" type="tns:Input_Switch_Parameters" />
-			<element name="Homing_Parameters" type="tns:Homing_Parameters" />
-			<element name="Heater_Parameters" type="tns:Heater_Parameters" />
-			<element name="Fan_Parameters" type="tns:Fan_Parameters" />
-			<element name="G_Code_Assignment_Parameters" type="tns:G_Code_Assignment_Parameters" />
+			<element name="Prunt" type="tns:Prunt_Parameters" />
+			<element name="Steppers" type="tns:Stepper_Parameters" />
+			<element name="Kinematics" type="tns:Kinematic_Parameters" />
+			<element name="Input_Switches" type="tns:Input_Switch_Parameters" />
+			<element name="Homings" type="tns:Homing_Parameters" />
+			<element name="Heaters" type="tns:Heater_Parameters" />
+			<element name="Fans" type="tns:Fan_Parameters" />
+			<element name="G_Code_Assignments" type="tns:G_Code_Assignment_Parameters" />
 		</sequence>
 	</complexType>
 	
