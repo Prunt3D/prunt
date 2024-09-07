@@ -366,15 +366,25 @@ package body Prunt.Config_XML is
       Append (Schema, "");
       Append (Schema, "   <simpleType name=""Input_Switch_Name"">");
       Append (Schema, "      <restriction base=""string"">");
-      Append (Schema, "         <enumeration value=""Input_Switch_1"" tns:localise=""Input_Switch_1 (1)"" />");
-      Append (Schema, "         <enumeration value=""Input_Switch_2"" tns:localise=""Input_Switch_2 (2)"" />");
+      for I in Input_Switch_Name loop
+         Append
+           (Schema,
+            "         <enumeration value=""" & Ada.Strings.Fixed.Trim (I'Image, Ada.Strings.Both) &
+            """ tns:localise=""" & Ada.Strings.Fixed.Trim (I'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Input_Switch_Name'Pos (I)'Image, Ada.Strings.Both) & ")"" />");
+      end loop;
       Append (Schema, "      </restriction>");
       Append (Schema, "   </simpleType>");
       Append (Schema, "");
       Append (Schema, "   <simpleType name=""Heater_Name"">");
       Append (Schema, "      <restriction base=""string"">");
-      Append (Schema, "         <enumeration value=""Heater_1"" tns:localise=""Heater_1 (1)"" />");
-      Append (Schema, "         <enumeration value=""Heater_2"" tns:localise=""Heater_2 (2)"" />");
+      for H in Heater_Name loop
+         Append
+           (Schema,
+            "         <enumeration value=""" & Ada.Strings.Fixed.Trim (H'Image, Ada.Strings.Both) &
+            """ tns:localise=""" & Ada.Strings.Fixed.Trim (H'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Heater_Name'Pos (H)'Image, Ada.Strings.Both) & ")"" />");
+      end loop;
       Append (Schema, "      </restriction>");
       Append (Schema, "   </simpleType>");
       Append (Schema, "");
@@ -540,12 +550,17 @@ package body Prunt.Config_XML is
       Append (Schema, "");
       Append (Schema, "   <complexType name=""Stepper_Parameters"">");
       Append (Schema, "      <sequence>");
-      Append
-        (Schema,
-         "         <element name=""Stepper_1"" type=""tns:Individual_Stepper_Parameters_TMC2240_UART"" tns:localise=""Stepper_1 (1)"" />");
-      Append
-        (Schema,
-         "         <element name=""Stepper_2"" type=""tns:Individual_Stepper_Parameters_TMC2240_UART"" tns:localise=""Stepper_2 (2)"" />");
+      for S in Stepper_Name loop
+         if Stepper_Kinds (S) /= TMC2240_UART_Kind then
+            raise Constraint_Error with "Not supported yet.";
+         end if;
+         Append
+           (Schema,
+            "         <element name=""" & Ada.Strings.Fixed.Trim (S'Image, Ada.Strings.Both) &
+            """ type=""tns:Individual_Stepper_Parameters_TMC2240_UART"" tns:localise=""" &
+            Ada.Strings.Fixed.Trim (S'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Stepper_Name'Pos (S)'Image, Ada.Strings.Both) & ")"" />");
+      end loop;
       Append (Schema, "      </sequence>");
       Append (Schema, "   </complexType>");
       Append (Schema, "");
@@ -598,23 +613,32 @@ package body Prunt.Config_XML is
       Append (Schema, "");
       Append (Schema, "   <complexType name=""Cartesian_Motor_Axis_Assignments"">");
       Append (Schema, "      <sequence>");
-      Append
-        (Schema,
-         "         <element name=""Stepper_1"" type=""tns:Cartesian_Motor_Axis"" tns:localise=""Stepper_1 (1)"" />");
-      Append
-        (Schema,
-         "         <element name=""Stepper_2"" type=""tns:Cartesian_Motor_Axis"" tns:localise=""Stepper_2 (2)"" />");
+      for S in Stepper_Name loop
+         if Stepper_Kinds (S) /= TMC2240_UART_Kind then
+            raise Constraint_Error with "Not supported yet.";
+         end if;
+         Append
+           (Schema,
+            "         <element name=""" & Ada.Strings.Fixed.Trim (S'Image, Ada.Strings.Both) &
+            """ type=""tns:Cartesian_Motor_Axis"" tns:localise=""" &
+            Ada.Strings.Fixed.Trim (S'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Stepper_Name'Pos (S)'Image, Ada.Strings.Both) & ")"" />");
+      end loop;
       Append (Schema, "      </sequence>");
       Append (Schema, "   </complexType>");
       Append (Schema, "");
       Append (Schema, "   <complexType name=""Core_XY_Motor_Axis_Assignments"">");
       Append (Schema, "      <sequence>");
-      Append
-        (Schema,
-         "         <element name=""Stepper_1"" type=""tns:Core_XY_Motor_Axis"" tns:localise=""Stepper_1 (1)"" />");
-      Append
-        (Schema,
-         "         <element name=""Stepper_2"" type=""tns:Core_XY_Motor_Axis"" tns:localise=""Stepper_2 (2)"" />");
+      for S in Stepper_Name loop
+         if Stepper_Kinds (S) /= TMC2240_UART_Kind then
+            raise Constraint_Error with "Not supported yet.";
+         end if;
+         Append
+           (Schema,
+            "         <element name=""" & Ada.Strings.Fixed.Trim (S'Image, Ada.Strings.Both) &
+            """ type=""tns:Core_XY_Motor_Axis"" tns:localise=""" & Ada.Strings.Fixed.Trim (S'Image, Ada.Strings.Both) &
+            " (" & Ada.Strings.Fixed.Trim (Stepper_Name'Pos (S)'Image, Ada.Strings.Both) & ")"" />");
+      end loop;
       Append (Schema, "      </sequence>");
       Append (Schema, "   </complexType>");
       Append (Schema, "");
@@ -649,12 +673,14 @@ package body Prunt.Config_XML is
       Append (Schema, "");
       Append (Schema, "   <complexType name=""Input_Switches"">");
       Append (Schema, "      <sequence>");
-      Append
-        (Schema,
-         "         <element name=""Input_Switch_1"" type=""tns:Input_Switch_Parameters"" tns:localise=""Input_Switch_1 (1)"" />");
-      Append
-        (Schema,
-         "         <element name=""Input_Switch_2"" type=""tns:Input_Switch_Parameters"" tns:localise=""Input_Switch_2 (2)"" />");
+      for I in Input_Switch_Name loop
+         Append
+           (Schema,
+            "         <element name=""" & Ada.Strings.Fixed.Trim (I'Image, Ada.Strings.Both) &
+            """ type=""tns:Input_Switch_Parameters"" tns:localise=""" &
+            Ada.Strings.Fixed.Trim (I'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Input_Switch_Name'Pos (I)'Image, Ada.Strings.Both) & ")"" />");
+      end loop;
       Append (Schema, "      </sequence>");
       Append (Schema, "   </complexType>");
       Append (Schema, "");
@@ -695,8 +721,13 @@ package body Prunt.Config_XML is
       Append (Schema, "");
       Append (Schema, "   <simpleType name=""Thermistor_Name"">");
       Append (Schema, "      <restriction base=""string"">");
-      Append (Schema, "         <enumeration value=""Thermistor_1"" tns:localise=""Thermistor_1 (1)"" />");
-      Append (Schema, "         <enumeration value=""Thermistor_2"" tns:localise=""Thermistor_2 (2)"" />");
+      for T in Thermistor_Name loop
+         Append
+           (Schema,
+            "         <enumeration value=""" & Ada.Strings.Fixed.Trim (T'Image, Ada.Strings.Both) &
+            """ tns:localise=""" & Ada.Strings.Fixed.Trim (T'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Thermistor_Name'Pos (T)'Image, Ada.Strings.Both) & ")"" />");
+      end loop;
       Append (Schema, "      </restriction>");
       Append (Schema, "   </simpleType>");
       Append (Schema, "");
@@ -735,12 +766,14 @@ package body Prunt.Config_XML is
       Append (Schema, "");
       Append (Schema, "   <complexType name=""Heater_Parameters"">");
       Append (Schema, "      <sequence>");
-      Append
-        (Schema,
-         "         <element name=""Heater_1"" tns:localise=""Heater_1 (1)"" type=""tns:Individual_Heater_Parameters"" />");
-      Append
-        (Schema,
-         "         <element name=""Heater_2"" tns:localise=""Heater_2 (2)"" type=""tns:Individual_Heater_Parameters"" />");
+      for H in Heater_Name loop
+         Append
+           (Schema,
+            "         <element name=""" & Ada.Strings.Fixed.Trim (H'Image, Ada.Strings.Both) & """ tns:localise=""" &
+            Ada.Strings.Fixed.Trim (H'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Heater_Name'Pos (H)'Image, Ada.Strings.Both) &
+            ")"" type=""tns:Individual_Heater_Parameters"" />");
+      end loop;
       Append (Schema, "      </sequence>");
       Append (Schema, "   </complexType>");
       Append (Schema, "");
@@ -774,12 +807,14 @@ package body Prunt.Config_XML is
       Append (Schema, "");
       Append (Schema, "   <complexType name=""Fan_Parameters"">");
       Append (Schema, "      <sequence>");
-      Append
-        (Schema,
-         "         <element name=""Fan_1"" tns:localise=""Fan_1 (1)"" type=""tns:Individual_Fan_Parameters"" />");
-      Append
-        (Schema,
-         "         <element name=""Fan_2"" tns:localise=""Fan_2 (2)"" type=""tns:Individual_Fan_Parameters"" />");
+      for F in Fan_Name loop
+         Append
+           (Schema,
+            "         <element name=""" & Ada.Strings.Fixed.Trim (F'Image, Ada.Strings.Both) & """ tns:localise=""" &
+            Ada.Strings.Fixed.Trim (F'Image, Ada.Strings.Both) & " (" &
+            Ada.Strings.Fixed.Trim (Fan_Name'Pos (F)'Image, Ada.Strings.Both) &
+            ")"" type=""tns:Individual_Fan_Parameters"" />");
+      end loop;
       Append (Schema, "      </sequence>");
       Append (Schema, "   </complexType>");
       Append (Schema, "");
