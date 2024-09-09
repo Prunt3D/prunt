@@ -21,6 +21,7 @@
 
 with Prunt.Motion_Planner;
 with Prunt.Config;
+with Prunt.Config_XML;
 with Prunt.Motion_Planner.Planner;
 with Prunt.GUI.GUI;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
@@ -221,6 +222,16 @@ private
       Fan_Name           => Fan_Name,
       Input_Switch_Name  => Input_Switch_Name,
       Config_Path        => Config_Path);
+
+   package My_Config_New is new Config_XML
+     (Stepper_Name       => Stepper_Name,
+      Stepper_Kinds_Type => Stepper_Kinds_Type,
+      Stepper_Kinds      => [for I in Stepper_Name => Stepper_Hardware (I).Kind],
+      Heater_Name        => Heater_Name,
+      Thermistor_Name    => Thermistor_Name,
+      Fan_Name           => Fan_Name,
+      Input_Switch_Name  => Input_Switch_Name,
+      Config_Path        => "test.xml");
 
    procedure Finished_Block (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Length);
 

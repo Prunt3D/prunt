@@ -133,11 +133,6 @@ package Prunt.Config_XML is
       end case;
    end record;
 
-   type Extruder_Parameters is record
-      Nozzle_Diameter   : Length := 0.4 * mm;
-      Filament_Diameter : Length := 1.75 * mm;
-   end record;
-
    --  Thermistor_Parameters in Prunt.Thermistors.
 
    type Heater_Full_Parameters is record
@@ -180,6 +175,7 @@ package Prunt.Config_XML is
    function Build_Schema return Schema.Validators.XML_Grammar;
 
    protected Config_File is
+      function Get_Schema return Unbounded_String;
       function Read_File return Unbounded_String;
       procedure Replace_File (Data : Unbounded_String);
       procedure Read (Data : out Prunt_Parameters);
@@ -188,7 +184,6 @@ package Prunt.Config_XML is
       procedure Read (Data : out Kinematics_Parameters);
       procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
       procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
-      procedure Read (Data : out Extruder_Parameters);
       procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
       procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) with
         Post => Data.Params.Kind not in (PID_Autotune_Kind);

@@ -142,7 +142,7 @@ package body Prunt.Controller is
       accept Start;
       My_GUI.Run;
       accept Finish;
-   end;
+   end GUI_Runner;
 
    procedure Run is
       Prunt_Params : My_Config.Prunt_Parameters;
@@ -157,6 +157,13 @@ package body Prunt.Controller is
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
          GUI_Runner.Start;
+
+         declare
+            Test : My_Config_New.Stepper_Parameters;
+         begin
+            My_Config_New.Config_File.Read (Test, Stepper_Name'First);
+            Ada.Text_IO.Put_Line (Test'Image);
+         end;
 
          My_Config.Config_File.Read (Prunt_Params);
 
@@ -339,7 +346,6 @@ package body Prunt.Controller is
       for T in Thermistor_Name loop
          My_Config.Config_File.Read (Thermistor_Params_Array (T), T);
       end loop;
-
 
       Setup (Heater_Thermistors, Thermistor_Params_Array);
    end Setup_Thermistors_And_Heater_Assignments;
