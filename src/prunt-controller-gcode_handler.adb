@@ -31,6 +31,8 @@ use type Prunt.TMC_Types.TMC2240.UART_CRC;
 
 package body Prunt.Controller.Gcode_Handler is
 
+   use type My_Config.Fan_Kind;
+
    package My_Gcode_Parser is new Prunt.Gcode_Parser
      (Stepper_Name      => Generic_Types.Stepper_Name,
       Heater_Name       => Generic_Types.Heater_Name,
@@ -64,6 +66,7 @@ package body Prunt.Controller.Gcode_Handler is
       Kinematics_Params        : My_Config.Kinematics_Parameters;
       Axial_Homing_Params      : array (Axis_Name) of My_Config.Homing_Parameters;
       Switchwise_Switch_Params : array (Generic_Types.Input_Switch_Name) of My_Config.Input_Switch_Parameters;
+      Fanwise_Fan_Params       : array (Generic_Types.Fan_Name) of My_Config.Fan_Parameters;
 
       G_Code_Assignment_Params : My_Config.G_Code_Assignment_Parameters;
 
@@ -377,6 +380,30 @@ package body Prunt.Controller.Gcode_Handler is
                      (Wait_For_Heater      => True,
                       Wait_For_Heater_Name => G_Code_Assignment_Params.Bed_Heater,
                       others               => <>)));
+            when Set_Fan_Speed_Kind =>
+               if Fanwise_Fan_Params (Command.Fan_To_Set).Kind /= My_Config.Dynamic_PWM_Kind then
+                  raise Command_Constraint_Error
+                    with "Fan " & Command.Fan_To_Set'Image & " is not set to dynamic PWM kind.";
+               else
+                  declare
+                     Speed : PWM_Scale := Command.Fan_Speed;
+                  begin
+                     Speed := PWM_Scale'Min (@, Fanwise_Fan_Params (Command.Fan_To_Set).Max_PWM);
+                     if Speed < Fanwise_Fan_Params (Command.Fan_To_Set).Disable_Below_PWM then
+                        Speed := 0.0;
+                     end if;
+                     if Fanwise_Fan_Params (Command.Fan_To_Set).Invert_Output then
+                        Speed := 1.0 - @;
+                     end if;
+                     Corner_Data.Fans (Command.Fan_To_Set) := Speed;
+                  end;
+               end if;
+               My_Planner.Enqueue
+                 ((Kind              => My_Planner.Move_Kind,
+                   Pos               => Command.Pos,
+                   Feedrate          => 0.000_1 * mm / s,
+                   Corner_Extra_Data => Corner_Data));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             when TMC_Dump_Kind =>
                for S in Generic_Types.Stepper_Name loop
                   if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
@@ -453,6 +480,10 @@ package body Prunt.Controller.Gcode_Handler is
 
          for I in Generic_Types.Input_Switch_Name loop
             My_Config.Config_File.Read (Switchwise_Switch_Params (I), I);
+         end loop;
+
+         for I in Generic_Types.Fan_Name loop
+            My_Config.Config_File.Read (Fanwise_Fan_Params (I), I);
          end loop;
 
          for I in Axis_Name loop
