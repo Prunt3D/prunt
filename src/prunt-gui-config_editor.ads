@@ -651,8 +651,6 @@ package Prunt.GUI.Config_Editor is
 
          Kind_Table : Cards_Table_Type;
 
-         Disabled_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
-
          Dynamic_PWM_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
          Disable_Below_PWM : Basic_Inputs.PWM_Scale_Rows.Parameter_Row;
          Max_PWM           : Basic_Inputs.PWM_Scale_Rows.Parameter_Row;

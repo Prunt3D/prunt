@@ -163,12 +163,10 @@ package Prunt.Config is
       end case;
    end record;
 
-   type Fan_Kind is (Disabled_Kind, Dynamic_PWM_Kind, Always_On_Kind);
+   type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
 
-   type Fan_Parameters (Kind : Fan_Kind := Disabled_Kind) is record
+   type Fan_Parameters (Kind : Fan_Kind := Always_On_Kind) is record
       case Kind is
-         when Disabled_Kind =>
-            null;
          when Dynamic_PWM_Kind =>
             Disable_Below_PWM : PWM_Scale := 0.5;
             Max_PWM           : PWM_Scale := 1.0;

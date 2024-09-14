@@ -1443,10 +1443,6 @@ package body Prunt.GUI.Config_Editor is
          View.Kind_Table.Style ("width", "100%");
          View.Kind_Table.Place_After (View.Widget_Table);
 
-         View.Disabled_Table.Create (View.Kind_Table);
-         View.Disabled_Table.Style ("border-collapse", "collapse");
-         View.Kind_Table.Add_Tab ("Disabled", View.Disabled_Table'Access);
-
          View.Dynamic_PWM_Table.Create (View.Kind_Table);
          View.Dynamic_PWM_Table.Style ("border-collapse", "collapse");
          View.Kind_Table.Add_Tab ("Dynamic PWM", View.Dynamic_PWM_Table'Access);
@@ -1487,8 +1483,6 @@ package body Prunt.GUI.Config_Editor is
          My_Config.Config_File.Read (Params, View.Fan);
 
          case Params.Kind is
-            when My_Config.Disabled_Kind =>
-               View.Kind_Table.Tabs.Select_Tab ("Disabled");
             when My_Config.Dynamic_PWM_Kind =>
                View.Kind_Table.Tabs.Select_Tab ("Dynamic PWM");
                View.Disable_Below_PWM.Set_Data (Params.Disable_Below_PWM);
@@ -1502,9 +1496,7 @@ package body Prunt.GUI.Config_Editor is
       overriding procedure Save_Data (View : in out Fan_Widget; Image : out UXString) is
          Params : My_Config.Fan_Parameters;
       begin
-         if View.Kind_Table.Cards.Current_Card = View.Disabled_Table'Unrestricted_Access then
-            Params := (Kind => My_Config.Disabled_Kind);
-         elsif View.Kind_Table.Cards.Current_Card = View.Dynamic_PWM_Table'Unrestricted_Access then
+         if View.Kind_Table.Cards.Current_Card = View.Dynamic_PWM_Table'Unrestricted_Access then
             Params                   := (Kind => My_Config.Dynamic_PWM_Kind, others => <>);
             Params.Disable_Below_PWM := View.Disable_Below_PWM.Get_Data;
             Params.Max_PWM           := View.Max_PWM.Get_Data;

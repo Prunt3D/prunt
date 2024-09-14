@@ -801,10 +801,6 @@ package body Prunt.Config is
          Table := TOML_Data.Get ("Fan").Get (Fan'Image);
 
          case Fan_Kind'Value (Table.Get ("Kind").As_String) is
-            when Disabled_Kind =>
-               Data := (Kind => Disabled_Kind);
-               Write (Data, Fan, Append_Only => True);
-               Table := TOML_Data.Get ("Fan").Get (Fan'Image);
             when Dynamic_PWM_Kind =>
                Data := (Kind => Dynamic_PWM_Kind, others => <>);
                Write (Data, Fan, Append_Only => True);
@@ -824,8 +820,6 @@ package body Prunt.Config is
       begin
          Table.Set ("Kind", To_TOML (Data.Kind));
          case Data.Kind is
-            when Disabled_Kind =>
-               null;
             when Dynamic_PWM_Kind =>
                Table.Set ("Disable_Below_PWM", To_TOML (Data.Disable_Below_PWM));
                Table.Set ("Max_PWM", To_TOML (Data.Max_PWM));

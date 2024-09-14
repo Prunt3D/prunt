@@ -711,8 +711,6 @@ package body Prunt.Controller is
       for F in Fan_Name loop
          My_Config.Config_File.Read (Fan_Params, F);
          case Fan_Params.Kind is
-            when My_Config.Disabled_Kind =>
-               Corner_Data.Fans (F) := 0.0;
             when My_Config.Dynamic_PWM_Kind =>
                Corner_Data.Fans (F) := 0.0;
             when My_Config.Always_On_Kind =>
