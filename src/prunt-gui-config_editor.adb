@@ -20,7 +20,6 @@
 -----------------------------------------------------------------------------
 
 with Ada.Exceptions;
-with Ada.Strings;
 with Gnoga.Gui.View;
 use type Gnoga.Gui.View.Pointer_To_View_Base_Class;
 with Prunt.Thermistors; use Prunt.Thermistors;

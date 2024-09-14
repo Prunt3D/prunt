@@ -30,9 +30,6 @@ with Gnoga.Gui.View.Console;
 with Gnoga.Gui.Element.Table;
 with Prunt.GUI.Cards_Table; use Prunt.GUI.Cards_Table;
 with UXStrings;             use UXStrings;
-with Ada.Exceptions;
-with Ada.Task_Identification;
-with Ada.Task_Termination;
 
 generic
    with package My_Config is new Prunt.Config (<>);

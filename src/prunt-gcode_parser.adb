@@ -68,10 +68,9 @@ package body Prunt.Gcode_Parser is
       I      : Positive         := Line'First;
 
       procedure Parse_Number (Param : Parameters_Index) is
-         In_Decimal_Part : Boolean  := False;
-         Is_Negative     : Boolean  := False;
-         Decimal_Digits  : Natural  := 0;
-         First_Char      : Positive := I;
+         In_Decimal_Part : Boolean           := False;
+         Is_Negative     : Boolean           := False;
+         First_Char      : constant Positive := I;
       begin
          loop
             exit when I = Line'Last + 1
@@ -143,7 +142,7 @@ package body Prunt.Gcode_Parser is
                exit when Line (I) = '"';
             end loop;
             Params (Param).End_Quote := I;
-            I := I + 1;
+            I                        := I + 1;
          else
             Parse_Number (Param);
          end if;
@@ -354,7 +353,7 @@ package body Prunt.Gcode_Parser is
                      Comm.Feedrate := Floatify_Or_Default ('F', Velocity'Last / 100.0 / (mm / min)) * mm / min;
                   else
                      Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
-                     Ctx.Feedrate := Comm.Feedrate;
+                     Ctx.Feedrate  := Comm.Feedrate;
                   end if;
 
                   Comm.Old_Pos := Ctx.Pos;
@@ -529,7 +528,7 @@ package body Prunt.Gcode_Parser is
                           with "Parameter 'P' must be integer between 0 and 999 or string in this command.";
                      when String_Kind =>
                         declare
-                           Name : String := String_Or_Error ('P');
+                           Name : constant String := String_Or_Error ('P');
                         begin
                            Comm.Fan_To_Set := Fan_Name'Value (Name);
                            if not Comm.Fan_To_Set'Valid then
@@ -576,7 +575,7 @@ package body Prunt.Gcode_Parser is
                begin
                   null;
                exception
-                  when E : Bad_Line =>
+                  when Bad_Line =>
                      raise Bad_Line
                        with "M205 requires P parameter with no value on Prunt to prevent conflicts with Marlin g-code.";
                end;

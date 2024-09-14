@@ -30,6 +30,9 @@ with Gnoga.Server.Connection;
 with Ada.Real_Time;
 with Prunt.Thermistors;
 with Prunt.Logger;
+with Ada.Exceptions;
+with Ada.Task_Identification;
+with Ada.Task_Termination;
 with Ada.Strings;       use Ada.Strings;
 with Ada.Strings.Fixed; use Ada.Strings.Fixed;
 
@@ -80,8 +83,8 @@ package body Prunt.GUI.GUI is
          or
             delay 0.5;
             declare
-               Pos  : Position := Get_Position;
-               Text : UXString := From_UTF_8 ("");
+               Pos  : constant Position := Get_Position;
+               Text : UXString          := From_UTF_8 ("");
                CR   : Character renames Ada.Characters.Latin_1.CR;
             begin
                Append (Text, From_UTF_8 ("Machine position (not accounting for G92 or retraction):" & CR));
@@ -140,9 +143,9 @@ package body Prunt.GUI.GUI is
                      "window.status_heater_power_chart.update();");
                end;
             exception
-               when E : Gnoga.Server.Connection.Connection_Error =>
+               when Gnoga.Server.Connection.Connection_Error =>
                   null; --  We ignore this error because it can be caused by a connection being closed during loading.
-               when E : others                                   =>
+               when E : others                               =>
                   Fatal_Exception_Occurrence_Holder.Set
                     (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
             end;
@@ -161,16 +164,19 @@ package body Prunt.GUI.GUI is
       procedure Free_Data is new Ada.Unchecked_Deallocation (App_Data, App_Access);
 
       procedure On_Pause_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+         pragma Unreferenced (Object);
       begin
          Pause_Stepgen;
       end On_Pause_Submit;
 
       procedure On_Resume_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+         pragma Unreferenced (Object);
       begin
          Resume_Stepgen;
       end On_Resume_Submit;
 
       procedure On_Manual_Gcode_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+         pragma Unreferenced (Object);
          Command   : constant UXString := App.Manual_Gcode_Form_Entry.Value;
          Succeeded : Boolean;
       begin
@@ -185,6 +191,7 @@ package body Prunt.GUI.GUI is
       end On_Manual_Gcode_Submit;
 
       procedure On_Auto_Gcode_File_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+         pragma Unreferenced (Object);
          Path      : constant UXString := App.Auto_Gcode_File_Form_Entry.Value;
          Succeeded : Boolean;
       begin
@@ -204,6 +211,7 @@ package body Prunt.GUI.GUI is
       end On_Auto_Gcode_File_Submit;
 
       procedure On_Auto_Gcode_Refresh_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+         pragma Unreferenced (Object);
          use Ada.Directories;
 
          procedure Fill_List (Directory_Entry : Directory_Entry_Type) is
@@ -257,9 +265,9 @@ package body Prunt.GUI.GUI is
                App.Status_Message_Text.Create (App.Status_Message_Row);
 
                declare
-                  JS_Names   : UXString := "";
-                  JS_Visible : UXString := "";
-                  JS_Colours : UXString :=
+                  JS_Names   : UXString          := "";
+                  JS_Visible : UXString          := "";
+                  JS_Colours : constant UXString :=
                     "d3.color('#e6194b'), d3.color('#3cb44b'), d3.color('#ffe119'), d3.color('#4363d8'), " &
                     "d3.color('#f58231'), d3.color('#911eb4'), d3.color('#46f0f0'), d3.color('#f032e6'), " &
                     "d3.color('#bcf60c'), d3.color('#fabebe'), d3.color('#008080'), d3.color('#e6beff'), " &
@@ -283,10 +291,11 @@ package body Prunt.GUI.GUI is
                   App.Status_Thermal_Chart_Div.Style ("width", "500px");
                   App.Status_Thermal_Chart_Div.Style ("height", "400px");
                   --!pp off
+                  pragma Warnings (Off, "this line is too long");
                   Gnoga.Server.Connection.Execute_Script
                     (App.Status_Thermal_Chart_Div.Connection_ID,
-                       "window.status_thermal_chart_data = Array.from(Array(" & From_UTF_8(My_Config.Thermistor_Name'Pos (My_Config.Thermistor_Name'Last)'Image) & " + 1), () => new Array(0));"
-                       & "window.status_thermal_chart_base_time = Date.now() - 1000 * " & From_UTF_8(Ada.Real_Time.Clock'Image) & ";"
+                       "window.status_thermal_chart_data = Array.from(Array(" & From_UTF_8 (My_Config.Thermistor_Name'Pos (My_Config.Thermistor_Name'Last)'Image) & " + 1), () => new Array(0));"
+                       & "window.status_thermal_chart_base_time = Date.now() - 1000 * " & From_UTF_8 (Ada.Real_Time.Clock'Image) & ";"
                        & "window.status_thermal_chart = new TimeChart(document.getElementById('" & App.Status_Thermal_Chart_Div.ID & "'), {"
                        & "    series: window.status_thermal_chart_data.map(function(a, i) {"
                        & "        return {"
@@ -316,18 +325,19 @@ package body Prunt.GUI.GUI is
                        & "});"
                        & "window.status_thermal_chart.update();"
                        & "window.status_thermal_chart.onResize();");
+                  pragma Warnings (On, "this line is too long");
                  --!pp on
                end;
 
                declare
-                  JS_Names   : UXString := "";
-                  JS_Colours : UXString :=
+                  JS_Names              : UXString          := "";
+                  JS_Colours            : constant UXString :=
                     "d3.color('#e6194b'), d3.color('#3cb44b'), d3.color('#ffe119'), d3.color('#4363d8'), " &
                     "d3.color('#f58231'), d3.color('#911eb4'), d3.color('#46f0f0'), d3.color('#f032e6'), " &
                     "d3.color('#bcf60c'), d3.color('#fabebe'), d3.color('#008080'), d3.color('#e6beff'), " &
                     "d3.color('#9a6324'), d3.color('#fffac8'), d3.color('#800000'), d3.color('#aaffc3'), " &
                     "d3.color('#808000'), d3.color('#ffd8b1'), d3.color('#000075'), d3.color('#808080'), ";
-                  JS_Colour_Assignments : UXString := "";
+                  JS_Colour_Assignments : UXString          := "";
                begin
                   for H in My_Config.Heater_Name loop
                      JS_Names.Append (From_UTF_8 ("'" & H'Image & "', "));
@@ -346,10 +356,11 @@ package body Prunt.GUI.GUI is
                   App.Status_Heater_Power_Chart_Div.Style ("width", "500px");
                   App.Status_Heater_Power_Chart_Div.Style ("height", "400px");
                   --!pp off
+                  pragma Warnings (Off, "this line is too long");
                   Gnoga.Server.Connection.Execute_Script
                     (App.Status_Heater_Power_Chart_Div.Connection_ID,
-                     "window.status_heater_power_chart_data = Array.from(Array(" & From_UTF_8(My_Config.Heater_Name'Pos (My_Config.Heater_Name'Last)'Image) & " + 1), () => new Array(0));"
-                       & "window.status_heater_power_chart_base_time = Date.now() - 1000 * " & From_UTF_8(Ada.Real_Time.Clock'Image) & ";"
+                     "window.status_heater_power_chart_data = Array.from(Array(" & From_UTF_8 (My_Config.Heater_Name'Pos (My_Config.Heater_Name'Last)'Image) & " + 1), () => new Array(0));"
+                       & "window.status_heater_power_chart_base_time = Date.now() - 1000 * " & From_UTF_8 (Ada.Real_Time.Clock'Image) & ";"
                        & "window.status_heater_power_chart = new TimeChart(document.getElementById('" & App.Status_Heater_Power_Chart_Div.ID & "'), {"
                        & "    series: window.status_heater_power_chart_data.map(function(a, i) {"
                        & "        return {"
@@ -379,6 +390,7 @@ package body Prunt.GUI.GUI is
                        & "});"
                        & "window.status_heater_power_chart.update();"
                        & "window.status_heater_power_chart.onResize();");
+                  pragma Warnings (On, "this line is too long");
                   --!pp on
                end;
 
@@ -571,7 +583,7 @@ package body Prunt.GUI.GUI is
               (App.Status_Heater_Power_Chart_Div.Connection_ID, "window.status_heater_power_chart.onResize();");
          end if;
       exception
-         when E : Gnoga.Server.Connection.Connection_Error =>
+         when Gnoga.Server.Connection.Connection_Error =>
             null; --  We ignore this error because it can be caused by a connection being closed during loading.
          when E : others                                   =>
             Fatal_Exception_Occurrence_Holder.Set

@@ -51,8 +51,6 @@ generic
    Loop_Interpolation_Time : Time;
 
    Runner_CPU : System.Multiprocessors.CPU_Range;
-
-   Initial_Position : Position := [others => 0.0 * mm];
 package Prunt.Step_Generator is
 
    type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;

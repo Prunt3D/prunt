@@ -19,13 +19,11 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Gnoga.Gui.Base;
 with Gnoga.Gui.Element.Form;
 with Gnoga.Gui.Element.Table;
 with Gnoga.Gui.Element.Common;
 with Gnoga.Gui.Element;
 with UXStrings; use UXStrings;
-with Gnoga.Types;
 
 generic
    type T is private;

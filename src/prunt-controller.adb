@@ -22,10 +22,8 @@
 with Prunt.Controller.Gcode_Handler;
 with Ada.Task_Termination;
 with Ada.Task_Identification;
-with Prunt.Thermistors;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.TMC_Types;
-with Ada.Text_IO;
 with Prunt.Logger;
 
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
@@ -142,7 +140,7 @@ package body Prunt.Controller is
       accept Start;
       My_GUI.Run;
       accept Finish;
-   end;
+   end GUI_Runner;
 
    procedure Run is
       Prunt_Params : My_Config.Prunt_Parameters;
@@ -184,7 +182,7 @@ package body Prunt.Controller is
                   end;
                end loop;
             exception
-               when E : Config_Constraint_Error =>
+               when Config_Constraint_Error =>
                   declare
                      Prunt_Params : My_Config.Prunt_Parameters;
                   begin
@@ -340,7 +338,6 @@ package body Prunt.Controller is
          My_Config.Config_File.Read (Thermistor_Params_Array (T), T);
       end loop;
 
-
       Setup (Heater_Thermistors, Thermistor_Params_Array);
    end Setup_Thermistors_And_Heater_Assignments;
 
@@ -373,7 +370,7 @@ package body Prunt.Controller is
          raise TMC_UART_Error with "Data read from TMC stepper does not match sent data for stepper " & Stepper'Image;
       end if;
    exception
-      when E : TMC_UART_Error =>
+      when TMC_UART_Error =>
          Logger.Log ("Data from TMC2240_UART_Write_And_Validate after error:");
          Logger.Log ("Sent: " & Message.Content'Image);
          Logger.Log ("Received: " & Reply.Content'Image);

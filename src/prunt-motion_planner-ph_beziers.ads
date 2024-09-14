@@ -24,7 +24,7 @@ private package Prunt.Motion_Planner.PH_Beziers is
    type PH_Bezier is private;
    --  C⁴ continuous Pythagorean-hodograph curve as specified in https://doi.org/10.1007/s00170-022-09463-y.
 
-   subtype Curve_Parameter is Dimensionless range 0.0..1.0;
+   subtype Curve_Parameter is Dimensionless range 0.0 .. 1.0;
 
    function Distance_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length;
    --  Returns the distance along the curve at T. T = 0 will return the start point, T = 1 will return the end point,

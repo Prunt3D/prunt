@@ -114,7 +114,7 @@ package Prunt.TMC_Types.TMC2240 is
    type Slope_Control_Type is (Slope_100V_Per_us, Slope_200V_Per_us, Slope_400V_Per_us, Slope_800V_Per_us) with
      Size => 2;
    for Slope_Control_Type use
-     (Slope_100V_Per_Us => 0, Slope_200V_Per_us => 1, Slope_400V_Per_us => 2, Slope_800V_Per_us => 3);
+     (Slope_100V_Per_us => 0, Slope_200V_Per_us => 1, Slope_400V_Per_us => 2, Slope_800V_Per_us => 3);
 
    type Current_Range_Type is (Max_1A, Max_2A, Max_3A) with
      Size => 2;

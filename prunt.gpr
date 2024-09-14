@@ -22,6 +22,10 @@ project Prunt is
          "-gnatW8");
    end Compiler;
 
+   package Builder is
+      for Global_Configuration_Pragmas use "gnat.adc";
+   end Builder;
+
    package Binder is
       for Switches ("Ada") use ("-Es"); --  Symbolic traceback
    end Binder;

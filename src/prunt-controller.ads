@@ -23,7 +23,6 @@ with Prunt.Motion_Planner;
 with Prunt.Config;
 with Prunt.Motion_Planner.Planner;
 with Prunt.GUI.GUI;
-with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
@@ -207,8 +206,7 @@ private
       Finish_Planner_Block    => Finish_Planner_Block,
       Interpolation_Time      => Interpolation_Time,
       Loop_Interpolation_Time => Loop_Interpolation_Time,
-      Runner_CPU              => Command_Generator_CPU,
-      Initial_Position        => [others => 0.0 * mm]);
+      Runner_CPU              => Command_Generator_CPU);
 
    type Stepper_Kinds_Type is array (Stepper_Name) of Stepper_Kind;
 

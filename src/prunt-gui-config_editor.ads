@@ -22,7 +22,6 @@
 with Gnoga.Gui.Base;
 with Gnoga.Gui.Element.Form;
 with Gnoga.Gui.Element.Table;
-with Gnoga.Gui.Element.Common;
 with Gnoga.Gui.Element;
 with Prunt.Config;
 with UXStrings;             use UXStrings;
