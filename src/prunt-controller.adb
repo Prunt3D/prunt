@@ -712,9 +712,17 @@ package body Prunt.Controller is
          My_Config.Config_File.Read (Fan_Params, F);
          case Fan_Params.Kind is
             when My_Config.Dynamic_PWM_Kind =>
-               Corner_Data.Fans (F) := 0.0;
+               if Fan_Params.Invert_Output then
+                  Corner_Data.Fans (F) := 1.0;
+               else
+                  Corner_Data.Fans (F) := 0.0;
+               end if;
             when My_Config.Always_On_Kind =>
-               Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
+               if Fan_Params.Invert_Output then
+                  Corner_Data.Fans (F) := 1.0 - Fan_Params.Always_On_PWM;
+               else
+                  Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
+               end if;
          end case;
       end loop;
       My_Gcode_Handler.Runner.Start (Corner_Data);

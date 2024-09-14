@@ -649,6 +649,8 @@ package Prunt.GUI.Config_Editor is
 
          Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
 
+         Invert_Output : Basic_Inputs.Boolean_Rows.Parameter_Row;
+
          Kind_Table : Cards_Table_Type;
 
          Dynamic_PWM_Table : aliased Gnoga.Gui.Element.Table.Table_Type;

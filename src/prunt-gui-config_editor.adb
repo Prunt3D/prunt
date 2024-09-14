@@ -1439,6 +1439,13 @@ package body Prunt.GUI.Config_Editor is
 
          View.Fan := Fan;
 
+         View.Invert_Output.Create
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "Invert Output",
+            Description =>
+              "If set, the output will be inverted. Toggle this if you fan turns off when set to max speed.");
+
          View.Kind_Table.Create (View);
          View.Kind_Table.Style ("width", "100%");
          View.Kind_Table.Place_After (View.Widget_Table);
@@ -1482,6 +1489,7 @@ package body Prunt.GUI.Config_Editor is
       begin
          My_Config.Config_File.Read (Params, View.Fan);
 
+         View.Invert_Output.Set_Data (Params.Invert_Output);
          case Params.Kind is
             when My_Config.Dynamic_PWM_Kind =>
                View.Kind_Table.Tabs.Select_Tab ("Dynamic PWM");
@@ -1506,6 +1514,7 @@ package body Prunt.GUI.Config_Editor is
          else
             raise Constraint_Error with "Fan type must be selected.";
          end if;
+         Params.Invert_Output := View.Invert_Output.Get_Data;
 
          My_Config.Config_File.Write (Params, View.Fan);
 

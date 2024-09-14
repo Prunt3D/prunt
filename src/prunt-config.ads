@@ -166,6 +166,7 @@ package Prunt.Config is
    type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
 
    type Fan_Parameters (Kind : Fan_Kind := Always_On_Kind) is record
+      Invert_Output : Boolean := False;
       case Kind is
          when Dynamic_PWM_Kind =>
             Disable_Below_PWM : PWM_Scale := 0.5;
