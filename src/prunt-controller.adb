@@ -539,7 +539,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -559,7 +559,8 @@ package body Prunt.Controller is
                         TPFD                 => Stepper_Params.TPFD,
                         Microstep_Resolution => Stepper_Params.Microstep_Resolution,
                         Interpolate          => TMC_Types.TMC_Boolean (False),
-                        Double_Edge          => TMC_Types.TMC_Boolean (False),
+                        Double_Edge          =>
+                          TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping),
                         Disable_S2G          => TMC_Types.TMC_Boolean (False),
                         Disable_S2Vs         => TMC_Types.TMC_Boolean (False)),
                      others        => <>));
