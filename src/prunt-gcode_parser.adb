@@ -350,7 +350,7 @@ package body Prunt.Gcode_Parser is
                   end if;
 
                   if Params ('G').Integer_Value = 0 then
-                     Comm.Feedrate := Floatify_Or_Default ('F', Velocity'Last / 100.0 / (mm / min)) * mm / min;
+                     Comm.Feedrate := Floatify_Or_Default ('F',  299_792_458_000.1 * 60.0) * mm / min;
                   else
                      Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
                      Ctx.Feedrate  := Comm.Feedrate;
