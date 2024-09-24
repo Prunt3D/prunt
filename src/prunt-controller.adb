@@ -134,6 +134,12 @@ package body Prunt.Controller is
       My_Gcode_Handler.Try_Set_File (Path, Succeeded);
    end Submit_Gcode_File;
 
+   task body Early_GUI_Runner is
+   begin
+      My_Early_GUI.Run;
+      accept Finish;
+   end Early_GUI_Runner;
+
    task body GUI_Runner is
    begin
       accept Start;
@@ -141,9 +147,14 @@ package body Prunt.Controller is
       accept Finish;
    end GUI_Runner;
 
+   procedure Prompt_For_Update is
+   begin
+      My_Early_GUI.Show_Update_Button;
+      My_Early_GUI.Block_Until_Update_Allowed;
+   end Prompt_For_Update;
+
    procedure Run is
       Prunt_Params : My_Config.Prunt_Parameters;
-
    begin
       begin
          Ada.Task_Termination.Set_Specific_Handler
@@ -152,8 +163,6 @@ package body Prunt.Controller is
            (My_Gcode_Handler.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-
-         GUI_Runner.Start;
 
          My_Config.Config_File.Read (Prunt_Params);
 
@@ -200,6 +209,10 @@ package body Prunt.Controller is
               (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
       end;
 
+      My_Early_GUI.Stop;
+      Early_GUI_Runner.Finish;
+      delay 1.0;
+      GUI_Runner.Start;
       GUI_Runner.Finish;
    end Run;
 

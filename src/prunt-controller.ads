@@ -23,6 +23,7 @@ with Prunt.Motion_Planner;
 with Prunt.Config;
 with Prunt.Motion_Planner.Planner;
 with Prunt.GUI.GUI;
+with Prunt.GUI.Early_GUI;
 with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
@@ -115,6 +116,14 @@ generic
    --  after each block while the next is loaded.
 package Prunt.Controller is
 
+   procedure Prompt_For_Update;
+   --  Prompts the user to click a button to allow a firmware update in the GUI and returns when the user clicks the
+   --  button. This is used to prevent a broken firmware updater from getting stuck in a loop and wearing out the flash
+   --  of the board being updated.
+   --
+   --  Should only be called before Run as it does not make sense to update the firmware after Prunt has started to
+   --  initialise the board.
+
    procedure Run;
    --  Start the controller. Does not return while the controller is running.
 
@@ -177,7 +186,9 @@ private
 
    function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean;
 
+   pragma Warnings (Off, "cannot call * before body seen");
    package My_Logger is new Logger;
+   pragma Warnings (On, "cannot call * before body seen");
 
    package My_Planner is new Motion_Planner.Planner
      (Flush_Extra_Data_Type        => Flush_Extra_Data,
@@ -239,6 +250,10 @@ private
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
+   package My_Early_GUI is new GUI.Early_GUI
+     (My_Logger                         => My_Logger,
+      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
+
    package My_GUI is new GUI.GUI
      (My_Logger                         => My_Logger,
       My_Config                         => My_Config,
@@ -258,6 +273,10 @@ private
    procedure Setup_Planner;
    procedure Setup_Step_Generator;
    procedure Setup_Gcode_Handler;
+
+   task Early_GUI_Runner is
+      entry Finish;
+   end Early_GUI_Runner;
 
    task GUI_Runner is
       entry Start;
