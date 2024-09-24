@@ -28,10 +28,12 @@ with Gnoga.Gui.Element.Common;
 with Gnoga.Gui.Element.Form;
 with Gnoga.Gui.View.Console;
 with Gnoga.Gui.Element.Table;
+with Prunt.Logger;
 with Prunt.GUI.Cards_Table; use Prunt.GUI.Cards_Table;
 with UXStrings;             use UXStrings;
 
 generic
+   with package My_Logger is new Prunt.Logger (<>);
    with package My_Config is new Prunt.Config (<>);
    with function Get_Position return Prunt.Position;
    with function Get_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;

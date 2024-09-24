@@ -30,6 +30,7 @@ with Prunt.Step_Generator;
 with Prunt.Heaters;
 with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
+with Prunt.Logger;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -137,6 +138,9 @@ package Prunt.Controller is
    procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence);
    --  Report an error to Prunt and cause the printer to halt.
 
+   procedure Log (Message : String);
+   --  Log a message for the user.
+
 private
 
    pragma Warnings (Off, "use of an anonymous access type allocator");
@@ -172,6 +176,8 @@ private
    end record;
 
    function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean;
+
+   package My_Logger is new Logger;
 
    package My_Planner is new Motion_Planner.Planner
      (Flush_Extra_Data_Type        => Flush_Extra_Data,
@@ -234,7 +240,8 @@ private
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
    package My_GUI is new GUI.GUI
-     (My_Config                         => My_Config,
+     (My_Logger                         => My_Logger,
+      My_Config                         => My_Config,
       Get_Position                      => Get_Position,
       Get_Temperature                   => Get_Temperature,
       Get_Heater_Power                  => Get_Heater_Power,

@@ -29,7 +29,6 @@ with Ada.Characters.Latin_1;
 with Gnoga.Server.Connection;
 with Ada.Real_Time;
 with Prunt.Thermistors;
-with Prunt.Logger;
 with Ada.Exceptions;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
@@ -591,7 +590,7 @@ package body Prunt.GUI.GUI is
       end;
 
       declare
-         Log_Handle : Logger.Handle;
+         Log_Handle : My_Logger.Handle;
 
          procedure Log_To_Tab (Message : String) is
          begin
@@ -599,7 +598,7 @@ package body Prunt.GUI.GUI is
             App.Log_Widget.New_Line;
          end Log_To_Tab;
       begin
-         Logger.Set_Receiver (Log_Handle, Log_To_Tab'Unrestricted_Access);
+         My_Logger.Set_Receiver (Log_Handle, Log_To_Tab'Unrestricted_Access);
 
          select
             Connection.Hold;
@@ -621,7 +620,7 @@ package body Prunt.GUI.GUI is
             Connection.Hold;
          end select;
 
-         Logger.Set_Receiver (Log_Handle, null);
+         My_Logger.Set_Receiver (Log_Handle, null);
       end;
 
       Status_Updater_Task.Stop;
@@ -633,7 +632,7 @@ package body Prunt.GUI.GUI is
    procedure Log_And_Switch_Tab (Object : Gnoga.Types.Pointer_to_Connection_Data_Class; Message : String) is
       procedure Inner (App : App_Access) is
       begin
-         Logger.Log (Message);
+         My_Logger.Log (Message);
          App.Main_Table.Tabs.Select_Tab ("Log");
       end Inner;
    begin

@@ -22,6 +22,7 @@
 private with Ada.Finalization;
 private with Ada.Containers.Doubly_Linked_Lists;
 
+generic
 package Prunt.Logger is
 
    type Receiver is access procedure (Message : String);

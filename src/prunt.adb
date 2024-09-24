@@ -37,7 +37,7 @@ package body Prunt is
             Ada.Exceptions.Save_Occurrence (Data, Occurrence);
          end if;
 
-         Logger.Log (Ada.Exceptions.Exception_Information (Occurrence));
+         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
       end Set;
 
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence)

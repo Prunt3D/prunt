@@ -24,7 +24,6 @@ with Ada.Task_Termination;
 with Ada.Task_Identification;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.TMC_Types;
-with Prunt.Logger;
 
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
 use type Prunt.TMC_Types.TMC2240.UART_Node_Address;
@@ -159,10 +158,10 @@ package body Prunt.Controller is
          My_Config.Config_File.Read (Prunt_Params);
 
          if not Prunt_Params.Enabled then
-            Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
+            My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
          else
             begin
-               Logger.Log ("Running setup.");
+               My_Logger.Log ("Running setup.");
 
                Setup_Thermistors_And_Heater_Assignments;
                Setup_Planner;
@@ -194,7 +193,7 @@ package body Prunt.Controller is
             end;
          end if;
 
-         Logger.Log ("Setup done.");
+         My_Logger.Log ("Setup done.");
       exception
          when E : others =>
             Fatal_Exception_Occurrence_Holder.all.Set
@@ -371,9 +370,9 @@ package body Prunt.Controller is
       end if;
    exception
       when TMC_UART_Error =>
-         Logger.Log ("Data from TMC2240_UART_Write_And_Validate after error:");
-         Logger.Log ("Sent: " & Message.Content'Image);
-         Logger.Log ("Received: " & Reply.Content'Image);
+         My_Logger.Log ("Data from TMC2240_UART_Write_And_Validate after error:");
+         My_Logger.Log ("Sent: " & Message.Content'Image);
+         My_Logger.Log ("Received: " & Reply.Content'Image);
          raise;
    end TMC2240_UART_Write_And_Validate;
 
@@ -725,5 +724,10 @@ package body Prunt.Controller is
       end loop;
       My_Gcode_Handler.Runner.Start (Corner_Data);
    end Setup_Gcode_Handler;
+
+   procedure Log (Message : String) is
+   begin
+      My_Logger.Log (Message);
+   end Log;
 
 end Prunt.Controller;
