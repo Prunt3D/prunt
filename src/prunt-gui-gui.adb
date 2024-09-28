@@ -84,28 +84,28 @@ package body Prunt.GUI.GUI is
             declare
                Pos  : constant Position := Get_Position;
                Text : UXString          := From_UTF_8 ("");
-               CR   : Character renames Ada.Characters.Latin_1.CR;
+               LF   : Character renames Ada.Characters.Latin_1.LF;
             begin
-               Append (Text, From_UTF_8 ("Machine position (not accounting for G92 or retraction):" & CR));
+               Append (Text, From_UTF_8 ("Machine position (not accounting for G92 or retraction):" & LF));
                for A in Axis_Name loop
-                  Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & CR));
+                  Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & LF));
                end loop;
 
-               Append (Text, From_UTF_8 (CR & "Temperatures:" & CR));
+               Append (Text, From_UTF_8 (LF & "Temperatures:" & LF));
                for T in My_Config.Thermistor_Name loop
                   Append
                     (Text,
-                     From_UTF_8 (T'Image & ": ") & DF_Image (Get_Temperature (T) / celcius) & From_UTF_8 (" C" & CR));
+                     From_UTF_8 (T'Image & ": ") & DF_Image (Get_Temperature (T) / celcius) & From_UTF_8 (" C" & LF));
                end loop;
 
-               Append (Text, From_UTF_8 (CR & "Heater powers:" & CR));
+               Append (Text, From_UTF_8 (LF & "Heater powers:" & LF));
                for H in My_Config.Heater_Name loop
-                  Append (Text, From_UTF_8 (H'Image & ": ") & DF_Image (Get_Heater_Power (H)) & From_UTF_8 ("" & CR));
+                  Append (Text, From_UTF_8 (H'Image & ": ") & DF_Image (Get_Heater_Power (H)) & From_UTF_8 ("" & LF));
                end loop;
 
-               Append (Text, From_UTF_8 (CR & "Input switch states:" & CR));
+               Append (Text, From_UTF_8 (LF & "Input switch states:" & LF));
                for S in My_Config.Input_Switch_Name loop
-                  Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & CR));
+                  Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & LF));
                end loop;
 
                App.Status_Message_Text.Inner_HTML (To_HTML (Text));
