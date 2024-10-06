@@ -350,7 +350,7 @@ package body Prunt.Gcode_Parser is
                   end if;
 
                   if Params ('G').Integer_Value = 0 then
-                     Comm.Feedrate := Floatify_Or_Default ('F',  299_792_458_000.1 * 60.0) * mm / min;
+                     Comm.Feedrate := Floatify_Or_Default ('F', 299_792_458_000.1 * 60.0) * mm / min;
                   else
                      Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
                      Ctx.Feedrate  := Comm.Feedrate;
@@ -619,6 +619,13 @@ package body Prunt.Gcode_Parser is
                  ((Kind               => Heater_Autotune_Kind,
                    Tuning_Temperature => Floatify_Or_Error ('S') * celcius,
                    Pos                => Ctx.Pos));
+            when 486 =>
+               declare
+                  Ignored : Dimensionless;
+               begin
+                  Ignored := Floatify_Or_Default ('S', 0.0);
+                  Ignored := Floatify_Or_Default ('T', 0.0);
+               end;
             when others =>
                raise Bad_Line with "Unknown M code: " & Params ('M').Integer_Value'Image;
          end case;
