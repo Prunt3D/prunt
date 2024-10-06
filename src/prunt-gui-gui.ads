@@ -41,6 +41,7 @@ generic
    with function Get_Input_Switch_State (Switch : My_Config.Input_Switch_Name) return Prunt.Pin_State;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
+   with function Is_Stepgen_Paused return Boolean;
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
    Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;

@@ -263,6 +263,7 @@ private
       Get_Input_Switch_State            => Get_Input_Switch_State,
       Submit_Gcode_Command              => Submit_Gcode_Command,
       Submit_Gcode_File                 => Submit_Gcode_File,
+      Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
       Pause_Stepgen                     => My_Step_Generator.Pause,
       Resume_Stepgen                    => My_Step_Generator.Resume,
       Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);

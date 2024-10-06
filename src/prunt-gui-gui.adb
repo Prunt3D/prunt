@@ -86,6 +86,10 @@ package body Prunt.GUI.GUI is
                Text : UXString          := From_UTF_8 ("");
                LF   : Character renames Ada.Characters.Latin_1.LF;
             begin
+               if Is_Stepgen_Paused then
+                  Append (Text, From_UTF_8 ("STEP GENERATOR IS PAUSED" & LF));
+               end if;
+
                Append (Text, From_UTF_8 ("Machine position (not accounting for G92 or retraction):" & LF));
                for A in Axis_Name loop
                   Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & LF));
@@ -107,6 +111,10 @@ package body Prunt.GUI.GUI is
                for S in My_Config.Input_Switch_Name loop
                   Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & LF));
                end loop;
+
+               if Is_Stepgen_Paused then
+                  Append (Text, From_UTF_8 ("STEP GENERATOR IS PAUSED" & LF));
+               end if;
 
                App.Status_Message_Text.Inner_HTML (To_HTML (Text));
 
