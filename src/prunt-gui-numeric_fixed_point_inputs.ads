@@ -19,39 +19,31 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-private with Ada.Text_IO;
-private with UXStrings;
+with Gnoga.Gui.Element.Form;
+with UXStrings; use UXStrings;
 
-package Prunt.GUI is
+generic
+   type T is delta <>;
+package Prunt.GUI.Numeric_Fixed_Point_Inputs is
 
-private
+   pragma Unsuppress (All_Checks);
 
-   use UXStrings;
+   type Numeric_Input is new Gnoga.Gui.Element.Form.Number_Type with null record;
 
-   Nice_Axis_Names : constant array (Axis_Name) of String (1 .. 6) :=
-     [X_Axis => "X Axis", Y_Axis => "Y Axis", Z_Axis => "Z Axis", E_Axis => "E Axis"];
+   overriding procedure Create
+     (Element : in out Numeric_Input;
+      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class;
+      Value   :        UXString := "";
+      Name    :        UXString := "";
+      ID      :        UXString := "");
 
-   generic
-      type Number is digits <>;
-   function Float_Image
-     (Value       : Number;
-      Fore        : Ada.Text_IO.Field := 2;
-      Aft         : Ada.Text_IO.Field := Number'Digits - 1;
-      Exp         : Ada.Text_IO.Field := 3;
-      Zero_Filled : Boolean           := False)
-     return String;
+   procedure Create_For_Parameter_Row
+     (Element : in out Numeric_Input;
+      Parent  : in out Gnoga.Gui.Element.Element_Type'Class;
+      Form    : in out Gnoga.Gui.Element.Form.Form_Type'Class);
 
-   generic
-      type Number is delta <>;
-   function Fixed_Point_Image
-     (Value       : Number;
-      Fore        : Ada.Text_IO.Field := 2;
-      Aft         : Ada.Text_IO.Field := Number'Aft;
-      Exp         : Ada.Text_IO.Field := 3;
-      Zero_Filled : Boolean           := False)
-     return String;
+   function Get (Input : Numeric_Input) return T;
 
-   --  The default 'Image outputs scientific notion, which isn't very user friendly, so we use this instead.
-   function DF_Image (Number : Dimensioned_Float) return UXString;
+   procedure Set (Input : in out Numeric_Input; Value : T);
 
-end Prunt.GUI;
+end Prunt.GUI.Numeric_Fixed_Point_Inputs;
