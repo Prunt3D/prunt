@@ -101,7 +101,8 @@ package Prunt.Gcode_Parser is
 
    type Context is private;
 
-   function Make_Context (Initial_Position : Position; Initial_Feedrate : Velocity) return Context;
+   function Make_Context
+     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean) return Context;
 
    type Command_Runner is access procedure (Comm : Command);
 
@@ -124,6 +125,7 @@ private
       M207_Feedrate             : Velocity;
       M208_Offset               : Position_Offset;
       M208_Feedrate             : Velocity;
+      Replace_G0_With_G1        : Boolean;
    end record;
 
 end Prunt.Gcode_Parser;

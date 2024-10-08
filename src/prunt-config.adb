@@ -322,13 +322,15 @@ package body Prunt.Config is
          Write (Data, Append_Only => True);
          Table := TOML_Data.Get ("Prunt");
 
-         Data.Enabled := From_TOML (Table.Get ("Enabled"));
+         Data.Enabled            := From_TOML (Table.Get ("Enabled"));
+         Data.Replace_G0_With_G1 := From_TOML (Table.Get ("Replace_G0_With_G1"));
       end Read;
 
       procedure Write (Data : Prunt_Parameters; Append_Only : Boolean := False) is
          Table : constant TOML_Value := Create_Table;
       begin
          Table.Set ("Enabled", To_TOML (Data.Enabled));
+         Table.Set ("Replace_G0_With_G1", To_TOML (Data.Replace_G0_With_G1));
 
          Maybe_Read_File;
          TOML_Data.Set_Default ("Prunt", Create_Table);
@@ -698,7 +700,7 @@ package body Prunt.Config is
             when Bang_Bang_Kind =>
                Data := (Params => (Kind => Bang_Bang_Kind, others => <>), others => <>);
                Write (Data, Heater, Append_Only => True);
-               Table := TOML_Data.Get ("Heater").Get (Heater'Image);
+               Table                            := TOML_Data.Get ("Heater").Get (Heater'Image);
                Data.Params.Bang_Bang_Hysteresis := From_TOML (Table.Get ("Bang_Bang_Hysteresis")) * celcius;
             when PID_Autotune_Kind =>
                raise Constraint_Error with "PID_Autotune_Kind should not exist in config file.";

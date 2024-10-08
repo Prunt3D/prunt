@@ -58,7 +58,7 @@ package body Prunt.Controller.Gcode_Handler is
       Zero_Pos_Offset : constant Position_Offset :=
         [X_Axis => 0.0 * mm, Y_Axis => 0.0 * mm, Z_Axis => 0.0 * mm, E_Axis => 0.0 * mm];
 
-      Parser_Context : My_Gcode_Parser.Context := Make_Context (Zero_Pos, 100.0 * mm / s);
+      Parser_Context : My_Gcode_Parser.Context;
 
       Is_Homed : array (Axis_Name) of Boolean := [others => False];
 
@@ -68,6 +68,8 @@ package body Prunt.Controller.Gcode_Handler is
       Fanwise_Fan_Params       : array (Generic_Types.Fan_Name) of My_Config.Fan_Parameters;
 
       G_Code_Assignment_Params : My_Config.G_Code_Assignment_Parameters;
+
+      Prunt_Params : My_Config.Prunt_Parameters;
 
       Command_Constraint_Error : exception;
 
@@ -474,6 +476,7 @@ package body Prunt.Controller.Gcode_Handler is
       accept Start (Initial_Data : Corner_Extra_Data) do
          Corner_Data := Initial_Data;
 
+         My_Config.Config_File.Read (Prunt_Params);
          My_Config.Config_File.Read (Kinematics_Params);
          My_Config.Config_File.Read (G_Code_Assignment_Params);
 
@@ -528,6 +531,8 @@ package body Prunt.Controller.Gcode_Handler is
                   null;
             end case;
          end loop;
+
+         Parser_Context := Make_Context (Zero_Pos, 100.0 * mm / s, Prunt_Params.Replace_G0_With_G1);
       end Start;
 
       My_Planner.Enqueue

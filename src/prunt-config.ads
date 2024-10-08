@@ -48,7 +48,8 @@ package Prunt.Config is
    Config_File_Format_Error : exception;
 
    type Prunt_Parameters is record
-      Enabled : Boolean := False;
+      Enabled            : Boolean := False;
+      Replace_G0_With_G1 : Boolean := False;
    end record;
 
    type Stepper_Parameters (Kind : Stepper_Kind := Basic_Kind) is record

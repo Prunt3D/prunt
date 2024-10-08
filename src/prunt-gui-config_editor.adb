@@ -246,6 +246,13 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Enabled",
             Description => "If set, allow Prunt to start.");
 
+         View.Replace_G0_With_G1.Create
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "Replace G0 With G1",
+            Description =>
+              "If set, replace G0 with G1 to replicate the behaviour of some other 3D printer motion controllers.");
+
          View.Read_Data;
 
          View.On_Submit_Handler (Outer_Section_Widgets.On_Submit'Unrestricted_Access);
@@ -259,12 +266,14 @@ package body Prunt.GUI.Config_Editor is
          My_Config.Config_File.Read (Params);
 
          View.Enabled.Set_Data (Params.Enabled);
+         View.Replace_G0_With_G1.Set_Data (Params.Replace_G0_With_G1);
       end Read_Data;
 
       overriding procedure Save_Data (View : in out Prunt_Widget; Image : out UXString) is
          Params : My_Config.Prunt_Parameters;
       begin
          Params.Enabled := View.Enabled.Get_Data;
+         Params.Replace_G0_With_G1 := View.Replace_G0_With_G1.Get_Data;
 
          My_Config.Config_File.Write (Params);
 

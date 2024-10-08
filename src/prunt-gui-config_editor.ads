@@ -457,8 +457,9 @@ package Prunt.GUI.Config_Editor is
    private
 
       type Prunt_Widget is new Parent_Type with record
-         Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
-         Enabled      : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         Widget_Table       : Gnoga.Gui.Element.Table.Table_Type;
+         Enabled            : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         Replace_G0_With_G1 : Basic_Inputs.Boolean_Rows.Parameter_Row;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;

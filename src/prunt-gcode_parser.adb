@@ -23,7 +23,9 @@ with Ada.Characters.Handling; use Ada.Characters.Handling;
 
 package body Prunt.Gcode_Parser is
 
-   function Make_Context (Initial_Position : Position; Initial_Feedrate : Velocity) return Context is
+   function Make_Context
+     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean) return Context
+   is
    begin
       return
         (XYZ_Relative_Mode         => False,
@@ -36,7 +38,8 @@ package body Prunt.Gcode_Parser is
          M207_Offset               => (others => Length (0.0)),
          M207_Feedrate             => Velocity'Last,
          M208_Offset               => (others => Length (0.0)),
-         M208_Feedrate             => 0.0 * mm / s);
+         M208_Feedrate             => 0.0 * mm / s,
+         Replace_G0_With_G1        => Replace_G0_With_G1);
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner) is
@@ -349,7 +352,7 @@ package body Prunt.Gcode_Parser is
                        Ctx.G92_Offset (E_Axis) + Ctx.Current_Retraction_Offset (E_Axis);
                   end if;
 
-                  if Params ('G').Integer_Value = 0 then
+                  if Params ('G').Integer_Value = 0 and not Ctx.Replace_G0_With_G1 then
                      Comm.Feedrate := Floatify_Or_Default ('F', 299_792_458_000.1 * 60.0) * mm / min;
                   else
                      Comm.Feedrate := Floatify_Or_Default ('F', Ctx.Feedrate / (mm / min)) * mm / min;
