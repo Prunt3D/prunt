@@ -314,115 +314,138 @@ package body Prunt.GUI.Config_Editor is
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "Slope_Control",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description => "Slew rate of the coil outputs.");
 
                View.I_Hold.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "I_Hold",
-                  Description => "Standstill current (0 = 1/32 ... 31 = 32/32).");
+                  Description => "Standstill current ratio compared to set current limit (0 = 1/32 ... 31 = 32/32).");
 
                View.I_Run.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "I_Run",
-                  Description => "Run current (0 = 1/32 ... 31 = 32/32).");
+                  Description => "Run current ratio compared to set current limit (0 = 1/32 ... 31 = 32/32).");
 
                View.I_Hold_Delay.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "I_Hold_Delay",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Time taken to slew one current level from run current towards standstill current " &
+                    "in multiples of 2^18 TMC2240 clock cycles.");
 
                View.I_Run_Delay.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "I_Run_Delay",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Time taken to slew one current level from standstill current towards run current " &
+                    "in multiples of 2^18 TMC2240 clock cycles.");
 
                View.T_Power_Down.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "T_Power_Down",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Time taken before beginning slew towards standstill current after standstill " &
+                    "in multiples of 2^18 TMC2240 clock cycles. " &
+                    "Must be at least 2 to allow for StealthChop tuning.");
 
                View.T_PWM_Thrs.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "T_PWM_Thrs",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Upper velocity limit for StealthChop, measured in number of TMC clock cycles between steps " &
+                    "normalised to 1/256 microstepping.");
 
                View.T_Cool_Thrs.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "T_Cool_Thrs",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Lower velocity limit for CoolStep and StallGuard, measured in number of TMC clock cycles " &
+                    "between steps normalised to 1/256 microstepping. Also upper limit for StealthChop.");
 
                View.T_High.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "T_High",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Lower velocity limit for high velocity stepping mode, measured in number of TMC clock cycles " &
+                    "between steps normalised to 1/256 microstepping. " &
+                    "Also upper velocity limit for CoolStep and StealthChop.");
 
                View.TOFF.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "TOFF",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Slow decay off time settings in modes other than StealthChop. Off time cycles = 24 + 32 × TOFF. " &
+                    "A setting of 0 disables the driver.");
 
                View.HSTRT_TFD210.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "HSTRT_TFD210",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "When CHM=0: HSTRT for SpreadCycle, HSTRT + HEND must be ≤ 16. " &
+                    "When CHM=1: Fast decay duration for constant off-time chopper, measured in 32 TMC clock cycles.");
 
                View.HEND_OFFSET.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "HEND_OFFSET",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "When CHM=0: HEND for SpreadCycle, HSTRT + HEND must be ≤ 16." &
+                    "When CHM=1: Sine wave offset for constant off-time chopper.");
 
                View.FD3.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "FD3",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description => "Adds to fast decay duration, measured in 256 TMC clock cycles.");
 
                View.DISFDCC.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "DISFDCC",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "If set, the driver will not end fast decay cycle if the negative current reaches a value " &
+                    "greater than the positive current in constant off-time chopper mode.");
 
                View.CHM.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "CHM",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description => "If set, use constant off-time chopper instead of SpreadCycle.");
 
                View.VHIGHFS.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "VHIGHFS",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description => "If set, switch to full step mode when VHIGH is exceeded.");
 
                View.VHIGHCHM.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "VHIGHCHM",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description => "If set, switch to CHM=1 and FD=0 when VHIGH is exceeded. Works with VHIGHFS.");
 
                View.TPFD.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "TPFD",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description =>
+                    "Duration of fast decay inserted after bridge polarity change, measured in 128 TMC clock cycles.");
 
                View.Microstep_Resolution.Create
                  (Parent      => View.Widget_Table,
                   Form        => View,
                   Name        => "Microstep_Resolution",
-                  Description => "As described in TMC2240 datasheet.");
+                  Description => "Number of microsteps per quarter sine wave.");
 
                View.PWM_OFS.Create
                  (Parent      => View.Widget_Table,
