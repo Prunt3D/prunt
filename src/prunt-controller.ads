@@ -250,9 +250,11 @@ private
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
+   pragma Warnings (Off, "cannot call * before body seen");
    package My_Early_GUI is new GUI.Early_GUI
      (My_Logger                         => My_Logger,
       Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
+   pragma Warnings (On, "cannot call * before body seen");
 
    package My_GUI is new GUI.GUI
      (My_Logger                         => My_Logger,
