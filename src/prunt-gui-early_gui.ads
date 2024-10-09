@@ -29,12 +29,15 @@ with Gnoga.Gui.Element.Form;
 with Gnoga.Gui.View.Console;
 with Gnoga.Gui.Element.Table;
 with Prunt.Logger;
+with GNAT.Sockets;
 with Prunt.GUI.Cards_Table; use Prunt.GUI.Cards_Table;
 with UXStrings;             use UXStrings;
 
 generic
    with package My_Logger is new Prunt.Logger (<>);
    Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;
+   Host : String;
+   Port : GNAT.Sockets.Port_Type;
 package Prunt.GUI.Early_GUI is
 
    procedure Run;

@@ -202,7 +202,7 @@ package body Prunt.GUI.Early_GUI is
       Gnoga.Application.Title ("Prunt");
       Gnoga.Application.HTML_On_Close
         ("Early setup done. Page will reload. <meta http-equiv=""refresh"" content=""0""/>");
-      Gnoga.Application.Multi_Connect.Initialize (Verbose => False);
+      Gnoga.Application.Multi_Connect.Initialize (Verbose => False, Host => From_UTF_8 (Host), Port => Integer (Port));
       Gnoga.Application.Multi_Connect.On_Connect_Handler (Event => On_Connect'Unrestricted_Access, Path => "default");
       Gnoga.Application.Multi_Connect.Message_Loop;
    end Run;

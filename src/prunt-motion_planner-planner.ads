@@ -19,6 +19,7 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with System.Multiprocessors;
 with Ada.Containers;
 private with Prunt.Motion_Planner.PH_Beziers;
 
@@ -35,6 +36,7 @@ generic
    Corner_Blender_Max_Secondary_Angle_To_Blend : Angle := 89.5 * deg;
    Input_Queue_Length : Ada.Containers.Count_Type := 1_000;
    Initial_Position : Position := [others => 0.0 * mm];
+   Runner_CPU : System.Multiprocessors.CPU_Range;
 package Prunt.Motion_Planner.Planner is
 
    type Command_Kind is (Move_Kind, Flush_Kind, Flush_And_Reset_Position_Kind, Flush_And_Change_Parameters_Kind);
@@ -102,7 +104,9 @@ package Prunt.Motion_Planner.Planner is
 
    Out_Of_Bounds_Error : exception;
 
-   task Runner is
+   task Runner with
+     CPU => Runner_CPU
+    is
       entry Setup (In_Params : Kinematic_Parameters);
 
       entry Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block);

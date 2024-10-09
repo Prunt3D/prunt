@@ -651,7 +651,7 @@ package body Prunt.GUI.GUI is
    begin
       Gnoga.Application.Title ("Prunt");
       Gnoga.Application.HTML_On_Close ("Prunt terminated. Reload this page to reconnect.");
-      Gnoga.Application.Multi_Connect.Initialize (Verbose => False);
+      Gnoga.Application.Multi_Connect.Initialize (Verbose => False, Host => From_UTF_8 (Host), Port => Integer (Port));
       Gnoga.Application.Multi_Connect.On_Connect_Handler (Event => On_Connect'Unrestricted_Access, Path => "default");
       Gnoga.Application.Multi_Connect.Message_Loop;
    end Run;

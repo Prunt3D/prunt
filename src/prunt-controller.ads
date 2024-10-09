@@ -32,6 +32,7 @@ with Prunt.Heaters;
 with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.Logger;
+with Prunt.Command_Line_Arguments;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -105,15 +106,6 @@ generic
 
    Config_Path : String;
    --  Path of the printer configuration file.
-
-   Command_Generator_CPU : System.Multiprocessors.CPU_Range;
-   --  The CPU to run the command generator task on. This is the task that calls Setup_For_Loop_Move,
-   --  Setup_For_Conditional_Move, Enqueue_Command, and Reset_Position. No other tasks will call these procedures.
-
-   Max_Planner_Block_Corners : Motion_Planner.Max_Corners_Type := 3_000;
-   --  Number of corners to be planned in a single block. Increasing this value will minimise the number of complete
-   --  stops required at the cost of using more memory. Increasing this value too far may cause the printer to pause
-   --  after each block while the next is loaded.
 package Prunt.Controller is
 
    procedure Prompt_For_Update;
@@ -195,10 +187,11 @@ private
       Flush_Extra_Data_Default     => (others => <>),
       Corner_Extra_Data_Type       => Corner_Extra_Data,
       Initial_Position             => [others => 0.0 * mm],
-      Max_Corners                  => Max_Planner_Block_Corners,
+      Max_Corners                  => Command_Line_Arguments.Max_Planner_Block_Corners,
       Is_Homing_Move               => Is_Homing_Move,
       Interpolation_Time           => Interpolation_Time,
-      Home_Move_Minimum_Coast_Time => 4.0 * Interpolation_Time + Loop_Interpolation_Time);
+      Home_Move_Minimum_Coast_Time => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
+      Runner_CPU                   => Command_Line_Arguments.Motion_Planner_CPU);
 
    procedure Start_Planner_Block (Data : Flush_Extra_Data; Last_Command_Index : Command_Index);
    procedure Enqueue_Command_Internal
@@ -223,7 +216,7 @@ private
       Finish_Planner_Block    => Finish_Planner_Block,
       Interpolation_Time      => Interpolation_Time,
       Loop_Interpolation_Time => Loop_Interpolation_Time,
-      Runner_CPU              => Command_Generator_CPU);
+      Runner_CPU              => Command_Line_Arguments.Step_Generator_CPU);
 
    type Stepper_Kinds_Type is array (Stepper_Name) of Stepper_Kind;
 
@@ -253,7 +246,9 @@ private
    pragma Warnings (Off, "cannot call * before body seen");
    package My_Early_GUI is new GUI.Early_GUI
      (My_Logger                         => My_Logger,
-      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
+      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
+      Host                              => Command_Line_Arguments.GUI_Host,
+      Port                              => Command_Line_Arguments.GUI_Port);
    pragma Warnings (On, "cannot call * before body seen");
 
    package My_GUI is new GUI.GUI
@@ -268,7 +263,9 @@ private
       Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
       Pause_Stepgen                     => My_Step_Generator.Pause,
       Resume_Stepgen                    => My_Step_Generator.Resume,
-      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
+      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
+      Host                              => Command_Line_Arguments.GUI_Host,
+      Port                              => Command_Line_Arguments.GUI_Port);
 
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
    procedure Setup_Thermistors_And_Heater_Assignments;
