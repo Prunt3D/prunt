@@ -626,16 +626,16 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => "Lower Position Limit",
             Description =>
-              "Minimum position that the printer may move to. The E axis may be set to " &
-              DF_Image (Length'First / 2.0) & " for effectively infinite range.");
+              "Minimum position that the printer may move to. The E axis may be set to -8E307" &
+              " for effectively infinite range.");
 
          View.Upper_Pos_Limit.Create
            (Parent      => View.Widget_Table,
             Form        => View,
             Name        => "Upper Position Limit",
             Description =>
-              "Maximum position that the printer may move to. The E axis may be set to " &
-              DF_Image (Length'Last / 2.0) & " for effectively infinite range.");
+              "Maximum position that the printer may move to. The E axis may be set to 8E307" &
+              " for effectively infinite range.");
 
          View.Tangential_Velocity_Max.Create
            (Parent      => View.Widget_Table,
@@ -652,7 +652,7 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => "Max Acceleration",
             Description =>
-              "May safely be set to " & DF_Image (Acceleration'Last / 2.0) &
+              "May safely be set to 8E307" &
               " for effectively infinite acceleration (to the extent allowed by other constraints)." &
               "Axial values will go above this value when corner blending is enabled.");
 
@@ -661,7 +661,7 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => "Max Jerk",
             Description =>
-              "May safely be set to " & DF_Image (Jerk'Last / 2.0) &
+              "May safely be set to 8E307" &
               " for effectively infinite jerk (to the extent allowed by other constraints). " &
               "Axial values will go above this value when corner blending is enabled.");
 
@@ -670,7 +670,7 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => "Max Snap",
             Description =>
-              "May safely be set to " & DF_Image (Snap'Last / 2.0) &
+              "May safely be set to 8E307" &
               " for effectively infinite snap (to the extent allowed by other constraints)." &
               "Axial values will go above this value when corner blending is enabled.");
 
@@ -679,7 +679,7 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => "Max Crackle",
             Description =>
-              "May safely be set to " & DF_Image (Crackle'Last / 2.0) &
+              "May safely be set to 8E307" &
               " for effectively infinite crackle (to the extent allowed by other constraints)." &
               "Axial values will go above this value when corner blending is enabled.");
 
