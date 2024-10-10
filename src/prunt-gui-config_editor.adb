@@ -272,7 +272,7 @@ package body Prunt.GUI.Config_Editor is
       overriding procedure Save_Data (View : in out Prunt_Widget; Image : out UXString) is
          Params : My_Config.Prunt_Parameters;
       begin
-         Params.Enabled := View.Enabled.Get_Data;
+         Params.Enabled            := View.Enabled.Get_Data;
          Params.Replace_G0_With_G1 := View.Replace_G0_With_G1.Get_Data;
 
          My_Config.Config_File.Write (Params);
@@ -1151,6 +1151,28 @@ package body Prunt.GUI.Config_Editor is
             Name        => UXStrings.From_UTF_8 ("Coefficient C"),
             Description => "In 1 / T = A + B * ln (R) + C * (ln (R))**3 where T is in kelvins and R is in ohms.");
 
+         View.SH_Examples.Create
+           (View.Steinhart_Hart_Table,
+            From_UTF_8
+              ("Below are some examples of values to use here. " &
+               "Please check that these values produce the correct output after setting them.<br><br>" &
+               "ATC Semitec 104GT-2:<br>" &
+               "A = 8.0965E-4  B = 2.1163E-4  C = 7.0742E-8<br><br>" &
+               "ATC Semitec 104NT-4-R025H42G:<br>" &
+               "A = 7.9582E-4  B = 2.1360E-4  C = 6.4830E-8<br><br>" &
+               "EPCOS 100K B57560G104F:<br>" &
+               "A = 7.2213E-4  B = 2.1676E-4  C = 8.9293E-8<br><br>" &
+               "Generic 3950:<br>" &
+               "A = 7.9347E-4  B = 2.0076E-4  C = 1.6328E-7<br><br>" &
+               "SliceEngineering 450:<br>" &
+               "A = 3.0553E-4  B = 2.1171E-4  C = 1.1962E-7<br><br>" &
+               "TDK NTCG104LH104JT1:<br>" &
+               "A = 9.7639E-4  B = 1.9688E-4  C = 7.2671E-8<br><br>" &
+               "Honeywell 100K 135-104LAG-J01:<br>" &
+               "A = 4.5695E-4  B = 2.5163E-4  C = 0<br><br>" &
+               "NTC 100K MGB18-104F39050L32:<br>" &
+               "A = 5.4598E-4  B = 2.4390E-4  C = 0<br><br>"));
+
          View.Callendar_Van_Dusen_Table.Create (View.Kind_Table);
          View.Callendar_Van_Dusen_Table.Style ("border-collapse", "collapse");
          View.Kind_Table.Add_Tab ("Callendar-Van Dusen", View.Callendar_Van_Dusen_Table'Access);
@@ -1172,6 +1194,16 @@ package body Prunt.GUI.Config_Editor is
             Form        => View,
             Name        => UXStrings.From_UTF_8 ("Coefficient B"),
             Description => "In R (0) * (1 + A * T + B * T**2) where T is in celcius.");
+
+         View.CVD_Examples.Create
+           (View.Callendar_Van_Dusen_Table,
+            From_UTF_8
+              ("Below are some examples of values to use here. " &
+               "Please check that these values produce the correct output after setting them.<br><br>" &
+               "PT-1000 (PT-385 class above 0C):<br>" &
+               "R = 1000  A = 3.9083E-3  B = -5.775E-7<br><br>" &
+               "PT-1000 (PT-392 class above 0C):<br>" &
+               "R = 1000  A = 3.9827E-3  B = -5.875E-7<br><br>"));
 
          View.Read_Data;
 

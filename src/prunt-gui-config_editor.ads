@@ -23,6 +23,7 @@ with Gnoga.Gui.Base;
 with Gnoga.Gui.Element.Form;
 with Gnoga.Gui.Element.Table;
 with Gnoga.Gui.Element;
+with Gnoga.Gui.Element.Common;
 with Prunt.Config;
 with UXStrings;             use UXStrings;
 with Gnoga.Types;
@@ -593,11 +594,13 @@ package Prunt.GUI.Config_Editor is
          SH_A                 : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
          SH_B                 : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
          SH_C                 : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         SH_Examples          : Gnoga.Gui.Element.Common.DIV_Type;
 
          Callendar_Van_Dusen_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
          CVD_R0                    : Basic_Inputs.Resistance_Rows.Parameter_Row;
          CVD_A                     : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
          CVD_B                     : Basic_Inputs.Dimensionless_Rows.Parameter_Row;
+         CVD_Examples              : Gnoga.Gui.Element.Common.DIV_Type;
 
          Submit_Button : Gnoga.Gui.Element.Form.Submit_Button_Type;
       end record;
