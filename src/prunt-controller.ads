@@ -131,6 +131,9 @@ package Prunt.Controller is
    --  Report the current state of an input switch. There are no restrictions on how often this procedure needs to be
    --  called.
 
+   procedure Report_Tachometer_Frequency (Fan : Fan_Name; Freq : Frequency);
+   --  Report the current frequency of a tachometer input.
+
    procedure Report_Last_Command_Executed (Index : Command_Index);
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
@@ -240,6 +243,8 @@ private
 
    function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State;
 
+   function Get_Tachometer_Frequency (Fan : Fan_Name) return Frequency;
+
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
@@ -258,6 +263,7 @@ private
       Get_Temperature                   => Get_Temperature,
       Get_Heater_Power                  => Get_Heater_Power,
       Get_Input_Switch_State            => Get_Input_Switch_State,
+      Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
       Submit_Gcode_Command              => Submit_Gcode_Command,
       Submit_Gcode_File                 => Submit_Gcode_File,
       Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,

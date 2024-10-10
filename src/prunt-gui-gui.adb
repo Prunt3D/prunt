@@ -112,6 +112,14 @@ package body Prunt.GUI.GUI is
                   Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & LF));
                end loop;
 
+               Append (Text, From_UTF_8 (LF & "Tachometer frequencies:" & LF));
+               for F in My_Config.Fan_Name loop
+                  Append
+                    (Text,
+                     From_UTF_8 (F'Image & ": ") & DF_Image (Get_Tachometer_Frequency (F) / hertz) &
+                     From_UTF_8 (" Hz" & LF));
+               end loop;
+
                if Is_Stepgen_Paused then
                   Append (Text, From_UTF_8 ("STEP GENERATOR IS PAUSED" & LF));
                end if;
@@ -592,7 +600,7 @@ package body Prunt.GUI.GUI is
       exception
          when Gnoga.Server.Connection.Connection_Error =>
             null; --  We ignore this error because it can be caused by a connection being closed during loading.
-         when E : others                                   =>
+         when E : others                               =>
             Fatal_Exception_Occurrence_Holder.Set
               (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
       end;

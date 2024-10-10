@@ -40,6 +40,7 @@ generic
    with function Get_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;
    with function Get_Heater_Power (Heater : My_Config.Heater_Name) return Prunt.PWM_Scale;
    with function Get_Input_Switch_State (Switch : My_Config.Input_Switch_Name) return Prunt.Pin_State;
+   with function Get_Tachometer_Frequency (Fan : My_COnfig.Fan_Name) return Frequency;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
    with function Is_Stepgen_Paused return Boolean;

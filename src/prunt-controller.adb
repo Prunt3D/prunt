@@ -83,6 +83,9 @@ package body Prunt.Controller is
    Last_Heater_Powers : array (Heater_Name) of PWM_Scale := (others => PWM_Scale (0.0)) with
        Atomic_Components, Volatile_Components;
 
+   Last_Tachometer_Frequencies : array (Fan_Name) of Frequency := (others => Frequency (0.0)) with
+       Atomic_Components, Volatile_Components;
+
    type Atomic_Volatile_Heater_Thermistor_Map is new Heater_Thermistor_Map with
      Atomic_Components, Volatile_Components;
    Stored_Heater_Thermistors : Atomic_Volatile_Heater_Thermistor_Map;
@@ -123,6 +126,11 @@ package body Prunt.Controller is
    begin
       return Last_Input_Switch_States (Switch);
    end Get_Input_Switch_State;
+
+   function Get_Tachometer_Frequency (Fan : Fan_Name) return Frequency is
+   begin
+      return Last_Tachometer_Frequencies (Fan);
+   end Get_Tachometer_Frequency;
 
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean) is
    begin
@@ -231,6 +239,11 @@ package body Prunt.Controller is
    begin
       Last_Heater_Powers (Heater) := Power;
    end Report_Heater_Power;
+
+   procedure Report_Tachometer_Frequency (Fan : Fan_Name; Freq : Frequency) is
+   begin
+      Last_Tachometer_Frequencies (Fan) := Freq;
+   end Report_Tachometer_Frequency;
 
    --  TODO
    procedure Report_Last_Command_Executed (Index : Command_Index) is null;
