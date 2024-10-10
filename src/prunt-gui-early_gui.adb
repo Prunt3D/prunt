@@ -41,9 +41,9 @@ package body Prunt.GUI.Early_GUI is
       function Translate_Character (C : Unicode_Character) return UXString is
       begin
          if C = Unicode_Character'Val (10) then
-            return "</br>";
+            return "<br>";
          elsif C = Unicode_Character'Val (13) then
-            return "</br>";
+            return "<br>";
          elsif C = '&' then
             return "&amp;";
          elsif C = '<' then
