@@ -973,8 +973,13 @@ package body Prunt.GUI.Config_Editor is
             Name        => "Switch Position",
             Description =>
               "The position that the axis is considered to be at when the switch is hit during the second move." &
-              "This position does not need to be inside the working area. " &
-              "If it is outside then the axis will move back in to the working area after homing.");
+              "This position does not need to be inside the working area.");
+
+         View.Move_To_After.Create
+           (Parent      => View.Double_Tap_Table,
+            Form        => View,
+            Name        => "Move To After",
+            Description => "The position to move the axis to after homing is completed.");
 
          View.Set_To_Value_Table.Create (View.Kind_Table);
          View.Set_To_Value_Table.Style ("border-collapse", "collapse");
@@ -1008,6 +1013,7 @@ package body Prunt.GUI.Config_Editor is
                View.Back_Off_Move_Distance.Set_Data (Params.Back_Off_Move_Distance);
                View.Second_Move_Distance.Set_Data (Params.Second_Move_Distance);
                View.Switch_Position.Set_Data (Params.Switch_Position);
+               View.Move_To_After.Set_Data (Params.Move_To_After);
             when My_Config.Set_To_Value_Kind =>
                View.Kind_Table.Tabs.Select_Tab ("Set To Value");
                View.Value.Set_Data (Params.Value);
@@ -1024,6 +1030,7 @@ package body Prunt.GUI.Config_Editor is
             Params.Back_Off_Move_Distance := View.Back_Off_Move_Distance.Get_Data;
             Params.Second_Move_Distance   := View.Second_Move_Distance.Get_Data;
             Params.Switch_Position        := View.Switch_Position.Get_Data;
+            Params.Move_To_After          := View.Move_To_After.Get_Data;
          elsif View.Kind_Table.Cards.Current_Card = View.Set_To_Value_Table'Unrestricted_Access then
             Params       := (Kind => My_Config.Set_To_Value_Kind, others => <>);
             Params.Value := View.Value.Get_Data;

@@ -85,6 +85,12 @@ package body Prunt.Controller.Gcode_Handler is
          Back_Off_Offset : constant Position_Offset :=
            [Zero_Pos_Offset with delta Axis => Axial_Homing_Params (Axis).Back_Off_Move_Distance];
       begin
+         if Axial_Homing_Params (Axis).Move_To_After < Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis) or
+           Axial_Homing_Params (Axis).Move_To_After > Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis)
+         then
+            raise Command_Constraint_Error with "Final position for homing axis " & Axis'Image & " is out of bounds.";
+         end if;
+
          My_Planner.Enqueue
            ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Extra_Data => (others => <>),
@@ -174,13 +180,7 @@ package body Prunt.Controller.Gcode_Handler is
              Reset_Pos        => Pos_After),
             Ignore_Bounds => True);
 
-         Pos_After := Pos_After + Back_Off_Offset;
-
-         if Pos_After (Axis) < Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis) then
-            Pos_After (Axis) := Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis);
-         elsif Pos_After (Axis) > Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis) then
-            Pos_After (Axis) := Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis);
-         end if;
+         Pos_After (Axis) :=  Axial_Homing_Params (Axis).Move_To_After;
 
          My_Planner.Enqueue
            ((Kind              => My_Planner.Move_Kind,
@@ -244,17 +244,6 @@ package body Prunt.Controller.Gcode_Handler is
                               My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
                            when My_Config.Double_Tap_Kind =>
                               Double_Tap_Home_Axis (Axis, Pos_After);
-                              if Axis = Z_Axis then
-                                 Pos_After (Z_Axis) := 5.0 * mm; --  TODO: Replace with a config option.
-                                 My_Planner.Enqueue
-                                   ((Kind              => My_Planner.Move_Kind,
-                                     Pos               => Pos_After,
-                                     Feedrate          => 10.0 * mm / s,
-                                     Corner_Extra_Data => Corner_Data));
-                                 My_Planner.Enqueue
-                                   ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
-                                 My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
-                              end if;
                         end case;
                         Is_Homed (Axis) := True;
                      end if;

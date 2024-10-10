@@ -131,6 +131,7 @@ package Prunt.Config is
             Back_Off_Move_Distance : Length            := 0.0 * mm;
             Second_Move_Distance   : Length            := 0.0 * mm;
             Switch_Position        : Length            := 0.0 * mm;
+            Move_To_After          : Length            := 5.0 * mm;
          when Set_To_Value_Kind =>
             Value : Length := 0.0 * mm;
       end case;

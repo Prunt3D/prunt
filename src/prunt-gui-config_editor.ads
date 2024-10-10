@@ -560,6 +560,7 @@ package Prunt.GUI.Config_Editor is
          Back_Off_Move_Distance : Basic_Inputs.Length_Rows.Parameter_Row;
          Second_Move_Distance   : Basic_Inputs.Length_Rows.Parameter_Row;
          Switch_Position        : Basic_Inputs.Length_Rows.Parameter_Row;
+         Move_To_After          : Basic_Inputs.Length_Rows.Parameter_Row;
 
          Set_To_Value_Table : aliased Gnoga.Gui.Element.Table.Table_Type;
          Value              : Basic_Inputs.Length_Rows.Parameter_Row;
