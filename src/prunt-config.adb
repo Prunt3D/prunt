@@ -300,17 +300,22 @@ package body Prunt.Config is
    package TMC2240_Freewheel_Type_TOML_Conversion is new Discrete_TOML_Conversion (TMC_Types.TMC2240.Freewheel_Type);
    use TMC2240_Freewheel_Type_TOML_Conversion;
 
-   --  TODO: It might make sense to make these recursively merge tables.
    function Left (Key : Unbounded_UTF8_String; L, R : TOML_Value) return TOML_Value is
-      pragma Unreferenced (Key, R);
    begin
-      return L;
+      if Kind (L) = TOML_Table and Kind (R) = TOML_Table then
+         return Merge (L, R, Left'Access);
+      else
+         return L;
+      end if;
    end Left;
 
    function Right (Key : Unbounded_UTF8_String; L, R : TOML_Value) return TOML_Value is
-      pragma Unreferenced (Key, L);
    begin
-      return R;
+      if Kind (L) = TOML_Table and Kind (R) = TOML_Table then
+         return Merge (L, R, Right'Access);
+      else
+         return R;
+      end if;
    end Right;
 
    protected body Config_File is
