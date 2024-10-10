@@ -663,7 +663,8 @@ package body Prunt.GUI.Config_Editor is
             Description =>
               "May safely be set to 8E307" &
               " for effectively infinite jerk (to the extent allowed by other constraints). " &
-              "Axial values will go above this value when corner blending is enabled.");
+              "Axial values will go above this value when corner blending is enabled. " &
+              "A good starting point for tuning is 100× the set maximum acceleration.");
 
          View.Snap_Max.Create
            (Parent      => View.Widget_Table,
@@ -672,7 +673,8 @@ package body Prunt.GUI.Config_Editor is
             Description =>
               "May safely be set to 8E307" &
               " for effectively infinite snap (to the extent allowed by other constraints). " &
-              "Axial values will go above this value when corner blending is enabled.");
+              "Axial values will go above this value when corner blending is enabled." &
+              "A good starting point for tuning is 1000× the set maximum jerk.");
 
          View.Crackle_Max.Create
            (Parent      => View.Widget_Table,
@@ -681,7 +683,8 @@ package body Prunt.GUI.Config_Editor is
             Description =>
               "May safely be set to 8E307" &
               " for effectively infinite crackle (to the extent allowed by other constraints). " &
-              "Axial values will go above this value when corner blending is enabled.");
+              "Axial values will go above this value when corner blending is enabled. " &
+              "A good starting point for tuning is 10000× the set maximum snap.");
 
          View.Axial_Velocity_Maxes.Create
            (Parent      => View.Widget_Table,
