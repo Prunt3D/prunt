@@ -118,7 +118,11 @@ package body Prunt.GUI.GUI is
                   JS_Text : UXString := From_UTF_8 ("");
                begin
                   for T in My_Config.Thermistor_Name loop
-                     Append (JS_Text, DF_Image (Get_Temperature (T) / celcius) & ",");
+                     Append (JS_Text, DF_Image (Get_Thermistor_Temperature (T) / celcius) & ",");
+                  end loop;
+
+                  for S in My_Config.Stepper_Name loop
+                     Append (JS_Text, DF_Image (Get_Stepper_Temperature (S) / celcius) & ",");
                   end loop;
 
                   Gnoga.Server.Connection.Execute_Script
@@ -268,14 +272,15 @@ package body Prunt.GUI.GUI is
                App.Status_Message_Text.Create (App.Status_Message_Row);
 
                declare
-                  JS_Names   : UXString          := "";
-                  JS_Visible : UXString          := "";
-                  JS_Colours : constant UXString :=
+                  JS_Names     : UXString          := "";
+                  JS_Visible   : UXString          := "";
+                  JS_Colours   : constant UXString :=
                     "d3.color('#e6194b'), d3.color('#3cb44b'), d3.color('#ffe119'), d3.color('#4363d8'), " &
                     "d3.color('#f58231'), d3.color('#911eb4'), d3.color('#46f0f0'), d3.color('#f032e6'), " &
                     "d3.color('#bcf60c'), d3.color('#fabebe'), d3.color('#008080'), d3.color('#e6beff'), " &
                     "d3.color('#9a6324'), d3.color('#fffac8'), d3.color('#800000'), d3.color('#aaffc3'), " &
                     "d3.color('#808000'), d3.color('#ffd8b1'), d3.color('#000075'), d3.color('#808080'), ";
+                  Array_Length : Natural          := 0;
                begin
                   for T in My_Config.Thermistor_Name loop
                      JS_Names.Append (From_UTF_8 ("'" & T'Image & "', "));
@@ -287,6 +292,18 @@ package body Prunt.GUI.GUI is
                         JS_Visible.Append
                           (From_UTF_8 ("" & Boolean'(Params.Kind /= Thermistors.Disabled_Kind)'Image & ", "));
                      end;
+                     Array_Length := @ + 1;
+                  end loop;
+
+                  for S in My_Config.Stepper_Name loop
+                     JS_Names.Append (From_UTF_8 ("'" & S'Image & "', "));
+                     declare
+                        Params : My_Config.Stepper_Parameters;
+                     begin
+                        My_Config.Config_File.Read (Params, S);
+                        JS_Visible.Append (From_UTF_8 ("" & Boolean'(Params.Kind in TMC2240_UART_Kind)'Image & ", "));
+                     end;
+                     Array_Length := @ + 1;
                   end loop;
 
                   App.Status_Thermal_Chart_Row.Create (App.Status_Table);
@@ -297,7 +314,7 @@ package body Prunt.GUI.GUI is
                   pragma Warnings (Off, "this line is too long");
                   Gnoga.Server.Connection.Execute_Script
                     (App.Status_Thermal_Chart_Div.Connection_ID,
-                       "window.status_thermal_chart_data = Array.from(Array(" & From_UTF_8 (My_Config.Thermistor_Name'Pos (My_Config.Thermistor_Name'Last)'Image) & " + 1), () => new Array(0));"
+                       "window.status_thermal_chart_data = Array.from(Array(" & From_UTF_8(Array_Length'Image) & "), () => new Array(0));"
                        & "window.status_thermal_chart_base_time = Date.now() - 1000 * " & From_UTF_8 (Ada.Real_Time.Clock'Image) & ";"
                        & "window.status_thermal_chart = new TimeChart(document.getElementById('" & App.Status_Thermal_Chart_Div.ID & "'), {"
                        & "    series: window.status_thermal_chart_data.map(function(a, i) {"
@@ -341,6 +358,7 @@ package body Prunt.GUI.GUI is
                     "d3.color('#9a6324'), d3.color('#fffac8'), d3.color('#800000'), d3.color('#aaffc3'), " &
                     "d3.color('#808000'), d3.color('#ffd8b1'), d3.color('#000075'), d3.color('#808080'), ";
                   JS_Colour_Assignments : UXString          := "";
+                  Array_Length          : Natural           := 0;
                begin
                   for H in My_Config.Heater_Name loop
                      JS_Names.Append (From_UTF_8 ("'" & H'Image & "', "));
@@ -352,6 +370,7 @@ package body Prunt.GUI.GUI is
                         JS_Colour_Assignments.Append
                           (From_UTF_8 (My_Config.Thermistor_Name'Pos (Params.Thermistor)'Image & ", "));
                      end;
+                     Array_Length := @ + 1;
                   end loop;
 
                   App.Status_Heater_Power_Chart_Row.Create (App.Status_Table);
@@ -362,7 +381,7 @@ package body Prunt.GUI.GUI is
                   pragma Warnings (Off, "this line is too long");
                   Gnoga.Server.Connection.Execute_Script
                     (App.Status_Heater_Power_Chart_Div.Connection_ID,
-                     "window.status_heater_power_chart_data = Array.from(Array(" & From_UTF_8 (My_Config.Heater_Name'Pos (My_Config.Heater_Name'Last)'Image) & " + 1), () => new Array(0));"
+                     "window.status_heater_power_chart_data = Array.from(Array(" & From_UTF_8 (Array_Length'Image) & "), () => new Array(0));"
                        & "window.status_heater_power_chart_base_time = Date.now() - 1000 * " & From_UTF_8 (Ada.Real_Time.Clock'Image) & ";"
                        & "window.status_heater_power_chart = new TimeChart(document.getElementById('" & App.Status_Heater_Power_Chart_Div.ID & "'), {"
                        & "    series: window.status_heater_power_chart_data.map(function(a, i) {"

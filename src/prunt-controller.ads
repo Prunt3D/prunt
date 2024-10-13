@@ -239,6 +239,8 @@ private
 
    function Get_Temperature (Thermistor : Thermistor_Name) return Temperature;
 
+   function Get_Temperature (Stepper : Stepper_Name) return Temperature;
+
    function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale;
 
    function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State;
@@ -260,7 +262,8 @@ private
      (My_Logger                         => My_Logger,
       My_Config                         => My_Config,
       Get_Position                      => Get_Position,
-      Get_Temperature                   => Get_Temperature,
+      Get_Thermistor_Temperature        => Get_Temperature,
+      Get_Stepper_Temperature           => Get_Temperature,
       Get_Heater_Power                  => Get_Heater_Power,
       Get_Input_Switch_State            => Get_Input_Switch_State,
       Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
@@ -279,6 +282,10 @@ private
    procedure Setup_Planner;
    procedure Setup_Step_Generator;
    procedure Setup_Gcode_Handler;
+
+   task TMC_Temperature_Updater is
+      entry Start;
+   end TMC_Temperature_Updater;
 
    task Early_GUI_Runner is
       entry Finish;

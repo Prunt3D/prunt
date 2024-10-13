@@ -74,11 +74,17 @@ package Prunt.Controller_Generic_Types is
             TMC2240_UART_Address : TMC_Types.TMC2240.UART_Node_Address;
             TMC2240_UART_Write   : access procedure (Message : TMC_Types.TMC2240.UART_Data_Byte_Array);
             --  Bytes sent in reverse order. Least significant bit sent first.
+            --
+            --  This procedure may be called from any task and may be called during step generation. Multiple calls may
+            --  also run simultaneously. The server implementation should ensure that this will not cause any issues.
             TMC2240_UART_Read    : access procedure
               (Message        :     TMC_Types.TMC2240.UART_Query_Byte_Array;
                Receive_Failed : out Boolean;
                Reply          : out TMC_Types.TMC2240.UART_Data_Byte_Array);
             --  Bytes sent in reverse order. Least significant bit sent first. Reply received in same way.
+            --
+            --  This procedure may be called from any task and may be called during step generation. Multiple calls may
+            --  also run simultaneously. The server implementation should ensure that this will not cause any issues.
       end case;
    end record;
 

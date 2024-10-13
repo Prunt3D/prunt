@@ -74,7 +74,10 @@ package body Prunt.Controller is
      Atomic_Components, Volatile_Components;
    Last_Heater_Targets : Atomic_Volatile_Heater_Targets := (others => Temperature (0.0));
 
-   Last_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0)) with
+   Last_Thermistor_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0)) with
+       Atomic_Components, Volatile_Components;
+
+   Last_Stepper_Temperatures : array (Stepper_Name) of Temperature := (others => Temperature (0.0)) with
        Atomic_Components, Volatile_Components;
 
    Last_Input_Switch_States : array (Input_Switch_Name) of Pin_State := (others => Low_State) with
@@ -92,7 +95,7 @@ package body Prunt.Controller is
 
    type Temperature_Report_Counter is mod 2**32;
 
-   Last_Temperatures_Counters : array (Thermistor_Name) of Temperature_Report_Counter := (others => 0) with
+   Last_Thermistor_Temperatures_Counters : array (Thermistor_Name) of Temperature_Report_Counter := (others => 0) with
      Atomic_Components, Volatile_Components;
 
    package My_Gcode_Handler is new Gcode_Handler;
@@ -114,7 +117,12 @@ package body Prunt.Controller is
 
    function Get_Temperature (Thermistor : Thermistor_Name) return Temperature is
    begin
-      return Last_Temperatures (Thermistor);
+      return Last_Thermistor_Temperatures (Thermistor);
+   end Get_Temperature;
+
+   function Get_Temperature (Stepper : Stepper_Name) return Temperature is
+   begin
+      return Last_Stepper_Temperatures (Stepper);
    end Get_Temperature;
 
    function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale is
@@ -141,6 +149,49 @@ package body Prunt.Controller is
    begin
       My_Gcode_Handler.Try_Set_File (Path, Succeeded);
    end Submit_Gcode_File;
+
+   task body TMC_Temperature_Updater is
+   begin
+      accept Start;
+
+      loop
+         for S in Stepper_Name loop
+            case Stepper_Hardware (S).Kind is
+               when Basic_Kind =>
+                  null;
+               when TMC2240_UART_Kind =>
+                  declare
+                     Query          : TMC_Types.TMC2240.UART_Query_Message :=
+                       (Bytes_Mode => False,
+                        Content    =>
+                          (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
+                           Register => TMC_Types.TMC2240.ADC_TEMP_Address,
+                           others   => <>));
+                     Receive_Failed : Boolean;
+                     Reply          : TMC_Types.TMC2240.UART_Data_Message;
+                  begin
+                     Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                     Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
+
+                     if Receive_Failed then
+                        null;
+                     elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
+                        null;
+                     elsif Reply.Content.Node /= 255 then
+                        null;
+                     elsif Reply.Content.Register /= Query.Content.Register then
+                        null;
+                     else
+                        Last_Stepper_Temperatures (S) :=
+                          Temperature (Reply.Content.ADC_TEMP_Data.ADC_Temp) - 264.675 * celcius;
+                     end if;
+                  end;
+            end case;
+         end loop;
+
+         delay 1.0;
+      end loop;
+   end TMC_Temperature_Updater;
 
    task body Early_GUI_Runner is
    begin
@@ -217,6 +268,7 @@ package body Prunt.Controller is
               (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
       end;
 
+      TMC_Temperature_Updater.Start;
       My_Early_GUI.Stop;
       Early_GUI_Runner.Finish;
       delay 1.0;
@@ -231,8 +283,8 @@ package body Prunt.Controller is
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
    begin
-      Last_Temperatures (Thermistor)          := Temp;
-      Last_Temperatures_Counters (Thermistor) := @ + 1;
+      Last_Thermistor_Temperatures (Thermistor)          := Temp;
+      Last_Thermistor_Temperatures_Counters (Thermistor) := @ + 1;
    end Report_Temperature;
 
    procedure Report_Heater_Power (Heater : Heater_Name; Power : PWM_Scale) is
@@ -328,15 +380,16 @@ package body Prunt.Controller is
       if Data.Wait_For_Heater then
          declare
             Start_Counter : constant Temperature_Report_Counter :=
-              Last_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name));
+              Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name));
          begin
             loop
-               exit when Last_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) /=
+               exit when Last_Thermistor_Temperatures_Counters
+                   (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) /=
                  Start_Counter;
             end loop;
          end;
          loop
-            exit when Last_Temperatures (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) >=
+            exit when Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) >=
               Last_Heater_Targets (Data.Wait_For_Heater_Name);
          end loop;
       end if;
