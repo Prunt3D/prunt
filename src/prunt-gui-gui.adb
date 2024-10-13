@@ -95,18 +95,6 @@ package body Prunt.GUI.GUI is
                   Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & LF));
                end loop;
 
-               Append (Text, From_UTF_8 (LF & "Temperatures:" & LF));
-               for T in My_Config.Thermistor_Name loop
-                  Append
-                    (Text,
-                     From_UTF_8 (T'Image & ": ") & DF_Image (Get_Temperature (T) / celcius) & From_UTF_8 (" C" & LF));
-               end loop;
-
-               Append (Text, From_UTF_8 (LF & "Heater powers:" & LF));
-               for H in My_Config.Heater_Name loop
-                  Append (Text, From_UTF_8 (H'Image & ": ") & DF_Image (Get_Heater_Power (H)) & From_UTF_8 ("" & LF));
-               end loop;
-
                Append (Text, From_UTF_8 (LF & "Input switch states:" & LF));
                for S in My_Config.Input_Switch_Name loop
                   Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & LF));
