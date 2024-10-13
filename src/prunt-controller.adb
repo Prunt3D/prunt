@@ -80,6 +80,9 @@ package body Prunt.Controller is
    Last_Stepper_Temperatures : array (Stepper_Name) of Temperature := (others => Temperature (0.0)) with
        Atomic_Components, Volatile_Components;
 
+   Last_Board_Temperatures : array (Board_Temperature_Probe_Name) of Temperature := (others => Temperature (0.0)) with
+       Atomic_Components, Volatile_Components;
+
    Last_Input_Switch_States : array (Input_Switch_Name) of Pin_State := (others => Low_State) with
        Atomic_Components, Volatile_Components;
 
@@ -123,6 +126,16 @@ package body Prunt.Controller is
    function Get_Temperature (Stepper : Stepper_Name) return Temperature is
    begin
       return Last_Stepper_Temperatures (Stepper);
+   end Get_Temperature;
+
+   function Get_Temperature (Temperature_Probe : Board_Temperature_Probe_Name) return Temperature is
+   begin
+      if Board_Temperature_Probe_Name'First > Board_Temperature_Probe_Name'Last then
+         --  This is here to keep GCC happy.
+         return 0.0 * celcius;
+      else
+         return Last_Board_Temperatures (Temperature_Probe);
+      end if;
    end Get_Temperature;
 
    function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale is
@@ -285,6 +298,11 @@ package body Prunt.Controller is
    begin
       Last_Thermistor_Temperatures (Thermistor)          := Temp;
       Last_Thermistor_Temperatures_Counters (Thermistor) := @ + 1;
+   end Report_Temperature;
+
+   procedure Report_Temperature (Temperature_Probe : Board_Temperature_Probe_Name; Temp : Temperature) is
+   begin
+      Last_Board_Temperatures (Temperature_Probe) := Temp;
    end Report_Temperature;
 
    procedure Report_Heater_Power (Heater : Heater_Name; Power : PWM_Scale) is

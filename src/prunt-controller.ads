@@ -123,6 +123,10 @@ package Prunt.Controller is
    --  Report the current thermistor output. There are no restrictions on how often this procedure needs to be called
    --  but some g-code commands will block until it is called after the start of command execution.
 
+   procedure Report_Temperature (Temperature_Probe : Board_Temperature_Probe_Name; Temp : Temperature);
+   --  Report the current board temperature probe output. There are no restrictions on how often this procedure needs
+   --  to be called.
+
    procedure Report_Heater_Power (Heater : Heater_Name; Power : PWM_Scale);
    --  Report the current power setting of a heater. There are no restrictions on how often this procedure needs to be
    --  called.
@@ -241,6 +245,8 @@ private
 
    function Get_Temperature (Stepper : Stepper_Name) return Temperature;
 
+   function Get_Temperature (Temperature_Probe : Board_Temperature_Probe_Name) return Temperature;
+
    function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale;
 
    function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State;
@@ -264,6 +270,8 @@ private
       Get_Position                      => Get_Position,
       Get_Thermistor_Temperature        => Get_Temperature,
       Get_Stepper_Temperature           => Get_Temperature,
+      Board_Temperature_Probe_Name      => Board_Temperature_Probe_Name,
+      Get_Board_Temperature             => Get_Temperature,
       Get_Heater_Power                  => Get_Heater_Power,
       Get_Input_Switch_State            => Get_Input_Switch_State,
       Get_Tachometer_Frequency          => Get_Tachometer_Frequency,

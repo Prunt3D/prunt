@@ -125,6 +125,10 @@ package body Prunt.GUI.GUI is
                      Append (JS_Text, DF_Image (Get_Stepper_Temperature (S) / celcius) & ",");
                   end loop;
 
+                  for P in Board_Temperature_Probe_Name loop
+                     Append (JS_Text, DF_Image (Get_Board_Temperature (P) / celcius) & ",");
+                  end loop;
+
                   Gnoga.Server.Connection.Execute_Script
                     (App.Status_Thermal_Chart_Div.Connection_ID,
                      "window.status_thermal_chart_data" &
@@ -280,7 +284,7 @@ package body Prunt.GUI.GUI is
                     "d3.color('#bcf60c'), d3.color('#fabebe'), d3.color('#008080'), d3.color('#e6beff'), " &
                     "d3.color('#9a6324'), d3.color('#fffac8'), d3.color('#800000'), d3.color('#aaffc3'), " &
                     "d3.color('#808000'), d3.color('#ffd8b1'), d3.color('#000075'), d3.color('#808080'), ";
-                  Array_Length : Natural          := 0;
+                  Array_Length : Natural           := 0;
                begin
                   for T in My_Config.Thermistor_Name loop
                      JS_Names.Append (From_UTF_8 ("'" & T'Image & "', "));
@@ -303,6 +307,12 @@ package body Prunt.GUI.GUI is
                         My_Config.Config_File.Read (Params, S);
                         JS_Visible.Append (From_UTF_8 ("" & Boolean'(Params.Kind in TMC2240_UART_Kind)'Image & ", "));
                      end;
+                     Array_Length := @ + 1;
+                  end loop;
+
+                  for P in Board_Temperature_Probe_Name loop
+                     JS_Names.Append (From_UTF_8 ("'" & P'Image & "', "));
+                     JS_Visible.Append (From_UTF_8 ("TRUE, "));
                      Array_Length := @ + 1;
                   end loop;
 

@@ -28,6 +28,7 @@ generic
    type Stepper_Name is (<>);
    type Heater_Name is (<>);
    type Thermistor_Name is (<>);
+   type Board_Temperature_Probe_Name is (<>);
    type Fan_Name is (<>);
    type Input_Switch_Name is (<>);
 package Prunt.Controller_Generic_Types is
