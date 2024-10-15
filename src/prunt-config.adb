@@ -555,6 +555,7 @@ package body Prunt.Config is
                Data.Back_Off_Move_Distance := From_TOML (Table.Get ("Back_Off_Move_Distance")) * mm;
                Data.Second_Move_Distance   := From_TOML (Table.Get ("Second_Move_Distance")) * mm;
                Data.Switch_Position        := From_TOML (Table.Get ("Switch_Position")) * mm;
+               Data.Move_To_After          := From_TOML (Table.Get ("Move_To_After")) * mm;
             when Set_To_Value_Kind =>
                Data := (Kind => Set_To_Value_Kind, others => <>);
                Write (Data, Axis, Append_Only => True);
@@ -574,6 +575,7 @@ package body Prunt.Config is
                Table.Set ("Back_Off_Move_Distance", To_TOML (Data.Back_Off_Move_Distance / mm));
                Table.Set ("Second_Move_Distance", To_TOML (Data.Second_Move_Distance / mm));
                Table.Set ("Switch_Position", To_TOML (Data.Switch_Position / mm));
+               Table.Set ("Move_To_After", To_TOML (Data.Move_To_After / mm));
             when Set_To_Value_Kind =>
                Table.Set ("Value", To_TOML (Data.Value / mm));
          end case;
