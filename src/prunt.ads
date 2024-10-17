@@ -44,7 +44,7 @@ package Prunt is
       --  Store an exception if no exception has been stored previously. Also prints all exceptions.
 
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence);
-      --  Get the stored exception, or Null_Occurrence if none have been stored.
+      --  Get the stored exception. Blocks until an exception is available.
    private
       function Null_Occurrence return Ada.Exceptions.Exception_Occurrence;
       Data : aliased Ada.Exceptions.Exception_Occurrence := Null_Occurrence;
