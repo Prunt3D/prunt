@@ -518,7 +518,7 @@ package body Prunt.Gcode_Parser is
                         Comm.Fan_To_Set := Fan_Name'First;
                      when Integer_Kind =>
                         begin
-                           Comm.Fan_To_Set := Fan_Name'Val (Integer_Or_Error ('P'));
+                           Comm.Fan_To_Set := Fan_Name'Enum_Val (Integer_Or_Error ('P'));
                            if not Comm.Fan_To_Set'Valid then
                               raise Constraint_Error;
                            end if;

@@ -378,7 +378,7 @@ package body Prunt.GUI.GUI is
                      begin
                         My_Config.Config_File.Read (Params, H);
                         JS_Colour_Assignments.Append
-                          (From_UTF_8 (My_Config.Thermistor_Name'Pos (Params.Thermistor)'Image & ", "));
+                          (From_UTF_8 (My_Config.Thermistor_Name'Enum_Rep (Params.Thermistor)'Image & ", "));
                      end;
                      Array_Length := @ + 1;
                   end loop;
@@ -455,7 +455,7 @@ package body Prunt.GUI.GUI is
                      App.Config_Editor_Stepper_Widgets (I).Create_Widget (App.Config_Editor_Steppers_Table.Cards, I);
                      App.Config_Editor_Steppers_Table.Add_Tab
                        (UXStrings.From_UTF_8
-                          (I'Image & " (" & Trim (My_Config.Stepper_Name'Pos (I)'Image, Left) & ")"),
+                          (I'Image & " (" & Trim (My_Config.Stepper_Name'Enum_Rep (I)'Image, Left) & ")"),
                         App.Config_Editor_Stepper_Widgets (I)'Access);
                   end loop;
                end;
@@ -475,7 +475,7 @@ package body Prunt.GUI.GUI is
                        (App.Config_Editor_Input_Switches_Table.Cards, I);
                      App.Config_Editor_Input_Switches_Table.Add_Tab
                        (UXStrings.From_UTF_8
-                          (I'Image & " (" & Trim (My_Config.Input_Switch_Name'Pos (I)'Image, Left) & ")"),
+                          (I'Image & " (" & Trim (My_Config.Input_Switch_Name'Enum_Rep (I)'Image, Left) & ")"),
                         App.Config_Editor_Input_Switch_Widgets (I)'Access);
                   end loop;
                end;
@@ -508,7 +508,7 @@ package body Prunt.GUI.GUI is
                        (App.Config_Editor_Thermistors_Table.Cards, I);
                      App.Config_Editor_Thermistors_Table.Add_Tab
                        (UXStrings.From_UTF_8
-                          (I'Image & " (" & Trim (My_Config.Thermistor_Name'Pos (I)'Image, Left) & ")"),
+                          (I'Image & " (" & Trim (My_Config.Thermistor_Name'Enum_Rep (I)'Image, Left) & ")"),
                         App.Config_Editor_Thermistor_Widgets (I)'Access);
                   end loop;
                end;
@@ -522,7 +522,8 @@ package body Prunt.GUI.GUI is
                   for I in App.Config_Editor_Heater_Widgets'Range loop
                      App.Config_Editor_Heater_Widgets (I).Create_Widget (App.Config_Editor_Heaters_Table.Cards, I);
                      App.Config_Editor_Heaters_Table.Add_Tab
-                       (UXStrings.From_UTF_8 (I'Image & " (" & Trim (My_Config.Heater_Name'Pos (I)'Image, Left) & ")"),
+                       (UXStrings.From_UTF_8
+                          (I'Image & " (" & Trim (My_Config.Heater_Name'Enum_Rep (I)'Image, Left) & ")"),
                         App.Config_Editor_Heater_Widgets (I)'Access);
                   end loop;
                end;
@@ -540,7 +541,8 @@ package body Prunt.GUI.GUI is
                   for I in App.Config_Editor_Fan_Widgets'Range loop
                      App.Config_Editor_Fan_Widgets (I).Create_Widget (App.Config_Editor_Fans_Table.Cards, I);
                      App.Config_Editor_Fans_Table.Add_Tab
-                       (UXStrings.From_UTF_8 (I'Image & " (" & Trim (My_Config.Fan_Name'Pos (I)'Image, Left) & ")"),
+                       (UXStrings.From_UTF_8
+                          (I'Image & " (" & Trim (My_Config.Fan_Name'Enum_Rep (I)'Image, Left) & ")"),
                         App.Config_Editor_Fan_Widgets (I)'Access);
                   end loop;
                end;
