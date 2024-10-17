@@ -131,15 +131,14 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
    function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters is
       New_Params : Kinematic_Parameters := Params;
    begin
+      New_Params.Tangential_Velocity_Max :=
+        Velocity'Min (New_Params.Tangential_Velocity_Max, 299_792_458_000.1 * mm / s);
+
       New_Params.Acceleration_Max :=
-        Acceleration'Min
-          (New_Params.Acceleration_Max, New_Params.Tangential_Velocity_Max / Interpolation_Time);
-      New_Params.Jerk_Max         :=
-        Jerk'Min (New_Params.Jerk_Max, New_Params.Acceleration_Max / Interpolation_Time);
-      New_Params.Snap_Max         :=
-        Snap'Min (New_Params.Snap_Max, New_Params.Jerk_Max / Interpolation_Time);
-      New_Params.Crackle_Max      :=
-        Crackle'Min (New_Params.Crackle_Max, New_Params.Snap_Max / Interpolation_Time);
+        Acceleration'Min (New_Params.Acceleration_Max, New_Params.Tangential_Velocity_Max / Interpolation_Time);
+      New_Params.Jerk_Max         := Jerk'Min (New_Params.Jerk_Max, New_Params.Acceleration_Max / Interpolation_Time);
+      New_Params.Snap_Max         := Snap'Min (New_Params.Snap_Max, New_Params.Jerk_Max / Interpolation_Time);
+      New_Params.Crackle_Max      := Crackle'Min (New_Params.Crackle_Max, New_Params.Snap_Max / Interpolation_Time);
 
       return New_Params;
    end Limit_Higher_Order_Params;
