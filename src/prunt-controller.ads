@@ -159,9 +159,6 @@ private
    --  plain variable but that is a GNAT extension and of course introduces the risk of dangling pointers.
    pragma Warnings (On, "use of an anonymous access type allocator");
 
-   Config_Constraint_Error : exception;
-   --  Raised when the configuration file is found to be invalid during setup.
-
    procedure Helper_Lock_Memory with
      Import => True, Convention => C, External_Name => "prunt_controller_helper_lock_memory";
 

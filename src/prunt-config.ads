@@ -212,6 +212,7 @@ package Prunt.Config is
       procedure Write (Data : Fan_Parameters; Fan : Fan_Name; Append_Only : Boolean := False);
       procedure Read (Data : out G_Code_Assignment_Parameters);
       procedure Write (Data : G_Code_Assignment_Parameters; Append_Only : Boolean := False);
+      procedure Validate_Config (Report : access procedure (Message : String));
    private
       procedure Maybe_Read_File;
       procedure Write_File;

@@ -226,7 +226,14 @@ package body Prunt.Controller is
    end Prompt_For_Update;
 
    procedure Run is
-      Prunt_Params : My_Config.Prunt_Parameters;
+      Prunt_Params    : My_Config.Prunt_Parameters;
+      Is_Config_Valid : Boolean := True;
+
+      procedure Log_Config_Error (Message : String) is
+      begin
+         Is_Config_Valid := False;
+         My_Logger.Log ("Config error: " & Message);
+      end Log_Config_Error;
    begin
       begin
          Ada.Task_Termination.Set_Specific_Handler
@@ -237,8 +244,18 @@ package body Prunt.Controller is
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
          My_Config.Config_File.Read (Prunt_Params);
+         My_Config.Config_File.Validate_Config (Log_Config_Error'Access);
 
-         if not Prunt_Params.Enabled then
+         if not Is_Config_Valid then
+            My_Logger.Log ("Prunt is disabled. Config is not valid.");
+            declare
+               Prunt_Params : My_Config.Prunt_Parameters;
+            begin
+               My_Config.Config_File.Read (Prunt_Params);
+               Prunt_Params.Enabled := False;
+               My_Config.Config_File.Write (Prunt_Params);
+            end;
+         elsif not Prunt_Params.Enabled then
             My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
          else
             begin
@@ -261,16 +278,6 @@ package body Prunt.Controller is
                      Reconfigure_Heater (H, Heater_Params.Params);
                   end;
                end loop;
-            exception
-               when Config_Constraint_Error =>
-                  declare
-                     Prunt_Params : My_Config.Prunt_Parameters;
-                  begin
-                     My_Config.Config_File.Read (Prunt_Params);
-                     Prunt_Params.Enabled := False;
-                     My_Config.Config_File.Write (Prunt_Params);
-                  end;
-                  raise;
             end;
          end if;
 
@@ -483,12 +490,6 @@ package body Prunt.Controller is
          when Basic_Kind =>
             null;
          when TMC2240_UART_Kind =>
-            if Stepper_Params.TOFF = 0 and Stepper_Params.Enabled then
-               raise Config_Constraint_Error
-                 with "TOFF of 0 disables output for stepper " & Stepper'Image &
-                 ". This is not allowed for enabled steppers.";
-            end if;
-
             declare
                Query          : TMC_Types.TMC2240.UART_Query_Message :=
                  (Bytes_Mode => False,
@@ -520,7 +521,7 @@ package body Prunt.Controller is
                Message       : TMC_Types.TMC2240.UART_Data_Message;
             begin
                if Stepper_Params.Output_Current > 3.0 * amp then
-                  raise Config_Constraint_Error
+                  raise Constraint_Error
                     with "Current must not be greater than 3A for stepper " & Stepper'Image;
                elsif Stepper_Params.Output_Current = 3.0 * amp then
                   Current_Range := TMC_Types.TMC2240.Max_3A;
@@ -549,7 +550,7 @@ package body Prunt.Controller is
                          (32.0,
                             Dimensionless'Floor (Stepper_Params.Output_Current / (1.0 * amp) * 256.0)));
                else
-                  raise Config_Constraint_Error
+                  raise Constraint_Error
                     with "Current must not be less than 0.125A for stepper " & Stepper'Image;
                end if;
 
@@ -696,59 +697,12 @@ package body Prunt.Controller is
       Kinematics_Params : My_Config.Kinematics_Parameters;
    begin
       My_Config.Config_File.Read (Kinematics_Params);
-
-      if Kinematics_Params.Planner_Parameters.Tangential_Velocity_Max <= 0.0 * mm / s then
-         raise Config_Constraint_Error with "Max velocity must be greater than 0.";
-      end if;
-
-      if Kinematics_Params.Planner_Parameters.Acceleration_Max <= 0.0 * mm / s**2 then
-         raise Config_Constraint_Error with "Max acceleration must be greater than 0.";
-      end if;
-
-      if Kinematics_Params.Planner_Parameters.Jerk_Max <= 0.0 * mm / s**3 then
-         raise Config_Constraint_Error with "Max jerk must be greater than 0.";
-      end if;
-
-      if Kinematics_Params.Planner_Parameters.Snap_Max <= 0.0 * mm / s**4 then
-         raise Config_Constraint_Error with "Max snap must be greater than 0.";
-      end if;
-
-      if Kinematics_Params.Planner_Parameters.Crackle_Max <= 0.0 * mm / s**5 then
-         raise Config_Constraint_Error with "Max crackle must be greater than 0.";
-      end if;
-
-      for A in Axis_Name loop
-         if Kinematics_Params.Planner_Parameters.Axial_Velocity_Maxes (A) <= 0.0 * mm / s then
-            raise Config_Constraint_Error with "Max " & A'Image & " velocity must be greater than 0.";
-         end if;
-      end loop;
-
-      --  TODO: Check that scaler will not cause max step rate to be exceeded.
-
       My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
    end Setup_Planner;
 
    procedure Setup_Step_Generator is
       Map               : My_Step_Generator.Stepper_Pos_Map := [others => [others => Length'Last]];
       Kinematics_Params : My_Config.Kinematics_Parameters;
-
-      Used_Steppers : array (Stepper_Name) of Boolean := [others => False];
-
-      procedure Check_Stepper (S : Stepper_Name) is
-         Stepper_Params : My_Config.Stepper_Parameters;
-      begin
-         My_Config.Config_File.Read (Stepper_Params, S);
-
-         if not Stepper_Params.Enabled then
-            raise Config_Constraint_Error with "Stepper " & S'Image & " attached to an axis but not enabled.";
-         end if;
-
-         if Used_Steppers (S) then
-            raise Config_Constraint_Error with "Stepper " & S'Image & " attached to multiples axes.";
-         end if;
-
-         Used_Steppers (S) := True;
-      end Check_Stepper;
    begin
       My_Config.Config_File.Read (Kinematics_Params);
 
@@ -761,35 +715,29 @@ package body Prunt.Controller is
             case Kinematics_Params.Kind is
                when My_Config.Cartesian_Kind =>
                   if Kinematics_Params.X_Steppers (S) then
-                     Check_Stepper (S);
                      Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
                   end if;
 
                   if Kinematics_Params.Y_Steppers (S) then
-                     Check_Stepper (S);
                      Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
                   end if;
                when My_Config.Core_XY_Kind =>
                   if Kinematics_Params.A_Steppers (S) then
-                     Check_Stepper (S);
                      Map (X_Axis, S) := 0.5 * Stepper_Params.Mm_Per_Step;
                      Map (Y_Axis, S) := 0.5 * Stepper_Params.Mm_Per_Step;
                   end if;
 
                   if Kinematics_Params.B_Steppers (S) then
-                     Check_Stepper (S);
                      Map (X_Axis, S) := 0.5 * Stepper_Params.Mm_Per_Step;
                      Map (Y_Axis, S) := -0.5 * Stepper_Params.Mm_Per_Step;
                   end if;
             end case;
 
             if Kinematics_Params.Z_Steppers (S) then
-               Check_Stepper (S);
                Map (Z_Axis, S) := Stepper_Params.Mm_Per_Step;
             end if;
 
             if Kinematics_Params.E_Steppers (S) then
-               Check_Stepper (S);
                Map (E_Axis, S) := Stepper_Params.Mm_Per_Step;
             end if;
          end;

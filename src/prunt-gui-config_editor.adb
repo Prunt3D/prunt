@@ -202,6 +202,15 @@ package body Prunt.GUI.Config_Editor is
       procedure On_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
          App   : constant Gnoga.Types.Pointer_to_Connection_Data_Class := Object.Connection_Data;
          Image : UXString;
+
+         Is_Config_Valid : Boolean := True;
+
+         procedure Log_Config_Error (Message : String) is
+         begin
+            Is_Config_Valid := False;
+            Log_And_Switch_Tab (App, "Config error: " & Message);
+         end Log_Config_Error;
+
          procedure Inner (Section : in out Outer_Section_Widget'Class) is
          begin
             Log_And_Switch_Tab (App, "Saving. Please wait.");
@@ -209,9 +218,14 @@ package body Prunt.GUI.Config_Editor is
             Log_And_Switch_Tab (App, "Save done.");
             --  Log_And_Switch_Tab (App, Image);
             begin
-               Log_And_Switch_Tab (App, "Please wait for read-back.");
+               Log_And_Switch_Tab (App, "Please wait for read-back and check.");
                Read_Data (Section);
-               Log_And_Switch_Tab (App, "Read-back done.");
+               My_Config.Config_File.Validate_Config (Log_Config_Error'Access);
+               if Is_Config_Valid then
+                  Log_And_Switch_Tab (App, "Read-back and check done. Config valid.");
+               else
+                  Log_And_Switch_Tab (App, "Read-back and check done. Config not valid.");
+               end if;
                Log_And_Switch_Tab
                  (App,
                   "A restart is required to apply the new configuration. " &

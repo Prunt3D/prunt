@@ -874,6 +874,178 @@ package body Prunt.Config is
          Write_File;
       end Write;
 
+      procedure Validate_Config (Report : access procedure (Message : String)) is
+      begin
+         for Stepper in Stepper_Name loop
+            declare
+               use type TMC_Types.Unsigned_4;
+               Stepper_Params : Stepper_Parameters;
+            begin
+               Read (Stepper_Params, Stepper);
+
+               case Stepper_Params.Kind is
+                  when Basic_Kind =>
+                     null;
+                  when TMC2240_UART_Kind =>
+                     if Stepper_Params.TOFF = 0 and Stepper_Params.Enabled then
+                        Report
+                          ("TOFF of 0 disables output for stepper " & Stepper'Image &
+                           ". This is not allowed for enabled steppers.");
+                     end if;
+
+                     if Stepper_Params.Output_Current > 3.0 * amp then
+                        Report ("Current must not be greater than 3A for stepper " & Stepper'Image);
+                     elsif Stepper_Params.Output_Current < 0.125 * amp then
+                        Report ("Current must not be less than 0.125A for stepper " & Stepper'Image);
+                     end if;
+               end case;
+            end;
+         end loop;
+
+         declare
+            Kinematics_Params : Kinematics_Parameters;
+         begin
+            Read (Kinematics_Params);
+
+            if Kinematics_Params.Planner_Parameters.Tangential_Velocity_Max <= 0.0 * mm / s then
+               Report ("Max velocity must be greater than 0.");
+            end if;
+
+            if Kinematics_Params.Planner_Parameters.Acceleration_Max <= 0.0 * mm / s**2 then
+               Report ("Max acceleration must be greater than 0.");
+            end if;
+
+            if Kinematics_Params.Planner_Parameters.Jerk_Max <= 0.0 * mm / s**3 then
+               Report ("Max jerk must be greater than 0.");
+            end if;
+
+            if Kinematics_Params.Planner_Parameters.Snap_Max <= 0.0 * mm / s**4 then
+               Report ("Max snap must be greater than 0.");
+            end if;
+
+            if Kinematics_Params.Planner_Parameters.Crackle_Max <= 0.0 * mm / s**5 then
+               Report ("Max crackle must be greater than 0.");
+            end if;
+
+            for A in Axis_Name loop
+               if Kinematics_Params.Planner_Parameters.Axial_Velocity_Maxes (A) <= 0.0 * mm / s then
+                  Report ("Max " & A'Image & " velocity must be greater than 0.");
+               end if;
+            end loop;
+
+            --  TODO: Check that scaler will not cause max step rate to be exceeded.
+         end;
+
+         declare
+            Kinematics_Params : Kinematics_Parameters;
+
+            Used_Steppers : array (Stepper_Name) of Boolean := [others => False];
+
+            procedure Check_Stepper (S : Stepper_Name) is
+               Stepper_Params : Stepper_Parameters;
+            begin
+               Read (Stepper_Params, S);
+
+               if not Stepper_Params.Enabled then
+                  Report ("Stepper " & S'Image & " attached to an axis but not enabled.");
+               end if;
+
+               if Used_Steppers (S) then
+                  Report ("Stepper " & S'Image & " attached to multiples axes.");
+               end if;
+
+               Used_Steppers (S) := True;
+            end Check_Stepper;
+         begin
+            Read (Kinematics_Params);
+
+            for S in Stepper_Name loop
+               declare
+                  Stepper_Params : Stepper_Parameters;
+               begin
+                  Config_File.Read (Stepper_Params, S);
+
+                  case Kinematics_Params.Kind is
+                     when Cartesian_Kind =>
+                        if Kinematics_Params.X_Steppers (S) then
+                           Check_Stepper (S);
+                        end if;
+
+                        if Kinematics_Params.Y_Steppers (S) then
+                           Check_Stepper (S);
+                        end if;
+                     when Core_XY_Kind =>
+                        if Kinematics_Params.A_Steppers (S) then
+                           Check_Stepper (S);
+                        end if;
+
+                        if Kinematics_Params.B_Steppers (S) then
+                           Check_Stepper (S);
+                        end if;
+                  end case;
+
+                  if Kinematics_Params.Z_Steppers (S) then
+                     Check_Stepper (S);
+                  end if;
+
+                  if Kinematics_Params.E_Steppers (S) then
+                     Check_Stepper (S);
+                  end if;
+               end;
+            end loop;
+         end;
+
+         for Axis in Axis_Name loop
+            declare
+               Params : Homing_Parameters;
+            begin
+               Read (Params, Axis);
+               case Params.Kind is
+                  when Double_Tap_Kind =>
+                     if Params.First_Move_Distance = 0.0 * mm or Params.Second_Move_Distance = 0.0 * mm or
+                       Params.Back_Off_Move_Distance = 0.0 * mm
+                     then
+                        Report
+                          ("One or more homing distances on axis " & Axis'Image &
+                           " are set to 0. This would cause homing to never complete.");
+                     end if;
+
+                     if Params.First_Move_Distance / Params.Second_Move_Distance < 0.0 then
+                        Report
+                          ("First and second homing distance on axis " & Axis'Image & " have different signs. " &
+                           "This would cause the axis to move away from the switch forever after the first hit.");
+                     end if;
+
+                     if Params.First_Move_Distance / Params.Back_Off_Move_Distance > 0.0 then
+                        Report
+                          ("First homing distance and back-off distance on axis " & Axis'Image & " have same sign. " &
+                           "This would cause axis to move further in to the switch after hitting it.");
+                     end if;
+
+                     if abs Params.First_Move_Distance < abs Params.Second_Move_Distance then
+                        Report
+                          ("First homing distance on axis " & Axis'Image &
+                           " is smaller than second homing distance. " &
+                           "The second distance should be smaller for more accurate homing.");
+                     end if;
+
+                     declare
+                        Switch_Params : Input_Switch_Parameters;
+                     begin
+                        Read (Switch_Params, Params.Switch);
+                        if not Switch_Params.Enabled then
+                           Report
+                             ("Axis " & Axis'Image & " is configured to use switch " & Params.Switch'Image &
+                              " for homing but the switch is not enabled.");
+                        end if;
+                     end;
+                  when Set_To_Value_Kind =>
+                     null;
+               end case;
+            end;
+         end loop;
+      end Validate_Config;
+
       procedure Maybe_Read_File is
       begin
          if File_Read then
