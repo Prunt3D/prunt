@@ -618,10 +618,58 @@ package body Prunt.Gcode_Parser is
                Ctx.M208_Feedrate        := Floatify_Or_Default ('F', Ctx.M208_Feedrate / (mm / min)) * (mm / min);
                Ctx.M208_Offset (E_Axis) := Floatify_Or_Default ('E', Ctx.M208_Offset (E_Axis) / mm) * mm;
             when 303 =>
-               Runner
-                 ((Kind               => Heater_Autotune_Kind,
-                   Tuning_Temperature => Floatify_Or_Error ('S') * celcius,
-                   Pos                => Ctx.Pos));
+               declare
+                  Cycles : Parameter_Integer := Integer_Or_Default ('C', 5);
+                  Comm   : Command           :=
+                    (Kind               => Heater_Autotune_Kind,
+                     Tuning_Temperature => Floatify_Or_Error ('S') * celcius,
+                     Heater_To_Tune     => <>,
+                     Max_Cycles         => <>,
+                     Pos                => Ctx.Pos);
+               begin
+                  if Integer (Cycles) < Integer (Heaters.PID_Autotune_Cycle_Count'First) or
+                    Integer (Cycles) > Integer (Heaters.PID_Autotune_Cycle_Count'Last)
+                  then
+                     raise Bad_Line
+                       with "Valid range for parameter 'C' is " & Heaters.PID_Autotune_Cycle_Count'First'Image &
+                       " .. " & Heaters.PID_Autotune_Cycle_Count'Last'Image;
+                  else
+                     Comm.Max_Cycles := Heaters.PID_Autotune_Cycle_Count (Cycles);
+                  end if;
+
+                  case Params ('T').Kind is
+                     when No_Value_Kind =>
+                        raise Bad_Line with "Parameter 'T' has no value in command requiring value.";
+                     when Non_Existant_Kind =>
+                        raise Bad_Line with "Parameter 'T' is required.";
+                     when Integer_Kind =>
+                        begin
+                           Comm.Heater_To_Tune := Heater_Name'Enum_Val (Integer_Or_Error ('T'));
+                           if not Comm.Fan_To_Set'Valid then
+                              raise Constraint_Error;
+                           end if;
+                        exception
+                           when Constraint_Error =>
+                              raise Bad_Line with "Invalid heater index (" & Params ('T').Integer_Value'Image & ").";
+                        end;
+                     when Float_Kind =>
+                        raise Bad_Line
+                          with "Parameter 'T' must be integer between 0 and 999 or string in this command.";
+                     when String_Kind =>
+                        declare
+                           Name : constant String := String_Or_Error ('T');
+                        begin
+                           Comm.Heater_To_Tune := Heater_Name'Value (Name);
+                           if not Comm.Heater_To_Tune'Valid then
+                              raise Constraint_Error;
+                           end if;
+                        exception
+                           when Constraint_Error =>
+                              raise Bad_Line with "Invalid heater name (" & Name & ").";
+                        end;
+                  end case;
+                  Runner (Comm);
+               end;
             when 486 =>
                declare
                   Ignored : Dimensionless;

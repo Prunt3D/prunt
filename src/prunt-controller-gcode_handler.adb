@@ -425,11 +425,16 @@ package body Prunt.Controller.Gcode_Handler is
                end loop;
             when Heater_Autotune_Kind =>
                Autotune_Heater
-                 (G_Code_Assignment_Params.Hotend_Heater,
-                 (Kind                    => PID_Autotune_Kind,
-                   PID_Tuning_Temperature => Command.Tuning_Temperature,
-                   others                 => <>));
-               --  TODO: Take parameters.
+                 (Command.Heater_To_Tune,
+                  (Kind                       => PID_Autotune_Kind,
+                   PID_Tuning_Temperature     => Command.Tuning_Temperature,
+                   Check_Max_Cumulative_Error => <>,
+                   Check_Gain_Time            => <>,
+                   Check_Minimum_Gain         => <>,
+                   Check_Hysteresis           => <>,
+                   Max_Cycles                 => Command.Max_Cycles,
+                   Proportional_Tuning_Factor => <>,
+                   Derivative_Tuning_Factor   => <>));
             when Set_Acceleration_Max_Kind
               | Set_Jerk_Max_Kind
               | Set_Snap_Max_Kind

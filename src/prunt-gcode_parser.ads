@@ -19,6 +19,8 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Prunt.Heaters;
+
 generic
    type Stepper_Name is (<>);
    type Heater_Name is (<>);
@@ -83,7 +85,8 @@ package Prunt.Gcode_Parser is
             Fan_Speed  : PWM_Scale;
          when Heater_Autotune_Kind =>
             Tuning_Temperature : Temperature;
-            --  TODO: Allow specification of heater.
+            Heater_To_Tune     : Heater_Name;
+            Max_Cycles         : Heaters.PID_Autotune_Cycle_Count;
          when Set_Acceleration_Max_Kind =>
             Acceleration_Max : Acceleration;
          when Set_Jerk_Max_Kind =>
