@@ -823,6 +823,7 @@ package body Prunt.Config is
                Data.Always_On_PWM := From_TOML (Table.Get ("Always_On_PWM"));
          end case;
          Data.Invert_Output := From_TOML (Table.Get ("Invert_Output"));
+         Data.PWM_Frequency := From_TOML (Table.Get ("PWM_Frequency")) * hertz;
       end Read;
 
       procedure Write (Data : Fan_Parameters; Fan : Fan_Name; Append_Only : Boolean := False) is
@@ -837,6 +838,7 @@ package body Prunt.Config is
                Table.Set ("Always_On_PWM", To_TOML (Data.Always_On_PWM));
          end case;
          Table.Set ("Invert_Output", To_TOML (Data.Invert_Output));
+         Table.Set ("PWM_Frequency", To_TOML (Data.PWM_Frequency / hertz));
 
          Maybe_Read_File;
          TOML_Data.Set_Default ("Fan", Create_Table);

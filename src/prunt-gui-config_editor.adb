@@ -1536,6 +1536,13 @@ package body Prunt.GUI.Config_Editor is
             Description =>
               "If set, the output will be inverted. Toggle this if you fan turns off when set to max speed.");
 
+         View.PWM_Frequency.Create
+           (Parent      => View.Widget_Table,
+            Form        => View,
+            Name        => "PWM Frequency",
+            Description =>
+              "Frequency for the PWM output. 30Hz is a good default for 2-wire fans and 25000Hz is good for 4 wires.");
+
          View.Kind_Table.Create (View);
          View.Kind_Table.Style ("width", "100%");
          View.Kind_Table.Place_After (View.Widget_Table);
@@ -1580,6 +1587,7 @@ package body Prunt.GUI.Config_Editor is
          My_Config.Config_File.Read (Params, View.Fan);
 
          View.Invert_Output.Set_Data (Params.Invert_Output);
+         View.PWM_Frequency.Set_Data (Params.PWM_Frequency);
          case Params.Kind is
             when My_Config.Dynamic_PWM_Kind =>
                View.Kind_Table.Tabs.Select_Tab ("Dynamic PWM");
@@ -1605,6 +1613,7 @@ package body Prunt.GUI.Config_Editor is
             raise Constraint_Error with "Fan type must be selected.";
          end if;
          Params.Invert_Output := View.Invert_Output.Get_Data;
+         Params.PWM_Frequency := View.PWM_Frequency.Get_Data;
 
          My_Config.Config_File.Write (Params, View.Fan);
 

@@ -122,6 +122,8 @@ package Prunt is
    min : constant Time  := s * 60.0;
    deg : constant Angle := (Ada.Numerics.Pi / 180.0) * radian;
 
+   subtype Fan_PWM_Frequency is Frequency range 1.0 * hertz .. 50_000.0 * hertz;
+
    subtype Velocity is Dimensioned_Float with
        Dimension => (Symbol => "mm/s", Millimeter => 1, Second => -1, others => 0);
    subtype Acceleration is Dimensioned_Float with

@@ -94,6 +94,11 @@ package Prunt.GUI.Config_Editor is
       use Resistance_Inputs;
       package Resistance_Rows is new Parameter_Rows (Resistance, "ohm", Resistance_Inputs.Numeric_Input);
 
+      package Fan_PWM_Frequency_Inputs is new Numeric_Floating_Inputs (Fan_PWM_Frequency);
+      use Fan_PWM_Frequency_Inputs;
+      package Fan_PWM_Frequency_Rows is new Parameter_Rows
+        (Fan_PWM_Frequency, "Hz", Fan_PWM_Frequency_Inputs.Numeric_Input);
+
       type Path_String_Input is new Gnoga.Gui.Element.Form.Text_Type with null record;
       function Get (Input : Path_String_Input) return My_Config.Path_Strings.Bounded_String;
       procedure Set (Input : in out Path_String_Input; Value : My_Config.Path_Strings.Bounded_String);
@@ -654,6 +659,7 @@ package Prunt.GUI.Config_Editor is
          Widget_Table : Gnoga.Gui.Element.Table.Table_Type;
 
          Invert_Output : Basic_Inputs.Boolean_Rows.Parameter_Row;
+         PWM_Frequency : Basic_Inputs.Fan_PWM_Frequency_Rows.Parameter_Row;
 
          Kind_Table : Cards_Table_Type;
 

@@ -266,6 +266,15 @@ package body Prunt.Controller is
                Setup_Step_Generator;
                Setup_Gcode_Handler;
 
+               for F in Fan_Name loop
+                  declare
+                     Fan_Params : My_Config.Fan_Parameters;
+                  begin
+                     My_Config.Config_File.Read (Fan_Params, F);
+                     Reconfigure_Fan (F, Fan_Params.PWM_Frequency);
+                  end;
+               end loop;
+
                for S in Stepper_Name loop
                   Setup_Stepper (S);
                end loop;

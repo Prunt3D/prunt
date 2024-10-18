@@ -169,6 +169,7 @@ package Prunt.Config is
 
    type Fan_Parameters (Kind : Fan_Kind := Always_On_Kind) is record
       Invert_Output : Boolean := False;
+      PWM_Frequency : Fan_PWM_Frequency := 30.0 * hertz;
       case Kind is
          when Dynamic_PWM_Kind =>
             Disable_Below_PWM : PWM_Scale := 0.5;

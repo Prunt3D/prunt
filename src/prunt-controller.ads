@@ -62,6 +62,10 @@ generic
    --
    --  TODO: Save the results to the config file.
 
+   with procedure Reconfigure_Fan (Fan : Fan_Name; PWM_Freq : Fan_PWM_Frequency);
+   --  Set the frequency of a fan PWM output. May be called multiple times per heater with different parameters. May be
+   --  called from any task.
+
    with procedure Setup_For_Loop_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
    --  Setup the step generator for an upcoming loop move. A loop move should stop looping when the state of Switch =
    --  Hit_State. This procedure will always be called before any loop moves are called, but may be called zero, one,
