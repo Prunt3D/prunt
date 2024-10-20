@@ -303,12 +303,21 @@ package body Prunt.Controller is
               (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
       end;
 
-      TMC_Temperature_Updater.Start;
-      My_Early_GUI.Stop;
-      Early_GUI_Runner.Finish;
-      delay 1.0;
-      GUI_Runner.Start;
-      GUI_Runner.Finish;
+      declare
+         Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
+      begin
+         select
+            Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
+            Shutdown;
+         then abort
+            TMC_Temperature_Updater.Start;
+            My_Early_GUI.Stop;
+            Early_GUI_Runner.Finish;
+            delay 1.0;
+            GUI_Runner.Start;
+            GUI_Runner.Finish;
+         end select;
+      end;
    end Run;
 
    procedure Report_Input_Switch_State (Switch : Input_Switch_Name; State : Pin_State) is

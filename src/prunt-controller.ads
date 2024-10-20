@@ -108,6 +108,9 @@ generic
    --  Enqueue_Command had the Safe_Stop_After parameter set to False. This procedure should not wait for heaters to
    --  reach targets. Last_Command indicates the last command index that was enqueued. May be called from any task.
 
+   with procedure Shutdown;
+   --  Shutdown the board and do not accept any new commands.
+
    Config_Path : String;
    --  Path of the printer configuration file.
 package Prunt.Controller is
