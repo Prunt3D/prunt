@@ -242,6 +242,12 @@ package body Prunt.Controller is
            (My_Gcode_Handler.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+         Ada.Task_Termination.Set_Specific_Handler
+           (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+         Ada.Task_Termination.Set_Specific_Handler
+           (Early_GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+         Ada.Task_Termination.Set_Specific_Handler
+           (GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
          My_Config.Config_File.Read (Prunt_Params);
          My_Config.Config_File.Validate_Config (Log_Config_Error'Access);
