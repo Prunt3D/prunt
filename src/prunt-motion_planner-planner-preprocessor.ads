@@ -19,8 +19,7 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-private with Ada.Containers.Synchronized_Queue_Interfaces;
-private with Ada.Containers.Bounded_Synchronized_Queues;
+with Ada.Containers; use Ada.Containers;
 
 private generic
 package Prunt.Motion_Planner.Planner.Preprocessor is
@@ -33,26 +32,35 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
 
 private
 
-   pragma Warnings (Off, "use of an anonymous access type allocator");
 
-   package Command_Queues_Interface is new Ada.Containers.Synchronized_Queue_Interfaces (Command);
-   package Command_Queues is new Ada.Containers.Bounded_Synchronized_Queues
-     (Command_Queues_Interface, Input_Queue_Length);
+   type Command_Queue_Array_Type is array (1 .. Input_Queue_Length) of Command;
 
-   Command_Queue : access Command_Queues.Queue := new Command_Queues.Queue;
+   protected Command_Queue is
+      procedure Setup (Initial_Parameters : Kinematic_Parameters);
+      entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
+      entry Dequeue (Comm : out Command);
+   private
+      Setup_Done            : Boolean                  := False;
+      Is_Full               : Boolean                  := False;
+      Next_Read, Next_Write : Count_Type               := Command_Queue_Array_Type'First;
+      Elements              : Command_Queue_Array_Type;
+      Current_Params        : Kinematic_Parameters;
+   end Command_Queue;
 
-   Params   : Kinematic_Parameters := (others => <>);
-   Last_Pos : Position             := [others => Length (0.0)];
+   protected Runner is
+      procedure Setup (Initial_Parameters : Kinematic_Parameters);
+      procedure Run (Block : aliased out Execution_Block);
+   private
+      Setup_Done         : Boolean                         := False;
+      Current_Params     : Kinematic_Parameters;
+      pragma Warnings (Off, "use of an anonymous access type allocator");
+      Corners            : access Block_Plain_Corners      := new Block_Plain_Corners (1 .. Corners_Index'Last);
+      Segment_Feedrates  : access Block_Segment_Feedrates  := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
+      Corners_Extra_Data : access Block_Corners_Extra_Data := new Block_Corners_Extra_Data (2 .. Corners_Index'Last);
+      pragma Warnings (On, "use of an anonymous access type allocator");
+   end Runner;
 
-   Setup_Done : Boolean := False;
-
-   Corners            : access Block_Plain_Corners      := new Block_Plain_Corners (1 .. Corners_Index'Last);
-   Segment_Feedrates  : access Block_Segment_Feedrates  := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
-   Corners_Extra_Data : access Block_Corners_Extra_Data := new Block_Corners_Extra_Data (2 .. Corners_Index'Last);
-
-   pragma Warnings (On, "use of an anonymous access type allocator");
-
-   procedure Check_Bounds (Pos : Position);
+   procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters);
 
    function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters;
    --  Limit the higher order kinematic limits to those reachable within a single interpolation period. This may be
