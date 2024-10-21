@@ -508,15 +508,18 @@ package body Prunt.Controller.Gcode_Handler is
 
          if Gcode_Queue.Get_Command /= "" then
             declare
-               Line    : constant String := Gcode_Queue.Get_Command;
+               Line : constant String := Gcode_Queue.Get_Command;
             begin
                Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
             exception
-               when E : Command_Constraint_Error =>
+               when E : Command_Constraint_Error       =>
                   My_Logger.Log
                     ("Error running manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
-               when E : Bad_Line =>
+               when E : Bad_Line                       =>
+                  My_Logger.Log
+                    ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
+               when E : My_Planner.Out_Of_Bounds_Error =>
                   My_Logger.Log
                     ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
             end;
@@ -539,13 +542,19 @@ package body Prunt.Controller.Gcode_Handler is
                      begin
                         Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
                      exception
-                        when E : Command_Constraint_Error =>
+                        when E : Command_Constraint_Error       =>
                            My_Logger.Log
                              ("Error running line in file " & Gcode_Queue.Get_File & " on line " &
                               Current_Line'Image & " (" & Line & "): " &
                               Ada.Exceptions.Exception_Information (E));
                            Command_Succeeded := False;
-                        when E : Bad_Line                 =>
+                        when E : Bad_Line                       =>
+                           My_Logger.Log
+                             ("Error parsing line in file " & Gcode_Queue.Get_File & " on line " &
+                              Current_Line'Image & " (" & Line & "): " &
+                              Ada.Exceptions.Exception_Information (E));
+                           Command_Succeeded := False;
+                        when E : My_Planner.Out_Of_Bounds_Error =>
                            My_Logger.Log
                              ("Error parsing line in file " & Gcode_Queue.Get_File & " on line " &
                               Current_Line'Image & " (" & Line & "): " &
