@@ -1010,18 +1010,19 @@ package body Prunt.Config is
                         Report
                           ("One or more homing distances on axis " & Axis'Image &
                            " are set to 0. This would cause homing to never complete.");
-                     end if;
+                     else
+                        if Params.First_Move_Distance / Params.Second_Move_Distance < 0.0 then
+                           Report
+                             ("First and second homing distance on axis " & Axis'Image & " have different signs. " &
+                              "This would cause the axis to move away from the switch forever after the first hit.");
+                        end if;
 
-                     if Params.First_Move_Distance / Params.Second_Move_Distance < 0.0 then
-                        Report
-                          ("First and second homing distance on axis " & Axis'Image & " have different signs. " &
-                           "This would cause the axis to move away from the switch forever after the first hit.");
-                     end if;
-
-                     if Params.First_Move_Distance / Params.Back_Off_Move_Distance > 0.0 then
-                        Report
-                          ("First homing distance and back-off distance on axis " & Axis'Image & " have same sign. " &
-                           "This would cause axis to move further in to the switch after hitting it.");
+                        if Params.First_Move_Distance / Params.Back_Off_Move_Distance > 0.0 then
+                           Report
+                             ("First homing distance and back-off distance on axis " & Axis'Image &
+                              " have same sign. " &
+                              "This would cause axis to move further in to the switch after hitting it.");
+                        end if;
                      end if;
 
                      if abs Params.First_Move_Distance < abs Params.Second_Move_Distance then
