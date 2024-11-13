@@ -356,6 +356,7 @@ package body Prunt.Controller is
    procedure Report_External_Error (Message : String) is
       External_Error : exception;
    begin
+      Disable_In_Config;
       raise External_Error with Message;
    exception
       when E : External_Error =>
@@ -365,6 +366,7 @@ package body Prunt.Controller is
 
    procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence) is
    begin
+      Disable_In_Config;
       Fatal_Exception_Occurrence_Holder.Set
         (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, Occurrence);
    end Report_External_Error;
@@ -802,5 +804,13 @@ package body Prunt.Controller is
    begin
       My_Logger.Log (Message);
    end Log;
+
+   procedure Disable_In_Config is
+      Prunt_Params : My_Config.Prunt_Parameters;
+   begin
+      My_Config.Config_File.Read (Prunt_Params);
+      Prunt_Params.Enabled := False;
+      My_Config.Config_File.Write (Prunt_Params);
+   end Disable_In_Config;
 
 end Prunt.Controller;

@@ -308,4 +308,6 @@ private
       entry Finish;
    end GUI_Runner;
 
+   procedure Disable_In_Config;
+
 end Prunt.Controller;
