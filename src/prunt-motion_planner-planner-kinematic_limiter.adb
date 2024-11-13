@@ -56,6 +56,12 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
 
             Feedrate := Velocity'Min (Feedrate, Block.Params.Tangential_Velocity_Max);
 
+            if abs Offset > 0.0 * mm then
+               Feedrate := Velocity'Min (Feedrate, abs Offset / Interpolation_Time);
+               --  This ensures that the step generator will not have to skip over many segments in a row, which could
+               --  cause the command queue to run dry.
+            end if;
+
             for A in Axis_Name loop
                if abs Offset (A) > 0.0 * mm then
                   Feedrate :=
