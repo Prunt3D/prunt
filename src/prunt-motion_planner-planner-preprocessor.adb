@@ -83,7 +83,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Command_Queue.Enqueue (Comm, Ignore_Bounds);
    end Enqueue;
 
-
    procedure Run (Block : aliased out Execution_Block) is
    begin
       Runner.Run (Block);
@@ -147,6 +146,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      Corners (N_Corners)            := Next_Command.Pos / Current_Params.Axial_Scaler;
                      Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
                      Segment_Feedrates (N_Corners)  := Next_Command.Feedrate;
+
+                     if N_Corners > 2 and then abs (Corners (N_Corners) - Corners (N_Corners - 1)) = 0.0 * mm
+                       and then abs (Corners (N_Corners - 1) - Corners (N_Corners - 2)) = 0.0 * mm
+                     then
+                        Corners (N_Corners - 1)            := Corners (N_Corners);
+                        Corners_Extra_Data (N_Corners - 1) := Corners_Extra_Data (N_Corners);
+                        Segment_Feedrates (N_Corners - 1)  := Segment_Feedrates (N_Corners);
+                        N_Corners                          := N_Corners - 1;
+                        --  Remove repeated zero-length segments.
+                     end if;
 
                      Last_Pos := Next_Command.Pos;
 
