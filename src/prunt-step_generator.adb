@@ -98,7 +98,7 @@ package body Prunt.Step_Generator is
             Paused := False;
          end if;
          Pausing_State := Running_Kind;
-         Pause_Slew := Pause_Slew_Index'First;
+         Pause_Slew    := Pause_Slew_Index'First;
 
          Start_Planner_Block (Flush_Extra_Data (Block), Current_Command_Index);
 
@@ -129,7 +129,7 @@ package body Prunt.Step_Generator is
                      loop
                         exit when not Do_Pause;
                      end loop;
-                     Paused := False;
+                     Paused        := False;
                      Pausing_State := Resuming_Kind;
                   when Resuming_Kind =>
                      if Pause_Slew = Pause_Slew_Index'First then
@@ -139,31 +139,33 @@ package body Prunt.Step_Generator is
                      end if;
                end case;
 
-               declare
-                  Is_Past_Accel_Part : Boolean;
-                  Pos : constant Position := Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
-               begin
-                  Enqueue_Command
-                    (Pos             => Pos,
-                     Stepper_Pos     => To_Stepper_Position (Pos, Pos_Map),
-                     Data            => Corner_Extra_Data (Block, I),
-                     Index           => Current_Command_Index,
-                     Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                     Safe_Stop_After =>
-                       Pausing_State = Paused_Kind
-                       or else (I = Block.N_Corners and Current_Time >= Segment_Time (Block, I)));
+               if Current_Time <= Segment_Time (Block, I) then
+                  declare
+                     Is_Past_Accel_Part : Boolean;
+                     Pos : constant Position := Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
+                  begin
+                     Enqueue_Command
+                       (Pos             => Pos,
+                        Stepper_Pos     => To_Stepper_Position (Pos, Pos_Map),
+                        Data            => Corner_Extra_Data (Block, I),
+                        Index           => Current_Command_Index,
+                        Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
+                        Safe_Stop_After =>
+                          Pausing_State = Paused_Kind
+                          or else (I = Block.N_Corners and Current_Time >= Segment_Time (Block, I)));
 
-                  case Homing_Move_When is
-                     when This_Block_Kind =>
-                        if Is_Past_Accel_Part then
-                           Homing_Move_When := This_Move_Kind; --  Next loop iteration, not this one.
-                        end if;
-                     when Not_Pending_Kind =>
-                        null;
-                     when This_Move_Kind =>
-                        Homing_Move_When := Not_Pending_Kind;
-                  end case;
-               end;
+                     case Homing_Move_When is
+                        when This_Block_Kind =>
+                           if Is_Past_Accel_Part then
+                              Homing_Move_When := This_Move_Kind; --  Next loop iteration, not this one.
+                           end if;
+                        when Not_Pending_Kind =>
+                           null;
+                        when This_Move_Kind =>
+                           Homing_Move_When := Not_Pending_Kind;
+                     end case;
+                  end;
+               end if;
 
                if Homing_Move_When /= Not_Pending_Kind and Current_Time >= Segment_Time (Block, I) then
                   raise Constraint_Error with "Homing move queued but end of block reached before execution.";
@@ -179,7 +181,9 @@ package body Prunt.Step_Generator is
 
                if I = Block.N_Corners and Current_Time > Segment_Time (Block, I) then
                   Current_Time := Segment_Time (Block, I);
-                  --  This is fine because the final bit of an execution block has very low velocity.
+                  --  Ensure that the last corner is always enqueued from at least once and we always finish on the
+                  --  exact final position. Having the wrong interpolation time here is fine because the final bit of
+                  --  an execution block has very low velocity.
                else
                   exit when Current_Time >= Segment_Time (Block, I);
                end if;

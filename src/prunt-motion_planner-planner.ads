@@ -36,6 +36,7 @@ generic
    Corner_Blender_Max_Secondary_Angle_To_Blend : Angle := 89.5 * deg;
    Input_Queue_Length : Ada.Containers.Count_Type := 1_000;
    Initial_Position : Position := [others => 0.0 * mm];
+   Preprocessor_Division_Time : Time := 1.0 * s;
    Runner_CPU : System.Multiprocessors.CPU_Range;
 package Prunt.Motion_Planner.Planner is
 
@@ -78,7 +79,8 @@ package Prunt.Motion_Planner.Planner is
       Finishing_Corner   :     Corners_Index;
       Time_Into_Segment  :     Time;
       Is_Past_Accel_Part : out Boolean)
-      return Position;
+      return Position with
+     Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and Time_Into_Segment >= 0.0 * s;
    --  Returns the position at a given time in to a segment. Is_Past_Accel_Part indicates if the given time is past the
    --  acceleration part of the segment.
 
@@ -106,7 +108,7 @@ package Prunt.Motion_Planner.Planner is
 
    task Runner with
      CPU => Runner_CPU
-    is
+   is
       entry Setup (In_Params : Kinematic_Parameters);
 
       entry Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block);
