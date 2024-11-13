@@ -310,12 +310,16 @@ package body Prunt.Controller is
             Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
             Shutdown;
          then abort
-            TMC_Temperature_Updater.Start;
+            if Prunt_Params.Enabled then
+               TMC_Temperature_Updater.Start;
+            end if;
             My_Early_GUI.Stop;
             Early_GUI_Runner.Finish;
             delay 1.0;
             GUI_Runner.Start;
             GUI_Runner.Finish;
+            My_Step_Generator.Pause;
+            My_Step_Generator.Runner.Finish;
          end select;
       end;
    end Run;

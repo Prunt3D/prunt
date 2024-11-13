@@ -186,6 +186,12 @@ package body Prunt.GUI.GUI is
          Resume_Stepgen;
       end On_Resume_Submit;
 
+      procedure End_Application (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+         pragma Unreferenced (Object);
+      begin
+         Gnoga.Application.Multi_Connect.End_Application;
+      end End_Application;
+
       procedure On_Manual_Gcode_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
          pragma Unreferenced (Object);
          Command   : constant UXString := App.Manual_Gcode_Form_Entry.Value;
@@ -603,6 +609,17 @@ package body Prunt.GUI.GUI is
                App.Main_Table.Add_Tab ("Log", App.Log_Widget'Access);
             end;
 
+            --  Shutdown
+            begin
+               App.Shutdown_Table.Create (App.Main_Table.Cards);
+               App.Shutdown_Row.Create (App.Shutdown_Table);
+               App.Shutdown_Div.Create (App.Shutdown_Row);
+               App.Shutdown_Form.Create (App.Shutdown_Div);
+               App.Shutdown_Button.Create (App.Shutdown_Form, Value => "Shutdown");
+               App.Shutdown_Form.On_Submit_Handler (End_Application'Unrestricted_Access);
+               App.Main_Table.Add_Tab ("Shutdown", App.Shutdown_Table'Access);
+            end;
+
             App.Main_Table.Cards.Show_Card ("Status");
             App.Loading_Div.Hidden (True);
             App.Main_Table.Hidden (False);
@@ -677,8 +694,8 @@ package body Prunt.GUI.GUI is
    procedure Run is
    begin
       Gnoga.Application.Title ("Prunt");
-      Gnoga.Application.HTML_On_Close ("Prunt terminated. Reload this page to reconnect.");
       Gnoga.Application.Multi_Connect.Initialize (Verbose => False, Host => From_UTF_8 (Host), Port => Integer (Port));
+      Gnoga.Application.HTML_On_Close ("");
       Gnoga.Application.Multi_Connect.On_Connect_Handler (Event => On_Connect'Unrestricted_Access, Path => "default");
       Gnoga.Application.Multi_Connect.Message_Loop;
    end Run;

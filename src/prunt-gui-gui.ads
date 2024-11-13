@@ -43,7 +43,7 @@ generic
    with function Get_Board_Temperature (Thermistor : Board_Temperature_Probe_Name) return Prunt.Temperature;
    with function Get_Heater_Power (Heater : My_Config.Heater_Name) return Prunt.PWM_Scale;
    with function Get_Input_Switch_State (Switch : My_Config.Input_Switch_Name) return Prunt.Pin_State;
-   with function Get_Tachometer_Frequency (Fan : My_COnfig.Fan_Name) return Frequency;
+   with function Get_Tachometer_Frequency (Fan : My_Config.Fan_Name) return Frequency;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
    with function Is_Stepgen_Paused return Boolean;
@@ -135,6 +135,13 @@ private
       Auto_Gcode_Refresh_Form               : aliased Gnoga.Gui.Element.Form.Form_Type;
       Auto_Gcode_Refresh_Form_Entry         : aliased Gnoga.Gui.Element.Form.Selection_Type;
       Auto_Gcode_Refresh_Form_Submit_Button : aliased Gnoga.Gui.Element.Form.Submit_Button_Type;
+
+      Shutdown_Table  : aliased Gnoga.Gui.Element.Table.Table_Type;
+      Shutdown_Row    : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
+      Shutdown_Div    : aliased Gnoga.Gui.Element.Common.DIV_Type;
+      Shutdown_Form   : aliased Gnoga.Gui.Element.Form.Form_Type;
+      Shutdown_Button : aliased Gnoga.Gui.Element.Form.Submit_Button_Type;
+      Restart_Button  : aliased Gnoga.Gui.Element.Form.Submit_Button_Type;
    end record;
 
    type App_Access is access all App_Data;

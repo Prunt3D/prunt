@@ -59,6 +59,7 @@ package Prunt.Step_Generator is
      CPU => Runner_CPU
    is
       entry Setup (Map : Stepper_Pos_Map);
+      entry Finish;
    end Runner;
 
    procedure Pause;
