@@ -68,100 +68,156 @@ package body Prunt.GUI.GUI is
       return R;
    end To_HTML;
 
+   procedure Show_Update_Button is
+   begin
+      Startup_State.Set_Check_For_Update;
+   end Show_Update_Button;
+
+   procedure Block_Until_Update_Allowed is
+   begin
+      Startup_State.Block_Until_Update_Allowed;
+   end Block_Until_Update_Allowed;
+
+   procedure Notify_Startup_Complete (Enabled : Boolean) is
+   begin
+      Startup_State.Set_Startup_Complete (Enabled);
+   end Notify_Startup_Complete;
+
+   protected body Startup_State is
+      procedure Set_Check_For_Update is
+      begin
+         Check_For_Update := True;
+      end Set_Check_For_Update;
+
+      function Get_Check_For_Update return Boolean is
+      begin
+         return Check_For_Update;
+      end Get_Check_For_Update;
+
+      procedure Set_Update_Allowed is
+      begin
+         Update_Allowed := True;
+      end Set_Update_Allowed;
+
+      entry Block_Until_Check_For_Update when Check_For_Update is
+      begin
+         null;
+      end Block_Until_Check_For_Update;
+
+      entry Block_Until_Update_Allowed when Update_Allowed is
+      begin
+         null;
+      end Block_Until_Update_Allowed;
+
+      procedure Set_Startup_Complete (Enabled : Boolean) is
+      begin
+         Prunt_Enabled    := Enabled;
+         Startup_Complete := True;
+      end Set_Startup_Complete;
+
+      entry Block_Until_Startup_Complete (Enabled : out Boolean) when Startup_Complete is
+      begin
+         Enabled := Prunt_Enabled;
+      end Block_Until_Startup_Complete;
+   end Startup_State;
+
    task body Status_Updater is
       App : App_Access;
    begin
-      accept Start (In_App : App_Access) do
-         App := In_App;
-      end Start;
-
-      loop
-         select
-            accept Stop;
-            exit;
-         or
-            delay 0.5;
-            declare
-               Pos  : constant Position := Get_Position;
-               Text : UXString          := From_UTF_8 ("");
-               LF   : Character renames Ada.Characters.Latin_1.LF;
-            begin
-               if Is_Stepgen_Paused then
-                  Append (Text, From_UTF_8 ("STEP GENERATOR IS PAUSED" & LF));
-               end if;
-
-               Append (Text, From_UTF_8 ("Machine position (not accounting for G92 or retraction):" & LF));
-               for A in Axis_Name loop
-                  Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & LF));
-               end loop;
-
-               Append (Text, From_UTF_8 (LF & "Input switch states:" & LF));
-               for S in My_Config.Input_Switch_Name loop
-                  Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & LF));
-               end loop;
-
-               Append (Text, From_UTF_8 (LF & "Tachometer frequencies:" & LF));
-               for F in My_Config.Fan_Name loop
-                  Append
-                    (Text,
-                     From_UTF_8 (F'Image & ": ") & DF_Image (Get_Tachometer_Frequency (F) / hertz) &
-                     From_UTF_8 (" Hz" & LF));
-               end loop;
-
-               if Is_Stepgen_Paused then
-                  Append (Text, From_UTF_8 ("STEP GENERATOR IS PAUSED" & LF));
-               end if;
-
-               App.Status_Message_Text.Inner_HTML (To_HTML (Text));
-
+      select
+         accept Stop;
+      or
+         accept Start (In_App : App_Access) do
+            App := In_App;
+         end Start;
+         loop
+            select
+               accept Stop;
+               exit;
+            or
+               delay 0.5;
                declare
-                  JS_Text : UXString := From_UTF_8 ("");
+                  Pos  : constant Position := Get_Position;
+                  Text : UXString          := From_UTF_8 ("");
+                  LF   : Character renames Ada.Characters.Latin_1.LF;
                begin
-                  for T in My_Config.Thermistor_Name loop
-                     Append (JS_Text, DF_Image (Get_Thermistor_Temperature (T) / celcius) & ",");
+                  if Is_Stepgen_Paused then
+                     Append (Text, From_UTF_8 ("STEP GENERATOR IS PAUSED" & LF));
+                  end if;
+
+                  Append (Text, From_UTF_8 ("Machine position (not accounting for G92 or retraction):" & LF));
+                  for A in Axis_Name loop
+                     Append (Text, From_UTF_8 (A'Image & ": ") & DF_Image (Pos (A) / mm) & From_UTF_8 (" mm" & LF));
                   end loop;
 
-                  for S in My_Config.Stepper_Name loop
-                     Append (JS_Text, DF_Image (Get_Stepper_Temperature (S) / celcius) & ",");
+                  Append (Text, From_UTF_8 (LF & "Input switch states:" & LF));
+                  for S in My_Config.Input_Switch_Name loop
+                     Append (Text, From_UTF_8 (S'Image & ": " & Get_Input_Switch_State (S)'Image & LF));
                   end loop;
 
-                  for P in Board_Temperature_Probe_Name loop
-                     Append (JS_Text, DF_Image (Get_Board_Temperature (P) / celcius) & ",");
+                  Append (Text, From_UTF_8 (LF & "Tachometer frequencies:" & LF));
+                  for F in My_Config.Fan_Name loop
+                     Append
+                       (Text,
+                        From_UTF_8 (F'Image & ": ") & DF_Image (Get_Tachometer_Frequency (F) / hertz) &
+                        From_UTF_8 (" Hz" & LF));
                   end loop;
 
-                  Gnoga.Server.Connection.Execute_Script
-                    (App.Status_Thermal_Chart_Div.Connection_ID,
-                     "window.status_thermal_chart_data" &
-                     ".forEach(function (a) { if (a.length >= 1200) {a.splice(0, 1);} });" &
-                     "window.status_thermal_chart_data.forEach(function (a, i) { a.push({x: " &
-                     From_UTF_8 (Ada.Real_Time.Clock'Image) & " * 1000, y: [" & JS_Text & "][i]}); });" &
-                     "window.status_thermal_chart.update();");
+                  if Is_Stepgen_Paused then
+                     Append (Text, From_UTF_8 ("STEP GENERATOR IS PAUSED" & LF));
+                  end if;
+
+                  App.Status_Message_Text.Inner_HTML (To_HTML (Text));
+
+                  declare
+                     JS_Text : UXString := From_UTF_8 ("");
+                  begin
+                     for T in My_Config.Thermistor_Name loop
+                        Append (JS_Text, DF_Image (Get_Thermistor_Temperature (T) / celcius) & ",");
+                     end loop;
+
+                     for S in My_Config.Stepper_Name loop
+                        Append (JS_Text, DF_Image (Get_Stepper_Temperature (S) / celcius) & ",");
+                     end loop;
+
+                     for P in Board_Temperature_Probe_Name loop
+                        Append (JS_Text, DF_Image (Get_Board_Temperature (P) / celcius) & ",");
+                     end loop;
+
+                     Gnoga.Server.Connection.Execute_Script
+                       (App.Status_Thermal_Chart_Div.Connection_ID,
+                        "window.status_thermal_chart_data" &
+                        ".forEach(function (a) { if (a.length >= 1200) {a.splice(0, 1);} });" &
+                        "window.status_thermal_chart_data.forEach(function (a, i) { a.push({x: " &
+                        From_UTF_8 (Ada.Real_Time.Clock'Image) & " * 1000, y: [" & JS_Text & "][i]}); });" &
+                        "window.status_thermal_chart.update();");
+                  end;
+
+                  declare
+                     JS_Text : UXString := From_UTF_8 ("");
+                  begin
+                     for H in My_Config.Heater_Name loop
+                        Append (JS_Text, DF_Image (Get_Heater_Power (H)) & ",");
+                     end loop;
+
+                     Gnoga.Server.Connection.Execute_Script
+                       (App.Status_Heater_Power_Chart_Div.Connection_ID,
+                        "window.status_heater_power_chart_data" &
+                        ".forEach(function (a) { if (a.length >= 1200) {a.splice(0, 1);} });" &
+                        "window.status_heater_power_chart_data.forEach(function (a, i) { a.push({x: " &
+                        From_UTF_8 (Ada.Real_Time.Clock'Image) & " * 1000, y: [" & JS_Text & "][i]}); });" &
+                        "window.status_heater_power_chart.update();");
+                  end;
+               exception
+                  when Gnoga.Server.Connection.Connection_Error =>
+                     null; --  We ignore this error because it can be caused by a connection being closed during loading.
+                  when E : others                               =>
+                     Fatal_Exception_Occurrence_Holder.Set
+                       (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
                end;
-
-               declare
-                  JS_Text : UXString := From_UTF_8 ("");
-               begin
-                  for H in My_Config.Heater_Name loop
-                     Append (JS_Text, DF_Image (Get_Heater_Power (H)) & ",");
-                  end loop;
-
-                  Gnoga.Server.Connection.Execute_Script
-                    (App.Status_Heater_Power_Chart_Div.Connection_ID,
-                     "window.status_heater_power_chart_data" &
-                     ".forEach(function (a) { if (a.length >= 1200) {a.splice(0, 1);} });" &
-                     "window.status_heater_power_chart_data.forEach(function (a, i) { a.push({x: " &
-                     From_UTF_8 (Ada.Real_Time.Clock'Image) & " * 1000, y: [" & JS_Text & "][i]}); });" &
-                     "window.status_heater_power_chart.update();");
-               end;
-            exception
-               when Gnoga.Server.Connection.Connection_Error =>
-                  null; --  We ignore this error because it can be caused by a connection being closed during loading.
-               when E : others                               =>
-                  Fatal_Exception_Occurrence_Holder.Set
-                    (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
-            end;
-         end select;
-      end loop;
+            end select;
+         end loop;
+      end select;
    end Status_Updater;
 
    procedure On_Connect
@@ -249,6 +305,15 @@ package body Prunt.GUI.GUI is
          App.Auto_Gcode_File_Form_Entry.Value ("");
       end On_Auto_Gcode_Refresh_Submit;
 
+      procedure On_Update_Submit (Object : in out Gnoga.Gui.Base.Base_Type'Class) is
+         pragma Unreferenced (Object);
+      begin
+         if Startup_State.Get_Check_For_Update then
+            Startup_State.Set_Update_Allowed;
+         else
+            raise Constraint_Error with "Update button should not be visible.";
+         end if;
+      end On_Update_Submit;
    begin
       Main_Window.Connection_Data (Data => App, Dynamic => False);
 
@@ -278,8 +343,16 @@ package body Prunt.GUI.GUI is
                App.Status_Table.Create (App.Main_Table.Cards);
                App.Main_Table.Add_Tab ("Status", App.Status_Table'Access);
 
+               App.Status_Update_Row.Create (App.Status_Table);
+               App.Status_Update_Div.Create (App.Status_Update_Row);
+               App.Status_Update_Div.Hidden (True);
+               App.Status_Update_Form.Create (App.Status_Update_Div);
+               App.Status_Update_Button.Create (App.Status_Update_Form, Value => "Update");
+               App.Status_Update_Form.On_Submit_Handler (On_Update_Submit'Unrestricted_Access);
+
                App.Status_Message_Row.Create (App.Status_Table);
                App.Status_Message_Text.Create (App.Status_Message_Row);
+               App.Status_Message_Text.Inner_HTML ("Waiting for board connection and setup.");
 
                declare
                   JS_Names     : UXString          := "";
@@ -563,42 +636,12 @@ package body Prunt.GUI.GUI is
             --  G-Code Console
             begin
                App.Manual_Gcode_Table.Create (App.Main_Table.Cards);
-
-               App.Manual_Gcode_Log_Row.Create (App.Manual_Gcode_Table);
-               App.Manual_Gcode_Log.Create (App.Manual_Gcode_Log_Row);
-               App.Manual_Gcode_Log.Style ("height", "500px");
-
-               App.Manual_Gcode_Form_Row.Create (App.Manual_Gcode_Table);
-               App.Manual_Gcode_Form_Div.Create (App.Manual_Gcode_Form_Row);
-               App.Manual_Gcode_Form.Create (App.Manual_Gcode_Form_Div);
-               App.Manual_Gcode_Form_Entry.Create (App.Manual_Gcode_Form, Size => 40);
-               App.Manual_Gcode_Form_Submit_Button.Create (App.Manual_Gcode_Form, Value => "Submit");
-               App.Manual_Gcode_Form.On_Submit_Handler (On_Manual_Gcode_Submit'Unrestricted_Access);
-
                App.Main_Table.Add_Tab ("G-Code Console", App.Manual_Gcode_Table'Access);
             end;
 
             --  Run File
             begin
                App.Auto_Gcode_Table.Create (App.Main_Table.Cards);
-
-               App.Auto_Gcode_Log_Row.Create (App.Auto_Gcode_Table);
-               App.Auto_Gcode_Log.Create (App.Auto_Gcode_Log_Row);
-               App.Auto_Gcode_Log.Style ("height", "500px");
-
-               App.Auto_Gcode_Form_Row.Create (App.Auto_Gcode_Table);
-               App.Auto_Gcode_Form_Div.Create (App.Auto_Gcode_Form_Row);
-               App.Auto_Gcode_File_Form.Create (App.Auto_Gcode_Form_Div);
-               App.Auto_Gcode_File_Form_Entry.Create (App.Auto_Gcode_File_Form);
-               App.Auto_Gcode_File_Form_Submit_Button.Create (App.Auto_Gcode_File_Form, Value => "Run File");
-               App.Auto_Gcode_File_Form.On_Submit_Handler (On_Auto_Gcode_File_Submit'Unrestricted_Access);
-
-               App.Auto_Gcode_Refresh_Form.Create (App.Auto_Gcode_Form_Div);
-               App.Auto_Gcode_Refresh_Form_Submit_Button.Create (App.Auto_Gcode_Refresh_Form, Value => "Refresh");
-               App.Auto_Gcode_Refresh_Form.On_Submit_Handler (On_Auto_Gcode_Refresh_Submit'Unrestricted_Access);
-
-               On_Auto_Gcode_Refresh_Submit (App.Auto_Gcode_Refresh_Form);
-
                App.Main_Table.Add_Tab ("Run File", App.Auto_Gcode_Table'Access);
             end;
 
@@ -626,8 +669,6 @@ package body Prunt.GUI.GUI is
 
             Main_Window.Buffer_Connection (False);
 
-            Status_Updater_Task.Start (App);
-
             Gnoga.Server.Connection.Execute_Script
               (App.Status_Thermal_Chart_Div.Connection_ID, "window.status_thermal_chart.onResize();");
             Gnoga.Server.Connection.Execute_Script
@@ -649,27 +690,102 @@ package body Prunt.GUI.GUI is
             App.Log_Widget.Put_Line (To_HTML (UXStrings.From_UTF_8 (Message)));
             App.Log_Widget.New_Line;
          end Log_To_Tab;
+
+         Occurrence : Ada.Exceptions.Exception_Occurrence;
       begin
          My_Logger.Set_Receiver (Log_Handle, Log_To_Tab'Unrestricted_Access);
 
          select
-            Connection.Hold;
+            Fatal_Exception_Occurrence_Holder.Get (Occurrence);
+            App.Fatal_Error_Div.Create
+              (App.Main_Window.all,
+               UXStrings.From_UTF_8 ("<h1>FATAL ERROR</h1><p>") &
+               To_HTML (UXStrings.From_UTF_8 (Ada.Exceptions.Exception_Information (Occurrence))) &
+               UXStrings.From_UTF_8 ("</p>"));
+            App.Fatal_Error_Div.Place_Inside_Top_Of (App.Main_Window.Document.Body_Element.all);
+            App.Main_Table.Hidden (True);
+            App.Loading_Div.Hidden (True);
+            Main_Window.Buffer_Connection (False);
          then abort
-            declare
-               Occurrence : Ada.Exceptions.Exception_Occurrence;
             begin
-               Fatal_Exception_Occurrence_Holder.Get (Occurrence);
-               App.Fatal_Error_Div.Create
-                 (App.Main_Window.all,
-                  UXStrings.From_UTF_8 ("<h1>FATAL ERROR</h1><p>") &
-                  To_HTML (UXStrings.From_UTF_8 (Ada.Exceptions.Exception_Information (Occurrence))) &
-                  UXStrings.From_UTF_8 ("</p>"));
-               App.Fatal_Error_Div.Place_Inside_Top_Of (App.Main_Window.Document.Body_Element.all);
-               App.Main_Table.Hidden (True);
-               App.Loading_Div.Hidden (True);
-               Main_Window.Buffer_Connection (False);
+               select
+                  Connection.Hold;
+               then abort
+                  declare
+                     Prunt_Enabled : Boolean;
+                  begin
+                     select
+                        Startup_State.Block_Until_Startup_Complete (Prunt_Enabled);
+                     then abort
+                        Startup_State.Block_Until_Check_For_Update;
+                        App.Status_Message_Text.Inner_HTML ("Firmware update required, click below button to allow.");
+                        App.Status_Update_Div.Hidden (False);
+                        Startup_State.Block_Until_Update_Allowed;
+                        App.Status_Message_Text.Inner_HTML ("Waiting for update and board setup.");
+                        App.Status_Update_Div.Hidden (True);
+                        Startup_State.Block_Until_Startup_Complete (Prunt_Enabled);
+                     end select;
+
+                     Startup_State.Block_Until_Startup_Complete (Prunt_Enabled);
+                     --  Above line to work around GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=116832
+
+                     App.Status_Update_Div.Hidden (True);
+
+                     if not Prunt_Enabled then
+                        App.Status_Message_Text.Inner_HTML ("Prunt is disabled. Enable after setting other settings.");
+                     else
+                        Status_Updater_Task.Start (App);
+
+                        --  G-Code Console
+                        begin
+                           App.Manual_Gcode_Log_Row.Create (App.Manual_Gcode_Table);
+                           App.Manual_Gcode_Log.Create (App.Manual_Gcode_Log_Row);
+                           App.Manual_Gcode_Log.Style ("height", "500px");
+
+                           App.Manual_Gcode_Form_Row.Create (App.Manual_Gcode_Table);
+                           App.Manual_Gcode_Form_Div.Create (App.Manual_Gcode_Form_Row);
+                           App.Manual_Gcode_Form.Create (App.Manual_Gcode_Form_Div);
+                           App.Manual_Gcode_Form_Entry.Create (App.Manual_Gcode_Form, Size => 40);
+                           App.Manual_Gcode_Form_Submit_Button.Create (App.Manual_Gcode_Form, Value => "Submit");
+                           App.Manual_Gcode_Form.On_Submit_Handler (On_Manual_Gcode_Submit'Unrestricted_Access);
+                        end;
+
+                        --  Run File
+                        begin
+                           App.Auto_Gcode_Log_Row.Create (App.Auto_Gcode_Table);
+                           App.Auto_Gcode_Log.Create (App.Auto_Gcode_Log_Row);
+                           App.Auto_Gcode_Log.Style ("height", "500px");
+
+                           App.Auto_Gcode_Form_Row.Create (App.Auto_Gcode_Table);
+                           App.Auto_Gcode_Form_Div.Create (App.Auto_Gcode_Form_Row);
+                           App.Auto_Gcode_File_Form.Create (App.Auto_Gcode_Form_Div);
+                           App.Auto_Gcode_File_Form_Entry.Create (App.Auto_Gcode_File_Form);
+                           App.Auto_Gcode_File_Form_Submit_Button.Create
+                             (App.Auto_Gcode_File_Form, Value => "Run File");
+                           App.Auto_Gcode_File_Form.On_Submit_Handler (On_Auto_Gcode_File_Submit'Unrestricted_Access);
+
+                           App.Auto_Gcode_Refresh_Form.Create (App.Auto_Gcode_Form_Div);
+                           App.Auto_Gcode_Refresh_Form_Submit_Button.Create
+                             (App.Auto_Gcode_Refresh_Form, Value => "Refresh");
+                           App.Auto_Gcode_Refresh_Form.On_Submit_Handler
+                             (On_Auto_Gcode_Refresh_Submit'Unrestricted_Access);
+
+                           On_Auto_Gcode_Refresh_Submit (App.Auto_Gcode_Refresh_Form);
+                        end;
+                     end if;
+                  end;
+                  Connection.Hold;
+               end select;
+
+               Connection.Hold;
+               --  Above line to work around GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=116832
+            exception
+               when Gnoga.Server.Connection.Connection_Error =>
+                  null; --  We ignore this error because it can be caused by a connection being closed during loading.
+               when E : others                               =>
+                  Fatal_Exception_Occurrence_Holder.Set
+                    (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
             end;
-            Connection.Hold;
          end select;
 
          My_Logger.Set_Receiver (Log_Handle, null);

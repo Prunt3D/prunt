@@ -55,6 +55,9 @@ generic
 package Prunt.GUI.GUI is
 
    procedure Run;
+   procedure Show_Update_Button;
+   procedure Block_Until_Update_Allowed;
+   procedure Notify_Startup_Complete (Enabled : Boolean);
 
 private
 
@@ -70,6 +73,21 @@ private
      array (My_Config.Thermistor_Name) of aliased My_Config_Editor.Section_Widgets.Thermistor_Widget;
    type Heater_Widgets is array (My_Config.Heater_Name) of aliased My_Config_Editor.Section_Widgets.Heater_Widget;
    type Fan_Widgets is array (My_Config.Fan_Name) of aliased My_Config_Editor.Section_Widgets.Fan_Widget;
+
+   protected Startup_State is
+      procedure Set_Check_For_Update;
+      function Get_Check_For_Update return Boolean;
+      procedure Set_Update_Allowed;
+      entry Block_Until_Check_For_Update;
+      entry Block_Until_Update_Allowed;
+      procedure Set_Startup_Complete (Enabled : Boolean);
+      entry Block_Until_Startup_Complete (Enabled : out Boolean);
+   private
+      Check_For_Update : Boolean := False;
+      Update_Allowed   : Boolean := False;
+      Startup_Complete : Boolean := False;
+      Prunt_Enabled    : Boolean := False;
+   end Startup_State;
 
    type App_Data is new Gnoga.Types.Connection_Data_Type with record
       Main_Window : aliased Gnoga.Gui.Window.Pointer_To_Window_Class;
@@ -104,6 +122,10 @@ private
       Status_Table                  : aliased Gnoga.Gui.Element.Table.Table_Type;
       Status_Message_Row            : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
       Status_Message_Text           : aliased Gnoga.Gui.Element.Common.DIV_Type;
+      Status_Update_Row             : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
+      Status_Update_Div             : aliased Gnoga.Gui.Element.Common.DIV_Type;
+      Status_Update_Form            : aliased Gnoga.Gui.Element.Form.Form_Type;
+      Status_Update_Button          : aliased Gnoga.Gui.Element.Form.Submit_Button_Type;
       Status_Thermal_Chart_Row      : aliased Gnoga.Gui.Element.Table.Table_Row_Type;
       Status_Thermal_Chart_Div      : aliased Gnoga.Gui.Element.Common.DIV_Type;
       Status_Heater_Power_Chart_Row : aliased Gnoga.Gui.Element.Table.Table_Row_Type;

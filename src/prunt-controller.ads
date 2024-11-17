@@ -23,7 +23,6 @@ with Prunt.Motion_Planner;
 with Prunt.Config;
 with Prunt.Motion_Planner.Planner;
 with Prunt.GUI.GUI;
-with Prunt.GUI.Early_GUI;
 with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
@@ -261,13 +260,6 @@ private
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
    pragma Warnings (Off, "cannot call * before body seen");
-   package My_Early_GUI is new GUI.Early_GUI
-     (My_Logger                         => My_Logger,
-      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
-      Host                              => Command_Line_Arguments.GUI_Host,
-      Port                              => Command_Line_Arguments.GUI_Port);
-   pragma Warnings (On, "cannot call * before body seen");
-
    package My_GUI is new GUI.GUI
      (My_Logger                         => My_Logger,
       My_Config                         => My_Config,
@@ -287,6 +279,7 @@ private
       Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
       Host                              => Command_Line_Arguments.GUI_Host,
       Port                              => Command_Line_Arguments.GUI_Port);
+   pragma Warnings (On, "cannot call * before body seen");
 
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
    procedure Setup_Thermistors_And_Heater_Assignments;
@@ -299,12 +292,7 @@ private
       entry Start;
    end TMC_Temperature_Updater;
 
-   task Early_GUI_Runner is
-      entry Finish;
-   end Early_GUI_Runner;
-
    task GUI_Runner is
-      entry Start;
       entry Finish;
    end GUI_Runner;
 

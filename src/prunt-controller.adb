@@ -206,23 +206,16 @@ package body Prunt.Controller is
       end loop;
    end TMC_Temperature_Updater;
 
-   task body Early_GUI_Runner is
-   begin
-      My_Early_GUI.Run;
-      accept Finish;
-   end Early_GUI_Runner;
-
    task body GUI_Runner is
    begin
-      accept Start;
       My_GUI.Run;
       accept Finish;
    end GUI_Runner;
 
    procedure Prompt_For_Update is
    begin
-      My_Early_GUI.Show_Update_Button;
-      My_Early_GUI.Block_Until_Update_Allowed;
+      My_GUI.Show_Update_Button;
+      My_GUI.Block_Until_Update_Allowed;
    end Prompt_For_Update;
 
    procedure Run is
@@ -244,8 +237,6 @@ package body Prunt.Controller is
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
            (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         Ada.Task_Termination.Set_Specific_Handler
-           (Early_GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
            (GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
@@ -297,6 +288,7 @@ package body Prunt.Controller is
          end if;
 
          My_Logger.Log ("Setup done.");
+         My_GUI.Notify_Startup_Complete (Prunt_Params.Enabled);
       exception
          when E : others =>
             Fatal_Exception_Occurrence_Holder.all.Set
@@ -313,10 +305,6 @@ package body Prunt.Controller is
             if Prunt_Params.Enabled then
                TMC_Temperature_Updater.Start;
             end if;
-            My_Early_GUI.Stop;
-            Early_GUI_Runner.Finish;
-            delay 1.0;
-            GUI_Runner.Start;
             GUI_Runner.Finish;
             My_Step_Generator.Pause;
             My_Step_Generator.Runner.Finish;
