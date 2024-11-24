@@ -689,6 +689,9 @@ package body Prunt.GUI.GUI is
          begin
             App.Log_Widget.Put_Line (To_HTML (UXStrings.From_UTF_8 (Message)));
             App.Log_Widget.New_Line;
+         exception
+            when Gnoga.Server.Connection.Connection_Error =>
+               null;
          end Log_To_Tab;
 
          Occurrence : Ada.Exceptions.Exception_Occurrence;
