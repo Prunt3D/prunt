@@ -689,6 +689,16 @@ package body Prunt.GUI.GUI is
          begin
             App.Log_Widget.Put_Line (To_HTML (UXStrings.From_UTF_8 (Message)));
             App.Log_Widget.New_Line;
+            declare
+               Tab        : Gnoga.Gui.View.Card.Tab_Item_Access :=
+                 Gnoga.Gui.View.Card.Tab_Item_Access (App.Main_Table.Tabs.Element ("Log"));
+               Dummy_Link : Gnoga.Gui.Element.Element_Type;
+            begin
+               if not Tab.Tab_Selected then
+                  Dummy_Link.Attach_Using_Parent (Tab.all, ID => Tab.ID & "_a");
+                  Dummy_Link.Background_Color ("darkred");
+               end if;
+            end;
          exception
             when Gnoga.Server.Connection.Connection_Error =>
                null;
