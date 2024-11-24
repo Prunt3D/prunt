@@ -301,6 +301,9 @@ package body Prunt.Controller is
          select
             Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
             Shutdown;
+
+            delay 5.0;
+            --  Give some time for the GUI runners to get the exception.
          then abort
             if Prunt_Params.Enabled then
                TMC_Temperature_Updater.Start;
