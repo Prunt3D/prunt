@@ -20,30 +20,31 @@
 -----------------------------------------------------------------------------
 
 with Ada.Text_IO;
+with Ada.Exceptions;
 
 package body Prunt.Logger is
 
    procedure Set_Receiver (Log_Handle : in out Handle; Log_Receiver : Receiver) is
    begin
-      Handler.Set_Receiver (Log_Handle, Log_Receiver);
+      List_Handler.Set_Receiver (Log_Handle, Log_Receiver);
    end Set_Receiver;
 
    procedure Log (Message : String) is
    begin
-      Handler.Log (Message);
+      Message_Queue.Enqueue (To_Unbounded_String (Message));
    end Log;
 
    overriding procedure Initialize (Object : in out Handle) is
    begin
-      Handler.Initialize (Object);
+      List_Handler.Initialize (Object);
    end Initialize;
 
    overriding procedure Finalize (Object : in out Handle) is
    begin
-      Handler.Finalize (Object);
+      List_Handler.Finalize (Object);
    end Finalize;
 
-   protected body Handler is
+   protected body List_Handler is
       procedure Initialize (Log_Handle : in out Handle) is
          use type Receiver_Lists.Cursor;
       begin
@@ -52,26 +53,54 @@ package body Prunt.Logger is
          end if;
 
          Receivers.Insert (Receiver_Lists.No_Element, null, Log_Handle.Cursor);
+         Receivers_Has_Update := True;
       end Initialize;
 
       procedure Finalize (Log_Handle : in out Handle) is
       begin
          Receivers.Delete (Log_Handle.Cursor);
+         Receivers_Has_Update := True;
       end Finalize;
 
       procedure Set_Receiver (Log_Handle : in out Handle; Log_Receiver : Receiver) is
       begin
          Receivers.Replace_Element (Log_Handle.Cursor, Log_Receiver);
+         Receivers_Has_Update := True;
       end Set_Receiver;
 
-      procedure Log (Message : String) is
+      procedure Update_If_Required (Receivers_Copy : in out Receiver_Lists.List) is
       begin
-         Ada.Text_IO.Put_Line (Message);
+         if Receivers_Has_Update then
+            Receiver_Lists.Assign (Target => Receivers_Copy, Source => Receivers);
+            Receivers_Has_Update := False;
+         end if;
+      end Update_If_Required;
+   end List_Handler;
 
-         for R of Receivers loop
-            R (Message);
-         end loop;
-      end Log;
-   end Handler;
+   task body Log_Pusher is
+      Message   : Unbounded_String;
+      Receivers : Receiver_Lists.List;
+   begin
+      loop
+         Message_Queue.Dequeue (Message);
+         List_Handler.Update_If_Required (Receivers);
+         declare
+            Message_String : constant String := To_String (Message);
+         begin
+            Ada.Text_IO.Put_Line (Message_String);
+            for R of Receivers loop
+               if R /= null then
+                  begin
+                     R (Message_String);
+                  exception
+                     when E : others =>
+                        Ada.Text_IO.Put_Line ("Exception in log pusher:");
+                        Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (E));
+                  end;
+               end if;
+            end loop;
+         end;
+      end loop;
+   end Log_Pusher;
 
 end Prunt.Logger;
