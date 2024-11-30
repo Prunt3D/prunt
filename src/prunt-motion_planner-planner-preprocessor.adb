@@ -112,7 +112,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block_N_Corners  : Corners_Index with
            Address => Block.N_Corners'Address;
          Next_Params      : Kinematic_Parameters;
-         Last_Pos         : Position              := Initial_Position;
       begin
          if not Setup_Done then
             raise Constraint_Error with "Setup not done.";
