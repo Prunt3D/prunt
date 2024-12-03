@@ -533,8 +533,8 @@ package body Prunt.Controller.Gcode_Handler is
 
                declare
                   type File_Line_Count is range 1 .. 2**63 - 1;
-                  Current_Line      : constant File_Line_Count := 1;
-                  Command_Succeeded : Boolean                  := True;
+                  Current_Line      : File_Line_Count := 1;
+                  Command_Succeeded : Boolean         := True;
                begin
                   while Command_Succeeded and not End_Of_File (File) loop
                      declare
@@ -561,6 +561,8 @@ package body Prunt.Controller.Gcode_Handler is
                               Ada.Exceptions.Exception_Information (E));
                            Command_Succeeded := False;
                      end;
+
+                     Current_Line := @ + 1;
                   end loop;
                end;
 
