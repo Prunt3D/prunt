@@ -102,7 +102,7 @@ package Prunt.Motion_Planner.Planner is
    --  Send a new command to the planner queue. May be called before Setup, but will block once the queue if full.
 
    procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean);
-   --  Pop a block from the queue of processed blocks. If not block is ready then Timed_Out will be set to True,
+   --  Pop a block from the queue of processed blocks. If a block is not ready then Timed_Out will be set to True,
    --  otherwise it will be set to False and Block will be set.
 
    Out_Of_Bounds_Error : exception;
