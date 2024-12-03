@@ -151,7 +151,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      then
                         Corners (N_Corners - 1)            := Corners (N_Corners);
                         Corners_Extra_Data (N_Corners - 1) := Corners_Extra_Data (N_Corners);
-                        Segment_Feedrates (N_Corners - 1)  := Segment_Feedrates (N_Corners);
+                        --  Keep first feedrate.
                         N_Corners                          := N_Corners - 1;
                         --  Remove repeated zero-length segments.
                      end if;
