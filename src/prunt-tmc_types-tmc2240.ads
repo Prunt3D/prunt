@@ -370,6 +370,8 @@ package Prunt.TMC_Types.TMC2240 is
      Size => 2;
    for Freewheel_Type use (Normal => 0, Freewheel => 1, Short_Via_LS => 2, Short_Via_HS => 3);
 
+   type PWM_Freq_Type is (Freq_1024, Freq_683, Freq_512, Freq_410);
+
    type PWMCONF is record
       PWM_OFS            : Unsigned_8;
       PWM_Grad           : Unsigned_8;
