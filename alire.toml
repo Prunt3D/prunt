@@ -14,9 +14,17 @@ release.optimization = ["-O3", "-gnatn", "-fdata-sections", "-ffunction-sections
 development.contracts = "Yes"
 
 [[depends-on]]
-ada_toml = "*"
-gnoga = "*"
+gnat_native = "^14.2.1"
+
+[[depends-on]]
+gnatcoll = "^24.0.0"
+
+[[depends-on]]
+ews = "^1.11.0"
 
 [[pins]]
-gnoga = { url = "https://github.com/Prunt3D/gnoga.git", branch = "prunt" }
-ada_toml = { url = "https://github.com/pmderodat/ada-toml.git", commit = "485b71c8c5d58cbdafeb925afbbe22590a2eada2" }
+ews = { url = "https://github.com/Prunt3D/ews.git" }
+
+[[actions]]
+type = "pre-build"
+command = ["ews_generator", "--input-dir", "html", "--output-dir", "generated_src_ews"]

@@ -19,39 +19,28 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-private with Ada.Text_IO;
-private with UXStrings;
+with Prunt.Logger;
+with Prunt.Config;
 
-package Prunt.GUI is
+generic
+   with package My_Logger is new Prunt.Logger (<>);
+   with package My_Config is new Prunt.Config (<>);
+   with function Get_Position return Prunt.Position;
+   with function Get_Thermistor_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;
+   with function Get_Stepper_Temperature (Thermistor : My_Config.Stepper_Name) return Prunt.Temperature;
+   type Board_Temperature_Probe_Name is (<>);
+   with function Get_Board_Temperature (Thermistor : Board_Temperature_Probe_Name) return Prunt.Temperature;
+   with function Get_Heater_Power (Heater : My_Config.Heater_Name) return Prunt.PWM_Scale;
+   with function Get_Input_Switch_State (Switch : My_Config.Input_Switch_Name) return Prunt.Pin_State;
+   with function Get_Tachometer_Frequency (Fan : My_Config.Fan_Name) return Frequency;
+   with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
+   with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
+   with function Is_Stepgen_Paused return Boolean;
+   with procedure Pause_Stepgen;
+   with procedure Resume_Stepgen;
+   Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;
+package Prunt.Web_Server is
 
-private
+   task Server;
 
-   use UXStrings;
-
-   Nice_Axis_Names : constant array (Axis_Name) of String (1 .. 6) :=
-     [X_Axis => "X Axis", Y_Axis => "Y Axis", Z_Axis => "Z Axis", E_Axis => "E Axis"];
-
-   generic
-      type Number is digits <>;
-   function Float_Image
-     (Value       : Number;
-      Fore        : Ada.Text_IO.Field := 2;
-      Aft         : Ada.Text_IO.Field := Number'Digits - 1;
-      Exp         : Ada.Text_IO.Field := 3;
-      Zero_Filled : Boolean           := False)
-     return String;
-
-   generic
-      type Number is delta <>;
-   function Fixed_Point_Image
-     (Value       : Number;
-      Fore        : Ada.Text_IO.Field := 2;
-      Aft         : Ada.Text_IO.Field := Number'Aft;
-      Exp         : Ada.Text_IO.Field := 3;
-      Zero_Filled : Boolean           := False)
-     return String;
-
-   --  The default 'Image outputs scientific notion, which isn't very user friendly, so we use this instead.
-   function DF_Image (Number : Dimensioned_Float) return UXString;
-
-end Prunt.GUI;
+end Prunt.Web_Server;

@@ -22,7 +22,7 @@
 with Prunt.Motion_Planner;
 with Prunt.Config;
 with Prunt.Motion_Planner.Planner;
-with Prunt.GUI.GUI;
+with Prunt.Web_Server;
 with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
@@ -260,7 +260,7 @@ private
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
    pragma Warnings (Off, "cannot call * before body seen");
-   package My_GUI is new GUI.GUI
+   package My_Web_Server is new Web_Server
      (My_Logger                         => My_Logger,
       My_Config                         => My_Config,
       Get_Position                      => Get_Position,
@@ -276,9 +276,7 @@ private
       Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
       Pause_Stepgen                     => My_Step_Generator.Pause,
       Resume_Stepgen                    => My_Step_Generator.Resume,
-      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
-      Host                              => Command_Line_Arguments.GUI_Host,
-      Port                              => Command_Line_Arguments.GUI_Port);
+      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
    pragma Warnings (On, "cannot call * before body seen");
 
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
@@ -295,7 +293,5 @@ private
    task GUI_Runner is
       entry Finish;
    end GUI_Runner;
-
-   procedure Disable_In_Config;
 
 end Prunt.Controller;

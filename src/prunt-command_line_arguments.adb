@@ -20,22 +20,21 @@
 -----------------------------------------------------------------------------
 
 with Ada.Command_Line;
-with UXStrings;
 
 package body Prunt.Command_Line_Arguments is
 
-   function Argument_Value (Switch : UXStrings.UXString; Default : UXStrings.UXString) return String is
+   function Argument_Value (Switch, Default : String) return String is
       use Ada.Command_Line;
-      use UXStrings;
-      Arg1, Arg2 : UXString;
    begin
-      for Arg in 1 .. Argument_Count loop
-         Arg1 := From_UTF_8 (Argument (Arg));
-         if Arg1.Length > Switch.Length and then Arg1.Slice (Arg1.First, Arg1.First + Switch.Length - 1) = Switch then
-            Arg2 := Arg1.Slice (Arg1.First + Switch.Length, Arg1.Last);
+      --  The last argument takes priority in case of duplicates.
+      for Arg in reverse 1 .. Argument_Count loop
+         if Argument (Arg)'Length > Switch'Length
+           and then Argument (Arg) (Argument (Arg)'First .. Argument (Arg)'First + Switch'Length - 1) = Switch
+         then
+            return Argument (Arg) (Argument (Arg)'First + Switch'Length .. Argument (Arg)'Last);
          end if;
       end loop;
-      return To_UTF_8 (if Arg2 /= Null_UXString then Arg2 else Default);
+      return Default;
    end Argument_Value;
 
    function GUI_Port return GNAT.Sockets.Port_Type is

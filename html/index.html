@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>
+    .tab-container {
+        display: flex; margin-bottom: 0px;
+    }
+    .tab {
+        margin-bottom: 1px;
+        padding: 10px;
+        outline: 1px solid #000000;
+        cursor: pointer;
+    }
+    .tab.active {
+        background-color: #000000;
+        color: #ffffff;
+    }
+    .tab.invalid {
+        outline: 3px dashed #ff0000;
+    }
+    .tab-content-container {
+        outline: 1px solid #000000;
+        padding: 10px;
+    }
+    .hidden {
+        display: none;
+    }
+    .vertical-list {
+        margin: 10px 0;
+    }
+    .config-form-row {
+        padding: 10px 0px;
+    }
+    .input-validity-error-label {
+        margin-left: 10px;
+        display: none;
+        color: #ff0000;
+    }
+    input:invalid {
+        outline: 2px dashed #ff0000;
+    }
+    input:invalid + .input-validity-error-label {
+        display: inline;
+    }
+    .title {
+        font-weight: bold;
+    }
+    .config-error-label {
+        color: #ff0000;
+    }
+  </style>
+</head>
+<body>
+  <div class="tab-container" id="topTabContainer">
+    <div class="tab active" id="statusTab">Status</div>
+    <div class="tab" id="configTab">Configuration</div>
+    <div class="tab" id="consoleTab">G-Code Console</div>
+    <div class="tab" id="fileTab">Run File</div>
+  </div>
+  <div class="tab-content-container" id="topTabContentContainer">
+    <div class="tab-content" id="statusTabContent"></div>
+    <div class="tab-content hidden" id="configTabContent"></div>
+    <div class="tab-content hidden" id="consoleTabContent"></div>
+    <div class="tab-content hidden" id="fileTabContent"></div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
