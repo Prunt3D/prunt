@@ -575,6 +575,22 @@ package body Prunt.Controller is
                     with "Current must not be less than 0.125A for stepper " & Stepper'Image;
                end if;
 
+               --  A delay greater than 8 bit times is required with multiple nodes or else nodes other than the
+               --  addressed node may detect transmission errors during reads. Technically we should have a delay
+               --  after reads until this is set for all nodes, but it's not currently an issue in any firmware
+               --  implementations.
+               Message             :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.NODECONF_Address,
+                     NODECONF_Data => (Node_Addr  => 0,
+                                       Send_Delay => TMC_Types.TMC2240.Delay_3x8,
+                                       Reserved   => 0),
+                     others        => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
+
                Message             :=
                  (Bytes_Mode => False,
                   Content    =>

@@ -310,14 +310,58 @@ package Prunt.TMC_Types.TMC2240 is
       MS_2          => 7,
       MS_Full_Steps => 8);
 
+   type CHM_Type is (SpreadCycle_Mode, Constant_Off_Time_Mode) with
+     Size => 1;
+   for CHM_Type use (SpreadCycle_Mode => 0, Constant_Off_Time_Mode => 1);
+
+   type TOFF_Type is
+     (Disable_Driver,
+      Off_56,
+      Off_88,
+      Off_120,
+      Off_152,
+      Off_184,
+      Off_216,
+      Off_248,
+      Off_280,
+      Off_312,
+      Off_344,
+      Off_376,
+      Off_408,
+      Off_440,
+      Off_472,
+      Off_504) with
+     Size => 4;
+   for TOFF_Type use
+     (Disable_Driver => 0,
+      Off_56         => 1,
+      Off_88         => 2,
+      Off_120        => 3,
+      Off_152        => 4,
+      Off_184        => 5,
+      Off_216        => 6,
+      Off_248        => 7,
+      Off_280        => 8,
+      Off_312        => 9,
+      Off_344        => 10,
+      Off_376        => 11,
+      Off_408        => 12,
+      Off_440        => 13,
+      Off_472        => 14,
+      Off_504        => 15);
+
+   type TBL_Type is (Blank_16, Blank_24, Blank_36, Blank_54) with
+     Size => 2;
+   for TBL_Type use (Blank_16 => 0, Blank_24 => 1, Blank_36 => 2, Blank_54 => 3);
+
    type CHOPCONF is record
-      TOFF                 : Unsigned_4;
+      TOFF                 : TOFF_Type;
       HSTRT_TFD210         : Unsigned_3;
       HEND_OFFSET          : Unsigned_4;
       FD3                  : Unsigned_1;
       DISFDCC              : TMC_Boolean;
       Reserved_1           : Unsigned_1;
-      CHM                  : TMC_Boolean;
+      CHM                  : CHM_Type;
       TBL                  : Unsigned_2;
       Reserved_2           : Unsigned_1;
       VHIGHFS              : TMC_Boolean;
