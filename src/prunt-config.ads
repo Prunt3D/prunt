@@ -19,15 +19,16 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Prunt.Thermistors;     use Prunt.Thermistors;
+with Prunt.Heaters;         use Prunt.Heaters;
+with Interfaces;            use Interfaces;
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Containers.Indefinite_Ordered_Maps;
+with Ada.Containers.Indefinite_Ordered_Sets;
 with Prunt.Motion_Planner;
 with TOML;
-with Ada.Strings.Bounded;
-with Prunt.Thermistors; use Prunt.Thermistors;
-with Prunt.Heaters;     use Prunt.Heaters;
 with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
-
---  Serialises and deserialises records to and from a TOML file.
 
 generic
    type Stepper_Name is (<>);
@@ -40,185 +41,45 @@ generic
    Config_Path : String;
 package Prunt.Config is
 
-   package Path_Strings is new Ada.Strings.Bounded.Generic_Bounded_Length (Max => 200);
+   function Schema return String;
 
-   type Attached_Steppers is array (Stepper_Name) of Boolean;
+private
 
-   IO_Error                 : exception;
-   Config_File_Format_Error : exception;
+   package Discrete_String_Sets is new Ada.Containers.Indefinite_Ordered_Sets (String);
 
-   type Prunt_Parameters is record
-      Enabled            : Boolean := False;
-      Replace_G0_With_G1 : Boolean := False;
-   end record;
+   type Property_Kind is (Boolean_Kind, Discrete_Kind, Integer_Kind, Float_Kind, Sequence_Kind, Variant_Kind);
 
-   type Stepper_Parameters (Kind : Stepper_Kind := Basic_Kind) is record
-      Enabled     : Boolean := False;
-      Mm_Per_Step : Length  := Length'Last / 2.0;
+   type Property_Parameters (Kind : Property_Kind);
+   type Property_Parameters_Access is not null access constant Property_Parameters;
+
+   package Property_Maps is new Ada.Containers.Indefinite_Ordered_Maps (String, Property_Parameters_Access);
+
+   type Property_Parameters (Kind : Property_Kind) is record
+      Description : Unbounded_String;
       case Kind is
-         when Basic_Kind =>
+         when Boolean_Kind =>
             null;
-         when TMC2240_UART_Kind =>
-            --  GLOBALSCALER and DRVCONF:
-            Output_Current       : Current                                     := 0.15 * amp;
-            Slope_Control        : TMC_Types.TMC2240.Slope_Control_Type        := TMC_Types.TMC2240.Slope_100V_Per_us;
-            --  IHOLDIRUN:
-            I_Hold               : TMC_Types.Unsigned_5                        := 16;
-            I_Run                : TMC_Types.Unsigned_5                        := 31;
-            I_Hold_Delay         : TMC_Types.Unsigned_4                        := 1;
-            I_Run_Delay          : TMC_Types.Unsigned_4                        := 4;
-            --  TPOWERDOWN:
-            T_Power_Down         : TMC_Types.Unsigned_8                        := 10;
-            --  TPWMTHRS:
-            T_PWM_Thrs           : TMC_Types.Unsigned_20                       := 0;
-            --  TCOOLTHRS:
-            T_Cool_Thrs          : TMC_Types.Unsigned_20                       := 0;
-            --  THIGH:
-            T_High               : TMC_Types.Unsigned_20                       := 0;
-            --  CHOPCONF:
-            TOFF                 : TMC_Types.Unsigned_4                        := 3;
-            HSTRT_TFD210         : TMC_Types.Unsigned_3                        := 5;
-            HEND_OFFSET          : TMC_Types.Unsigned_4                        := 2;
-            FD3                  : TMC_Types.Unsigned_1                        := 0;
-            DISFDCC              : Boolean                                     := False;
-            CHM                  : Boolean                                     := False;
-            VHIGHFS              : Boolean                                     := False;
-            VHIGHCHM             : Boolean                                     := False;
-            TPFD                 : TMC_Types.Unsigned_4                        := 4;
-            Microstep_Resolution : TMC_Types.TMC2240.Microstep_Resolution_Type := TMC_Types.TMC2240.MS_256;
-            --  PWMCONF:
-            PWM_OFS              : TMC_Types.Unsigned_8                        := 29;
-            PWM_Grad             : TMC_Types.Unsigned_8                        := 0;
-            PWM_Freq             : TMC_Types.Unsigned_2                        := 0;
-            PWM_Auto_Scale       : Boolean                                     := True;
-            PWM_Auto_Grad        : Boolean                                     := True;
-            Freewheel            : TMC_Types.TMC2240.Freewheel_Type            := TMC_Types.TMC2240.Normal;
-            PWM_Meas_SD_Enable   : Boolean                                     := False;
-            PWM_Dis_Reg_Stst     : Boolean                                     := False;
-            PWM_Reg              : TMC_Types.Unsigned_4                        := 4;
-            PWM_Lim              : TMC_Types.Unsigned_4                        := 12;
+         when Discrete_Kind =>
+            Discrete_Options : Discrete_String_Sets.Set;
+         when Integer_Kind =>
+            Integer_Min  : Long_Long_Integer;
+            Integer_Max  : Long_Long_Integer;
+            Integer_Unit : Unbounded_String;
+         when Float_Kind =>
+            Float_Min  : Long_Float;
+            Float_Max  : Long_Float;
+            Float_Unit : Unbounded_String;
+         when Sequence_Kind | Variant_Kind =>
+            Children : Property_Maps.Map;
       end case;
    end record;
 
-   type Kinematics_Kind is (Cartesian_Kind, Core_XY_Kind);
+   package Flat_Schemas is new Ada.Containers.Indefinite_Ordered_Maps (String, Property_Parameters);
 
-   type Kinematics_Parameters (Kind : Kinematics_Kind := Cartesian_Kind) is record
-      Planner_Parameters : Motion_Planner.Kinematic_Parameters := (others => <>);
-      Z_Steppers         : Attached_Steppers                   := [others => False];
-      E_Steppers         : Attached_Steppers                   := [others => False];
-      case Kind is
-         when Cartesian_Kind =>
-            X_Steppers : Attached_Steppers := [others => False];
-            Y_Steppers : Attached_Steppers := [others => False];
-         when Core_XY_Kind =>
-            A_Steppers : Attached_Steppers := [others => False];
-            B_Steppers : Attached_Steppers := [others => False];
-      end case;
-   end record;
-
-   type Input_Switch_Parameters is record
-      Enabled     : Boolean := False;
-      Hit_On_High : Boolean := False;
-   end record;
-
-   type Homing_Kind is (Double_Tap_Kind, Set_To_Value_Kind);
-
-   type Homing_Parameters (Kind : Homing_Kind := Double_Tap_Kind) is record
-      case Kind is
-         when Double_Tap_Kind =>
-            Switch                 : Input_Switch_Name := Input_Switch_Name'First;
-            First_Move_Distance    : Length            := 0.0 * mm;
-            Back_Off_Move_Distance : Length            := 0.0 * mm;
-            Second_Move_Distance   : Length            := 0.0 * mm;
-            Switch_Position        : Length            := 0.0 * mm;
-            Move_To_After          : Length            := 5.0 * mm;
-         when Set_To_Value_Kind =>
-            Value : Length := 0.0 * mm;
-      end case;
-   end record;
-
-   type Extruder_Parameters is record
-      Nozzle_Diameter   : Length := 0.4 * mm;
-      Filament_Diameter : Length := 1.75 * mm;
-   end record;
-
-   --  Thermistor_Parameters in Prunt.Thermistors.
-
-   type Heater_Full_Parameters is record
-      Thermistor : Thermistor_Name := Thermistor_Name'First;
-      Params     : Heaters.Heater_Parameters;
-   end record;
-
-   type Bed_Mesh_Kind is (No_Mesh_Kind, Beacon_Kind);
-
-   type Bed_Mesh_Parameters (Kind : Bed_Mesh_Kind := No_Mesh_Kind) is record
-      case Kind is
-         when No_Mesh_Kind =>
-            null;
-         when Beacon_Kind =>
-            Serial_Port_Path     : Path_Strings.Bounded_String := Path_Strings.To_Bounded_String ("");
-            X_Offset             : Length                      := 0.0 * mm;
-            Y_Offset             : Length                      := 0.0 * mm;
-            Calibration_Floor    : Length                      := 0.2 * mm;
-            Calibration_Ceiling  : Length                      := 5.0 * mm;
-            Calibration_Feedrate : Velocity                    := 1.0 * mm / s;
-      end case;
-   end record;
-
-   type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
-
-   type Fan_Parameters (Kind : Fan_Kind := Always_On_Kind) is record
-      Invert_Output : Boolean := False;
-      PWM_Frequency : Fan_PWM_Frequency := 30.0 * hertz;
-      case Kind is
-         when Dynamic_PWM_Kind =>
-            Disable_Below_PWM : PWM_Scale := 0.5;
-            Max_PWM           : PWM_Scale := 1.0;
-         when Always_On_Kind =>
-            Always_On_PWM : PWM_Scale := 1.0;
-      end case;
-   end record;
-
-   type G_Code_Assignment_Parameters is record
-      Bed_Heater    : Heater_Name := Heater_Name'First;
-      --  Chamber_Heater : Heater_Name := Heater_Name'First;
-      Hotend_Heater : Heater_Name := Heater_Name'First;
-   end record;
-
-   protected Config_File is
-      procedure Read (Data : out Prunt_Parameters);
-      procedure Write (Data : Prunt_Parameters; Append_Only : Boolean := False);
-      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
-        Post => Data.Kind = Stepper_Kinds (Stepper);
-      procedure Write (Data : Stepper_Parameters; Stepper : Stepper_Name; Append_Only : Boolean := False) with
-        Pre => Data.Kind = Stepper_Kinds (Stepper);
-      procedure Read (Data : out Kinematics_Parameters);
-      procedure Write (Data : Kinematics_Parameters; Append_Only : Boolean := False);
-      procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
-      procedure Write
-        (Data : Input_Switch_Parameters; Input_Switch : Input_Switch_Name; Append_Only : Boolean := False);
-      procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
-      procedure Write (Data : Homing_Parameters; Axis : Axis_Name; Append_Only : Boolean := False);
-      procedure Read (Data : out Extruder_Parameters);
-      procedure Write (Data : Extruder_Parameters; Append_Only : Boolean := False);
-      procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
-      procedure Write (Data : Thermistor_Parameters; Thermistor : Thermistor_Name; Append_Only : Boolean := False);
-      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) with
-        Post => Data.Params.Kind not in PID_Autotune_Kind;
-      procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) with
-        Pre => Data.Params.Kind not in PID_Autotune_Kind;
-      procedure Read (Data : out Bed_Mesh_Parameters);
-      procedure Write (Data : Bed_Mesh_Parameters; Append_Only : Boolean := False);
-      procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
-      procedure Write (Data : Fan_Parameters; Fan : Fan_Name; Append_Only : Boolean := False);
-      procedure Read (Data : out G_Code_Assignment_Parameters);
-      procedure Write (Data : G_Code_Assignment_Parameters; Append_Only : Boolean := False);
-      procedure Validate_Config (Report : access procedure (Message : String));
-   private
-      procedure Maybe_Read_File;
-      procedure Write_File;
-      File_Read : Boolean         := False;
-      TOML_Data : TOML.TOML_Value := TOML.No_TOML_Value;
-   end Config_File;
+   function Build_Schema return Property_Maps.Map;
+   function Schema_To_JSON (Schema : Property_Maps.Map) return String;
+   function Build_Flat_Schema return Flat_Schemas.Map with
+     Post =>
+      (for all P of Build_Flat_Schema'Result => P.Kind in Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind);
 
 end Prunt.Config;
