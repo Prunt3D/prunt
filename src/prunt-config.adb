@@ -141,11 +141,15 @@ package body Prunt.Config is
           ("Basic stepper driver settings.",
            ["Enabled" =>
              Boolean
-               ("Enable this stepper driver, allowing it to be attached to an axis."),
+               ("Enable this stepper driver, allowing it to be attached to an axis.",
+                Default => False),
             "Distance per step" =>
               Float
                 ("Distance moved by the attached motor for each step signal.",
-                 Default => 8.0E307, Min => -8.0E307, Max => 8.0E307, Unit => "mm")]);
+                 Default => 8.0E307,
+                 Min     => -8.0E307,
+                 Max     => 8.0E307,
+                 Unit    => "mm")]);
 
       --  TODO: Add StallGuard and CoolStep.
       TMC2240_Stepper_Sequence : Property_Parameters_Access :=
@@ -159,14 +163,17 @@ package body Prunt.Config is
               Float
                 ("Distance moved by the attached motor for each step signal.",
                  Default => 8.0E307,
-                 Min => -8.0E307,
-                 Max => 8.0E307,
-                 Unit => "mm"),
+                 Min     => -8.0E307,
+                 Max     => 8.0E307,
+                 Unit    => "mm"),
             "Run current" =>
               Float
                 ("Peak current limit for each motor coil. This parameter will be used to set CURRENT_RANGE to the " &
                    "smallest suitable range before setting GLOBALSCALER.",
-                 Default => 0.125, Min => 0.125, Max => 3.0, Unit => "A"),
+                 Default => 0.125,
+                 Min     => 0.125,
+                 Max     => 3.0,
+                 Unit    => "A"),
             "SLOPE_CONTROL" =>
               Discrete
                 ("Output slew rate. 400V/uS is usually a good setting. 800V/uS provides a minimal decrease in power " &
@@ -178,35 +185,53 @@ package body Prunt.Config is
             "IHOLD" =>
               Float
                 ("Standstill current scale. 0 = 0% of set current, 1 = 100% of set current. Resolution of 1/32.",
-                 Default => 1.0, Min => 0.0, Max => 1.0, Unit => ""),
+                 Default => 1.0,
+                 Min     => 0.0,
+                 Max     => 1.0,
+                 Unit    => ""),
             "IRUN" =>
               Float
                 ("Run current scale. 0 = 0% of set current, 1 = 100% of set current. Resolution of 1/32.",
-                 Default => 1.0, Min => 0.0, Max => 1.0, Unit => ""),
+                 Default => 1.0,
+                 Min     => 0.0,
+                 Max     => 1.0,
+                 Unit    => ""),
             "IHOLDDELAY" =>
               Float
                 ("Slew time for motor power down after standstill detected. Resolution of 21ms.",
                  --  Actually 80ns*2^18 = 20.97152ms, but 21ms is close enough given the internal oscillator is +/- 5%.
-                 Default => 315.0, Min => 0.0, Max => 315.0, Unit => "ms"),
+                 Default => 315.0,
+                 Min     => 0.0,
+                 Max     => 315.0,
+                 Unit    => "ms"),
             "IRUNDELAY" =>
               --  TODO: This description and allowed values assumes the internal oscillator is used.
               Float
                 ("Slew time for motor power up after end of standstill. Resolution is 0.041ms",
                  --  Actually 40.96us, but 21us is close enough given the internal oscillator is +/- 5%.
-                 Default => 0.0, Min => 0.0, Max => 0.615, Unit => "ms"),
+                 Default => 0.0,
+                 Min     => 0.0,
+                 Max     => 0.615,
+                 Unit    => "ms"),
             "TPOWERDOWN" =>
               --  TODO: This description and allowed values assumes the internal oscillator is used.
               Float
                 ("Delay before motor power down after standstill detected. A minimum value of 42ms is required for " &
                    "automatic StealthChop2 tuning. Resolution of 21ms.",
                  --  Actually 80ns*2^18 = 20.97152ms, but 21ms is close enough given the internal oscillator is +/- 5%.
-                 Default => 5355.0, Min => 0.0, Max => 5355.0, Unit => "ms"),
+                 Default => 5_355.0,
+                 Min     => 0.0,
+                 Max     => 5_355.0,
+                 Unit    => "ms"),
             "THIGH" =>
               --  TODO: This description and allowed values assumes the internal oscillator is used.
               Float
                 ("Lower velocity limit for high velocity mode and upper velocity limit for CoolStep/StealthChop2 " &
                    "mode (if enabled).",
-                 Default => 8.0E307, Min => 0.0, Max => 8.0E307, Unit => "mm/s"),
+                 Default => 8.0E307,
+                 Min     => 0.0,
+                 Max     => 8.0E307,
+                 Unit    => "mm/s"),
             "TOFF" =>
               --  TODO: This description assumes the internal oscillator is used.
               Discrete
@@ -231,8 +256,7 @@ package body Prunt.Config is
                  ["24", "36", "54"]),
             "VHIGHFS" =>
               Boolean
-                ("Switch to full stepping (no microstep outputs) when in high velocity mode.",
-                 Default => False),
+                ("Switch to full stepping (no microstep outputs) when in high velocity mode.", Default => False),
             "VHIGHCHM" =>
               Boolean
                 ("Set CHM to constant off time, TFD to 0, and approximately double TOFF when in high velocity mode.",
@@ -241,7 +265,10 @@ package body Prunt.Config is
               Integer
                 ("Passive fast decay duration after bridge polarity change. Duration in TMC clock cycles (typically " &
                    "80ns) = 128 * TPFD.",
-                 Default => 4, Min => 0, Max => 15, Unit => ""),
+                 Default => 4,
+                 Min     => 0,
+                 Max     => 15,
+                 Unit    => ""),
             "MRES" =>
               Discrete
                 --  TODO: Emit error when microstep resolution is too high and document that feature here.
@@ -255,148 +282,297 @@ package body Prunt.Config is
               Boolean
                 ("If enabled, wait 2^18 TMC clock cycles (typically 21ms) instead of 2^20 cycles (84ms) after a " &
                    "step signal be before beginning standstill detection.",
-                Default => False),
-            "CHM" => Variant
-              ("Select the chopper mode to be used when StealthChop2 is disabled or the upper velocity limit for " &
-                 "StealthChop2 is exceeded. VHIGHCHM may override this when the velocity set by VHIGH is exceeded. " &
-                 "SpreadCycle usually produces better results.",
-               Default => "SpreadCycle",
-               ["SpreadCycle" => Variant
-                 ("Select manual SpreadCycle settings or settings derived from motor parameters and other driver " &
-                    "parameters. Derived mode should be used unless manual tuning with an oscilloscope is being " &
-                    "performed.",
-                  ["Derived" =>
+                 Default => False),
+            "CHM" =>
+              Variant
+                ("Select the chopper mode to be used when StealthChop2 is disabled or the upper velocity limit for " &
+                   "StealthChop2 is exceeded. VHIGHCHM may override this when the velocity set by VHIGH is " &
+                   "exceeded. SpreadCycle usually produces better results.",
+                 Default => "SpreadCycle",
+                 ["SpreadCycle" =>
+                   Variant
+                     ("Select manual SpreadCycle settings or settings derived from motor parameters and other " &
+                        "driver parameters. Derived mode should be used unless manual tuning with an oscilloscope " &
+                        "is being performed.",
+                      ["Derived" =>
+                        Sequence
+                          ("Automatic calculation of optimal SpreadCycle parameters from motor parameters.",
+                           ["Input voltage" =>
+                             Float
+                               ("Driver input voltage, not the voltage listed on the stepper motor specifications. " &
+                                  "An error will be emitted if the measured driver voltage does not match this " &
+                                  "parameter to within 10% at startup. Changing of the driver voltage after " &
+                                  "startup will cause the motor to perform poorly.",
+                                Default => 24.0,
+                                Min     => 6.5,
+                                Max     => 40.0,
+                                Unit    => "V"),
+                            "Phase inductance" =>
+                              --  The very low values below will cause errors so there's no risk of the user forgetting
+                              --  to set these values.
+                              Float
+                                ("Inductance of each motor coil as listed on the motor specifications.",
+                                 Default => 0.000_000_000_1,
+                                 Min     => 0.000_000_1,
+                                 Max     => 10_000_000.0,
+                                 Unit    => "mH"),
+                            "Phase resistance" =>
+                              Float
+                                ("Resistance of each motor coil as listed on the motor specifications.",
+                                 Default => 0.000_000_1,
+                                 Min     => 0.000_000_1,
+                                 Max     => 10_000_000.0,
+                                 Unit    => "Ohm")]),
+                       "Manual" =>
+                         Sequence
+                           ("SpreadCycle chopper settings. Refer to the TMC2240 datasheet for details on tuning " &
+                              "these values. Derived parameters mode should be used unless manual tuning with " &
+                              "an oscilloscope is being performed.",
+                            ["HSTRT" =>
+                              Integer
+                                ("Hysteresis start setting as described in the TMC2240 datasheet.",
+                                 Default => 5,
+                                 Min     => 0,
+                                 Max     => 7,
+                                 Unit    => ""),
+                             "HEND" =>
+                               Integer
+                                 ("Hysteresis end setting as described in the TMC2240 datasheet. This is the " &
+                                    "resultant value from -3 to 12, not the raw register value.",
+                                  Default => -1,
+                                  Min     => -3,
+                                  Max     => 12,
+                                  Unit    => "")])]),
+                  "Constant off time" =>
                     Sequence
-                      ("Automatic calculation of optimal SpreadCycle parameters from motor parameters.",
-                       ["Input voltage" =>
-                         Float
-                           ("Driver input voltage, not the voltage listed on the stepper motor specifications. An " &
-                              "error will be emitted if the measured driver voltage does not match this parameter " &
-                              "to within 10% at startup. Changing of the driver voltage after startup will cause " &
-                              "the motor to perform poorly.",
-                            Default => 24.0, Min => 6.5, Max => 40.0, Unit => "V"),
-                        "Phase inductance" =>
-                          --  The very low values below will cause errors so there's no risk of the user forgetting
-                          --  to set these values.
-                          Float
-                            ("Inductance of each motor coil as listed on the motor specifications.",
-                             Default => 0.000_000_000_1, Min => 0.000_000_1, Max => 10_000_000.0, Unit => "mH"),
-                        "Phase resistance" =>
-                          Float
-                            ("Resistance of each motor coil as listed on the motor specifications.",
-                             Default => 0.000_000_1, Min => 0.000_000_1, Max => 10_000_000.0, Unit => "Ohm")]),
-                   "Manual" =>
-                     Sequence
-                       ("SpreadCycle chopper settings. Refer to the TMC2240 datasheet for details on tuning these " &
-                          "values. Derived parameters mode should be used unless manual tuning with an oscilloscope " &
-                          "is being performed.",
-                        ["HSTRT" =>
+                      ("Constant off time chopper settings. No automatic tuning of these parameters is available. " &
+                         "Refer to the TMC2240 datasheet for details on tuning these values. SpreadCycle in derived " &
+                         "parameters mode should be used unless manual tuning with an oscilloscope is being " &
+                         "performed.",
+                       ["DISFDCC" =>
+                         Boolean
+                           ("If set, disable the usage of the current comparator for termination of the fast decay " &
+                              "cycle. If not set then the fast decay cycle will be terminated early if the negative " &
+                              "current value exceeds the previous positive value.",
+                            Default => False),
+                        "OFFSET" =>
                           Integer
-                            ("Hysteresis start setting as described in the TMC2240 datasheet.",
-                             Default => 5, Min => 0, Max => 7, Unit => ""),
-                         "HEND" =>
-                           Integer
-                             ("Hysteresis end setting as described in the TMC2240 datasheet. This is the resultant " &
-                                "value from -3 to 12, not the raw register value.",
-                              Default => -1, Min => -3, Max => 12, Unit => "")])]),
-                "Constant off time" => Sequence
-                  ("Constant off time chopper settings. No automatic tuning of these parameters is available. Refer " &
-                     "to the TMC2240 datasheet for details on tuning these values. SpreadCycle in derived " &
-                     "parameters mode should be used unless manual tuning with an oscilloscope is being performed.",
-                   ["DISFDCC" =>
-                     Boolean
-                       ("If set, disable the usage of the current comparator for termination of the fast decay " &
-                          "cycle. If not set then the fast decay cycle will be terminated early if the negative " &
-                          "current value exceeds the previous positive value.",
-                       Default => False),
-                    "OFFSET" =>
-                      Integer
-                        ("Sine wave offset as described in the TMC2240 datasheet. This is the resultant value from " &
-                           "-3 to 12, not the raw register value.",
-                         Default => -1, Min => -3, Max => 12, Unit => ""),
-                    "TFD" =>
-                      Integer
-                        ("Fast decay time setting as described in the TMC2240 datasheet. This parameter sets both " &
-                           "FD3 and HSTRT_TFD210.",
-                         Default => 5, Min => 0, Max => 15, Unit => "")])]),
-            "StealthChop2 (EN_PWM_MODE)" => Variant
-              ("Enable or disable StealthChop2 for this driver. StealthChop2 reduces audible noise at low " &
-                 "velocities. In most cases no tuning of parameters is required for good results.",
-               Default => "Disabled",
-               ["Disabled" =>
-                 Sequence
-                   ("StealthChop2 is disabled.",
-                    []),
-                "Enabled" =>
-                  Sequence
-                    ("StealthChop2 settings.",
-                     ["TPWMTHRS" =>
-                       Float
-                         ("Upper velocity limit for StealthChop2 mode.",
-                          Default => 8.0E307, Min => 0.0, Max => 8E307, Unit => "mm/s"),
-                      "PWM_OFS" =>
-                        Integer
-                          ("Fixed part of StealthChop2 maximum PWM amplitude as described in TMC2240 datasheet. " &
-                             "Usually this should be left at the default value of 29 and PWM_AUTOSCALE should be " &
-                             "enabled.",
-                           Default => 29, Min => 0, Max => 255, Unit => ""),
-                      "PWM_GRAD" =>
-                        Integer
-                          ("Velocity dependent part of StealthChop2 maximum PWM described in TMC2240 datasheet. " &
-                             "Usually this should be left at the default value of 0 and PWM_AUTOGRAD should be " &
-                             "enabled.",
-                           Default => 0, Min => 0, Max => 255, Unit => ""),
-                      "PWM_FREQ" =>
-                        --  TODO: This description assumes the internal oscillator is used.
-                        Discrete
-                          ("StealthChop2 PWM cycle duration measured in half TMC clock cycles (typically a half " &
-                             "cycle is 40ns). Usually a value of 683 is a good default for a resultant frequency " &
-                             "of 36kHz.",
-                           Default => "683",
-                           --  [for X in TMC_Types.TMC2240.PWM_Freq_Type => X'Image]),
-                           --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
-                           ["1024", "683", "512", "410"]),
-                      "PWM_AUTOSCALE" =>
-                        Boolean
-                          ("Enable automatic tuning of PWM_OFS. Set current limits may not be effective if this is " &
-                             "disabled!",
-                          Default => True),
-                      "PWM_AUTOGRAD" =>
-                        Boolean
-                          ("Enable automatic tuning of PWM_GRAD. Set current limits may not be effective if this is " &
-                             "disabled!",
-                          Default => True),
-                      "FREEWHEEL" =>
-                        Discrete
-                          ("StealthChop2 standstill freewheeling mode when IHOLD = 0.",
-                           Default => "NORMAL",
-                           --  [for X in TMC_Types.TMC2240.Freewheel_Type => X'Image]),
-                           --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
-                           ["NORMAL", "FREEWHEEL", "SHORT_VIA_LS", "SHORT_VIA_HS"]),
-                      "PWM_MEAS_SD_ENABLE" =>
-                        Boolean
-                          ("Use slow decay phase on low side to measure motor current when in StealthChop2 mode.",
-                          Default => False),
-                      "PWM_DIS_REG_STST" =>
-                        Boolean
-                          ("Disable StealthChop2 current regulation when in standstill and reduce the duty cycle to " &
-                             "a very low value.",
-                          Default => False),
-                      "PWM_REG" =>
-                        Integer
-                          ("StealthChop2 maximum PWM auto-scaling change per half wave measured in half increments, " &
-                             "with 1 being 0.5 increments.",
-                           Default => 4, Min => 0, Max => 15, Unit => ""),
-                      "PWM_LIM" =>
-                        Integer
-                          ("StealthChop2 PWM auto-scaling amplitude limit when switching from SpreadCycle to " &
-                             "StealthChop2. Limits the upper 4 bits.",
-                           Default => 12, Min => 0, Max => 15, Unit => ""),
-                      "MULTISTEP_FILT" =>
-                        Boolean
-                          ("Some sort of undocumented filtering for StealthChop2. This should be left off on " &
-                             "official Prunt hardware as the generated step signals have extremely low jitter.",
-                          Default => False)])])]);
+                            ("Sine wave offset as described in the TMC2240 datasheet. This is the resultant value " &
+                               "from -3 to 12, not the raw register value.",
+                             Default => -1,
+                             Min     => -3,
+                             Max     => 12,
+                             Unit    => ""),
+                        "TFD" =>
+                          Integer
+                            ("Fast decay time setting as described in the TMC2240 datasheet. This parameter sets " &
+                               "both FD3 and HSTRT_TFD210.",
+                             Default => 5,
+                             Min     => 0,
+                             Max     => 15,
+                             Unit    => "")])]),
+            "StealthChop2 (EN_PWM_MODE)" =>
+              Variant
+                ("Enable or disable StealthChop2 for this driver. StealthChop2 reduces audible noise at low " &
+                   "velocities. In most cases no tuning of parameters is required for good results.",
+                 Default => "Disabled",
+                 ["Disabled" => Sequence ("StealthChop2 is disabled.", []),
+                  "Enabled" =>
+                    Sequence
+                      ("StealthChop2 settings.",
+                       ["TPWMTHRS" =>
+                         Float
+                           ("Upper velocity limit for StealthChop2 mode.",
+                            Default => 8.0E307,
+                            Min     => 0.0,
+                            Max     => 8E307,
+                            Unit    => "mm/s"),
+                        "PWM_OFS" =>
+                          Integer
+                            ("Fixed part of StealthChop2 maximum PWM amplitude as described in TMC2240 datasheet. " &
+                               "Usually this should be left at the default value of 29 and PWM_AUTOSCALE should be " &
+                               "enabled.",
+                             Default => 29,
+                             Min     => 0,
+                             Max     => 255,
+                             Unit    => ""),
+                        "PWM_GRAD" =>
+                          Integer
+                            ("Velocity dependent part of StealthChop2 maximum PWM described in TMC2240 datasheet. " &
+                               "Usually this should be left at the default value of 0 and PWM_AUTOGRAD should be " &
+                               "enabled.",
+                             Default => 0,
+                             Min     => 0,
+                             Max     => 255,
+                             Unit    => ""),
+                        "PWM_FREQ" =>
+                          --  TODO: This description assumes the internal oscillator is used.
+                          Discrete
+                            ("StealthChop2 PWM cycle duration measured in half TMC clock cycles (typically a half " &
+                               "cycle is 40ns). Usually a value of 683 is a good default for a resultant frequency " &
+                               "of 36kHz.",
+                             Default => "683",
+                             --  [for X in TMC_Types.TMC2240.PWM_Freq_Type => X'Image]),
+                             --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+
+                             ["1024", "683", "512", "410"]),
+                        "PWM_AUTOSCALE" =>
+                          Boolean
+                            ("Enable automatic tuning of PWM_OFS. Set current limits may not be effective if this " &
+                               "is disabled!",
+                             Default => True),
+                        "PWM_AUTOGRAD" =>
+                          Boolean
+                            ("Enable automatic tuning of PWM_GRAD. Set current limits may not be effective if this " &
+                               "is disabled!",
+                             Default => True),
+                        "FREEWHEEL" =>
+                          Discrete
+                            ("StealthChop2 standstill freewheeling mode when IHOLD = 0.",
+                             Default => "NORMAL",
+                             --  [for X in TMC_Types.TMC2240.Freewheel_Type => X'Image]),
+                             --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+
+                             ["NORMAL", "FREEWHEEL", "SHORT_VIA_LS", "SHORT_VIA_HS"]),
+                        "PWM_MEAS_SD_ENABLE" =>
+                          Boolean
+                            ("Use slow decay phase on low side to measure motor current when in StealthChop2 mode.",
+                             Default => False),
+                        "PWM_DIS_REG_STST" =>
+                          Boolean
+                            ("Disable StealthChop2 current regulation when in standstill and reduce the duty cycle " &
+                               "to a very low value.",
+                             Default => False),
+                        "PWM_REG" =>
+                          Integer
+                            ("StealthChop2 maximum PWM auto-scaling change per half wave measured in half " &
+                               "increments, with 1 being 0.5 increments.",
+                             Default => 4,
+                             Min     => 0,
+                             Max     => 15,
+                             Unit    => ""),
+                        "PWM_LIM" =>
+                          Integer
+                            ("StealthChop2 PWM auto-scaling amplitude limit when switching from SpreadCycle to " &
+                               "StealthChop2. Limits the upper 4 bits.",
+                             Default => 12,
+                             Min     => 0,
+                             Max     => 15,
+                             Unit    => ""),
+                        "MULTISTEP_FILT" =>
+                          Boolean
+                            ("Some sort of undocumented filtering for StealthChop2. This should be left off on " &
+                               "official Prunt hardware as the generated step signals have extremely low jitter.",
+                             Default => False)])])]);
+
+      Thermistor_Sequence : Property_Parameters_Access :=
+        Sequence
+          ("Thermistor settings.",
+           ["Minimum temperature" =>
+             Float
+               ("Any temperature below this temperature will cause an emergency stop if the heater is enabled.",
+                Default => 0.0,
+                Min     => -8.0E307,
+                Max     => 8.0E307,
+                Unit    => "°C"),
+           "Maximum temperature" =>
+             Float
+               ("Any temperature above this temperature will cause an emergency stop if the heater is enabled.",
+                Default => 0.0,
+                Min     => -8.0E307,
+                Max     => 8.0E307,
+                Unit    => "°C"),
+            "Thermistor kind" =>
+              --  TODO: Add sample values here.
+              Variant
+                ("The kind of thermistor connected to this input.",
+                 Default => "Disabled",
+                 ["Disabled" =>
+                   Sequence
+                     ("Thermistor is disabled.",
+                      []),
+                  "ATC Semitec 104GT-2" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A = 8.0965E-4  B = 2.1163E-4  C = 7.0742E-8",
+                       []),
+                  "ATC Semitec 104NT-4-R025H42G" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=7.9582E-4 B=2.1360E-4 C=6.4830E-8",
+                       []),
+                  "EPCOS 100K B57560G104F" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=7.2213E-4 B=2.1676E-4 C=8.9293E-8",
+                       []),
+                  "Generic 3950" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=7.9347E-4 B=2.0076E-4 C=1.6328E-7",
+                       []),
+                  "SliceEngineering 450" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=3.0553E-4 B=2.1171E-4 C=1.1962E-7",
+                       []),
+                  "TDK NTCG104LH104JT1" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=9.7639E-4 B=1.9688E-4 C=7.2671E-8",
+                       []),
+                  "Honeywell 100K 135-104LAG-J01" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=4.5695E-4 B=2.5163E-4 C=0",
+                       []),
+                  "NTC 100K MGB18-104F39050L32" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=5.4598E-4 B=2.4390E-4 C=0",
+                       []),
+                  "PT-1000 (PT-385 class above 0C)" =>
+                    Sequence
+                      ("Using Callendar-Van Dusen model with R=1000 A=3.9083E-3 B=-5.775E-7",
+                       []),
+                  "PT-1000 (PT-392 class above 0C)" =>
+                    Sequence
+                      ("Using Callendar-Van Dusen model with R=1000 A=3.9827E-3 B=-5.875E-7",
+                       []),
+                  "Custom Steinhart-Hart model" =>
+                    Sequence
+                      ("1 / T = A + B * ln(R) + C * (ln(R))**3 where T is in kelvins.",
+                       ["A" => Float
+                         ("",
+                          Default => 0.0,
+                          Min     => -8.0E307,
+                          Max     => 8.0E307,
+                          Unit    => ""),
+                       "B" => Float
+                         ("",
+                          Default => 0.0,
+                          Min     => -8.0E307,
+                          Max     => 8.0E307,
+                           Unit    => ""),
+                       "C" => Float
+                         ("",
+                          Default => 0.0,
+                          Min     => -8.0E307,
+                          Max     => 8.0E307,
+                          Unit    => "")]),
+                 "Custom Callendar-Van Dusen model" =>
+                    Sequence
+                      ("R = R(0) * (1 + A * T + B * T**2) where T is in celcius.",
+                       ["R (0)" => Float
+                         ("",
+                          Default => 0.0,
+                          Min     => -8.0E307,
+                          Max     => 8.0E307,
+                          Unit    => "ohm"),
+                       "A" => Float
+                         ("",
+                          Default => 0.0,
+                          Min     => -8.0E307,
+                          Max     => 8.0E307,
+                           Unit    => ""),
+                       "B" => Float
+                         ("",
+                          Default => 0.0,
+                          Min     => -8.0E307,
+                          Max     => 8.0E307,
+                          Unit    => "")]))]);
 
       Result : Property_Maps.Map;
    begin
@@ -425,17 +601,17 @@ package body Prunt.Config is
                 Sequence_Over_Axes
                   ("Minimum position that the printer may move to. Any axis may be set to -8E307 for effectively " &
                      "infinite range.",
-                   (Kind          => Float_Kind,
+                   (Kind           => Float_Kind,
                     Description   => "",
                     Float_Min     => -8.0E307,
                     Float_Max     => 8.0E307,
                     Float_Unit    => "mm",
                     Float_Default => 0.0)),
-                "Upper position limit" =>
+               "Upper position limit" =>
                  Sequence_Over_Axes
                    ("Maximum position that the printer may move to. Any axis may be set to 8E307 for effectively " &
                       "infinite range.",
-                    (Kind          => Float_Kind,
+                    (Kind           => Float_Kind,
                      Description   => "",
                      Float_Min     => -8.0E307,
                      Float_Max     => 8.0E307,
@@ -459,11 +635,14 @@ package body Prunt.Config is
                  Float
                    ("The maximum combined feedrate of all axes, including the E axis. Usually this should be set " &
                       "to a high value (e.g. 8E307) and the per-axis limits should be used instead.",
-                   Default => 0.0, Min => 0.0, Max => 8.0E307, Unit => "mm/s"),
-                "Axial velocity limits" =>
+                    Default => 0.0,
+                    Min     => 0.0,
+                    Max     => 8.0E307,
+                    Unit    => "mm/s"),
+               "Axial velocity limits" =>
                  Sequence_Over_Axes
                    ("Maximum feedrate for each individual axis.",
-                    (Kind          => Float_Kind,
+                    (Kind           => Float_Kind,
                      Description   => "",
                      Float_Min     => -8.0E307,
                      Float_Max     => 8.0E307,
@@ -474,35 +653,53 @@ package body Prunt.Config is
                    ("The E axis velocity is multiplied by this value and then added to the E axis position. " &
                       "This means that the maximum E axis velocity is the set maximum plus the pressure advance " &
                       "time multiplied by the set maximum acceleration. The same applies to jerk etc..",
-                   Default => 0.0, Min => -8.0E307, Max => 8.0E307, Unit => "s"),
+                    Default => 0.0,
+                    Min     => -8.0E307,
+                    Max     => 8.0E307,
+                    Unit    => "s"),
                "Maximum chord error" =>
                  Float
                    ("The maximum distance that the planned path may deviate from the commanded path. Setting this " &
                       "parameter to 0 will cause the printer to come to a complete stop at every corner.",
-                   Default => 0.1, Min => 0.0, Max => 8.0E307, Unit => "mm"),
+                    Default => 0.1,
+                    Min     => 0.0,
+                    Max     => 8.0E307,
+                    Unit    => "mm"),
                "Maximum acceleration" =>
                  Float
                    ("May safely be set to 8E307 for effectively infinite acceleration (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled.",
-                   Default => 0.0, Min => 0.0, Max => 8.0E307, Unit => "mm/s^2"),
+                    Default => 0.0,
+                    Min     => 0.0,
+                    Max     => 8.0E307,
+                    Unit    => "mm/s²"),
                "Maximum jerk" =>
                  Float
                    ("May safely be set to 8E307 for effectively infinite jerk (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
                       "A good starting point for tuning is 100 times the set maximum acceleration.",
-                   Default => 0.0, Min => 0.0, Max => 8.0E307, Unit => "mm/s^3"),
+                    Default => 0.0,
+                    Min     => 0.0,
+                    Max     => 8.0E307,
+                    Unit    => "mm/s³"),
                "Maximum snap" =>
                  Float
                    ("May safely be set to 8E307 for effectively infinite snap (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
                       "A good starting point for tuning is 1,000 times the set maximum acceleration.",
-                   Default => 0.0, Min => 0.0, Max => 8.0E307, Unit => "mm/s^4"),
+                    Default => 0.0,
+                    Min     => 0.0,
+                    Max     => 8.0E307,
+                    Unit    => "mm/s⁴"),
                "Maximum crackle" =>
                  Float
                    ("May safely be set to 8E307 for effectively infinite crackle (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
-                      "A good starting point for tuning is 10,000 the set maximum acceleration.",
-                   Default => 0.0, Min => 0.0, Max => 8.0E307, Unit => "mm/s^5"),
+                      "A good starting point for tuning is 10,000 times the set maximum acceleration.",
+                    Default => 0.0,
+                    Min     => 0.0,
+                    Max     => 8.0E307,
+                    Unit    => "mm/s⁵"),
                "Axial scaler" =>
                  Sequence_Over_Axes
                    ("Inside the motion planner, all positions are divided by this value before applying motion " &
@@ -521,13 +718,19 @@ package body Prunt.Config is
                  Variant
                    ("The type of kinematics used by the printer.",
                     ["Cartesian" =>
-                       Sequence_Over_Steppers
-                         ("Axis each stepper is attached to.",
-                          (Kind => Discrete_Kind, Description => "", Default => "NONE", ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"])),
+                      Sequence_Over_Steppers
+                        ("Axis each stepper is attached to.",
+                         (Kind        => Discrete_Kind,
+                          Description => "",
+                          Default     => "NONE",
+                          ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"])),
                      "Core XY" =>
                        Sequence_Over_Steppers
                          ("Axis each stepper is attached to.",
-                          (Kind => Discrete_Kind, Description => "", Default => "NONE", ["NONE", "A_AXIS", "B_AXIS", "Z_AXIS", "E_AXIS"]))])]),
+                          (Kind        => Discrete_Kind,
+                           Description => "",
+                           Default     => "NONE",
+                           ["NONE", "A_AXIS", "B_AXIS", "Z_AXIS", "E_AXIS"]))])]),
          "Input switches" =>
            Sequence
              ("Input switch settings.",
