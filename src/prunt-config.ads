@@ -58,19 +58,25 @@ private
       Description : Unbounded_String;
       case Kind is
          when Boolean_Kind =>
-            null;
+            Boolean_Default : Boolean;
          when Discrete_Kind =>
             Discrete_Options : Discrete_String_Sets.Set;
+            Discrete_Default : Unbounded_String;
          when Integer_Kind =>
-            Integer_Min  : Long_Long_Integer;
-            Integer_Max  : Long_Long_Integer;
-            Integer_Unit : Unbounded_String;
+            Integer_Min     : Long_Long_Integer;
+            Integer_Max     : Long_Long_Integer;
+            Integer_Unit    : Unbounded_String;
+            Integer_Default : Long_Long_Integer;
          when Float_Kind =>
-            Float_Min  : Long_Float;
-            Float_Max  : Long_Float;
-            Float_Unit : Unbounded_String;
-         when Sequence_Kind | Variant_Kind =>
-            Children : Property_Maps.Map;
+            Float_Min     : Long_Float;
+            Float_Max     : Long_Float;
+            Float_Unit    : Unbounded_String;
+            Float_Default : Long_Float;
+         when Sequence_Kind =>
+            Sequence_Children : Property_Maps.Map;
+         when Variant_Kind =>
+            Variant_Children : Property_Maps.Map;
+            Variant_Default  : Unbounded_String;
       end case;
    end record;
 
