@@ -132,17 +132,21 @@ package body Prunt.Config is
                Property_Maps.Insert (Result.all.Children, S'Image, Prop_Access);
             end loop;
          end return;
-      end Sequence_Over_Axes;
+      end Sequence_Over_Steppers;
 
       Stepper_Name_Strings : constant Discrete_String_Sets.Set := [for S in Stepper_Name => S'Image];
+      Input_Switch_Name_Strings : constant Discrete_String_Sets.Set := [for I in Input_Switch_Name => I'Image];
+      Thermistor_Name_Strings : constant Discrete_String_Sets.Set := [for T in Thermistor_Name => T'Image];
+      Heater_Name_Strings : constant Discrete_String_Sets.Set := [for H in Heater_Name => H'Image];
 
+      --!pp off
       Basic_Stepper_Sequence : Property_Parameters_Access :=
         Sequence
           ("Basic stepper driver settings.",
            ["Enabled" =>
-             Boolean
-               ("Enable this stepper driver, allowing it to be attached to an axis.",
-                Default => False),
+              Boolean
+                ("Enable this stepper driver, allowing it to be attached to an axis.",
+                 Default => False),
             "Distance per step" =>
               Float
                 ("Distance moved by the attached motor for each step signal.",
@@ -156,9 +160,9 @@ package body Prunt.Config is
         Sequence
           ("TMC2240 stepper driver settings.",
            ["Enabled" =>
-             Boolean
-               ("Enable this stepper driver, allowing it to be attached to an axis.",
-                Default => False),
+              Boolean
+                ("Enable this stepper driver, allowing it to be attached to an axis.",
+                 Default => False),
             "Distance per step" =>
               Float
                 ("Distance moved by the attached motor for each step signal.",
@@ -290,39 +294,39 @@ package body Prunt.Config is
                    "exceeded. SpreadCycle usually produces better results.",
                  Default => "SpreadCycle",
                  ["SpreadCycle" =>
-                   Variant
-                     ("Select manual SpreadCycle settings or settings derived from motor parameters and other " &
-                        "driver parameters. Derived mode should be used unless manual tuning with an oscilloscope " &
-                        "is being performed.",
-                      ["Derived" =>
-                        Sequence
-                          ("Automatic calculation of optimal SpreadCycle parameters from motor parameters.",
-                           ["Input voltage" =>
-                             Float
-                               ("Driver input voltage, not the voltage listed on the stepper motor specifications. " &
-                                  "An error will be emitted if the measured driver voltage does not match this " &
-                                  "parameter to within 10% at startup. Changing of the driver voltage after " &
-                                  "startup will cause the motor to perform poorly.",
-                                Default => 24.0,
-                                Min     => 6.5,
-                                Max     => 40.0,
-                                Unit    => "V"),
-                            "Phase inductance" =>
-                              --  The very low values below will cause errors so there's no risk of the user forgetting
-                              --  to set these values.
+                    Variant
+                      ("Select manual SpreadCycle settings or settings derived from motor parameters and other " &
+                         "driver parameters. Derived mode should be used unless manual tuning with an oscilloscope " &
+                         "is being performed.",
+                       ["Derived" =>
+                         Sequence
+                           ("Automatic calculation of optimal SpreadCycle parameters from motor parameters.",
+                            ["Input voltage" =>
                               Float
-                                ("Inductance of each motor coil as listed on the motor specifications.",
-                                 Default => 0.000_000_000_1,
-                                 Min     => 0.000_000_1,
-                                 Max     => 10_000_000.0,
-                                 Unit    => "mH"),
-                            "Phase resistance" =>
-                              Float
-                                ("Resistance of each motor coil as listed on the motor specifications.",
-                                 Default => 0.000_000_1,
-                                 Min     => 0.000_000_1,
-                                 Max     => 10_000_000.0,
-                                 Unit    => "Ohm")]),
+                                ("Driver input voltage, not the voltage listed on the stepper motor specifications. " &
+                                   "An error will be emitted if the measured driver voltage does not match this " &
+                                   "parameter to within 10% at startup. Changing of the driver voltage after " &
+                                   "startup will cause the motor to perform poorly.",
+                                 Default => 24.0,
+                                 Min     => 6.5,
+                                 Max     => 40.0,
+                                 Unit    => "V"),
+                             "Phase inductance" =>
+                               --  The very low values below will cause errors so there's no risk of the user forgetting
+                               --  to set these values.
+                               Float
+                                 ("Inductance of each motor coil as listed on the motor specifications.",
+                                  Default => 0.000_000_000_1,
+                                  Min     => 0.000_000_1,
+                                  Max     => 10_000_000.0,
+                                  Unit    => "mH"),
+                             "Phase resistance" =>
+                               Float
+                                 ("Resistance of each motor coil as listed on the motor specifications.",
+                                  Default => 0.000_000_1,
+                                  Min     => 0.000_000_1,
+                                  Max     => 10_000_000.0,
+                                  Unit    => "Ohm")]),
                        "Manual" =>
                          Sequence
                            ("SpreadCycle chopper settings. Refer to the TMC2240 datasheet for details on tuning " &
@@ -350,11 +354,11 @@ package body Prunt.Config is
                          "parameters mode should be used unless manual tuning with an oscilloscope is being " &
                          "performed.",
                        ["DISFDCC" =>
-                         Boolean
-                           ("If set, disable the usage of the current comparator for termination of the fast decay " &
-                              "cycle. If not set then the fast decay cycle will be terminated early if the negative " &
-                              "current value exceeds the previous positive value.",
-                            Default => False),
+                          Boolean
+                            ("If set, disable the usage of the current comparator for termination of the fast decay " &
+                               "cycle. If not set then the fast decay cycle will be terminated early if the negative " &
+                               "current value exceeds the previous positive value.",
+                             Default => False),
                         "OFFSET" =>
                           Integer
                             ("Sine wave offset as described in the TMC2240 datasheet. This is the resultant value " &
@@ -381,12 +385,12 @@ package body Prunt.Config is
                     Sequence
                       ("StealthChop2 settings.",
                        ["TPWMTHRS" =>
-                         Float
-                           ("Upper velocity limit for StealthChop2 mode.",
-                            Default => 8.0E307,
-                            Min     => 0.0,
-                            Max     => 8E307,
-                            Unit    => "mm/s"),
+                          Float
+                            ("Upper velocity limit for StealthChop2 mode.",
+                             Default => 8.0E307,
+                             Min     => 0.0,
+                             Max     => 8E307,
+                             Unit    => "mm/s"),
                         "PWM_OFS" =>
                           Integer
                             ("Fixed part of StealthChop2 maximum PWM amplitude as described in TMC2240 datasheet. " &
@@ -469,12 +473,12 @@ package body Prunt.Config is
         Sequence
           ("Thermistor settings.",
            ["Minimum temperature" =>
-             Float
-               ("Any temperature below this temperature will cause an emergency stop if the heater is enabled.",
-                Default => 0.0,
-                Min     => -8.0E307,
-                Max     => 8.0E307,
-                Unit    => "°C"),
+              Float
+                ("Any temperature below this temperature will cause an emergency stop if the heater is enabled.",
+                 Default => 0.0,
+                 Min     => -8.0E307,
+                 Max     => 8.0E307,
+                 Unit    => "°C"),
            "Maximum temperature" =>
              Float
                ("Any temperature above this temperature will cause an emergency stop if the heater is enabled.",
@@ -488,9 +492,9 @@ package body Prunt.Config is
                 ("The kind of thermistor connected to this input.",
                  Default => "Disabled",
                  ["Disabled" =>
-                   Sequence
-                     ("Thermistor is disabled.",
-                      []),
+                    Sequence
+                      ("Thermistor is disabled.",
+                       []),
                   "ATC Semitec 104GT-2" =>
                     Sequence
                       ("Using Steinhart-Hart model with A = 8.0965E-4  B = 2.1163E-4  C = 7.0742E-8",
@@ -534,45 +538,255 @@ package body Prunt.Config is
                   "Custom Steinhart-Hart model" =>
                     Sequence
                       ("1 / T = A + B * ln(R) + C * (ln(R))**3 where T is in kelvins.",
-                       ["A" => Float
-                         ("",
-                          Default => 0.0,
-                          Min     => -8.0E307,
-                          Max     => 8.0E307,
-                          Unit    => ""),
-                       "B" => Float
-                         ("",
-                          Default => 0.0,
-                          Min     => -8.0E307,
-                          Max     => 8.0E307,
-                           Unit    => ""),
-                       "C" => Float
-                         ("",
-                          Default => 0.0,
-                          Min     => -8.0E307,
-                          Max     => 8.0E307,
-                          Unit    => "")]),
+                       ["A" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -8.0E307,
+                             Max     => 8.0E307,
+                             Unit    => ""),
+                        "B" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -8.0E307,
+                             Max     => 8.0E307,
+                             Unit    => ""),
+                        "C" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -8.0E307,
+                             Max     => 8.0E307,
+                             Unit    => "")]),
                  "Custom Callendar-Van Dusen model" =>
                     Sequence
                       ("R = R(0) * (1 + A * T + B * T**2) where T is in celcius.",
-                       ["R (0)" => Float
-                         ("",
-                          Default => 0.0,
-                          Min     => -8.0E307,
-                          Max     => 8.0E307,
-                          Unit    => "ohm"),
-                       "A" => Float
-                         ("",
-                          Default => 0.0,
-                          Min     => -8.0E307,
-                          Max     => 8.0E307,
-                           Unit    => ""),
-                       "B" => Float
-                         ("",
-                          Default => 0.0,
-                          Min     => -8.0E307,
-                          Max     => 8.0E307,
-                          Unit    => "")]))]);
+                       ["R (0)" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -8.0E307,
+                             Max     => 8.0E307,
+                             Unit    => "ohm"),
+                        "A" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -8.0E307,
+                             Max     => 8.0E307,
+                             Unit    => ""),
+                        "B" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -8.0E307,
+                             Max     => 8.0E307,
+                             Unit    => "")]))]);
+
+      Input_Switch_Sequence : Property_Parameters_Access :=
+        Sequence
+          ("Input switch settings.",
+           ["Enabled" =>
+              Boolean
+                ("Enable the switch, allowing it to be used for homing.",
+                 Default => False),
+            "Hit on high" =>
+              Boolean
+                ("Consider the switch to be hit when the input pin is in the high state.",
+                 Default => False)]);
+
+      Homing_Sequence : Property_Parameters_Access :=
+        Variant
+          ("Homing method for this axis.",
+           Default => "Double tap",
+           ["Set to value" =>
+              Sequence
+                ("Set this axis to a given position when homing is performed without actually moving.",
+                 ["Position" =>
+                    Float
+                      ("Position to set the axis to.",
+                       Default => 0.0,
+                       Min     => -8.0E307,
+                       Max     => 8.0E307,
+                       Unit    => "mm")]),
+            "Double tap" =>
+              Sequence
+                ("Move towards a switch until it is hit, then back off, then move towards it slower and record the " &
+                   "position.",
+                 ["Switch" =>
+                    Discrete
+                      ("Input switch to use.",
+                       Default => Input_Switch_Name'First'Image,
+                       Input_Switch_Name_Strings),
+                  "Move towards negative infinity" =>
+                    Boolean
+                      ("If set then homing will move towards lower positions, otherwise homing will move towards " &
+                         "higher positions.",
+                       Default => True),
+                  "First move distance" =>
+                    Float
+                      ("Distance past switch hit point allowed in first seeking move.",
+                       Default => 0.0,
+                       Min     => 0.0,
+                       Max     => 8.0E307,
+                       Unit    => "mm"),
+                  "Back off move distance" =>
+                    Float
+                      ("Distance that is moved back after the switch is first hit.",
+                       Default => 0.0,
+                       Min     => 0.0,
+                       Max     => 8.0E307,
+                       Unit    => "mm"),
+                  "Second move distance" =>
+                    Float
+                      ("Distance past switch hit point allowed in second seeking move.",
+                       Default => 0.0,
+                       Min     => 0.0,
+                       Max     => 8.0E307,
+                       Unit    => "mm"),
+                  "Switch position" =>
+                    Float
+                      ("Position of the switch on the axis. This value is allowed to be outside of the machine limits.",
+                       Default => 0.0,
+                       Min     => -8.0E307,
+                       Max     => 8.0E307,
+                       Unit    => "mm"),
+                  "Move to after" =>
+                    Float
+                      ("Position to move to after homing. This position must be inside the machine limits.",
+                       Default => 0.0,
+                       Min     => -8.0E307,
+                       Max     => 8.0E307,
+                       Unit    => "mm")])]);
+
+      Heater_Sequence : Property_Parameters_Access :=
+        Sequence
+          ("Parameters for this heater.",
+           ["Thermistor" =>
+              Discrete
+                ("Thermistor connected to this heater.",
+                 Default => Thermistor_Name'First'Image,
+                 Thermistor_Name_Strings),
+            "Check maximum cumulative error" =>
+              Float
+                ("Maximum cumulative error before a failure is detected.",
+                 Default => 120.0,
+                 Min     => 0.0,
+                 Max     => 8.0E307,
+                 Unit    => "°C"),
+            "Check gain time" =>
+              Float
+                ("Period to check for temperature rise over during heating to detect failures.",
+                 Default => 20.0,
+                 Min     => 0.0,
+                 Max     => 8.0E307,
+                 Unit    => "s"),
+            "Check minimum gain" =>
+              Float
+                ("Minium temperature rise required in gain period to reset cumulative error.",
+                 Default => 2.0,
+                 Min     => 0.0,
+                 Max     => 8.0E307,
+                 Unit    => "°C"),
+            "Check hysteresis" =>
+              Float
+                ("Maximum temperature below or above the setpoint where the heater is considered to be at " &
+                   "temperature.",
+                 Default => 3.0,
+                 Min     => 0.0,
+                 Max     => 8.0E307,
+                 Unit    => "°C"),
+            "Control method" =>
+              Variant
+                ("Type of control used for this heater.",
+                 Default => "Disabled",
+                 ["Disabled" =>
+                    Sequence
+                      ("This heater is disabled.",
+                       []),
+                  "PID" =>
+                    Sequence
+                      ("Basic PID control. Can be automatically tuned with M303 g-code command.",
+                      ["Proportional scale" =>
+                         Float
+                           ("Scale for proportional part.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 8.0E307,
+                            Unit    => ""),
+                       "Integral scale" =>
+                         Float
+                           ("Scale for integral part.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 8.0E307,
+                             Unit    => ""),
+                       "Derivative scale" =>
+                         Float
+                           ("Scale for derivative part.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 8.0E307,
+                            Unit    => "")]),
+                  "Bang bang" =>
+                    Sequence
+                      ("Turn on the heater when the temperature falls below setpoint - hysteresis/2 and turn " &
+                         "off the heater when the temperature rises above setpoint + hysteresis/2.",
+                      ["Hysteresis" =>
+                         Float
+                           ("Hysteresis for switching the heater on or off.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 8.0E307,
+                            Unit    => "°C")])])]);
+
+      Fan_Sequence : Property_Parameters_Access :=
+        Sequence
+          ("Settings for this fan.",
+           ["Invert PWM output" =>
+              Boolean
+                ("Invert the PWM output.",
+                 Default => False),
+           "PWM frequency" =>
+              Float
+                ("Frequency of the PWM output.",
+                 Default => 0.0,
+                 Min     => 0.0,
+                 Max     => 8.0E307,
+                 Unit    => "Hz"),
+            "Control method" =>
+              Variant
+                ("Type of control used for this fan.",
+                 Default => "Always on",
+                 ["Dynamic duty cycle" =>
+                    Sequence
+                      ("Alow for setting of the duty cycle while the printer is running (e.g. via M106/M107).",
+                      ["Disable below" =>
+                         Float
+                           ("Set the duty cycle to zero if it falls below this value.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => ""),
+                      "Maximum duty cycle" =>
+                         Float
+                           ("Duty cycle corresponding to 100%.",
+                            Default => 1.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => "")]),
+                  "Always on" =>
+                    Sequence
+                      ("The fan always stays with a fixed PWM duty cycle.",
+                      ["Duty cycle" =>
+                         Float
+                           ("Duty cycle to send to the fan.",
+                            Default => 1.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => "")])])]);
+      --!pp on
 
       Result : Property_Maps.Map;
    begin
@@ -582,9 +796,9 @@ package body Prunt.Config is
           Sequence
             ("Prunt settings.",
              ["Enabled" =>
-               Boolean
-                 ("Enable the printer.",
-                  Default => False),
+                Boolean
+                  ("Enable the printer.",
+                   Default => False),
               "Replace G0 with G1" =>
                 Boolean
                   ("Replace all G0 g-code commands with G1 commands to mimic the behaviour of some other 3D " &
@@ -598,15 +812,15 @@ package body Prunt.Config is
            Sequence
              ("Kinematic settings.",
               ["Lower position limit" =>
-                Sequence_Over_Axes
-                  ("Minimum position that the printer may move to. Any axis may be set to -8E307 for effectively " &
-                     "infinite range.",
-                   (Kind           => Float_Kind,
-                    Description   => "",
-                    Float_Min     => -8.0E307,
-                    Float_Max     => 8.0E307,
-                    Float_Unit    => "mm",
-                    Float_Default => 0.0)),
+                 Sequence_Over_Axes
+                   ("Minimum position that the printer may move to. Any axis may be set to -8E307 for effectively " &
+                      "infinite range.",
+                    (Kind           => Float_Kind,
+                     Description   => "",
+                     Float_Min     => -8.0E307,
+                     Float_Max     => 8.0E307,
+                     Float_Unit    => "mm",
+                     Float_Default => 0.0)),
                "Upper position limit" =>
                  Sequence_Over_Axes
                    ("Maximum position that the printer may move to. Any axis may be set to 8E307 for effectively " &
@@ -718,12 +932,12 @@ package body Prunt.Config is
                  Variant
                    ("The type of kinematics used by the printer.",
                     ["Cartesian" =>
-                      Sequence_Over_Steppers
-                        ("Axis each stepper is attached to.",
-                         (Kind        => Discrete_Kind,
-                          Description => "",
-                          Default     => "NONE",
-                          ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"])),
+                       Sequence_Over_Steppers
+                         ("Axis each stepper is attached to.",
+                          (Kind        => Discrete_Kind,
+                           Description => "",
+                           Default     => "NONE",
+                           ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"])),
                      "Core XY" =>
                        Sequence_Over_Steppers
                          ("Axis each stepper is attached to.",
@@ -746,7 +960,16 @@ package body Prunt.Config is
          "Fans" =>
            Sequence
              ("Fan settings.",
-              [])];
+              []),
+         "G-code assignments" =>
+           Sequence
+             ("Assign heaters to g-code commands.",
+              ["Hotend heater" =>
+                Discrete
+                  ("Heater to use for the hotend.",
+                   Default => Heater_Name'First,
+                   Heater_Name_Strings)])];
+      --!pp on
 
       for S in Stepper_Name loop
          Property_Maps.Insert
@@ -759,7 +982,28 @@ package body Prunt.Config is
              else
                 raise Constraint_Error with "Config not implemented for stepper kind " & S'Image));
       end loop;
-      --!pp on
+
+      for I in Input_Switch_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Input switches").Element.all.Children,
+            I'Image,
+            Input_Switch_Sequence);
+      end loop;
+
+      for T in Thermistor_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Thermistors").Element.all.Children, T'Image, Thermistor_Sequence);
+      end loop;
+
+      for H in Heater_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Heaters").Element.all.Children, H'Image, Heater_Sequence);
+      end loop;
+
+      for F in Fan_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Fans").Element.all.Children, F'Image, Fan_Sequence);
+      end loop;
 
       return Result;
    end Build_Schema;
