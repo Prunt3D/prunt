@@ -23,6 +23,7 @@ with Ada.Directories;
 with Ada.Text_IO;
 with Ada.Strings;
 with Ada.Strings.Fixed;
+with Ada.Text_IO.Unbounded_IO;
 
 package body Prunt.Config is
 
@@ -34,18 +35,22 @@ package body Prunt.Config is
    end Trim;
 
    function Build_Schema return Property_Maps.Map is
-      function Boolean (Description : String) return Property_Parameters_Access is
+      function Boolean (Description : String; Default : Boolean) return Property_Parameters_Access is
       begin
-         return new Property_Parameters'(Kind => Boolean_Kind, Description => To_Unbounded_String (Description));
+         return
+           new Property_Parameters'
+             (Kind            => Boolean_Kind,
+              Description     => To_Unbounded_String (Description),
+              Boolean_Default => Default);
       end Boolean;
 
       function Sequence (Description : String; Children : Property_Maps.Map) return Property_Parameters_Access is
       begin
          return
            new Property_Parameters'
-             (Kind        => Sequence_Kind,
-              Description => To_Unbounded_String (Description),
-              Children    => Children);
+             (Kind              => Sequence_Kind,
+              Description       => To_Unbounded_String (Description),
+              Sequence_Children => Children);
       end Sequence;
 
       function Variant
@@ -107,31 +112,35 @@ package body Prunt.Config is
       end Discrete;
 
       function Sequence_Over_Axes
-        (Description : String; Property : Property_Parameters) return Property_Parameters_Access
+        (Description : String; Property : Property_Parameters_Access) return Property_Parameters_Access
       is
-         Prop_Access : Property_Parameters_Access := new Property_Parameters'(Property);
+         Children : Property_Maps.Map := [];
       begin
-         return Result : Property_Parameters_Access do
-            Result := new Property_Parameters'(Kind => Sequence_Kind, Description => Description, []);
+         for A in Axis_Name loop
+            Property_Maps.Insert (Children, A'Image, Property);
+         end loop;
 
-            for A in Axis_Name loop
-               Property_Maps.Insert (Result.all.Children, A'Image, Prop_Access);
-            end loop;
-         end return;
+         return
+           new Property_Parameters'
+             (Kind              => Sequence_Kind,
+              Description       => To_Unbounded_String (Description),
+              Sequence_Children => Children);
       end Sequence_Over_Axes;
 
       function Sequence_Over_Steppers
-        (Description : String; Property : Property_Parameters) return Property_Parameters_Access
+        (Description : String; Property : Property_Parameters_Access) return Property_Parameters_Access
       is
-         Prop_Access : Property_Parameters_Access := new Property_Parameters'(Property);
+         Children : Property_Maps.Map := [];
       begin
-         return Result : Property_Parameters_Access do
-            Result := new Property_Parameters'(Kind => Sequence_Kind, Description => Description, []);
+         for S in Stepper_Name loop
+            Property_Maps.Insert (Children, S'Image, Property);
+         end loop;
 
-            for S in Stepper_Name loop
-               Property_Maps.Insert (Result.all.Children, S'Image, Prop_Access);
-            end loop;
-         end return;
+         return
+           new Property_Parameters'
+             (Kind              => Sequence_Kind,
+              Description       => To_Unbounded_String (Description),
+              Sequence_Children => Children);
       end Sequence_Over_Steppers;
 
       Stepper_Name_Strings : constant Discrete_String_Sets.Set := [for S in Stepper_Name => S'Image];
@@ -185,7 +194,7 @@ package body Prunt.Config is
                  Default => "SLOPE_400V_PER_US",
                  --  [for X in TMC_Types.TMC2240.Slope_Control_Type => X'Image]),
                  --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
-                 ["SLOPE_100V_PER_US", "SLOPE_200V_PER_US", "SLOPE_400V_PER_US", "SLOPE_800V_PER_US"]),
+                 Options => ["SLOPE_100V_PER_US", "SLOPE_200V_PER_US", "SLOPE_400V_PER_US", "SLOPE_800V_PER_US"]),
             "IHOLD" =>
               Float
                 ("Standstill current scale. 0 = 0% of set current, 1 = 100% of set current. Resolution of 1/32.",
@@ -245,8 +254,8 @@ package body Prunt.Config is
                  --     range TMC_Types.TMC2240.Off_56 .. TMC_Types.TMC2240.Off_504 => X'Image]),
                  --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
                  Default => "120",
-                 ["56", "88", "120", "152", "184", "216", "248", "280", "312", "344", "376", "408", "440", "472",
-                  "504"]),
+                 Options => ["56", "88", "120", "152", "184", "216", "248", "280", "312", "344", "376", "408", "440",
+                  "472", "504"]),
             "TBL" =>
               --  TODO: This description and allowed values assumes the internal oscillator is used.
               Discrete
@@ -257,7 +266,7 @@ package body Prunt.Config is
                  --     X'Image]),
                  --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
                  Default => "36",
-                 ["24", "36", "54"]),
+                 Options => ["24", "36", "54"]),
             "VHIGHFS" =>
               Boolean
                 ("Switch to full stepping (no microstep outputs) when in high velocity mode.", Default => False),
@@ -280,7 +289,7 @@ package body Prunt.Config is
                  --  [for X in TMC_Types.TMC2240.Microstep_Resolution_Type => X'Image]),
                  --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
                  Default => "MS_256",
-                 ["MS_256", "MS_128", "MS_64", "MS_32", "MS_16", "MS_8", "MS_4", "MS_2", "MS_FULL_STEPS"]),
+                 Options => ["MS_256", "MS_128", "MS_64", "MS_32", "MS_16", "MS_8", "MS_4", "MS_2", "MS_FULL_STEPS"]),
             "FAST_STANDSTILL" =>
               --  TODO: This description assumes the internal oscillator is used.
               Boolean
@@ -292,12 +301,13 @@ package body Prunt.Config is
                 ("Select the chopper mode to be used when StealthChop2 is disabled or the upper velocity limit for " &
                    "StealthChop2 is exceeded. VHIGHCHM may override this when the velocity set by VHIGH is " &
                    "exceeded. SpreadCycle usually produces better results.",
-                 Default => "SpreadCycle",
+                 "SpreadCycle",
                  ["SpreadCycle" =>
                     Variant
                       ("Select manual SpreadCycle settings or settings derived from motor parameters and other " &
                          "driver parameters. Derived mode should be used unless manual tuning with an oscilloscope " &
                          "is being performed.",
+                       "Derived",
                        ["Derived" =>
                          Sequence
                            ("Automatic calculation of optimal SpreadCycle parameters from motor parameters.",
@@ -312,8 +322,8 @@ package body Prunt.Config is
                                  Max     => 40.0,
                                  Unit    => "V"),
                              "Phase inductance" =>
-                               --  The very low values below will cause errors so there's no risk of the user forgetting
-                               --  to set these values.
+                               --  The very low values below will cause errors so there's no risk of the user
+                               --  forgetting to set these values.
                                Float
                                  ("Inductance of each motor coil as listed on the motor specifications.",
                                   Default => 0.000_000_000_1,
@@ -356,8 +366,8 @@ package body Prunt.Config is
                        ["DISFDCC" =>
                           Boolean
                             ("If set, disable the usage of the current comparator for termination of the fast decay " &
-                               "cycle. If not set then the fast decay cycle will be terminated early if the negative " &
-                               "current value exceeds the previous positive value.",
+                               "cycle. If not set then the fast decay cycle will be terminated early if the " &
+                               "negative current value exceeds the previous positive value.",
                              Default => False),
                         "OFFSET" =>
                           Integer
@@ -379,7 +389,7 @@ package body Prunt.Config is
               Variant
                 ("Enable or disable StealthChop2 for this driver. StealthChop2 reduces audible noise at low " &
                    "velocities. In most cases no tuning of parameters is required for good results.",
-                 Default => "Disabled",
+                 "Disabled",
                  ["Disabled" => Sequence ("StealthChop2 is disabled.", []),
                   "Enabled" =>
                     Sequence
@@ -389,7 +399,7 @@ package body Prunt.Config is
                             ("Upper velocity limit for StealthChop2 mode.",
                              Default => 8.0E307,
                              Min     => 0.0,
-                             Max     => 8E307,
+                             Max     => 8.0E307,
                              Unit    => "mm/s"),
                         "PWM_OFS" =>
                           Integer
@@ -418,8 +428,7 @@ package body Prunt.Config is
                              Default => "683",
                              --  [for X in TMC_Types.TMC2240.PWM_Freq_Type => X'Image]),
                              --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
-
-                             ["1024", "683", "512", "410"]),
+                             Options => ["1024", "683", "512", "410"]),
                         "PWM_AUTOSCALE" =>
                           Boolean
                             ("Enable automatic tuning of PWM_OFS. Set current limits may not be effective if this " &
@@ -436,8 +445,7 @@ package body Prunt.Config is
                              Default => "NORMAL",
                              --  [for X in TMC_Types.TMC2240.Freewheel_Type => X'Image]),
                              --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
-
-                             ["NORMAL", "FREEWHEEL", "SHORT_VIA_LS", "SHORT_VIA_HS"]),
+                             Options => ["NORMAL", "FREEWHEEL", "SHORT_VIA_LS", "SHORT_VIA_HS"]),
                         "PWM_MEAS_SD_ENABLE" =>
                           Boolean
                             ("Use slow decay phase on low side to measure motor current when in StealthChop2 mode.",
@@ -478,19 +486,19 @@ package body Prunt.Config is
                  Default => 0.0,
                  Min     => -8.0E307,
                  Max     => 8.0E307,
-                 Unit    => "°C"),
+                 Unit    => "C"),
            "Maximum temperature" =>
              Float
                ("Any temperature above this temperature will cause an emergency stop if the heater is enabled.",
                 Default => 0.0,
                 Min     => -8.0E307,
                 Max     => 8.0E307,
-                Unit    => "°C"),
+                Unit    => "C"),
             "Thermistor kind" =>
               --  TODO: Add sample values here.
               Variant
                 ("The kind of thermistor connected to this input.",
-                 Default => "Disabled",
+                 "Disabled",
                  ["Disabled" =>
                     Sequence
                       ("Thermistor is disabled.",
@@ -582,7 +590,7 @@ package body Prunt.Config is
                              Default => 0.0,
                              Min     => -8.0E307,
                              Max     => 8.0E307,
-                             Unit    => "")]))]);
+                             Unit    => "")])])]);
 
       Input_Switch_Sequence : Property_Parameters_Access :=
         Sequence
@@ -599,7 +607,7 @@ package body Prunt.Config is
       Homing_Sequence : Property_Parameters_Access :=
         Variant
           ("Homing method for this axis.",
-           Default => "Double tap",
+           "Double tap",
            ["Set to value" =>
               Sequence
                 ("Set this axis to a given position when homing is performed without actually moving.",
@@ -618,7 +626,7 @@ package body Prunt.Config is
                     Discrete
                       ("Input switch to use.",
                        Default => Input_Switch_Name'First'Image,
-                       Input_Switch_Name_Strings),
+                       Options => Input_Switch_Name_Strings),
                   "Move towards negative infinity" =>
                     Boolean
                       ("If set then homing will move towards lower positions, otherwise homing will move towards " &
@@ -647,7 +655,8 @@ package body Prunt.Config is
                        Unit    => "mm"),
                   "Switch position" =>
                     Float
-                      ("Position of the switch on the axis. This value is allowed to be outside of the machine limits.",
+                      ("Position of the switch on the axis. This value is allowed to be outside of the machine " &
+                         "limits.",
                        Default => 0.0,
                        Min     => -8.0E307,
                        Max     => 8.0E307,
@@ -667,14 +676,14 @@ package body Prunt.Config is
               Discrete
                 ("Thermistor connected to this heater.",
                  Default => Thermistor_Name'First'Image,
-                 Thermistor_Name_Strings),
+                 Options => Thermistor_Name_Strings),
             "Check maximum cumulative error" =>
               Float
                 ("Maximum cumulative error before a failure is detected.",
                  Default => 120.0,
                  Min     => 0.0,
                  Max     => 8.0E307,
-                 Unit    => "°C"),
+                 Unit    => "C"),
             "Check gain time" =>
               Float
                 ("Period to check for temperature rise over during heating to detect failures.",
@@ -688,7 +697,7 @@ package body Prunt.Config is
                  Default => 2.0,
                  Min     => 0.0,
                  Max     => 8.0E307,
-                 Unit    => "°C"),
+                 Unit    => "C"),
             "Check hysteresis" =>
               Float
                 ("Maximum temperature below or above the setpoint where the heater is considered to be at " &
@@ -696,11 +705,11 @@ package body Prunt.Config is
                  Default => 3.0,
                  Min     => 0.0,
                  Max     => 8.0E307,
-                 Unit    => "°C"),
+                 Unit    => "C"),
             "Control method" =>
               Variant
                 ("Type of control used for this heater.",
-                 Default => "Disabled",
+                 "Disabled",
                  ["Disabled" =>
                     Sequence
                       ("This heater is disabled.",
@@ -739,7 +748,7 @@ package body Prunt.Config is
                             Default => 0.0,
                             Min     => 0.0,
                             Max     => 8.0E307,
-                            Unit    => "°C")])])]);
+                            Unit    => "C")])])]);
 
       Fan_Sequence : Property_Parameters_Access :=
         Sequence
@@ -758,7 +767,7 @@ package body Prunt.Config is
             "Control method" =>
               Variant
                 ("Type of control used for this fan.",
-                 Default => "Always on",
+                 "Always on",
                  ["Dynamic duty cycle" =>
                     Sequence
                       ("Alow for setting of the duty cycle while the printer is running (e.g. via M106/M107).",
@@ -815,22 +824,22 @@ package body Prunt.Config is
                  Sequence_Over_Axes
                    ("Minimum position that the printer may move to. Any axis may be set to -8E307 for effectively " &
                       "infinite range.",
-                    (Kind           => Float_Kind,
-                     Description   => "",
-                     Float_Min     => -8.0E307,
-                     Float_Max     => 8.0E307,
-                     Float_Unit    => "mm",
-                     Float_Default => 0.0)),
+                   Float
+                     ("",
+                      Default => 0.0,
+                      Min     => -8.0E307,
+                      Max     => 8.0E307,
+                      Unit    => "mm")),
                "Upper position limit" =>
                  Sequence_Over_Axes
                    ("Maximum position that the printer may move to. Any axis may be set to 8E307 for effectively " &
                       "infinite range.",
-                    (Kind           => Float_Kind,
-                     Description   => "",
-                     Float_Min     => -8.0E307,
-                     Float_Max     => 8.0E307,
-                     Float_Unit    => "mm",
-                     Float_Default => 0.0)),
+                    Float
+                      ("",
+                       Default => 0.0,
+                       Min     => -8.0E307,
+                       Max     => 8.0E307,
+                       Unit    => "mm")),
                "Ignore E in XYZE" =>
                  Boolean
                    ("Ignore the E axis component of the feedrate unless E is the only axis in a command (e.g. " &
@@ -856,12 +865,12 @@ package body Prunt.Config is
                "Axial velocity limits" =>
                  Sequence_Over_Axes
                    ("Maximum feedrate for each individual axis.",
-                    (Kind           => Float_Kind,
-                     Description   => "",
-                     Float_Min     => -8.0E307,
-                     Float_Max     => 8.0E307,
-                     Float_Unit    => "mm/s",
-                     Float_Default => 0.0)),
+                    Float
+                      ("",
+                       Default => 0.0,
+                       Min     => -8.0E307,
+                       Max     => 8.0E307,
+                       Unit    => "mm/s")),
                "Pressure advance time" =>
                  Float
                    ("The E axis velocity is multiplied by this value and then added to the E axis position. " &
@@ -886,7 +895,7 @@ package body Prunt.Config is
                     Default => 0.0,
                     Min     => 0.0,
                     Max     => 8.0E307,
-                    Unit    => "mm/s²"),
+                    Unit    => "mm/s^2"),
                "Maximum jerk" =>
                  Float
                    ("May safely be set to 8E307 for effectively infinite jerk (to the extent allowed by " &
@@ -895,7 +904,7 @@ package body Prunt.Config is
                     Default => 0.0,
                     Min     => 0.0,
                     Max     => 8.0E307,
-                    Unit    => "mm/s³"),
+                    Unit    => "mm/s^3"),
                "Maximum snap" =>
                  Float
                    ("May safely be set to 8E307 for effectively infinite snap (to the extent allowed by " &
@@ -904,7 +913,7 @@ package body Prunt.Config is
                     Default => 0.0,
                     Min     => 0.0,
                     Max     => 8.0E307,
-                    Unit    => "mm/s⁴"),
+                    Unit    => "mm/s^4"),
                "Maximum crackle" =>
                  Float
                    ("May safely be set to 8E307 for effectively infinite crackle (to the extent allowed by " &
@@ -913,7 +922,7 @@ package body Prunt.Config is
                     Default => 0.0,
                     Min     => 0.0,
                     Max     => 8.0E307,
-                    Unit    => "mm/s⁵"),
+                    Unit    => "mm/s^5"),
                "Axial scaler" =>
                  Sequence_Over_Axes
                    ("Inside the motion planner, all positions are divided by this value before applying motion " &
@@ -922,29 +931,30 @@ package body Prunt.Config is
                       "limits, or when setting the feedrate in g-code. Corner deviation and tangential feedrate, " &
                       "acceleration, etc. is based on scaled positions, so a tangential acceleration of 10mm/s^2 " &
                       "and a scaler of 0.5 will set the axial limit to 5mm/s^2.",
-                    (Kind          => Float_Kind,
-                     Description   => "",
-                     Float_Min     => 1.0E-100,
-                     Float_Max     => 8.0E307,
-                     Float_Unit    => "",
-                     Float_Default => 1.0)),
+                    Float
+                      ("",
+                       Default => 1.0,
+                       Min     => 1.0E-100,
+                       Max     => 8.0E307,
+                       Unit    => "")),
                "Kinematics kind" =>
                  Variant
                    ("The type of kinematics used by the printer.",
+                    "Cartesian",
                     ["Cartesian" =>
                        Sequence_Over_Steppers
                          ("Axis each stepper is attached to.",
-                          (Kind        => Discrete_Kind,
-                           Description => "",
-                           Default     => "NONE",
-                           ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"])),
+                          Discrete
+                            ("",
+                             Default => "NONE",
+                             Options => ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"])),
                      "Core XY" =>
                        Sequence_Over_Steppers
                          ("Axis each stepper is attached to.",
-                          (Kind        => Discrete_Kind,
-                           Description => "",
-                           Default     => "NONE",
-                           ["NONE", "A_AXIS", "B_AXIS", "Z_AXIS", "E_AXIS"]))])]),
+                          Discrete
+                            ("",
+                             Default => "NONE",
+                             Options => ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"]))])]),
          "Input switches" =>
            Sequence
              ("Input switch settings.",
@@ -965,15 +975,20 @@ package body Prunt.Config is
            Sequence
              ("Assign heaters to g-code commands.",
               ["Hotend heater" =>
-                Discrete
-                  ("Heater to use for the hotend.",
-                   Default => Heater_Name'First,
-                   Heater_Name_Strings)])];
+                 Discrete
+                   ("Heater to use for the hotend.",
+                    Default => Heater_Name'First'Image,
+                    Options => Heater_Name_Strings),
+              "Bed heater" =>
+                 Discrete
+                   ("Heater to use for the bed.",
+                    Default => Heater_Name'First'Image,
+                    Options => Heater_Name_Strings)])];
       --!pp on
 
       for S in Stepper_Name loop
          Property_Maps.Insert
-           (Property_Maps.Reference (Result, "Steppers").Element.all.Children,
+           (Property_Maps.Reference (Result, "Steppers").Element.all.Sequence_Children,
             S'Image,
             (if Stepper_Kinds (S) = Basic_Kind then
                 Basic_Stepper_Sequence
@@ -985,32 +1000,32 @@ package body Prunt.Config is
 
       for I in Input_Switch_Name loop
          Property_Maps.Insert
-           (Property_Maps.Reference (Result, "Input switches").Element.all.Children,
+           (Property_Maps.Reference (Result, "Input switches").Element.all.Sequence_Children,
             I'Image,
             Input_Switch_Sequence);
       end loop;
 
       for T in Thermistor_Name loop
          Property_Maps.Insert
-           (Property_Maps.Reference (Result, "Thermistors").Element.all.Children, T'Image, Thermistor_Sequence);
+           (Property_Maps.Reference (Result, "Thermistors").Element.all.Sequence_Children,
+            T'Image,
+            Thermistor_Sequence);
       end loop;
 
       for H in Heater_Name loop
          Property_Maps.Insert
-           (Property_Maps.Reference (Result, "Heaters").Element.all.Children, H'Image, Heater_Sequence);
+           (Property_Maps.Reference (Result, "Heaters").Element.all.Sequence_Children, H'Image, Heater_Sequence);
       end loop;
 
       for F in Fan_Name loop
          Property_Maps.Insert
-           (Property_Maps.Reference (Result, "Fans").Element.all.Children, F'Image, Fan_Sequence);
+           (Property_Maps.Reference (Result, "Fans").Element.all.Sequence_Children, F'Image, Fan_Sequence);
       end loop;
 
       return Result;
    end Build_Schema;
 
-   Internal_Schema : constant Property_Maps.Map := Build_Schema;
-
-   function Schema_To_JSON (Schema : Property_Maps.Map) return String is
+   function Schema_To_JSON (Schema : Property_Maps.Map) return Unbounded_String is
       --  String escape functionality can be added here if required.
 
       Result : Unbounded_String;
@@ -1021,14 +1036,14 @@ package body Prunt.Config is
       begin
          Append (Result, "{");
          for I in Node.Iterate loop
-            Append (Result, """" & Key (I) & """:{""Description"":""" & Element (I).all.Description & """,");
-            case Element (I).all.Kind is
+            Append (Result, """" & Key (I) & """:{""Description"":""" & Element (I).Description & """,");
+            case Element (I).Kind is
                when Boolean_Kind =>
                   Append (Result, """Kind"":""Boolean""}");
                when Discrete_Kind =>
                   Append (Result, """Kind"":""Discrete"",""Options"":[");
                   declare
-                     Options : Discrete_String_Sets.Set := Element (I).all.Discrete_Options;
+                     Options : Discrete_String_Sets.Set := Element (I).Discrete_Options;
                   begin
                      for J in Options.Iterate loop
                         Append (Result, """" & Element (J) & """");
@@ -1042,23 +1057,23 @@ package body Prunt.Config is
                   Append
                     (Result,
                      """Kind"":""Integer""" &
-                       ",""Min"":" & Trim (Element (I).all.Integer_Min'Image) &
-                       ",""Max"":" & Trim (Element (I).all.Integer_Max'Image) &
-                       ",""Unit"":" & Element (I).all.Integer_Unit'Image & "}");
+                       ",""Min"":" & Trim (Element (I).Integer_Min'Image) &
+                       ",""Max"":" & Trim (Element (I).Integer_Max'Image) &
+                       ",""Unit"":" & Element (I).Integer_Unit'Image & "}");
                when Float_Kind =>
                   Append
                     (Result,
                      """Kind"":""Float""" &
-                       ",""Min"":" & Trim (Element (I).all.Float_Min'Image) &
-                       ",""Max"":" & Trim (Element (I).all.Float_Max'Image) &
-                       ",""Unit"":" & Element (I).all.Float_Unit'Image & "}");
+                       ",""Min"":" & Trim (Element (I).Float_Min'Image) &
+                       ",""Max"":" & Trim (Element (I).Float_Max'Image) &
+                       ",""Unit"":" & Element (I).Float_Unit'Image & "}");
                when Sequence_Kind =>
                   Append (Result, """Kind"":""Sequence"",""Children"":");
-                  DFS (Element (I).all.Children);
+                  DFS (Element (I).Sequence_Children);
                   Append (Result, "}");
                when Variant_Kind =>
                   Append (Result, """Kind"":""Variant"",""Children"":");
-                  DFS (Element (I).all.Children);
+                  DFS (Element (I).Variant_Children);
                   Append (Result, "}");
             end case;
             if Key (I) /= Last_Key (Node) then
@@ -1071,14 +1086,10 @@ package body Prunt.Config is
       DFS (Schema);
 
       Ada.Text_IO.Put_Line (To_String (Result));
-      return To_String (Result);
+      return Result;
    end Schema_To_JSON;
 
-   Schema_String : constant String := Schema_To_JSON (Internal_Schema);
-
-   function Schema return String is (Schema_String);
-
-   function Build_Flat_Schema return Flat_Schemas.Map is
+   function Build_Flat_Schema (Schema : Property_Maps.Map) return Flat_Schemas.Map is
       Result : Flat_Schemas.Map;
 
       procedure DFS (Node : Property_Maps.Map; Path : String) is
@@ -1090,14 +1101,14 @@ package body Prunt.Config is
             declare
                New_Path : constant String := Path & (if Path = "" then "" else "$") & Key (I);
             begin
-               case Element (I).all.Kind is
+               case Element (I).Kind is
                   when Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind =>
-                     Insert (Result, New_Path, Element (I).all);
+                     Insert (Result, New_Path, Element (I));
                   when Sequence_Kind =>
-                     DFS (Element (I).all.Children, New_Path);
+                     DFS (Element (I).Sequence_Children, New_Path);
                   when Variant_Kind =>
                      declare
-                        Children : Property_Maps.Map := Element (I).all.Children;
+                        Children : Property_Maps.Map := Element (I).Variant_Children;
                         Options  : Discrete_String_Sets.Set;
                      begin
                         for J in Children.Iterate loop
@@ -1110,9 +1121,11 @@ package body Prunt.Config is
                         Insert
                           (Result,
                            New_Path,
-                           (Kind             => Discrete_Kind,
-                            Description      => To_Unbounded_String (""),
-                            Discrete_Options => Options));
+                           new Property_Parameters'
+                             (Kind             => Discrete_Kind,
+                              Description      => To_Unbounded_String (""),
+                              Discrete_Default => Element (I).Variant_Default,
+                              Discrete_Options => Options));
                         DFS (Children, New_Path);
                      end;
                end case;
@@ -1120,10 +1133,192 @@ package body Prunt.Config is
          end loop;
       end DFS;
    begin
-      DFS (Internal_Schema, "");
+      DFS (Schema, "");
       return Result;
    end Build_Flat_Schema;
 
-   Flat_Schema : constant Flat_Schemas.Map := Build_Flat_Schema;
+   protected body Config_File is
+      procedure Disable_Prunt is
+      begin
+         Maybe_Do_Init;
+         JSON_Data.Set_Field ("Prunt$Enabled", False);
+         Write_File;
+      end Disable_Prunt;
+
+      procedure Read (Data : out Prunt_Parameters) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Prunt;
+      end Read;
+
+      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Steppers (Stepper);
+      end Read;
+
+      procedure Read (Data : out Kinematics_Parameters) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Kinematics;
+      end Read;
+
+      procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Switches (Input_Switch);
+      end Read;
+
+      procedure Read (Data : out Homing_Parameters; Axis : Axis_Name) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Homing (Axis);
+      end Read;
+
+      procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Thermistors (Thermistor);
+      end Read;
+
+      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Heaters (Heater);
+      end Read;
+
+      procedure Read (Data : out Fan_Parameters; Fan : Fan_Name) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.Fans (Fan);
+      end Read;
+
+      procedure Read (Data : out G_Code_Assignment_Parameters) is
+      begin
+         Maybe_Do_Init;
+         Data := Initial_Config.G_Code_Assignments;
+      end Read;
+
+      procedure Patch (Data : String) is
+      begin
+         --  TODO
+         null;
+      end Patch;
+
+      procedure Validate_Config (Report : access procedure (Message : String)) is
+      begin
+         --  TODO
+         null;
+      end Validate_Config;
+
+      procedure Maybe_Do_Init is
+         use Flat_Schemas;
+      begin
+         if Init_Done then
+            return;
+         end if;
+
+         Schema      := Build_Schema;
+         Schema_JSON := Schema_To_JSON (Schema);
+         Flat_Schema := Build_Flat_Schema (Schema);
+
+         if Ada.Directories.Exists (Config_Path) then
+            declare
+               File          : Ada.Text_IO.File_Type;
+               File_Contents : Unbounded_String;
+            begin
+               Ada.Text_IO.Open (File, Ada.Text_IO.In_File, Config_Path);
+               while not Ada.Text_IO.End_Of_File (File) loop
+                  Append (File_Contents, Ada.Text_IO.Unbounded_IO.Get_Line (File));
+               end loop;
+               Ada.Text_IO.Close (File);
+
+               JSON_Data := Read (File_Contents);
+            end;
+         else
+            JSON_Data := Create_Object;
+         end if;
+
+         if Kind (JSON_Data) /= JSON_Object_Type then
+            raise Config_File_Format_Error with "Config file should contain a JSON object.";
+         end if;
+
+         for X in Flat_Schema.Iterate loop
+            if not Has_Field (JSON_Data, Key (X)) then
+               case Element (X).Kind is
+                  when Boolean_Kind =>
+                     Set_Field (JSON_Data, Key (X), Element (X).Boolean_Default);
+                  when Discrete_Kind =>
+                     Set_Field (JSON_Data, Key (X), Element (X).Discrete_Default);
+                  when Integer_Kind =>
+                     Set_Field (JSON_Data, Key (X), Create (Element (X).Integer_Default));
+                  when Float_Kind =>
+                     Set_Field_Long_Float (JSON_Data, Key (X), Element (X).Float_Default);
+                  when Sequence_Kind | Variant_Kind =>
+                     raise Constraint_Error with "Field type should not exist here: " & Element (X).Kind'Image;
+               end case;
+            end if;
+
+            case Element (X).Kind is
+               when Boolean_Kind =>
+                  if Kind (Get (JSON_Data, Key (X))) /= JSON_Boolean_Type then
+                     raise Config_File_Format_Error with "Element " & Key (X) & " must be boolean.";
+                  end if;
+               when Discrete_Kind =>
+                  if Kind (Get (JSON_Data, Key (X))) /= JSON_String_Type then
+                     raise Config_File_Format_Error with "Element " & Key (X) & " must be string.";
+                  elsif not Discrete_String_Sets.Contains (Element (X).Discrete_Options, Get (JSON_Data, Key (X))) then
+                     raise Config_File_Format_Error
+                       with "Element " & Key (X) & " must be one of: " & Element (X).Discrete_Options'Image;
+                  end if;
+               when Integer_Kind =>
+                  if Kind (Get (JSON_Data, Key (X))) /= JSON_Int_Type then
+                     raise Config_File_Format_Error with "Element " & Key (X) & " must be integer.";
+                  elsif Get (Get (JSON_Data, Key (X))) < Element (X).Integer_Min then
+                     raise Config_File_Format_Error
+                       with "Element " & Key (X) & " must not be less than " & Element (X).Integer_Min'Image;
+                  elsif Get (Get (JSON_Data, Key (X))) > Element (X).Integer_Max then
+                     raise Config_File_Format_Error
+                       with "Element " & Key (X) & " must not be greater than " & Element (X).Integer_Max'Image;
+                  end if;
+               when Float_Kind =>
+                  if Kind (Get (JSON_Data, Key (X))) /= JSON_Float_Type then
+                     raise Config_File_Format_Error with "Element " & Key (X) & " must be float.";
+                  elsif Get_Long_Float (JSON_Data, Key (X)) < Element (X).Float_Min then
+                     raise Config_File_Format_Error
+                       with "Element " & Key (X) & " must not be less than " & Element (X).Float_Min'Image;
+                  elsif Get_Long_Float (JSON_Data, Key (X)) < Element (X).Float_Max then
+                     raise Config_File_Format_Error
+                       with "Element " & Key (X) & " must not be greater than " & Element (X).Float_Max'Image;
+                  end if;
+               when Sequence_Kind | Variant_Kind =>
+                  raise Constraint_Error with "Field type should not exist here: " & Element (X).Kind'Image;
+            end case;
+         end loop;
+      end Maybe_Do_Init;
+
+      procedure Write_File is
+         File : Ada.Text_IO.File_Type;
+      begin
+         for I in reverse 1 .. 19 loop
+            if Ada.Directories.Exists (Config_Path & "_backup_" & Trim (I'Image)) then
+               Ada.Directories.Rename
+                 (Old_Name => Config_Path & "_backup_" & Trim (I'Image),
+                  New_Name => Config_Path & "_backup_" & Trim (Integer (I + 1)'Image));
+            end if;
+         end loop;
+
+         if Ada.Directories.Exists (Config_Path) then
+            Ada.Directories.Rename (Old_Name => Config_Path, New_Name => Config_Path & "_backup_1");
+         end if;
+
+         Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, Config_Path);
+         Ada.Text_IO.Put_Line (File, Write (JSON_Data));
+      exception
+         when others =>
+            Ada.Text_IO.Close (File);
+            raise;
+      end Write_File;
+   end Config_File;
 
 end Prunt.Config;
