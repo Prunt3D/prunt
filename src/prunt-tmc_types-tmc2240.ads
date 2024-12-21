@@ -362,7 +362,7 @@ package Prunt.TMC_Types.TMC2240 is
       DISFDCC              : TMC_Boolean;
       Reserved_1           : Unsigned_1;
       CHM                  : CHM_Type;
-      TBL                  : Unsigned_2;
+      TBL                  : TBL_Type;
       Reserved_2           : Unsigned_1;
       VHIGHFS              : TMC_Boolean;
       VHIGHCHM             : TMC_Boolean;

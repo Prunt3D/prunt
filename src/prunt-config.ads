@@ -151,7 +151,8 @@ package Prunt.Config is
    --  procedure Patch (Data : String);
    --  procedure Validate_Config (Report : access procedure (Message : String));
 
-private
+--  TODO: Temporary.
+--  private
 
    package Discrete_String_Sets is new Ada.Containers.Indefinite_Ordered_Sets (String);
 

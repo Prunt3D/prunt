@@ -22,7 +22,7 @@
 with Prunt.Motion_Planner;
 with Prunt.Config;
 with Prunt.Motion_Planner.Planner;
-with Prunt.GUI.GUI;
+--  with Prunt.GUI.GUI;
 with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
@@ -260,25 +260,25 @@ private
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
    pragma Warnings (Off, "cannot call * before body seen");
-   package My_GUI is new GUI.GUI
-     (My_Logger                         => My_Logger,
-      My_Config                         => My_Config,
-      Get_Position                      => Get_Position,
-      Get_Thermistor_Temperature        => Get_Temperature,
-      Get_Stepper_Temperature           => Get_Temperature,
-      Board_Temperature_Probe_Name      => Board_Temperature_Probe_Name,
-      Get_Board_Temperature             => Get_Temperature,
-      Get_Heater_Power                  => Get_Heater_Power,
-      Get_Input_Switch_State            => Get_Input_Switch_State,
-      Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
-      Submit_Gcode_Command              => Submit_Gcode_Command,
-      Submit_Gcode_File                 => Submit_Gcode_File,
-      Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
-      Pause_Stepgen                     => My_Step_Generator.Pause,
-      Resume_Stepgen                    => My_Step_Generator.Resume,
-      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
-      Host                              => Command_Line_Arguments.GUI_Host,
-      Port                              => Command_Line_Arguments.GUI_Port);
+   --  package My_GUI is new GUI.GUI
+   --    (My_Logger                         => My_Logger,
+   --     My_Config                         => My_Config,
+   --     Get_Position                      => Get_Position,
+   --     Get_Thermistor_Temperature        => Get_Temperature,
+   --     Get_Stepper_Temperature           => Get_Temperature,
+   --     Board_Temperature_Probe_Name      => Board_Temperature_Probe_Name,
+   --     Get_Board_Temperature             => Get_Temperature,
+   --     Get_Heater_Power                  => Get_Heater_Power,
+   --     Get_Input_Switch_State            => Get_Input_Switch_State,
+   --     Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
+   --     Submit_Gcode_Command              => Submit_Gcode_Command,
+   --     Submit_Gcode_File                 => Submit_Gcode_File,
+   --     Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
+   --     Pause_Stepgen                     => My_Step_Generator.Pause,
+   --     Resume_Stepgen                    => My_Step_Generator.Resume,
+   --     Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
+   --     Host                              => Command_Line_Arguments.GUI_Host,
+   --     Port                              => Command_Line_Arguments.GUI_Port);
    pragma Warnings (On, "cannot call * before body seen");
 
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
