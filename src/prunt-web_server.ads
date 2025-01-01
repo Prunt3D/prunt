@@ -21,6 +21,7 @@
 
 with Prunt.Logger;
 with Prunt.Config;
+with GNAT.Sockets;
 
 generic
    with package My_Logger is new Prunt.Logger (<>);
@@ -39,6 +40,7 @@ generic
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
    Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;
+   Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 
    task Server;

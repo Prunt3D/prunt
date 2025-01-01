@@ -26,8 +26,15 @@ with EWS.Server;
 with EWS.Types;
 with EWS_Htdocs;
 with Ada.Text_IO;
+with Ada.Strings;
+with Ada.Strings.Fixed;
 
 package body Prunt.Web_Server is
+
+   function Trim (S : String) return String is
+   begin
+      return Ada.Strings.Fixed.Trim (S, Side => Ada.Strings.Both);
+   end Trim;
 
    function Response_Config_Schema (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
    begin
@@ -71,10 +78,100 @@ package body Prunt.Web_Server is
       end if;
    end Response_Config_Values;
 
+   function Response_Status_Values (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      Pos    : Position         := Get_Position;
+
+      use type My_Config.Thermistor_Name;
+      use type My_Config.Fan_Name;
+      use type My_Config.Heater_Name;
+      use type My_Config.Stepper_Name;
+      use type My_Config.Input_Switch_Name;
+   begin
+      if EWS.HTTP.Get_Method (Request.all) /= "GET" then
+         return EWS.HTTP.Not_Implemented (Request);
+      end if;
+
+      Append (Result, """Position"":{");
+      for A in Axis_Name loop
+         Append (Result, """" & Trim (A'Image) & """:" & Pos (A)'Image);
+         if A /= Axis_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Thermistor Temperatures"":{");
+      for T in My_Config.Thermistor_Name loop
+         Append (Result, """" & Trim (T'Image) & """:" & Get_Thermistor_Temperature (T)'Image);
+         if T /= My_Config.Thermistor_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Stepper Temperatures"":{");
+      for S in My_Config.Stepper_Name loop
+         Append (Result, """" & Trim (S'Image) & """:" & Get_Stepper_Temperature (S)'Image);
+         if S /= My_Config.Stepper_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Board Probe Temperatures"":{");
+      for P in Board_Temperature_Probe_Name loop
+         Append (Result, """" & Trim (P'Image) & """:" & Get_Board_Temperature (P)'Image);
+         if P /= Board_Temperature_Probe_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Heater Powers"":{");
+      for H in My_Config.Heater_Name loop
+         Append (Result, """" & Trim (H'Image) & """:" & Get_Heater_Power (H)'Image);
+         if H /= My_Config.Heater_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Switch Is High State"":{");
+      for I in My_Config.Input_Switch_Name loop
+         Append
+           (Result,
+            """" & Trim (I'Image) & """:" & (if Get_Input_Switch_State (I) = High_State then "true" else "false"));
+         if I /= My_Config.Input_Switch_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Tachometer Frequencies"":{");
+      for F in My_Config.Fan_Name loop
+         Append (Result, """" & Trim (F'Image) & """:" & Get_Tachometer_Frequency (F)'Image);
+         if F /= My_Config.Fan_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Stepgen Is Paused"":" & (if Is_Stepgen_Paused then "true" else "false"));
+
+      Append (Result, "}");
+
+      return Response : EWS.Dynamic.Dynamic_Response (Request) do
+         Response.Set_Content_Type (EWS.Types.JSON);
+         Response.Set_Content (Result);
+      end return;
+   end Response_Status_Values;
+
    task body Server is
    begin
       EWS.Dynamic.Register (Response_Config_Schema'Unrestricted_Access, "/config/schema");
       EWS.Dynamic.Register (Response_Config_Values'Unrestricted_Access, "/config/values");
+      EWS.Dynamic.Register (Response_Status_Values'Unrestricted_Access, "/status/values");
 
       EWS.Server.Serve (Using_Port => 8_080, With_Stack => 4_000_000);
 
