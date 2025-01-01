@@ -25,8 +25,7 @@ with Prunt.Motion_Planner;
 
 package Prunt.Command_Line_Arguments is
 
-   function GUI_Port return GNAT.Sockets.Port_Type;
-   function GUI_Host return String;
+   function Web_Server_Port return GNAT.Sockets.Port_Type;
    function Motion_Planner_CPU return System.Multiprocessors.CPU_Range;
    function Step_Generator_CPU return System.Multiprocessors.CPU_Range;
    function Max_Planner_Block_Corners return Motion_Planner.Max_Corners_Type;

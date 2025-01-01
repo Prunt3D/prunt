@@ -276,7 +276,8 @@ private
       Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
       Pause_Stepgen                     => My_Step_Generator.Pause,
       Resume_Stepgen                    => My_Step_Generator.Resume,
-      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all);
+      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
+      Port                              => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");
 
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);

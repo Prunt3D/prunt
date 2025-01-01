@@ -37,9 +37,8 @@ package body Prunt.Command_Line_Arguments is
       return Default;
    end Argument_Value;
 
-   function GUI_Port return GNAT.Sockets.Port_Type is
-     (GNAT.Sockets.Port_Type'Value (Argument_Value ("--prunt-gui-port=", "8080")));
-   function GUI_Host return String is (Argument_Value ("--prunt-gui-host=", ""));
+   function Web_Server_Port return GNAT.Sockets.Port_Type is
+     (GNAT.Sockets.Port_Type'Value (Argument_Value ("--prunt-web-server-port=", "8080")));
    function Motion_Planner_CPU return System.Multiprocessors.CPU_Range is
      (System.Multiprocessors.CPU_Range'Value (Argument_Value ("--prunt-motion-planner-cpu=", "0")));
    function Step_Generator_CPU return System.Multiprocessors.CPU_Range is
