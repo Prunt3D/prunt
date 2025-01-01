@@ -15,8 +15,15 @@
         background-color: #000000;
         color: #ffffff;
     }
-    .tab.invalid {
+    .tab.local-invalid {
         outline: 3px dashed #ff0000;
+        box-shadow: 0 0 0 1px #000000;
+        z-index: 3;
+    }
+    .tab.remote-invalid {
+        outline: 3px dotted #fa7a00;
+        box-shadow: 0 0 0 1px #000000;
+        z-index: 2;
     }
     .tab-content-container {
         outline: 1px solid #000000;

@@ -27,4 +27,8 @@ ews = { url = "https://github.com/Prunt3D/ews.git" }
 
 [[actions]]
 type = "pre-build"
+command = ["tsc", "--downlevelIteration", "html/main.ts"]
+
+[[actions]]
+type = "pre-build"
 command = ["ews_generator", "--input-dir", "html", "--output-dir", "generated_src_ews"]

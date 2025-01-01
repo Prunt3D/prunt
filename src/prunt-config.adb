@@ -1276,6 +1276,7 @@ package body Prunt.Config is
          if not Had_Schema_Error then
             Map_JSON_Object (New_Data, Merge_Into_Config'Access);
             Validate_Current_Config (Report);
+            Write_File;
          end if;
 
          Get_Values (Data);
