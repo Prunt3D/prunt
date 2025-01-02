@@ -28,6 +28,7 @@ with EWS_Htdocs;
 with Ada.Text_IO;
 with Ada.Strings;
 with Ada.Strings.Fixed;
+with Ada.Exceptions;
 
 package body Prunt.Web_Server is
 
@@ -78,6 +79,91 @@ package body Prunt.Web_Server is
       end if;
    end Response_Config_Values;
 
+   function Response_Status_Schema (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      Pos    : Position         := Get_Position;
+
+      use type My_Config.Thermistor_Name;
+      use type My_Config.Fan_Name;
+      use type My_Config.Heater_Name;
+      use type My_Config.Stepper_Name;
+      use type My_Config.Input_Switch_Name;
+   begin
+      if EWS.HTTP.Get_Method (Request.all) /= "GET" then
+         return EWS.HTTP.Not_Implemented (Request);
+      end if;
+
+      Append (Result, """Position"":[");
+      for A in Axis_Name loop
+         Append (Result, """" & Trim (A'Image) & """");
+         if A /= Axis_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "],");
+
+      Append (Result, """Thermistor Temperatures"":[");
+      for T in My_Config.Thermistor_Name loop
+         Append (Result, """" & Trim (T'Image) & """");
+         if T /= My_Config.Thermistor_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "],");
+
+      Append (Result, """Stepper Temperatures"":[");
+      for S in My_Config.Stepper_Name loop
+         Append (Result, """" & Trim (S'Image) & """");
+         if S /= My_Config.Stepper_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "],");
+
+      Append (Result, """Board Probe Temperatures"":[");
+      for P in Board_Temperature_Probe_Name loop
+         Append (Result, """" & Trim (P'Image) & """");
+         if P /= Board_Temperature_Probe_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "],");
+
+      Append (Result, """Heater Powers"":[");
+      for H in My_Config.Heater_Name loop
+         Append (Result, """" & Trim (H'Image) & """");
+         if H /= My_Config.Heater_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "],");
+
+      Append (Result, """Switch Is High State"":[");
+      for I in My_Config.Input_Switch_Name loop
+         Append (Result, """" & Trim (I'Image) & """");
+         if I /= My_Config.Input_Switch_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "],");
+
+      Append (Result, """Tachometer Frequencies"":[");
+      for F in My_Config.Fan_Name loop
+         Append (Result, """" & Trim (F'Image) & """");
+         if F /= My_Config.Fan_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "]");
+
+      Append (Result, "}");
+
+      return Response : EWS.Dynamic.Dynamic_Response (Request) do
+         Response.Set_Content_Type (EWS.Types.JSON);
+         Response.Set_Content (Result);
+      end return;
+   end Response_Status_Schema;
+
    function Response_Status_Values (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
       Result : Unbounded_String := To_Unbounded_String ("{");
       Pos    : Position         := Get_Position;
@@ -90,6 +176,19 @@ package body Prunt.Web_Server is
    begin
       if EWS.HTTP.Get_Method (Request.all) /= "GET" then
          return EWS.HTTP.Not_Implemented (Request);
+      end if;
+
+      if Fatal_Exception_Occurrence_Holder.Is_Set then
+         return Response : EWS.Dynamic.Dynamic_Response (Request) do
+            declare
+               Occurrence : Ada.Exceptions.Exception_Occurrence;
+            begin
+               Fatal_Exception_Occurrence_Holder.Get (Occurrence);
+               Response.Set_Content_Type (EWS.Types.JSON);
+               Response.Set_Content
+                 ("{""Fatal Exception"":""" & JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence)) & """}");
+            end;
+         end return;
       end if;
 
       Append (Result, """Position"":{");
@@ -167,13 +266,42 @@ package body Prunt.Web_Server is
       end return;
    end Response_Status_Values;
 
+   function Response_Pause_Pause (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   begin
+      if EWS.HTTP.Get_Method (Request.all) = "POST" then
+         Pause_Stepgen;
+         return Result : EWS.Dynamic.Dynamic_Response (Request) do
+            Result.Set_Content_Type (EWS.Types.Plain);
+            Result.Set_Content ("");
+         end return;
+      else
+         return EWS.HTTP.Not_Implemented (Request);
+      end if;
+   end Response_Pause_Pause;
+
+   function Response_Pause_Resume (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   begin
+      if EWS.HTTP.Get_Method (Request.all) = "POST" then
+         Resume_Stepgen;
+         return Result : EWS.Dynamic.Dynamic_Response (Request) do
+            Result.Set_Content_Type (EWS.Types.Plain);
+            Result.Set_Content ("");
+         end return;
+      else
+         return EWS.HTTP.Not_Implemented (Request);
+      end if;
+   end Response_Pause_Resume;
+
    task body Server is
    begin
       EWS.Dynamic.Register (Response_Config_Schema'Unrestricted_Access, "/config/schema");
       EWS.Dynamic.Register (Response_Config_Values'Unrestricted_Access, "/config/values");
+      EWS.Dynamic.Register (Response_Status_Schema'Unrestricted_Access, "/status/schema");
       EWS.Dynamic.Register (Response_Status_Values'Unrestricted_Access, "/status/values");
+      EWS.Dynamic.Register (Response_Pause_Pause'Unrestricted_Access, "/pause/pause");
+      EWS.Dynamic.Register (Response_Pause_Resume'Unrestricted_Access, "/pause/resume");
 
-      EWS.Server.Serve (Using_Port => 8_080, With_Stack => 4_000_000);
+      EWS.Server.Serve (Using_Port => Port, With_Stack => 4_000_000);
 
       loop
          delay 100.0;
