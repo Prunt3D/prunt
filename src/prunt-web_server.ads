@@ -21,7 +21,13 @@
 
 with Prunt.Logger;
 with Prunt.Config;
-with GNAT.Sockets;
+with Ada.Strings.Bounded;
+with Ada.Exceptions;                                    use Ada.Exceptions;
+with Ada.Streams;                                       use Ada.Streams;
+with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
+with GNAT.Sockets;                                      use GNAT.Sockets;
+with GNAT.Sockets.Server;                               use GNAT.Sockets.Server;
+with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connection_State_Machine.HTTP_Server;
 
 generic
    with package My_Logger is new Prunt.Logger (<>);
@@ -44,5 +50,78 @@ generic
 package Prunt.Web_Server is
 
    task Server;
+
+private
+
+   Buffer_Size : constant := 50_000;
+
+   package Post_Bodies is new Ada.Strings.Bounded.Generic_Bounded_Length (Buffer_Size);
+
+   type Post_Body_Destination is new Content_Destination with record
+      Content : Post_Bodies.Bounded_String := Post_Bodies.Null_Bounded_String;
+      Failed  : Boolean                    := False;
+   end record;
+
+   overriding procedure Commit (Destination : in out Post_Body_Destination);
+   overriding procedure Put (Destination : in out Post_Body_Destination; Data : String);
+
+   procedure Write (Stream : access Root_Stream_Type'Class; Item : Post_Body_Destination);
+   for Post_Body_Destination'Write use Write;
+
+   type Prunt_HTTP_Factory
+     (Request_Length : Positive; Input_Size : Buffer_Length; Output_Size : Buffer_Length; Max_Connections : Positive)
+   is
+   new Connections_Factory with null record;
+
+   type Prunt_Client
+     (Listener       : access Connections_Server'Class;
+      Request_Length : Positive;
+      Input_Size     : Buffer_Length;
+      Output_Size    : Buffer_Length)
+   is
+   new HTTP_Client
+     (Listener       => Listener,
+      Request_Length => Request_Length,
+      Input_Size     => Input_Size,
+      Output_Size    => Output_Size) with
+   record
+      Post_Content : aliased Post_Body_Destination;
+   end record;
+
+   type Prunt_Client_Access is access all Prunt_Client;
+
+   overriding procedure Reply_HTML
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
+   --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
+   --  does whereas the original does not.
+   --
+   --  TODO: Take an Unbounded_String here to avoid some copies.
+
+   overriding procedure Reply_Text
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
+   --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
+   --  does whereas the original does not.
+   --
+   --  TODO: Take an Unbounded_String here to avoid some copies.
+
+   procedure Reply_JSON
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
+   --  TODO: Take an Unbounded_String here to avoid some copies.
+
+   overriding procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class);
+   overriding procedure Body_Sent
+     (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean);
+   overriding procedure Body_Error
+     (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence);
+   overriding procedure Do_Get (Client : in out Prunt_Client);
+   overriding procedure Do_Head (Client : in out Prunt_Client);
+   overriding procedure Do_Post (Client : in out Prunt_Client);
+   overriding procedure Do_Body (Client : in out Prunt_Client);
+   overriding procedure Initialize (Client : in out Prunt_Client);
+   overriding function Create
+     (Factory  : access Prunt_HTTP_Factory;
+      Listener : access Connections_Server'Class;
+      From     : Sock_Addr_Type)
+      return Connection_Ptr;
 
 end Prunt.Web_Server;

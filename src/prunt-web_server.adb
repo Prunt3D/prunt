@@ -20,15 +20,9 @@
 -----------------------------------------------------------------------------
 
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
-with EWS.Dynamic;
-with EWS.HTTP;
-with EWS.Server;
-with EWS.Types;
-with EWS_Htdocs;
-with Ada.Text_IO;
 with Ada.Strings;
 with Ada.Strings.Fixed;
-with Ada.Exceptions;
+with Prunt.Web_Server_Resources;
 
 package body Prunt.Web_Server is
 
@@ -37,21 +31,34 @@ package body Prunt.Web_Server is
       return Ada.Strings.Fixed.Trim (S, Side => Ada.Strings.Both);
    end Trim;
 
-   function Response_Config_Schema (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   function Ends_With (Source, Pattern : String) return Boolean is
    begin
-      if EWS.HTTP.Get_Method (Request.all) = "GET" then
-         return Result : EWS.Dynamic.Dynamic_Response (Request) do
-            Result.Set_Content_Type (EWS.Types.JSON);
-            Result.Set_Content (My_Config.Get_Schema);
-         end return;
-      else
-         return EWS.HTTP.Not_Implemented (Request);
-      end if;
-   end Response_Config_Schema;
+      return Source'Length >= Pattern'Length and then Ada.Strings.Fixed.Tail (Source, Pattern'Length) = Pattern;
+   end Ends_With;
 
-   function Response_Config_Values (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   overriding procedure Initialize (Client : in out Prunt_Client) is
+   begin
+      Initialize (HTTP_Client (Client));
+   end Initialize;
+
+   overriding procedure Commit (Destination : in out Post_Body_Destination) is
+   begin
+      null;
+   end Commit;
+
+   overriding procedure Put (Destination : in out Post_Body_Destination; Data : String) is
+   begin
+      Post_Bodies.Append (Destination.Content, Data);
+   end Put;
+
+   procedure Write (Stream : access Root_Stream_Type'Class; Item : Post_Body_Destination) is
+   begin
+      null;
+   end Write;
+
+   function Patch_Config_Values (Patch : String) return Unbounded_String is
       Errors : Unbounded_String := To_Unbounded_String ("[");
-      Values : Unbounded_String;
+      Values : Unbounded_String := To_Unbounded_String (Patch);
 
       procedure Append_Error (Key, Message : String) is
       begin
@@ -61,27 +68,161 @@ package body Prunt.Web_Server is
          Append (Errors, "{""Key"":""" & JSON_Escape (Key) & """,""Message"":""" & JSON_Escape (Message) & """}");
       end Append_Error;
    begin
-      if EWS.HTTP.Get_Method (Request.all) = "GET" then
-         Values := My_Config.Get_Values_And_Validate (Append_Error'Unrestricted_Access);
-         return Result : EWS.Dynamic.Dynamic_Response (Request) do
-            Result.Set_Content_Type (EWS.Types.JSON);
-            Result.Set_Content ("{""Values"":" & Values & ",""Errors"":" & Errors & "]}");
-         end return;
-      elsif EWS.HTTP.Get_Method (Request.all) = "POST" then
-         Values := EWS.HTTP.Get_Body (Request.all);
-         My_Config.Patch (Values, Append_Error'Access);
-         return Result : EWS.Dynamic.Dynamic_Response (Request) do
-            Result.Set_Content_Type (EWS.Types.JSON);
-            Result.Set_Content ("{""Values"":" & Values & ",""Errors"":" & Errors & "]}");
-         end return;
-      else
-         return EWS.HTTP.Not_Implemented (Request);
-      end if;
-   end Response_Config_Values;
+      My_Config.Patch (Values, Append_Error'Access);
+      return "{""Values"":" & Values & ",""Errors"":" & Errors & "]}";
+   end Patch_Config_Values;
 
-   function Response_Status_Schema (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   overriding procedure Reply_HTML
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True)
+   is
+   begin
+      Send_Status_Line (Client, Code, Reason);
+      Send_Date (Client);
+      Send_Content_Type (Client, "text/html");
+      Send_Connection (Client, False);
+      Send_Body (Client, Message, Get);
+   end Reply_HTML;
+
+   overriding procedure Reply_Text
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True)
+   is
+   begin
+      Send_Status_Line (Client, Code, Reason);
+      Send_Date (Client);
+      Send_Content_Type (Client, "text/plain");
+      Send_Connection (Client, False);
+      Send_Body (Client, Message, Get);
+   end Reply_Text;
+
+   procedure Reply_JSON
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True)
+   is
+   begin
+      Send_Status_Line (Client, Code, Reason);
+      Send_Date (Client);
+      Send_Content_Type (Client, "application/json");
+      Send_Connection (Client, False);
+      Send_Body (Client, Message, Get);
+   end Reply_JSON;
+
+   overriding procedure Body_Error
+     (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence)
+   is
+   begin
+      Save_Occurrence (Client, Error);
+      Client.Post_Content.Failed := True;
+   end Body_Error;
+
+   overriding procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class) is
+   begin
+      null;
+   end Body_Received;
+
+   overriding procedure Body_Sent (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean)
+   is
+   begin
+      null;
+   end Body_Sent;
+
+   overriding function Create
+     (Factory  : access Prunt_HTTP_Factory;
+      Listener : access Connections_Server'Class;
+      From     : Sock_Addr_Type)
+      return Connection_Ptr
+   is
+      Result : Prunt_Client_Access;
+   begin
+      if Get_Clients_Count (Listener.all) < Factory.Max_Connections then
+         Result :=
+           new Prunt_Client
+             (Listener       => Listener.all'Unchecked_Access,
+              Request_Length => Factory.Request_Length,
+              Input_Size     => Factory.Input_Size,
+              Output_Size    => Factory.Output_Size);
+         Receive_Body_Tracing (Prunt_Client (Result.all), True);
+         Receive_Header_Tracing (Prunt_Client (Result.all), True);
+         return Result.all'Unrestricted_Access;
+      else
+         return null;
+      end if;
+   end Create;
+
+   procedure Do_Get_Head (Client : in out Prunt_Client; Get : Boolean) is
+      Status : Status_Line renames Get_Status_Line (Client);
+
+      use type Web_Server_Resources.Content_Access;
+   begin
+      if Status.Kind = File then
+         if Status.File = "config/schema" then
+            Reply_JSON (Client, 200, "OK", To_String (My_Config.Get_Schema), Get);
+         elsif Status.File = "config/values" then
+            Reply_JSON (Client, 200, "OK", To_String (Patch_Config_Values ("{}")), Get);
+         elsif Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File)) /= null then
+            Send_Status_Line (Client, 200, "OK");
+            Send_Date (Client);
+            if Status.File = "" or else Ends_With (Status.File, ".html") then
+               Send_Content_Type (Client, "text/html");
+            elsif Ends_With (Status.File, ".js") then
+               Send_Content_Type (Client, "text/javascript");
+            else
+               Send_Content_Type (Client, "text/plain");
+            end if;
+            Send_Connection (Client, False);
+            Send_Body
+              (Client,
+               Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File)).all,
+               Get);
+         else
+            Reply_Text (Client, 404, "Not Found", "File not found.", Get);
+         end if;
+      else
+         Reply_Text (Client, 404, "Not Found", "File not found.", Get);
+      end if;
+   end Do_Get_Head;
+
+   overriding procedure Do_Get (Client : in out Prunt_Client) is
+   begin
+      Do_Get_Head (Client, True);
+   end Do_Get;
+
+   overriding procedure Do_Head (Client : in out Prunt_Client) is
+   begin
+      Do_Get_Head (Client, False);
+   end Do_Head;
+
+   overriding procedure Do_Post (Client : in out Prunt_Client) is
+      Status : Status_Line renames Get_Status_Line (Client);
+   begin
+      if Status.Kind = File and then Status.File = "config/values" then
+         if Client.Post_Content.Failed then
+            declare
+               Error : Exception_Occurrence;
+            begin
+               Client.Post_Content.Failed := False;
+               Get_Occurrence (Client, Error);
+               Reply_Text (Client, 413, "Content Too Large", Exception_Information (Error));
+            end;
+         else
+            Reply_JSON
+              (Client,
+               200,
+               "OK",
+               To_String (Patch_Config_Values (Post_Bodies.To_String (Client.Post_Content.Content))),
+               True);
+         end if;
+      else
+         Reply_Text (Client, 404, "Not Found", "File not found.", True);
+      end if;
+   end Do_Post;
+
+   overriding procedure Do_Body (Client : in out Prunt_Client) is
+      Status : Status_Line renames Get_Status_Line (Client);
+   begin
+      Receive_Body (Client, Client.Post_Content'Access);
+   end Do_Body;
+
+   function Build_Status_Schema return Unbounded_String is
       Result : Unbounded_String := To_Unbounded_String ("{");
-      Pos    : Position         := Get_Position;
 
       use type My_Config.Thermistor_Name;
       use type My_Config.Fan_Name;
@@ -89,10 +230,6 @@ package body Prunt.Web_Server is
       use type My_Config.Stepper_Name;
       use type My_Config.Input_Switch_Name;
    begin
-      if EWS.HTTP.Get_Method (Request.all) /= "GET" then
-         return EWS.HTTP.Not_Implemented (Request);
-      end if;
-
       Append (Result, """Position"":[");
       for A in Axis_Name loop
          Append (Result, """" & Trim (A'Image) & """");
@@ -158,13 +295,10 @@ package body Prunt.Web_Server is
 
       Append (Result, "}");
 
-      return Response : EWS.Dynamic.Dynamic_Response (Request) do
-         Response.Set_Content_Type (EWS.Types.JSON);
-         Response.Set_Content (Result);
-      end return;
-   end Response_Status_Schema;
+      return Result;
+   end Build_Status_Schema;
 
-   function Response_Status_Values (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   function Build_Status_Values return Unbounded_String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       Pos    : Position         := Get_Position;
 
@@ -174,21 +308,15 @@ package body Prunt.Web_Server is
       use type My_Config.Stepper_Name;
       use type My_Config.Input_Switch_Name;
    begin
-      if EWS.HTTP.Get_Method (Request.all) /= "GET" then
-         return EWS.HTTP.Not_Implemented (Request);
-      end if;
-
       if Fatal_Exception_Occurrence_Holder.Is_Set then
-         return Response : EWS.Dynamic.Dynamic_Response (Request) do
-            declare
-               Occurrence : Ada.Exceptions.Exception_Occurrence;
-            begin
-               Fatal_Exception_Occurrence_Holder.Get (Occurrence);
-               Response.Set_Content_Type (EWS.Types.JSON);
-               Response.Set_Content
-                 ("{""Fatal Exception"":""" & JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence)) & """}");
-            end;
-         end return;
+         declare
+            Occurrence : Ada.Exceptions.Exception_Occurrence;
+         begin
+            Fatal_Exception_Occurrence_Holder.Get (Occurrence);
+            return
+              To_Unbounded_String ("{""Fatal Exception"":""") &
+              JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence)) & """}";
+         end;
       end if;
 
       Append (Result, """Position"":{");
@@ -260,48 +388,53 @@ package body Prunt.Web_Server is
 
       Append (Result, "}");
 
-      return Response : EWS.Dynamic.Dynamic_Response (Request) do
-         Response.Set_Content_Type (EWS.Types.JSON);
-         Response.Set_Content (Result);
-      end return;
-   end Response_Status_Values;
+      return Result;
+   end Build_Status_Values;
 
-   function Response_Pause_Pause (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
-   begin
-      if EWS.HTTP.Get_Method (Request.all) = "POST" then
-         Pause_Stepgen;
-         return Result : EWS.Dynamic.Dynamic_Response (Request) do
-            Result.Set_Content_Type (EWS.Types.Plain);
-            Result.Set_Content ("");
-         end return;
-      else
-         return EWS.HTTP.Not_Implemented (Request);
-      end if;
-   end Response_Pause_Pause;
+   --  function Response_Pause_Pause (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   --  begin
+   --     if EWS.HTTP.Get_Method (Request.all) = "POST" then
+   --        Pause_Stepgen;
+   --        return Result : EWS.Dynamic.Dynamic_Response (Request) do
+   --           Result.Set_Content_Type (EWS.Types.Plain);
+   --           Result.Set_Content ("");
+   --        end return;
+   --     else
+   --        return EWS.HTTP.Not_Implemented (Request);
+   --     end if;
+   --  end Response_Pause_Pause;
 
-   function Response_Pause_Resume (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
-   begin
-      if EWS.HTTP.Get_Method (Request.all) = "POST" then
-         Resume_Stepgen;
-         return Result : EWS.Dynamic.Dynamic_Response (Request) do
-            Result.Set_Content_Type (EWS.Types.Plain);
-            Result.Set_Content ("");
-         end return;
-      else
-         return EWS.HTTP.Not_Implemented (Request);
-      end if;
-   end Response_Pause_Resume;
+   --  function Response_Pause_Resume (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
+   --  begin
+   --     if EWS.HTTP.Get_Method (Request.all) = "POST" then
+   --        Resume_Stepgen;
+   --        return Result : EWS.Dynamic.Dynamic_Response (Request) do
+   --           Result.Set_Content_Type (EWS.Types.Plain);
+   --           Result.Set_Content ("");
+   --        end return;
+   --     else
+   --        return EWS.HTTP.Not_Implemented (Request);
+   --     end if;
+   --  end Response_Pause_Resume;
 
    task body Server is
-   begin
-      EWS.Dynamic.Register (Response_Config_Schema'Unrestricted_Access, "/config/schema");
-      EWS.Dynamic.Register (Response_Config_Values'Unrestricted_Access, "/config/values");
-      EWS.Dynamic.Register (Response_Status_Schema'Unrestricted_Access, "/status/schema");
-      EWS.Dynamic.Register (Response_Status_Values'Unrestricted_Access, "/status/values");
-      EWS.Dynamic.Register (Response_Pause_Pause'Unrestricted_Access, "/pause/pause");
-      EWS.Dynamic.Register (Response_Pause_Resume'Unrestricted_Access, "/pause/resume");
+      Factory :
+        aliased Prunt_HTTP_Factory
+          (Request_Length  => Buffer_Size,
+           Input_Size      => Buffer_Size,
+           Output_Size     => Buffer_Size,
+           Max_Connections => 1000);
 
-      EWS.Server.Serve (Using_Port => Port, With_Stack => 4_000_000);
+      Server : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
+   begin
+      --  EWS.Dynamic.Register (Response_Status_Schema'Unrestricted_Access, "/status/schema");
+      --  EWS.Dynamic.Register (Response_Status_Values'Unrestricted_Access, "/status/values");
+      --  EWS.Dynamic.Register (Response_Pause_Pause'Unrestricted_Access, "/pause/pause");
+      --  EWS.Dynamic.Register (Response_Pause_Resume'Unrestricted_Access, "/pause/resume");
+
+      --  EWS.Server.Serve (Using_Port => Port, With_Stack => 4_000_000);
+
+      --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_Decoded, Sent => GNAT.Sockets.Server.Trace_Decoded);
 
       loop
          delay 100.0;

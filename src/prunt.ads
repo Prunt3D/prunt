@@ -232,9 +232,4 @@ package Prunt is
    function JSON_Escape (S : String) return String;
    function JSON_Escape (S : Ada.Strings.Unbounded.Unbounded_String) return Ada.Strings.Unbounded.Unbounded_String;
 
-private
-
-   Nice_Axis_Names : constant array (Axis_Name) of String (1 .. 6) :=
-     [X_Axis => "X Axis", Y_Axis => "Y Axis", Z_Axis => "Z Axis", E_Axis => "E Axis"];
-
 end Prunt;

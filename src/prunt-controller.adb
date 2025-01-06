@@ -242,6 +242,8 @@ package body Prunt.Controller is
            (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
            (GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+         Ada.Task_Termination.Set_Specific_Handler
+           (My_Web_Server.Server'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
          My_Config.Validate_Initial_Config (Log_Config_Error'Access);
 

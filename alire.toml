@@ -17,18 +17,18 @@ development.contracts = "Yes"
 gnat_native = "^14.2.1"
 
 [[depends-on]]
-gnatcoll = "^24.0.0"
+gnatcoll = "^23.0.0"
+
+[[actions]]
+type = "pre-build"
+command = ["tsc", "--declaration", "--declarationMap", "--sourceMap", "--downlevelIteration", "html/main.ts"]
+
+[[actions]]
+type = "pre-build"
+command = ["are", "--lang=Ada", "-o", "./generated_src_html", "--content-only", "--name-access", "--rule=./html/package.xml", "./html"]
 
 [[depends-on]]
-ews = "^1.11.0"
+simple_components = "^4.68.0"
 
-[[pins]]
-ews = { url = "https://github.com/Prunt3D/ews.git" }
-
-[[actions]]
-type = "pre-build"
-command = ["tsc", "--downlevelIteration", "html/main.ts"]
-
-[[actions]]
-type = "pre-build"
-command = ["ews_generator", "--input-dir", "html", "--output-dir", "generated_src_ews"]
+[[depends-on]]
+are = "^1.5.1"
