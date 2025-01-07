@@ -391,6 +391,33 @@ package body Prunt.Web_Server is
       return Result;
    end Build_Status_Values;
 
+   overriding procedure WebSocket_Finalize (Client : in out Prunt_Client) is
+   begin
+      WebSocket_Receiver_List_Handler.Finalize (Client.WebSocket_Receiver_Cursor);
+      WebSocket_Receiver_List_Handler.Wait_Until_Update_Done;
+   end WebSocket_Finalize;
+
+   overriding procedure WebSocket_Initialize (Client : in out Prunt_Client) is
+   begin
+      WebSocket_Receiver_List_Handler.Initialize (Client.WebSocket_Receiver_Cursor, Client'Unrestricted_Access);
+      --  Unrestricted_Access should be fine since this is a tagged type and should therefore be passed by reference.
+   end WebSocket_Initialize;
+
+   overriding function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept is
+      Status : Status_Line renames Get_Status_Line (Client.all);
+   begin
+      if Status.File = "log_and_status" then
+         return (Accepted => True, Length => 0, Size => 5_000, Duplex => True, Chunked => False, Protocols => "");
+      else
+         return (Accepted => False, Length => 9, Code => 404, Reason => "Not Found");
+      end if;
+   end WebSocket_Open;
+
+   overriding procedure WebSocket_Received (Client : in out Prunt_Client; Message : String) is
+   begin
+      null;
+   end WebSocket_Received;
+
    --  function Response_Pause_Pause (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
    --  begin
    --     if EWS.HTTP.Get_Method (Request.all) = "POST" then
@@ -417,13 +444,45 @@ package body Prunt.Web_Server is
    --     end if;
    --  end Response_Pause_Resume;
 
+   protected body WebSocket_Receiver_List_Handler is
+      procedure Initialize (Cursor : in out WebSocket_Receiver_Lists.Cursor; Client : Prunt_Client_Access) is
+         use type WebSocket_Receiver_Lists.Cursor;
+      begin
+         if Cursor /= WebSocket_Receiver_Lists.No_Element then
+            raise Constraint_Error with "Initialize called multiple times, this should not be possible.";
+         end if;
+
+         Receivers.Insert (WebSocket_Receiver_Lists.No_Element, Client, Cursor);
+         Receivers_Has_Update := True;
+      end Initialize;
+
+      procedure Finalize (Cursor : in out WebSocket_Receiver_Lists.Cursor) is
+      begin
+         Receivers.Delete (Cursor);
+         Receivers_Has_Update := True;
+      end Finalize;
+
+      procedure Update_If_Required (Receivers_Copy : in out WebSocket_Receiver_Lists.List) is
+      begin
+         if Receivers_Has_Update then
+            WebSocket_Receiver_Lists.Assign (Target => Receivers_Copy, Source => Receivers);
+            Receivers_Has_Update := False;
+         end if;
+      end Update_If_Required;
+
+      entry Wait_Until_Update_Done when not Receivers_Has_Update is
+      begin
+         null;
+      end Wait_Until_Update_Done;
+   end WebSocket_Receiver_List_Handler;
+
    task body Server is
       Factory :
         aliased Prunt_HTTP_Factory
           (Request_Length  => Buffer_Size,
            Input_Size      => Buffer_Size,
            Output_Size     => Buffer_Size,
-           Max_Connections => 1000);
+           Max_Connections => 1_000);
 
       Server : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
    begin

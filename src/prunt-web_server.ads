@@ -22,6 +22,7 @@
 with Prunt.Logger;
 with Prunt.Config;
 with Ada.Strings.Bounded;
+with Ada.Containers.Doubly_Linked_Lists;
 with Ada.Exceptions;                                    use Ada.Exceptions;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
@@ -73,6 +74,22 @@ private
    is
    new Connections_Factory with null record;
 
+   type Prunt_Client;
+
+   type Prunt_Client_Access is access all Prunt_Client;
+
+   package WebSocket_Receiver_Lists is new Ada.Containers.Doubly_Linked_Lists (Prunt_Client_Access);
+
+   protected WebSocket_Receiver_List_Handler is
+      procedure Initialize (Cursor : in out WebSocket_Receiver_Lists.Cursor; Client : Prunt_Client_Access);
+      procedure Finalize (Cursor : in out WebSocket_Receiver_Lists.Cursor);
+      procedure Update_If_Required (Receivers_Copy : in out WebSocket_Receiver_Lists.List);
+      entry Wait_Until_Update_Done;
+   private
+      Receivers            : WebSocket_Receiver_Lists.List;
+      Receivers_Has_Update : Boolean := True;
+   end WebSocket_Receiver_List_Handler;
+
    type Prunt_Client
      (Listener       : access Connections_Server'Class;
       Request_Length : Positive;
@@ -85,10 +102,9 @@ private
       Input_Size     => Input_Size,
       Output_Size    => Output_Size) with
    record
-      Post_Content : aliased Post_Body_Destination;
+      Post_Content              : aliased Post_Body_Destination;
+      WebSocket_Receiver_Cursor : WebSocket_Receiver_Lists.Cursor := WebSocket_Receiver_Lists.No_Element;
    end record;
-
-   type Prunt_Client_Access is access all Prunt_Client;
 
    overriding procedure Reply_HTML
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
@@ -123,5 +139,9 @@ private
       Listener : access Connections_Server'Class;
       From     : Sock_Addr_Type)
       return Connection_Ptr;
+   overriding function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept;
+   overriding procedure WebSocket_Received (Client : in out Prunt_Client; Message : String);
+   overriding procedure WebSocket_Initialize (Client : in out Prunt_Client);
+   overriding procedure WebSocket_Finalize (Client : in out Prunt_Client);
 
 end Prunt.Web_Server;
