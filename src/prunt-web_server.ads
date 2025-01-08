@@ -22,7 +22,8 @@
 with Prunt.Logger;
 with Prunt.Config;
 with Ada.Strings.Bounded;
-with Ada.Containers.Doubly_Linked_Lists;
+with Ada.Containers.Ordered_Sets;
+with Ada.Task_Termination;
 with Ada.Exceptions;                                    use Ada.Exceptions;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
@@ -50,7 +51,7 @@ generic
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 
-   task Server;
+   procedure Task_Termination_Set_Specific_Handler (Handler : Ada.Task_Termination.Termination_Handler);
 
 private
 
@@ -76,19 +77,9 @@ private
 
    type Prunt_Client;
 
-   type Prunt_Client_Access is access all Prunt_Client;
+   type Prunt_Client_Access is access Prunt_Client;
 
-   package WebSocket_Receiver_Lists is new Ada.Containers.Doubly_Linked_Lists (Prunt_Client_Access);
-
-   protected WebSocket_Receiver_List_Handler is
-      procedure Initialize (Cursor : in out WebSocket_Receiver_Lists.Cursor; Client : Prunt_Client_Access);
-      procedure Finalize (Cursor : in out WebSocket_Receiver_Lists.Cursor);
-      procedure Update_If_Required (Receivers_Copy : in out WebSocket_Receiver_Lists.List);
-      entry Wait_Until_Update_Done;
-   private
-      Receivers            : WebSocket_Receiver_Lists.List;
-      Receivers_Has_Update : Boolean := True;
-   end WebSocket_Receiver_List_Handler;
+   function "<" (Left, Right : Prunt_Client_Access) return Boolean;
 
    type Prunt_Client
      (Listener       : access Connections_Server'Class;
@@ -102,9 +93,15 @@ private
       Input_Size     => Input_Size,
       Output_Size    => Output_Size) with
    record
-      Post_Content              : aliased Post_Body_Destination;
-      WebSocket_Receiver_Cursor : WebSocket_Receiver_Lists.Cursor := WebSocket_Receiver_Lists.No_Element;
+      Post_Content     : aliased Post_Body_Destination;
+      Self_Access      : Prunt_Client_Access          := null;
    end record;
+
+   task Server is
+      entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
+      entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
+      entry Log_To_WebSocket_Receivers (Message : String);
+   end Server;
 
    overriding procedure Reply_HTML
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
@@ -134,6 +131,7 @@ private
    overriding procedure Do_Post (Client : in out Prunt_Client);
    overriding procedure Do_Body (Client : in out Prunt_Client);
    overriding procedure Initialize (Client : in out Prunt_Client);
+   overriding procedure Connected (Client : in out Prunt_Client);
    overriding function Create
      (Factory  : access Prunt_HTTP_Factory;
       Listener : access Connections_Server'Class;

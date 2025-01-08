@@ -19,10 +19,13 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Real_Time;         use Ada.Real_Time;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Strings;
 with Ada.Strings.Fixed;
 with Prunt.Web_Server_Resources;
+with System;
+with GNAT.Sockets;
 
 package body Prunt.Web_Server is
 
@@ -40,6 +43,11 @@ package body Prunt.Web_Server is
    begin
       Initialize (HTTP_Client (Client));
    end Initialize;
+
+   overriding procedure Connected (Client : in out Prunt_Client) is
+   begin
+      Connected (HTTP_Client (Client));
+   end Connected;
 
    overriding procedure Commit (Destination : in out Post_Body_Destination) is
    begin
@@ -139,8 +147,11 @@ package body Prunt.Web_Server is
               Request_Length => Factory.Request_Length,
               Input_Size     => Factory.Input_Size,
               Output_Size    => Factory.Output_Size);
-         Receive_Body_Tracing (Prunt_Client (Result.all), True);
-         Receive_Header_Tracing (Prunt_Client (Result.all), True);
+
+         --  Receive_Body_Tracing (Prunt_Client (Result.all), True);
+         --  Receive_Header_Tracing (Prunt_Client (Result.all), True);
+         Result.Self_Access := Result;
+
          return Result.all'Unrestricted_Access;
       else
          return null;
@@ -393,14 +404,23 @@ package body Prunt.Web_Server is
 
    overriding procedure WebSocket_Finalize (Client : in out Prunt_Client) is
    begin
-      WebSocket_Receiver_List_Handler.Finalize (Client.WebSocket_Receiver_Cursor);
-      WebSocket_Receiver_List_Handler.Wait_Until_Update_Done;
+      Server.Remove_WebSocket_Receiver (Client);
    end WebSocket_Finalize;
 
    overriding procedure WebSocket_Initialize (Client : in out Prunt_Client) is
    begin
-      WebSocket_Receiver_List_Handler.Initialize (Client.WebSocket_Receiver_Cursor, Client'Unrestricted_Access);
-      --  Unrestricted_Access should be fine since this is a tagged type and should therefore be passed by reference.
+      GNAT.Sockets.Set_Socket_Option (Client.Get_Socket, Socket_Level, (Send_Timeout, 0.000_001));
+      if GNAT.Sockets.Get_Socket_Option (Client.Get_Socket, Socket_Level, Send_Buffer).Size < 20_000 then
+         GNAT.Sockets.Set_Socket_Option (Client.Get_Socket, Socket_Level, (Send_Buffer, 20_000));
+      end if;
+      --  Sending a WebSocket message from a different task bypasses the regular handling of unresponsive clients,
+      --  therefore we need to set our own timeout here. The timeout is set to an extremely low value here as the
+      --  timeout counter only starts when the syscall is blocked.
+      --
+      --  TODO: Move TMC register dump to a HTTP request so in will not generate a large log message which overruns
+      --  the buffer.
+
+      Server.Register_WebSocket_Receiver (Client);
    end WebSocket_Initialize;
 
    overriding function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept is
@@ -418,63 +438,24 @@ package body Prunt.Web_Server is
       null;
    end WebSocket_Received;
 
-   --  function Response_Pause_Pause (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
-   --  begin
-   --     if EWS.HTTP.Get_Method (Request.all) = "POST" then
-   --        Pause_Stepgen;
-   --        return Result : EWS.Dynamic.Dynamic_Response (Request) do
-   --           Result.Set_Content_Type (EWS.Types.Plain);
-   --           Result.Set_Content ("");
-   --        end return;
-   --     else
-   --        return EWS.HTTP.Not_Implemented (Request);
-   --     end if;
-   --  end Response_Pause_Pause;
+   function "<" (Left, Right : Prunt_Client_Access) return Boolean is
+      use System;
+   begin
+      if Left = Right then
+         return False;
+      elsif Left = null then
+         return True;
+      elsif Right = null then
+         return False;
+      else
+         return Left.all'Address < Right.all'Address;
+      end if;
+   end "<";
 
-   --  function Response_Pause_Resume (Request : EWS.HTTP.Request_P) return EWS.HTTP.Response'Class is
-   --  begin
-   --     if EWS.HTTP.Get_Method (Request.all) = "POST" then
-   --        Resume_Stepgen;
-   --        return Result : EWS.Dynamic.Dynamic_Response (Request) do
-   --           Result.Set_Content_Type (EWS.Types.Plain);
-   --           Result.Set_Content ("");
-   --        end return;
-   --     else
-   --        return EWS.HTTP.Not_Implemented (Request);
-   --     end if;
-   --  end Response_Pause_Resume;
-
-   protected body WebSocket_Receiver_List_Handler is
-      procedure Initialize (Cursor : in out WebSocket_Receiver_Lists.Cursor; Client : Prunt_Client_Access) is
-         use type WebSocket_Receiver_Lists.Cursor;
-      begin
-         if Cursor /= WebSocket_Receiver_Lists.No_Element then
-            raise Constraint_Error with "Initialize called multiple times, this should not be possible.";
-         end if;
-
-         Receivers.Insert (WebSocket_Receiver_Lists.No_Element, Client, Cursor);
-         Receivers_Has_Update := True;
-      end Initialize;
-
-      procedure Finalize (Cursor : in out WebSocket_Receiver_Lists.Cursor) is
-      begin
-         Receivers.Delete (Cursor);
-         Receivers_Has_Update := True;
-      end Finalize;
-
-      procedure Update_If_Required (Receivers_Copy : in out WebSocket_Receiver_Lists.List) is
-      begin
-         if Receivers_Has_Update then
-            WebSocket_Receiver_Lists.Assign (Target => Receivers_Copy, Source => Receivers);
-            Receivers_Has_Update := False;
-         end if;
-      end Update_If_Required;
-
-      entry Wait_Until_Update_Done when not Receivers_Has_Update is
-      begin
-         null;
-      end Wait_Until_Update_Done;
-   end WebSocket_Receiver_List_Handler;
+   procedure Task_Termination_Set_Specific_Handler (Handler : Ada.Task_Termination.Termination_Handler) is
+   begin
+      Ada.Task_Termination.Set_Specific_Handler (Server'Identity, Handler);
+   end Task_Termination_Set_Specific_Handler;
 
    task body Server is
       Factory :
@@ -482,9 +463,37 @@ package body Prunt.Web_Server is
           (Request_Length  => Buffer_Size,
            Input_Size      => Buffer_Size,
            Output_Size     => Buffer_Size,
-           Max_Connections => 1_000);
+           Max_Connections => 100);
 
-      Server : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
+      Sockets_Server : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
+
+      Next_Status_Send : Ada.Real_Time.Time := Clock;
+
+      package WebSocket_Receiver_Sets is new Ada.Containers.Ordered_Sets (Prunt_Client_Access);
+      WebSocket_Receivers : WebSocket_Receiver_Sets.Set;
+
+      procedure Send_To_All_WebSocket_Receivers (Message : String) is
+      begin
+         for C of WebSocket_Receivers loop
+            begin
+               WebSocket_Send (C.all, Message);
+            exception
+               when E : others =>
+                  Trace_Error (Factory, "Send_To_All_WebSocket_Receivers", E);
+                  C.Shutdown;
+               --  Force the socket to close after the send syscall blocks due to buffer overrun.
+               --
+               --  TODO: Is there a better way to do this?
+            end;
+         end loop;
+      end Send_To_All_WebSocket_Receivers;
+
+      Log_Handle : My_Logger.Handle;
+
+      procedure Logger_Receiver (Message : String) is
+      begin
+         Server.Log_To_WebSocket_Receivers (Message);
+      end Logger_Receiver;
    begin
       --  EWS.Dynamic.Register (Response_Status_Schema'Unrestricted_Access, "/status/schema");
       --  EWS.Dynamic.Register (Response_Status_Values'Unrestricted_Access, "/status/values");
@@ -494,9 +503,50 @@ package body Prunt.Web_Server is
       --  EWS.Server.Serve (Using_Port => Port, With_Stack => 4_000_000);
 
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_Decoded, Sent => GNAT.Sockets.Server.Trace_Decoded);
+      Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_None, Sent => GNAT.Sockets.Server.Trace_None);
+
+      Log_Handle.Set_Receiver (Logger_Receiver'Unrestricted_Access);
 
       loop
-         delay 100.0;
+         select
+            accept Register_WebSocket_Receiver (Client : in out Prunt_Client) do
+               if Client.Self_Access /= Client'Unrestricted_Access then
+                  raise Constraint_Error
+                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
+                  --  It seems like this never occurs, but it's better to have it in case the library changes. I would
+                  --  prefer to avoid Unrestricted_Access completely, but that is not possible with how the library is
+                  --  designed.
+               end if;
+
+               WebSocket_Receivers.Insert (Client'Unrestricted_Access);
+            end Register_WebSocket_Receiver;
+         or
+            accept Remove_WebSocket_Receiver (Client : in out Prunt_Client) do
+               if Client.Self_Access /= Client'Unrestricted_Access then
+                  raise Constraint_Error
+                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
+                  --  It seems like this never occurs, but it's better to have it in case the library changes. I would
+                  --  prefer to avoid Unrestricted_Access completely, but that is not possible with how the library is
+                  --  designed.
+               end if;
+
+               WebSocket_Receivers.Delete (Client'Unrestricted_Access);
+            end Remove_WebSocket_Receiver;
+         or
+            accept Log_To_WebSocket_Receivers (Message : String) do
+               Send_To_All_WebSocket_Receivers ("{""Log"":""" & JSON_Escape (Message) & """}");
+            end Log_To_WebSocket_Receivers;
+         or
+            delay until Next_Status_Send;
+
+            Send_To_All_WebSocket_Receivers ("{""Status"":" & Clock'Image & "}");
+
+            Next_Status_Send := Next_Status_Send + Seconds (1);
+            if Clock > Next_Status_Send then
+               Next_Status_Send := Clock;
+               --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
+            end if;
+         end select;
       end loop;
    end Server;
 
