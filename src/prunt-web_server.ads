@@ -27,6 +27,7 @@ with Ada.Task_Termination;
 with Ada.Exceptions;                                    use Ada.Exceptions;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
+with Ada.Strings.Unbounded;                             use Ada.Strings.Unbounded;
 with GNAT.Sockets;                                      use GNAT.Sockets;
 with GNAT.Sockets.Server;                               use GNAT.Sockets.Server;
 with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connection_State_Machine.HTTP_Server;
@@ -67,9 +68,6 @@ private
    overriding procedure Commit (Destination : in out Post_Body_Destination);
    overriding procedure Put (Destination : in out Post_Body_Destination; Data : String);
 
-   procedure Write (Stream : access Root_Stream_Type'Class; Item : Post_Body_Destination);
-   for Post_Body_Destination'Write use Write;
-
    type Prunt_HTTP_Factory
      (Request_Length : Positive; Input_Size : Buffer_Length; Output_Size : Buffer_Length; Max_Connections : Positive)
    is
@@ -80,6 +78,15 @@ private
    type Prunt_Client_Access is access Prunt_Client;
 
    function "<" (Left, Right : Prunt_Client_Access) return Boolean;
+
+   type Extra_Client_Content is record
+      Post_Content : aliased Post_Body_Destination;
+      Self_Access  : Prunt_Client_Access := null;
+      File         : File_Type;
+   end record;
+
+   procedure Write (Stream : access Root_Stream_Type'Class; Item : Extra_Client_Content);
+   for Extra_Client_Content'Write use Write;
 
    type Prunt_Client
      (Listener       : access Connections_Server'Class;
@@ -93,8 +100,7 @@ private
       Input_Size     => Input_Size,
       Output_Size    => Output_Size) with
    record
-      Post_Content     : aliased Post_Body_Destination;
-      Self_Access      : Prunt_Client_Access          := null;
+      Content : Extra_Client_Content;
    end record;
 
    task Server is
@@ -131,6 +137,7 @@ private
    overriding procedure Do_Post (Client : in out Prunt_Client);
    overriding procedure Do_Body (Client : in out Prunt_Client);
    overriding procedure Initialize (Client : in out Prunt_Client);
+   overriding procedure Finalize (Client : in out Prunt_Client);
    overriding procedure Connected (Client : in out Prunt_Client);
    overriding function Create
      (Factory  : access Prunt_HTTP_Factory;
@@ -141,5 +148,8 @@ private
    overriding procedure WebSocket_Received (Client : in out Prunt_Client; Message : String);
    overriding procedure WebSocket_Initialize (Client : in out Prunt_Client);
    overriding procedure WebSocket_Finalize (Client : in out Prunt_Client);
+
+   function Build_Status_Schema return Unbounded_String;
+   function Build_Status_Values return Unbounded_String;
 
 end Prunt.Web_Server;
