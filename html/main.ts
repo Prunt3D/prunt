@@ -17,7 +17,7 @@ interface FloatSchema extends SchemaBase {
 }
 
 interface TabbedSequenceSchema extends SchemaBase {
-    Kind: "Tabbed Sequence";
+    Kind: "Tabbed_Sequence";
     Children: Record<string, SchemaEntry>;
 }
 
@@ -138,7 +138,7 @@ function buildField(
     configErrorLabels.set(path, errorLabel);
 
     switch (schema.Kind) {
-        case "Tabbed Sequence":
+        case "Tabbed_Sequence":
             buildTabbedSequence(schema.Children, path, container);
             break;
         case "Sequence":

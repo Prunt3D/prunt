@@ -339,7 +339,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "],");
 
-      Append (Result, """Thermistor Temperatures"":[");
+      Append (Result, """Thermistor_Temperatures"":[");
       for T in My_Config.Thermistor_Name loop
          Append (Result, """" & Trim (T'Image) & """");
          if T /= My_Config.Thermistor_Name'Last then
@@ -348,7 +348,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "],");
 
-      Append (Result, """Stepper Temperatures"":[");
+      Append (Result, """Stepper_Temperatures"":[");
       for S in My_Config.Stepper_Name loop
          Append (Result, """" & Trim (S'Image) & """");
          if S /= My_Config.Stepper_Name'Last then
@@ -357,7 +357,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "],");
 
-      Append (Result, """Board Probe Temperatures"":[");
+      Append (Result, """Board_Probe_Temperatures"":[");
       for P in Board_Temperature_Probe_Name loop
          Append (Result, """" & Trim (P'Image) & """");
          if P /= Board_Temperature_Probe_Name'Last then
@@ -366,7 +366,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "],");
 
-      Append (Result, """Heater Powers"":[");
+      Append (Result, """Heater_Powers"":[");
       for H in My_Config.Heater_Name loop
          Append (Result, """" & Trim (H'Image) & """");
          if H /= My_Config.Heater_Name'Last then
@@ -375,7 +375,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "],");
 
-      Append (Result, """Switch Is High State"":[");
+      Append (Result, """Switch_Is_High_State"":[");
       for I in My_Config.Input_Switch_Name loop
          Append (Result, """" & Trim (I'Image) & """");
          if I /= My_Config.Input_Switch_Name'Last then
@@ -384,7 +384,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "],");
 
-      Append (Result, """Tachometer Frequencies"":[");
+      Append (Result, """Tachometer_Frequencies"":[");
       for F in My_Config.Fan_Name loop
          Append (Result, """" & Trim (F'Image) & """");
          if F /= My_Config.Fan_Name'Last then
@@ -414,7 +414,7 @@ package body Prunt.Web_Server is
          begin
             Fatal_Exception_Occurrence_Holder.Get (Occurrence);
             return
-              To_Unbounded_String ("{""Fatal Exception"":""") &
+              To_Unbounded_String ("{""Fatal_Exception"":""") &
               JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence)) & """}";
          end;
       end if;
@@ -428,7 +428,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Thermistor Temperatures"":{");
+      Append (Result, """Thermistor_Temperatures"":{");
       for T in My_Config.Thermistor_Name loop
          Append (Result, """" & Trim (T'Image) & """:" & Get_Thermistor_Temperature (T)'Image);
          if T /= My_Config.Thermistor_Name'Last then
@@ -437,7 +437,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Stepper Temperatures"":{");
+      Append (Result, """Stepper_Temperatures"":{");
       for S in My_Config.Stepper_Name loop
          Append (Result, """" & Trim (S'Image) & """:" & Get_Stepper_Temperature (S)'Image);
          if S /= My_Config.Stepper_Name'Last then
@@ -446,7 +446,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Board Probe Temperatures"":{");
+      Append (Result, """Board_Probe_Temperatures"":{");
       for P in Board_Temperature_Probe_Name loop
          Append (Result, """" & Trim (P'Image) & """:" & Get_Board_Temperature (P)'Image);
          if P /= Board_Temperature_Probe_Name'Last then
@@ -455,7 +455,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Heater Powers"":{");
+      Append (Result, """Heater_Powers"":{");
       for H in My_Config.Heater_Name loop
          Append (Result, """" & Trim (H'Image) & """:" & Get_Heater_Power (H)'Image);
          if H /= My_Config.Heater_Name'Last then
@@ -464,7 +464,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Switch Is High State"":{");
+      Append (Result, """Switch_Is_High_State"":{");
       for I in My_Config.Input_Switch_Name loop
          Append
            (Result,
@@ -475,7 +475,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Tachometer Frequencies"":{");
+      Append (Result, """Tachometer_Frequencies"":{");
       for F in My_Config.Fan_Name loop
          Append (Result, """" & Trim (F'Image) & """:" & Get_Tachometer_Frequency (F)'Image);
          if F /= My_Config.Fan_Name'Last then
@@ -484,7 +484,7 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Stepgen Is Paused"":" & (if Is_Stepgen_Paused then "true" else "false"));
+      Append (Result, """Stepgen_Is_Paused"":" & (if Is_Stepgen_Paused then "true" else "false"));
 
       Append (Result, "}");
 

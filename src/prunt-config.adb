@@ -1181,7 +1181,7 @@ package body Prunt.Config is
                        ",""Unit"":" & Element (I).Float_Unit'Image & "}");
                when Sequence_Kind =>
                   if Element (I).Sequence_Tabbed then
-                     Append (Result, """Kind"":""Tabbed Sequence"",""Children"":");
+                     Append (Result, """Kind"":""Tabbed_Sequence"",""Children"":");
                   else
                      Append (Result, """Kind"":""Sequence"",""Children"":");
                   end if;
