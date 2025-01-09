@@ -62,13 +62,25 @@
     <div class="tab active" id="statusTab">Status</div>
     <div class="tab" id="configTab">Configuration</div>
     <div class="tab" id="consoleTab">G-Code Console</div>
-    <div class="tab" id="fileTab">Run File</div>
+    <div class="tab" id="fileTab">Files</div>
   </div>
   <div class="tab-content-container" id="topTabContentContainer">
     <div class="tab-content" id="statusTabContent"></div>
     <div class="tab-content hidden" id="configTabContent"></div>
     <div class="tab-content hidden" id="consoleTabContent"></div>
-    <div class="tab-content hidden" id="fileTabContent"></div>
+    <div class="tab-content hidden" id="fileTabContent">
+        <div>
+            <h1>Upload File</h1>
+            <input type="file" id="fileUploadInput"></input>
+            <button id="fileUploadButton" onClick="uploadFile()">Upload file</button>
+        </div>
+        <div>
+            <h1>Run File</h1>
+            <button id="fileRefreshButton" onClick="refreshFiles()">Refresh</button>
+            <select id="fileRunInput"></select>
+            <button id="fileRunButton" onClick="runFile()">Run file</button>
+        </div>
+    </div>
   </div>
   <script src="main.js"></script>
 </body>

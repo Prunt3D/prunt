@@ -45,6 +45,36 @@ package body Prunt.Web_Server is
       return Source'Length >= Pattern'Length and then Ada.Strings.Fixed.Head (Source, Pattern'Length) = Pattern;
    end Starts_With;
 
+   overriding function Get (Source : access Directory_Content) return String is
+      Dir : Directory_Entry_Type;
+   begin
+      case Source.Step is
+         when Starting =>
+            Source.Step := First_Entry;
+            return "[";
+         when First_Entry | Continuing_Entries =>
+            if More_Entries (Source.Search) then
+               Get_Next_Entry (Source.Search, Dir);
+               if Source.Step = First_Entry then
+                  Source.Step := Continuing_Entries;
+                  return """" & JSON_Escape (Simple_Name (Dir)) & """";
+               else
+                  return ",""" & Simple_Name (Dir) & """";
+               end if;
+            else
+               Source.Step := Finished;
+               return "]";
+            end if;
+         when Finished =>
+            return "";
+      end case;
+   end Get;
+
+   overriding procedure Finalize (Source : in out Directory_Content) is
+   begin
+      Finalize (Content_Source (Source));
+   end Finalize;
+
    overriding procedure Initialize (Client : in out Prunt_Client) is
    begin
       Initialize (HTTP_Client (Client));
@@ -221,7 +251,32 @@ package body Prunt.Web_Server is
                Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File)).all,
                Get);
          elsif Status.File = "uploads" then
-            Reply_Text (Client, 404, "Not Found", "File not found.", Get); --  TODO
+            if Kind ("uploads") /= Directory then
+               Reply_Text
+                 (Client,
+                  500,
+                  "Internal Server Error",
+                  """uploads"" is not a directory. Delete or rename the file named uploads and restart Prunt.",
+                  Get);
+            else
+               begin
+                  Client.Content.Uploads_Directory_Content.Step := Starting;
+                  Start_Search
+                    (Search    => Client.Content.Uploads_Directory_Content.Search,
+                     Directory => "uploads",
+                     Pattern   => "*",
+                     Filter    => (Ordinary_File => True, others => False));
+
+                  Send_Status_Line (Client, 200, "OK");
+                  Send_Date (Client);
+                  Send_Server (Client);
+                  Send_Content_Type (Client, "application/json");
+                  Send_Body (Client, Client.Content.Uploads_Directory_Content'Access, Get);
+               exception
+                  when E : Ada.Directories.Use_Error =>
+                     Reply_Text (Client, 500, "Internal Server Error", """uploads"" directory is not readable.", Get);
+               end;
+            end if;
          elsif Starts_With (Status.File, "uploads/") then
             if Kind ("uploads") /= Directory then
                Reply_Text
@@ -230,45 +285,48 @@ package body Prunt.Web_Server is
                   "Internal Server Error",
                   """uploads"" is not a directory. Delete or rename the file named uploads and restart Prunt.",
                   Get);
-            end if;
-
-            begin
-               declare
-                  File_Name : String :=
-                    Status.File (Status.File'First + String'("uploads/")'Length .. Status.File'Last);
-                  File_Path : String := Compose (Containing_Directory => "uploads", Name => File_Name);
+            else
                begin
-                  if not Exists (File_Path) then
-                     Reply_Text (Client, 404, "Not Found", "File not found.", Get);
-                  elsif Kind (File_Path) /= Ordinary_File then
+                  declare
+                     File_Name : String :=
+                       Status.File (Status.File'First + String'("uploads/")'Length .. Status.File'Last);
+                     File_Path : String := Compose (Containing_Directory => "uploads", Name => File_Name);
+                  begin
+                     if not Exists (File_Path) then
+                        Reply_Text (Client, 404, "Not Found", "File not found.", Get);
+                     elsif Kind (File_Path) /= Ordinary_File then
+                        Reply_Text
+                          (Client,
+                           400,
+                           "Bad Request",
+                           "File is not regular. Only regular files directly in uploads directory may be accessed.",
+                           Get);
+                     else
+                        if Is_Open (Client.Content.File) then
+                           Close (Client.Content.File);
+                        end if;
+                        Open (Client.Content.File, In_File, File_Path);
+                        Send_Status_Line (Client, 200, "OK");
+                        Send_Date (Client);
+                        Send_Server (Client);
+                        Send_Content_Type (Client, "text/plain");
+                        Send_Body
+                          (Client,
+                           Stream (Client.Content.File),
+                           Stream_Element_Count (Size (Client.Content.File)),
+                           Get);
+                     end if;
+                  end;
+               exception
+                  when E : Ada.Directories.Name_Error =>
                      Reply_Text
                        (Client,
                         400,
                         "Bad Request",
-                        "File is not regular. Only regular files directly in the uploads directory may be accessed.",
+                        "File name is malformed. Only regular files directly in uploads directory may be accessed.",
                         Get);
-                  else
-                     if Is_Open (Client.Content.File) then
-                        Close (Client.Content.File);
-                     end if;
-                     Open (Client.Content.File, In_File, File_Path);
-                     Send_Status_Line (Client, 200, "OK");
-                     Send_Date (Client);
-                     Send_Server (Client);
-                     Send_Content_Type (Client, "text/plain");
-                     Send_Body
-                       (Client, Stream (Client.Content.File), Stream_Element_Count (Size (Client.Content.File)), Get);
-                  end if;
                end;
-            exception
-               when E : Ada.Directories.Name_Error =>
-                  Reply_Text
-                    (Client,
-                     400,
-                     "Bad Request",
-                     "File name is malformed. Only regular files directly in the uploads directory may be accessed.",
-                     Get);
-            end;
+            end if;
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", Get);
          end if;
@@ -290,7 +348,15 @@ package body Prunt.Web_Server is
    overriding procedure Do_Post (Client : in out Prunt_Client) is
       Status : Status_Line renames Get_Status_Line (Client);
    begin
-      if Status.Kind = File then
+      if Client.Content.Post_Content.Failed then
+         declare
+            Error : Exception_Occurrence;
+         begin
+            Client.Content.Post_Content.Failed := False;
+            Get_Occurrence (Client, Error);
+            Reply_Text (Client, 413, "Content Too Large", Exception_Information (Error), True);
+         end;
+      elsif Status.Kind = File then
          if Status.File = "pause/pause" then
             Pause_Stepgen;
             Reply_Text (Client, 204, "No Content", "", True);
@@ -298,21 +364,44 @@ package body Prunt.Web_Server is
             Resume_Stepgen;
             Reply_Text (Client, 204, "No Content", "", True);
          elsif Status.File = "config/values" then
-            if Client.Content.Post_Content.Failed then
-               declare
-                  Error : Exception_Occurrence;
-               begin
-                  Client.Content.Post_Content.Failed := False;
-                  Get_Occurrence (Client, Error);
-                  Reply_Text (Client, 413, "Content Too Large", Exception_Information (Error), True);
-               end;
-            else
-               Reply_JSON
+            Reply_JSON
+              (Client,
+               200,
+               "OK",
+               To_String (Patch_Config_Values (Post_Bodies.To_String (Client.Content.Post_Content.Content))),
+               True);
+         elsif Status.File = "run-file" then
+            if Kind ("uploads") /= Directory then
+               Reply_Text
                  (Client,
-                  200,
-                  "OK",
-                  To_String (Patch_Config_Values (Post_Bodies.To_String (Client.Content.Post_Content.Content))),
+                  500,
+                  "Internal Server Error",
+                  """uploads"" is not a directory. Delete or rename the file named uploads and restart Prunt.",
                   True);
+            else
+               declare
+                  File_Path : String :=
+                    Compose
+                      (Containing_Directory => "uploads",
+                       Name                 => Post_Bodies.To_String (Client.Content.Post_Content.Content));
+                  Succeeded : Boolean;
+               begin
+                  if Exists (File_Path) and then Kind (File_Path) /= Ordinary_File then
+                     Reply_Text (Client, 500, "Internal Server Error", "File exists but is not a regular file.", True);
+                  else
+                     Submit_Gcode_File (File_Path, Succeeded);
+                     if Succeeded then
+                        Reply_Text (Client, 204, "No Content", "", True);
+                     else
+                        Reply_Text
+                          (Client,
+                           500,
+                           "Internal Server Error",
+                           "Can not run file while another file is running.",
+                           True);
+                     end if;
+                  end if;
+               end;
             end if;
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", True);
@@ -328,6 +417,8 @@ package body Prunt.Web_Server is
       case Client.Content.Put_Fail_Reason is
          when No_Failure_Kind =>
             Reply_Text (Client, 204, "No Content", "", True);
+            --  TODO: Currently we send a 204 when the user attempts to upload an empty file, but the file is not
+            --  actually created or replaced. We should either send a reply that indicated that or write the file.
          when Uploads_Not_Dir_Kind =>
             Reply_Text
               (Client,
@@ -686,7 +777,7 @@ package body Prunt.Web_Server is
       end Logger_Receiver;
    begin
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_Decoded, Sent => GNAT.Sockets.Server.Trace_Decoded);
-      Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_None, Sent => GNAT.Sockets.Server.Trace_None);
+      --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_None, Sent => GNAT.Sockets.Server.Trace_None);
 
       begin
          if not Exists ("uploads") then

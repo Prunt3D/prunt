@@ -24,6 +24,7 @@ with Prunt.Config;
 with Ada.Strings.Bounded;
 with Ada.Containers.Ordered_Sets;
 with Ada.Task_Termination;
+with Ada.Directories;
 with Ada.Exceptions;                                    use Ada.Exceptions;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
@@ -88,11 +89,22 @@ private
       Wrong_Request_Target_Kind,
       Unhandled_Exception_Kind);
 
+   type Directory_Content_Step is (Starting, First_Entry, Continuing_Entries, Finished);
+
+   type Directory_Content is new Content_Source with record
+      Step   : Directory_Content_Step := Starting;
+      Search : Ada.Directories.Search_Type;
+   end record;
+
+   overriding function Get (Source : access Directory_Content) return String;
+   overriding procedure Finalize (Source : in out Directory_Content);
+
    type Extra_Client_Content is record
-      Post_Content    : aliased Post_Body_Destination;
-      Self_Access     : Prunt_Client_Access := null;
-      File            : File_Type;
-      Put_Fail_Reason : Put_Fail_Reason_Kind;
+      Post_Content              : aliased Post_Body_Destination;
+      Self_Access               : Prunt_Client_Access  := null;
+      File                      : File_Type;
+      Put_Fail_Reason           : Put_Fail_Reason_Kind := No_Failure_Kind;
+      Uploads_Directory_Content : aliased Directory_Content;
    end record;
 
    procedure Write (Stream : access Root_Stream_Type'Class; Item : Extra_Client_Content);

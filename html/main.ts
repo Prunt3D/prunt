@@ -340,13 +340,13 @@ function buildInteger(schema: IntegerSchema, path: string, container: HTMLElemen
     input.setAttribute("required", "");
 
     let oldValidity: boolean | null = null;
-    input.addEventListener("input", function () {
+    input.addEventListener("input", function() {
         if (oldValidity !== input.checkValidity()) {
             oldValidity = input.checkValidity();
             updateValidation();
         }
     });
-    input.addEventListener("configFieldValidationReset", function () {
+    input.addEventListener("configFieldValidationReset", function() {
         oldValidity = null;
     });
 
@@ -369,13 +369,13 @@ function buildFloat(schema: FloatSchema, path: string, container: HTMLElement) {
     input.setAttribute("required", "");
 
     let oldValidity: boolean | null = null;
-    input.addEventListener("input", function () {
+    input.addEventListener("input", function() {
         if (oldValidity !== input.checkValidity()) {
             oldValidity = input.checkValidity();
             updateValidation();
         }
     });
-    input.addEventListener("configFieldValidationReset", function () {
+    input.addEventListener("configFieldValidationReset", function() {
         oldValidity = null;
     });
 
@@ -469,7 +469,84 @@ function updateValues(values: { Values: Record<string, any>; Errors: { Key: stri
     updateValidation();
 }
 
-(async function () {
+function uploadFile(): void {
+    const fileInput = document.getElementById("fileUploadInput") as HTMLInputElement;
+
+    if (fileInput.files && fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+
+        fetch(`/uploads/${encodeURIComponent(file.name)}`, {
+            method: "PUT",
+            body: file,
+        }).then((response) => {
+            if (response.ok) {
+                alert("File upload complete.");
+            } else {
+                response.text().then((error) => {
+                    alert(`File upload failed:\n${response.statusText}\n${error}`);
+                });
+            }
+        });
+    } else {
+        alert("Please select a file to upload.");
+    }
+}
+
+function refreshFiles(): void {
+    fetch("/uploads").then((response) => {
+        if (!response.ok) {
+            response.text().then((error) => {
+                alert(`File refresh failed:\n${response.statusText}\n${error}`);
+            });
+        } else {
+            response.json().then((files: string[]) => {
+                const fileRunInput = document.getElementById('fileRunInput') as HTMLSelectElement;
+
+                fileRunInput.innerHTML = "";
+
+                const option = document.createElement("option");
+                option.value = "";
+                option.textContent = "";
+                fileRunInput.appendChild(option);
+
+                files.forEach((file) => {
+                    const option = document.createElement("option");
+                    option.value = file;
+                    option.textContent = file;
+                    fileRunInput.appendChild(option);
+                });
+            });
+        }
+    });
+}
+
+function runFile(): void {
+    const fileRunInput = document.getElementById('fileRunInput') as HTMLSelectElement;
+    const selectedFile = fileRunInput.value;
+
+    if (selectedFile == "") {
+        alert("Please select a file to run.");
+        return;
+    }
+
+    fetch("/run-file", {
+        method: "POST",
+        headers: {
+            "Content-Type": "text/plain",
+        },
+        body: selectedFile
+    }).then((response) => {
+        if (response.ok) {
+            alert("File queued.");
+        } else {
+            response.text().then((error) => {
+                alert(`Failed to run file:\n${response.statusText}\n${error}`);
+            });
+        }
+    });
+}
+
+(async function() {
     const topTabContainer = document.getElementById("topTabContainer") as HTMLElement;
     const topTabContentContainer = document.getElementById("topTabContentContainer") as HTMLElement;
 
@@ -502,4 +579,6 @@ function updateValues(values: { Values: Record<string, any>; Errors: { Key: stri
     saveButton.textContent = "Save all options";
     saveButton.addEventListener("click", saveConfig);
     configTabContent.appendChild(saveButton);
+
+    refreshFiles();
 })();
