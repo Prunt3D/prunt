@@ -79,10 +79,20 @@ private
 
    function "<" (Left, Right : Prunt_Client_Access) return Boolean;
 
+   type Put_Fail_Reason_Kind is
+     (No_Failure_Kind,
+      Uploads_Not_Dir_Kind,
+      File_Not_Regular_Kind,
+      File_Name_Malformed_Kind,
+      Wrong_Directory_Kind,
+      Wrong_Request_Target_Kind,
+      Unhandled_Exception_Kind);
+
    type Extra_Client_Content is record
-      Post_Content : aliased Post_Body_Destination;
-      Self_Access  : Prunt_Client_Access := null;
-      File         : File_Type;
+      Post_Content    : aliased Post_Body_Destination;
+      Self_Access     : Prunt_Client_Access := null;
+      File            : File_Type;
+      Put_Fail_Reason : Put_Fail_Reason_Kind;
    end record;
 
    procedure Write (Stream : access Root_Stream_Type'Class; Item : Extra_Client_Content);
@@ -135,6 +145,7 @@ private
    overriding procedure Do_Get (Client : in out Prunt_Client);
    overriding procedure Do_Head (Client : in out Prunt_Client);
    overriding procedure Do_Post (Client : in out Prunt_Client);
+   overriding procedure Do_Put (Client : in out Prunt_Client);
    overriding procedure Do_Body (Client : in out Prunt_Client);
    overriding procedure Initialize (Client : in out Prunt_Client);
    overriding procedure Finalize (Client : in out Prunt_Client);

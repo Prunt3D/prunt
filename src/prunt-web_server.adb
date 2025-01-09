@@ -130,6 +130,9 @@ package body Prunt.Web_Server is
    begin
       Save_Occurrence (Client, Error);
       Client.Content.Post_Content.Failed := True;
+      Client.Content.Put_Fail_Reason     := Unhandled_Exception_Kind;
+      --  It doesn't matter if we set both fields here as Do_Put or Do_Post will be called later and will use the
+      --  correct field.
    end Body_Error;
 
    overriding procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class) is
@@ -137,6 +140,10 @@ package body Prunt.Web_Server is
       if Is_Open (Client.Content.File) then
          Close (Client.Content.File);
       end if;
+   exception
+      when E : others =>
+         Save_Occurrence (Client, E);
+         Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
    end Body_Received;
 
    overriding procedure Body_Sent (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean)
@@ -315,10 +322,95 @@ package body Prunt.Web_Server is
       end if;
    end Do_Post;
 
+   overriding procedure Do_Put (Client : in out Prunt_Client) is
+      Status : Status_Line renames Get_Status_Line (Client);
+   begin
+      case Client.Content.Put_Fail_Reason is
+         when No_Failure_Kind =>
+            Reply_Text (Client, 204, "No Content", "", True);
+         when Uploads_Not_Dir_Kind =>
+            Reply_Text
+              (Client,
+               500,
+               "Internal Server Error",
+               """uploads"" is not a directory. Delete or rename the file named uploads and restart Prunt.",
+               True);
+         when File_Not_Regular_Kind =>
+            Reply_Text
+              (Client,
+               500,
+               "Internal Server Error",
+               "File exists and is not a regular file. Only regular files may be replaced.",
+               True);
+         when File_Name_Malformed_Kind =>
+            Reply_Text
+              (Client,
+               400,
+               "Bad Request",
+               "File name is malformed. Only regular files directly in the uploads directory may be accessed.",
+               True);
+         when Wrong_Directory_Kind =>
+            Reply_Text (Client, 400, "Bad Request", "Files may only be uploaded to the uploads directory.", True);
+         when Wrong_Request_Target_Kind =>
+            Reply_Text (Client, 400, "Bad Request", "Request target must be a file.", True);
+         when Unhandled_Exception_Kind =>
+            declare
+               Error : Exception_Occurrence;
+            begin
+               Get_Occurrence (Client, Error);
+               Reply_Text (Client, 500, "Internal Server Error", Exception_Information (Error));
+            end;
+      end case;
+   end Do_Put;
+
    overriding procedure Do_Body (Client : in out Prunt_Client) is
       Status : Status_Line renames Get_Status_Line (Client);
    begin
-      Receive_Body (Client, Client.Content.Post_Content'Access);
+      if Client.Get_Method = HTTP_POST then
+         Receive_Body (Client, Client.Content.Post_Content'Access);
+      elsif Client.Get_Method = HTTP_PUT then
+         begin
+            Client.Content.Put_Fail_Reason := No_Failure_Kind;
+            if Status.Kind = File then
+               if Starts_With (Status.File, "uploads/") then
+                  if Kind ("uploads") /= Directory then
+                     Client.Content.Put_Fail_Reason := Uploads_Not_Dir_Kind;
+                  end if;
+
+                  declare
+                     File_Name : String :=
+                       Status.File (Status.File'First + String'("uploads/")'Length .. Status.File'Last);
+                     File_Path : String := Compose (Containing_Directory => "uploads", Name => File_Name);
+                  begin
+                     if Exists (File_Path) and then Kind (File_Path) /= Ordinary_File then
+                        Client.Content.Put_Fail_Reason := File_Not_Regular_Kind;
+                     else
+                        if Is_Open (Client.Content.File) then
+                           Close (Client.Content.File);
+                        end if;
+                        if Exists (File_Path) then
+                           Open (Client.Content.File, Out_File, File_Path);
+                        else
+                           Create (Client.Content.File, Out_File, File_Path);
+                        end if;
+
+                        Receive_Body (Client, Stream (Client.Content.File));
+                     end if;
+                  end;
+               else
+                  Client.Content.Put_Fail_Reason := Wrong_Directory_Kind;
+               end if;
+            else
+               Client.Content.Put_Fail_Reason := Wrong_Request_Target_Kind;
+            end if;
+         exception
+            when E : Ada.Directories.Name_Error =>
+               Client.Content.Put_Fail_Reason := File_Name_Malformed_Kind;
+            when E : others                     =>
+               Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
+               Save_Occurrence (Client, E);
+         end;
+      end if;
    end Do_Body;
 
    function Build_Status_Schema return Unbounded_String is
