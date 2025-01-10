@@ -1001,8 +1001,9 @@ package body Prunt.Config is
                  Float
                    ("May safely be set to 8E307 for effectively infinite jerk (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
-                      "A good starting point for tuning is 100 times the set maximum acceleration.",
-                    Default => 10_000.0,
+                      "A good starting point for tuning is 100 times the set maximum acceleration. " &
+                      "This can be achieved by appending E2 to you acceleration value in this field.",
+                    Default => 100.0E2,
                     Min     => 0.000_001,
                     Max     => 8.0E307,
                     Unit    => "mm/s^3"),
@@ -1010,8 +1011,9 @@ package body Prunt.Config is
                  Float
                    ("May safely be set to 8E307 for effectively infinite snap (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
-                      "A good starting point for tuning is 1,000 times the set maximum acceleration.",
-                    Default => 10_000_000.0,
+                      "A good starting point for tuning is 100,000 times the set maximum acceleration. " &
+                      "This can be achieved by appending E5 to you acceleration value in this field.",
+                    Default => 100.0E5,
                     Min     => 0.000_001,
                     Max     => 8.0E307,
                     Unit    => "mm/s^4"),
@@ -1019,8 +1021,9 @@ package body Prunt.Config is
                  Float
                    ("May safely be set to 8E307 for effectively infinite crackle (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
-                      "A good starting point for tuning is 10,000 times the set maximum acceleration.",
-                    Default => 100_000_000.0,
+                      "A good starting point for tuning is 1,000,000,000 times the set maximum acceleration. " &
+                      "This can be achieved by appending E9 to you acceleration value in this field.",
+                    Default => 100.0E9,
                     Min     => 0.000_001,
                     Max     => 8.0E307,
                     Unit    => "mm/s^5"),

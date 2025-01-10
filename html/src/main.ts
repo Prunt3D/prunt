@@ -180,6 +180,9 @@ function buildField(
             buildTabbedSequence(schema.Children, path, container);
             break;
         case "Sequence":
+            if (!container.classList.contains("tab-content")) {
+                container.classList.add("config-sequence");
+            }
             buildSequence(schema.Children, path, container, ownerTab);
             break;
         case "Variant":
