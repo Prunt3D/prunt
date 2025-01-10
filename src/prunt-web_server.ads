@@ -25,6 +25,7 @@ with Ada.Strings.Bounded;
 with Ada.Containers.Ordered_Sets;
 with Ada.Task_Termination;
 with Ada.Directories;
+with Prunt.Web_Server_Resources;
 with Ada.Exceptions;                                    use Ada.Exceptions;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
@@ -69,6 +70,17 @@ private
    overriding procedure Commit (Destination : in out Post_Body_Destination);
    overriding procedure Put (Destination : in out Post_Body_Destination; Data : String);
 
+   type Array_Stream_Type is new Root_Stream_Type with record
+      Content  : Web_Server_Resources.Content_Access;
+      Position : Stream_Element_Offset;
+      Done     : Boolean;
+   end record;
+
+   overriding procedure Read
+     (Stream : in out Array_Stream_Type; Item : out Stream_Element_Array; Last : out Stream_Element_Offset);
+
+   overriding procedure Write (Stream : in out Array_Stream_Type; Item : Stream_Element_Array);
+
    type Prunt_HTTP_Factory
      (Request_Length : Positive; Input_Size : Buffer_Length; Output_Size : Buffer_Length; Max_Connections : Positive)
    is
@@ -100,10 +112,16 @@ private
    overriding procedure Finalize (Source : in out Directory_Content);
 
    type Extra_Client_Content is record
-      Post_Content              : aliased Post_Body_Destination;
       Self_Access               : Prunt_Client_Access  := null;
+      --  Embedded file GET requests:
+      Array_Stream              : aliased Array_Stream_Type;
+      --  POST requests:
+      Post_Content              : aliased Post_Body_Destination;
+      --  File GET and PUT requests:
       File                      : File_Type;
+      --  File PUT requests:
       Put_Fail_Reason           : Put_Fail_Reason_Kind := No_Failure_Kind;
+      --  GET /uploads requests:
       Uploads_Directory_Content : aliased Directory_Content;
    end record;
 

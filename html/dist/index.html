@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta http-equiv="Pragma" content="no-cache" />
+        <meta http-equiv="Expires" content="0" />
+        <meta charset="utf-8">
+        <link rel="shortcut icon" href="favicon.ico">
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+        <link rel="manifest" href="/site.webmanifest">
+        <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+        <meta name="msapplication-TileColor" content="#da532c">
+        <meta name="theme-color" content="#ffffff">
+        <style>
+            .tab-container {
+                display: flex; margin-bottom: 0px;
+            }
+            .tab {
+                margin-bottom: 1px;
+                padding: 10px;
+                outline: 1px solid #000000;
+                cursor: pointer;
+            }
+            .tab.active {
+                background-color: #000000;
+                color: #ffffff;
+            }
+            .tab.local-invalid {
+                outline: 3px dashed #ff0000;
+                box-shadow: 0 0 0 1px #000000;
+                z-index: 3;
+            }
+            .tab.remote-invalid {
+                outline: 3px dotted #fa7a00;
+                box-shadow: 0 0 0 1px #000000;
+                z-index: 2;
+            }
+            .tab-content-container {
+                outline: 1px solid #000000;
+                padding: 10px;
+            }
+            .hidden {
+                display: none;
+            }
+            .vertical-list {
+                margin: 10px 0;
+            }
+            .config-form-row {
+                padding: 10px 0px;
+            }
+            .input-validity-error-label {
+                margin-left: 10px;
+                display: none;
+                color: #ff0000;
+            }
+            input:invalid {
+                outline: 2px dashed #ff0000;
+            }
+            input:invalid + .input-validity-error-label {
+                display: inline;
+            }
+            .title {
+                font-weight: bold;
+            }
+            .config-error-label {
+                color: #ff0000;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="tab-container" id="topTabContainer">
+            <div class="tab active" id="statusTab">Status</div>
+            <div class="tab" id="configTab">Configuration</div>
+            <div class="tab" id="consoleTab">G-Code Console</div>
+            <div class="tab" id="fileTab">Files</div>
+        </div>
+        <div class="tab-content-container" id="topTabContentContainer">
+            <div class="tab-content" id="statusTabContent"></div>
+            <div class="tab-content hidden" id="configTabContent"></div>
+            <div class="tab-content hidden" id="consoleTabContent"></div>
+            <div class="tab-content hidden" id="fileTabContent">
+                <div>
+                    <h1>Upload File</h1>
+                    <input type="file" id="fileUploadInput"></input>
+                    <button id="fileUploadButton" onClick="uploadFile()">Upload file</button>
+                </div>
+                <div>
+                    <h1>Run File</h1>
+                    <button id="fileRefreshButton" onClick="refreshFiles()">Refresh</button>
+                    <select id="fileRunInput"></select>
+                    <button id="fileRunButton" onClick="runFile()">Run file</button>
+                </div>
+            </div>
+        </div>
+        <script src="bundle.js"></script>
+    </body>
+</html>

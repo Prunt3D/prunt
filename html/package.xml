@@ -1,13 +1,9 @@
 <package>
 
-  <resource name='Prunt.Web_Server_Resources' format='string'>
+  <resource name='Prunt.Web_Server_Resources' format='binary'>
     <install mode='copy'>
       <fileset dir=".">
-        <include name="*.html"/>
-        <include name="*.js"/>
-        <include name="*.ts"/>
-        <include name="*.map"/>
-        <!-- *.ts and *.map included to make debugging a bit easier. -->
+        <include name="*"/>
       </fileset>
     </install>
   </resource>

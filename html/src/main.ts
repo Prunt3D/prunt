@@ -1,53 +1,74 @@
-interface SchemaBase {
+interface StatusSchema {
+  Position: string[];
+  Thermistor_Temperatures: string[];
+  Stepper_Temperatures: string[];
+  Board_Probe_Temperatures: string[];
+  Heater_Powers: string[];
+  Switch_Is_High_State: string[];
+  Tachometer_Frequencies: string[];
+}
+
+interface StatusValues {
+  Position: Record<string, number>;
+  Thermistor_Temperatures: Record<string, number>;
+  Stepper_Temperatures: Record<string, number>;
+  Board_Probe_Temperatures: Record<string, number>;
+  Heater_Powers: Record<string, number>;
+  Switch_Is_High_State: Record<string, boolean>;
+  Tachometer_Frequencies: Record<string, number>;
+  Stepgen_Is_Paused: boolean;
+}
+
+interface SettingsSchemaBase {
     Description: string;
 }
 
-interface IntegerSchema extends SchemaBase {
+interface IntegerSettingsSchema extends SettingsSchemaBase {
     Kind: "Integer";
     Min: number;
     Max: number;
     Unit: string;
 }
 
-interface FloatSchema extends SchemaBase {
+interface FloatSettingsSchema extends SettingsSchemaBase {
     Kind: "Float";
     Min: number;
     Max: number;
     Unit: string;
 }
 
-interface TabbedSequenceSchema extends SchemaBase {
+interface TabbedSequenceSettingsSchema extends SettingsSchemaBase {
     Kind: "Tabbed_Sequence";
-    Children: Record<string, SchemaEntry>;
+    Children: Record<string, SettingsSchemaEntry>;
 }
 
-interface SequenceSchema extends SchemaBase {
+interface SequenceSettingsSchema extends SettingsSchemaBase {
     Kind: "Sequence";
-    Children: Record<string, SchemaEntry>;
+    Children: Record<string, SettingsSchemaEntry>;
 }
 
-interface VariantSchema extends SchemaBase {
+interface VariantSettingsSchema extends SettingsSchemaBase {
     Kind: "Variant";
-    Children: Record<string, SchemaEntry>;
+    Children: Record<string, SettingsSchemaEntry>;
 }
 
-interface DiscreteSchema extends SchemaBase {
+interface DiscreteSettingsSchema extends SettingsSchemaBase {
     Kind: "Discrete";
     Options: string[];
 }
 
-interface BooleanSchema extends SchemaBase {
+interface BooleanSettingsSchema extends SettingsSchemaBase {
     Kind: "Boolean";
 }
 
-type SchemaEntry =
-    | IntegerSchema
-    | FloatSchema
-    | TabbedSequenceSchema
-    | SequenceSchema
-    | VariantSchema
-    | DiscreteSchema
-    | BooleanSchema;
+type SettingsSchemaEntry =
+    | IntegerSettingsSchema
+    | FloatSettingsSchema
+    | TabbedSequenceSettingsSchema
+    | SequenceSettingsSchema
+    | VariantSettingsSchema
+    | DiscreteSettingsSchema
+    | BooleanSettingsSchema;
 
 const configElements = new Map<string, HTMLElement>();
 const configErrorLabels = new Map<string, HTMLElement>();
@@ -119,7 +140,7 @@ function updateValidation(): number {
 }
 
 function buildField(
-    schema: SchemaEntry,
+    schema: SettingsSchemaEntry,
     path: string,
     container: HTMLElement,
     ownerTab: HTMLElement
@@ -173,7 +194,7 @@ function buildField(
 }
 
 function buildTabbedSequence(
-    schema: Record<string, SchemaEntry>,
+    schema: Record<string, SettingsSchemaEntry>,
     path: string,
     container: HTMLElement
 ) {
@@ -210,7 +231,7 @@ function buildTabbedSequence(
 }
 
 function buildSequence(
-    schema: Record<string, SchemaEntry>,
+    schema: Record<string, SettingsSchemaEntry>,
     path: string,
     container: HTMLElement,
     ownerTab: HTMLElement
@@ -230,7 +251,7 @@ function buildSequence(
 }
 
 function buildVariant(
-    schema: Record<string, SchemaEntry>,
+    schema: Record<string, SettingsSchemaEntry>,
     path: string,
     container: HTMLElement
 ) {
@@ -322,7 +343,7 @@ function buildDiscrete(options: string[], path: string, container: HTMLElement) 
     container.appendChild(select);
 }
 
-function buildBoolean(schema: SchemaBase, path: string, container: HTMLElement) {
+function buildBoolean(schema: SettingsSchemaBase, path: string, container: HTMLElement) {
     const input = document.createElement("input");
     input.type = "checkbox";
 
@@ -331,7 +352,7 @@ function buildBoolean(schema: SchemaBase, path: string, container: HTMLElement) 
     container.appendChild(input);
 }
 
-function buildInteger(schema: IntegerSchema, path: string, container: HTMLElement) {
+function buildInteger(schema: IntegerSettingsSchema, path: string, container: HTMLElement) {
     const input = document.createElement("input");
     input.type = "number";
     input.min = schema.Min.toString();
@@ -360,7 +381,7 @@ function buildInteger(schema: IntegerSchema, path: string, container: HTMLElemen
     container.appendChild(rangeMessage);
 }
 
-function buildFloat(schema: FloatSchema, path: string, container: HTMLElement) {
+function buildFloat(schema: FloatSettingsSchema, path: string, container: HTMLElement) {
     const input = document.createElement("input");
     input.type = "number";
     input.min = schema.Min.toString();
@@ -568,7 +589,7 @@ function runFile(): void {
     configTabContent.innerHTML = "";
 
     const schemaResponse = await fetch("./config/schema");
-    const schema: Record<string, SchemaEntry> = await schemaResponse.json();
+    const schema: Record<string, SettingsSchemaEntry> = await schemaResponse.json();
     buildTabbedSequence(schema, "", configTabContent);
 
     const valuesResponse = await fetch("./config/values");

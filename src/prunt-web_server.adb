@@ -45,6 +45,36 @@ package body Prunt.Web_Server is
       return Source'Length >= Pattern'Length and then Ada.Strings.Fixed.Head (Source, Pattern'Length) = Pattern;
    end Starts_With;
 
+   overriding procedure Read
+     (Stream : in out Array_Stream_Type; Item : out Stream_Element_Array; Last : out Stream_Element_Offset)
+   is
+   begin
+      if Stream.Position > Stream.Content'Last then
+         Stream.Done := True;
+      end if;
+
+      if Stream.Done then
+         Last := Item'First - 1;
+      else
+         for I in Item'Range loop
+            Last     := I;
+            Item (I) := Stream.Content (Stream.Position);
+
+            if Stream.Position = Stream.Content'Last then
+               Stream.Done := True;
+               exit;
+            else
+               Stream.Position := Stream.Position + 1;
+            end if;
+         end loop;
+      end if;
+   end Read;
+
+   overriding procedure Write (Stream : in out Array_Stream_Type; Item : Stream_Element_Array) is
+   begin
+      raise Constraint_Error with "Writing not supported.";
+   end Write;
+
    overriding function Get (Source : access Directory_Content) return String is
       Dir : Directory_Entry_Type;
    begin
@@ -242,14 +272,36 @@ package body Prunt.Web_Server is
                Send_Content_Type (Client, "text/html");
             elsif Ends_With (Status.File, ".js") then
                Send_Content_Type (Client, "text/javascript");
+            elsif Ends_With (Status.File, ".ico") then
+               Send_Content_Type (Client, "image/vnd.microsoft.icon");
+            elsif Ends_With (Status.File, ".ico") then
+               Send_Content_Type (Client, "image/png");
+            elsif Ends_With (Status.File, ".svg") then
+               Send_Content_Type (Client, "image/svg+xml");
+            elsif Ends_With (Status.File, ".webmanifest") then
+               Send_Content_Type (Client, "application/manifest+json");
+            elsif Ends_With (Status.File, ".xml") then
+               Send_Content_Type (Client, "text/xml");
             else
                Send_Content_Type (Client, "text/plain");
             end if;
             Send_Connection (Client, Persistent => False);
-            Send_Body
-              (Client,
-               Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File)).all,
-               Get);
+            Client.Content.Array_Stream.Content  :=
+              Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File));
+            Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
+            Client.Content.Array_Stream.Done     := False;
+            Send_Body (Client, Client.Content.Array_Stream'Access, Get);
+         elsif Status.File = "prunt-is-enabled" then
+            declare
+               Prunt_Params : My_Config.Prunt_Parameters;
+            begin
+               My_Config.Read (Prunt_Params);
+               if Prunt_Params.Enabled then
+                  Reply_JSON (Client, 200, "OK", "true", Get);
+               else
+                  Reply_JSON (Client, 200, "OK", "false", Get);
+               end if;
+            end;
          elsif Status.File = "uploads" then
             if Kind ("uploads") /= Directory then
                Reply_Text

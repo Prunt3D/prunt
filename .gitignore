@@ -2,8 +2,7 @@
 /lib/
 /alire/
 /config/
-/html/main.d.ts
-/html/main.d.ts.map
-/html/main.js
-/html/main.js.map
+/html/node_modules/
+/html/dist/bundle.js
+/html/dist/bundle.js.map
 /.dir-locals.el

@@ -21,11 +21,11 @@ gnatcoll = "^23.0.0"
 
 [[actions]]
 type = "pre-build"
-command = ["tsc", "--declaration", "--declarationMap", "--sourceMap", "--downlevelIteration", "html/main.ts"]
+command = ["sh", "-c", "cd html && npx webpack"]
 
 [[actions]]
 type = "pre-build"
-command = ["are", "--lang=Ada", "-o", "./generated_src_html", "--content-only", "--name-access", "--rule=./html/package.xml", "./html"]
+command = ["are", "--lang=Ada", "-o", "./generated_src_html", "--content-only", "--name-access", "--rule=./html/package.xml", "./html/dist"]
 
 [[depends-on]]
 simple_components = "^4.68.0"
