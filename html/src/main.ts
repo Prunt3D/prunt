@@ -1,23 +1,40 @@
+import uPlot from 'uplot';
+
 interface StatusSchema {
-  Position: string[];
-  Thermistor_Temperatures: string[];
-  Stepper_Temperatures: string[];
-  Board_Probe_Temperatures: string[];
-  Heater_Powers: string[];
-  Switch_Is_High_State: string[];
-  Tachometer_Frequencies: string[];
+    Position: string[];
+    Thermistor_Temperatures: string[];
+    Stepper_Temperatures: string[];
+    Board_Probe_Temperatures: string[];
+    Heater_Powers: string[];
+    Switch_Is_High_State: string[];
+    Tachometer_Frequencies: string[];
 }
 
 interface StatusValues {
-  Position: Record<string, number>;
-  Thermistor_Temperatures: Record<string, number>;
-  Stepper_Temperatures: Record<string, number>;
-  Board_Probe_Temperatures: Record<string, number>;
-  Heater_Powers: Record<string, number>;
-  Switch_Is_High_State: Record<string, boolean>;
-  Tachometer_Frequencies: Record<string, number>;
-  Stepgen_Is_Paused: boolean;
+    Position: Record<string, number>;
+    Thermistor_Temperatures: Record<string, number>;
+    Stepper_Temperatures: Record<string, number>;
+    Board_Probe_Temperatures: Record<string, number>;
+    Heater_Powers: Record<string, number>;
+    Switch_Is_High_State: Record<string, boolean>;
+    Tachometer_Frequencies: Record<string, number>;
+    Stepgen_Is_Paused: boolean;
 }
+
+interface WebsocketValue {
+};
+
+interface WebsocketStatusValue extends WebsocketValue {
+    Status: StatusValues;
+};
+
+interface WebsocketFatalErrorValue extends WebsocketValue {
+    Fatal_Error: String;
+};
+
+interface WebsocketLogValue extends WebsocketValue {
+    Message: String;
+};
 
 interface SettingsSchemaBase {
     Description: string;
@@ -602,4 +619,67 @@ function runFile(): void {
     configTabContent.appendChild(saveButton);
 
     refreshFiles();
+})();
+
+(function() {
+    const connectionWarning = document.getElementById("connectionWarning");
+    let websocket: WebSocket | null = null;
+    let lastMessageTime = Date.now();
+
+    function connectWebSocket() {
+        websocket = new WebSocket("/websocket/everything");
+
+        websocket.onopen = () => {
+            console.log('WebSocket connection established.');
+            lastMessageTime = Date.now();
+            connectionWarning.classList.add("hidden");
+        };
+
+        websocket.onmessage = (event) => {
+            lastMessageTime = Date.now();
+                const data: WebsocketValue = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+        };
+
+        websocket.onclose = (event) => {
+            connectionWarning.classList.remove("hidden");
+            attemptReconnect();
+        };
+
+        websocket.onerror = (error) => {
+            connectionWarning.classList.remove("hidden");
+            websocket?.close();
+        };
+    }
+
+    function handleWebSocketMessage(data: WebsocketValue) {
+        if ((data as WebsocketStatusValue).Status) {
+            console.log((data as WebsocketStatusValue).Status);
+        } else if ((data as WebsocketFatalErrorValue).Fatal_Error) {
+            console.log((data as WebsocketFatalErrorValue).Fatal_Error);
+        } else if ((data as WebsocketLogValue).Message) {
+            console.log((data as WebsocketLogValue).Message);
+        }
+    }
+
+    function attemptReconnect() {
+        if (websocket) {
+            websocket.onopen = null;
+            websocket.onmessage = null;
+            websocket.onclose = null;
+            websocket.onerror = null;
+            websocket = null;
+        }
+        setTimeout(() => connectWebSocket(), 5000);
+    }
+
+    function checkInactivity() {
+        if (Date.now() - lastMessageTime > 10000) {
+            websocket?.close();
+        }
+    }
+
+    connectWebSocket();
+
+    setInterval(checkInactivity, 5000);
 })();

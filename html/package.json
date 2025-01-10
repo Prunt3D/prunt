@@ -15,6 +15,6 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
-    "timechart": "^0.5.2"
+    "uplot": "^1.6.31"
   }
 }
