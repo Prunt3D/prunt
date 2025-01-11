@@ -159,6 +159,9 @@ package body Prunt.Web_Server is
       Send_Date (Client);
       Send_Content_Type (Client, "text/html");
       Send_Connection (Client, Persistent => False);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+      Send (Client, "Pragma: no-cache" & CRLF);
+      Send (Client, "Expires: 0" & CRLF);
       Send_Body (Client, Message, Get);
    end Reply_HTML;
 
@@ -170,6 +173,9 @@ package body Prunt.Web_Server is
       Send_Date (Client);
       Send_Content_Type (Client, "text/plain");
       Send_Connection (Client, Persistent => False);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+      Send (Client, "Pragma: no-cache" & CRLF);
+      Send (Client, "Expires: 0" & CRLF);
       Send_Body (Client, Message, Get);
    end Reply_Text;
 
@@ -181,6 +187,9 @@ package body Prunt.Web_Server is
       Send_Date (Client);
       Send_Content_Type (Client, "application/json");
       Send_Connection (Client, Persistent => False);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+      Send (Client, "Pragma: no-cache" & CRLF);
+      Send (Client, "Expires: 0" & CRLF);
       Send_Body (Client, Message, Get);
    end Reply_JSON;
 
@@ -286,6 +295,9 @@ package body Prunt.Web_Server is
                Send_Content_Type (Client, "text/plain");
             end if;
             Send_Connection (Client, Persistent => False);
+            Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+            Send (Client, "Pragma: no-cache" & CRLF);
+            Send (Client, "Expires: 0" & CRLF);
             Client.Content.Array_Stream.Content  :=
               Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File));
             Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
@@ -323,6 +335,10 @@ package body Prunt.Web_Server is
                   Send_Date (Client);
                   Send_Server (Client);
                   Send_Content_Type (Client, "application/json");
+                  Send_Connection (Client, Persistent => False);
+                  Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+                  Send (Client, "Pragma: no-cache" & CRLF);
+                  Send (Client, "Expires: 0" & CRLF);
                   Send_Body (Client, Client.Content.Uploads_Directory_Content'Access, Get);
                exception
                   when E : Ada.Directories.Use_Error =>
@@ -362,6 +378,10 @@ package body Prunt.Web_Server is
                         Send_Date (Client);
                         Send_Server (Client);
                         Send_Content_Type (Client, "text/plain");
+                        Send_Connection (Client, Persistent => False);
+                        Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+                        Send (Client, "Pragma: no-cache" & CRLF);
+                        Send (Client, "Expires: 0" & CRLF);
                         Send_Body
                           (Client,
                            Stream (Client.Content.File),
