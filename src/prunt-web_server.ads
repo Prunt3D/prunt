@@ -54,6 +54,7 @@ generic
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 
+   procedure Start;
    procedure Task_Termination_Set_Specific_Handler (Handler : Ada.Task_Termination.Termination_Handler);
 
 private
@@ -144,6 +145,7 @@ private
    end record;
 
    task Server is
+      entry Start;
       entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Log_To_WebSocket_Receivers (Message : String);

@@ -102,7 +102,7 @@
             }
 
             .uplot {
-                font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+                <!-- font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; -->
                 line-height: 1.5;
                 width: min-content;
             }
@@ -242,38 +242,44 @@
         </style>
     </head>
     <body>
-        <div id="connectionWarning" class="connection-warning hidden">
-            <h1>Connection lost. Attempting to reconnect...</h1>
-        </div>
-        <div class="tab-container" id="topTabContainer">
-            <div class="tab active" id="statusTab">Status</div>
-            <div class="tab" id="configTab">Configuration</div>
-            <div class="tab" id="consoleTab">G-Code Console</div>
-            <div class="tab" id="fileTab">Files</div>
-        </div>
-        <div class="tab-content-container" id="topTabContentContainer">
-            <div class="tab-content" id="statusTabContent">
-                <div id="statusPlot"></div>
+        <noscript>This page required JavaScript to be enabled.</noscript>
+        <div id="mainBody" class="hidden">
+            <div id="connectionWarning" class="connection-warning hidden">
+                <h1>Connection lost. Attempting to reconnect...</h1>
             </div>
-            <div class="tab-content hidden" id="configTabContent"></div>
-            <div class="tab-content hidden" id="consoleTabContent"></div>
-            <div class="tab-content hidden" id="fileTabContent">
-                <div>
-                    <h1>Upload File</h1>
-                    <input type="file" id="fileUploadInput"></input>
-                    <button id="fileUploadButton" onClick="main.uploadFile()">Upload file</button>
+            <div class="tab-container" id="topTabContainer">
+                <div class="tab active" id="statusTab">Status</div>
+                <div class="tab" id="configTab">Configuration</div>
+                <div class="tab" id="consoleTab">G-Code Console</div>
+                <div class="tab" id="fileTab">Files</div>
+                <div class="tab" id="logTab">Log</div>
+            </div>
+            <div class="tab-content-container" id="topTabContentContainer">
+                <div class="tab-content" id="statusTabContent">
+                    <div id="statusDetails"></div>
+                    <div id="statusPlot"></div>
                 </div>
-                <div>
-                    <progress id="fileUploadProgress" value="0" max="100"></progress>
-                </div>
-                <div>
-                    <h1>Run File</h1>
-                    <button id="fileRefreshButton" onClick="main.refreshFiles()">Refresh</button>
-                    <select id="fileRunInput"></select>
-                    <button id="fileRunButton" onClick="main.runFile()">Run file</button>
+                <div class="tab-content hidden" id="configTabContent"></div>
+                <div class="tab-content hidden" id="consoleTabContent"></div>
+                <div class="tab-content hidden" id="fileTabContent">
+                    <div>
+                        <h1>Upload File</h1>
+                        <input type="file" id="fileUploadInput"></input>
+                        <button id="fileUploadButton" onClick="main.uploadFile()">Upload file</button>
+                    </div>
+                    <div>
+                        <progress id="fileUploadProgress" value="0" max="100"></progress>
+                    </div>
+                    <div>
+                        <h1>Run File</h1>
+                        <button id="fileRefreshButton" onClick="main.refreshFiles()">Refresh</button>
+                        <select id="fileRunInput"></select>
+                        <button id="fileRunButton" onClick="main.runFile()">Run file</button>
+                        <button id="fileDownloadButton" onClick="main.downloadFile()">Download file</button>
+                    </div>
                 </div>
             </div>
         </div>
-        <script  src="bundle.js"></script>
+        <script src="bundle.js"></script>
     </body>
 </html>

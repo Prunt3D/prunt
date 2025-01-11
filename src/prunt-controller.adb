@@ -246,6 +246,8 @@ package body Prunt.Controller is
 
          My_Config.Validate_Initial_Config (Log_Config_Error'Access);
 
+         My_Web_Server.Start;
+
          if not Is_Config_Valid then
             My_Logger.Log ("Prunt is disabled. Config is not valid.");
             My_Config.Disable_Prunt;

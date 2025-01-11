@@ -37,7 +37,7 @@ export function refreshFiles(): void {
             });
         } else {
             response.json().then((files: string[]) => {
-                const fileRunInput = document.getElementById('fileRunInput') as HTMLSelectElement;
+                const fileRunInput = document.getElementById("fileRunInput") as HTMLSelectElement;
 
                 fileRunInput.innerHTML = "";
 
@@ -58,7 +58,7 @@ export function refreshFiles(): void {
 }
 
 export async function runFile(): Promise<void> {
-    const fileRunInput = document.getElementById('fileRunInput') as HTMLSelectElement;
+    const fileRunInput = document.getElementById("fileRunInput") as HTMLSelectElement;
     const selectedFile = fileRunInput.value;
 
     if (selectedFile == "") {
@@ -83,6 +83,26 @@ export async function runFile(): Promise<void> {
     }
 }
 
-setupStatus();
-setupSettings();
-refreshFiles();
+export async function downloadFile(): Promise<void> {
+    const fileRunInput = document.getElementById("fileRunInput") as HTMLSelectElement;
+    const selectedFile = fileRunInput.value;
+
+    if (selectedFile == "") {
+        alert("Please select a file to download.");
+        return;
+    }
+
+    const link = document.createElement("a");
+    link.href = `./uploads/${selectedFile}`;
+    link.download = selectedFile;
+    link.click();
+}
+
+const mainBody = document.getElementById("mainBody");
+Promise.all([setupStatus(), setupSettings(), refreshFiles()]).then(() => {
+    mainBody.classList.remove("hidden");
+}).catch((error) => {
+    alert("Error occurred during loading.");
+    mainBody.innerText = error + "\n\n" + error.stack;
+    mainBody.classList.remove("hidden");
+});

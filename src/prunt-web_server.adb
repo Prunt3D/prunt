@@ -307,14 +307,19 @@ package body Prunt.Web_Server is
             declare
                Prunt_Params : My_Config.Prunt_Parameters;
             begin
-               My_Config.Read (Prunt_Params);
-               if Prunt_Params.Enabled then
-                  Reply_JSON (Client, 200, "OK", "true", Get);
+               if (My_Config.Is_Ready_For_Reads) then
+                  My_Config.Read (Prunt_Params);
+                  if Prunt_Params.Enabled then
+                     Reply_JSON (Client, 200, "OK", "true", Get);
+                  else
+                     Reply_JSON (Client, 200, "OK", "false", Get);
+                  end if;
                else
                   Reply_JSON (Client, 200, "OK", "false", Get);
                end if;
             end;
-         elsif Status.File = "uploads" then
+         elsif Status.File = "uploads" or else Status.File = "uploads/" then
+            --  uploads/ is provided for users manually entering the URL.
             if Kind ("uploads") /= Directory then
                Reply_Text
                  (Client,
@@ -377,7 +382,7 @@ package body Prunt.Web_Server is
                         Send_Status_Line (Client, 200, "OK");
                         Send_Date (Client);
                         Send_Server (Client);
-                        Send_Content_Type (Client, "text/plain");
+                        Send_Content_Type (Client, "application/octet-stream");
                         Send_Connection (Client, Persistent => False);
                         Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
                         Send (Client, "Pragma: no-cache" & CRLF);
@@ -807,6 +812,11 @@ package body Prunt.Web_Server is
       end if;
    end "<";
 
+   procedure Start is
+   begin
+      Server.Start;
+   end Start;
+
    procedure Task_Termination_Set_Specific_Handler (Handler : Ada.Task_Termination.Termination_Handler) is
    begin
       Ada.Task_Termination.Set_Specific_Handler (Server'Identity, Handler);
@@ -819,8 +829,6 @@ package body Prunt.Web_Server is
            Input_Size      => Buffer_Size,
            Output_Size     => Buffer_Size,
            Max_Connections => 300);
-
-      Sockets_Server : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
 
       Next_Status_Send : Ada.Real_Time.Time := Clock;
 
@@ -852,6 +860,7 @@ package body Prunt.Web_Server is
    begin
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_Decoded, Sent => GNAT.Sockets.Server.Trace_Decoded);
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_None, Sent => GNAT.Sockets.Server.Trace_None);
+      --  TODO: Make the above only log errors instead of producing lots of noise.
 
       begin
          if not Exists ("uploads") then
@@ -865,50 +874,56 @@ package body Prunt.Web_Server is
             Fatal_Exception_Occurrence_Holder.Set (Ada.Task_Termination.Unhandled_Exception, Server'Identity, E);
       end;
 
-      Log_Handle.Set_Receiver (Logger_Receiver'Unrestricted_Access);
+      accept Start;
 
-      loop
-         select
-            accept Register_WebSocket_Receiver (Client : in out Prunt_Client) do
-               if Client.Content.Self_Access /= Client'Unrestricted_Access then
-                  raise Constraint_Error
-                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
-                  --  It seems like this never occurs, but it's better to have it in case the library changes. I would
-                  --  prefer to avoid Unrestricted_Access completely, but that is not possible with how the library is
-                  --  designed.
+      declare
+         Sockets_Server : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
+      begin
+         Log_Handle.Set_Receiver (Logger_Receiver'Unrestricted_Access);
+
+         loop
+            select
+               accept Register_WebSocket_Receiver (Client : in out Prunt_Client) do
+                  if Client.Content.Self_Access /= Client'Unrestricted_Access then
+                     raise Constraint_Error
+                       with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
+                     --  It seems like this never occurs, but it's better to have it in case the library changes. I
+                     --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
+                     --  library is designed.
+                  end if;
+
+                  WebSocket_Receivers.Insert (Client'Unrestricted_Access);
+               end Register_WebSocket_Receiver;
+            or
+               accept Remove_WebSocket_Receiver (Client : in out Prunt_Client) do
+                  if Client.Content.Self_Access /= Client'Unrestricted_Access then
+                     raise Constraint_Error
+                       with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
+                     --  It seems like this never occurs, but it's better to have it in case the library changes. I
+                     --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
+                     --  library is designed.
+                  end if;
+
+                  WebSocket_Receivers.Delete (Client'Unrestricted_Access);
+               end Remove_WebSocket_Receiver;
+            or
+               accept Log_To_WebSocket_Receivers (Message : String) do
+                  Send_To_All_WebSocket_Receivers ("{""Log"":""" & JSON_Escape (Message) & """}");
+               end Log_To_WebSocket_Receivers;
+            or
+               delay until Next_Status_Send;
+
+               Send_To_All_WebSocket_Receivers ("{""Status"":" & To_String (Build_Status_Values) & "}");
+
+               Next_Status_Send := Next_Status_Send + Seconds (1);
+               --  TODO: Change the interval to 125ms and allow the client to specify a divisor to skip some updates.
+               if Clock > Next_Status_Send then
+                  Next_Status_Send := Clock;
+                  --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
                end if;
-
-               WebSocket_Receivers.Insert (Client'Unrestricted_Access);
-            end Register_WebSocket_Receiver;
-         or
-            accept Remove_WebSocket_Receiver (Client : in out Prunt_Client) do
-               if Client.Content.Self_Access /= Client'Unrestricted_Access then
-                  raise Constraint_Error
-                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
-                  --  It seems like this never occurs, but it's better to have it in case the library changes. I would
-                  --  prefer to avoid Unrestricted_Access completely, but that is not possible with how the library is
-                  --  designed.
-               end if;
-
-               WebSocket_Receivers.Delete (Client'Unrestricted_Access);
-            end Remove_WebSocket_Receiver;
-         or
-            accept Log_To_WebSocket_Receivers (Message : String) do
-               Send_To_All_WebSocket_Receivers ("{""Log"":""" & JSON_Escape (Message) & """}");
-            end Log_To_WebSocket_Receivers;
-         or
-            delay until Next_Status_Send;
-
-            Send_To_All_WebSocket_Receivers ("{""Status"":" & To_String (Build_Status_Values) & "}");
-
-            Next_Status_Send := Next_Status_Send + Seconds (1);
-            --  TODO: Change the interval to 125ms and allow the client to specify a divisor to skip some updates.
-            if Clock > Next_Status_Send then
-               Next_Status_Send := Clock;
-               --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
-            end if;
-         end select;
-      end loop;
+            end select;
+         end loop;
+      end;
    end Server;
 
 end Prunt.Web_Server;

@@ -2312,6 +2312,11 @@ package body Prunt.Config is
          Get_Values (Values);
       end Get_Values_And_Validate;
 
+      function Is_Ready_For_Reads return Boolean is
+      begin
+         return Initial_Config_Valid;
+      end Is_Ready_For_Reads;
+
    end Config_File;
 
    procedure Disable_Prunt is
@@ -2402,5 +2407,10 @@ package body Prunt.Config is
          Config_File.Get_Values_And_Validate (Report, Values);
       end return;
    end Get_Values_And_Validate;
+
+   function Is_Ready_For_Reads return Boolean is
+   begin
+      return Config_File.Is_Ready_For_Reads;
+   end Is_Ready_For_Reads;
 
 end Prunt.Config;
