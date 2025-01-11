@@ -102,134 +102,134 @@
             }
 
             .uplot {
-	            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-	            line-height: 1.5;
-	            width: min-content;
+                font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+                line-height: 1.5;
+                width: min-content;
             }
 
             .u-title {
-	            text-align: center;
-	            font-size: 18px;
-	            font-weight: bold;
+                text-align: center;
+                font-size: 18px;
+                font-weight: bold;
             }
 
             .u-wrap {
-	            position: relative;
-	            user-select: none;
+                position: relative;
+                user-select: none;
             }
 
             .u-over,
             .u-under {
-	            position: absolute;
+                position: absolute;
             }
 
             .u-under {
-	            overflow: hidden;
+                overflow: hidden;
             }
 
             .uplot canvas {
-	            display: block;
-	            position: relative;
-	            width: 100%;
-	            height: 100%;
+                display: block;
+                position: relative;
+                width: 100%;
+                height: 100%;
             }
 
             .u-axis {
-	            position: absolute;
+                position: absolute;
             }
 
             .u-legend {
-	            font-size: 14px;
-	            margin: auto;
-	            text-align: center;
+                font-size: 14px;
+                margin: auto;
+                text-align: center;
             }
 
             .u-inline {
-	            display: block;
+                display: block;
             }
 
             .u-inline * {
-	            display: inline-block;
+                display: inline-block;
             }
 
             .u-inline tr {
-	            margin-right: 16px;
+                margin-right: 16px;
             }
 
             .u-legend th {
-	            font-weight: 600;
+                font-weight: 600;
             }
 
             .u-legend th > * {
-	            vertical-align: middle;
-	            display: inline-block;
+                vertical-align: middle;
+                display: inline-block;
             }
 
             .u-legend .u-marker {
-	            width: 1em;
-	            height: 1em;
-	            margin-right: 4px;
-	            background-clip: padding-box !important;
+                width: 1em;
+                height: 1em;
+                margin-right: 4px;
+                background-clip: padding-box !important;
             }
 
             .u-inline.u-live th::after {
-	            content: ":";
-	            vertical-align: middle;
+                content: ":";
+                vertical-align: middle;
             }
 
             .u-inline:not(.u-live) .u-value {
-	            display: none;
+                display: none;
             }
 
             .u-series > * {
-	            padding: 4px;
+                padding: 4px;
             }
 
             .u-series th {
-	            cursor: pointer;
+                cursor: pointer;
             }
 
             .u-legend .u-off > * {
-	            opacity: 0.3;
+                opacity: 0.3;
             }
 
             .u-select {
-	            background: rgba(0,0,0,0.07);
-	            position: absolute;
-	            pointer-events: none;
+                background: rgba(0,0,0,0.07);
+                position: absolute;
+                pointer-events: none;
             }
 
             .u-cursor-x,
             .u-cursor-y {
-	            position: absolute;
-	            left: 0;
-	            top: 0;
-	            pointer-events: none;
-	            will-change: transform;
+                position: absolute;
+                left: 0;
+                top: 0;
+                pointer-events: none;
+                will-change: transform;
             }
 
             .u-hz .u-cursor-x,
             .u-vt .u-cursor-y {
-	            height: 100%;
-	            border-right: 1px dashed #607D8B;
+                height: 100%;
+                border-right: 1px dashed #607D8B;
             }
 
             .u-hz .u-cursor-y,
             .u-vt .u-cursor-x {
-	            width: 100%;
-	            border-bottom: 1px dashed #607D8B;
+                width: 100%;
+                border-bottom: 1px dashed #607D8B;
             }
 
             .u-cursor-pt {
-	            position: absolute;
-	            top: 0;
-	            left: 0;
-	            border-radius: 50%;
-	            border: 0 solid;
-	            pointer-events: none;
-	            will-change: transform;
-	            /* this has to be !important since we set inline "background" shorthand */
-	            background-clip: padding-box !important;
+                position: absolute;
+                top: 0;
+                left: 0;
+                border-radius: 50%;
+                border: 0 solid;
+                pointer-events: none;
+                will-change: transform;
+                /* this has to be !important since we set inline "background" shorthand */
+                background-clip: padding-box !important;
             }
 
             .u-axis.u-off,
@@ -237,7 +237,7 @@
             .u-cursor-x.u-off,
             .u-cursor-y.u-off,
             .u-cursor-pt.u-off {
-	            display: none;
+                display: none;
             }
         </style>
     </head>
@@ -252,23 +252,28 @@
             <div class="tab" id="fileTab">Files</div>
         </div>
         <div class="tab-content-container" id="topTabContentContainer">
-            <div class="tab-content" id="statusTabContent"></div>
+            <div class="tab-content" id="statusTabContent">
+                <div id="statusPlot"></div>
+            </div>
             <div class="tab-content hidden" id="configTabContent"></div>
             <div class="tab-content hidden" id="consoleTabContent"></div>
             <div class="tab-content hidden" id="fileTabContent">
                 <div>
                     <h1>Upload File</h1>
                     <input type="file" id="fileUploadInput"></input>
-                    <button id="fileUploadButton" onClick="uploadFile()">Upload file</button>
+                    <button id="fileUploadButton" onClick="main.uploadFile()">Upload file</button>
+                </div>
+                <div>
+                    <progress id="fileUploadProgress" value="0" max="100"></progress>
                 </div>
                 <div>
                     <h1>Run File</h1>
-                    <button id="fileRefreshButton" onClick="refreshFiles()">Refresh</button>
+                    <button id="fileRefreshButton" onClick="main.refreshFiles()">Refresh</button>
                     <select id="fileRunInput"></select>
-                    <button id="fileRunButton" onClick="runFile()">Run file</button>
+                    <button id="fileRunButton" onClick="main.runFile()">Run file</button>
                 </div>
             </div>
         </div>
-        <script src="bundle.js"></script>
+        <script  src="bundle.js"></script>
     </body>
 </html>

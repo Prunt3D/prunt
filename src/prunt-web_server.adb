@@ -674,6 +674,8 @@ package body Prunt.Web_Server is
          end;
       end if;
 
+      Append (Result, """Time"":" & Clock'Image & ",");
+
       Append (Result, """Position"":{");
       for A in Axis_Name loop
          Append (Result, """" & Trim (A'Image) & """:" & Pos (A)'Image);
@@ -900,6 +902,7 @@ package body Prunt.Web_Server is
             Send_To_All_WebSocket_Receivers ("{""Status"":" & To_String (Build_Status_Values) & "}");
 
             Next_Status_Send := Next_Status_Send + Seconds (1);
+            --  TODO: Change the interval to 125ms and allow the client to specify a divisor to skip some updates.
             if Clock > Next_Status_Send then
                Next_Status_Send := Clock;
                --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
