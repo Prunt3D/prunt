@@ -34,7 +34,7 @@ interface WebsocketFatalErrorValue extends WebsocketValue {
 };
 
 interface WebsocketLogValue extends WebsocketValue {
-    Message: String;
+    Log: String;
 };
 
 let plotData: number[][];
@@ -77,8 +77,8 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
 
     let opts: uPlot.Options = {
         title: "Temperatures and Heater Powers",
-        width: 1000,
-        height: 800,
+        width: Math.max(300, Math.min(600, document.documentElement.clientWidth - 35)),
+        height: 300,
         cursor: {
             drag: {
                 setScale: false,
@@ -163,6 +163,7 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
 }
 
 export async function setupStatus(): Promise<void> {
+    const messageLog = document.getElementById("messageLog") as HTMLDivElement;
     const connectionWarning = document.getElementById("connectionWarning");
     const statusDetails = document.getElementById("statusDetails");
     let websocket: WebSocket | null = null;
@@ -171,7 +172,7 @@ export async function setupStatus(): Promise<void> {
     if (await (await fetch("./prunt-is-enabled")).json() === false) {
         connectionWarning.innerHTML = "<h1>Prunt is disabled. Configure in configuration tab and restart.</h1>";
         connectionWarning.classList.remove("hidden");
-        return;
+        // return;
     }
 
     const schemaResponse = await fetch("./status/schema");
@@ -208,9 +209,9 @@ export async function setupStatus(): Promise<void> {
 
             statusDetails.innerText =
                 (status.Stepgen_Is_Paused ? "MACHINE IS PAUSED\n\n" : "") +
-                "Position:\n" + Object.entries(status.Position).map((i, v) => i + ": " + v) +
-                "\n\nSwitch states:\n" + Object.entries(status.Switch_Is_High_State).map((i, v) => i + ": " + (v ? "High" : "Low")) +
-                "Tachometers:\n" + Object.entries(status.Tachometer_Frequencies).map((i, v) => i + ": " + v + " Hz");
+                "Position:\n" + Object.entries(status.Position).map(([i, v], _) => `${i}: ${v}`).join("\n") +
+                "\n\nSwitch states:\n" + Object.entries(status.Switch_Is_High_State).map(([i, v], _) => `${i}: ${v ? "High" : "Low"}`).join("\n") +
+                "\n\nTachometers:\n" + Object.entries(status.Tachometer_Frequencies).map(([i, v], _) => `${i}: ${v} Hz`).join("\n");
 
             plotData[0].push(status.Time);
 
@@ -240,9 +241,16 @@ export async function setupStatus(): Promise<void> {
 
             plot.setData(plotData as uPlot.AlignedData);
         } else if ((data as WebsocketFatalErrorValue).Fatal_Error) {
-            console.log((data as WebsocketFatalErrorValue).Fatal_Error);
-        } else if ((data as WebsocketLogValue).Message) {
-            console.log((data as WebsocketLogValue).Message);
+            const newText = `Fatal error:\n${(data as WebsocketFatalErrorValue).Fatal_Error}`;
+            if (connectionWarning.innerText != newText) {
+                connectionWarning.innerText = newText;
+            }
+            connectionWarning.classList.remove("hidden");
+        } else if ((data as WebsocketLogValue).Log) {
+            const entry = document.createElement("p");
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${(data as WebsocketLogValue).Log}`;
+            messageLog.appendChild(entry);
+            messageLog.scrollTop = messageLog.scrollHeight;
         }
     }
 

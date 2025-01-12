@@ -133,6 +133,23 @@ export async function runCommand(): Promise<void> {
     commandLog.scrollTop = commandLog.scrollHeight;
 }
 
+const topTabContainer = document.getElementById("topTabContainer") as HTMLElement;
+const topTabContentContainer = document.getElementById("topTabContentContainer") as HTMLElement;
+
+const tabs = ["status", "config", "console", "file", "log"];
+for (const name of tabs) {
+    const tab = document.getElementById(`${name}Tab`) as HTMLElement;
+    const tabContent = document.getElementById(`${name}TabContent`) as HTMLElement;
+
+    tab.addEventListener("click", () => {
+        topTabContainer.querySelectorAll(":scope > .tab").forEach(t => t.classList.remove("active"));
+        topTabContentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
+
+        tab.classList.add("active");
+        tabContent.classList.remove("hidden");
+    });
+}
+
 const mainBody = document.getElementById("mainBody");
 Promise.all([setupStatus(), setupSettings(), refreshFiles()]).then(() => {
     mainBody.classList.remove("hidden");

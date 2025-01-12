@@ -476,23 +476,6 @@ function updateValues(values: { Values: Record<string, any>; Errors: { Key: stri
 }
 
 export async function setupSettings(): Promise<void> {
-    const topTabContainer = document.getElementById("topTabContainer") as HTMLElement;
-    const topTabContentContainer = document.getElementById("topTabContentContainer") as HTMLElement;
-
-    const tabs = ["status", "config", "console", "file"];
-    for (const name of tabs) {
-        const tab = document.getElementById(`${name}Tab`) as HTMLElement;
-        const tabContent = document.getElementById(`${name}TabContent`) as HTMLElement;
-
-        tab.addEventListener("click", () => {
-            topTabContainer.querySelectorAll(":scope > .tab").forEach(t => t.classList.remove("active"));
-            topTabContentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
-
-            tab.classList.add("active");
-            tabContent.classList.remove("hidden");
-        });
-    }
-
     const configTabContent = document.getElementById("configTabContent") as HTMLElement;
     configTabContent.innerHTML = "";
 
