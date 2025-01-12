@@ -480,6 +480,22 @@ package body Prunt.Web_Server is
                   end if;
                end;
             end if;
+         elsif Status.File = "run-command" then
+            declare
+               Succeeded : Boolean;
+            begin
+               Submit_Gcode_Command (Post_Bodies.To_String (Client.Content.Post_Content.Content), Succeeded);
+               if Succeeded then
+                  Reply_Text (Client, 204, "No Content", "", True);
+               else
+                  Reply_Text
+                    (Client,
+                     500,
+                     "Internal Server Error",
+                     "Can not run command while another command or file is running.",
+                     True);
+               end if;
+            end;
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", True);
          end if;

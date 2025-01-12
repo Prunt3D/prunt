@@ -98,6 +98,41 @@ export async function downloadFile(): Promise<void> {
     link.click();
 }
 
+export async function runCommand(): Promise<void> {
+    const commandLog = document.getElementById("commandLog") as HTMLDivElement;
+    const commandRunInput = document.getElementById("commandRunInput") as HTMLInputElement;
+    const command = commandRunInput.value;
+    const timestamp = new Date().toLocaleTimeString();
+
+    if (command == "") {
+        alert("Please enter a command to run.");
+        return;
+    }
+
+    const response = await fetch("./run-command", {
+        method: "POST",
+        headers: {
+            "Content-Type": "text/plain",
+        },
+        body: command
+    });
+
+    const entry = document.createElement("p");
+
+    if (response.ok) {
+        entry.textContent = `${timestamp}: Enqueued command: ${command}`;
+        commandRunInput.value = "";
+    } else {
+        entry.textContent = `${timestamp}: Failed to enqueue command: ${command}`;
+        response.text().then((error) => {
+            alert(`Failed to run command:\n${response.statusText}\n${error}`);
+        });
+    }
+
+    commandLog.appendChild(entry);
+    commandLog.scrollTop = commandLog.scrollHeight;
+}
+
 const mainBody = document.getElementById("mainBody");
 Promise.all([setupStatus(), setupSettings(), refreshFiles()]).then(() => {
     mainBody.classList.remove("hidden");

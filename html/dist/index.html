@@ -2,6 +2,7 @@
 <html lang="en">
     <head>
         <title>Prunt Motion Controller</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta http-equiv="Pragma" content="no-cache" />
         <meta http-equiv="Expires" content="0" />
@@ -15,6 +16,13 @@
         <meta name="msapplication-TileColor" content="#da532c">
         <meta name="theme-color" content="#ffffff">
         <style>
+            .command-log {
+                height: 500px;
+                border: 1px solid #000000;
+                overflow-y: auto;
+                padding: 10px;
+            }
+
             .tab-container {
                 display: flex; margin-bottom: 0px;
             }
@@ -260,7 +268,13 @@
                     <div id="statusPlot"></div>
                 </div>
                 <div class="tab-content hidden" id="configTabContent"></div>
-                <div class="tab-content hidden" id="consoleTabContent"></div>
+                <div class="tab-content hidden" id="consoleTabContent">
+                    <div id="commandLog" class="command-log"></div>
+                    <div>
+                        <input id="commandRunInput" type="text" onkeydown="if (event.key == 'Enter') {main.runCommand()}"></input>
+                        <button id="commandRunButton" onClick="main.runCommand()">Run command</button>
+                    </div>
+                </div>
                 <div class="tab-content hidden" id="fileTabContent">
                     <div>
                         <h1>Upload File</h1>
