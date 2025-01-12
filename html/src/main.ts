@@ -150,6 +150,34 @@ for (const name of tabs) {
     });
 }
 
+export async function pauseStepgen(): Promise<void> {
+    await fetch("./pause/pause", {
+        method: "POST"
+    }).then((response) => {
+        if (!response.ok) {
+            response.text().then((error) => {
+                alert(`Failed to pause:\n${response.statusText}\n${error}`);
+            });
+        }
+    }).catch((error) => {
+        alert(`Failed to pause:\n${error}\n${error.stack}`);
+    });
+}
+
+export async function resumeStepgen(): Promise<void> {
+    await fetch("./pause/resume", {
+        method: "POST"
+    }).then((response) => {
+        if (!response.ok) {
+            response.text().then((error) => {
+                alert(`Failed to resume:\n${response.statusText}\n${error}`);
+            });
+        }
+    }).catch((error) => {
+        alert(`Failed to resume:\n${error}\n${error.stack}`);
+    });
+}
+
 const mainBody = document.getElementById("mainBody");
 Promise.all([setupStatus(), setupSettings(), refreshFiles()]).then(() => {
     mainBody.classList.remove("hidden");
