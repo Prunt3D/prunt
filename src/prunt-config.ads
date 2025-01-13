@@ -153,7 +153,7 @@ package Prunt.Config is
    procedure Validate_Current_Config (Report : access procedure (Key, Message : String));
    function Get_Schema return Ada.Strings.Unbounded.Unbounded_String;
    function Get_Values return Ada.Strings.Unbounded.Unbounded_String;
-   function Is_Ready_For_Reads return Boolean;
+   function Prunt_Is_Enabled return Boolean;
 
    function Get_Values_And_Validate
      (Report : access procedure (Key, Message : String)) return Ada.Strings.Unbounded.Unbounded_String;
@@ -255,7 +255,7 @@ private
       procedure Get_Values (Values : out Ada.Strings.Unbounded.Unbounded_String);
       procedure Get_Values_And_Validate
         (Report : access procedure (Key, Message : String); Values : out Ada.Strings.Unbounded.Unbounded_String);
-      function Is_Ready_For_Reads return Boolean;
+      procedure Prunt_Is_Enabled (Result : out Boolean);
    private
       procedure Error_If_Initial_Config_Invalid;
       procedure Validate_Config (Config : JSON_Value; Report : access procedure (Key, Message : String));

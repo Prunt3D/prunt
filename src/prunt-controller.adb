@@ -243,10 +243,9 @@ package body Prunt.Controller is
          Ada.Task_Termination.Set_Specific_Handler
            (GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
+         --  TODO: The above should occur before this procedure is called.
 
          My_Config.Validate_Initial_Config (Log_Config_Error'Access);
-
-         My_Web_Server.Start;
 
          if not Is_Config_Valid then
             My_Logger.Log ("Prunt is disabled. Config is not valid.");
@@ -300,6 +299,8 @@ package body Prunt.Controller is
             Fatal_Exception_Occurrence_Holder.all.Set
               (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
       end;
+
+      My_Web_Server.Notify_Startup_Done;
 
       declare
          Fatal_Exception : Ada.Exceptions.Exception_Occurrence;

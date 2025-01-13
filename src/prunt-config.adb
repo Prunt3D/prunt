@@ -2312,10 +2312,11 @@ package body Prunt.Config is
          Get_Values (Values);
       end Get_Values_And_Validate;
 
-      function Is_Ready_For_Reads return Boolean is
+      procedure Prunt_Is_Enabled (Result : out Boolean) is
       begin
-         return Initial_Config_Valid;
-      end Is_Ready_For_Reads;
+         Maybe_Do_Init;
+         Result := Get (Initial_Properties, "Prunt$Enabled");
+      end Prunt_Is_Enabled;
 
    end Config_File;
 
@@ -2408,9 +2409,11 @@ package body Prunt.Config is
       end return;
    end Get_Values_And_Validate;
 
-   function Is_Ready_For_Reads return Boolean is
+   function Prunt_Is_Enabled return Boolean is
    begin
-      return Config_File.Is_Ready_For_Reads;
-   end Is_Ready_For_Reads;
+      return Result : Boolean do
+         Config_File.Prunt_Is_Enabled (Result);
+      end return;
+   end Prunt_Is_Enabled;
 
 end Prunt.Config;

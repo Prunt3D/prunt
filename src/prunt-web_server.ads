@@ -54,10 +54,25 @@ generic
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 
-   procedure Start;
+   procedure Wait_For_User_To_Allow_Update;
+   procedure Notify_Startup_Done;
    procedure Task_Termination_Set_Specific_Handler (Handler : Ada.Task_Termination.Termination_Handler);
 
 private
+
+   protected Startup_Manager is
+      entry Wait_For_Update_Allowed;
+      procedure Set_Update_Required;
+      function Get_Update_Required return Boolean;
+      procedure Set_Startup_Done;
+      function Get_Startup_Done return Boolean;
+      procedure Set_Update_Allowed;
+      function Get_Update_Allowed return Boolean;
+   private
+      Update_Required : Boolean := False;
+      Update_Allowed  : Boolean := False;
+      Startup_Done    : Boolean := False;
+   end Startup_Manager;
 
    Buffer_Size : constant := 50_000;
 
@@ -145,7 +160,6 @@ private
    end record;
 
    task Server is
-      entry Start;
       entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Log_To_WebSocket_Receivers (Message : String);
