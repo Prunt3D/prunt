@@ -210,6 +210,28 @@ async function setupPruntDisabledWarning(): Promise<void> {
     }
 }
 
+export async function allowFirmwareUpdate(): Promise<void> {
+    const firmwareUpdateDialog = document.getElementById("firmwareUpdateDialog") as HTMLDialogElement;
+
+    await fetch("./allow-firmware-update", {
+        method: "POST"
+    }).then((response) => {
+        if (!response.ok) {
+            response.text().then((error) => {
+                const message = `Failed to allow firmware update:\n${response.statusText}\n${error}`;
+                console.error(message);
+                alert(message);
+            });
+        } else {
+            firmwareUpdateDialog.close();
+        }
+    }).catch((error) => {
+        const message = `Failed to allow firmware update:\n${error}\n${error.stack}`;
+        console.error(message);
+        alert(message);
+    });
+}
+
 const mainBody = document.getElementById("mainBody");
 Promise.all([setupStatus(), setupSettings(), refreshFiles(), setupPruntDisabledWarning()]).then(() => {
     mainBody.classList.remove("hidden");

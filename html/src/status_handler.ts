@@ -171,12 +171,15 @@ export async function setupStatus(): Promise<void> {
     const messageLog = document.getElementById("messageLog") as HTMLDivElement;
     const logTab = document.getElementById("logTab");
     const webSocketConnectionWarning = document.getElementById("webSocketConnectionWarning");
+    const boardConnectionWarning = document.getElementById("boardConnectionWarning");
+    const firmwareUpdateDialog = document.getElementById("firmwareUpdateDialog") as HTMLDialogElement;
     const fatalErrorWarning = document.getElementById("fatalErrorWarning");
     const fatalErrorWarningText = document.getElementById("fatalErrorWarningText");
     const statusDetails = document.getElementById("statusDetails");
     let websocket: WebSocket | null = null;
     let lastMessageTime = Date.now();
     let serverStartTime: string | null = null;
+    let updatePromptAlreadyShown = false;
 
     const schemaResponse = await fetch("./status/schema");
 
@@ -217,6 +220,23 @@ export async function setupStatus(): Promise<void> {
     function handleWebSocketMessage(data: WebsocketValue) {
         if ((data as WebsocketStatusValue).Status) {
             const status = (data as WebsocketStatusValue).Status;
+
+            switch (status.Startup) {
+                case "Done":
+                    boardConnectionWarning.classList.add("hidden");
+                    break;
+                case "Waiting":
+                case "Update running":
+                    boardConnectionWarning.classList.remove("hidden");
+                    break;
+                case "Update required":
+                    boardConnectionWarning.classList.remove("hidden");
+                    if (!updatePromptAlreadyShown) {
+                        firmwareUpdateDialog.showModal();
+                        updatePromptAlreadyShown = true;
+                    }
+                    break;
+            }
 
             statusDetails.innerText =
                 (status.Stepgen_Is_Paused ? "MACHINE IS PAUSED\n\n" : "") +
