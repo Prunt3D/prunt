@@ -153,6 +153,15 @@ package body Prunt.Web_Server is
       Finalize (Content_Source (Source));
    end Finalize;
 
+   overriding function Get (Source : access Unbounded_String_Source) return String is
+      New_Next_Start : Positive :=
+        Positive'Min (Source.Next_Start + Buffer_Size - 100, Ada.Strings.Unbounded.Length (Source.Content) + 1);
+      Result         : String   := Slice (Source.Content, Source.Next_Start, New_Next_Start - 1);
+   begin
+      Source.Next_Start := New_Next_Start;
+      return Result;
+   end Get;
+
    overriding procedure Initialize (Client : in out Prunt_Client) is
    begin
       Initialize (HTTP_Client (Client));
@@ -241,6 +250,28 @@ package body Prunt.Web_Server is
       Send_Body (Client, Message, Get);
    end Reply_JSON;
 
+   procedure Reply_JSON
+     (Client  : in out Prunt_Client;
+      Code    :        Positive;
+      Reason  :        String;
+      Message :        Unbounded_String;
+      Get     :        Boolean := True)
+   is
+   begin
+      Send_Status_Line (Client, Code, Reason);
+      Send_Date (Client);
+      Send_Content_Type (Client, "application/json");
+      Send_Connection (Client, Persistent => False);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+      Send (Client, "Pragma: no-cache" & CRLF);
+      Send (Client, "Expires: 0" & CRLF);
+
+      Client.Content.Big_String_Content.Content    := Message;
+      Client.Content.Big_String_Content.Next_Start := 1;
+
+      Send_Body (Client, Client.Content.Big_String_Content'Access, Get);
+   end Reply_JSON;
+
    overriding procedure Body_Error
      (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence)
    is
@@ -315,13 +346,13 @@ package body Prunt.Web_Server is
       --  should we handle it as if the target was "/"?
       if Status.Kind = File then
          if Status.File = "config/schema" then
-            Reply_JSON (Client, 200, "OK", To_String (My_Config.Get_Schema), Get);
+            Reply_JSON (Client, 200, "OK", My_Config.Get_Schema, Get);
          elsif Status.File = "config/values" then
-            Reply_JSON (Client, 200, "OK", To_String (Patch_Config_Values ("{}")), Get);
+            Reply_JSON (Client, 200, "OK", Patch_Config_Values ("{}"), Get);
          elsif Status.File = "status/schema" then
-            Reply_JSON (Client, 200, "OK", To_String (Build_Status_Schema), Get);
+            Reply_JSON (Client, 200, "OK", Build_Status_Schema, Get);
          elsif Status.File = "status/values" then
-            Reply_JSON (Client, 200, "OK", To_String (Build_Status_Values), Get);
+            Reply_JSON (Client, 200, "OK", Build_Status_Values, Get);
          elsif Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File)) /= null then
             Send_Status_Line (Client, 200, "OK");
             Send_Date (Client);
@@ -489,7 +520,7 @@ package body Prunt.Web_Server is
               (Client,
                200,
                "OK",
-               To_String (Patch_Config_Values (Post_Bodies.To_String (Client.Content.Post_Content.Content))),
+               Patch_Config_Values (Post_Bodies.To_String (Client.Content.Post_Content.Content)),
                True);
          elsif Status.File = "run-file" then
             if Kind ("uploads") /= Directory then
@@ -878,6 +909,10 @@ package body Prunt.Web_Server is
          Close (Client.Content.File);
       end if;
 
+      Client.Content.Big_String_Content.Content := Null_Unbounded_String;
+      Client.Content.Post_Content.Content       := Post_Bodies.Null_Bounded_String;
+      End_Search (Client.Content.Uploads_Directory_Content.Search);
+
       Finalize (HTTP_Client (Client));
    end Finalize;
 
@@ -965,7 +1000,7 @@ package body Prunt.Web_Server is
             accept Register_WebSocket_Receiver (Client : in out Prunt_Client) do
                if Client.Content.Self_Access /= Client'Unrestricted_Access then
                   raise Constraint_Error
-                     with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
+                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
                   --  It seems like this never occurs, but it's better to have it in case the library changes. I
                   --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
                   --  library is designed.

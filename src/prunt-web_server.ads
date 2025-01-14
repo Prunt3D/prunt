@@ -74,9 +74,10 @@ private
       Startup_Done    : Boolean := False;
    end Startup_Manager;
 
-   Buffer_Size : constant := 50_000;
+   Buffer_Size      : constant := 5_000;
+   Post_Buffer_Size : constant := 100_000;
 
-   package Post_Bodies is new Ada.Strings.Bounded.Generic_Bounded_Length (Buffer_Size);
+   package Post_Bodies is new Ada.Strings.Bounded.Generic_Bounded_Length (Post_Buffer_Size);
 
    type Post_Body_Destination is new Content_Destination with record
       Content : Post_Bodies.Bounded_String := Post_Bodies.Null_Bounded_String;
@@ -85,6 +86,15 @@ private
 
    overriding procedure Commit (Destination : in out Post_Body_Destination);
    overriding procedure Put (Destination : in out Post_Body_Destination; Data : String);
+
+   type Unbounded_String_Source is new Content_Source with record
+      Content    : Unbounded_String;
+      Next_Start : Positive := 1;
+      --  Using the Slice function to replace the Unbounded_String would be a bit cleaner here, but the GCC Slice
+      --  implementation copies the entire string in to a new allocation, so we do this instead to avoid some copies.
+   end record;
+
+   overriding function Get (Source : access Unbounded_String_Source) return String;
 
    type Array_Stream_Type is new Root_Stream_Type with record
       Content  : Web_Server_Resources.Content_Access;
@@ -131,6 +141,8 @@ private
       Self_Access               : Prunt_Client_Access  := null;
       --  Embedded file GET requests:
       Array_Stream              : aliased Array_Stream_Type;
+      --  Unbounded_String GET requests:
+      Big_String_Content        : aliased Unbounded_String_Source;
       --  POST requests:
       Post_Content              : aliased Post_Body_Destination;
       --  File GET and PUT requests:
@@ -181,7 +193,13 @@ private
 
    procedure Reply_JSON
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
-   --  TODO: Take an Unbounded_String here to avoid some copies.
+
+   procedure Reply_JSON
+     (Client  : in out Prunt_Client;
+      Code    :        Positive;
+      Reason  :        String;
+      Message :        Unbounded_String;
+      Get     :        Boolean := True);
 
    overriding procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class);
    overriding procedure Body_Sent
