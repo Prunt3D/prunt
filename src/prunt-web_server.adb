@@ -571,7 +571,7 @@ package body Prunt.Web_Server is
                      True);
                end if;
             end;
-         elsif Status.File = "allow-update" then
+         elsif Status.File = "allow-firmware-update" then
             Startup_Manager.Set_Update_Allowed;
             Reply_Text (Client, 204, "No Content", "", True);
          else
@@ -755,17 +755,7 @@ package body Prunt.Web_Server is
             Append (Result, ",");
          end if;
       end loop;
-      Append (Result, "],");
-
-      if Startup_Manager.Get_Startup_Done then
-         Append (Result, """Startup"":""Done""");
-      elsif Startup_Manager.Get_Update_Allowed then
-         Append (Result, """Startup"":""Update running""");
-      elsif Startup_Manager.Get_Update_Required then
-         Append (Result, """Startup"":""Update required""");
-      else
-         Append (Result, """Startup"":""Waiting""");
-      end if;
+      Append (Result, "]");
 
       Append (Result, "}");
 
@@ -773,7 +763,7 @@ package body Prunt.Web_Server is
    end Build_Status_Schema;
 
    function Build_Status_Values return Unbounded_String is
-      Result : Unbounded_String := To_Unbounded_String ("{");
+      Result : Unbounded_String := To_Unbounded_String ("{""Status"":{");
       Pos    : Position         := Get_Position;
 
       use type My_Config.Thermistor_Name;
@@ -788,7 +778,7 @@ package body Prunt.Web_Server is
          begin
             Fatal_Exception_Occurrence_Holder.Get (Occurrence);
             return
-              To_Unbounded_String ("{""Fatal_Exception"":""") &
+              To_Unbounded_String ("{""Fatal_Error"":""") &
               JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence)) & """}";
          end;
       end if;
@@ -860,9 +850,19 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "},");
 
-      Append (Result, """Stepgen_Is_Paused"":" & (if Is_Stepgen_Paused then "true" else "false"));
+      Append (Result, """Stepgen_Is_Paused"":" & (if Is_Stepgen_Paused then "true," else "false,"));
 
-      Append (Result, "}");
+      if Startup_Manager.Get_Startup_Done then
+         Append (Result, """Startup"":""Done""");
+      elsif Startup_Manager.Get_Update_Allowed then
+         Append (Result, """Startup"":""Update running""");
+      elsif Startup_Manager.Get_Update_Required then
+         Append (Result, """Startup"":""Update required""");
+      else
+         Append (Result, """Startup"":""Waiting""");
+      end if;
+
+      Append (Result, "}}");
 
       return Result;
    end Build_Status_Values;
@@ -1030,7 +1030,7 @@ package body Prunt.Web_Server is
          or
             delay until Next_Status_Send;
 
-            Send_To_All_WebSocket_Receivers ("{""Status"":" & To_String (Build_Status_Values) & "}");
+            Send_To_All_WebSocket_Receivers (To_String (Build_Status_Values));
 
             Next_Status_Send := Next_Status_Send + Seconds (1);
             --  TODO: Change the interval to 125ms and allow the client to specify a divisor to skip some updates.
