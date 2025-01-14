@@ -291,8 +291,4 @@ private
       entry Start;
    end TMC_Temperature_Updater;
 
-   task GUI_Runner is
-      entry Finish;
-   end GUI_Runner;
-
 end Prunt.Controller;

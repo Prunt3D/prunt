@@ -206,18 +206,9 @@ package body Prunt.Controller is
       end loop;
    end TMC_Temperature_Updater;
 
-   task body GUI_Runner is
-   begin
-      --  My_GUI.Run;
-      delay 100.0;
-      accept Finish;
-   end GUI_Runner;
-
    procedure Prompt_For_Update is
    begin
-      --  My_GUI.Show_Update_Button;
-      --  My_GUI.Block_Until_Update_Allowed;
-      null;
+      My_Web_Server.Wait_For_User_To_Allow_Update;
    end Prompt_For_Update;
 
    procedure Run is
@@ -240,8 +231,6 @@ package body Prunt.Controller is
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
            (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         Ada.Task_Termination.Set_Specific_Handler
-           (GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
          --  TODO: The above should occur before this procedure is called.
 
@@ -315,7 +304,6 @@ package body Prunt.Controller is
             if Prunt_Enabled then
                TMC_Temperature_Updater.Start;
             end if;
-            GUI_Runner.Finish;
             My_Step_Generator.Pause;
             My_Step_Generator.Runner.Finish;
          end select;
