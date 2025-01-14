@@ -20,6 +20,7 @@ interface StatusValues {
     Switch_Is_High_State: Record<string, boolean>;
     Tachometer_Frequencies: Record<string, number>;
     Stepgen_Is_Paused: boolean;
+    Startup: "Done" | "Update running" | "Update required" | "Waiting";
 }
 
 interface WebsocketValue {
@@ -30,11 +31,15 @@ interface WebsocketStatusValue extends WebsocketValue {
 };
 
 interface WebsocketFatalErrorValue extends WebsocketValue {
-    Fatal_Error: String;
+    Fatal_Error: string;
 };
 
 interface WebsocketLogValue extends WebsocketValue {
-    Log: String;
+    Log: string;
+};
+
+interface WebsocketServerStartTimeValue extends WebsocketValue {
+    Server_Start_Time: string;
 };
 
 let plotData: number[][];
@@ -164,18 +169,23 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
 
 export async function setupStatus(): Promise<void> {
     const messageLog = document.getElementById("messageLog") as HTMLDivElement;
-    const connectionWarning = document.getElementById("connectionWarning");
+    const logTab = document.getElementById("logTab");
+    const webSocketConnectionWarning = document.getElementById("webSocketConnectionWarning");
+    const fatalErrorWarning = document.getElementById("fatalErrorWarning");
+    const fatalErrorWarningText = document.getElementById("fatalErrorWarningText");
     const statusDetails = document.getElementById("statusDetails");
     let websocket: WebSocket | null = null;
     let lastMessageTime = Date.now();
-
-    if (await (await fetch("./prunt-is-enabled")).json() === false) {
-        connectionWarning.innerHTML = "<h1>Prunt is disabled. Configure in configuration tab and restart.</h1>";
-        connectionWarning.classList.remove("hidden");
-        // return;
-    }
+    let serverStartTime: string | null = null;
 
     const schemaResponse = await fetch("./status/schema");
+
+    if (!schemaResponse.ok) {
+        const message = `Failed to load status schema:\n${schemaResponse.statusText}\n${await schemaResponse.text()}`;
+        console.error(message);
+        throw new Error(message);
+    }
+
     const schema: StatusSchema = await schemaResponse.json();
 
     function connectWebSocket() {
@@ -183,22 +193,23 @@ export async function setupStatus(): Promise<void> {
 
         websocket.onopen = () => {
             lastMessageTime = Date.now();
-            connectionWarning.classList.add("hidden");
+            webSocketConnectionWarning.classList.add("hidden");
         };
 
         websocket.onmessage = (event) => {
             lastMessageTime = Date.now();
             const data: WebsocketValue = JSON.parse(event.data);
+            // TODO: Error handling for bad JSON.
             handleWebSocketMessage(data);
         };
 
         websocket.onclose = (event) => {
-            connectionWarning.classList.remove("hidden");
+            webSocketConnectionWarning.classList.remove("hidden");
             attemptReconnect();
         };
 
         websocket.onerror = (error) => {
-            connectionWarning.classList.remove("hidden");
+            webSocketConnectionWarning.classList.remove("hidden");
             websocket?.close();
         };
     }
@@ -241,16 +252,26 @@ export async function setupStatus(): Promise<void> {
 
             plot.setData(plotData as uPlot.AlignedData);
         } else if ((data as WebsocketFatalErrorValue).Fatal_Error) {
-            const newText = `Fatal error:\n${(data as WebsocketFatalErrorValue).Fatal_Error}`;
-            if (connectionWarning.innerText != newText) {
-                connectionWarning.innerText = newText;
+            if (fatalErrorWarningText.innerText == "") {
+                fatalErrorWarningText.innerText = (data as WebsocketFatalErrorValue).Fatal_Error;
             }
-            connectionWarning.classList.remove("hidden");
+            fatalErrorWarning.classList.remove("hidden");
         } else if ((data as WebsocketLogValue).Log) {
             const entry = document.createElement("p");
-            entry.textContent = `${new Date().toLocaleTimeString()}: ${(data as WebsocketLogValue).Log}`;
+            entry.innerText = `${new Date().toLocaleTimeString()}: ${(data as WebsocketLogValue).Log}`;
             messageLog.appendChild(entry);
             messageLog.scrollTop = messageLog.scrollHeight;
+            if (!logTab.classList.contains("active")) {
+                logTab.classList.add("has-update");
+            }
+        } else if ((data as WebsocketServerStartTimeValue).Server_Start_Time) {
+            if (serverStartTime === null) {
+                serverStartTime = (data as WebsocketServerStartTimeValue).Server_Start_Time;
+            }
+
+            if (serverStartTime != (data as WebsocketServerStartTimeValue).Server_Start_Time) {
+                window.location.reload();
+            }
         }
     }
 

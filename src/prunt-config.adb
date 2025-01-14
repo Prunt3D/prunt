@@ -2315,7 +2315,7 @@ package body Prunt.Config is
       procedure Prunt_Is_Enabled (Result : out Boolean) is
       begin
          Maybe_Do_Init;
-         Result := Get (Initial_Properties, "Prunt$Enabled");
+         Result := Get (Get (Initial_Properties, "Properties"), "Prunt$Enabled");
       end Prunt_Is_Enabled;
 
    end Config_File;

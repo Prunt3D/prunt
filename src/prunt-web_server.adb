@@ -449,6 +449,11 @@ package body Prunt.Web_Server is
       else
          Reply_Text (Client, 404, "Not Found", "File not found.", Get);
       end if;
+   exception
+      when E : others =>
+         Reply_Text (Client, 500, "Internal Server Error", Exception_Information (E), Get);
+         My_Logger.Log ("Unhandled exception in Web_Server.Do_Get_Head: " & Exception_Information (E));
+         Save_Occurrence (Client, E);
    end Do_Get_Head;
 
    overriding procedure Do_Get (Client : in out Prunt_Client) is
@@ -535,12 +540,20 @@ package body Prunt.Web_Server is
                      True);
                end if;
             end;
+         elsif Status.File = "allow-update" then
+            Startup_Manager.Set_Update_Allowed;
+            Reply_Text (Client, 204, "No Content", "", True);
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", True);
          end if;
       else
          Reply_Text (Client, 404, "Not Found", "File not found.", True);
       end if;
+   exception
+      when E : others =>
+         Reply_Text (Client, 500, "Internal Server Error", Exception_Information (E), True);
+         My_Logger.Log ("Unhandled exception in Web_Server.Do_Post: " & Exception_Information (E));
+         Save_Occurrence (Client, E);
    end Do_Post;
 
    overriding procedure Do_Put (Client : in out Prunt_Client) is
@@ -584,6 +597,11 @@ package body Prunt.Web_Server is
                Reply_Text (Client, 500, "Internal Server Error", Exception_Information (Error));
             end;
       end case;
+   exception
+      when E : others =>
+         Reply_Text (Client, 500, "Internal Server Error", Exception_Information (E), True);
+         My_Logger.Log ("Unhandled exception in Web_Server.Do_Put: " & Exception_Information (E));
+         Save_Occurrence (Client, E);
    end Do_Put;
 
    overriding procedure Do_Body (Client : in out Prunt_Client) is
@@ -918,6 +936,11 @@ package body Prunt.Web_Server is
       begin
          Server.Log_To_WebSocket_Receivers (Message);
       end Logger_Receiver;
+
+      Server_Start_Time : Ada.Real_Time.Time := Clock;
+      --  Used by client to force a reload if the server has been restarted.
+
+      New_Client : Prunt_Client_Access;
    begin
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_Decoded, Sent => GNAT.Sockets.Server.Trace_Decoded);
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_None, Sent => GNAT.Sockets.Server.Trace_None);
@@ -942,14 +965,17 @@ package body Prunt.Web_Server is
             accept Register_WebSocket_Receiver (Client : in out Prunt_Client) do
                if Client.Content.Self_Access /= Client'Unrestricted_Access then
                   raise Constraint_Error
-                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
+                     with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
                   --  It seems like this never occurs, but it's better to have it in case the library changes. I
                   --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
                   --  library is designed.
                end if;
 
-               WebSocket_Receivers.Insert (Client'Unrestricted_Access);
+               New_Client := Client'Unrestricted_Access;
+               WebSocket_Receivers.Insert (New_Client);
             end Register_WebSocket_Receiver;
+
+            WebSocket_Send (New_Client.all, "{""Server_Start_Time"":""" & Server_Start_Time'Image & """}");
          or
             accept Remove_WebSocket_Receiver (Client : in out Prunt_Client) do
                if Client.Content.Self_Access /= Client'Unrestricted_Access then

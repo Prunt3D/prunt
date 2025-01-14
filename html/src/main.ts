@@ -19,7 +19,9 @@ export function uploadFile(): void {
             if (xhr.status == 204) {
                 alert("File upload complete.");
             } else {
-                alert(`File upload failed:\n${xhr.statusText}\n${xhr.responseText}`);
+                const message = `File upload failed:\n${xhr.statusText}\n${xhr.responseText}`;
+                console.error(message);
+                alert(message);
             }
         });
         xhr.open("PUT", `/uploads/${encodeURIComponent(file.name)}`, true);
@@ -33,10 +35,13 @@ export function refreshFiles(): void {
     fetch("./uploads").then((response) => {
         if (!response.ok) {
             response.text().then((error) => {
-                alert(`File refresh failed:\n${response.statusText}\n${error}`);
+                const message = `File refresh failed:\n${response.statusText}\n${error}`;
+                console.error(message);
+                alert(message);
             });
         } else {
             response.json().then((files: string[]) => {
+                // TODO: Error handling for bad JSON.
                 const fileRunInput = document.getElementById("fileRunInput") as HTMLSelectElement;
 
                 fileRunInput.innerHTML = "";
@@ -78,7 +83,9 @@ export async function runFile(): Promise<void> {
         alert("File queued.");
     } else {
         response.text().then((error) => {
-            alert(`Failed to run file:\n${response.statusText}\n${error}`);
+            const message = `Failed to run file:\n${response.statusText}\n${error}`;
+            console.error(message);
+            alert(message);
         });
     }
 }
@@ -125,7 +132,9 @@ export async function runCommand(): Promise<void> {
     } else {
         entry.textContent = `${timestamp}: Failed to enqueue command: ${command}`;
         response.text().then((error) => {
-            alert(`Failed to run command:\n${response.statusText}\n${error}`);
+            const message = `Failed to run command:\n${response.statusText}\n${error}`;
+            console.error(message);
+            alert(message);
         });
     }
 
@@ -135,6 +144,7 @@ export async function runCommand(): Promise<void> {
 
 const topTabContainer = document.getElementById("topTabContainer") as HTMLElement;
 const topTabContentContainer = document.getElementById("topTabContentContainer") as HTMLElement;
+const messageLog = document.getElementById("messageLog") as HTMLDivElement;
 
 const tabs = ["status", "config", "console", "file", "log"];
 for (const name of tabs) {
@@ -146,7 +156,9 @@ for (const name of tabs) {
         topTabContentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
 
         tab.classList.add("active");
+        tab.classList.remove("has-update");
         tabContent.classList.remove("hidden");
+        messageLog.scrollTop = messageLog.scrollHeight;
     });
 }
 
@@ -156,11 +168,15 @@ export async function pauseStepgen(): Promise<void> {
     }).then((response) => {
         if (!response.ok) {
             response.text().then((error) => {
-                alert(`Failed to pause:\n${response.statusText}\n${error}`);
+                const message = `Failed to pause:\n${response.statusText}\n${error}`;
+                console.error(message);
+                alert(message);
             });
         }
     }).catch((error) => {
-        alert(`Failed to pause:\n${error}\n${error.stack}`);
+        const message = `Failed to pause:\n${error}\n${error.stack}`;
+        console.error(message);
+        alert(message);
     });
 }
 
@@ -170,16 +186,32 @@ export async function resumeStepgen(): Promise<void> {
     }).then((response) => {
         if (!response.ok) {
             response.text().then((error) => {
-                alert(`Failed to resume:\n${response.statusText}\n${error}`);
+                const message = `Failed to resume:\n${response.statusText}\n${error}`;
+                console.error(message);
+                alert(message);
             });
         }
     }).catch((error) => {
-        alert(`Failed to resume:\n${error}\n${error.stack}`);
+        const message = `Failed to resume:\n${error}\n${error.stack}`;
+        console.error(message);
+        alert(message);
     });
 }
 
+async function setupPruntDisabledWarning(): Promise<void> {
+    const response = await fetch("./prunt-is-enabled");
+
+    if (!response.ok) {
+        const message = `Failed to check if Prunt is enabled:\n${response.statusText}\n${await response.text()}`;
+        console.error(message);
+        throw new Error(message);
+    } else if (await response.json() === false) {
+        document.getElementById("pruntDisabledWarning").classList.remove("hidden");
+    }
+}
+
 const mainBody = document.getElementById("mainBody");
-Promise.all([setupStatus(), setupSettings(), refreshFiles()]).then(() => {
+Promise.all([setupStatus(), setupSettings(), refreshFiles(), setupPruntDisabledWarning()]).then(() => {
     mainBody.classList.remove("hidden");
 }).catch((error) => {
     alert("Error occurred during loading.");

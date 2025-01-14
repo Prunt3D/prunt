@@ -433,9 +433,17 @@ async function saveConfig(): Promise<void> {
         },
         body: JSON.stringify(configData),
     });
-    const responseData = await response.json();
-    updateValues(responseData);
-    alert("Settings saved.");
+
+    if (!response.ok) {
+        const message = `Failed to save config:\n${response.statusText}\n${await response.text()}`;
+        console.error(message);
+        alert(message);
+    } else {
+        const responseData = await response.json();
+        // TODO: Error handling for bad JSON.
+        updateValues(responseData);
+        alert("Settings saved.");
+    }
 }
 
 function updateValues(values: { Values: Record<string, any>; Errors: { Key: string; Message: string }[] }): void {
@@ -480,15 +488,29 @@ export async function setupSettings(): Promise<void> {
     configTabContent.innerHTML = "";
 
     const schemaResponse = await fetch("./config/schema");
-    const schema: Record<string, SettingsSchemaEntry> = await schemaResponse.json();
-    buildTabbedSequence(schema, "", configTabContent);
 
-    const valuesResponse = await fetch("./config/values");
-    const values = await valuesResponse.json();
-    updateValues(values);
+    if (!schemaResponse.ok) {
+        const message = `Failed to load config schema:\n${schemaResponse.statusText}\n${await schemaResponse.text()}`;
+        console.error(message);
+        throw new Error(message);
+    } else {
+        const schema: Record<string, SettingsSchemaEntry> = await schemaResponse.json();
+        buildTabbedSequence(schema, "", configTabContent);
 
-    const saveButton = document.createElement("button");
-    saveButton.textContent = "Save all options";
-    saveButton.addEventListener("click", saveConfig);
-    configTabContent.appendChild(saveButton);
+        const valuesResponse = await fetch("./config/values");
+
+        if (!valuesResponse.ok) {
+            const message = `Failed to load config values:\n${valuesResponse.statusText}\n${await valuesResponse.text()}`;
+            console.error(message);
+            throw new Error(message);
+        } else {
+            const values = await valuesResponse.json();
+            updateValues(values);
+
+            const saveButton = document.createElement("button");
+            saveButton.textContent = "Save all options";
+            saveButton.addEventListener("click", saveConfig);
+            configTabContent.appendChild(saveButton);
+        }
+    }
 };

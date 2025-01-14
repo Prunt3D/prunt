@@ -41,8 +41,12 @@
                 cursor: pointer;
             }
 
+            .tab.has-update {
+                background-color: #f7d911;
+            }
+
             .tab.active {
-                background-color: #000000;
+                background-color: #000000 !important;
                 color: #ffffff;
             }
 
@@ -102,7 +106,7 @@
                 color: #ff0000;
             }
 
-            .connection-warning {
+            .warning-banner {
                 background-color: #f7d911;
                 text-align: center;
                 padding: 10px;
@@ -258,9 +262,25 @@
     </head>
     <body>
         <noscript>This page required JavaScript to be enabled.</noscript>
+
+        <dialog id="firmwareUpdateDialog">
+            <p>Board firmware update is required. This version of Prunt can not be used until the firmware is updated.</p>
+            <button onClick="main.allowFirmwareUpdate()">Update firmware</button>
+        </dialog>
+
         <div id="mainBody" class="hidden">
-            <div id="connectionWarning" class="connection-warning hidden">
-                <h1>Connection lost. Attempting to reconnect...</h1>
+            <div id="fatalErrorWarning" class="warning-banner hidden">
+                <h1>Fatal error:</h1>
+                <p id="fatalErrorWarningText"></p>
+            </div>
+            <div id="webSocketConnectionWarning" class="warning-banner hidden">
+                <h1>WebSocket connection lost. Attempting to reconnect.</h1>
+            </div>
+            <div id="boardConnectionWarning" class="warning-banner hidden">
+                <h1>Board not connected or startup still running.</h1>
+            </div>
+            <div id="pruntDisabledWarning" class="warning-banner hidden">
+                <h1>Prunt is disabled. Enable in configuration tab after setting other parameters and then restart.</h1>
             </div>
             <div class="tab-container" id="topTabContainer">
                 <div class="tab active" id="statusTab">Status</div>
