@@ -219,8 +219,6 @@ package body Prunt.Controller is
          Is_Config_Valid := False;
          My_Logger.Log ("Config error: " & Key & ": " & Message);
       end Log_Config_Error;
-
-      Prunt_Enabled : Boolean := False;
    begin
       begin
          Ada.Task_Termination.Set_Specific_Handler
@@ -277,12 +275,12 @@ package body Prunt.Controller is
                   end loop;
                end if;
             end;
+
+            TMC_Temperature_Updater.Start;
          end if;
 
-         Prunt_Enabled := True;
 
          My_Logger.Log ("Setup done.");
-         --  My_GUI.Notify_Startup_Complete (Prunt_Params.Enabled);
       exception
          when E : others =>
             Fatal_Exception_Occurrence_Holder.all.Set
@@ -294,19 +292,13 @@ package body Prunt.Controller is
       declare
          Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
       begin
-         select
-            Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
-            Shutdown;
+         Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
+         My_Step_Generator.Pause;
+         My_Step_Generator.Runner.Finish;
+         Shutdown;
 
-            delay 5.0;
-            --  Give some time for the GUI runners to get the exception.
-         then abort
-            if Prunt_Enabled then
-               TMC_Temperature_Updater.Start;
-            end if;
-            My_Step_Generator.Pause;
-            My_Step_Generator.Runner.Finish;
-         end select;
+         delay 5.0;
+         --  Give some time for the GUI to get the exception.
       end;
    end Run;
 

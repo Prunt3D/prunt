@@ -65,8 +65,8 @@ function updateValidation(): number {
     const localInvalidTabs = new Set<HTMLElement>();
     const remoteInvalidTabs = new Set<HTMLElement>();
 
-    for (const [key, element] of configElements) {
-        const errorLabel = configErrorLabels.get(key)!;
+    for (const [key, errorLabel] of configErrorLabels) {
+        const element = configElements.get(key);
         if (
             (element instanceof HTMLInputElement && element.type === "number" && !element.checkValidity()) ||
             (errorLabel.textContent !== "")
@@ -447,12 +447,11 @@ async function saveConfig(): Promise<void> {
 }
 
 function updateValues(values: { Values: Record<string, any>; Errors: { Key: string; Message: string }[] }): void {
-    for (const [key, element] of configElements) {
-        const label = configErrorLabels.get(key)
-        if (label) {
-            label.textContent = "";
-        }
+    for (const [key, label] of configErrorLabels) {
+        label.textContent = "";
+    }
 
+    for (const [key, element] of configElements) {
         if (element.classList.contains("tab-container")) {
             for (const child of Array.from(element.children)) {
                 if (values.Values[key] === child.textContent) {

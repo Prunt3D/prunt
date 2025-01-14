@@ -244,9 +244,9 @@ package body Prunt.Config is
             "Distance per step" =>
               Float
                 ("Distance moved by the attached motor for each step signal.",
-                 Default => 8.0E307,
-                 Min     => -8.0E307,
-                 Max     => 8.0E307,
+                 Default => 1.0E100,
+                 Min     => -1.0E100,
+                 Max     => 1.0E100,
                  Unit    => "mm")]);
 
       --  TODO: Add StallGuard and CoolStep.
@@ -260,9 +260,9 @@ package body Prunt.Config is
             "Distance per step" =>
               Float
                 ("Distance moved by the attached motor for each step signal.",
-                 Default => 8.0E307,
-                 Min     => -8.0E307,
-                 Max     => 8.0E307,
+                 Default => 1.0E100,
+                 Min     => -1.0E100,
+                 Max     => 1.0E100,
                  Unit    => "mm"),
             "Run current" =>
               Float
@@ -326,9 +326,9 @@ package body Prunt.Config is
               Float
                 ("Lower velocity limit for high velocity mode and upper velocity limit for CoolStep/StealthChop2 " &
                    "mode (if enabled).",
-                 Default => 8.0E307,
+                 Default => 1.0E100,
                  Min     => 0.0,
-                 Max     => 8.0E307,
+                 Max     => 1.0E100,
                  Unit    => "mm/s"),
             "TOFF" =>
               --  TODO: This description assumes the internal oscillator is used.
@@ -482,9 +482,9 @@ package body Prunt.Config is
                        ["TPWMTHRS" =>
                           Float
                             ("Upper velocity limit for StealthChop2 mode.",
-                             Default => 8.0E307,
+                             Default => 1.0E100,
                              Min     => 0.0,
-                             Max     => 8.0E307,
+                             Max     => 1.0E100,
                              Unit    => "mm/s"),
                         "PWM_OFS" =>
                           Integer
@@ -569,15 +569,15 @@ package body Prunt.Config is
               Float
                 ("Any temperature below this temperature will cause an emergency stop if the heater is enabled.",
                  Default => 0.0,
-                 Min     => -8.0E307,
-                 Max     => 8.0E307,
+                 Min     => -1.0E100,
+                 Max     => 1.0E100,
                  Unit    => "C"),
            "Maximum temperature" =>
              Float
                ("Any temperature above this temperature will cause an emergency stop if the heater is enabled.",
                 Default => 0.0,
-                Min     => -8.0E307,
-                Max     => 8.0E307,
+                Min     => -1.0E100,
+                Max     => 1.0E100,
                 Unit    => "C"),
             "Thermistor kind" =>
               Variant
@@ -644,22 +644,22 @@ package body Prunt.Config is
                           Float
                             ("",
                              Default => 0.0,
-                             Min     => -8.0E307,
-                             Max     => 8.0E307,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
                              Unit    => ""),
                         "B" =>
                           Float
                             ("",
                              Default => 0.0,
-                             Min     => -8.0E307,
-                             Max     => 8.0E307,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
                              Unit    => ""),
                         "C" =>
                           Float
                             ("",
                              Default => 0.0,
-                             Min     => -8.0E307,
-                             Max     => 8.0E307,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
                              Unit    => "")]),
                  "Custom Callendar-Van Dusen model" =>
                     Sequence
@@ -668,22 +668,22 @@ package body Prunt.Config is
                           Float
                             ("",
                              Default => 0.0,
-                             Min     => -8.0E307,
-                             Max     => 8.0E307,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
                              Unit    => "ohm"),
                         "A" =>
                           Float
                             ("",
                              Default => 0.0,
-                             Min     => -8.0E307,
-                             Max     => 8.0E307,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
                              Unit    => ""),
                         "B" =>
                           Float
                             ("",
                              Default => 0.0,
-                             Min     => -8.0E307,
-                             Max     => 8.0E307,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
                              Unit    => "")])])]);
 
       Input_Switch_Sequence : constant Property_Parameters_Access :=
@@ -714,8 +714,8 @@ package body Prunt.Config is
                     Float
                       ("Position to set the axis to.",
                        Default => 0.0,
-                       Min     => -8.0E307,
-                       Max     => 8.0E307,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
                        Unit    => "mm")]),
             "Use input switch" =>
               Sequence
@@ -736,36 +736,36 @@ package body Prunt.Config is
                       ("Distance past switch hit point allowed in first seeking move.",
                        Default => 0.1,
                        Min     => 0.000_001,
-                       Max     => 8.0E307,
+                       Max     => 1.0E100,
                        Unit    => "mm"),
                   "Back off move distance" =>
                     Float
                       ("Distance that is moved back after the switch is first hit.",
                        Default => 2.0,
                        Min     => 0.0,
-                       Max     => 8.0E307,
+                       Max     => 1.0E100,
                        Unit    => "mm"),
                   "Second move distance" =>
                     Float
                       ("Distance past switch hit point allowed in second seeking move.",
                        Default => 0.1,
                        Min     => 0.000_001,
-                       Max     => 8.0E307,
+                       Max     => 1.0E100,
                        Unit    => "mm"),
                   "Switch position" =>
                     Float
                       ("Position of the switch on the axis. This value is allowed to be outside of the machine " &
                          "limits.",
                        Default => 0.0,
-                       Min     => -8.0E307,
-                       Max     => 8.0E307,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
                        Unit    => "mm"),
                   "Move to after" =>
                     Float
                       ("Position to move to after homing. This position must be inside the machine limits.",
                        Default => 0.0,
-                       Min     => -8.0E307,
-                       Max     => 8.0E307,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
                        Unit    => "mm")])]);
 
       Heater_Sequence : constant Property_Parameters_Access :=
@@ -781,21 +781,21 @@ package body Prunt.Config is
                 ("Maximum cumulative error before a failure is detected.",
                  Default => 120.0,
                  Min     => 0.0,
-                 Max     => 8.0E307,
+                 Max     => 1.0E100,
                  Unit    => "C"),
             "Check gain time" =>
               Float
                 ("Period to check for temperature rise over during heating to detect failures.",
                  Default => 20.0,
                  Min     => 0.0,
-                 Max     => 8.0E307,
+                 Max     => 1.0E100,
                  Unit    => "s"),
             "Check minimum gain" =>
               Float
                 ("Minium temperature rise required in gain period to reset cumulative error.",
                  Default => 2.0,
                  Min     => 0.0,
-                 Max     => 8.0E307,
+                 Max     => 1.0E100,
                  Unit    => "C"),
             "Check hysteresis" =>
               Float
@@ -803,7 +803,7 @@ package body Prunt.Config is
                    "temperature.",
                  Default => 3.0,
                  Min     => 0.0,
-                 Max     => 8.0E307,
+                 Max     => 1.0E100,
                  Unit    => "C"),
             "Control method" =>
               Variant
@@ -821,21 +821,21 @@ package body Prunt.Config is
                            ("Scale for proportional part.",
                             Default => 0.0,
                             Min     => 0.0,
-                            Max     => 8.0E307,
+                            Max     => 1.0E100,
                             Unit    => ""),
                        "Integral scale" =>
                          Float
                            ("Scale for integral part.",
                             Default => 0.0,
                             Min     => 0.0,
-                            Max     => 8.0E307,
+                            Max     => 1.0E100,
                              Unit    => ""),
                        "Derivative scale" =>
                          Float
                            ("Scale for derivative part.",
                             Default => 0.0,
                             Min     => 0.0,
-                            Max     => 8.0E307,
+                            Max     => 1.0E100,
                             Unit    => "")]),
                   "Bang bang" =>
                     Sequence
@@ -846,7 +846,7 @@ package body Prunt.Config is
                            ("Hysteresis for switching the heater on or off.",
                             Default => 0.0,
                             Min     => 0.0,
-                            Max     => 8.0E307,
+                            Max     => 1.0E100,
                             Unit    => "C")])])]);
 
       Fan_Sequence : constant Property_Parameters_Access :=
@@ -923,23 +923,23 @@ package body Prunt.Config is
              ("Kinematic settings.",
               ["Lower position limit" =>
                  Sequence_Over_Axes
-                   ("Minimum position that the printer may move to. Any axis may be set to -8E307 for effectively " &
+                   ("Minimum position that the printer may move to. Any axis may be set to -1E100 for effectively " &
                       "infinite range.",
                    Float
                      ("",
                       Default => 0.0,
-                      Min     => -8.0E307,
-                      Max     => 8.0E307,
+                      Min     => -1.0E100,
+                      Max     => 1.0E100,
                       Unit    => "mm")),
                "Upper position limit" =>
                  Sequence_Over_Axes
-                   ("Maximum position that the printer may move to. Any axis may be set to 8E307 for effectively " &
+                   ("Maximum position that the printer may move to. Any axis may be set to 1E100 for effectively " &
                       "infinite range.",
                     Float
                       ("",
                        Default => 0.0,
-                       Min     => -8.0E307,
-                       Max     => 8.0E307,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
                        Unit    => "mm")),
                "Ignore E in XYZE" =>
                  Boolean
@@ -958,10 +958,10 @@ package body Prunt.Config is
                "Maximum tangential velocity" =>
                  Float
                    ("The maximum combined feedrate of all axes, including the E axis. Usually this should be set " &
-                      "to a high value (e.g. 8E307) and the per-axis limits should be used instead.",
+                      "to a high value (e.g. 1E100) and the per-axis limits should be used instead.",
                     Default => 10.0,
                     Min     => 0.000_001,
-                    Max     => 8.0E307,
+                    Max     => 1.0E100,
                     Unit    => "mm/s"),
                "Axial velocity limits" =>
                  Sequence_Over_Axes
@@ -970,7 +970,7 @@ package body Prunt.Config is
                       ("",
                        Default => 10.0,
                        Min     => 0.000_001,
-                       Max     => 8.0E307,
+                       Max     => 1.0E100,
                        Unit    => "mm/s")),
                "Pressure advance time" =>
                  Float
@@ -978,8 +978,8 @@ package body Prunt.Config is
                       "This means that the maximum E axis velocity is the set maximum plus the pressure advance " &
                       "time multiplied by the set maximum acceleration. The same applies to jerk etc..",
                     Default => 0.0,
-                    Min     => -8.0E307,
-                    Max     => 8.0E307,
+                    Min     => -1.0E100,
+                    Max     => 1.0E100,
                     Unit    => "s"),
                "Maximum chord error" =>
                  Float
@@ -987,45 +987,45 @@ package body Prunt.Config is
                       "parameter to 0 will cause the printer to come to a complete stop at every corner.",
                     Default => 0.1,
                     Min     => 0.0,
-                    Max     => 8.0E307,
+                    Max     => 1.0E100,
                     Unit    => "mm"),
                "Maximum acceleration" =>
                  Float
-                   ("May safely be set to 8E307 for effectively infinite acceleration (to the extent allowed by " &
+                   ("May safely be set to 1E100 for effectively infinite acceleration (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled.",
                     Default => 100.0,
                     Min     => 0.000_001,
-                    Max     => 8.0E307,
+                    Max     => 1.0E100,
                     Unit    => "mm/s^2"),
                "Maximum jerk" =>
                  Float
-                   ("May safely be set to 8E307 for effectively infinite jerk (to the extent allowed by " &
+                   ("May safely be set to 1E100 for effectively infinite jerk (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
                       "A good starting point for tuning is 100 times the set maximum acceleration. " &
                       "This can be achieved by appending E2 to you acceleration value in this field.",
                     Default => 100.0E2,
                     Min     => 0.000_001,
-                    Max     => 8.0E307,
+                    Max     => 1.0E100,
                     Unit    => "mm/s^3"),
                "Maximum snap" =>
                  Float
-                   ("May safely be set to 8E307 for effectively infinite snap (to the extent allowed by " &
+                   ("May safely be set to 1E100 for effectively infinite snap (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
                       "A good starting point for tuning is 100,000 times the set maximum acceleration. " &
                       "This can be achieved by appending E5 to you acceleration value in this field.",
                     Default => 100.0E5,
                     Min     => 0.000_001,
-                    Max     => 8.0E307,
+                    Max     => 1.0E100,
                     Unit    => "mm/s^4"),
                "Maximum crackle" =>
                  Float
-                   ("May safely be set to 8E307 for effectively infinite crackle (to the extent allowed by " &
+                   ("May safely be set to 1E100 for effectively infinite crackle (to the extent allowed by " &
                       "other constraints). Axial values will go above this value when corner blending is enabled. " &
                       "A good starting point for tuning is 1,000,000,000 times the set maximum acceleration. " &
                       "This can be achieved by appending E9 to you acceleration value in this field.",
                     Default => 100.0E9,
                     Min     => 0.000_001,
-                    Max     => 8.0E307,
+                    Max     => 1.0E100,
                     Unit    => "mm/s^5"),
                "Axial scaler" =>
                  Sequence_Over_Axes
@@ -1039,7 +1039,7 @@ package body Prunt.Config is
                       ("",
                        Default => 1.0,
                        Min     => 1.0E-100,
-                       Max     => 8.0E307,
+                       Max     => 1.0E100,
                        Unit    => "")),
                "Kinematics kind" =>
                  Variant
@@ -1302,6 +1302,25 @@ package body Prunt.Config is
          if not Boolean'(Get (Config, "Prunt$Enabled")) then
             Report ("Prunt$Enabled", "Prunt is disabled. Enable after setting other options.");
          end if;
+
+         for S in Stepper_Name loop
+            if Get
+                (Config,
+                 "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" & S'Image) /=
+              "NONE"
+            then
+               if not Boolean'(Get (Config, "Steppers$" & S'Image & "$Enabled")) then
+                  Report
+                    ("Steppers$" & S'Image & "$Enabled",
+                     "Stepper is attached to " &
+                     Get
+                       (Config,
+                        "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" &
+                        S'Image) &
+                     " but stepper is not enabled.");
+               end if;
+            end if;
+         end loop;
 
          for S in Stepper_Name loop
             case Stepper_Kinds (S) is
@@ -1829,9 +1848,10 @@ package body Prunt.Config is
                                (Long_Float'Min
                                   (12_500_000.0 /
                                      (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step") /
-                                        My_Get_Long_Float
-                                          (Data,
-                                           "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS")),
+                                        (My_Get_Long_Float
+                                           (Data,
+                                            "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS") +
+                                           1.0E-100) + 1.0E-100),
                                    2.0**20 - 1.0))),
                         Reserved => 0),
                      TCOOLTHRS     =>
@@ -1844,7 +1864,7 @@ package body Prunt.Config is
                                (Long_Float'Min
                                   (12_500_000.0 /
                                      (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step") /
-                                        My_Get_Long_Float (Data, "Steppers$" & S'Image & "$THIGH")),
+                                        (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100)),
                                    2.0**20 - 1.0))),
                         Reserved => 0),
                      CHOPCONF      =>
