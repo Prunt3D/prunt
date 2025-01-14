@@ -206,26 +206,18 @@ package body Prunt.Controller is
       end loop;
    end TMC_Temperature_Updater;
 
-   task body GUI_Runner is
-   begin
-      My_GUI.Run;
-      accept Finish;
-   end GUI_Runner;
-
    procedure Prompt_For_Update is
    begin
-      My_GUI.Show_Update_Button;
-      My_GUI.Block_Until_Update_Allowed;
+      My_Web_Server.Wait_For_User_To_Allow_Update;
    end Prompt_For_Update;
 
    procedure Run is
-      Prunt_Params    : My_Config.Prunt_Parameters;
       Is_Config_Valid : Boolean := True;
 
-      procedure Log_Config_Error (Message : String) is
+      procedure Log_Config_Error (Key, Message : String) is
       begin
          Is_Config_Valid := False;
-         My_Logger.Log ("Config error: " & Message);
+         My_Logger.Log ("Config error: " & Key & ": " & Message);
       end Log_Config_Error;
    begin
       begin
@@ -237,81 +229,76 @@ package body Prunt.Controller is
            (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
            (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         Ada.Task_Termination.Set_Specific_Handler
-           (GUI_Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+         My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
+         --  TODO: The above should occur before this procedure is called.
 
-         My_Config.Config_File.Read (Prunt_Params);
-         My_Config.Config_File.Validate_Config (Log_Config_Error'Access);
+         My_Config.Validate_Initial_Config (Log_Config_Error'Access);
 
          if not Is_Config_Valid then
             My_Logger.Log ("Prunt is disabled. Config is not valid.");
+            My_Config.Disable_Prunt;
+         else
             declare
                Prunt_Params : My_Config.Prunt_Parameters;
             begin
-               My_Config.Config_File.Read (Prunt_Params);
-               Prunt_Params.Enabled := False;
-               My_Config.Config_File.Write (Prunt_Params);
+               My_Config.Read (Prunt_Params);
+               if not Prunt_Params.Enabled then
+                  My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
+               else
+                  My_Logger.Log ("Running setup.");
+
+                  Setup_Thermistors_And_Heater_Assignments;
+                  Setup_Planner;
+                  Setup_Step_Generator;
+                  Setup_Gcode_Handler;
+
+                  for F in Fan_Name loop
+                     declare
+                        Fan_Params : My_Config.Fan_Parameters;
+                     begin
+                        My_Config.Read (Fan_Params, F);
+                        Reconfigure_Fan (F, Fan_Params.PWM_Frequency);
+                     end;
+                  end loop;
+
+                  for S in Stepper_Name loop
+                     Setup_Stepper (S);
+                  end loop;
+
+                  for H in Heater_Name loop
+                     declare
+                        Heater_Params : My_Config.Heater_Full_Parameters;
+                     begin
+                        My_Config.Read (Heater_Params, H);
+                        Reconfigure_Heater (H, Heater_Params.Params);
+                     end;
+                  end loop;
+               end if;
             end;
-         elsif not Prunt_Params.Enabled then
-            My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
-         else
-            begin
-               My_Logger.Log ("Running setup.");
 
-               Setup_Thermistors_And_Heater_Assignments;
-               Setup_Planner;
-               Setup_Step_Generator;
-               Setup_Gcode_Handler;
-
-               for F in Fan_Name loop
-                  declare
-                     Fan_Params : My_Config.Fan_Parameters;
-                  begin
-                     My_Config.Config_File.Read (Fan_Params, F);
-                     Reconfigure_Fan (F, Fan_Params.PWM_Frequency);
-                  end;
-               end loop;
-
-               for S in Stepper_Name loop
-                  Setup_Stepper (S);
-               end loop;
-
-               for H in Heater_Name loop
-                  declare
-                     Heater_Params : My_Config.Heater_Full_Parameters;
-                  begin
-                     My_Config.Config_File.Read (Heater_Params, H);
-                     Reconfigure_Heater (H, Heater_Params.Params);
-                  end;
-               end loop;
-            end;
+            TMC_Temperature_Updater.Start;
          end if;
 
+
          My_Logger.Log ("Setup done.");
-         My_GUI.Notify_Startup_Complete (Prunt_Params.Enabled);
       exception
          when E : others =>
             Fatal_Exception_Occurrence_Holder.all.Set
               (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
       end;
 
+      My_Web_Server.Notify_Startup_Done;
+
       declare
          Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
       begin
-         select
-            Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
-            Shutdown;
+         Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
+         My_Step_Generator.Pause;
+         My_Step_Generator.Runner.Finish;
+         Shutdown;
 
-            delay 5.0;
-            --  Give some time for the GUI runners to get the exception.
-         then abort
-            if Prunt_Params.Enabled then
-               TMC_Temperature_Updater.Start;
-            end if;
-            GUI_Runner.Finish;
-            My_Step_Generator.Pause;
-            My_Step_Generator.Runner.Finish;
-         end select;
+         delay 5.0;
+         --  Give some time for the GUI to get the exception.
       end;
    end Run;
 
@@ -347,7 +334,7 @@ package body Prunt.Controller is
    procedure Report_External_Error (Message : String) is
       External_Error : exception;
    begin
-      Disable_In_Config;
+      My_Config.Disable_Prunt;
       raise External_Error with Message;
    exception
       when E : External_Error =>
@@ -357,7 +344,7 @@ package body Prunt.Controller is
 
    procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence) is
    begin
-      Disable_In_Config;
+      My_Config.Disable_Prunt;
       Fatal_Exception_Occurrence_Holder.Set
         (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, Occurrence);
    end Report_External_Error;
@@ -452,14 +439,14 @@ package body Prunt.Controller is
          declare
             Heater_Params : My_Config.Heater_Full_Parameters;
          begin
-            My_Config.Config_File.Read (Heater_Params, H);
+            My_Config.Read (Heater_Params, H);
             Heater_Thermistors (H)        := Heater_Params.Thermistor;
             Stored_Heater_Thermistors (H) := Heater_Params.Thermistor;
          end;
       end loop;
 
       for T in Thermistor_Name loop
-         My_Config.Config_File.Read (Thermistor_Params_Array (T), T);
+         My_Config.Read (Thermistor_Params_Array (T), T);
       end loop;
 
       Setup (Heater_Thermistors, Thermistor_Params_Array);
@@ -505,12 +492,13 @@ package body Prunt.Controller is
       Stepper_Params : My_Config.Stepper_Parameters;
 
    begin
-      My_Config.Config_File.Read (Stepper_Params, Stepper);
+      My_Config.Read (Stepper_Params, Stepper);
 
       case Stepper_Hardware (Stepper).Kind is
          when Basic_Kind =>
             null;
          when TMC2240_UART_Kind =>
+            null;
             declare
                Query          : TMC_Types.TMC2240.UART_Query_Message :=
                  (Bytes_Mode => False,
@@ -537,55 +525,42 @@ package body Prunt.Controller is
             end;
 
             declare
-               Global_Scaler : TMC_Types.TMC2240.Global_Scaler_Type;
-               Current_Range : TMC_Types.TMC2240.Current_Range_Type;
                Message       : TMC_Types.TMC2240.UART_Data_Message;
             begin
-               if Stepper_Params.Output_Current > 3.0 * amp then
-                  raise Constraint_Error
-                    with "Current must not be greater than 3A for stepper " & Stepper'Image;
-               elsif Stepper_Params.Output_Current = 3.0 * amp then
-                  Current_Range := TMC_Types.TMC2240.Max_3A;
-                  Global_Scaler := 0;
-               elsif Stepper_Params.Output_Current > 2.0 * amp then
-                  Current_Range := TMC_Types.TMC2240.Max_3A;
-                  Global_Scaler :=
-                    TMC_Types.TMC2240.Global_Scaler_Type
-                      (Dimensionless'Floor (Stepper_Params.Output_Current / (3.0 * amp) * 256.0));
-               elsif Stepper_Params.Output_Current = 2.0 * amp then
-                  Current_Range := TMC_Types.TMC2240.Max_2A;
-                  Global_Scaler := 0;
-               elsif Stepper_Params.Output_Current > 1.0 * amp then
-                  Current_Range := TMC_Types.TMC2240.Max_2A;
-                  Global_Scaler :=
-                    TMC_Types.TMC2240.Global_Scaler_Type
-                      (Dimensionless'Floor (Stepper_Params.Output_Current / (2.0 * amp) * 256.0));
-               elsif Stepper_Params.Output_Current = 1.0 * amp then
-                  Current_Range := TMC_Types.TMC2240.Max_1A;
-                  Global_Scaler := 0;
-               elsif Stepper_Params.Output_Current >= 0.125 * amp then
-                  Current_Range := TMC_Types.TMC2240.Max_1A;
-                  Global_Scaler :=
-                    TMC_Types.TMC2240.Global_Scaler_Type
-                      (Dimensionless'Max
-                         (32.0,
-                            Dimensionless'Floor (Stepper_Params.Output_Current / (1.0 * amp) * 256.0)));
-               else
-                  raise Constraint_Error
-                    with "Current must not be less than 0.125A for stepper " & Stepper'Image;
-               end if;
+               --  A delay greater than 8 bit times is required with multiple nodes or else nodes other than the
+               --  addressed node may detect transmission errors during reads. Technically we should have a delay
+               --  after reads until this is set for all nodes, but it's not currently an issue in any firmware
+               --  implementations.
+               Message             :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.NODECONF_Address,
+                     NODECONF_Data =>
+                       (Node_Addr  => 0,
+                        Send_Delay => TMC_Types.TMC2240.Delay_3x8,
+                        Reserved   => 0),
+                     others        => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
 
                Message             :=
                  (Bytes_Mode => False,
                   Content    =>
-                    (Node         => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register     => TMC_Types.TMC2240.DRV_CONF_Address,
-                     DRV_CONF_Data =>
-                       (Current_Range => Current_Range,
-                        Reserved_1    => 0,
-                        Slope_Control => Stepper_Params.Slope_Control,
-                        Reserved_2    => 0),
-                     others       => <>));
+                    (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.GCONF_Address,
+                     GCONF_Data => Stepper_Params.GCONF,
+                     others     => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
+
+               Message             :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.DRV_CONF_Address,
+                     DRV_CONF_Data => Stepper_Params.DRV_CONF,
+                     others        => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
@@ -594,7 +569,7 @@ package body Prunt.Controller is
                   Content    =>
                     (Node               => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register           => TMC_Types.TMC2240.GLOBAL_SCALER_Address,
-                     GLOBAL_SCALER_Data => (Global_Scaler => Global_Scaler, Reserved => 0),
+                     GLOBAL_SCALER_Data => Stepper_Params.GLOBAL_SCALER,
                      others             => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
@@ -604,15 +579,7 @@ package body Prunt.Controller is
                   Content    =>
                     (Node            => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register        => TMC_Types.TMC2240.IHOLD_IRUN_Address,
-                     IHOLD_IRUN_Data =>
-                       (I_Hold       => Stepper_Params.I_Hold,
-                        Reserved_1   => 0,
-                        I_Run        => Stepper_Params.I_Run,
-                        Reserved_2   => 0,
-                        I_Hold_Delay => Stepper_Params.I_Hold_Delay,
-                        Reserved_3   => 0,
-                        I_Run_Delay  => Stepper_Params.I_Run_Delay,
-                        Reserved_4   => 0),
+                     IHOLD_IRUN_Data => Stepper_Params.IHOLD_IRUN,
                      others          => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
@@ -622,7 +589,7 @@ package body Prunt.Controller is
                   Content    =>
                     (Node            => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register        => TMC_Types.TMC2240.TPOWERDOWN_Address,
-                     TPOWERDOWN_Data => (T_Power_Down => Stepper_Params.T_Power_Down, Reserved => 0),
+                     TPOWERDOWN_Data => Stepper_Params.TPOWERDOWN,
                      others          => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
@@ -632,7 +599,7 @@ package body Prunt.Controller is
                   Content    =>
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
-                     TPWMTHRS_Data => (T_PWM_Thrs => Stepper_Params.T_PWM_Thrs, Reserved => 0),
+                     TPWMTHRS_Data => Stepper_Params.TPWMTHRS,
                      others        => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
@@ -642,7 +609,7 @@ package body Prunt.Controller is
                   Content    =>
                     (Node           => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register       => TMC_Types.TMC2240.TCOOLTHRS_Address,
-                     TCOOLTHRS_Data => (T_Cool_Thrs => Stepper_Params.T_Cool_Thrs, Reserved => 0),
+                     TCOOLTHRS_Data => Stepper_Params.TCOOLTHRS,
                      others         => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
@@ -652,8 +619,18 @@ package body Prunt.Controller is
                   Content    =>
                     (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register   => TMC_Types.TMC2240.THIGH_Address,
-                     THIGH_Data => (T_High => Stepper_Params.T_High, Reserved => 0),
+                     THIGH_Data => Stepper_Params.THIGH,
                      others     => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
+
+               Message             :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node         => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register     => TMC_Types.TMC2240.PWMCONF_Address,
+                     PWMCONF_Data => Stepper_Params.PWMCONF,
+                     others       => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
@@ -663,45 +640,9 @@ package body Prunt.Controller is
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register      => TMC_Types.TMC2240.CHOPCONF_Address,
                      CHOPCONF_Data =>
-                       (TOFF                 => Stepper_Params.TOFF,
-                        HSTRT_TFD210         => Stepper_Params.HSTRT_TFD210,
-                        HEND_OFFSET          => Stepper_Params.HEND_OFFSET,
-                        FD3                  => Stepper_Params.FD3,
-                        DISFDCC              => TMC_Types.TMC_Boolean (Stepper_Params.DISFDCC),
-                        Reserved_1           => 0,
-                        CHM                  => TMC_Types.TMC_Boolean (Stepper_Params.CHM),
-                        TBL                  => 2,
-                        Reserved_2           => 0,
-                        VHIGHFS              => TMC_Types.TMC_Boolean (Stepper_Params.VHIGHFS),
-                        VHIGHCHM             => TMC_Types.TMC_Boolean (Stepper_Params.VHIGHCHM),
-                        TPFD                 => Stepper_Params.TPFD,
-                        Microstep_Resolution => Stepper_Params.Microstep_Resolution,
-                        Interpolate          => TMC_Types.TMC_Boolean (False),
-                        Double_Edge          =>
-                          TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping),
-                        Disable_S2G          => TMC_Types.TMC_Boolean (False),
-                        Disable_S2Vs         => TMC_Types.TMC_Boolean (False)),
+                       (Stepper_Params.CHOPCONF with delta
+                        Double_Edge => TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping)),
                      others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-
-               Message             :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node         => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register     => TMC_Types.TMC2240.PWMCONF_Address,
-                     PWMCONF_Data =>
-                       (PWM_OFS            => Stepper_Params.PWM_OFS,
-                        PWM_Grad           => Stepper_Params.PWM_Grad,
-                        PWM_Freq           => Stepper_Params.PWM_Freq,
-                        PWM_Auto_Scale     => TMC_Types.TMC_Boolean (Stepper_Params.PWM_Auto_Scale),
-                        PWM_Auto_Grad      => TMC_Types.TMC_Boolean (Stepper_Params.PWM_Auto_Grad),
-                        Freewheel          => Stepper_Params.Freewheel,
-                        PWM_Meas_SD_Enable => TMC_Types.TMC_Boolean (Stepper_Params.PWM_Meas_SD_Enable),
-                        PWM_Dis_Reg_Stst   => TMC_Types.TMC_Boolean (Stepper_Params.PWM_Dis_Reg_Stst),
-                        PWM_Reg            => Stepper_Params.PWM_Reg,
-                        PWM_Lim            => Stepper_Params.PWM_Lim),
-                     others       => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
             end;
@@ -717,7 +658,7 @@ package body Prunt.Controller is
    procedure Setup_Planner is
       Kinematics_Params : My_Config.Kinematics_Parameters;
    begin
-      My_Config.Config_File.Read (Kinematics_Params);
+      My_Config.Read (Kinematics_Params);
       My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
    end Setup_Planner;
 
@@ -725,13 +666,13 @@ package body Prunt.Controller is
       Map               : My_Step_Generator.Stepper_Pos_Map := [others => [others => Length'Last]];
       Kinematics_Params : My_Config.Kinematics_Parameters;
    begin
-      My_Config.Config_File.Read (Kinematics_Params);
+      My_Config.Read (Kinematics_Params);
 
       for S in Stepper_Name loop
          declare
             Stepper_Params : My_Config.Stepper_Parameters;
          begin
-            My_Config.Config_File.Read (Stepper_Params, S);
+            My_Config.Read (Stepper_Params, S);
 
             case Kinematics_Params.Kind is
                when My_Config.Cartesian_Kind =>
@@ -772,7 +713,7 @@ package body Prunt.Controller is
       Fan_Params  : My_Config.Fan_Parameters;
    begin
       for F in Fan_Name loop
-         My_Config.Config_File.Read (Fan_Params, F);
+         My_Config.Read (Fan_Params, F);
          case Fan_Params.Kind is
             when My_Config.Dynamic_PWM_Kind =>
                if Fan_Params.Invert_Output then
@@ -795,13 +736,5 @@ package body Prunt.Controller is
    begin
       My_Logger.Log (Message);
    end Log;
-
-   procedure Disable_In_Config is
-      Prunt_Params : My_Config.Prunt_Parameters;
-   begin
-      My_Config.Config_File.Read (Prunt_Params);
-      Prunt_Params.Enabled := False;
-      My_Config.Config_File.Write (Prunt_Params);
-   end Disable_In_Config;
 
 end Prunt.Controller;

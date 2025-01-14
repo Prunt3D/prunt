@@ -2,4 +2,7 @@
 /lib/
 /alire/
 /config/
+/html/node_modules/
+/html/dist/bundle.js
+/html/dist/bundle.js.map
 /.dir-locals.el

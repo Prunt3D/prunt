@@ -235,6 +235,9 @@ package body Prunt.Controller.Gcode_Handler is
                   for Axis of Homing_Order loop
                      if Command.Axes (Axis) then
                         case Axial_Homing_Params (Axis).Kind is
+                           when My_Config.Disabled_Kind =>
+                              raise Command_Constraint_Error
+                                with "Homing is not configured for axis " & Axis'Image & ".";
                            when My_Config.Set_To_Value_Kind =>
                               Pos_After (Axis) := Axial_Homing_Params (Axis).Value;
                               My_Planner.Enqueue
@@ -470,20 +473,20 @@ package body Prunt.Controller.Gcode_Handler is
       accept Start (Initial_Data : Corner_Extra_Data) do
          Corner_Data := Initial_Data;
 
-         My_Config.Config_File.Read (Prunt_Params);
-         My_Config.Config_File.Read (Kinematics_Params);
-         My_Config.Config_File.Read (G_Code_Assignment_Params);
+         My_Config.Read (Prunt_Params);
+         My_Config.Read (Kinematics_Params);
+         My_Config.Read (G_Code_Assignment_Params);
 
          for I in Generic_Types.Input_Switch_Name loop
-            My_Config.Config_File.Read (Switchwise_Switch_Params (I), I);
+            My_Config.Read (Switchwise_Switch_Params (I), I);
          end loop;
 
          for I in Generic_Types.Fan_Name loop
-            My_Config.Config_File.Read (Fanwise_Fan_Params (I), I);
+            My_Config.Read (Fanwise_Fan_Params (I), I);
          end loop;
 
          for I in Axis_Name loop
-            My_Config.Config_File.Read (Axial_Homing_Params (I), I);
+            My_Config.Read (Axial_Homing_Params (I), I);
          end loop;
 
          Parser_Context := Make_Context (Zero_Pos, 100.0 * mm / s, Prunt_Params.Replace_G0_With_G1);

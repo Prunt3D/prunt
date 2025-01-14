@@ -310,15 +310,59 @@ package Prunt.TMC_Types.TMC2240 is
       MS_2          => 7,
       MS_Full_Steps => 8);
 
+   type CHM_Type is (SpreadCycle_Mode, Constant_Off_Time_Mode) with
+     Size => 1;
+   for CHM_Type use (SpreadCycle_Mode => 0, Constant_Off_Time_Mode => 1);
+
+   type TOFF_Type is
+     (Disable_Driver,
+      Off_56,
+      Off_88,
+      Off_120,
+      Off_152,
+      Off_184,
+      Off_216,
+      Off_248,
+      Off_280,
+      Off_312,
+      Off_344,
+      Off_376,
+      Off_408,
+      Off_440,
+      Off_472,
+      Off_504) with
+     Size => 4;
+   for TOFF_Type use
+     (Disable_Driver => 0,
+      Off_56         => 1,
+      Off_88         => 2,
+      Off_120        => 3,
+      Off_152        => 4,
+      Off_184        => 5,
+      Off_216        => 6,
+      Off_248        => 7,
+      Off_280        => 8,
+      Off_312        => 9,
+      Off_344        => 10,
+      Off_376        => 11,
+      Off_408        => 12,
+      Off_440        => 13,
+      Off_472        => 14,
+      Off_504        => 15);
+
+   type TBL_Type is (Blank_16, Blank_24, Blank_36, Blank_54) with
+     Size => 2;
+   for TBL_Type use (Blank_16 => 0, Blank_24 => 1, Blank_36 => 2, Blank_54 => 3);
+
    type CHOPCONF is record
-      TOFF                 : Unsigned_4;
+      TOFF                 : TOFF_Type;
       HSTRT_TFD210         : Unsigned_3;
       HEND_OFFSET          : Unsigned_4;
       FD3                  : Unsigned_1;
       DISFDCC              : TMC_Boolean;
       Reserved_1           : Unsigned_1;
-      CHM                  : TMC_Boolean;
-      TBL                  : Unsigned_2;
+      CHM                  : CHM_Type;
+      TBL                  : TBL_Type;
       Reserved_2           : Unsigned_1;
       VHIGHFS              : TMC_Boolean;
       VHIGHCHM             : TMC_Boolean;
@@ -370,10 +414,12 @@ package Prunt.TMC_Types.TMC2240 is
      Size => 2;
    for Freewheel_Type use (Normal => 0, Freewheel => 1, Short_Via_LS => 2, Short_Via_HS => 3);
 
+   type PWM_Freq_Type is (Freq_1024, Freq_683, Freq_512, Freq_410);
+
    type PWMCONF is record
       PWM_OFS            : Unsigned_8;
       PWM_Grad           : Unsigned_8;
-      PWM_Freq           : Unsigned_2;
+      PWM_Freq           : PWM_Freq_Type;
       PWM_Auto_Scale     : TMC_Boolean;
       PWM_Auto_Grad      : TMC_Boolean;
       Freewheel          : Freewheel_Type;
@@ -720,6 +766,21 @@ package Prunt.TMC_Types.TMC2240 is
 
    function Compute_CRC (Message : UART_Data_Message) return UART_CRC;
    function Compute_CRC (Message : UART_Query_Message) return UART_CRC;
+
+   procedure Optimize_Spreadcycle
+     (Driver_Voltage              :     Voltage;
+      TBL                         :     TBL_Type;
+      Motor_Inductance            :     Inductance;
+      Motor_Resistance            :     Resistance;
+      Motor_Peak_Current          :     Current;
+      TOFF                        :     TOFF_Type;
+      IRUN                        :     Unsigned_5;
+      HSTRT                       : out Unsigned_3;
+      HEND                        : out Unsigned_4;
+      Sum_Too_High                : out Boolean;
+      Sum_Too_High_For_Full_Scale : out Boolean;
+      Excessive_Heating           : out Boolean;
+      Driver_Voltage_Too_Low      : out Boolean);
 
 private
 

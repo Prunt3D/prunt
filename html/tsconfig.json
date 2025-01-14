@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "sourceMap": true,
+    "downlevelIteration": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node"
+  }
+}

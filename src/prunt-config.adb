@@ -21,1068 +21,2419 @@
 
 with Ada.Directories;
 with Ada.Text_IO;
-with TOML.File_IO; use TOML;
+with Ada.Strings;
+with Ada.Strings.Fixed;
+with Ada.Text_IO.Unbounded_IO;
 
 package body Prunt.Config is
 
    pragma Unsuppress (All_Checks);
 
-   function To_TOML (V : Dimensionless) return TOML_Value is
-     (Create_Float ((Kind => Regular, Value => Valid_Float (V))));
-   function From_TOML (V : TOML_Value) return Dimensionless is (Dimensionless (V.As_Float.Value));
+   use type TMC_Types.TMC2240.CHM_Type;
 
-   generic
-      type T is (<>);
-   package Discrete_TOML_Conversion is
-      function To_TOML (V : T) return TOML_Value is (Create_String (V'Image));
-      function From_TOML (V : TOML_Value) return T is (T'Value (V.As_String));
-   end Discrete_TOML_Conversion;
+   pragma Warnings (Off, "cannot call * before body seen");
+   --  TODO: Find a way to fix this.
 
-   --  package Stepper_Name_TOML_Conversion is new Discrete_TOML_Conversion (Stepper_Name);
-   --  use Stepper_Name_TOML_Conversion;
-
-   package Heater_Name_TOML_Conversion is new Discrete_TOML_Conversion (Heater_Name);
-   use Heater_Name_TOML_Conversion;
-
-   package Thermistor_Name_TOML_Conversion is new Discrete_TOML_Conversion (Thermistor_Name);
-   use Thermistor_Name_TOML_Conversion;
-
-   --  package Fan_Name_TOML_Conversion is new Discrete_TOML_Conversion (Fan_Name);
-   --  use Fan_Name_TOML_Conversion;
-
-   package Kinematics_Kind_TOML_Conversion is new Discrete_TOML_Conversion (Kinematics_Kind);
-   use Kinematics_Kind_TOML_Conversion;
-
-   package Homing_Kind_TOML_Conversion is new Discrete_TOML_Conversion (Homing_Kind);
-   use Homing_Kind_TOML_Conversion;
-
-   package Heater_Kind_TOML_Conversion is new Discrete_TOML_Conversion (Heater_Kind);
-   use Heater_Kind_TOML_Conversion;
-
-   package Bed_Mesh_Kind_TOML_Conversion is new Discrete_TOML_Conversion (Bed_Mesh_Kind);
-   use Bed_Mesh_Kind_TOML_Conversion;
-
-   package Fan_Kind_TOML_Conversion is new Discrete_TOML_Conversion (Fan_Kind);
-   use Fan_Kind_TOML_Conversion;
-
-   --  package Axis_Name_TOML_Conversion is new Discrete_TOML_Conversion (Axis_Name);
-   --  use Axis_Name_TOML_Conversion;
-
-   package Input_Switch_Name_TOML_Conversion is new Discrete_TOML_Conversion (Input_Switch_Name);
-   use Input_Switch_Name_TOML_Conversion;
-
-   package Thermistor_Kind_TOML_Conversion is new Discrete_TOML_Conversion (Thermistor_Kind);
-   use Thermistor_Kind_TOML_Conversion;
-
-   function To_TOML (V : Boolean) return TOML_Value is (Create_Boolean (V));
-   function From_TOML (V : TOML_Value) return Boolean is (V.As_Boolean);
-
-   function To_TOML (V : Path_Strings.Bounded_String) return TOML_Value is
-     (Create_String (Path_Strings.To_String (V)));
-   function From_TOML (V : TOML_Value) return Path_Strings.Bounded_String is
-     (Path_Strings.To_Bounded_String (V.As_String));
-
-   function To_TOML (Pos : Position) return TOML_Value is
-      Table : constant TOML_Value := Create_Table;
+   function My_Get_Long_Float (Val : JSON_Value) return Long_Float is
    begin
-      for I in Pos'Range loop
-         Table.Set (I'Image, To_TOML (Pos (I) / mm));
-      end loop;
-      return Table;
-   end To_TOML;
-
-   function From_TOML (Table : TOML_Value) return Position is
-      Pos : Position;
-   begin
-      for I in Pos'Range loop
-         Pos (I) := From_TOML (Table.Get (I'Image)) * mm;
-      end loop;
-      return Pos;
-   end From_TOML;
-
-   function To_TOML (Steppers : Attached_Steppers) return TOML_Value is
-      Value : constant TOML_Value := Create_Array;
-   begin
-      for I in Steppers'Range loop
-         if Steppers (I) then
-            Value.Append (Create_String (I'Image));
-         end if;
-      end loop;
-      return Value;
-   end To_TOML;
-
-   function From_TOML (Table : TOML_Value) return Attached_Steppers is
-      Steppers : Attached_Steppers := [others => False];
-   begin
-      for I in 1 .. Table.Length loop
-         Steppers (Stepper_Name'Value (Table.Item (I).As_String)) := True;
-      end loop;
-      return Steppers;
-   end From_TOML;
-
-   function To_TOML (Vels : Axial_Velocities) return TOML_Value is
-      Table : constant TOML_Value := Create_Table;
-   begin
-      for I in Vels'Range loop
-         Table.Set (I'Image, To_TOML (Vels (I) / (mm / s)));
-      end loop;
-      return Table;
-   end To_TOML;
-
-   function From_TOML (Table : TOML_Value) return Axial_Velocities is
-      Vels : Axial_Velocities;
-   begin
-      for I in Vels'Range loop
-         Vels (I) := From_TOML (Table.Get (I'Image)) * mm / s;
-      end loop;
-      return Vels;
-   end From_TOML;
-
-   function To_TOML (Scale : Position_Scale) return TOML_Value is
-      Table : constant TOML_Value := Create_Table;
-   begin
-      for I in Scale'Range loop
-         Table.Set (I'Image, To_TOML (Scale (I)));
-      end loop;
-      return Table;
-   end To_TOML;
-
-   function From_TOML (Table : TOML_Value) return Position_Scale is
-      Scale : Position_Scale;
-   begin
-      for I in Scale'Range loop
-         Scale (I) := From_TOML (Table.Get (I'Image));
-      end loop;
-      return Scale;
-   end From_TOML;
-
-   function To_TOML (Params : Motion_Planner.Kinematic_Parameters) return TOML_Value is
-      Table : constant TOML_Value := Create_Table;
-   begin
-      Table.Set ("Lower_Pos_Limit", To_TOML (Params.Lower_Pos_Limit));
-      Table.Set ("Upper_Pos_Limit", To_TOML (Params.Upper_Pos_Limit));
-      Table.Set ("Ignore_E_In_XYZE", To_TOML (Params.Ignore_E_In_XYZE));
-      Table.Set ("Shift_Blended_Corners", To_TOML (Params.Shift_Blended_Corners));
-      Table.Set ("Tangential_Velocity_Max", To_TOML (Params.Tangential_Velocity_Max / (mm / s)));
-      Table.Set ("Axial_Velocity_Maxes", To_TOML (Params.Axial_Velocity_Maxes));
-      Table.Set ("Pressure_Advance_Time", To_TOML (Params.Pressure_Advance_Time / s));
-      Table.Set ("Acceleration_Max", To_TOML (Params.Acceleration_Max / (mm / s**2)));
-      Table.Set ("Jerk_Max", To_TOML (Params.Jerk_Max / (mm / s**3)));
-      Table.Set ("Snap_Max", To_TOML (Params.Snap_Max / (mm / s**4)));
-      Table.Set ("Crackle_Max", To_TOML (Params.Crackle_Max / (mm / s**5)));
-      Table.Set ("Chord_Error_Max", To_TOML (Params.Chord_Error_Max / mm));
-      Table.Set ("Axial_Scaler", To_TOML (Params.Axial_Scaler));
-      return Table;
-   end To_TOML;
-
-   function From_TOML (Table : TOML_Value) return Motion_Planner.Kinematic_Parameters is
-   begin
-      return
-        (Lower_Pos_Limit         => From_TOML (Table.Get ("Lower_Pos_Limit")),
-         Upper_Pos_Limit         => From_TOML (Table.Get ("Upper_Pos_Limit")),
-         Ignore_E_In_XYZE        => From_TOML (Table.Get ("Ignore_E_In_XYZE")),
-         Shift_Blended_Corners   => From_TOML (Table.Get ("Shift_Blended_Corners")),
-         Tangential_Velocity_Max => From_TOML (Table.Get ("Tangential_Velocity_Max")) * mm / s,
-         Axial_Velocity_Maxes    => From_TOML (Table.Get ("Axial_Velocity_Maxes")),
-         Pressure_Advance_Time   => From_TOML (Table.Get ("Pressure_Advance_Time")) * s,
-         Acceleration_Max        => From_TOML (Table.Get ("Acceleration_Max")) * mm / s**2,
-         Jerk_Max                => From_TOML (Table.Get ("Jerk_Max")) * mm / s**3,
-         Snap_Max                => From_TOML (Table.Get ("Snap_Max")) * mm / s**4,
-         Crackle_Max             => From_TOML (Table.Get ("Crackle_Max")) * mm / s**5,
-         Chord_Error_Max         => From_TOML (Table.Get ("Chord_Error_Max")) * mm,
-         Axial_Scaler            => From_TOML (Table.Get ("Axial_Scaler")));
-   end From_TOML;
-
-   function To_TOML (V : TMC_Types.Unsigned_1) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_1 is (TMC_Types.Unsigned_1 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_2) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_2 is (TMC_Types.Unsigned_2 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_3) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_3 is (TMC_Types.Unsigned_3 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_4) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_4 is (TMC_Types.Unsigned_4 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_5) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_5 is (TMC_Types.Unsigned_5 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_6) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_6 is (TMC_Types.Unsigned_6 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_7) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_7 is (TMC_Types.Unsigned_7 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_8) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_8 is (TMC_Types.Unsigned_8 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_9) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_9 is (TMC_Types.Unsigned_9 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_10) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_10 is (TMC_Types.Unsigned_10 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_11) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_11 is (TMC_Types.Unsigned_11 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_12) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_12 is (TMC_Types.Unsigned_12 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_13) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_13 is (TMC_Types.Unsigned_13 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_14) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_14 is (TMC_Types.Unsigned_14 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_15) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_15 is (TMC_Types.Unsigned_15 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_16) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_16 is (TMC_Types.Unsigned_16 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_17) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_17 is (TMC_Types.Unsigned_17 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_18) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_18 is (TMC_Types.Unsigned_18 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_19) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_19 is (TMC_Types.Unsigned_19 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_20) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_20 is (TMC_Types.Unsigned_20 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_21) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_21 is (TMC_Types.Unsigned_21 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_22) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_22 is (TMC_Types.Unsigned_22 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_23) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_23 is (TMC_Types.Unsigned_23 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_24) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_24 is (TMC_Types.Unsigned_24 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_25) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_25 is (TMC_Types.Unsigned_25 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_26) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_26 is (TMC_Types.Unsigned_26 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_27) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_27 is (TMC_Types.Unsigned_27 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_28) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_28 is (TMC_Types.Unsigned_28 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_29) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_29 is (TMC_Types.Unsigned_29 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_30) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_30 is (TMC_Types.Unsigned_30 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_31) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_31 is (TMC_Types.Unsigned_31 (V.As_Integer));
-
-   function To_TOML (V : TMC_Types.Unsigned_32) return TOML_Value is (Create_Integer (Any_Integer (V)));
-   function From_TOML (V : TOML_Value) return TMC_Types.Unsigned_32 is (TMC_Types.Unsigned_32 (V.As_Integer));
-
-   package TMC2240_Slope_Control_Type_TOML_Conversion is new Discrete_TOML_Conversion
-     (TMC_Types.TMC2240.Slope_Control_Type);
-   use TMC2240_Slope_Control_Type_TOML_Conversion;
-
-   package TMC2240_Microstep_Resolution_Type_TOML_Conversion is new Discrete_TOML_Conversion
-     (TMC_Types.TMC2240.Microstep_Resolution_Type);
-   use TMC2240_Microstep_Resolution_Type_TOML_Conversion;
-
-   package TMC2240_Freewheel_Type_TOML_Conversion is new Discrete_TOML_Conversion (TMC_Types.TMC2240.Freewheel_Type);
-   use TMC2240_Freewheel_Type_TOML_Conversion;
-
-   function Left (Key : Unbounded_UTF8_String; L, R : TOML_Value) return TOML_Value is
-   begin
-      if Kind (L) = TOML_Table and Kind (R) = TOML_Table then
-         return Merge (L, R, Left'Access);
+      if Kind (Val) = JSON_Float_Type then
+         return Get_Long_Float (Val);
+      elsif Kind (Val) = JSON_Int_Type then
+         return Long_Float (Long_Long_Integer'(Get (Val)));
       else
-         return L;
+         raise Constraint_Error with "Not a number.";
       end if;
-   end Left;
+   end My_Get_Long_Float;
 
-   function Right (Key : Unbounded_UTF8_String; L, R : TOML_Value) return TOML_Value is
+   function My_Get_Long_Float (Val : JSON_Value; Field : UTF8_String) return Long_Float is
    begin
-      if Kind (L) = TOML_Table and Kind (R) = TOML_Table then
-         return Merge (L, R, Right'Access);
-      else
-         return R;
-      end if;
-   end Right;
+      return My_Get_Long_Float (Get (Val, Field));
+   end My_Get_Long_Float;
+
+   function Get_JSON_Integer (Val : JSON_Value; Field : UTF8_String) return T is
+   begin
+      return T (Long_Long_Integer'(Get (Get (Val, Field))));
+   end Get_JSON_Integer;
+
+   pragma Warnings (Off, "function ""Get"" is not referenced");
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_1);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_2);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_3);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_4);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_5);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_6);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_7);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_8);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_9);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_10);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_11);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_12);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_13);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_14);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_15);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_16);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_17);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_18);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_19);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_20);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_21);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_22);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_23);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_24);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_25);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_26);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_27);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_28);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_29);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_30);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_31);
+   function Get is new Get_JSON_Integer (TMC_Types.Unsigned_32);
+   pragma Warnings (On, "function ""Get"" is not referenced");
+
+   function Get (Val : JSON_Value; Field : UTF8_String) return Dimensionless is
+   begin
+      return Dimensionless (My_Get_Long_Float (Val, Field));
+   end Get;
+
+   function Get (Val : JSON_Value; Field : UTF8_String) return TMC_Boolean is
+   begin
+      return TMC_Types.TMC_Boolean (Boolean'(Get (Val, Field)));
+   end Get;
+
+   function Trim (S : String) return String is
+   begin
+      return Ada.Strings.Fixed.Trim (S, Side => Ada.Strings.Both);
+   end Trim;
+
+   function Build_Schema return Property_Maps.Map is
+      function Boolean (Description : String; Default : Boolean) return Property_Parameters_Access is
+      begin
+         return
+           new Property_Parameters'
+             (Kind            => Boolean_Kind,
+              Description     => To_Unbounded_String (Description),
+              Boolean_Default => Default);
+      end Boolean;
+
+      function Sequence (Description : String; Children : Property_Maps.Map) return Property_Parameters_Access is
+      begin
+         return
+           new Property_Parameters'
+             (Kind              => Sequence_Kind,
+              Description       => To_Unbounded_String (Description),
+              Sequence_Children => Children,
+              Sequence_Tabbed   => False);
+      end Sequence;
+
+      function Tabbed_Sequence
+        (Description : String; Children : Property_Maps.Map) return Property_Parameters_Access
+      is
+      begin
+         return
+           new Property_Parameters'
+             (Kind              => Sequence_Kind,
+              Description       => To_Unbounded_String (Description),
+              Sequence_Children => Children,
+              Sequence_Tabbed   => True);
+      end Tabbed_Sequence;
+
+      function Variant
+        (Description : String; Default : String; Children : Property_Maps.Map) return Property_Parameters_Access
+      is
+      begin
+         return
+           new Property_Parameters'
+             (Kind             => Variant_Kind,
+              Description      => To_Unbounded_String (Description),
+              Variant_Children => Children,
+              Variant_Default  => To_Unbounded_String (Default));
+      end Variant;
+
+      function Integer
+        (Description       : String;
+         Default, Min, Max : Long_Long_Integer;
+         Unit              : String)
+         return Property_Parameters_Access
+      is
+      begin
+         return
+           new Property_Parameters'
+             (Kind            => Integer_Kind,
+              Description     => To_Unbounded_String (Description),
+              Integer_Min     => Min,
+              Integer_Max     => Max,
+              Integer_Unit    => To_Unbounded_String (Unit),
+              Integer_Default => Default);
+      end Integer;
+
+      function Float
+        (Description : String; Default, Min, Max : Long_Float; Unit : String) return Property_Parameters_Access
+      is
+      begin
+         return
+           new Property_Parameters'
+             (Kind          => Float_Kind,
+              Description   => To_Unbounded_String (Description),
+              Float_Min     => Min,
+              Float_Max     => Max,
+              Float_Unit    => To_Unbounded_String (Unit),
+              Float_Default => Default);
+      end Float;
+
+      function Discrete
+        (Description : String;
+         Default     : String;
+         Options     : Discrete_String_Sets.Set)
+         return Property_Parameters_Access
+      is
+      begin
+         return
+           new Property_Parameters'
+             (Kind             => Discrete_Kind,
+              Description      => To_Unbounded_String (Description),
+              Discrete_Options => Options,
+              Discrete_Default => To_Unbounded_String (Default));
+      end Discrete;
+
+      function Sequence_Over_Axes
+        (Description : String; Property : Property_Parameters_Access) return Property_Parameters_Access
+      is
+         Children : Property_Maps.Map := [];
+      begin
+         for A in Axis_Name loop
+            Property_Maps.Insert (Children, A'Image, Property);
+         end loop;
+
+         return
+           new Property_Parameters'
+             (Kind              => Sequence_Kind,
+              Description       => To_Unbounded_String (Description),
+              Sequence_Children => Children,
+              Sequence_Tabbed   => False);
+      end Sequence_Over_Axes;
+
+      function Sequence_Over_Steppers
+        (Description : String; Property : Property_Parameters_Access) return Property_Parameters_Access
+      is
+         Children : Property_Maps.Map := [];
+      begin
+         for S in Stepper_Name loop
+            Property_Maps.Insert (Children, S'Image, Property);
+         end loop;
+
+         return
+           new Property_Parameters'
+             (Kind              => Sequence_Kind,
+              Description       => To_Unbounded_String (Description),
+              Sequence_Children => Children,
+              Sequence_Tabbed   => False);
+      end Sequence_Over_Steppers;
+
+      Input_Switch_Name_Strings : constant Discrete_String_Sets.Set := [for I in Input_Switch_Name => I'Image];
+      Thermistor_Name_Strings : constant Discrete_String_Sets.Set := [for T in Thermistor_Name => T'Image];
+      Heater_Name_Strings : constant Discrete_String_Sets.Set := [for H in Heater_Name => H'Image];
+
+      --!pp off
+      Basic_Stepper_Sequence : constant Property_Parameters_Access :=
+        Sequence
+          ("Basic stepper driver settings.",
+           ["Enabled" =>
+              Boolean
+                ("Enable this stepper driver, allowing it to be attached to an axis.",
+                 Default => False),
+            "Distance per step" =>
+              Float
+                ("Distance moved by the attached motor for each step signal.",
+                 Default => 1.0E100,
+                 Min     => -1.0E100,
+                 Max     => 1.0E100,
+                 Unit    => "mm")]);
+
+      --  TODO: Add StallGuard and CoolStep.
+      TMC2240_Stepper_Sequence : constant Property_Parameters_Access :=
+        Sequence
+          ("TMC2240 stepper driver settings.",
+           ["Enabled" =>
+              Boolean
+                ("Enable this stepper driver, allowing it to be attached to an axis.",
+                 Default => False),
+            "Distance per step" =>
+              Float
+                ("Distance moved by the attached motor for each step signal.",
+                 Default => 1.0E100,
+                 Min     => -1.0E100,
+                 Max     => 1.0E100,
+                 Unit    => "mm"),
+            "Run current" =>
+              Float
+                ("Peak current limit for each motor coil. This parameter will be used to set CURRENT_RANGE to the " &
+                   "smallest suitable range before setting GLOBALSCALER.",
+                 Default => 0.125,
+                 Min     => 0.125,
+                 Max     => 3.0,
+                 Unit    => "A"),
+            "SLOPE_CONTROL" =>
+              Discrete
+                ("Output slew rate. 400V/uS is usually a good setting. 800V/uS provides a minimal decrease in power " &
+                   "dissipation.",
+                 Default => "SLOPE_400V_PER_US",
+                 --  [for X in TMC_Types.TMC2240.Slope_Control_Type => X'Image]),
+                 --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+                 Options => ["SLOPE_100V_PER_US", "SLOPE_200V_PER_US", "SLOPE_400V_PER_US", "SLOPE_800V_PER_US"]),
+            "IHOLD" =>
+              Float
+                ("Standstill current scale. 0 = 0% of set current, 1 = 100% of set current. Resolution of 1/32.",
+                 Default => 1.0,
+                 Min     => 0.031_25,
+                 Max     => 1.0,
+                 Unit    => ""),
+            "IRUN" =>
+              Float
+                ("Run current scale. 0 = 0% of set current, 1 = 100% of set current. Resolution of 1/32.",
+                 Default => 1.0,
+                 Min     => 0.031_25,
+                 Max     => 1.0,
+                 Unit    => ""),
+            "IHOLDDELAY" =>
+              Float
+                ("Slew time for motor power down after standstill detected. Resolution of 21ms.",
+                 --  Actually 80ns*2^18 = 20.97152ms, but 21ms is close enough given the internal oscillator is +/- 5%.
+                 Default => 315.0,
+                 Min     => 0.0,
+                 Max     => 315.0,
+                 Unit    => "ms"),
+            "IRUNDELAY" =>
+              --  TODO: This description and allowed values assumes the internal oscillator is used.
+              Float
+                ("Slew time for motor power up after end of standstill. Resolution is 0.041ms",
+                 --  Actually 40.96us, but 21us is close enough given the internal oscillator is +/- 5%.
+                 Default => 0.0,
+                 Min     => 0.0,
+                 Max     => 0.615,
+                 Unit    => "ms"),
+            "TPOWERDOWN" =>
+              --  TODO: This description and allowed values assumes the internal oscillator is used.
+              Float
+                ("Delay before motor power down after standstill detected. A minimum value of 42ms is required for " &
+                   "automatic StealthChop2 tuning. Resolution of 21ms.",
+                 --  Actually 80ns*2^18 = 20.97152ms, but 21ms is close enough given the internal oscillator is +/- 5%.
+                 Default => 5_355.0,
+                 Min     => 0.0,
+                 Max     => 5_355.0,
+                 Unit    => "ms"),
+            "THIGH" =>
+              --  TODO: This description and allowed values assumes the internal oscillator is used.
+              Float
+                ("Lower velocity limit for high velocity mode and upper velocity limit for CoolStep/StealthChop2 " &
+                   "mode (if enabled).",
+                 Default => 1.0E100,
+                 Min     => 0.0,
+                 Max     => 1.0E100,
+                 Unit    => "mm/s"),
+            "TOFF" =>
+              --  TODO: This description assumes the internal oscillator is used.
+              Discrete
+                ("Slow decay (i.e. off time) duration in TMC clock cycles (typically 80ns). 120 is usually a good " &
+                   "setting when combined with TBL = 36 for a theoretical maximum chopper frequency of 40kHz.",
+                 --  [for X in TMC_Types.TMC2240.TOFF_Type
+                 --     range TMC_Types.TMC2240.Off_56 .. TMC_Types.TMC2240.Off_504 => X'Image]),
+                 --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+                 Default => "120",
+                 Options => ["56", "88", "120", "152", "184", "216", "248", "280", "312", "344", "376", "408", "440",
+                  "472", "504"]),
+            "TBL" =>
+              --  TODO: This description and allowed values assumes the internal oscillator is used.
+              Discrete
+                ("Comparator blank time measured in TMC clock cycles (typically 80ns). 36 is usually a good " &
+                   "setting when combined with TOFF = 120 for a theoretical maximum chopper frequency of 40kHz.",
+                 --  [for X in TMC_Types.TMC2240.TBL_Type
+                 --     range TMC_Types.TMC2240.Blank_24 .. TMC_Types.TMC2240.Blank_54 =>
+                 --     X'Image]),
+                 --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+                 Default => "36",
+                 Options => ["24", "36", "54"]),
+            "VHIGHFS" =>
+              Boolean
+                ("Switch to full stepping (no microstep outputs) when in high velocity mode.", Default => False),
+            "VHIGHCHM" =>
+              Boolean
+                ("Set CHM to constant off time, TFD to 0, and approximately double TOFF when in high velocity mode.",
+                 Default => False),
+            "TPFD" =>
+              Integer
+                ("Passive fast decay duration after bridge polarity change. Duration in TMC clock cycles (typically " &
+                   "80ns) = 128 * TPFD.",
+                 Default => 4,
+                 Min     => 0,
+                 Max     => 15,
+                 Unit    => ""),
+            "MRES" =>
+              Discrete
+                --  TODO: Emit error when microstep resolution is too high and document that feature here.
+                ("Microstep resolution.",
+                 --  [for X in TMC_Types.TMC2240.Microstep_Resolution_Type => X'Image]),
+                 --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+                 Default => "MS_256",
+                 Options => ["MS_256", "MS_128", "MS_64", "MS_32", "MS_16", "MS_8", "MS_4", "MS_2", "MS_FULL_STEPS"]),
+            "FAST_STANDSTILL" =>
+              --  TODO: This description assumes the internal oscillator is used.
+              Boolean
+                ("If enabled, wait 2^18 TMC clock cycles (typically 21ms) instead of 2^20 cycles (84ms) after a " &
+                   "step signal be before beginning standstill detection.",
+                 Default => False),
+            "CHM" =>
+              Variant
+                ("Select the chopper mode to be used when StealthChop2 is disabled or the upper velocity limit for " &
+                   "StealthChop2 is exceeded. VHIGHCHM may override this when the velocity set by VHIGH is " &
+                   "exceeded. SpreadCycle usually produces better results.",
+                 "SpreadCycle",
+                 ["SpreadCycle" =>
+                    Variant
+                      ("Select manual SpreadCycle settings or settings derived from motor parameters and other " &
+                         "driver parameters. Derived mode should be used unless manual tuning with an oscilloscope " &
+                         "is being performed.",
+                       "Derived",
+                       ["Derived" =>
+                         Sequence
+                           ("Automatic calculation of optimal SpreadCycle parameters from motor parameters.",
+                            ["Input voltage" =>
+                              Float
+                                ("Driver input voltage, not the voltage listed on the stepper motor specifications. " &
+                                   "An error will be emitted if the measured driver voltage does not match this " &
+                                   "parameter to within 10% at startup. Changing of the driver voltage after " &
+                                   "startup will cause the motor to perform poorly.",
+                                 Default => 24.0,
+                                 Min     => 6.5,
+                                 Max     => 40.0,
+                                 Unit    => "V"),
+                             "Phase inductance" =>
+                               --  The very low values below will cause errors so there's no risk of the user
+                               --  forgetting to set these values.
+                               Float
+                                 ("Inductance of each motor coil as listed on the motor specifications.",
+                                  Default => 0.000_000_1,
+                                  Min     => 0.000_000_1,
+                                  Max     => 10_000_000.0,
+                                  Unit    => "mH"),
+                             "Phase resistance" =>
+                               Float
+                                 ("Resistance of each motor coil as listed on the motor specifications.",
+                                  Default => 0.000_000_1,
+                                  Min     => 0.000_000_1,
+                                  Max     => 10_000_000.0,
+                                  Unit    => "Ohm")]),
+                       "Manual" =>
+                         Sequence
+                           ("SpreadCycle chopper settings. Refer to the TMC2240 datasheet for details on tuning " &
+                              "these values. Derived parameters mode should be used unless manual tuning with " &
+                              "an oscilloscope is being performed.",
+                            ["HSTRT" =>
+                              Integer
+                                ("Hysteresis start setting as described in the TMC2240 datasheet.",
+                                 Default => 5,
+                                 Min     => 0,
+                                 Max     => 7,
+                                 Unit    => ""),
+                             "HEND" =>
+                               Integer
+                                 ("Hysteresis end setting as described in the TMC2240 datasheet. This is the " &
+                                    "resultant value from -3 to 12, not the raw register value.",
+                                  Default => -1,
+                                  Min     => -3,
+                                  Max     => 12,
+                                  Unit    => "")])]),
+                  "Constant off time" =>
+                    Sequence
+                      ("Constant off time chopper settings. No automatic tuning of these parameters is available. " &
+                         "Refer to the TMC2240 datasheet for details on tuning these values. SpreadCycle in derived " &
+                         "parameters mode should be used unless manual tuning with an oscilloscope is being " &
+                         "performed.",
+                       ["DISFDCC" =>
+                          Boolean
+                            ("If set, disable the usage of the current comparator for termination of the fast decay " &
+                               "cycle. If not set then the fast decay cycle will be terminated early if the " &
+                               "negative current value exceeds the previous positive value.",
+                             Default => False),
+                        "OFFSET" =>
+                          Integer
+                            ("Sine wave offset as described in the TMC2240 datasheet. This is the resultant value " &
+                               "from -3 to 12, not the raw register value.",
+                             Default => -1,
+                             Min     => -3,
+                             Max     => 12,
+                             Unit    => ""),
+                        "TFD" =>
+                          Integer
+                            ("Fast decay time setting as described in the TMC2240 datasheet. This parameter sets " &
+                               "both FD3 and HSTRT_TFD210.",
+                             Default => 5,
+                             Min     => 0,
+                             Max     => 15,
+                             Unit    => "")])]),
+            "StealthChop2 (EN_PWM_MODE)" =>
+              Variant
+                ("Enable or disable StealthChop2 for this driver. StealthChop2 reduces audible noise at low " &
+                   "velocities. In most cases no tuning of parameters is required for good results.",
+                 "Disabled",
+                 ["Disabled" => Sequence ("StealthChop2 is disabled.", []),
+                  "Enabled" =>
+                    Sequence
+                      ("StealthChop2 settings.",
+                       ["TPWMTHRS" =>
+                          Float
+                            ("Upper velocity limit for StealthChop2 mode.",
+                             Default => 1.0E100,
+                             Min     => 0.0,
+                             Max     => 1.0E100,
+                             Unit    => "mm/s"),
+                        "PWM_OFS" =>
+                          Integer
+                            ("Fixed part of StealthChop2 maximum PWM amplitude as described in TMC2240 datasheet. " &
+                               "Usually this should be left at the default value of 29 and PWM_AUTOSCALE should be " &
+                               "enabled.",
+                             Default => 29,
+                             Min     => 0,
+                             Max     => 255,
+                             Unit    => ""),
+                        "PWM_GRAD" =>
+                          Integer
+                            ("Velocity dependent part of StealthChop2 maximum PWM described in TMC2240 datasheet. " &
+                               "Usually this should be left at the default value of 0 and PWM_AUTOGRAD should be " &
+                               "enabled.",
+                             Default => 0,
+                             Min     => 0,
+                             Max     => 255,
+                             Unit    => ""),
+                        "PWM_FREQ" =>
+                          --  TODO: This description assumes the internal oscillator is used.
+                          Discrete
+                            ("StealthChop2 PWM cycle duration measured in half TMC clock cycles (typically a half " &
+                               "cycle is 40ns). Usually a value of 683 is a good default for a resultant frequency " &
+                               "of 36kHz.",
+                             Default => "683",
+                             --  [for X in TMC_Types.TMC2240.PWM_Freq_Type => X'Image]),
+                             --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+                             Options => ["1024", "683", "512", "410"]),
+                        "PWM_AUTOSCALE" =>
+                          Boolean
+                            ("Enable automatic tuning of PWM_OFS. Set current limits may not be effective if this " &
+                               "is disabled!",
+                             Default => True),
+                        "PWM_AUTOGRAD" =>
+                          Boolean
+                            ("Enable automatic tuning of PWM_GRAD. Set current limits may not be effective if this " &
+                               "is disabled!",
+                             Default => True),
+                        "FREEWHEEL" =>
+                          Discrete
+                            ("StealthChop2 standstill freewheeling mode when IHOLD = 0.",
+                             Default => "NORMAL",
+                             --  [for X in TMC_Types.TMC2240.Freewheel_Type => X'Image]),
+                             --  TODO: GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=118082
+                             Options => ["NORMAL", "FREEWHEEL", "SHORT_VIA_LS", "SHORT_VIA_HS"]),
+                        "PWM_MEAS_SD_ENABLE" =>
+                          Boolean
+                            ("Use slow decay phase on low side to measure motor current when in StealthChop2 mode.",
+                             Default => False),
+                        "PWM_DIS_REG_STST" =>
+                          Boolean
+                            ("Disable StealthChop2 current regulation when in standstill and reduce the duty cycle " &
+                               "to a very low value.",
+                             Default => False),
+                        "PWM_REG" =>
+                          Integer
+                            ("StealthChop2 maximum PWM auto-scaling change per half wave measured in half " &
+                               "increments, with 1 being 0.5 increments.",
+                             Default => 4,
+                             Min     => 0,
+                             Max     => 15,
+                             Unit    => ""),
+                        "PWM_LIM" =>
+                          Integer
+                            ("StealthChop2 PWM auto-scaling amplitude limit when switching from SpreadCycle to " &
+                               "StealthChop2. Limits the upper 4 bits.",
+                             Default => 12,
+                             Min     => 0,
+                             Max     => 15,
+                             Unit    => ""),
+                        "MULTISTEP_FILT" =>
+                          Boolean
+                            ("Some sort of undocumented filtering for StealthChop2. This should be left off on " &
+                               "official Prunt hardware as the generated step signals have extremely low jitter.",
+                             Default => False)])])]);
+
+      Thermistor_Sequence : constant Property_Parameters_Access :=
+        Sequence
+          ("Thermistor settings.",
+           ["Minimum temperature" =>
+              Float
+                ("Any temperature below this temperature will cause an emergency stop if the heater is enabled.",
+                 Default => 0.0,
+                 Min     => -1.0E100,
+                 Max     => 1.0E100,
+                 Unit    => "C"),
+           "Maximum temperature" =>
+             Float
+               ("Any temperature above this temperature will cause an emergency stop if the heater is enabled.",
+                Default => 0.0,
+                Min     => -1.0E100,
+                Max     => 1.0E100,
+                Unit    => "C"),
+            "Thermistor kind" =>
+              Variant
+                ("The kind of thermistor connected to this input.",
+                 "Disabled",
+                 ["Disabled" =>
+                    Sequence
+                      ("Thermistor is disabled.",
+                       []),
+                  "ATC Semitec 104GT-2" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=8.0965E-4 B=2.1163E-4 C=7.0742E-8. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "ATC Semitec 104NT-4-R025H42G" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=7.9582E-4 B=2.1360E-4 C=6.4830E-8. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "EPCOS 100K B57560G104F" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=7.2213E-4 B=2.1676E-4 C=8.9293E-8. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "Generic 3950" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=7.9347E-4 B=2.0076E-4 C=1.6328E-7. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "SliceEngineering 450" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=3.0553E-4 B=2.1171E-4 C=1.1962E-7. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "TDK NTCG104LH104JT1" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=9.7639E-4 B=1.9688E-4 C=7.2671E-8. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "Honeywell 100K 135-104LAG-J01" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=4.5695E-4 B=2.5163E-4 C=0. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "NTC 100K MGB18-104F39050L32" =>
+                    Sequence
+                      ("Using Steinhart-Hart model with A=5.4598E-4 B=2.4390E-4 C=0. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "PT-1000 (PT-385 class above 0C)" =>
+                    Sequence
+                      ("Using Callendar-Van Dusen model with R(0)=1000 A=3.9083E-3 B=-5.775E-7. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "PT-1000 (PT-392 class above 0C)" =>
+                    Sequence
+                      ("Using Callendar-Van Dusen model with R(0)=1000 A=3.9827E-3 B=-5.875E-7. " &
+                         "You should ensure the thermistor output is correct before use.",
+                       []),
+                  "Custom Steinhart-Hart model" =>
+                    Sequence
+                      ("1 / T = A + B * ln(R) + C * (ln(R))**3 where T is in kelvins.",
+                       ["A" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
+                             Unit    => ""),
+                        "B" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
+                             Unit    => ""),
+                        "C" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
+                             Unit    => "")]),
+                 "Custom Callendar-Van Dusen model" =>
+                    Sequence
+                      ("R = R(0) * (1 + A * T + B * T**2) where T is in celcius.",
+                       ["R(0)" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
+                             Unit    => "ohm"),
+                        "A" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
+                             Unit    => ""),
+                        "B" =>
+                          Float
+                            ("",
+                             Default => 0.0,
+                             Min     => -1.0E100,
+                             Max     => 1.0E100,
+                             Unit    => "")])])]);
+
+      Input_Switch_Sequence : constant Property_Parameters_Access :=
+        Sequence
+          ("Input switch settings.",
+           ["Enabled" =>
+              Boolean
+                ("Enable the switch, allowing it to be used for homing.",
+                 Default => False),
+            "Hit on high" =>
+              Boolean
+                ("Consider the switch to be hit when the input pin is in the high state.",
+                 Default => False)]);
+
+      Homing_Sequence : constant Property_Parameters_Access :=
+        Variant
+          ("Homing method for this axis. Usually ""Set to value"" should be used for E axis and " &
+             """Use input switch"" should be used for XYZ.",
+           "Disabled",
+           ["Disabled" =>
+              Sequence
+                ("Homing not yet configured. Axis will not allow movement until homing is configured.",
+                 []),
+            "Set to value" =>
+              Sequence
+                ("Set this axis to a given position when homing is performed without actually moving.",
+                 ["Position" =>
+                    Float
+                      ("Position to set the axis to.",
+                       Default => 0.0,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
+                       Unit    => "mm")]),
+            "Use input switch" =>
+              Sequence
+                ("Move towards a switch until it is hit, then back off, then move towards it slower and record the " &
+                   "position.",
+                 ["Switch" =>
+                    Discrete
+                      ("Input switch to use.",
+                       Default => Input_Switch_Name'First'Image,
+                       Options => Input_Switch_Name_Strings),
+                  "Move towards negative infinity" =>
+                    Boolean
+                      ("If set then homing will move towards lower positions, otherwise homing will move towards " &
+                         "higher positions.",
+                       Default => True),
+                  "First move distance" =>
+                    Float
+                      ("Distance past switch hit point allowed in first seeking move.",
+                       Default => 0.1,
+                       Min     => 0.000_001,
+                       Max     => 1.0E100,
+                       Unit    => "mm"),
+                  "Back off move distance" =>
+                    Float
+                      ("Distance that is moved back after the switch is first hit.",
+                       Default => 2.0,
+                       Min     => 0.0,
+                       Max     => 1.0E100,
+                       Unit    => "mm"),
+                  "Second move distance" =>
+                    Float
+                      ("Distance past switch hit point allowed in second seeking move.",
+                       Default => 0.1,
+                       Min     => 0.000_001,
+                       Max     => 1.0E100,
+                       Unit    => "mm"),
+                  "Switch position" =>
+                    Float
+                      ("Position of the switch on the axis. This value is allowed to be outside of the machine " &
+                         "limits.",
+                       Default => 0.0,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
+                       Unit    => "mm"),
+                  "Move to after" =>
+                    Float
+                      ("Position to move to after homing. This position must be inside the machine limits.",
+                       Default => 0.0,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
+                       Unit    => "mm")])]);
+
+      Heater_Sequence : constant Property_Parameters_Access :=
+        Sequence
+          ("Parameters for this heater.",
+           ["Thermistor" =>
+              Discrete
+                ("Thermistor connected to this heater.",
+                 Default => Thermistor_Name'First'Image,
+                 Options => Thermistor_Name_Strings),
+            "Check maximum cumulative error" =>
+              Float
+                ("Maximum cumulative error before a failure is detected.",
+                 Default => 120.0,
+                 Min     => 0.0,
+                 Max     => 1.0E100,
+                 Unit    => "C"),
+            "Check gain time" =>
+              Float
+                ("Period to check for temperature rise over during heating to detect failures.",
+                 Default => 20.0,
+                 Min     => 0.0,
+                 Max     => 1.0E100,
+                 Unit    => "s"),
+            "Check minimum gain" =>
+              Float
+                ("Minium temperature rise required in gain period to reset cumulative error.",
+                 Default => 2.0,
+                 Min     => 0.0,
+                 Max     => 1.0E100,
+                 Unit    => "C"),
+            "Check hysteresis" =>
+              Float
+                ("Maximum temperature below or above the setpoint where the heater is considered to be at " &
+                   "temperature.",
+                 Default => 3.0,
+                 Min     => 0.0,
+                 Max     => 1.0E100,
+                 Unit    => "C"),
+            "Control method" =>
+              Variant
+                ("Type of control used for this heater.",
+                 "Disabled",
+                 ["Disabled" =>
+                    Sequence
+                      ("This heater is disabled.",
+                       []),
+                  "PID" =>
+                    Sequence
+                      ("Basic PID control. Can be automatically tuned with M303 g-code command.",
+                      ["Proportional scale" =>
+                         Float
+                           ("Scale for proportional part.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 1.0E100,
+                            Unit    => ""),
+                       "Integral scale" =>
+                         Float
+                           ("Scale for integral part.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 1.0E100,
+                             Unit    => ""),
+                       "Derivative scale" =>
+                         Float
+                           ("Scale for derivative part.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 1.0E100,
+                            Unit    => "")]),
+                  "Bang bang" =>
+                    Sequence
+                      ("Turn on the heater when the temperature falls below setpoint - hysteresis/2 and turn " &
+                         "off the heater when the temperature rises above setpoint + hysteresis/2.",
+                      ["Hysteresis" =>
+                         Float
+                           ("Hysteresis for switching the heater on or off.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 1.0E100,
+                            Unit    => "C")])])]);
+
+      Fan_Sequence : constant Property_Parameters_Access :=
+        Sequence
+          ("Settings for this fan.",
+           ["Invert PWM output" =>
+              Boolean
+                ("Invert the PWM output.",
+                 Default => False),
+           "PWM frequency" =>
+              Float
+                ("Frequency of the PWM output. 30Hz is usually the best value for 2-wire fans and 25000Hz is " &
+                   "usually required for 4-wire fans.",
+                 Default => 30.0,
+                 Min     => 1.0,
+                 Max     => 50_000.0,
+                 Unit    => "Hz"),
+            "Control method" =>
+              Variant
+                ("Type of control used for this fan.",
+                 "Always on",
+                 ["Dynamic duty cycle" =>
+                    Sequence
+                      ("Allow for setting of the duty cycle while the printer is running (e.g. via M106/M107).",
+                      ["Disable below" =>
+                         Float
+                           ("Set the duty cycle to zero if it falls below this value.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => ""),
+                      "Maximum duty cycle" =>
+                         Float
+                           ("Duty cycle corresponding to 100%.",
+                            Default => 1.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => "")]),
+                  "Always on" =>
+                    Sequence
+                      ("The fan always stays with a fixed PWM duty cycle.",
+                      ["Duty cycle" =>
+                         Float
+                           ("Duty cycle to send to the fan.",
+                            Default => 1.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => "")])])]);
+      --!pp on
+
+      Result : Property_Maps.Map;
+   begin
+      --!pp off
+      Result :=
+        ["Prunt" =>
+          Sequence
+            ("Prunt settings.",
+             ["Enabled" =>
+                Boolean
+                  ("Enable the printer. The printer will automatically by disabled if an error occurs or if the " &
+                     "configuration is invalid.",
+                   Default => False),
+              "Replace G0 with G1" =>
+                Boolean
+                  ("Replace all G0 g-code commands with G1 commands to mimic the behaviour of some other 3D " &
+                     "printer motion controllers.",
+                   Default => False)]),
+         "Steppers" =>
+           Tabbed_Sequence
+             ("Stepper driver settings.",
+              []),
+         "Kinematics" =>
+           Sequence
+             ("Kinematic settings.",
+              ["Lower position limit" =>
+                 Sequence_Over_Axes
+                   ("Minimum position that the printer may move to. Any axis may be set to -1E100 for effectively " &
+                      "infinite range.",
+                   Float
+                     ("",
+                      Default => 0.0,
+                      Min     => -1.0E100,
+                      Max     => 1.0E100,
+                      Unit    => "mm")),
+               "Upper position limit" =>
+                 Sequence_Over_Axes
+                   ("Maximum position that the printer may move to. Any axis may be set to 1E100 for effectively " &
+                      "infinite range.",
+                    Float
+                      ("",
+                       Default => 0.0,
+                       Min     => -1.0E100,
+                       Max     => 1.0E100,
+                       Unit    => "mm")),
+               "Ignore E in XYZE" =>
+                 Boolean
+                   ("Ignore the E axis component of the feedrate unless E is the only axis in a command (e.g. " &
+                      "'G1 X1 E100 F1' will cause the X axis to move at 1 mm/min and the E axis will move as fast " &
+                      "as required). This is the behaviour that most other 3D printer motion controllers use. The " &
+                      "E axis feedrate limit and global feedrate limit will always be respected regardless of " &
+                      "this setting.",
+                    Default => True),
+               "Shift blended corners" =>
+                 Boolean
+                   ("Attempt to shift blended corners such that the blended path intersects the original corner " &
+                      "rather than cutting off the corner. Enabling this will also cause line segments to move " &
+                      "outwards slightly to match the corners.",
+                    Default => False),
+               "Maximum tangential velocity" =>
+                 Float
+                   ("The maximum combined feedrate of all axes, including the E axis. Usually this should be set " &
+                      "to a high value (e.g. 1E100) and the per-axis limits should be used instead.",
+                    Default => 10.0,
+                    Min     => 0.000_001,
+                    Max     => 1.0E100,
+                    Unit    => "mm/s"),
+               "Axial velocity limits" =>
+                 Sequence_Over_Axes
+                   ("Maximum feedrate for each individual axis.",
+                    Float
+                      ("",
+                       Default => 10.0,
+                       Min     => 0.000_001,
+                       Max     => 1.0E100,
+                       Unit    => "mm/s")),
+               "Pressure advance time" =>
+                 Float
+                   ("The E axis velocity is multiplied by this value and then added to the E axis position. " &
+                      "This means that the maximum E axis velocity is the set maximum plus the pressure advance " &
+                      "time multiplied by the set maximum acceleration. The same applies to jerk etc..",
+                    Default => 0.0,
+                    Min     => -1.0E100,
+                    Max     => 1.0E100,
+                    Unit    => "s"),
+               "Maximum chord error" =>
+                 Float
+                   ("The maximum distance that the planned path may deviate from the commanded path. Setting this " &
+                      "parameter to 0 will cause the printer to come to a complete stop at every corner.",
+                    Default => 0.1,
+                    Min     => 0.0,
+                    Max     => 1.0E100,
+                    Unit    => "mm"),
+               "Maximum acceleration" =>
+                 Float
+                   ("May safely be set to 1E100 for effectively infinite acceleration (to the extent allowed by " &
+                      "other constraints). Axial values will go above this value when corner blending is enabled.",
+                    Default => 100.0,
+                    Min     => 0.000_001,
+                    Max     => 1.0E100,
+                    Unit    => "mm/s^2"),
+               "Maximum jerk" =>
+                 Float
+                   ("May safely be set to 1E100 for effectively infinite jerk (to the extent allowed by " &
+                      "other constraints). Axial values will go above this value when corner blending is enabled. " &
+                      "A good starting point for tuning is 100 times the set maximum acceleration. " &
+                      "This can be achieved by appending E2 to you acceleration value in this field.",
+                    Default => 100.0E2,
+                    Min     => 0.000_001,
+                    Max     => 1.0E100,
+                    Unit    => "mm/s^3"),
+               "Maximum snap" =>
+                 Float
+                   ("May safely be set to 1E100 for effectively infinite snap (to the extent allowed by " &
+                      "other constraints). Axial values will go above this value when corner blending is enabled. " &
+                      "A good starting point for tuning is 100,000 times the set maximum acceleration. " &
+                      "This can be achieved by appending E5 to you acceleration value in this field.",
+                    Default => 100.0E5,
+                    Min     => 0.000_001,
+                    Max     => 1.0E100,
+                    Unit    => "mm/s^4"),
+               "Maximum crackle" =>
+                 Float
+                   ("May safely be set to 1E100 for effectively infinite crackle (to the extent allowed by " &
+                      "other constraints). Axial values will go above this value when corner blending is enabled. " &
+                      "A good starting point for tuning is 1,000,000,000 times the set maximum acceleration. " &
+                      "This can be achieved by appending E9 to you acceleration value in this field.",
+                    Default => 100.0E9,
+                    Min     => 0.000_001,
+                    Max     => 1.0E100,
+                    Unit    => "mm/s^5"),
+               "Axial scaler" =>
+                 Sequence_Over_Axes
+                   ("Inside the motion planner, all positions are divided by this value before applying motion " &
+                      "profile limits, allowing for different limits on different axes. You do not need to take " &
+                      "this value in to account when setting position limits, mm per step values, axial velocity " &
+                      "limits, or when setting the feedrate in g-code. Corner deviation and tangential feedrate, " &
+                      "acceleration, etc. is based on scaled positions, so a tangential acceleration of 10mm/s^2 " &
+                      "and a scaler of 0.5 will set the axial limit to 5mm/s^2.",
+                    Float
+                      ("",
+                       Default => 1.0,
+                       Min     => 1.0E-100,
+                       Max     => 1.0E100,
+                       Unit    => "")),
+               "Kinematics kind" =>
+                 Variant
+                   ("The type of kinematics used by the printer.",
+                    "Cartesian",
+                    ["Cartesian" =>
+                       Sequence_Over_Steppers
+                         ("Axis each stepper is attached to.",
+                          Discrete
+                            ("",
+                             Default => "NONE",
+                             Options => ["NONE", "X_AXIS", "Y_AXIS", "Z_AXIS", "E_AXIS"])),
+                     "Core XY" =>
+                       Sequence_Over_Steppers
+                         ("Axis each stepper is attached to.",
+                          Discrete
+                            ("",
+                             Default => "NONE",
+                             Options => ["NONE", "A_AXIS", "B_AXIS", "Z_AXIS", "E_AXIS"]))])]),
+         "Input switches" =>
+           Tabbed_Sequence
+             ("Input switch settings.",
+              []),
+         "Thermistors" =>
+           Tabbed_Sequence
+             ("Thermistor settings.",
+              []),
+         "Heaters" =>
+           Tabbed_Sequence
+             ("Heater settings.",
+              []),
+         "Homing" =>
+           Tabbed_Sequence
+             ("Homing settings.",
+              []),
+         "Fans" =>
+           Tabbed_Sequence
+             ("Fan settings.",
+              []),
+         "G-code assignments" =>
+           Sequence
+             ("Assign heaters to g-code commands.",
+              ["Hotend heater" =>
+                 Discrete
+                   ("Heater to use for the hotend.",
+                    Default => Heater_Name'First'Image,
+                    Options => Heater_Name_Strings),
+              "Bed heater" =>
+                 Discrete
+                   ("Heater to use for the bed.",
+                    Default => Heater_Name'First'Image,
+                    Options => Heater_Name_Strings)])];
+      --!pp on
+
+      for S in Stepper_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Steppers").Element.all.Sequence_Children,
+            S'Image,
+            (if Stepper_Kinds (S) = Basic_Kind then
+                Basic_Stepper_Sequence
+             elsif Stepper_Kinds (S) = TMC2240_UART_Kind then
+                TMC2240_Stepper_Sequence
+             else
+                raise Constraint_Error with "Config not implemented for stepper kind " & S'Image));
+      end loop;
+
+      for I in Input_Switch_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Input switches").Element.all.Sequence_Children,
+            I'Image,
+            Input_Switch_Sequence);
+      end loop;
+
+      for T in Thermistor_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Thermistors").Element.all.Sequence_Children,
+            T'Image,
+            Thermistor_Sequence);
+      end loop;
+
+      for H in Heater_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Heaters").Element.all.Sequence_Children, H'Image, Heater_Sequence);
+      end loop;
+
+      for F in Fan_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Fans").Element.all.Sequence_Children, F'Image, Fan_Sequence);
+      end loop;
+
+      for A in Axis_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children, A'Image, Homing_Sequence);
+      end loop;
+
+      return Result;
+   end Build_Schema;
+
+   function Schema_To_JSON (Schema : Property_Maps.Map) return Ada.Strings.Unbounded.Unbounded_String is
+      --  String escape functionality can be added here if required.
+
+      use Ada.Strings.Unbounded;
+
+      Result : Unbounded_String;
+
+      procedure DFS (Node : Property_Maps.Map) is
+         use Property_Maps;
+         use Discrete_String_Sets;
+      begin
+         Append (Result, "{");
+         for I in Node.Iterate loop
+            Append (Result, """" & Key (I) & """:{""Description"":""" & JSON_Escape (Element (I).Description) & """,");
+            case Element (I).Kind is
+               when Boolean_Kind =>
+                  Append (Result, """Kind"":""Boolean""}");
+               when Discrete_Kind =>
+                  Append (Result, """Kind"":""Discrete"",""Options"":[");
+                  declare
+                     Options : constant Discrete_String_Sets.Set := Element (I).Discrete_Options;
+                  begin
+                     for J in Options.Iterate loop
+                        Append (Result, """" & Element (J) & """");
+                        if Element (J) /= Last_Element (Options) then
+                           Append (Result, ",");
+                        end if;
+                     end loop;
+                  end;
+                  Append (Result, "]}");
+               when Integer_Kind =>
+                  Append
+                    (Result,
+                     """Kind"":""Integer""" &
+                       ",""Min"":" & Trim (Element (I).Integer_Min'Image) &
+                       ",""Max"":" & Trim (Element (I).Integer_Max'Image) &
+                       ",""Unit"":" & Element (I).Integer_Unit'Image & "}");
+               when Float_Kind =>
+                  Append
+                    (Result,
+                     """Kind"":""Float""" &
+                       ",""Min"":" & Trim (Element (I).Float_Min'Image) &
+                       ",""Max"":" & Trim (Element (I).Float_Max'Image) &
+                       ",""Unit"":" & Element (I).Float_Unit'Image & "}");
+               when Sequence_Kind =>
+                  if Element (I).Sequence_Tabbed then
+                     Append (Result, """Kind"":""Tabbed_Sequence"",""Children"":");
+                  else
+                     Append (Result, """Kind"":""Sequence"",""Children"":");
+                  end if;
+                  DFS (Element (I).Sequence_Children);
+                  Append (Result, "}");
+               when Variant_Kind =>
+                  Append (Result, """Kind"":""Variant"",""Children"":");
+                  DFS (Element (I).Variant_Children);
+                  Append (Result, "}");
+            end case;
+            if Key (I) /= Last_Key (Node) then
+               Append (Result, ",");
+            end if;
+         end loop;
+         Append (Result, "}");
+      end DFS;
+   begin
+      DFS (Schema);
+      return Result;
+   end Schema_To_JSON;
+
+   function Build_Flat_Schema (Schema : Property_Maps.Map) return Flat_Schemas.Map is
+      Result : Flat_Schemas.Map;
+
+      procedure DFS (Node : Property_Maps.Map; Path : String) is
+         use Property_Maps;
+         use Flat_Schemas;
+         use Discrete_String_Sets;
+      begin
+         for I in Node.Iterate loop
+            declare
+               New_Path : constant String := Path & (if Path = "" then "" else "$") & Key (I);
+            begin
+               case Element (I).Kind is
+                  when Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind =>
+                     Insert (Result, New_Path, Element (I));
+                  when Sequence_Kind =>
+                     DFS (Element (I).Sequence_Children, New_Path);
+                  when Variant_Kind =>
+                     declare
+                        Children : constant Property_Maps.Map := Element (I).Variant_Children;
+                        Options  : Discrete_String_Sets.Set;
+                     begin
+                        for J in Children.Iterate loop
+                           Insert (Options, Key (J));
+                           --  TODO: Obviously an aggregate expression would be cleaner here, but GCC 14.2 appears
+                           --  to have a bug that prevents this. This bug is fixed in 15 at the time of writing. A
+                           --  standalone test program is available here:
+                           --  https://gist.github.com/liampwll/87a498ebf6aa335dfa3cda0f9ef2dcc5
+                        end loop;
+                        Insert
+                          (Result,
+                           New_Path,
+                           new Property_Parameters'
+                             (Kind             => Discrete_Kind,
+                              Description      => To_Unbounded_String (""),
+                              Discrete_Default => Element (I).Variant_Default,
+                              Discrete_Options => Options));
+                        DFS (Children, New_Path);
+                     end;
+               end case;
+            end;
+         end loop;
+      end DFS;
+   begin
+      DFS (Schema, "");
+      return Result;
+   end Build_Flat_Schema;
 
    protected body Config_File is
 
-      procedure Read (Data : out Prunt_Parameters) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Append_Only => True);
-         Table := TOML_Data.Get ("Prunt");
-
-         Data.Enabled            := From_TOML (Table.Get ("Enabled"));
-         Data.Replace_G0_With_G1 := From_TOML (Table.Get ("Replace_G0_With_G1"));
-      end Read;
-
-      procedure Write (Data : Prunt_Parameters; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         Table.Set ("Enabled", To_TOML (Data.Enabled));
-         Table.Set ("Replace_G0_With_G1", To_TOML (Data.Replace_G0_With_G1));
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Prunt", Create_Table);
-         TOML_Data.Set
-           ("Prunt", Merge (TOML_Data.Get ("Prunt"), Table, (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) is
-         Table : TOML_Value;
-      begin
-         case Stepper_Kinds (Stepper) is
-            when Basic_Kind =>
-               Data := (Kind => Basic_Kind, others => <>);
-               Write (Data, Stepper, Append_Only => True);
-               Table := TOML_Data.Get ("Stepper").Get (Stepper'Image);
-            when TMC2240_UART_Kind =>
-               Data := (Kind => TMC2240_UART_Kind, others => <>);
-               Write (Data, Stepper, Append_Only => True);
-               Table                     := TOML_Data.Get ("Stepper").Get (Stepper'Image);
-               Data.Output_Current       := From_TOML (Table.Get ("Output_Current")) * amp;
-               Data.Slope_Control        := From_TOML (Table.Get ("Slope_Control"));
-               Data.I_Hold               := From_TOML (Table.Get ("I_Hold"));
-               Data.I_Run                := From_TOML (Table.Get ("I_Run"));
-               Data.I_Hold_Delay         := From_TOML (Table.Get ("I_Hold_Delay"));
-               Data.I_Run_Delay          := From_TOML (Table.Get ("I_Run_Delay"));
-               Data.T_Power_Down         := From_TOML (Table.Get ("T_Power_Down"));
-               Data.T_PWM_Thrs           := From_TOML (Table.Get ("T_PWM_Thrs"));
-               Data.T_Cool_Thrs          := From_TOML (Table.Get ("T_Cool_Thrs"));
-               Data.T_High               := From_TOML (Table.Get ("T_High"));
-               Data.TOFF                 := From_TOML (Table.Get ("TOFF"));
-               Data.HSTRT_TFD210         := From_TOML (Table.Get ("HSTRT_TFD210"));
-               Data.HEND_OFFSET          := From_TOML (Table.Get ("HEND_OFFSET"));
-               Data.FD3                  := From_TOML (Table.Get ("FD3"));
-               Data.DISFDCC              := From_TOML (Table.Get ("DISFDCC"));
-               Data.CHM                  := From_TOML (Table.Get ("CHM"));
-               Data.VHIGHFS              := From_TOML (Table.Get ("VHIGHFS"));
-               Data.VHIGHCHM             := From_TOML (Table.Get ("VHIGHCHM"));
-               Data.TPFD                 := From_TOML (Table.Get ("TPFD"));
-               Data.Microstep_Resolution := From_TOML (Table.Get ("Microstep_Resolution"));
-               Data.PWM_OFS              := From_TOML (Table.Get ("PWM_OFS"));
-               Data.PWM_Grad             := From_TOML (Table.Get ("PWM_Grad"));
-               Data.PWM_Freq             := From_TOML (Table.Get ("PWM_Freq"));
-               Data.PWM_Auto_Scale       := From_TOML (Table.Get ("PWM_Auto_Scale"));
-               Data.PWM_Auto_Grad        := From_TOML (Table.Get ("PWM_Auto_Grad"));
-               Data.Freewheel            := From_TOML (Table.Get ("Freewheel"));
-               Data.PWM_Meas_SD_Enable   := From_TOML (Table.Get ("PWM_Meas_SD_Enable"));
-               Data.PWM_Dis_Reg_Stst     := From_TOML (Table.Get ("PWM_Dis_Reg_Stst"));
-               Data.PWM_Reg              := From_TOML (Table.Get ("PWM_Reg"));
-               Data.PWM_Lim              := From_TOML (Table.Get ("PWM_Lim"));
-         end case;
-         Data.Enabled     := From_TOML (Table.Get ("Enabled"));
-         Data.Mm_Per_Step := From_TOML (Table.Get ("Mm_Per_Step")) * mm;
-
-         if Data.Kind /= Stepper_Kinds (Stepper) then
-            raise Constraint_Error
-              with "Provided Stepper_Parameters has wrong discriminant. Expected " & Stepper_Kinds (Stepper)'Image &
-              " but got " & Data.Kind'Image & " for stepper " & Stepper'Image & ".";
-         end if;
-      end Read;
-
-      procedure Write (Data : Stepper_Parameters; Stepper : Stepper_Name; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         if Data.Kind /= Stepper_Kinds (Stepper) then
-            raise Constraint_Error
-              with "Provided Stepper_Parameters has wrong discriminant. Expected " & Stepper_Kinds (Stepper)'Image &
-              " but got " & Data.Kind'Image & " for stepper " & Stepper'Image & ".";
-         end if;
-
-         case Data.Kind is
-            when Basic_Kind =>
-               null;
-            when TMC2240_UART_Kind =>
-               Table.Set ("Output_Current", To_TOML (Data.Output_Current / amp));
-               Table.Set ("Slope_Control", To_TOML (Data.Slope_Control));
-               Table.Set ("I_Hold", To_TOML (Data.I_Hold));
-               Table.Set ("I_Run", To_TOML (Data.I_Run));
-               Table.Set ("I_Hold_Delay", To_TOML (Data.I_Hold_Delay));
-               Table.Set ("I_Run_Delay", To_TOML (Data.I_Run_Delay));
-               Table.Set ("T_Power_Down", To_TOML (Data.T_Power_Down));
-               Table.Set ("T_PWM_Thrs", To_TOML (Data.T_PWM_Thrs));
-               Table.Set ("T_Cool_Thrs", To_TOML (Data.T_Cool_Thrs));
-               Table.Set ("T_High", To_TOML (Data.T_High));
-               Table.Set ("TOFF", To_TOML (Data.TOFF));
-               Table.Set ("HSTRT_TFD210", To_TOML (Data.HSTRT_TFD210));
-               Table.Set ("HEND_OFFSET", To_TOML (Data.HEND_OFFSET));
-               Table.Set ("FD3", To_TOML (Data.FD3));
-               Table.Set ("DISFDCC", To_TOML (Data.DISFDCC));
-               Table.Set ("CHM", To_TOML (Data.CHM));
-               Table.Set ("VHIGHFS", To_TOML (Data.VHIGHFS));
-               Table.Set ("VHIGHCHM", To_TOML (Data.VHIGHCHM));
-               Table.Set ("TPFD", To_TOML (Data.TPFD));
-               Table.Set ("Microstep_Resolution", To_TOML (Data.Microstep_Resolution));
-               Table.Set ("PWM_OFS", To_TOML (Data.PWM_OFS));
-               Table.Set ("PWM_Grad", To_TOML (Data.PWM_Grad));
-               Table.Set ("PWM_Freq", To_TOML (Data.PWM_Freq));
-               Table.Set ("PWM_Auto_Scale", To_TOML (Data.PWM_Auto_Scale));
-               Table.Set ("PWM_Auto_Grad", To_TOML (Data.PWM_Auto_Grad));
-               Table.Set ("Freewheel", To_TOML (Data.Freewheel));
-               Table.Set ("PWM_Meas_SD_Enable", To_TOML (Data.PWM_Meas_SD_Enable));
-               Table.Set ("PWM_Dis_Reg_Stst", To_TOML (Data.PWM_Dis_Reg_Stst));
-               Table.Set ("PWM_Reg", To_TOML (Data.PWM_Reg));
-               Table.Set ("PWM_Lim", To_TOML (Data.PWM_Lim));
-         end case;
-
-         Table.Set ("Enabled", To_TOML (Data.Enabled));
-         Table.Set ("Mm_Per_Step", To_TOML (Data.Mm_Per_Step / mm));
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Stepper", Create_Table);
-         TOML_Data.Get ("Stepper").Set_Default (Stepper'Image, Create_Table);
-         TOML_Data.Get ("Stepper").Set
-           (Stepper'Image,
-            Merge
-              (TOML_Data.Get ("Stepper").Get (Stepper'Image),
-               Table,
-               (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Kinematics_Parameters) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Append_Only => True);
-         Table := TOML_Data.Get ("Kinematics");
-
-         case Kinematics_Kind'Value (Table.Get ("Kind").As_String) is
-            when Cartesian_Kind =>
-               Data := (Kind => Cartesian_Kind, others => <>);
-               Write (Data, Append_Only => True);
-               Table           := TOML_Data.Get ("Kinematics");
-               Data.X_Steppers := From_TOML (Table.Get ("X_Steppers"));
-               Data.Y_Steppers := From_TOML (Table.Get ("Y_Steppers"));
-            when Core_XY_Kind =>
-               Data := (Kind => Core_XY_Kind, others => <>);
-               Write (Data, Append_Only => True);
-               Table           := TOML_Data.Get ("Kinematics");
-               Data.A_Steppers := From_TOML (Table.Get ("A_Steppers"));
-               Data.B_Steppers := From_TOML (Table.Get ("B_Steppers"));
-         end case;
-         Data.Planner_Parameters := From_TOML (Table.Get ("Planner_Parameters"));
-         Data.Z_Steppers         := From_TOML (Table.Get ("Z_Steppers"));
-         Data.E_Steppers         := From_TOML (Table.Get ("E_Steppers"));
-      end Read;
-
-      procedure Write (Data : Kinematics_Parameters; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         Table.Set ("Kind", To_TOML (Data.Kind));
-         case Data.Kind is
-            when Cartesian_Kind =>
-               Table.Set ("X_Steppers", To_TOML (Data.X_Steppers));
-               Table.Set ("Y_Steppers", To_TOML (Data.Y_Steppers));
-            when Core_XY_Kind =>
-               Table.Set ("A_Steppers", To_TOML (Data.A_Steppers));
-               Table.Set ("B_Steppers", To_TOML (Data.B_Steppers));
-         end case;
-         Table.Set ("Planner_Parameters", To_TOML (Data.Planner_Parameters));
-         Table.Set ("Z_Steppers", To_TOML (Data.Z_Steppers));
-         Table.Set ("E_Steppers", To_TOML (Data.E_Steppers));
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Kinematics", Create_Table);
-         TOML_Data.Set
-           ("Kinematics",
-            Merge (TOML_Data.Get ("Kinematics"), Table, (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Input_Switch, Append_Only => True);
-         Table := TOML_Data.Get ("Input_Switch").Get (Input_Switch'Image);
-
-         Data.Enabled     := From_TOML (Table.Get ("Enabled"));
-         Data.Hit_On_High := From_TOML (Table.Get ("Hit_On_High"));
-      end Read;
-
-      procedure Write
-        (Data : Input_Switch_Parameters; Input_Switch : Input_Switch_Name; Append_Only : Boolean := False)
+      procedure Patch
+        (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String))
       is
-         Table : constant TOML_Value := Create_Table;
+         New_Data : constant JSON_Value := Read (Data);
+
+         procedure Merge_Into_Config (Name : UTF8_String; Value : JSON_Value) is
+         begin
+            Set_Field (Get (Current_Properties, "Properties"), Name, Value);
+         end Merge_Into_Config;
+
+         Had_Schema_Error : Boolean := False;
+
+         procedure Report_Schema_Error (Key, Message : String) is
+         begin
+            Had_Schema_Error := True;
+            Report (Key, "Data does not match schema, no values will be saved: " & Message);
+         end Report_Schema_Error;
       begin
-         Table.Set ("Enabled", To_TOML (Data.Enabled));
-         Table.Set ("Hit_On_High", To_TOML (Data.Hit_On_High));
+         Validate_Config_To_Schema (New_Data, Report_Schema_Error'Access);
 
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Input_Switch", Create_Table);
-         TOML_Data.Get ("Input_Switch").Set_Default (Input_Switch'Image, Create_Table);
-         TOML_Data.Get ("Input_Switch").Set
-           (Input_Switch'Image,
-            Merge
-              (TOML_Data.Get ("Input_Switch").Get (Input_Switch'Image),
-               Table,
-               (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Homing_Parameters; Axis : Axis_Name) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Axis, Append_Only => True);
-         Table := TOML_Data.Get ("Homing").Get (Axis'Image);
-
-         case Homing_Kind'Value (Table.Get ("Kind").As_String) is
-            when Double_Tap_Kind =>
-               Data := (Kind => Double_Tap_Kind, others => <>);
-               Write (Data, Axis, Append_Only => True);
-               Table                       := TOML_Data.Get ("Homing").Get (Axis'Image);
-               Data.Switch                 := From_TOML (Table.Get ("Switch"));
-               Data.First_Move_Distance    := From_TOML (Table.Get ("First_Move_Distance")) * mm;
-               Data.Back_Off_Move_Distance := From_TOML (Table.Get ("Back_Off_Move_Distance")) * mm;
-               Data.Second_Move_Distance   := From_TOML (Table.Get ("Second_Move_Distance")) * mm;
-               Data.Switch_Position        := From_TOML (Table.Get ("Switch_Position")) * mm;
-               Data.Move_To_After          := From_TOML (Table.Get ("Move_To_After")) * mm;
-            when Set_To_Value_Kind =>
-               Data := (Kind => Set_To_Value_Kind, others => <>);
-               Write (Data, Axis, Append_Only => True);
-               Table      := TOML_Data.Get ("Homing").Get (Axis'Image);
-               Data.Value := From_TOML (Table.Get ("Value")) * mm;
-         end case;
-      end Read;
-
-      procedure Write (Data : Homing_Parameters; Axis : Axis_Name; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         Table.Set ("Kind", To_TOML (Data.Kind));
-         case Data.Kind is
-            when Double_Tap_Kind =>
-               Table.Set ("Switch", To_TOML (Data.Switch));
-               Table.Set ("First_Move_Distance", To_TOML (Data.First_Move_Distance / mm));
-               Table.Set ("Back_Off_Move_Distance", To_TOML (Data.Back_Off_Move_Distance / mm));
-               Table.Set ("Second_Move_Distance", To_TOML (Data.Second_Move_Distance / mm));
-               Table.Set ("Switch_Position", To_TOML (Data.Switch_Position / mm));
-               Table.Set ("Move_To_After", To_TOML (Data.Move_To_After / mm));
-            when Set_To_Value_Kind =>
-               Table.Set ("Value", To_TOML (Data.Value / mm));
-         end case;
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Homing", Create_Table);
-         TOML_Data.Get ("Homing").Set_Default (Axis'Image, Create_Table);
-         TOML_Data.Get ("Homing").Set
-           (Axis'Image,
-            Merge
-              (TOML_Data.Get ("Homing").Get (Axis'Image), Table, (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Extruder_Parameters) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Append_Only => True);
-         Table := TOML_Data.Get ("Extruder");
-
-         Data.Nozzle_Diameter   := From_TOML (Table.Get ("Nozzle_Diameter")) * mm;
-         Data.Filament_Diameter := From_TOML (Table.Get ("Filament_Diameter")) * mm;
-      end Read;
-
-      procedure Write (Data : Extruder_Parameters; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         Table.Set ("Nozzle_Diameter", To_TOML (Data.Nozzle_Diameter / mm));
-         Table.Set ("Filament_Diameter", To_TOML (Data.Filament_Diameter / mm));
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Extruder", Create_Table);
-         TOML_Data.Set
-           ("Extruder",
-            Merge (TOML_Data.Get ("Extruder"), Table, (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Thermistor, Append_Only => True);
-         Table := TOML_Data.Get ("Thermistor").Get (Thermistor'Image);
-
-         case Thermistor_Kind'Value (Table.Get ("Kind").As_String) is
-            when Disabled_Kind =>
-               Data := (Kind => Disabled_Kind, others => <>);
-               Write (Data, Thermistor, Append_Only => True);
-               Table := TOML_Data.Get ("Thermistor").Get (Thermistor'Image);
-            when Steinhart_Hart_Kind =>
-               Data := (Kind => Steinhart_Hart_Kind, others => <>);
-               Write (Data, Thermistor, Append_Only => True);
-               Table     := TOML_Data.Get ("Thermistor").Get (Thermistor'Image);
-               Data.SH_A := From_TOML (Table.Get ("SH_A"));
-               Data.SH_B := From_TOML (Table.Get ("SH_B"));
-               Data.SH_C := From_TOML (Table.Get ("SH_C"));
-            when Callendar_Van_Dusen_Kind =>
-               Data := (Kind => Callendar_Van_Dusen_Kind, others => <>);
-               Write (Data, Thermistor, Append_Only => True);
-               Table       := TOML_Data.Get ("Thermistor").Get (Thermistor'Image);
-               Data.CVD_R0 := From_TOML (Table.Get ("CVD_R0")) * ohm;
-               Data.CVD_A  := From_TOML (Table.Get ("CVD_A"));
-               Data.CVD_B  := From_TOML (Table.Get ("CVD_B"));
-         end case;
-         Data.Minimum_Temperature := From_TOML (Table.Get ("Minimum_Temperature")) * celcius;
-         Data.Maximum_Temperature := From_TOML (Table.Get ("Maximum_Temperature")) * celcius;
-
-         if Data.Minimum_Temperature > Data.Maximum_Temperature then
-            raise Constraint_Error with "Maximum temperature may not be less that minimum temperature.";
-         end if;
-      end Read;
-
-      procedure Write (Data : Thermistor_Parameters; Thermistor : Thermistor_Name; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         if Data.Minimum_Temperature > Data.Maximum_Temperature then
-            raise Constraint_Error with "Maximum temperature may not be less that minimum temperature.";
+         if not Had_Schema_Error then
+            Map_JSON_Object (New_Data, Merge_Into_Config'Access);
+            Validate_Current_Config (Report);
+            Write_File;
          end if;
 
-         Table.Set ("Kind", To_TOML (Data.Kind));
-         case Data.Kind is
-            when Disabled_Kind =>
-               null;
-            when Steinhart_Hart_Kind =>
-               Table.Set ("SH_A", To_TOML (Data.SH_A));
-               Table.Set ("SH_B", To_TOML (Data.SH_B));
-               Table.Set ("SH_C", To_TOML (Data.SH_C));
-            when Callendar_Van_Dusen_Kind =>
-               Table.Set ("CVD_R0", To_TOML (Data.CVD_R0 / ohm));
-               Table.Set ("CVD_A", To_TOML (Data.CVD_A));
-               Table.Set ("CVD_B", To_TOML (Data.CVD_B));
-         end case;
-         Table.Set ("Minimum_Temperature", To_TOML (Data.Minimum_Temperature / celcius));
-         Table.Set ("Maximum_Temperature", To_TOML (Data.Maximum_Temperature / celcius));
+         Get_Values (Data);
+      end Patch;
 
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Thermistor", Create_Table);
-         TOML_Data.Get ("Thermistor").Set_Default (Thermistor'Image, Create_Table);
-         TOML_Data.Get ("Thermistor").Set
-           (Thermistor'Image,
-            Merge
-              (TOML_Data.Get ("Thermistor").Get (Thermistor'Image),
-               Table,
-               (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) is
-         Table : TOML_Value;
+      procedure Validate_Initial_Config (Report : access procedure (Key, Message : String)) is
       begin
-         Data := (others => <>);
-         Write (Data, Heater, Append_Only => True);
-         Table := TOML_Data.Get ("Heater").Get (Heater'Image);
+         Maybe_Do_Init;
+         Validate_Config (Get (Initial_Properties, "Properties"), Report);
+      end Validate_Initial_Config;
 
-         case Heater_Kind'Value (Table.Get ("Kind").As_String) is
-            when Disabled_Kind =>
-               Data := (Params => (Kind => Disabled_Kind, others => <>), others => <>);
-               Write (Data, Heater, Append_Only => True);
-               Table := TOML_Data.Get ("Heater").Get (Heater'Image);
-            when PID_Kind =>
-               Data := (Params => (Kind => PID_Kind, others => <>), others => <>);
-               Write (Data, Heater, Append_Only => True);
-               Table                          := TOML_Data.Get ("Heater").Get (Heater'Image);
-               Data.Params.Proportional_Scale := From_TOML (Table.Get ("Proportional_Scale"));
-               Data.Params.Integral_Scale     := From_TOML (Table.Get ("Integral_Scale"));
-               Data.Params.Derivative_Scale   := From_TOML (Table.Get ("Derivative_Scale"));
-            when Bang_Bang_Kind =>
-               Data := (Params => (Kind => Bang_Bang_Kind, others => <>), others => <>);
-               Write (Data, Heater, Append_Only => True);
-               Table                            := TOML_Data.Get ("Heater").Get (Heater'Image);
-               Data.Params.Bang_Bang_Hysteresis := From_TOML (Table.Get ("Bang_Bang_Hysteresis")) * celcius;
-            when PID_Autotune_Kind =>
-               raise Constraint_Error with "PID_Autotune_Kind should not exist in config file.";
-         end case;
-         Data.Thermistor                        := From_TOML (Table.Get ("Thermistor"));
-         Data.Params.Check_Max_Cumulative_Error := From_TOML (Table.Get ("Check_Max_Cumulative_Error")) * celcius;
-         Data.Params.Check_Gain_Time            := From_TOML (Table.Get ("Check_Gain_Time")) * s;
-         Data.Params.Check_Minimum_Gain         := From_TOML (Table.Get ("Check_Minimum_Gain")) * celcius;
-         Data.Params.Check_Hysteresis           := From_TOML (Table.Get ("Check_Hysteresis")) * celcius;
-      end Read;
-
-      procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
+      procedure Validate_Current_Config (Report : access procedure (Key, Message : String)) is
       begin
-         Table.Set ("Kind", To_TOML (Data.Params.Kind));
-         case Data.Params.Kind is
-            when Disabled_Kind =>
-               null;
-            when PID_Kind =>
-               Table.Set ("Proportional_Scale", To_TOML (Data.Params.Proportional_Scale));
-               Table.Set ("Integral_Scale", To_TOML (Data.Params.Integral_Scale));
-               Table.Set ("Derivative_Scale", To_TOML (Data.Params.Derivative_Scale));
-            when Bang_Bang_Kind =>
-               Table.Set ("Bang_Bang_Hysteresis", To_TOML (Data.Params.Bang_Bang_Hysteresis / celcius));
-            when PID_Autotune_Kind =>
-               raise Constraint_Error with "PID_Autotune_Kind can not be written to config file.";
-         end case;
-         Table.Set ("Thermistor", To_TOML (Data.Thermistor));
-         Table.Set ("Check_Max_Cumulative_Error", To_TOML (Data.Params.Check_Max_Cumulative_Error / celcius));
-         Table.Set ("Check_Gain_Time", To_TOML (Data.Params.Check_Gain_Time / s));
-         Table.Set ("Check_Minimum_Gain", To_TOML (Data.Params.Check_Minimum_Gain / celcius));
-         Table.Set ("Check_Hysteresis", To_TOML (Data.Params.Check_Hysteresis / celcius));
+         Maybe_Do_Init;
+         Validate_Config (Get (Current_Properties, "Properties"), Report);
+      end Validate_Current_Config;
 
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Heater", Create_Table);
-         TOML_Data.Get ("Heater").Set_Default (Heater'Image, Create_Table);
-         TOML_Data.Get ("Heater").Set
-           (Heater'Image,
-            Merge
-              (TOML_Data.Get ("Heater").Get (Heater'Image),
-               Table,
-               (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Bed_Mesh_Parameters) is
-         Table : TOML_Value;
+      procedure Validate_Config (Config : JSON_Value; Report : access procedure (Key, Message : String)) is
       begin
-         Data := (others => <>);
-         Write (Data, Append_Only => True);
-         Table := TOML_Data.Get ("Bed_Mesh");
+         if not Boolean'(Get (Config, "Prunt$Enabled")) then
+            Report ("Prunt$Enabled", "Prunt is disabled. Enable after setting other options.");
+         end if;
 
-         case Bed_Mesh_Kind'Value (Table.Get ("Kind").As_String) is
-            when No_Mesh_Kind =>
-               Data := (Kind => No_Mesh_Kind);
-               Write (Data, Append_Only => True);
-               Table := TOML_Data.Get ("Bed_Mesh");
-            when Beacon_Kind =>
-               Data := (Kind => Beacon_Kind, others => <>);
-               Write (Data, Append_Only => True);
-               Table                     := TOML_Data.Get ("Bed_Mesh");
-               Data.Serial_Port_Path     := From_TOML (Table.Get ("Serial_Port_Path"));
-               Data.X_Offset             := From_TOML (Table.Get ("X_Offset")) * mm;
-               Data.Y_Offset             := From_TOML (Table.Get ("Y_Offset")) * mm;
-               Data.Calibration_Floor    := From_TOML (Table.Get ("Calibration_Floor")) * mm;
-               Data.Calibration_Ceiling  := From_TOML (Table.Get ("Calibration_Ceiling")) * mm;
-               Data.Calibration_Feedrate := From_TOML (Table.Get ("Calibration_Feedrate")) * mm / s;
-         end case;
-      end Read;
-
-      procedure Write (Data : Bed_Mesh_Parameters; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         Table.Set ("Kind", To_TOML (Data.Kind));
-         case Data.Kind is
-            when No_Mesh_Kind =>
-               null;
-            when Beacon_Kind =>
-               Table.Set ("Serial_Port_Path", To_TOML (Data.Serial_Port_Path));
-               Table.Set ("X_Offset", To_TOML (Data.X_Offset / mm));
-               Table.Set ("Y_Offset", To_TOML (Data.Y_Offset / mm));
-               Table.Set ("Calibration_Floor", To_TOML (Data.Calibration_Floor / mm));
-               Table.Set ("Calibration_Ceiling", To_TOML (Data.Calibration_Ceiling / mm));
-               Table.Set ("Calibration_Feedrate", To_TOML (Data.Calibration_Feedrate / (mm / s)));
-         end case;
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Bed_Mesh", Create_Table);
-         TOML_Data.Set
-           ("Bed_Mesh",
-            Merge (TOML_Data.Get ("Bed_Mesh"), Table, (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out Fan_Parameters; Fan : Fan_Name) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Fan, Append_Only => True);
-         Table := TOML_Data.Get ("Fan").Get (Fan'Image);
-
-         case Fan_Kind'Value (Table.Get ("Kind").As_String) is
-            when Dynamic_PWM_Kind =>
-               Data := (Kind => Dynamic_PWM_Kind, others => <>);
-               Write (Data, Fan, Append_Only => True);
-               Table                  := TOML_Data.Get ("Fan").Get (Fan'Image);
-               Data.Disable_Below_PWM := From_TOML (Table.Get ("Disable_Below_PWM"));
-               Data.Max_PWM           := From_TOML (Table.Get ("Max_PWM"));
-            when Always_On_Kind =>
-               Data := (Kind => Always_On_Kind, others => <>);
-               Write (Data, Fan, Append_Only => True);
-               Table              := TOML_Data.Get ("Fan").Get (Fan'Image);
-               Data.Always_On_PWM := From_TOML (Table.Get ("Always_On_PWM"));
-         end case;
-         Data.Invert_Output := From_TOML (Table.Get ("Invert_Output"));
-         Data.PWM_Frequency := From_TOML (Table.Get ("PWM_Frequency")) * hertz;
-      end Read;
-
-      procedure Write (Data : Fan_Parameters; Fan : Fan_Name; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         Table.Set ("Kind", To_TOML (Data.Kind));
-         case Data.Kind is
-            when Dynamic_PWM_Kind =>
-               Table.Set ("Disable_Below_PWM", To_TOML (Data.Disable_Below_PWM));
-               Table.Set ("Max_PWM", To_TOML (Data.Max_PWM));
-            when Always_On_Kind =>
-               Table.Set ("Always_On_PWM", To_TOML (Data.Always_On_PWM));
-         end case;
-         Table.Set ("Invert_Output", To_TOML (Data.Invert_Output));
-         Table.Set ("PWM_Frequency", To_TOML (Data.PWM_Frequency / hertz));
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("Fan", Create_Table);
-         TOML_Data.Get ("Fan").Set_Default (Fan'Image, Create_Table);
-         TOML_Data.Get ("Fan").Set
-           (Fan'Image,
-            Merge (TOML_Data.Get ("Fan").Get (Fan'Image), Table, (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Read (Data : out G_Code_Assignment_Parameters) is
-         Table : TOML_Value;
-      begin
-         Data := (others => <>);
-         Write (Data, Append_Only => True);
-         Table := TOML_Data.Get ("G_Code_Assignment");
-
-         Data.Bed_Heater    := From_TOML (Table.Get ("Bed_Heater"));
-         --  Data.Chamber_Heater := From_TOML (Table.Get ("Chamber_Heater"));
-         Data.Hotend_Heater := From_TOML (Table.Get ("Hotend_Heater"));
-      end Read;
-
-      procedure Write (Data : G_Code_Assignment_Parameters; Append_Only : Boolean := False) is
-         Table : constant TOML_Value := Create_Table;
-      begin
-         Table.Set ("Bed_Heater", To_TOML (Data.Bed_Heater));
-         --  Table.Set ("Chamber_Heater", To_TOML (Data.Chamber_Heater));
-         Table.Set ("Hotend_Heater", To_TOML (Data.Hotend_Heater));
-
-         Maybe_Read_File;
-         TOML_Data.Set_Default ("G_Code_Assignment", Create_Table);
-         TOML_Data.Set
-           ("G_Code_Assignment",
-            Merge (TOML_Data.Get ("G_Code_Assignment"), Table, (if Append_Only then Left'Access else Right'Access)));
-         Write_File;
-      end Write;
-
-      procedure Validate_Config (Report : access procedure (Message : String)) is
-      begin
-         for Stepper in Stepper_Name loop
-            declare
-               use type TMC_Types.Unsigned_4;
-               Stepper_Params : Stepper_Parameters;
-            begin
-               Read (Stepper_Params, Stepper);
-
-               case Stepper_Params.Kind is
-                  when Basic_Kind =>
-                     null;
-                  when TMC2240_UART_Kind =>
-                     if Stepper_Params.TOFF = 0 and Stepper_Params.Enabled then
-                        Report
-                          ("TOFF of 0 disables output for stepper " & Stepper'Image &
-                           ". This is not allowed for enabled steppers.");
-                     end if;
-
-                     if Stepper_Params.Output_Current > 3.0 * amp then
-                        Report ("Current must not be greater than 3A for stepper " & Stepper'Image);
-                     elsif Stepper_Params.Output_Current < 0.125 * amp then
-                        Report ("Current must not be less than 0.125A for stepper " & Stepper'Image);
-                     end if;
-               end case;
-            end;
+         for S in Stepper_Name loop
+            if Get
+                (Config,
+                 "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" & S'Image) /=
+              "NONE"
+            then
+               if not Boolean'(Get (Config, "Steppers$" & S'Image & "$Enabled")) then
+                  Report
+                    ("Steppers$" & S'Image & "$Enabled",
+                     "Stepper is attached to " &
+                     Get
+                       (Config,
+                        "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" &
+                        S'Image) &
+                     " but stepper is not enabled.");
+               end if;
+            end if;
          end loop;
 
-         declare
-            Kinematics_Params : Kinematics_Parameters;
-         begin
-            Read (Kinematics_Params);
-
-            if Kinematics_Params.Planner_Parameters.Tangential_Velocity_Max <= 0.0 * mm / s then
-               Report ("Max velocity must be greater than 0.");
-            end if;
-
-            if Kinematics_Params.Planner_Parameters.Acceleration_Max <= 0.0 * mm / s**2 then
-               Report ("Max acceleration must be greater than 0.");
-            end if;
-
-            if Kinematics_Params.Planner_Parameters.Jerk_Max <= 0.0 * mm / s**3 then
-               Report ("Max jerk must be greater than 0.");
-            end if;
-
-            if Kinematics_Params.Planner_Parameters.Snap_Max <= 0.0 * mm / s**4 then
-               Report ("Max snap must be greater than 0.");
-            end if;
-
-            if Kinematics_Params.Planner_Parameters.Crackle_Max <= 0.0 * mm / s**5 then
-               Report ("Max crackle must be greater than 0.");
-            end if;
-
-            for A in Axis_Name loop
-               if Kinematics_Params.Planner_Parameters.Axial_Velocity_Maxes (A) <= 0.0 * mm / s then
-                  Report ("Max " & A'Image & " velocity must be greater than 0.");
-               end if;
-            end loop;
-
-            --  TODO: Check that scaler will not cause max step rate to be exceeded.
-         end;
-
-         declare
-            Kinematics_Params : Kinematics_Parameters;
-
-            Used_Steppers : array (Stepper_Name) of Boolean := [others => False];
-
-            procedure Check_Stepper (S : Stepper_Name) is
-               Stepper_Params : Stepper_Parameters;
-            begin
-               Read (Stepper_Params, S);
-
-               if not Stepper_Params.Enabled then
-                  Report ("Stepper " & S'Image & " attached to an axis but not enabled.");
-               end if;
-
-               if Used_Steppers (S) then
-                  Report ("Stepper " & S'Image & " attached to multiples axes.");
-               end if;
-
-               Used_Steppers (S) := True;
-            end Check_Stepper;
-         begin
-            Read (Kinematics_Params);
-
-            for S in Stepper_Name loop
-               declare
-                  Stepper_Params : Stepper_Parameters;
-               begin
-                  Config_File.Read (Stepper_Params, S);
-
-                  case Kinematics_Params.Kind is
-                     when Cartesian_Kind =>
-                        if Kinematics_Params.X_Steppers (S) then
-                           Check_Stepper (S);
-                        end if;
-
-                        if Kinematics_Params.Y_Steppers (S) then
-                           Check_Stepper (S);
-                        end if;
-                     when Core_XY_Kind =>
-                        if Kinematics_Params.A_Steppers (S) then
-                           Check_Stepper (S);
-                        end if;
-
-                        if Kinematics_Params.B_Steppers (S) then
-                           Check_Stepper (S);
-                        end if;
-                  end case;
-
-                  if Kinematics_Params.Z_Steppers (S) then
-                     Check_Stepper (S);
-                  end if;
-
-                  if Kinematics_Params.E_Steppers (S) then
-                     Check_Stepper (S);
-                  end if;
-               end;
-            end loop;
-         end;
-
-         for Axis in Axis_Name loop
-            declare
-               Params : Homing_Parameters;
-            begin
-               Read (Params, Axis);
-               case Params.Kind is
-                  when Double_Tap_Kind =>
-                     if Params.First_Move_Distance = 0.0 * mm or Params.Second_Move_Distance = 0.0 * mm or
-                       Params.Back_Off_Move_Distance = 0.0 * mm
+         for S in Stepper_Name loop
+            case Stepper_Kinds (S) is
+               when Basic_Kind =>
+                  null;
+               when TMC2240_UART_Kind =>
+                  declare
+                     Sum_Too_High                : Boolean;
+                     Sum_Too_High_For_Full_Scale : Boolean;
+                     Excessive_Heating           : Boolean;
+                     Driver_Voltage_Too_Low      : Boolean;
+                     HSTRT                       : TMC_Types.Unsigned_3;
+                     HEND                        : TMC_Types.Unsigned_4;
+                     IRUN                        : constant TMC_Types.Unsigned_5 :=
+                       TMC_Types.Unsigned_5
+                         (Long_Float'Max
+                            (0.0,
+                             Long_Float'Floor
+                               (My_Get_Long_Float (Config, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0)));
+                  begin
+                     if
+                       Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                         and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                      then
-                        Report
-                          ("One or more homing distances on axis " & Axis'Image &
-                           " are set to 0. This would cause homing to never complete.");
-                     else
-                        if Params.First_Move_Distance / Params.Second_Move_Distance < 0.0 then
+                        TMC_Types.TMC2240.Optimize_Spreadcycle
+                          (Driver_Voltage =>
+                             Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Input voltage") * volt,
+                           TBL =>
+                             TMC_Types.TMC2240.TBL_Type'Value
+                               ("BLANK_" & Get (Config, "Steppers$" & S'Image & "$TBL")),
+                           Motor_Inductance =>
+                             Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase inductance") /
+                               1_000.0 * henry,
+                           Motor_Resistance =>
+                             Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase resistance") * ohm,
+                           Motor_Peak_Current =>
+                             Get (Config, "Steppers$" & S'Image & "$Run current") * amp,
+                           TOFF  =>
+                             TMC_Types.TMC2240.TOFF_Type'Value
+                               ("OFF_" & Get (Config, "Steppers$" & S'Image & "$TOFF")),
+                           IRUN  => IRUN,
+                           HSTRT => HSTRT,
+                           HEND  => HEND,
+                           Sum_Too_High => Sum_Too_High,
+                           Sum_Too_High_For_Full_Scale => Sum_Too_High_For_Full_Scale,
+                           Excessive_Heating => Excessive_Heating,
+                           Driver_Voltage_Too_Low => Driver_Voltage_Too_Low);
+                        if Sum_Too_High then
                            Report
-                             ("First and second homing distance on axis " & Axis'Image & " have different signs. " &
-                              "This would cause the axis to move away from the switch forever after the first hit.");
+                             ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                              "Automatically computed hysteresis sum is too high. Check that motor parameters are " &
+                                "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual " &
+                                "tuning.");
+                        elsif Sum_Too_High_For_Full_Scale and IRUN = 31 then
+                           Report
+                             ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                              "Automatically computed hysteresis sum is too high. Check that motor parameters are " &
+                                "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual " &
+                                "tuning. A very small reduction of IRUN to 0.97 will allow the computed parameters " &
+                                "to be used.");
                         end if;
 
-                        if Params.First_Move_Distance / Params.Back_Off_Move_Distance > 0.0 then
+                        if Excessive_Heating then
                            Report
-                             ("First homing distance and back-off distance on axis " & Axis'Image &
-                              " have same sign. " &
-                              "This would cause axis to move further in to the switch after hitting it.");
+                             ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                              "The stepper motor is likely to heat up excessively at the given driver voltage. " &
+                                "Check that parameters are correct. If parameters are correct and you still want to " &
+                                "use this motor then use manual tuning.");
+                        end if;
+
+                        if Driver_Voltage_Too_Low then
+                           Report
+                             ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                              "The stepper motor requires a higher driver voltage to reach full current. Check that " &
+                                "parameters are correct. If parameters are correct and you still want to use this " &
+                                "motor then use manual tuning.");
+                        end if;
+                     elsif
+                       Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                       and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Manual"
+                     then
+                        if
+                          IRUN = 31 and then
+                            Integer'
+                              (Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") +
+                                 Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT")) > 14
+                        then
+                           --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks
+                           --  to be an off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but
+                           --  the maximum is probably actually 255.
+                           Report
+                             ("Steppers$" & S'Image & "$CHM$SpreadCycle$Manual",
+                              "HSTRT + HEND must be less than 15 unless IRUN is reduced to 0.97 or below as " &
+                                "otherwise the hysteresis start setting will be greater than the full scale " &
+                                "current, leading to incorrect operation.");
                         end if;
                      end if;
-
-                     if abs Params.First_Move_Distance < abs Params.Second_Move_Distance then
-                        Report
-                          ("First homing distance on axis " & Axis'Image &
-                           " is smaller than second homing distance. " &
-                           "The second distance should be smaller for more accurate homing.");
-                     end if;
-
-                     declare
-                        Switch_Params : Input_Switch_Parameters;
-                     begin
-                        Read (Switch_Params, Params.Switch);
-                        if not Switch_Params.Enabled then
-                           Report
-                             ("Axis " & Axis'Image & " is configured to use switch " & Params.Switch'Image &
-                              " for homing but the switch is not enabled.");
-                        end if;
-                     end;
-                  when Set_To_Value_Kind =>
-                     null;
-               end case;
-            end;
+                  end;
+            end case;
          end loop;
+
+         --  TODO: Check that scaler will not cause max step rate to be exceeded.
       end Validate_Config;
 
-      procedure Maybe_Read_File is
+      procedure Write_File is
+         File : Ada.Text_IO.File_Type;
       begin
-         if File_Read then
+         if Ada.Directories.Exists (Config_Path & "_backup_18") then
+            --  Always keep the very oldest file just in case the user put an important comment in the original file.
+            --  We can not easily detect if the user modified the file when a backup already existed, but this is
+            --  better than nothing.
+            if Ada.Directories.Exists (Config_Path & "_backup_19") then
+               Ada.Directories.Delete_File (Config_Path & "_backup_18");
+            else
+               Ada.Directories.Rename
+                 (Old_Name => Config_Path & "_backup_18",
+                  New_Name => Config_Path & "_backup_19");
+            end if;
+         end if;
+
+         for I in reverse 1 .. 17 loop
+            if Ada.Directories.Exists (Config_Path & "_backup_" & Trim (I'Image)) then
+               Ada.Directories.Rename
+                 (Old_Name => Config_Path & "_backup_" & Trim (I'Image),
+                  New_Name => Config_Path & "_backup_" & Trim (Integer (I + 1)'Image));
+            end if;
+         end loop;
+
+         if Ada.Directories.Exists (Config_Path) then
+            Ada.Directories.Rename (Old_Name => Config_Path, New_Name => Config_Path & "_backup_1");
+         end if;
+
+         Ada.Text_IO.Create (File, Ada.Text_IO.Out_File, Config_Path);
+         Ada.Text_IO.Put_Line (File, Write (Current_Properties));
+         Ada.Text_IO.Close (File);
+      exception
+         when others =>
+            if Ada.Text_IO.Is_Open (File) then
+               Ada.Text_IO.Close (File);
+            end if;
+            raise;
+      end Write_File;
+
+      procedure Maybe_Do_Init is
+         use Flat_Schemas;
+      begin
+         if Init_Failed then
+            raise Constraint_Error with "Init failed, no further operations may be performed.";
+         end if;
+
+         if Init_Done then
             return;
          end if;
 
-         if not Ada.Directories.Exists (Config_Path) then
+         Schema      := Build_Schema;
+         Schema_JSON := Schema_To_JSON (Schema);
+         Flat_Schema := Build_Flat_Schema (Schema);
+
+         if Ada.Directories.Exists (Config_Path) then
             declare
-               F : Ada.Text_IO.File_Type;
+               File          : Ada.Text_IO.File_Type;
+               File_Contents : Ada.Strings.Unbounded.Unbounded_String;
             begin
-               Ada.Text_IO.Create (F, Ada.Text_IO.Out_File, Config_Path);
-               Ada.Text_IO.Close (F);
+               Ada.Text_IO.Open (File, Ada.Text_IO.In_File, Config_Path);
+               while not Ada.Text_IO.End_Of_File (File) loop
+                  Ada.Strings.Unbounded.Append (File_Contents, Ada.Text_IO.Unbounded_IO.Get_Line (File));
+               end loop;
+               Ada.Text_IO.Close (File);
+
+               Current_Properties := Read (File_Contents);
             end;
+         else
+            Current_Properties := Create_Object;
+            Set_Field (Current_Properties, "Schema version", Integer'(1));
+            Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
+         if Kind (Current_Properties) /= JSON_Object_Type then
+            raise Config_File_Format_Error with "Config file should contain a JSON object.";
+         end if;
+
+         if
+           not Has_Field (Current_Properties, "Schema version") or else
+             Kind (Get (Current_Properties, "Schema version")) /= JSON_Int_Type or else
+             not Has_Field (Current_Properties, "Properties") or else
+             Kind (Get (Current_Properties, "Properties")) /= JSON_Object_Type
+         then
+            raise Config_File_Format_Error
+              with "Config file format should be {""Schema version"": Integer, ""Properties"": {...}}.";
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Integer'(1) then
+            raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
+         end if;
+
+         for X in Flat_Schema.Iterate loop
+            if not Has_Field (Get (Current_Properties, "Properties"), Key (X)) then
+               case Element (X).Kind is
+                  when Boolean_Kind =>
+                     Set_Field (Get (Current_Properties, "Properties"), Key (X), Element (X).Boolean_Default);
+                  when Discrete_Kind =>
+                     Set_Field (Get (Current_Properties, "Properties"), Key (X), Element (X).Discrete_Default);
+                  when Integer_Kind =>
+                     Set_Field (Get (Current_Properties, "Properties"), Key (X), Create (Element (X).Integer_Default));
+                  when Float_Kind =>
+                     Set_Field_Long_Float (Get (Current_Properties, "Properties"), Key (X), Element (X).Float_Default);
+                  when Sequence_Kind | Variant_Kind =>
+                     raise Constraint_Error with "Field type should not exist here: " & Element (X).Kind'Image;
+               end case;
+            end if;
+         end loop;
+
          declare
-            Result : constant TOML.Read_Result := TOML.File_IO.Load_File (Config_Path);
+            Has_Errors : Boolean := False;
+
+            procedure Report (Key, Message : String) is
+            begin
+               Ada.Text_IO.Put_Line ("Schema mismatch: " & Key & ": " & Message);
+               Has_Errors := True;
+            end Report;
          begin
-            if Result.Success then
-               TOML_Data := Result.Value;
-               File_Read := True;
-            else
-               raise IO_Error with Result'Image;
+            Validate_Config_To_Schema (Get (Current_Properties, "Properties"), Report'Access);
+
+            if Has_Errors then
+               Init_Failed := True;
+               raise Config_File_Format_Error
+                 with "Config file errors logged to console. If you did not edit the config file by hand then this " &
+                 "is a bug in Prunt.";
             end if;
          end;
-      end Maybe_Read_File;
 
-      procedure Write_File is
-         F : Ada.Text_IO.File_Type;
+         Write_File;
+
+         declare
+            procedure Handle_Invalid_Config (Key, Message : String) is
+               pragma Unreferenced (Key);
+               pragma Unreferenced (Message);
+            begin
+               Initial_Config_Valid := False;
+               Get (Current_Properties, "Properties").Set_Field ("Prunt$Enabled", False);
+               Write_File;
+            end Handle_Invalid_Config;
+         begin
+            Initial_Config_Valid := True;
+            Validate_Config (Get (Current_Properties, "Properties"), Handle_Invalid_Config'Access);
+
+            if Initial_Config_Valid then
+               Initial_Config := JSON_To_Config (Get (Current_Properties, "Properties"));
+            end if;
+         end;
+
+         Initial_Properties := Clone (Current_Properties);
+
+         Init_Done := True;
+      end Maybe_Do_Init;
+
+      procedure Disable_Prunt is
       begin
-         Ada.Text_IO.Open (F, Ada.Text_IO.Out_File, Config_Path);
-         TOML.File_IO.Dump_To_File (TOML_Data, F);
-         Ada.Text_IO.Close (F);
-      end Write_File;
+         Maybe_Do_Init;
+         Get (Current_Properties, "Properties").Set_Field ("Prunt$Enabled", False);
+         Write_File;
+      end Disable_Prunt;
+
+      procedure Read (Data : out Prunt_Parameters) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Prunt;
+      end Read;
+
+      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Steppers (Stepper);
+      end Read;
+
+      procedure Read (Data : out Kinematics_Parameters) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Kinematics;
+      end Read;
+
+      procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Switches (Input_Switch);
+      end Read;
+
+      procedure Read (Data : out Homing_Parameters; Axis : Axis_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Homing (Axis);
+      end Read;
+
+      procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Thermistors (Thermistor);
+      end Read;
+
+      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Heaters (Heater);
+      end Read;
+
+      procedure Read (Data : out Fan_Parameters; Fan : Fan_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Fans (Fan);
+      end Read;
+
+      procedure Read (Data : out G_Code_Assignment_Parameters) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.G_Code_Assignments;
+      end Read;
+
+      function JSON_To_Config (Data : JSON_Value) return Full_Config is
+         Config : Full_Config;
+      begin
+         Config.Prunt :=
+           (Enabled            => Get (Data, "Prunt$Enabled"),
+            Replace_G0_With_G1 => Get (Data, "Prunt$Replace G0 with G1"));
+
+         if Get (Data, "Kinematics$Kinematics kind") = "Cartesian" then
+            Config.Kinematics :=
+              (Kind               => Cartesian_Kind,
+               Planner_Parameters => <>,
+               Z_Steppers         => (others => False),
+               E_Steppers         => (others => False),
+               X_Steppers         => (others => False),
+               Y_Steppers         => (others => False));
+            for S in Stepper_Name loop
+               if Get (Data, "Kinematics$Kinematics kind$Cartesian$" & S'Image) = "Z_AXIS" then
+                  Config.Kinematics.Z_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Cartesian$" & S'Image) = "E_AXIS" then
+                  Config.Kinematics.E_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Cartesian$" & S'Image) = "X_AXIS" then
+                  Config.Kinematics.X_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Cartesian$" & S'Image) = "Y_AXIS" then
+                  Config.Kinematics.Y_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Cartesian$" & S'Image) = "NONE" then
+                  null;
+               else
+                  raise Constraint_Error;
+               end if;
+            end loop;
+         elsif Get (Data, "Kinematics$Kinematics kind") = "Core XY" then
+            Config.Kinematics :=
+              (Kind               => Core_XY_Kind,
+               Planner_Parameters => <>,
+               Z_Steppers         => (others => False),
+               E_Steppers         => (others => False),
+               A_Steppers         => (others => False),
+               B_Steppers         => (others => False));
+            for S in Stepper_Name loop
+               if Get (Data, "Kinematics$Kinematics kind$Core XY$" & S'Image) = "Z_AXIS" then
+                  Config.Kinematics.Z_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Core XY$" & S'Image) = "E_AXIS" then
+                  Config.Kinematics.E_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Core XY$" & S'Image) = "A_AXIS" then
+                  Config.Kinematics.A_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Core XY$" & S'Image) = "B_AXIS" then
+                  Config.Kinematics.B_Steppers (S) := True;
+               elsif Get (Data, "Kinematics$Kinematics kind$Core XY$" & S'Image) = "NONE" then
+                  null;
+               else
+                  raise Constraint_Error;
+               end if;
+            end loop;
+         else
+            raise Constraint_Error;
+         end if;
+
+         Config.Kinematics.Planner_Parameters :=
+           (Lower_Pos_Limit         =>
+              (X_Axis => Get (Data, "Kinematics$Lower position limit$X_AXIS") * mm,
+               Y_Axis => Get (Data, "Kinematics$Lower position limit$Y_AXIS") * mm,
+               Z_Axis => Get (Data, "Kinematics$Lower position limit$Z_AXIS") * mm,
+               E_Axis => Get (Data, "Kinematics$Lower position limit$E_AXIS") * mm),
+            Upper_Pos_Limit         =>
+              (X_Axis => Get (Data, "Kinematics$Upper position limit$X_AXIS") * mm,
+               Y_Axis => Get (Data, "Kinematics$Upper position limit$Y_AXIS") * mm,
+               Z_Axis => Get (Data, "Kinematics$Upper position limit$Z_AXIS") * mm,
+               E_Axis => Get (Data, "Kinematics$Upper position limit$E_AXIS") * mm),
+            Ignore_E_In_XYZE        => Get (Data, "Kinematics$Ignore E in XYZE"),
+            Shift_Blended_Corners   => Get (Data, "Kinematics$Shift blended corners"),
+            Tangential_Velocity_Max => Get (Data, "Kinematics$Maximum tangential velocity") * mm / s,
+            Axial_Velocity_Maxes    =>
+              (X_Axis => Get (Data, "Kinematics$Axial velocity limits$X_AXIS") * mm / s,
+               Y_Axis => Get (Data, "Kinematics$Axial velocity limits$Y_AXIS") * mm / s,
+               Z_Axis => Get (Data, "Kinematics$Axial velocity limits$Z_AXIS") * mm / s,
+               E_Axis => Get (Data, "Kinematics$Axial velocity limits$E_AXIS") * mm / s),
+            Pressure_Advance_Time   => Get (Data, "Kinematics$Pressure advance time") * s,
+            Acceleration_Max        => Get (Data, "Kinematics$Maximum acceleration") * mm / s**2,
+            Jerk_Max                => Get (Data, "Kinematics$Maximum jerk") * mm / s**3,
+            Snap_Max                => Get (Data, "Kinematics$Maximum snap") * mm / s**4,
+            Crackle_Max             => Get (Data, "Kinematics$Maximum crackle") * mm / s**5,
+            Chord_Error_Max         => Get (Data, "Kinematics$Maximum chord error") * mm,
+            Axial_Scaler            =>
+              (X_Axis => Get (Data, "Kinematics$Axial scaler$X_AXIS"),
+               Y_Axis => Get (Data, "Kinematics$Axial scaler$Y_AXIS"),
+               Z_Axis => Get (Data, "Kinematics$Axial scaler$Z_AXIS"),
+               E_Axis => Get (Data, "Kinematics$Axial scaler$E_AXIS")));
+
+         Config.G_Code_Assignments :=
+           (Bed_Heater    => Heater_Name'Value (Get (Data, "G-code assignments$Bed heater")),
+            Hotend_Heater => Heater_Name'Value (Get (Data, "G-code assignments$Hotend heater")));
+
+         for S in Stepper_Name loop
+            case Stepper_Kinds (S) is
+               when Basic_Kind =>
+                  Config.Steppers (S) :=
+                    (Kind        => Basic_Kind,
+                     Enabled     => Get (Data, "Steppers$" & S'Image & "$Enabled"),
+                     Mm_Per_Step => Get (Data, "Steppers$" & S'Image & "$Distance per step") * mm);
+               when TMC2240_UART_Kind =>
+                  Config.Steppers (S) :=
+                    (Kind          => TMC2240_UART_Kind,
+                     Enabled       => Get (Data, "Steppers$" & S'Image & "$Enabled"),
+                     Mm_Per_Step   => Get (Data, "Steppers$" & S'Image & "$Distance per step") * mm,
+                     GCONF         =>
+                     (Reserved_1       => 0,
+                        Fast_Standstill  => Get (Data, "Steppers$" & S'Image & "$FAST_STANDSTILL"),
+                        En_PWM_Mode      =>
+                          TMC_Boolean
+                            (Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)") = "Enabled"),
+                        Multistep_Filt   =>
+                          Get
+                            (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$MULTISTEP_FILT"),
+                        Invert_Direction => False,
+                        Diag0_Error      => False,
+                        Diag0_OTPW       => False,
+                        Diag0_Stall      => False,
+                        Diag1_Stall      => False,
+                        Diag1_Index      => False,
+                        Diag1_On_State   => False,
+                        Reserved_2       => 0,
+                        Diag_0_Push_Pull => False,
+                        Diag_1_Push_Pull => False,
+                        Small_Hysteresis => True,
+                        Stop_Enable      => False,
+                        Direct_Mode      => False,
+                        Reserved_3       => 0),
+                     DRV_CONF      =>
+                       (Current_Range =>
+                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0 then
+                              TMC_Types.TMC2240.Max_3A
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 1.0 then
+                              TMC_Types.TMC2240.Max_2A
+                           else
+                              TMC_Types.TMC2240.Max_1A),
+                        Reserved_1    => 0,
+                        Slope_Control =>
+                          TMC_Types.TMC2240.Slope_Control_Type'Value
+                            (Get (Data, "Steppers$" & S'Image & "$SLOPE_CONTROL")),
+                        Reserved_2    => 0),
+                     GLOBAL_SCALER =>
+                       (Global_Scaler =>
+                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 3.0 then
+                              0
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0 then
+                              TMC_Types.TMC2240.Global_Scaler_Type
+                                (Dimensionless'Floor
+                                   (Get (Data, "Steppers$" & S'Image & "$Run current") / 3.0 * 256.0))
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 2.0 then
+                              0
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 1.0 then
+                              TMC_Types.TMC2240.Global_Scaler_Type
+                                (Dimensionless'Floor
+                                   (Get (Data, "Steppers$" & S'Image & "$Run current") / 2.0 * 256.0))
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 1.0 then
+                              0
+                           else
+                              TMC_Types.TMC2240.Global_Scaler_Type
+                                (Dimensionless'Max
+                                   (32.0,
+                                    Dimensionless'Floor
+                                      (Get (Data, "Steppers$" & S'Image & "$Run current") / 1.0 * 256.0)))),
+                        Reserved    => 0),
+                     IHOLD_IRUN    =>
+                       (I_Hold       =>
+                          TMC_Types.Unsigned_5
+                            (Long_Float'Max
+                               (0.0,
+                                Long_Float'Floor
+                                  (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IHOLD") * 32.0 - 1.0))),
+                        Reserved_1   => 0,
+                        I_Run        =>
+                          TMC_Types.Unsigned_5
+                            (Long_Float'Max
+                               (0.0,
+                                Long_Float'Floor
+                                   (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0))),
+                        Reserved_2   => 0,
+                        I_Hold_Delay =>
+                          TMC_Types.Unsigned_4
+                            (Long_Float'Floor
+                               (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IHOLDDELAY") / 21.0)),
+                        Reserved_3   => 0,
+                        I_Run_Delay  =>
+                          TMC_Types.Unsigned_4
+                            (Long_Float'Floor
+                               (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUNDELAY") / 0.041)),
+                        Reserved_4   => 0),
+                     TPOWERDOWN    =>
+                       (T_Power_Down =>
+                          TMC_Types.Unsigned_8
+                            (Long_Float'Floor
+                               (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$TPOWERDOWN") / 21.0)),
+                        Reserved => 0),
+                     TPWMTHRS      =>
+                       (T_PWM_Thrs =>
+                          TMC_Types.Unsigned_20
+                            (Long_Float'Floor
+                               (Long_Float'Min
+                                  (12_500_000.0 /
+                                     (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step") /
+                                        (My_Get_Long_Float
+                                           (Data,
+                                            "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS") +
+                                           1.0E-100) + 1.0E-100),
+                                   2.0**20 - 1.0))),
+                        Reserved => 0),
+                     TCOOLTHRS     =>
+                       (T_Cool_Thrs => 0,
+                        Reserved    => 0),
+                     THIGH         =>
+                       (T_High =>
+                          TMC_Types.Unsigned_20
+                            (Long_Float'Floor
+                               (Long_Float'Min
+                                  (12_500_000.0 /
+                                     (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step") /
+                                        (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100)),
+                                   2.0**20 - 1.0))),
+                        Reserved => 0),
+                     CHOPCONF      =>
+                       (TOFF                 =>
+                          TMC_Types.TMC2240.TOFF_Type'Value
+                            ("OFF_" & Get (Data, "Steppers$" & S'Image & "$TOFF")),
+                        HSTRT_TFD210         => <>, --  Set later.
+                        HEND_OFFSET          => <>, --  Set later.
+                        FD3                  => <>, --  Set later.
+                        DISFDCC              =>
+                          Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$DISFDCC"),
+                        Reserved_1           => 0,
+                        CHM                  =>
+                          (if Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle" then
+                              TMC_Types.TMC2240.SpreadCycle_Mode
+                           elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "Constant off time" then
+                              TMC_Types.TMC2240.Constant_Off_Time_Mode
+                           else
+                              raise Constraint_Error with "Not implemented."),
+                        TBL                  =>
+                          TMC_Types.TMC2240.TBL_Type'Value
+                            ("BLANK_" & Get (Data, "Steppers$" & S'Image & "$TBL")),
+                        Reserved_2           => 0,
+                        VHIGHFS              => Get (Data, "Steppers$" & S'Image & "$VHIGHFS"),
+                        VHIGHCHM             => Get (Data, "Steppers$" & S'Image & "$VHIGHCHM"),
+                        TPFD                 => Get (Data, "Steppers$" & S'Image & "$TPFD"),
+                        Microstep_Resolution =>
+                          TMC_Types.TMC2240.Microstep_Resolution_Type'Value
+                            (Get (Data, "Steppers$" & S'Image & "$MRES")),
+                        Interpolate          => False,
+                        Double_Edge          => False, --  Set correctly in Prunt.Controller.
+                        Disable_S2G          => False,
+                        Disable_S2Vs         => False),
+                     PWMCONF       =>
+                       (PWM_OFS            =>
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_OFS"),
+                        PWM_Grad           =>
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_GRAD"),
+                        PWM_Freq           =>
+                          TMC_Types.TMC2240.PWM_Freq_Type'Value
+                            ("FREQ_" &
+                               Get
+                                 (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_FREQ")),
+                        PWM_Auto_Scale     =>
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_AUTOSCALE"),
+                        PWM_Auto_Grad      =>
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_AUTOGRAD"),
+                        Freewheel          =>
+                          TMC_Types.TMC2240.Freewheel_Type'Value
+                            (Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$FREEWHEEL")),
+                        PWM_Meas_SD_Enable =>
+                          Get
+                            (Data,
+                             "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_MEAS_SD_ENABLE"),
+                        PWM_Dis_Reg_Stst   =>
+                          Get
+                            (Data,
+                             "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_DIS_REG_STST"),
+                        PWM_Reg            =>
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_REG"),
+                        PWM_Lim            =>
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_LIM")));
+
+                  if Get (Data, "Steppers$" & S'Image & "$CHM") = "Constant off time" then
+                     Config.Steppers (S).CHOPCONF.DISFDCC :=
+                       Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$DISFDCC");
+                     Config.Steppers (S).CHOPCONF.HEND_OFFSET :=
+                       TMC_Types.Unsigned_4
+                         (Long_Integer'
+                            (Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$OFFSET") + 3));
+                     Config.Steppers (S).CHOPCONF.HSTRT_TFD210 :=
+                       TMC_Types.Unsigned_3
+                         (Long_Integer'
+                            (Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$TFD") rem 8));
+                     Config.Steppers (S).CHOPCONF.FD3 :=
+                       TMC_Types.Unsigned_1
+                         (Long_Integer'
+                            (Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$TFD") / 8));
+                  elsif
+                    Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                    and then Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Manual"
+                  then
+                     Config.Steppers (S).CHOPCONF.HEND_OFFSET :=
+                       TMC_Types.Unsigned_4
+                         (Long_Integer'
+                            (Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") + 3));
+                     Config.Steppers (S).CHOPCONF.HSTRT_TFD210 :=
+                       Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT");
+                  elsif
+                    Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                    and then Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
+                  then
+                     declare
+                        Sum_Too_High                : Boolean;
+                        Sum_Too_High_For_Full_Scale : Boolean;
+                        Excessive_Heating           : Boolean;
+                        Driver_Voltage_Too_Low      : Boolean;
+                     begin
+                        TMC_Types.TMC2240.Optimize_Spreadcycle
+                          (Driver_Voltage =>
+                             Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Input voltage") * volt,
+                           TBL => Config.Steppers (S).CHOPCONF.TBL,
+                           Motor_Inductance =>
+                             Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase inductance") /
+                               1_000.0 * henry,
+                           Motor_Resistance =>
+                             Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase resistance") * ohm,
+                           Motor_Peak_Current =>
+                             Get (Data, "Steppers$" & S'Image & "$Run current") * amp,
+                           TOFF  => Config.Steppers (S).CHOPCONF.TOFF,
+                           IRUN  => Config.Steppers (S).IHOLD_IRUN.I_Run,
+                           HSTRT => Config.Steppers (S).CHOPCONF.HSTRT_TFD210,
+                           HEND  => Config.Steppers (S).CHOPCONF.HEND_OFFSET,
+                           Sum_Too_High => Sum_Too_High,
+                           Sum_Too_High_For_Full_Scale => Sum_Too_High_For_Full_Scale,
+                           Excessive_Heating => Excessive_Heating,
+                           Driver_Voltage_Too_Low => Driver_Voltage_Too_Low);
+                        if Excessive_Heating or Driver_Voltage_Too_Low then
+                           raise Constraint_Error with "Invalid config should have been caught earlier.";
+                        end if;
+                     end;
+                  else
+                     raise Constraint_Error with "Not implemented.";
+                  end if;
+
+                  if
+                    Config.Steppers (S).CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode and
+                      (Dimensionless (Config.Steppers (S).CHOPCONF.HEND_OFFSET) +
+                         Dimensionless (Config.Steppers (S).CHOPCONF.HSTRT_TFD210) > 18.0) and
+                      (Config.Steppers (S).IHOLD_IRUN.I_Run = 31)
+                  then
+                     raise Constraint_Error with "Invalid config should have been caught earlier.";
+                  end if;
+            end case;
+         end loop;
+
+         for I in Input_Switch_Name loop
+            Config.Switches (I) :=
+              (Enabled     => Get (Data, "Input switches$" & I'Image & "$Enabled"),
+               Hit_On_High => Get (Data, "Input switches$" & I'Image & "$Hit on high"));
+         end loop;
+
+         for A in Axis_Name loop
+            if Get (Data, "Homing$" & A'Image) = "Disabled" then
+               Config.Homing (A) := (Kind => Disabled_Kind);
+            elsif Get (Data, "Homing$" & A'Image) = "Use input switch" then
+               Config.Homing (A) :=
+                 (Kind                   => Double_Tap_Kind,
+                  Switch                 =>
+                    Input_Switch_Name'Value (Get (Data, "Homing$" & A'Image & "$Use input switch$Switch")),
+                  First_Move_Distance    =>
+                    Get (Data, "Homing$" & A'Image & "$Use input switch$First move distance") * mm,
+                  Back_Off_Move_Distance =>
+                    -Get (Data, "Homing$" & A'Image & "$Use input switch$Back off move distance") * mm,
+                  Second_Move_Distance   =>
+                    Get (Data, "Homing$" & A'Image & "$Use input switch$Second move distance") * mm,
+                  Switch_Position        =>
+                    Get (Data, "Homing$" & A'Image & "$Use input switch$Switch position") * mm,
+                  Move_To_After          =>
+                    Get (Data, "Homing$" & A'Image & "$Use input switch$Move to after") * mm);
+
+               if Boolean'
+                 (Get (Data, "Homing$" & A'Image & "$Use input switch$Move towards negative infinity"))
+               then
+                  Config.Homing (A).First_Move_Distance    :=
+                    -Config.Homing (A).First_Move_Distance;
+                  Config.Homing (A).Back_Off_Move_Distance :=
+                    -Config.Homing (A).Back_Off_Move_Distance;
+                  Config.Homing (A).Second_Move_Distance   :=
+                    -Config.Homing (A).Second_Move_Distance;
+               end if;
+            elsif Get (Data, "Homing$" & A'Image) = "Set to value" then
+               Config.Homing (A) :=
+                 (Kind  => Set_To_Value_Kind,
+                  Value => Get (Data, "Homing$" & A'Image & "$Set to value$Position") * mm);
+            else
+               raise Constraint_Error;
+            end if;
+         end loop;
+
+         for T in Thermistor_Name loop
+            if Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Disabled" then
+               Config.Thermistors (T) :=
+                 (Kind                => Disabled_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Custom Steinhart-Hart model" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                =>
+                    Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Steinhart-Hart model$A"),
+                  SH_B                =>
+                    Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Steinhart-Hart model$B"),
+                  SH_C                =>
+                    Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Steinhart-Hart model$C"));
+            elsif
+              Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Custom Callendar-Van Dusen model"
+            then
+               Config.Thermistors (T) :=
+                 (Kind                => Callendar_Van_Dusen_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  CVD_R0              =>
+                    Get
+                      (Data,
+                       "Thermistors$" & T'Image & "$Thermistor kind$Custom Callendar-Van Dusen model$R(0)") * ohm,
+                  CVD_A               =>
+                    Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Callendar-Van Dusen model$A"),
+                  CVD_B               =>
+                    Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Callendar-Van Dusen model$B"));
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "ATC Semitec 104GT-2" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 8.0965E-4,
+                  SH_B                => 2.1163E-4,
+                  SH_C                => 7.0742E-8);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "ATC Semitec 104NT-4-R025H42G" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 7.9582E-4,
+                  SH_B                => 2.1360E-4,
+                  SH_C                => 6.4830E-8);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "EPCOS 100K B57560G104F" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 7.2213E-4,
+                  SH_B                => 2.1676E-4,
+                  SH_C                => 8.9293E-8);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Generic 3950" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 7.9347E-4,
+                  SH_B                => 2.0076E-4,
+                  SH_C                => 1.6328E-7);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "SliceEngineering 450" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 3.0553E-4,
+                  SH_B                => 2.1171E-4,
+                  SH_C                => 1.1962E-7);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "TDK NTCG104LH104JT1" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 9.7639E-4,
+                  SH_B                => 1.9688E-4,
+                  SH_C                => 7.2671E-8);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Honeywell 100K 135-104LAG-J01" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 4.5695E-4,
+                  SH_B                => 2.5163E-4,
+                  SH_C                => 0.0);
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "NTC 100K MGB18-104F39050L32" then
+               Config.Thermistors (T) :=
+                 (Kind                => Steinhart_Hart_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  SH_A                => 5.4598E-4,
+                  SH_B                => 2.4390E-4,
+                  SH_C                => 0.0);
+            elsif
+              Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "PT-1000 (PT-385 class above 0C)"
+            then
+               Config.Thermistors (T) :=
+                 (Kind                => Callendar_Van_Dusen_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  CVD_R0              => 1_000.0 * ohm,
+                  CVD_A               => 3.9083E-3,
+                  CVD_B               => -5.775E-7);
+            elsif
+              Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "PT-1000 (PT-392 class above 0C)"
+            then
+               Config.Thermistors (T) :=
+                 (Kind                => Callendar_Van_Dusen_Kind,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  CVD_R0              => 1_000.0 * ohm,
+                  CVD_A               => 3.9827E-3,
+                  CVD_B               => -5.875E-7);
+            else
+               raise Constraint_Error;
+            end if;
+         end loop;
+
+         for H in Heater_Name loop
+            if Get (Data, "Heaters$" & H'Image & "$Control method") = "Disabled" then
+               Config.Heaters (H) :=
+                 (Thermistor => Thermistor_Name'Value (Get (Data, "Heaters$" & H'Image & "$Thermistor")),
+                  Params =>
+                    (Kind                       => Disabled_Kind,
+                     Check_Max_Cumulative_Error =>
+                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celcius,
+                     Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
+                     Check_Minimum_Gain         =>
+                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celcius,
+                     Check_Hysteresis           =>
+                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celcius));
+            elsif Get (Data, "Heaters$" & H'Image & "$Control method") = "PID" then
+               Config.Heaters (H) :=
+                 (Thermistor => Thermistor_Name'Value (Get (Data, "Heaters$" & H'Image & "$Thermistor")),
+                  Params =>
+                    (Kind                       => PID_Kind,
+                     Check_Max_Cumulative_Error =>
+                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celcius,
+                     Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
+                     Check_Minimum_Gain         =>
+                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celcius,
+                     Check_Hysteresis           =>
+                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celcius,
+                     Proportional_Scale         =>
+                       Get (Data, "Heaters$" & H'Image & "$Control method$PID$Proportional scale"),
+                     Integral_Scale             =>
+                       Get (Data, "Heaters$" & H'Image & "$Control method$PID$Integral scale"),
+                     Derivative_Scale           =>
+                       Get (Data, "Heaters$" & H'Image & "$Control method$PID$Derivative scale")));
+            elsif Get (Data, "Heaters$" & H'Image & "$Control method") = "Bang bang" then
+               Config.Heaters (H) :=
+                 (Thermistor => Thermistor_Name'Value (Get (Data, "Heaters$" & H'Image & "$Thermistor")),
+                  Params =>
+                    (Kind                       => Bang_Bang_Kind,
+                     Check_Max_Cumulative_Error =>
+                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celcius,
+                     Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
+                     Check_Minimum_Gain         =>
+                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celcius,
+                     Check_Hysteresis           =>
+                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celcius,
+                     Bang_Bang_Hysteresis       =>
+                       Get (Data, "Heaters$" & H'Image & "$Control method$Bang bang$Hysteresis") * celcius));
+            else
+               raise Constraint_Error;
+            end if;
+         end loop;
+
+         for F in Fan_Name loop
+            if Get (Data, "Fans$" & F'Image & "$Control method") = "Always on" then
+               Config.Fans (F) :=
+                 (Kind          => Always_On_Kind,
+                  Invert_Output => Get (Data, "Fans$" & F'Image & "$Invert PWM output"),
+                  PWM_Frequency => Get (Data, "Fans$" & F'Image & "$PWM frequency") * hertz,
+                  Always_On_PWM => Get (Data, "Fans$" & F'Image & "$Control method$Always on$Duty cycle"));
+            elsif Get (Data, "Fans$" & F'Image & "$Control method") = "Dynamic duty cycle" then
+               Config.Fans (F) :=
+                 (Kind              => Dynamic_PWM_Kind,
+                  Invert_Output     => Get (Data, "Fans$" & F'Image & "$Invert PWM output"),
+                  PWM_Frequency     => Get (Data, "Fans$" & F'Image & "$PWM frequency") * hertz,
+                  Disable_Below_PWM =>
+                    Get (Data, "Fans$" & F'Image & "$Control method$Dynamic duty cycle$Disable below"),
+                  Max_PWM           =>
+                    Get (Data, "Fans$" & F'Image & "$Control method$Dynamic duty cycle$Maximum duty cycle"));
+            else
+               raise Constraint_Error;
+            end if;
+         end loop;
+
+         return Config;
+      end JSON_To_Config;
+
+      procedure Validate_Config_To_Schema (Config : JSON_Value; Report : access procedure (Key, Message : String)) is
+         procedure Check_Field (Name : UTF8_String; Value : JSON_Value) is
+            use Flat_Schemas;
+         begin
+            if not Flat_Schema.Contains (Name) then
+               Report (Name, "Key is not a recognised parameter name.");
+               return;
+            end if;
+
+            case Element (Flat_Schema, Name).Kind is
+               when Boolean_Kind =>
+                  if Kind (Value) /= JSON_Boolean_Type then
+                     Report (Name, "Element must be boolean.");
+                  end if;
+               when Discrete_Kind =>
+                  if Kind (Value) /= JSON_String_Type then
+                     Report (Name, "Element must be string.");
+                  elsif
+                    not Discrete_String_Sets.Contains (Element (Flat_Schema, Name).Discrete_Options, Get (Value))
+                  then
+                     Report
+                       (Name, "Element must be one of: " &
+                          Element (Flat_Schema, Name).Discrete_Options'Image);
+                  end if;
+               when Integer_Kind =>
+                  if Kind (Value) = JSON_Float_Type then
+                     Report (Name, "Element must be integer, floats are not allowed even if they are whole numbers.");
+                  elsif Kind (Value) /= JSON_Int_Type then
+                     Report (Name, "Element must be integer.");
+                  elsif Get (Value) < Element (Flat_Schema, Name).Integer_Min then
+                     Report
+                       (Name, "Element must not be less than " & Trim (Element (Flat_Schema, Name).Integer_Min'Image));
+                  elsif Get (Value) > Element (Flat_Schema, Name).Integer_Max then
+                     Report
+                       (Name,
+                        "Element must not be greater than " & Trim (Element (Flat_Schema, Name).Integer_Max'Image));
+                  end if;
+               when Float_Kind =>
+                  if Kind (Value) not in JSON_Float_Type | JSON_Int_Type then
+                     Report (Name, "Element must be float or integer (automatically upcast).");
+                  elsif My_Get_Long_Float (Value) < Element (Flat_Schema, Name).Float_Min then
+                     Report
+                       (Name, "Element must not be less than " & Trim (Element (Flat_Schema, Name).Float_Min'Image));
+                  elsif My_Get_Long_Float (Value) > Element (Flat_Schema, Name).Float_Max then
+                     Report
+                       (Name,
+                        "Element must not be greater than " & Trim (Element (Flat_Schema, Name).Float_Max'Image));
+                  end if;
+               when Sequence_Kind | Variant_Kind =>
+                  raise Constraint_Error with "Field type should not exist here: " & Element (Flat_Schema, Name)'Image;
+            end case;
+         end Check_Field;
+      begin
+         if Kind (Config) /= JSON_Object_Type then
+            Report ("Something is very broken if you're seeing this.", "Config file should contain a JSON object.");
+            return;
+         end if;
+
+            Map_JSON_Object (Config, Check_Field'Access);
+      end Validate_Config_To_Schema;
+
+      procedure Get_Schema (Schema : out Ada.Strings.Unbounded.Unbounded_String) is
+      begin
+         Maybe_Do_Init;
+         Schema := Schema_JSON;
+      end Get_Schema;
+
+      procedure Get_Values (Values : out Ada.Strings.Unbounded.Unbounded_String) is
+      begin
+         Maybe_Do_Init;
+         Values := Write (Get (Current_Properties, "Properties"));
+      end Get_Values;
+
+      procedure Error_If_Initial_Config_Invalid is
+      begin
+         if not Init_Done then
+            raise Constraint_Error with "Init not done.";
+         end if;
+
+         if not Initial_Config_Valid then
+            raise Constraint_Error with "Config is invalid, this procedure should not have been called.";
+         end if;
+      end Error_If_Initial_Config_Invalid;
+
+      procedure Get_Values_And_Validate
+        (Report : access procedure (Key, Message : String); Values : out Ada.Strings.Unbounded.Unbounded_String)
+      is
+      begin
+         Validate_Current_Config (Report);
+         Get_Values (Values);
+      end Get_Values_And_Validate;
+
+      procedure Prunt_Is_Enabled (Result : out Boolean) is
+      begin
+         Maybe_Do_Init;
+         Result := Get (Get (Initial_Properties, "Properties"), "Prunt$Enabled");
+      end Prunt_Is_Enabled;
+
    end Config_File;
+
+   procedure Disable_Prunt is
+   begin
+      Config_File.Disable_Prunt;
+   end Disable_Prunt;
+
+   procedure Read (Data : out Prunt_Parameters) is
+   begin
+      Config_File.Read (Data);
+   end Read;
+
+   procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) is
+   begin
+      Config_File.Read (Data, Stepper);
+   end Read;
+
+   procedure Read (Data : out Kinematics_Parameters) is
+   begin
+      Config_File.Read (Data);
+   end Read;
+
+   procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name) is
+   begin
+      Config_File.Read (Data, Input_Switch);
+   end Read;
+
+   procedure Read (Data : out Homing_Parameters; Axis : Axis_Name) is
+   begin
+      Config_File.Read (Data, Axis);
+   end Read;
+
+   procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name) is
+   begin
+      Config_File.Read (Data, Thermistor);
+   end Read;
+
+   procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) is
+   begin
+      Config_File.Read (Data, Heater);
+   end Read;
+
+   procedure Read (Data : out Fan_Parameters; Fan : Fan_Name) is
+   begin
+      Config_File.Read (Data, Fan);
+   end Read;
+
+   procedure Read (Data : out G_Code_Assignment_Parameters) is
+   begin
+      Config_File.Read (Data);
+   end Read;
+
+   procedure Patch
+     (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String))
+   is
+   begin
+      Config_File.Patch (Data, Report);
+   end Patch;
+
+   procedure Validate_Initial_Config (Report : access procedure (Key, Message : String)) is
+   begin
+      Config_File.Validate_Initial_Config (Report);
+   end Validate_Initial_Config;
+
+   procedure Validate_Current_Config (Report : access procedure (Key, Message : String)) is
+   begin
+      Config_File.Validate_Current_Config (Report);
+   end Validate_Current_Config;
+
+   function Get_Schema return Ada.Strings.Unbounded.Unbounded_String is
+      Result : Ada.Strings.Unbounded.Unbounded_String;
+   begin
+      Config_File.Get_Schema (Result);
+      return Result;
+   end Get_Schema;
+
+   function Get_Values return Ada.Strings.Unbounded.Unbounded_String is
+      Result : Ada.Strings.Unbounded.Unbounded_String;
+   begin
+      Config_File.Get_Values (Result);
+      return Result;
+   end Get_Values;
+
+   function Get_Values_And_Validate
+     (Report : access procedure (Key, Message : String)) return Ada.Strings.Unbounded.Unbounded_String is
+   begin
+      return Values : Ada.Strings.Unbounded.Unbounded_String do
+         Config_File.Get_Values_And_Validate (Report, Values);
+      end return;
+   end Get_Values_And_Validate;
+
+   function Prunt_Is_Enabled return Boolean is
+   begin
+      return Result : Boolean do
+         Config_File.Prunt_Is_Enabled (Result);
+      end return;
+   end Prunt_Is_Enabled;
 
 end Prunt.Config;

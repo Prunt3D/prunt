@@ -14,9 +14,21 @@ release.optimization = ["-O3", "-gnatn", "-fdata-sections", "-ffunction-sections
 development.contracts = "Yes"
 
 [[depends-on]]
-ada_toml = "*"
-gnoga = "*"
+gnat_native = "^14.2.1"
 
-[[pins]]
-gnoga = { url = "https://github.com/Prunt3D/gnoga.git", branch = "prunt" }
-ada_toml = { url = "https://github.com/pmderodat/ada-toml.git", commit = "485b71c8c5d58cbdafeb925afbbe22590a2eada2" }
+[[depends-on]]
+gnatcoll = "^23.0.0"
+
+[[actions]]
+type = "pre-build"
+command = ["sh", "-c", "cd html && npx webpack"]
+
+[[actions]]
+type = "pre-build"
+command = ["are", "--lang=Ada", "-o", "./generated_src_html", "--content-only", "--name-access", "--rule=./html/package.xml", "./html/dist"]
+
+[[depends-on]]
+simple_components = "^4.68.0"
+
+[[depends-on]]
+are = "^1.5.1"

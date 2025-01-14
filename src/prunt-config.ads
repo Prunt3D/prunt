@@ -19,15 +19,15 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Prunt.Motion_Planner;
-with TOML;
-with Ada.Strings.Bounded;
 with Prunt.Thermistors; use Prunt.Thermistors;
 with Prunt.Heaters;     use Prunt.Heaters;
-with Prunt.TMC_Types;
+with GNATCOLL.JSON;     use GNATCOLL.JSON;
+with Ada.Strings.Unbounded;
+with Ada.Containers.Indefinite_Ordered_Maps;
+with Ada.Containers.Indefinite_Ordered_Sets;
+with Prunt.Motion_Planner;
+with Prunt.TMC_Types;   use Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
-
---  Serialises and deserialises records to and from a TOML file.
 
 generic
    type Stepper_Name is (<>);
@@ -39,8 +39,6 @@ generic
    type Input_Switch_Name is (<>);
    Config_Path : String;
 package Prunt.Config is
-
-   package Path_Strings is new Ada.Strings.Bounded.Generic_Bounded_Length (Max => 200);
 
    type Attached_Steppers is array (Stepper_Name) of Boolean;
 
@@ -59,44 +57,16 @@ package Prunt.Config is
          when Basic_Kind =>
             null;
          when TMC2240_UART_Kind =>
-            --  GLOBALSCALER and DRVCONF:
-            Output_Current       : Current                                     := 0.15 * amp;
-            Slope_Control        : TMC_Types.TMC2240.Slope_Control_Type        := TMC_Types.TMC2240.Slope_100V_Per_us;
-            --  IHOLDIRUN:
-            I_Hold               : TMC_Types.Unsigned_5                        := 16;
-            I_Run                : TMC_Types.Unsigned_5                        := 31;
-            I_Hold_Delay         : TMC_Types.Unsigned_4                        := 1;
-            I_Run_Delay          : TMC_Types.Unsigned_4                        := 4;
-            --  TPOWERDOWN:
-            T_Power_Down         : TMC_Types.Unsigned_8                        := 10;
-            --  TPWMTHRS:
-            T_PWM_Thrs           : TMC_Types.Unsigned_20                       := 0;
-            --  TCOOLTHRS:
-            T_Cool_Thrs          : TMC_Types.Unsigned_20                       := 0;
-            --  THIGH:
-            T_High               : TMC_Types.Unsigned_20                       := 0;
-            --  CHOPCONF:
-            TOFF                 : TMC_Types.Unsigned_4                        := 3;
-            HSTRT_TFD210         : TMC_Types.Unsigned_3                        := 5;
-            HEND_OFFSET          : TMC_Types.Unsigned_4                        := 2;
-            FD3                  : TMC_Types.Unsigned_1                        := 0;
-            DISFDCC              : Boolean                                     := False;
-            CHM                  : Boolean                                     := False;
-            VHIGHFS              : Boolean                                     := False;
-            VHIGHCHM             : Boolean                                     := False;
-            TPFD                 : TMC_Types.Unsigned_4                        := 4;
-            Microstep_Resolution : TMC_Types.TMC2240.Microstep_Resolution_Type := TMC_Types.TMC2240.MS_256;
-            --  PWMCONF:
-            PWM_OFS              : TMC_Types.Unsigned_8                        := 29;
-            PWM_Grad             : TMC_Types.Unsigned_8                        := 0;
-            PWM_Freq             : TMC_Types.Unsigned_2                        := 0;
-            PWM_Auto_Scale       : Boolean                                     := True;
-            PWM_Auto_Grad        : Boolean                                     := True;
-            Freewheel            : TMC_Types.TMC2240.Freewheel_Type            := TMC_Types.TMC2240.Normal;
-            PWM_Meas_SD_Enable   : Boolean                                     := False;
-            PWM_Dis_Reg_Stst     : Boolean                                     := False;
-            PWM_Reg              : TMC_Types.Unsigned_4                        := 4;
-            PWM_Lim              : TMC_Types.Unsigned_4                        := 12;
+            GCONF         : TMC_Types.TMC2240.GCONF;
+            DRV_CONF      : TMC_Types.TMC2240.DRV_CONF;
+            GLOBAL_SCALER : TMC_Types.TMC2240.GLOBAL_SCALER;
+            IHOLD_IRUN    : TMC_Types.TMC2240.IHOLD_IRUN;
+            TPOWERDOWN    : TMC_Types.TMC2240.TPOWERDOWN;
+            TPWMTHRS      : TMC_Types.TMC2240.TPWMTHRS;
+            TCOOLTHRS     : TMC_Types.TMC2240.TCOOLTHRS;
+            THIGH         : TMC_Types.TMC2240.THIGH;
+            PWMCONF       : TMC_Types.TMC2240.PWMCONF;
+            CHOPCONF      : TMC_Types.TMC2240.CHOPCONF;
       end case;
    end record;
 
@@ -121,10 +91,12 @@ package Prunt.Config is
       Hit_On_High : Boolean := False;
    end record;
 
-   type Homing_Kind is (Double_Tap_Kind, Set_To_Value_Kind);
+   type Homing_Kind is (Disabled_Kind, Double_Tap_Kind, Set_To_Value_Kind);
 
-   type Homing_Parameters (Kind : Homing_Kind := Double_Tap_Kind) is record
+   type Homing_Parameters (Kind : Homing_Kind := Disabled_Kind) is record
       case Kind is
+         when Disabled_Kind =>
+            null;
          when Double_Tap_Kind =>
             Switch                 : Input_Switch_Name := Input_Switch_Name'First;
             First_Move_Distance    : Length            := 0.0 * mm;
@@ -137,11 +109,6 @@ package Prunt.Config is
       end case;
    end record;
 
-   type Extruder_Parameters is record
-      Nozzle_Diameter   : Length := 0.4 * mm;
-      Filament_Diameter : Length := 1.75 * mm;
-   end record;
-
    --  Thermistor_Parameters in Prunt.Thermistors.
 
    type Heater_Full_Parameters is record
@@ -149,26 +116,10 @@ package Prunt.Config is
       Params     : Heaters.Heater_Parameters;
    end record;
 
-   type Bed_Mesh_Kind is (No_Mesh_Kind, Beacon_Kind);
-
-   type Bed_Mesh_Parameters (Kind : Bed_Mesh_Kind := No_Mesh_Kind) is record
-      case Kind is
-         when No_Mesh_Kind =>
-            null;
-         when Beacon_Kind =>
-            Serial_Port_Path     : Path_Strings.Bounded_String := Path_Strings.To_Bounded_String ("");
-            X_Offset             : Length                      := 0.0 * mm;
-            Y_Offset             : Length                      := 0.0 * mm;
-            Calibration_Floor    : Length                      := 0.2 * mm;
-            Calibration_Ceiling  : Length                      := 5.0 * mm;
-            Calibration_Feedrate : Velocity                    := 1.0 * mm / s;
-      end case;
-   end record;
-
    type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
 
    type Fan_Parameters (Kind : Fan_Kind := Always_On_Kind) is record
-      Invert_Output : Boolean := False;
+      Invert_Output : Boolean           := False;
       PWM_Frequency : Fan_PWM_Frequency := 30.0 * hertz;
       case Kind is
          when Dynamic_PWM_Kind =>
@@ -181,44 +132,161 @@ package Prunt.Config is
 
    type G_Code_Assignment_Parameters is record
       Bed_Heater    : Heater_Name := Heater_Name'First;
-      --  Chamber_Heater : Heater_Name := Heater_Name'First;
       Hotend_Heater : Heater_Name := Heater_Name'First;
    end record;
 
+   procedure Disable_Prunt;
+   procedure Read (Data : out Prunt_Parameters);
+   procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
+     Post => Data.Kind = Stepper_Kinds (Stepper);
+   procedure Read (Data : out Kinematics_Parameters);
+   procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
+   procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
+   procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
+   procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) with
+     Post => Data.Params.Kind not in PID_Autotune_Kind;
+   procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
+   procedure Read (Data : out G_Code_Assignment_Parameters);
+   procedure Patch
+     (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
+   procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));
+   procedure Validate_Current_Config (Report : access procedure (Key, Message : String));
+   function Get_Schema return Ada.Strings.Unbounded.Unbounded_String;
+   function Get_Values return Ada.Strings.Unbounded.Unbounded_String;
+   function Prunt_Is_Enabled return Boolean;
+
+   function Get_Values_And_Validate
+     (Report : access procedure (Key, Message : String)) return Ada.Strings.Unbounded.Unbounded_String;
+   --  Identical to Validate_Current_Config followed by Get_Values, but guarantees that the values will not change
+   --  between the two operations.
+
+private
+
+   package Discrete_String_Sets is new Ada.Containers.Indefinite_Ordered_Sets (String);
+
+   type Property_Kind is (Boolean_Kind, Discrete_Kind, Integer_Kind, Float_Kind, Sequence_Kind, Variant_Kind);
+
+   type Property_Parameters (Kind : Property_Kind);
+   type Property_Parameters_Access is not null access constant Property_Parameters;
+
+   package Property_Maps is new Ada.Containers.Indefinite_Ordered_Maps (String, Property_Parameters_Access);
+
+   type Property_Parameters (Kind : Property_Kind) is record
+      Description : Ada.Strings.Unbounded.Unbounded_String;
+      case Kind is
+         when Boolean_Kind =>
+            Boolean_Default : Boolean;
+         when Discrete_Kind =>
+            Discrete_Options : Discrete_String_Sets.Set;
+            Discrete_Default : Ada.Strings.Unbounded.Unbounded_String;
+         when Integer_Kind =>
+            Integer_Min     : Long_Long_Integer;
+            Integer_Max     : Long_Long_Integer;
+            Integer_Unit    : Ada.Strings.Unbounded.Unbounded_String;
+            Integer_Default : Long_Long_Integer;
+         when Float_Kind =>
+            Float_Min     : Long_Float;
+            Float_Max     : Long_Float;
+            Float_Unit    : Ada.Strings.Unbounded.Unbounded_String;
+            Float_Default : Long_Float;
+         when Sequence_Kind =>
+            Sequence_Children : Property_Maps.Map;
+            Sequence_Tabbed   : Boolean;
+         when Variant_Kind =>
+            Variant_Children : Property_Maps.Map;
+            Variant_Default  : Ada.Strings.Unbounded.Unbounded_String;
+      end case;
+   end record;
+
+   package Flat_Schemas is new Ada.Containers.Indefinite_Ordered_Maps (String, Property_Parameters_Access);
+
+   --  This function leaks memory as it is only meant to be called once over the lifetime of the program.
+   function Build_Schema return Property_Maps.Map;
+
+   function Schema_To_JSON (Schema : Property_Maps.Map) return Ada.Strings.Unbounded.Unbounded_String;
+
+   --  This function leaks memory as it is only meant to be called once over the lifetime of the program.
+   function Build_Flat_Schema (Schema : Property_Maps.Map) return Flat_Schemas.Map with
+     Post =>
+      (for all P of Build_Flat_Schema'Result => P.Kind in Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind);
+
+   type Stepper_Parameters_Array is array (Stepper_Name) of Stepper_Parameters;
+
+   type Input_Switch_Parameters_Array is array (Input_Switch_Name) of Input_Switch_Parameters;
+
+   type Homing_Parameters_Array is array (Axis_Name) of Homing_Parameters;
+
+   type Thermistor_Parameters_Array is array (Thermistor_Name) of Thermistor_Parameters;
+
+   type Heater_Full_Parameters_Array is array (Heater_Name) of Heater_Full_Parameters;
+
+   type Fan_Parameters_Array is array (Fan_Name) of Fan_Parameters;
+
+   type Full_Config is record
+      Prunt              : Prunt_Parameters;
+      Kinematics         : Kinematics_Parameters;
+      G_Code_Assignments : G_Code_Assignment_Parameters;
+      Steppers           : Stepper_Parameters_Array;
+      Switches           : Input_Switch_Parameters_Array;
+      Homing             : Homing_Parameters_Array;
+      Thermistors        : Thermistor_Parameters_Array;
+      Heaters            : Heater_Full_Parameters_Array;
+      Fans               : Fan_Parameters_Array;
+   end record;
+
    protected Config_File is
+      procedure Disable_Prunt;
       procedure Read (Data : out Prunt_Parameters);
-      procedure Write (Data : Prunt_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
         Post => Data.Kind = Stepper_Kinds (Stepper);
-      procedure Write (Data : Stepper_Parameters; Stepper : Stepper_Name; Append_Only : Boolean := False) with
-        Pre => Data.Kind = Stepper_Kinds (Stepper);
       procedure Read (Data : out Kinematics_Parameters);
-      procedure Write (Data : Kinematics_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
-      procedure Write
-        (Data : Input_Switch_Parameters; Input_Switch : Input_Switch_Name; Append_Only : Boolean := False);
       procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
-      procedure Write (Data : Homing_Parameters; Axis : Axis_Name; Append_Only : Boolean := False);
-      procedure Read (Data : out Extruder_Parameters);
-      procedure Write (Data : Extruder_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
-      procedure Write (Data : Thermistor_Parameters; Thermistor : Thermistor_Name; Append_Only : Boolean := False);
       procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) with
         Post => Data.Params.Kind not in PID_Autotune_Kind;
-      procedure Write (Data : Heater_Full_Parameters; Heater : Heater_Name; Append_Only : Boolean := False) with
-        Pre => Data.Params.Kind not in PID_Autotune_Kind;
-      procedure Read (Data : out Bed_Mesh_Parameters);
-      procedure Write (Data : Bed_Mesh_Parameters; Append_Only : Boolean := False);
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
-      procedure Write (Data : Fan_Parameters; Fan : Fan_Name; Append_Only : Boolean := False);
       procedure Read (Data : out G_Code_Assignment_Parameters);
-      procedure Write (Data : G_Code_Assignment_Parameters; Append_Only : Boolean := False);
-      procedure Validate_Config (Report : access procedure (Message : String));
+      procedure Patch
+        (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
+      procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));
+      procedure Validate_Current_Config (Report : access procedure (Key, Message : String));
+      procedure Get_Schema (Schema : out Ada.Strings.Unbounded.Unbounded_String);
+      procedure Get_Values (Values : out Ada.Strings.Unbounded.Unbounded_String);
+      procedure Get_Values_And_Validate
+        (Report : access procedure (Key, Message : String); Values : out Ada.Strings.Unbounded.Unbounded_String);
+      procedure Prunt_Is_Enabled (Result : out Boolean);
    private
-      procedure Maybe_Read_File;
+      procedure Error_If_Initial_Config_Invalid;
+      procedure Validate_Config (Config : JSON_Value; Report : access procedure (Key, Message : String));
+      function JSON_To_Config (Data : JSON_Value) return Full_Config;
+      procedure Validate_Config_To_Schema (Config : JSON_Value; Report : access procedure (Key, Message : String));
+      procedure Maybe_Do_Init;
       procedure Write_File;
-      File_Read : Boolean         := False;
-      TOML_Data : TOML.TOML_Value := TOML.No_TOML_Value;
+      Init_Done            : Boolean := False;
+      Init_Failed          : Boolean := False;
+      Initial_Config_Valid : Boolean := False;
+      Initial_Properties   : JSON_Value;
+      Current_Properties   : JSON_Value;
+      Schema               : Property_Maps.Map;
+      Schema_JSON          : Ada.Strings.Unbounded.Unbounded_String;
+      Flat_Schema          : Flat_Schemas.Map;
+      Initial_Config       : Full_Config;
    end Config_File;
+
+   function Get (Val : JSON_Value; Field : UTF8_String) return Dimensionless with
+     Pre => Val.Kind = JSON_Object_Type and then Get (Val, Field).Kind in JSON_Float_Type | JSON_Int_Type;
+
+   function My_Get_Long_Float (Val : JSON_Value; Field : UTF8_String) return Long_Float with
+     Pre => Val.Kind = JSON_Object_Type and then Get (Val, Field).Kind in JSON_Float_Type | JSON_Int_Type;
+
+   generic
+      type T is range <>;
+   function Get_JSON_Integer (Val : JSON_Value; Field : UTF8_String) return T;
+
+   function To_Unbounded_String (Source : String) return Ada.Strings.Unbounded.Unbounded_String renames
+     Ada.Strings.Unbounded.To_Unbounded_String;
+
+   function Get (Val : JSON_Value; Field : UTF8_String) return TMC_Boolean;
 
 end Prunt.Config;

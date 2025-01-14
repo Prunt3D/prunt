@@ -4,7 +4,7 @@ project Prunt is
    for Library_Name use "Prunt";
    for Library_Version use Project'Library_Name & ".so." & Prunt_Config.Crate_Version;
 
-   for Source_Dirs use ("src/", "config/");
+   for Source_Dirs use ("src/", "config/", "generated_src_html/");
    for Object_Dir use "obj/" & Prunt_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
    for Library_Dir use "lib";

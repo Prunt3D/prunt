@@ -23,6 +23,7 @@ with Ada.Numerics;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
 with Ada.Exceptions;
+with Ada.Strings.Unbounded;
 
 package Prunt is
 
@@ -40,8 +41,9 @@ package Prunt is
       procedure Set
         (Cause      : Ada.Task_Termination.Cause_Of_Termination;
          ID         : Ada.Task_Identification.Task_Id;
-         Occurrence : Ada.Exceptions.Exception_Occurrence) with Post => Is_Set;
-      --  Store an exception if no exception has been stored previously. Also prints all exceptions.
+         Occurrence : Ada.Exceptions.Exception_Occurrence) with
+        Post => Is_Set;
+        --  Store an exception if no exception has been stored previously. Also prints all exceptions.
 
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence);
       --  Get the stored exception. Blocks until an exception is available.
@@ -60,7 +62,6 @@ package Prunt is
       ((Unit_Name => Millimeter, Unit_Symbol => "mm", Dim_Symbol => "Length"),
        (Unit_Name => Second, Unit_Symbol => "s", Dim_Symbol => "Time"),
        (Unit_Name => Celcius, Unit_Symbol => "°C", Dim_Symbol => "Temperature"),
-       (Unit_Name => Volt, Unit_Symbol => "V", Dim_Symbol => "Voltage"),
        (Unit_Name => Amp, Unit_Symbol => "A", Dim_Symbol => "Current"),
        (Unit_Name => Gram, Unit_Symbol => "g", Dim_Symbol => "Mass"));
 
@@ -80,7 +81,7 @@ package Prunt is
        Dimension => (Symbol => "×", others => 0);
 
    subtype Voltage is Dimensioned_Float with
-       Dimension => (Symbol => "V", Volt => 1, others => 0);
+       Dimension => (Symbol => "nV", Gram => 1, Millimeter => 2, Second => -3, Amp => -1, others => 0);
 
    subtype Current is Dimensioned_Float with
        Dimension => (Symbol => "A", Amp => 1, others => 0);
@@ -89,38 +90,47 @@ package Prunt is
        Dimension => (Symbol => "g", Gram => 1, others => 0);
 
    subtype Resistance is Dimensioned_Float with
-       Dimension => (Symbol => "Ω", Volt => 1, Amp => -1, others => 0);
+       Dimension => (Symbol => "nΩ", Gram => 1, Millimeter => 2, Second => -3, Amp => -2, others => 0);
 
    subtype Power is Dimensioned_Float with
-       Dimension => (Symbol => "W", Volt => 1, Amp => 1, others => 0);
+       Dimension => (Symbol => "nW", Gram => 1, Millimeter => 2, Second => -3, others => 0);
 
    subtype Frequency is Dimensioned_Float with
        Dimension => (Symbol => "Hz", Second => -1, others => 0);
 
    subtype Energy is Dimensioned_Float with
-       Dimension => (Symbol => "J", Volt => 1, Amp => 1, Second => 1, others => 0);
+       Dimension => (Symbol => "nJ", Gram => 1, Millimeter => 2, Second => -2, others => 0);
+
+   subtype Inductance is Dimensioned_Float with
+       Dimension => (Symbol => "nH", Gram => 1, Millimeter => 2, Second => -2, Amp => -2, others => 0);
 
    subtype PWM_Scale is Dimensionless range 0.0 .. 1.0;
 
    subtype Cruise_Ratio is Dimensionless range 0.03 .. 0.97;
 
    pragma Warnings (Off, "assumed to be");
-   mm      : constant Length      := 1.0;
-   s       : constant Time        := 1.0;
-   celcius : constant Temperature := 1.0;
-   radian  : constant Angle       := 1.0;
-   volt    : constant Voltage     := 1.0;
-   amp     : constant Current     := 1.0;
-   ohm     : constant Resistance  := 1.0;
-   hertz   : constant Frequency   := 1.0;
-   watt    : constant Power       := 1.0;
-   joule   : constant Energy      := 1.0;
-   gram    : constant Mass        := 1.0;
+   mm        : constant Length      := 1.0;
+   s         : constant Time        := 1.0;
+   celcius   : constant Temperature := 1.0;
+   radian    : constant Angle       := 1.0;
+   nanovolt  : constant Voltage     := 1.0;
+   amp       : constant Current     := 1.0;
+   nanoohm   : constant Resistance  := 1.0;
+   hertz     : constant Frequency   := 1.0;
+   nanowatt  : constant Power       := 1.0;
+   nanojoule : constant Energy      := 1.0;
+   gram      : constant Mass        := 1.0;
+   nanohenry : constant Inductance  := 1.0;
    pragma Warnings (On, "assumed to be");
 
-   ms  : constant Time  := s / 1_000.0;
-   min : constant Time  := s * 60.0;
-   deg : constant Angle := (Ada.Numerics.Pi / 180.0) * radian;
+   volt  : constant Voltage    := 1_000_000_000.0 * nanovolt;
+   ohm   : constant Resistance := 1_000_000_000.0 * nanoohm;
+   watt  : constant Power      := 1_000_000_000.0 * nanowatt;
+   joule : constant Energy     := 1_000_000_000.0 * nanojoule;
+   henry : constant Inductance := 1_000_000_000.0 * nanohenry;
+   ms    : constant Time       := s / 1_000.0;
+   min   : constant Time       := s * 60.0;
+   deg   : constant Angle      := (Ada.Numerics.Pi / 180.0) * radian;
 
    subtype Fan_PWM_Frequency is Frequency range 1.0 * hertz .. 50_000.0 * hertz;
 
@@ -152,19 +162,20 @@ package Prunt is
        Dimension => (Symbol => "mm⁻⁴", Millimeter => -4, others => 0);
 
    subtype Heat_Flux is Dimensioned_Float with
-       Dimension => (Symbol => "W/mm²", Volt => 1, Amp => 1, Millimeter => -2, others => 0);
+       Dimension => (Symbol => "mW/mm²", Gram => 1, Second => -3, others => 0);
 
    subtype Heat_Transfer_Coefficient is Dimensioned_Float with
-       Dimension => (Symbol => "W/(mm²°C)", Volt => 1, Amp => 1, Millimeter => -2, Celcius => -1, others => 0);
+       Dimension => (Symbol => "mW/(m²°C)", Gram => 1, Second => -3, Celcius => -1, others => 0);
 
    subtype Thermal_Conductance is Dimensioned_Float with
-       Dimension => (Symbol => "W/°C", Volt => 1, Amp => 1, Celcius => -1, others => 0);
+       Dimension => (Symbol => "nW/°C", Gram => 1, Millimeter => 2, Second => -3, Celcius => -1, others => 0);
 
    subtype Heat_Capacity is Dimensioned_Float with
-       Dimension => (Symbol => "J/°C", Volt => 1, Amp => 1, Second => 1, Celcius => -1, others => 0);
+       Dimension => (Symbol => "nJ/°C", Gram => 1, Millimeter => 2, Second => -2, Celcius => -1, others => 0);
 
    subtype Specific_Heat_Capacity is Dimensioned_Float with
-       Dimension => (Symbol => "J/(g°C)", Volt => 1, Amp => 1, Second => 1, Gram => -1, Celcius => -1, others => 0);
+       Dimension =>
+        (Symbol => "nJ/(g°C)",  Millimeter => 2, Second => -2, Celcius => -1, others => 0);
 
    subtype Inverse_Temperature is Dimensioned_Float with
        Dimension => (Symbol => "°C⁻¹", Celcius => -1, others => 0);
@@ -218,9 +229,7 @@ package Prunt is
 
    TMC_UART_Error : exception;
 
-private
-
-   Nice_Axis_Names : constant array (Axis_Name) of String (1 .. 6) :=
-     [X_Axis => "X Axis", Y_Axis => "Y Axis", Z_Axis => "Z Axis", E_Axis => "E Axis"];
+   function JSON_Escape (S : String) return String;
+   function JSON_Escape (S : Ada.Strings.Unbounded.Unbounded_String) return Ada.Strings.Unbounded.Unbounded_String;
 
 end Prunt;
