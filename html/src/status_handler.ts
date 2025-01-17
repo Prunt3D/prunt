@@ -260,7 +260,7 @@ export async function setupStatus(): Promise<void> {
                 ++i;
             }
             for (const h of schema.Heater_Powers) {
-                plotData[i].push(status.Heater_Powers[h]);
+                plotData[i].push(status.Heater_Powers[h] * 100);
                 ++i;
             }
 
