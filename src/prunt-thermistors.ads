@@ -26,8 +26,8 @@ package Prunt.Thermistors is
    --  TODO: Should a polynomial mode be added? It would allow for higher accuracy, but what we already have is more
    --  than good enough for 3d printers.
    type Thermistor_Parameters (Kind : Thermistor_Kind := Disabled_Kind) is record
-      Minimum_Temperature : Temperature := 0.0 * celcius;
-      Maximum_Temperature : Temperature := 0.0 * celcius;
+      Minimum_Temperature : Temperature := 0.0 * celsius;
+      Maximum_Temperature : Temperature := 0.0 * celsius;
       case Kind is
          when Disabled_Kind =>
             null;

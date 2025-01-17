@@ -499,7 +499,7 @@ package body Prunt.Gcode_Parser is
             when 104 =>
                Runner
                  ((Kind               => Set_Hotend_Temperature_Kind,
-                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
             when 106 | 107 =>
                declare
@@ -548,29 +548,29 @@ package body Prunt.Gcode_Parser is
             when 109 =>
                Runner
                  ((Kind               => Wait_Hotend_Temperature_Kind,
-                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
             when 122 =>
                Runner ((Kind => TMC_Dump_Kind, Pos => Ctx.Pos));
             when 140 =>
                Runner
                  ((Kind               => Set_Bed_Temperature_Kind,
-                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
             when 141 =>
                Runner
                  ((Kind               => Set_Chamber_Temperature_Kind,
-                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
             when 190 =>
                Runner
                  ((Kind               => Wait_Bed_Temperature_Kind,
-                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
             when 191 =>
                Runner
                  ((Kind               => Wait_Chamber_Temperature_Kind,
-                   Target_Temperature => Floatify_Or_Error ('S') * celcius,
+                   Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
             when 205 =>
                declare
@@ -622,7 +622,7 @@ package body Prunt.Gcode_Parser is
                   Cycles : Parameter_Integer := Integer_Or_Default ('C', 5);
                   Comm   : Command           :=
                     (Kind               => Heater_Autotune_Kind,
-                     Tuning_Temperature => Floatify_Or_Error ('S') * celcius,
+                     Tuning_Temperature => Floatify_Or_Error ('S') * celsius,
                      Heater_To_Tune     => <>,
                      Max_Cycles         => <>,
                      Pos                => Ctx.Pos);

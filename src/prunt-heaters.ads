@@ -26,10 +26,10 @@ package Prunt.Heaters is
    type Heater_Kind is (Disabled_Kind, PID_Kind, Bang_Bang_Kind, PID_Autotune_Kind);
 
    type Heater_Parameters (Kind : Heater_Kind := Disabled_Kind) is record
-      Check_Max_Cumulative_Error : Temperature := 120.0 * celcius;
+      Check_Max_Cumulative_Error : Temperature := 120.0 * celsius;
       Check_Gain_Time            : Time        := 20.0 * s;
-      Check_Minimum_Gain         : Temperature := 2.0 * celcius;
-      Check_Hysteresis           : Temperature := 3.0 * celcius;
+      Check_Minimum_Gain         : Temperature := 2.0 * celsius;
+      Check_Hysteresis           : Temperature := 3.0 * celsius;
       case Kind is
          when Disabled_Kind =>
             null;
@@ -38,12 +38,12 @@ package Prunt.Heaters is
             Integral_Scale     : Dimensionless := 0.0;
             Derivative_Scale   : Dimensionless := 0.0;
          when Bang_Bang_Kind =>
-            Bang_Bang_Hysteresis : Temperature := 0.0 * celcius;
+            Bang_Bang_Hysteresis : Temperature := 0.0 * celsius;
          when PID_Autotune_Kind =>
             Max_Cycles                 : PID_Autotune_Cycle_Count := 5;
             Proportional_Tuning_Factor : Dimensionless            := 0.6;
             Derivative_Tuning_Factor   : Frequency                := 0.125 * hertz;
-            PID_Tuning_Temperature     : Temperature              := 0.0 * celcius;
+            PID_Tuning_Temperature     : Temperature              := 0.0 * celsius;
       end case;
    end record;
 

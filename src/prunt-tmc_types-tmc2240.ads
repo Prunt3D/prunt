@@ -238,7 +238,7 @@ package Prunt.TMC_Types.TMC2240 is
 
    type ADC_Temp_Almost_Kelvin_Type is delta 10.0 / 77.0 range 0.0 .. 10.0 / 77.0 * (2.0**13 - 1.0) with
      Size => 13, Small => 10.0 / 77.0;
-     --  This range starts at −2038.0/(77.0/10.0) celcius (approx -264), but GNAT will not generate a biased
+     --  This range starts at −2038.0/(77.0/10.0) celsius (approx -264), but GNAT will not generate a biased
      --  representation for delta types, so we can not represent this in kelvin.
 
    type ADC_TEMP is record

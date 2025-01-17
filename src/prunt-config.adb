@@ -663,7 +663,7 @@ package body Prunt.Config is
                              Unit    => "")]),
                  "Custom Callendar-Van Dusen model" =>
                     Sequence
-                      ("R = R(0) * (1 + A * T + B * T**2) where T is in celcius.",
+                      ("R = R(0) * (1 + A * T + B * T**2) where T is in celsius.",
                        ["R(0)" =>
                           Float
                             ("",
@@ -2049,13 +2049,13 @@ package body Prunt.Config is
             if Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Disabled" then
                Config.Thermistors (T) :=
                  (Kind                => Disabled_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius);
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Custom Steinhart-Hart model" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                =>
                     Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Steinhart-Hart model$A"),
                   SH_B                =>
@@ -2067,8 +2067,8 @@ package body Prunt.Config is
             then
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   CVD_R0              =>
                     Get
                       (Data,
@@ -2080,64 +2080,64 @@ package body Prunt.Config is
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "ATC Semitec 104GT-2" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 8.0965E-4,
                   SH_B                => 2.1163E-4,
                   SH_C                => 7.0742E-8);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "ATC Semitec 104NT-4-R025H42G" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 7.9582E-4,
                   SH_B                => 2.1360E-4,
                   SH_C                => 6.4830E-8);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "EPCOS 100K B57560G104F" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 7.2213E-4,
                   SH_B                => 2.1676E-4,
                   SH_C                => 8.9293E-8);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Generic 3950" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 7.9347E-4,
                   SH_B                => 2.0076E-4,
                   SH_C                => 1.6328E-7);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "SliceEngineering 450" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 3.0553E-4,
                   SH_B                => 2.1171E-4,
                   SH_C                => 1.1962E-7);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "TDK NTCG104LH104JT1" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 9.7639E-4,
                   SH_B                => 1.9688E-4,
                   SH_C                => 7.2671E-8);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Honeywell 100K 135-104LAG-J01" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 4.5695E-4,
                   SH_B                => 2.5163E-4,
                   SH_C                => 0.0);
             elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "NTC 100K MGB18-104F39050L32" then
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   SH_A                => 5.4598E-4,
                   SH_B                => 2.4390E-4,
                   SH_C                => 0.0);
@@ -2146,8 +2146,8 @@ package body Prunt.Config is
             then
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   CVD_R0              => 1_000.0 * ohm,
                   CVD_A               => 3.9083E-3,
                   CVD_B               => -5.775E-7);
@@ -2156,8 +2156,8 @@ package body Prunt.Config is
             then
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
-                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celcius,
-                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celcius,
+                  Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
+                  Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   CVD_R0              => 1_000.0 * ohm,
                   CVD_A               => 3.9827E-3,
                   CVD_B               => -5.875E-7);
@@ -2173,24 +2173,24 @@ package body Prunt.Config is
                   Params =>
                     (Kind                       => Disabled_Kind,
                      Check_Max_Cumulative_Error =>
-                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celsius,
                      Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
                      Check_Minimum_Gain         =>
-                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
                      Check_Hysteresis           =>
-                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celcius));
+                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius));
             elsif Get (Data, "Heaters$" & H'Image & "$Control method") = "PID" then
                Config.Heaters (H) :=
                  (Thermistor => Thermistor_Name'Value (Get (Data, "Heaters$" & H'Image & "$Thermistor")),
                   Params =>
                     (Kind                       => PID_Kind,
                      Check_Max_Cumulative_Error =>
-                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celsius,
                      Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
                      Check_Minimum_Gain         =>
-                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
                      Check_Hysteresis           =>
-                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius,
                      Proportional_Scale         =>
                        Get (Data, "Heaters$" & H'Image & "$Control method$PID$Proportional scale"),
                      Integral_Scale             =>
@@ -2203,14 +2203,14 @@ package body Prunt.Config is
                   Params =>
                     (Kind                       => Bang_Bang_Kind,
                      Check_Max_Cumulative_Error =>
-                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celsius,
                      Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
                      Check_Minimum_Gain         =>
-                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
                      Check_Hysteresis           =>
-                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celcius,
+                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius,
                      Bang_Bang_Hysteresis       =>
-                       Get (Data, "Heaters$" & H'Image & "$Control method$Bang bang$Hysteresis") * celcius));
+                       Get (Data, "Heaters$" & H'Image & "$Control method$Bang bang$Hysteresis") * celsius));
             else
                raise Constraint_Error;
             end if;

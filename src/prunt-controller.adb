@@ -132,7 +132,7 @@ package body Prunt.Controller is
    begin
       if Board_Temperature_Probe_Name'First > Board_Temperature_Probe_Name'Last then
          --  This is here to keep GCC happy.
-         return 0.0 * celcius;
+         return 0.0 * celsius;
       else
          return Last_Board_Temperatures (Temperature_Probe);
       end if;
@@ -196,7 +196,7 @@ package body Prunt.Controller is
                         null;
                      else
                         Last_Stepper_Temperatures (S) :=
-                          Temperature (Reply.Content.ADC_TEMP_Data.ADC_Temp) - 264.675 * celcius;
+                          Temperature (Reply.Content.ADC_TEMP_Data.ADC_Temp) - 264.675 * celsius;
                      end if;
                   end;
             end case;

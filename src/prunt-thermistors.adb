@@ -32,13 +32,13 @@ package body Prunt.Thermistors is
             raise Constraint_Error with "Thermistor is disabled.";
          when Steinhart_Hart_Kind =>
             declare
-               X : constant Dimensionless := (1.0 / Params.SH_C) * (Params.SH_A - 1.0 / (Temp / celcius + 273.15));
+               X : constant Dimensionless := (1.0 / Params.SH_C) * (Params.SH_A - 1.0 / (Temp / celsius + 273.15));
                Y : constant Dimensionless := ((Params.SH_B / (3.0 * Params.SH_C))**3 + X**2 / 4.0)**(1 / 2);
             begin
                return Math.Exp ((Y - X / 2.0)**(1 / 3) - (Y + X / 2.0)**(1 / 3)) * ohm;
             end;
          when Callendar_Van_Dusen_Kind =>
-            return Params.CVD_R0 * (1.0 + Params.CVD_A * Temp / celcius + Params.CVD_B * (Temp / celcius)**2);
+            return Params.CVD_R0 * (1.0 + Params.CVD_A * Temp / celsius + Params.CVD_B * (Temp / celsius)**2);
       end case;
    end Temperature_To_Resistance;
 
