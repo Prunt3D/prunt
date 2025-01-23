@@ -670,13 +670,10 @@ package body Prunt.Gcode_Parser is
                   end case;
                   Runner (Comm);
                end;
-            when 486 =>
-               declare
-                  Ignored : Dimensionless;
-               begin
-                  Ignored := Floatify_Or_Default ('S', 0.0);
-                  Ignored := Floatify_Or_Default ('T', 0.0);
-               end;
+            when 73 | 486 =>
+               for I in Params'Range loop
+                  Params (I).Consumed := True;
+               end loop;
             when others =>
                raise Bad_Line with "Unknown M code: " & Params ('M').Integer_Value'Image;
          end case;
