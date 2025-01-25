@@ -21,7 +21,7 @@ gnatcoll = "^23.0.0"
 
 [[actions]]
 type = "pre-build"
-command = ["sh", "-c", "cd html && npx webpack"]
+command = ["sh", "-c", "cd html && npm install webpack-cli && npx webpack"]
 
 [[actions]]
 type = "pre-build"
