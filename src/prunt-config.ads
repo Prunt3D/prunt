@@ -24,6 +24,7 @@ with Prunt.Heaters;     use Prunt.Heaters;
 with GNATCOLL.JSON;     use GNATCOLL.JSON;
 with Ada.Strings.Unbounded;
 with Ada.Containers.Indefinite_Ordered_Maps;
+with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 with Ada.Containers.Indefinite_Ordered_Sets;
 with Prunt.Motion_Planner;
 with Prunt.TMC_Types;   use Prunt.TMC_Types;
@@ -169,7 +170,7 @@ private
    type Property_Parameters (Kind : Property_Kind);
    type Property_Parameters_Access is not null access constant Property_Parameters;
 
-   package Property_Maps is new Ada.Containers.Indefinite_Ordered_Maps (String, Property_Parameters_Access);
+   package Property_Maps is new Indefinite_Ordered_Maps_With_Insertion_Order (String, Property_Parameters_Access);
 
    type Property_Parameters (Kind : Property_Kind) is record
       Description : Ada.Strings.Unbounded.Unbounded_String;
