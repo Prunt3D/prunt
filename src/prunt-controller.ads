@@ -26,7 +26,7 @@ with Prunt.Web_Server;
 with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
-with Prunt.Step_Generator;
+with Prunt.Step_Generator.Generator;
 with Prunt.Heaters;
 with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
@@ -217,7 +217,7 @@ private
       First_Accel_Distance : Length;
       Next_Command_Index   : Command_Index);
 
-   package My_Step_Generator is new Step_Generator
+   package My_Step_Generator is new Step_Generator.Generator
      (Planner                 => My_Planner,
       Stepper_Name            => Stepper_Name,
       Stepper_Position        => Stepper_Position,

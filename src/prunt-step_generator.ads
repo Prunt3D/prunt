@@ -19,60 +19,11 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with System.Multiprocessors;
-with Prunt.Motion_Planner.Planner;
-
-generic
-   with package Planner is new Motion_Planner.Planner (<>);
-   use Planner;
-
-   type Stepper_Name is (<>);
-
-   type Stepper_Position is array (Stepper_Name) of Dimensionless;
-
-   with procedure Start_Planner_Block (Data : Flush_Extra_Data_Type; Last_Command_Index : Command_Index);
-   with procedure Enqueue_Command
-     (Pos             : Position;
-      Stepper_Pos     : Stepper_Position;
-      Data            : Corner_Extra_Data_Type;
-      Index           : Command_Index;
-      Loop_Until_Hit  : Boolean;
-      Safe_Stop_After : Boolean);
-   with procedure Finish_Planner_Block
-     (Data                 : Flush_Extra_Data_Type;
-      Next_Block_Pos       : Stepper_Position;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index);
-   --  First_Accel_Distance is the distance length of the acceleration part of the first move. This is used to
-   --  determine the position after a homing move as the loop move starts as soon as possible after the acceleration
-   --  part.
-
-   Interpolation_Time : Time;
-   Loop_Interpolation_Time : Time;
-
-   Runner_CPU : System.Multiprocessors.CPU_Range;
 package Prunt.Step_Generator is
 
-   type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
+   pragma Elaborate_Body;
+   --  TODO: Temporary.
 
-   task Runner with
-     CPU => Runner_CPU
-   is
-      entry Setup (Map : Stepper_Pos_Map);
-      entry Finish;
-   end Runner;
 
-   procedure Pause;
-   procedure Resume;
-   function Is_Paused return Boolean;
-
-private
-
-   type Pause_Slew_Index is new Integer range 0 .. Integer (10.0 * s / Interpolation_Time);
-   --  Max at paused end of slew.
-
-   function Pause_Slew_Interpolation_Time (Index : Pause_Slew_Index) return Time;
-
-   function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position;
 
 end Prunt.Step_Generator;
