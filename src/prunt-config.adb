@@ -895,6 +895,76 @@ package body Prunt.Config is
                             Min     => 0.0,
                             Max     => 1.0,
                             Unit    => "")])])]);
+
+      Shaper_Sequence : constant Property_Parameters_Access :=
+        Variant
+          ("Input shaping method used for this axis.",
+           "No shaper",
+           ["No shaper" =>
+              Sequence
+                ("No input shaping will be applied to this axis.",
+                 []),
+            "Zero vibration (ZV/ZVD/ZVDD/etc.)" =>
+              Sequence
+                ("Zero vibration shaper defined in N. C. Singer and W. P. Seering, ""Preshaping Command Inputs to " &
+                   "Reduce System Vibration,"" Journal of Dynamic Systems, Measurement, and Control, vol. 112, no. " &
+                   "1. ASME International, pp. 76-82, Mar. 01, 1990. doi: 10.1115/1.2894142.",
+                 ["Frequency" =>
+                    Float
+                      ("This parameter is not copied between different shapers.",
+                       Default => 1.0,
+                       Min     => 1.0E-10,
+                       Max     => 1.0E100,
+                       Unit    => "Hz"),
+                  "Damping ratio" =>
+                    Float
+                      ("This parameter is not copied between different shapers.",
+                       Default => 0.1,
+                       Min     => 0.001,
+                       Max     => 0.999,
+                       Unit    => "Hz"),
+                  "Number of derivatives" =>
+                    Integer
+                      ("0 = ZV, 1 = ZVD, 2 = ZVDD, 3 = ZVDDD.",
+                       Default => 0,
+                       Min     => 0,
+                       Max     => 3,
+                       Unit    => "")]),
+            "Extra insensitive (EI/2HEI/3HEI)" =>
+              Sequence
+                ("Extra insensitive shaper defined in W. E. Singhose, L. J. Porter, T. D. Tuttle, and N. C. Singer, " &
+                   """Vibration Reduction Using Multi-Hump Input Shapers,"" Journal of Dynamic Systems, " &
+                   "Measurement, and Control, vol. 119, no. 2. ASME International, pp. 320-326, Jun. 01, 1997. doi: " &
+                   "10.1115/1.2801257.",
+                 ["Frequency" =>
+                    Float
+                      ("This parameter is not copied between different shapers.",
+                       Default => 1.0,
+                       Min     => 1.0E-10,
+                       Max     => 1.0E100,
+                       Unit    => "Hz"),
+                  "Damping ratio" =>
+                    Float
+                      ("This parameter is not copied between different shapers.",
+                       Default => 0.1,
+                       Min     => 0.001,
+                       Max     => 0.999,
+                       Unit    => "Hz"),
+                  "Residual vibration level" =>
+                    Float
+                      ("This is hard-coded to 0.05 in other 3D printer motion controllers. Usually it does not need " &
+                         "to be changed.",
+                       Default => 0.05,
+                       Min     => 0.001,
+                       Max     => 0.999,
+                       Unit    => ""),
+                  "Number of humps" =>
+                    Integer
+                      ("",
+                       Default => 1,
+                       Min     => 1,
+                       Max     => 3,
+                       Unit    => "")])]);
       --!pp on
 
       Result : Property_Maps.Map;
@@ -1079,6 +1149,10 @@ package body Prunt.Config is
            Tabbed_Sequence
              ("Fan settings.",
               []),
+         "Input shaping" =>
+           Tabbed_Sequence
+             ("Input shaping settings.",
+              []),
          "G-code assignments" =>
            Sequence
              ("Assign heaters to g-code commands.",
@@ -1133,6 +1207,11 @@ package body Prunt.Config is
       for A in Axis_Name loop
          Property_Maps.Insert
            (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children, A'Image, Homing_Sequence);
+      end loop;
+
+      for A in Axis_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Input shaping").Element.all.Sequence_Children, A'Image, Shaper_Sequence);
       end loop;
 
       return Result;
@@ -1494,7 +1573,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Integer'(1));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(2));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
@@ -1512,7 +1591,12 @@ package body Prunt.Config is
               with "Config file format should be {""Schema version"": Integer, ""Properties"": {...}}.";
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Integer'(1) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(1) then
+            --  Version 2 adds input shaper parameters.
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(2));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(2) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -1645,6 +1729,13 @@ package body Prunt.Config is
          Maybe_Do_Init;
          Error_If_Initial_Config_Invalid;
          Data := Initial_Config.G_Code_Assignments;
+      end Read;
+
+      procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Shapers (Axis);
       end Read;
 
       function JSON_To_Config (Data : JSON_Value) return Full_Config is
@@ -2237,6 +2328,49 @@ package body Prunt.Config is
             end if;
          end loop;
 
+         for A in Axis_Name loop
+            if Get (Data, "Input shaping$" & A'Image) = "No shaper" then
+               Config.Shapers (A) := (Kind => No_Shaper);
+            elsif Get (Data, "Input shaping$" & A'Image) = "Zero vibration (ZV/ZVD/ZVDD/etc.)" then
+               Config.Shapers (A) :=
+                 (Kind                         => Zero_Vibration,
+                  Zero_Vibration_Frequency     =>
+                    Get (Data, "Input shaping$" & A'Image & "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Frequency") *
+                    hertz,
+                  Zero_Vibration_Damping_Ratio =>
+                    Get
+                      (Data, "Input shaping$" & A'Image & "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Damping ratio"),
+                  Zero_Vibration_Deriviatives  =>
+                    Zero_Vibration_Deriviatives_Count
+                      (Integer'
+                         (Get
+                            (Data,
+                             "Input shaping$" & A'Image &
+                             "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Number of derivatives"))));
+            elsif Get (Data, "Input shaping$" & A'Image) = "Extra insensitive (EI/2HEI/3HEI)" then
+               Config.Shapers (A) :=
+                 (Kind                                 => Extra_Insensitive,
+                  Extra_Insensitive_Frequency          =>
+                    Get (Data, "Input shaping$" & A'Image & "$Extra insensitive (EI/2HEI/3HEI)$Frequency") *
+                    hertz,
+                  Extra_Insensitive_Damping_Ratio      =>
+                    Get (Data, "Input shaping$" & A'Image & "$Extra insensitive (EI/2HEI/3HEI)$Damping ratio"),
+                  Extra_Insensitive_Residual_Vibration =>
+                    Get
+                      (Data,
+                       "Input shaping$" & A'Image & "$Extra insensitive (EI/2HEI/3HEI)$Residual vibration level"),
+                  Extra_Insensitive_Humps              =>
+                    Extra_Insensitive_Humps_Count
+                      (Integer'
+                         (Get
+                            (Data,
+                             "Input shaping$" & A'Image &
+                             "$Extra insensitive (EI/2HEI/3HEI)$Number of derivatives"))));
+            else
+               raise Constraint_Error;
+            end if;
+         end loop;
+
          return Config;
       end JSON_To_Config;
 
@@ -2388,6 +2522,11 @@ package body Prunt.Config is
    procedure Read (Data : out G_Code_Assignment_Parameters) is
    begin
       Config_File.Read (Data);
+   end Read;
+
+   procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name) is
+   begin
+      Config_File.Read (Data, Axis);
    end Read;
 
    procedure Patch

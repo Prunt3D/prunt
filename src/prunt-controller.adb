@@ -103,12 +103,12 @@ package body Prunt.Controller is
 
    package My_Gcode_Handler is new Gcode_Handler;
 
-   function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean is
+   function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean is
    begin
       return Data.Is_Homing_Move;
    end Is_Homing_Move;
 
-   procedure Finished_Block (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Length) is
+   procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length) is
    begin
       My_Gcode_Handler.Finished_Block (Data, First_Segment_Accel_Distance);
    end Finished_Block;
@@ -279,7 +279,6 @@ package body Prunt.Controller is
             TMC_Temperature_Updater.Start;
          end if;
 
-
          My_Logger.Log ("Setup done.");
       exception
          when E : others =>
@@ -351,7 +350,7 @@ package body Prunt.Controller is
 
    First_Block : Boolean := True;
 
-   procedure Start_Planner_Block (Data : Flush_Extra_Data; Last_Command_Index : Command_Index) is
+   procedure Start_Planner_Block (Data : Flush_Resetting_Data; Last_Command_Index : Command_Index) is
    begin
       if First_Block then
          Reset_Position ([others => 0.0]);
@@ -390,7 +389,7 @@ package body Prunt.Controller is
    end Enqueue_Command_Internal;
 
    procedure Finish_Planner_Block
-     (Data                 : Flush_Extra_Data;
+     (Data                 : Flush_Resetting_Data;
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
       Next_Command_Index   : Command_Index)
@@ -657,9 +656,18 @@ package body Prunt.Controller is
 
    procedure Setup_Planner is
       Kinematics_Params : My_Config.Kinematics_Parameters;
+      Shaper_Params     : Input_Shapers.Axial_Shaper_Parameters;
    begin
       My_Config.Read (Kinematics_Params);
+
+      for A in Axis_Name loop
+         My_Config.Read (Shaper_Params (A), A);
+      end loop;
+
       My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
+      My_Planner.Enqueue
+        ((Kind               => My_Planner.Update_Persistent_Data_Kind,
+         New_Persistent_Data => (Shaper_Parameters => Shaper_Params)));
    end Setup_Planner;
 
    procedure Setup_Step_Generator is
@@ -736,5 +744,10 @@ package body Prunt.Controller is
    begin
       My_Logger.Log (Message);
    end Log;
+
+   function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters is
+   begin
+      return Data.Shaper_Parameters;
+   end Get_Axial_Shaper_Parameters;
 
 end Prunt.Controller;

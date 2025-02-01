@@ -20,6 +20,8 @@
 -----------------------------------------------------------------------------
 
 with Ada.Numerics.Generic_Elementary_Functions;
+with Prunt.Input_Shapers.Shapers;
+use type Prunt.Input_Shapers.Cycle_Count;
 
 package body Prunt.Step_Generator.Generator is
 
@@ -82,6 +84,8 @@ package body Prunt.Step_Generator.Generator is
       Working_Block_Wrapper : constant access Block_Wrapper := new Block_Wrapper;
       pragma Warnings (On, "use of an anonymous access type allocator");
       Block renames Working_Block_Wrapper.Block;
+
+      Current_Shapers : Input_Shapers.Shapers.Axial_Shapers;
    begin
       select
          accept Finish;
@@ -118,14 +122,25 @@ package body Prunt.Step_Generator.Generator is
                end loop;
             end;
 
-            Start_Planner_Block (Flush_Extra_Data (Block), Current_Command_Index);
-
-            if Is_Homing_Move (Flush_Extra_Data (Block)) then
+            if Is_Homing_Move (Flush_Resetting_Data (Block)) then
                if Block.N_Corners /= 2 then
                   raise Constraint_Error with "Homing move must have exactly 2 corners.";
                end if;
                Homing_Move_When := This_Block_Kind;
+
+               Current_Shapers :=
+                 Input_Shapers.Shapers.Create
+                   ((others => (Kind => Input_Shapers.No_Shaper)), Interpolation_Time, Block_Start_Pos (Block));
+               --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
+            else
+               Current_Shapers :=
+                 Input_Shapers.Shapers.Create
+                   (Get_Axial_Shaper_Parameters (Block_Persistent_Data (Block)),
+                    Interpolation_Time,
+                    Block_Start_Pos (Block));
             end if;
+
+            Start_Planner_Block (Flush_Resetting_Data (Block), Current_Command_Index);
 
             for I in 2 .. Block.N_Corners loop
                loop
@@ -167,17 +182,33 @@ package body Prunt.Step_Generator.Generator is
                   if Current_Time <= Segment_Time (Block, I) then
                      declare
                         Is_Past_Accel_Part : Boolean;
-                        Pos : constant Position := Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
+                        Unshaped_Pos       : constant Position :=
+                          Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
+                        Shaped_Pos         : Position := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
                      begin
-                        Enqueue_Command
-                          (Pos             => Pos,
-                           Stepper_Pos     => To_Stepper_Position (Pos, Pos_Map),
-                           Data            => Corner_Extra_Data (Block, I),
-                           Index           => Current_Command_Index,
-                           Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                           Safe_Stop_After =>
-                             Pausing_State = Paused_Kind
-                             or else (I = Block.N_Corners and Current_Time >= Segment_Time (Block, I)));
+                        if Pausing_State = Paused_Kind
+                          or else (I = Block.N_Corners and Current_Time >= Segment_Time (Block, I))
+                        then
+                           for J in 0 .. Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers) loop
+                              Enqueue_Command
+                                (Pos             => Shaped_Pos,
+                                 Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
+                                 Data            => Corner_Extra_Data (Block, I),
+                                 Index           => Current_Command_Index,
+                                 Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
+                                 Safe_Stop_After =>
+                                   J = Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers));
+                              Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
+                           end loop;
+                        else
+                           Enqueue_Command
+                             (Pos             => Shaped_Pos,
+                              Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
+                              Data            => Corner_Extra_Data (Block, I),
+                              Index           => Current_Command_Index,
+                              Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
+                              Safe_Stop_After => False);
+                        end if;
 
                         case Homing_Move_When is
                            when This_Block_Kind =>
@@ -206,9 +237,9 @@ package body Prunt.Step_Generator.Generator is
 
                   if I = Block.N_Corners and Current_Time > Segment_Time (Block, I) then
                      Current_Time := Segment_Time (Block, I);
-                     --  Ensure that the last corner is always enqueued from at least once and we always finish on the
-                     --  exact final position. Having the wrong interpolation time here is fine because the final bit
-                     --  of an execution block has very low velocity.
+                     --  Ensure that the last corner is always enqueued from at least once and we always finish on
+                     --  the exact final position. Having the wrong interpolation time here is fine because the
+                     --  final bit of an execution block has very low velocity.
                   else
                      exit when Current_Time >= Segment_Time (Block, I);
                   end if;
@@ -227,7 +258,7 @@ package body Prunt.Step_Generator.Generator is
                end if;
 
                Finish_Planner_Block
-                 (Flush_Extra_Data (Block),
+                 (Flush_Resetting_Data (Block),
                   To_Stepper_Position (Next_Block_Pos (Block), Pos_Map),
                   First_Accel_Distance,
                   Current_Command_Index);

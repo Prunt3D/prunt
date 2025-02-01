@@ -31,7 +31,7 @@ package Prunt.Controller.Gcode_Handler is
    --  Try to enqueue a command to be executed. Succeeded will be set False if there is already a file or command
    --  running.
 
-   procedure Finished_Block (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Length);
+   procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
    --  Report that a block has finished executing. First_Segment_Accel_Distance should be set to the distance of the
    --  first acceleration profile, this is used to determine at what point a homing loop move started in homing blocks.
 
@@ -55,11 +55,11 @@ private
    end Gcode_Queue;
 
    protected Finished_Block_Queue is
-      procedure Push (In_Data : Flush_Extra_Data; In_First_Segment_Accel_Distance : Length);
-      entry Pop (Out_Data : out Flush_Extra_Data; Out_First_Segment_Accel_Distance : out Length);
+      procedure Push (In_Data : Flush_Resetting_Data; In_First_Segment_Accel_Distance : Length);
+      entry Pop (Out_Data : out Flush_Resetting_Data; Out_First_Segment_Accel_Distance : out Length);
    private
       Has_Item                     : Boolean := False;
-      Data                         : Flush_Extra_Data;
+      Data                         : Flush_Resetting_Data;
       First_Segment_Accel_Distance : Length;
    end Finished_Block_Queue;
 

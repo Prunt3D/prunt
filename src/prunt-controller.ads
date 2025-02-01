@@ -27,6 +27,7 @@ with Prunt.Controller_Generic_Types;
 with Ada.Exceptions;
 with System.Multiprocessors;
 with Prunt.Step_Generator.Generator;
+with Prunt.Input_Shapers;
 with Prunt.Heaters;
 with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
@@ -168,7 +169,7 @@ private
    procedure Helper_Lock_Memory with
      Import => True, Convention => C, External_Name => "prunt_controller_helper_lock_memory";
 
-   type Flush_Extra_Data is record
+   type Flush_Resetting_Data is record
       Is_Homing_Move           : Boolean           := False;
       Home_Switch              : Input_Switch_Name := Input_Switch_Name'First;
       Home_Hit_On_State        : Pin_State         := High_State;
@@ -181,29 +182,35 @@ private
       Pause_After              : Boolean           := False;
    end record;
 
+   type Block_Persistent_Data is record
+      Shaper_Parameters : Input_Shapers.Axial_Shaper_Parameters := (others => (Kind => Input_Shapers.No_Shaper));
+   end record;
+
    type Corner_Extra_Data is record
       Fans    : Fan_PWMs;
       Heaters : Heater_Targets;
    end record;
 
-   function Is_Homing_Move (Data : Flush_Extra_Data) return Boolean;
+   function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean;
 
    pragma Warnings (Off, "cannot call * before body seen");
    package My_Logger is new Logger;
    pragma Warnings (On, "cannot call * before body seen");
 
    package My_Planner is new Motion_Planner.Planner
-     (Flush_Extra_Data_Type        => Flush_Extra_Data,
-      Flush_Extra_Data_Default     => (others => <>),
-      Corner_Extra_Data_Type       => Corner_Extra_Data,
-      Initial_Position             => [others => 0.0 * mm],
-      Max_Corners                  => Command_Line_Arguments.Max_Planner_Block_Corners,
-      Is_Homing_Move               => Is_Homing_Move,
-      Interpolation_Time           => Interpolation_Time,
-      Home_Move_Minimum_Coast_Time => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
-      Runner_CPU                   => Command_Line_Arguments.Motion_Planner_CPU);
+     (Flush_Resetting_Data_Type     => Flush_Resetting_Data,
+      Flush_Resetting_Data_Default  => (others => <>),
+      Block_Persistent_Data_Type    => Block_Persistent_Data,
+      Block_Persistent_Data_Default => (others => <>),
+      Corner_Extra_Data_Type        => Corner_Extra_Data,
+      Initial_Position              => [others => 0.0 * mm],
+      Max_Corners                   => Command_Line_Arguments.Max_Planner_Block_Corners,
+      Is_Homing_Move                => Is_Homing_Move,
+      Interpolation_Time            => Interpolation_Time,
+      Home_Move_Minimum_Coast_Time  => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
+      Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
 
-   procedure Start_Planner_Block (Data : Flush_Extra_Data; Last_Command_Index : Command_Index);
+   procedure Start_Planner_Block (Data : Flush_Resetting_Data; Last_Command_Index : Command_Index);
    procedure Enqueue_Command_Internal
      (Pos             : Position;
       Stepper_Pos     : Stepper_Position;
@@ -212,21 +219,24 @@ private
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean);
    procedure Finish_Planner_Block
-     (Data                 : Flush_Extra_Data;
+     (Data                 : Flush_Resetting_Data;
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
       Next_Command_Index   : Command_Index);
 
+   function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters;
+
    package My_Step_Generator is new Step_Generator.Generator
-     (Planner                 => My_Planner,
-      Stepper_Name            => Stepper_Name,
-      Stepper_Position        => Stepper_Position,
-      Start_Planner_Block     => Start_Planner_Block,
-      Enqueue_Command         => Enqueue_Command_Internal,
-      Finish_Planner_Block    => Finish_Planner_Block,
-      Interpolation_Time      => Interpolation_Time,
-      Loop_Interpolation_Time => Loop_Interpolation_Time,
-      Runner_CPU              => Command_Line_Arguments.Step_Generator_CPU);
+     (Planner                     => My_Planner,
+      Stepper_Name                => Stepper_Name,
+      Stepper_Position            => Stepper_Position,
+      Start_Planner_Block         => Start_Planner_Block,
+      Enqueue_Command             => Enqueue_Command_Internal,
+      Finish_Planner_Block        => Finish_Planner_Block,
+      Get_Axial_Shaper_Parameters => Get_Axial_Shaper_Parameters,
+      Interpolation_Time          => Interpolation_Time,
+      Loop_Interpolation_Time     => Loop_Interpolation_Time,
+      Runner_CPU                  => Command_Line_Arguments.Step_Generator_CPU);
 
    type Stepper_Kinds_Type is array (Stepper_Name) of Stepper_Kind;
 
@@ -240,7 +250,7 @@ private
       Input_Switch_Name  => Input_Switch_Name,
       Config_Path        => Config_Path);
 
-   procedure Finished_Block (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Length);
+   procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
 
    function Get_Position return Position;
 

@@ -24,11 +24,14 @@ with Ada.Containers;
 private with Prunt.Motion_Planner.PH_Beziers;
 
 generic
-   type Flush_Extra_Data_Type is private;
-   Flush_Extra_Data_Default : Flush_Extra_Data_Type;
+   type Flush_Resetting_Data_Type is private;
+   Flush_Resetting_Data_Default : Flush_Resetting_Data_Type;
+   type Block_Persistent_Data_Type is private;
+   --  TODO: This should be passed around everywhere when a block finishes like Flush_Resetting_Data_Type is.
+   Block_Persistent_Data_Default : Block_Persistent_Data_Type;
    type Corner_Extra_Data_Type is private;
    Home_Move_Minimum_Coast_Time : Time;
-   with function Is_Homing_Move (Data : Flush_Extra_Data_Type) return Boolean;
+   with function Is_Homing_Move (Data : Flush_Resetting_Data_Type) return Boolean;
    Interpolation_Time : Time;
    Max_Corners : Max_Corners_Type := 50_000;
    --  Preprocessor_Minimum_Move_Distance : Length := 0.001 * mm;
@@ -40,12 +43,17 @@ generic
    Runner_CPU : System.Multiprocessors.CPU_Range;
 package Prunt.Motion_Planner.Planner is
 
-   type Command_Kind is (Move_Kind, Flush_Kind, Flush_And_Reset_Position_Kind, Flush_And_Change_Parameters_Kind);
+   type Command_Kind is
+     (Move_Kind,
+      Flush_Kind,
+      Flush_And_Reset_Position_Kind,
+      Flush_And_Change_Parameters_Kind,
+      Update_Persistent_Data_Kind);
 
    type Command (Kind : Command_Kind := Move_Kind) is record
       case Kind is
          when Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
-            Flush_Extra_Data : Flush_Extra_Data_Type;
+            Flush_Resetting_Data : Flush_Resetting_Data_Type;
             case Kind is
                when Flush_And_Reset_Position_Kind =>
                   Reset_Pos : Position;
@@ -58,13 +66,15 @@ package Prunt.Motion_Planner.Planner is
             Pos               : Position;
             Feedrate          : Velocity;
             Corner_Extra_Data : Corner_Extra_Data_Type;
+         when Update_Persistent_Data_Kind =>
+            New_Persistent_Data : Block_Persistent_Data_Type;
       end case;
    end record;
 
-   type Corners_Index is new Max_Corners_Type'Base range 0 .. Max_Corners;
+   type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
 
-   type Execution_Block (N_Corners : Corners_Index := 0) is private;
-   --  N_Corners may be 0 or 1, in which case there are no segments.
+   type Execution_Block (N_Corners : Corners_Index := 1) is private;
+   --  N_Corners may be 1, in which case there are no segments.
 
    --  First Finishing_Corner = 2. If N_Corners < 2 then these functions must not be called.
 
@@ -88,9 +98,16 @@ package Prunt.Motion_Planner.Planner is
    --  Returns the start position of the next block. At the end of a block, the motion executor should assume it is at
    --  this position, even if is not.
 
-   function Flush_Extra_Data (Block : Execution_Block) return Flush_Extra_Data_Type;
-   --  Return the data passed to the Enqueue procedure, or Flush_Extra_Data_Default if the block was filled before
-   --  receiving a flush command.
+   function Block_Start_Pos (Block : Execution_Block) return Position;
+   --  Returns the start position of this block.
+
+   function Flush_Resetting_Data (Block : Execution_Block) return Flush_Resetting_Data_Type;
+   --  Return the data passed to the Enqueue procedure, or Flush_Resetting_Data_Default if the block was filled before
+   --  receiving a flush command. This data resets for each block.
+
+   function Block_Persistent_Data (Block : Execution_Block) return Block_Persistent_Data_Type;
+   --  Return the latest data passed to the Enqueue procedure, or Block_Persistent_Data_Default if the no data has been
+   --  received. This data persists between blocks.
 
    function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
    --  Returns the length of the acceleration part of a segment.
@@ -134,7 +151,7 @@ private
    --  Kinematic_Limiter
    type Block_Corner_Velocity_Limits is array (Corners_Index range <>) of Velocity;
 
-   type Execution_Block (N_Corners : Corners_Index := 0) is record
+   type Execution_Block (N_Corners : Corners_Index := 1) is record
       --  TODO: Having all these fields accessible before the relevant stage is called is not ideal, but using a
       --  discriminated type with a discriminant to indicate the stage causes a stack overflow when trying to change
       --  the discriminant without making a copy as GCC tries to copy the whole thing to the stack. In the future we
@@ -144,12 +161,13 @@ private
       --  faster than the same code without discriminated types (refer to the no-discriminated-records branch).
 
       --  Preprocessor
-      Flush_Extra_Data   : Flush_Extra_Data_Type;
-      Next_Block_Pos     : Scaled_Position;
-      Params             : Kinematic_Parameters;
-      Corners            : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
-      Segment_Feedrates  : Block_Segment_Feedrates (2 .. N_Corners);  --  Adjusted with scaler in Kinematic_Limiter.
-      Corners_Extra_Data : Block_Corners_Extra_Data (2 .. N_Corners);
+      Flush_Resetting_Data  : Flush_Resetting_Data_Type;
+      Block_Persistent_Data : Block_Persistent_Data_Type;
+      Next_Block_Pos        : Scaled_Position;
+      Params                : Kinematic_Parameters;
+      Corners               : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
+      Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);  --  Adjusted with scaler in Kinematic_Limiter.
+      Corners_Extra_Data    : Block_Corners_Extra_Data (2 .. N_Corners);
 
       --  Corner_Blender
       Beziers : Block_Beziers (1 .. N_Corners);

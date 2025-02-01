@@ -92,8 +92,8 @@ package body Prunt.Controller.Gcode_Handler is
          end if;
 
          My_Planner.Enqueue
-           ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Extra_Data => (others => <>),
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
              Reset_Pos        => Zero_Pos),
             Ignore_Bounds => True);
 
@@ -104,8 +104,8 @@ package body Prunt.Controller.Gcode_Handler is
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
-           ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Extra_Data =>
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data =>
                (Is_Conditional_Move      => True,
                 Conditional_Switch       => Switch,
                 Conditional_Hit_On_State => (if Hit_State = High_State then Low_State else High_State),
@@ -120,8 +120,8 @@ package body Prunt.Controller.Gcode_Handler is
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
-           ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Extra_Data =>
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data =>
                (Is_Homing_Move => True, Home_Switch => Switch, Home_Hit_On_State => Hit_State, others => <>),
              Reset_Pos        => Zero_Pos),
             Ignore_Bounds => True);
@@ -132,13 +132,13 @@ package body Prunt.Controller.Gcode_Handler is
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
-           ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Extra_Data => (others => <>),
-             Reset_Pos        => Zero_Pos),
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Zero_Pos),
             Ignore_Bounds => True);
 
          declare
-            Data            : Flush_Extra_Data;
+            Data            : Flush_Resetting_Data;
             First_Seg_Accel : Length;
          begin
             Finished_Block_Queue.Pop (Data, First_Seg_Accel);
@@ -153,14 +153,14 @@ package body Prunt.Controller.Gcode_Handler is
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
-           ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Extra_Data =>
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data =>
                (Is_Homing_Move => True, Home_Switch => Switch, Home_Hit_On_State => Hit_State, others => <>),
              Reset_Pos        => Zero_Pos),
             Ignore_Bounds => True);
 
          declare
-            Data            : Flush_Extra_Data;
+            Data            : Flush_Resetting_Data;
             First_Seg_Accel : Length;
          begin
             Finished_Block_Queue.Pop (Data, First_Seg_Accel);
@@ -175,9 +175,9 @@ package body Prunt.Controller.Gcode_Handler is
          end;
 
          My_Planner.Enqueue
-           ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Extra_Data => (others => <>),
-             Reset_Pos        => Pos_After),
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Pos_After),
             Ignore_Bounds => True);
 
          Pos_After (Axis) :=  Axial_Homing_Params (Axis).Move_To_After;
@@ -189,9 +189,9 @@ package body Prunt.Controller.Gcode_Handler is
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
-           ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Extra_Data => (others => <>),
-             Reset_Pos        => Pos_After),
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Pos_After),
             Ignore_Bounds => True);
          My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
       end Double_Tap_Home_Axis;
@@ -203,7 +203,7 @@ package body Prunt.Controller.Gcode_Handler is
                null;
             when Pause_Kind =>
                My_Planner.Enqueue
-                 ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (Pause_After => True, others => <>)));
+                 ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (Pause_After => True, others => <>)));
             when Move_Kind =>
                if Command.Pos /= Command.Old_Pos then
                   if Command.Feedrate = 0.0 * mm / s then
@@ -225,8 +225,8 @@ package body Prunt.Controller.Gcode_Handler is
                end if;
             when Dwell_Kind =>
                My_Planner.Enqueue
-                 ((Kind            => My_Planner.Flush_Kind,
-                  Flush_Extra_Data => (Dwell_Time => Command.Dwell_Time, others => <>)));
+                 ((Kind                => My_Planner.Flush_Kind,
+                  Flush_Resetting_Data => (Dwell_Time => Command.Dwell_Time, others => <>)));
             when Home_Kind =>
                declare
                   Pos_After    : Position                                := Command.Pos_Before;
@@ -241,9 +241,9 @@ package body Prunt.Controller.Gcode_Handler is
                            when My_Config.Set_To_Value_Kind =>
                               Pos_After (Axis) := Axial_Homing_Params (Axis).Value;
                               My_Planner.Enqueue
-                                ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-                                  Reset_Pos        => Pos_After,
-                                  Flush_Extra_Data => (others => <>)));
+                                ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+                                  Reset_Pos            => Pos_After,
+                                  Flush_Resetting_Data => (others => <>)));
                               My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
                            when My_Config.Double_Tap_Kind =>
                               Double_Tap_Home_Axis (Axis, Pos_After);
@@ -338,7 +338,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Corner_Extra_Data => Corner_Data));
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
             when Wait_Hotend_Temperature_Kind =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Hotend_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
@@ -347,8 +347,8 @@ package body Prunt.Controller.Gcode_Handler is
                    Feedrate          => 0.000_1 * mm / s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue
-                 ((Kind             => My_Planner.Flush_Kind,
-                   Flush_Extra_Data =>
+                 ((Kind                 => My_Planner.Flush_Kind,
+                   Flush_Resetting_Data =>
                      (Wait_For_Heater      => True,
                       Wait_For_Heater_Name => G_Code_Assignment_Params.Hotend_Heater,
                       others               => <>)));
@@ -359,7 +359,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Corner_Extra_Data => Corner_Data));
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
             when Wait_Bed_Temperature_Kind =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
@@ -368,8 +368,8 @@ package body Prunt.Controller.Gcode_Handler is
                    Feedrate          => 0.000_1 * mm / s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue
-                 ((Kind             => My_Planner.Flush_Kind,
-                   Flush_Extra_Data =>
+                 ((Kind                 => My_Planner.Flush_Kind,
+                   Flush_Resetting_Data =>
                      (Wait_For_Heater      => True,
                       Wait_For_Heater_Name => G_Code_Assignment_Params.Bed_Heater,
                       others               => <>)));
@@ -396,7 +396,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Corner_Extra_Data => Corner_Data));
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
             when TMC_Dump_Kind =>
                for S in Generic_Types.Stepper_Name loop
                   if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
@@ -462,9 +462,9 @@ package body Prunt.Controller.Gcode_Handler is
                      raise Constraint_Error with "Unreachable.";
                end case;
                My_Planner.Enqueue
-                 ((Kind            => My_Planner.Flush_And_Change_Parameters_Kind,
-                   New_Params      => Kinematics_Params.Planner_Parameters,
-                  Flush_Extra_Data => (others => <>)));
+                 ((Kind                 => My_Planner.Flush_And_Change_Parameters_Kind,
+                   New_Params           => Kinematics_Params.Planner_Parameters,
+                   Flush_Resetting_Data => (others => <>)));
             when others =>
                raise Constraint_Error with "Command not implemented.";
          end case;
@@ -493,18 +493,18 @@ package body Prunt.Controller.Gcode_Handler is
       end Start;
 
       My_Planner.Enqueue
-        ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-          Flush_Extra_Data => (others => <>),
-          Reset_Pos        => Zero_Pos));
+        ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+          Flush_Resetting_Data => (others => <>),
+          Reset_Pos            => Zero_Pos));
       My_Planner.Enqueue
         ((Kind              => My_Planner.Move_Kind,
           Pos               => Zero_Pos,
           Feedrate          => Velocity'Last,
           Corner_Extra_Data => Corner_Data));
       My_Planner.Enqueue
-        ((Kind             => My_Planner.Flush_And_Reset_Position_Kind,
-          Flush_Extra_Data => (others => <>),
-          Reset_Pos        => Zero_Pos));
+        ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+          Flush_Resetting_Data => (others => <>),
+          Reset_Pos            => Zero_Pos));
 
       loop
          delay 0.1;
@@ -514,7 +514,7 @@ package body Prunt.Controller.Gcode_Handler is
                Line : constant String := Gcode_Queue.Get_Command;
             begin
                Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
             exception
                when E : Command_Constraint_Error       =>
                   My_Logger.Log
@@ -569,7 +569,7 @@ package body Prunt.Controller.Gcode_Handler is
                   end loop;
                end;
 
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Extra_Data => (others => <>)));
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
                Close (File);
             exception
@@ -638,7 +638,7 @@ package body Prunt.Controller.Gcode_Handler is
       end Get_Command;
    end Gcode_Queue;
 
-   procedure Finished_Block (Data : Flush_Extra_Data; First_Segment_Accel_Distance : Length) is
+   procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length) is
    begin
       if Data.Is_Homing_Move then
          Finished_Block_Queue.Push (Data, First_Segment_Accel_Distance);
@@ -646,7 +646,7 @@ package body Prunt.Controller.Gcode_Handler is
    end Finished_Block;
 
    protected body Finished_Block_Queue is
-      procedure Push (In_Data : Flush_Extra_Data; In_First_Segment_Accel_Distance : Length) is
+      procedure Push (In_Data : Flush_Resetting_Data; In_First_Segment_Accel_Distance : Length) is
       begin
          if Has_Item then
             raise Constraint_Error with "There should not be more than one homing move in the pipeline.";
@@ -657,7 +657,9 @@ package body Prunt.Controller.Gcode_Handler is
          Has_Item                     := True;
       end Push;
 
-      entry Pop (Out_Data : out Flush_Extra_Data; Out_First_Segment_Accel_Distance : out Length) when Has_Item is
+      entry Pop (Out_Data : out Flush_Resetting_Data; Out_First_Segment_Accel_Distance : out Length)
+        when Has_Item
+      is
       begin
          Out_Data                         := Data;
          Out_First_Segment_Accel_Distance := First_Segment_Accel_Distance;

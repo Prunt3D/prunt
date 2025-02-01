@@ -20,10 +20,4 @@
 -----------------------------------------------------------------------------
 
 package Prunt.Step_Generator is
-
-   pragma Elaborate_Body;
-   --  TODO: Temporary.
-
-
-
 end Prunt.Step_Generator;

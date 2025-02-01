@@ -50,9 +50,10 @@ private
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       procedure Run (Block : aliased out Execution_Block);
    private
-      Setup_Done     : Boolean  := False;
-      Last_Pos       : Position := Initial_Position;
-      Current_Params : Kinematic_Parameters;
+      Setup_Done            : Boolean  := False;
+      Last_Pos              : Position := Initial_Position;
+      Current_Params        : Kinematic_Parameters;
+      Block_Persistent_Data : Block_Persistent_Data_Type := Block_Persistent_Data_Default;
       pragma Warnings (Off, "use of an anonymous access type allocator");
       Corners            : access Block_Plain_Corners      := new Block_Plain_Corners (1 .. Corners_Index'Last);
       Segment_Feedrates  : access Block_Segment_Feedrates  := new Block_Segment_Feedrates (2 .. Corners_Index'Last);

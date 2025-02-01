@@ -19,15 +19,16 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Prunt.Thermistors; use Prunt.Thermistors;
-with Prunt.Heaters;     use Prunt.Heaters;
-with GNATCOLL.JSON;     use GNATCOLL.JSON;
+with Prunt.Thermistors;   use Prunt.Thermistors;
+with Prunt.Heaters;       use Prunt.Heaters;
+with GNATCOLL.JSON;       use GNATCOLL.JSON;
+with Prunt.TMC_Types;     use Prunt.TMC_Types;
+with Prunt.Input_Shapers; use Prunt.Input_Shapers;
 with Ada.Strings.Unbounded;
 with Ada.Containers.Indefinite_Ordered_Maps;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 with Ada.Containers.Indefinite_Ordered_Sets;
 with Prunt.Motion_Planner;
-with Prunt.TMC_Types;   use Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
 
 generic
@@ -148,6 +149,7 @@ package Prunt.Config is
      Post => Data.Params.Kind not in PID_Autotune_Kind;
    procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
    procedure Read (Data : out G_Code_Assignment_Parameters);
+   procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
    procedure Patch
      (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
    procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));
@@ -223,6 +225,8 @@ private
 
    type Fan_Parameters_Array is array (Fan_Name) of Fan_Parameters;
 
+   type Shaper_Parameters_Array is array (Axis_Name) of Shaper_Parameters;
+
    type Full_Config is record
       Prunt              : Prunt_Parameters;
       Kinematics         : Kinematics_Parameters;
@@ -233,6 +237,7 @@ private
       Thermistors        : Thermistor_Parameters_Array;
       Heaters            : Heater_Full_Parameters_Array;
       Fans               : Fan_Parameters_Array;
+      Shapers            : Shaper_Parameters_Array;
    end record;
 
    protected Config_File is
@@ -248,6 +253,7 @@ private
         Post => Data.Params.Kind not in PID_Autotune_Kind;
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
       procedure Read (Data : out G_Code_Assignment_Parameters);
+      procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
       procedure Patch
         (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
       procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));

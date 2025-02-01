@@ -65,7 +65,7 @@ package body Prunt.Motion_Planner.Planner is
       loop
          My_Preprocessor.Run (Block);
 
-         if Is_Homing_Move (Block.Flush_Extra_Data) and Block.N_Corners /= 2 then
+         if Is_Homing_Move (Block.Flush_Resetting_Data) and Block.N_Corners /= 2 then
             raise Constraint_Error with "Homing move must have exactly 2 corners.";
          end if;
 
@@ -75,7 +75,7 @@ package body Prunt.Motion_Planner.Planner is
             My_Kinematic_Limiter.Run (Block);
             My_Feedrate_Profile_Generator.Run (Block);
 
-            exit when (not Is_Homing_Move (Block.Flush_Extra_Data))
+            exit when (not Is_Homing_Move (Block.Flush_Resetting_Data))
               or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
 
             Block.Segment_Feedrates (2) := Block.Segment_Feedrates (2) * 0.9;
@@ -155,19 +155,18 @@ package body Prunt.Motion_Planner.Planner is
       elsif Distance < Start_Curve_Half_Distance + Mid_Distance or End_Curve_Half_Distance = 0.0 * mm then
          if Mid_Distance = 0.0 * mm then
             Pos     := Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
-         Tangent :=
-           Tangent_At_Distance
-             (Block.Beziers (Finishing_Corner - 1),
-              Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
+            Tangent :=
+              Tangent_At_Distance
+                (Block.Beziers (Finishing_Corner - 1), Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
          else
             Pos     :=
               Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0) +
               (Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
                  Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)) *
-              ((Distance - Start_Curve_Half_Distance) / Mid_Distance);
+                ((Distance - Start_Curve_Half_Distance) / Mid_Distance);
             Tangent :=
-              Point_At_T
-                (Block.Beziers (Finishing_Corner), 0.0) - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
+              Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
+              Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
          end if;
       else
          Pos     :=
@@ -178,10 +177,10 @@ package body Prunt.Motion_Planner.Planner is
 
       if abs Tangent /= 0.0 * mm then
          Scaled_Velocity_Tangent :=
-         (Tangent / abs Tangent) *
-         Velocity_At_Time
-            (Block.Feedrate_Profiles (Finishing_Corner), Time_Into_Segment, Block.Params.Crackle_Max,
-            Block.Corner_Velocity_Limits (Finishing_Corner - 1));
+           (Tangent / abs Tangent) *
+           Velocity_At_Time
+             (Block.Feedrate_Profiles (Finishing_Corner), Time_Into_Segment, Block.Params.Crackle_Max,
+              Block.Corner_Velocity_Limits (Finishing_Corner - 1));
 
          Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Scaled_Velocity_Tangent (E_Axis);
       end if;
@@ -194,10 +193,20 @@ package body Prunt.Motion_Planner.Planner is
       return Position (Block.Next_Block_Pos * Block.Params.Axial_Scaler);
    end Next_Block_Pos;
 
-   function Flush_Extra_Data (Block : Execution_Block) return Flush_Extra_Data_Type is
+   function Block_Start_Pos (Block : Execution_Block) return Position is
    begin
-      return Block.Flush_Extra_Data;
-   end Flush_Extra_Data;
+      return Position (Block.Corners (Corners_Index'First) * Block.Params.Axial_Scaler);
+   end Block_Start_Pos;
+
+   function Flush_Resetting_Data (Block : Execution_Block) return Flush_Resetting_Data_Type is
+   begin
+      return Block.Flush_Resetting_Data;
+   end Flush_Resetting_Data;
+
+   function Block_Persistent_Data (Block : Execution_Block) return Block_Persistent_Data_Type is
+   begin
+      return Block.Block_Persistent_Data;
+   end Block_Persistent_Data;
 
    function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
    begin
