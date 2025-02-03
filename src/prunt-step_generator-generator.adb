@@ -189,17 +189,22 @@ package body Prunt.Step_Generator.Generator is
                         if Pausing_State = Paused_Kind
                           or else (I = Block.N_Corners and Current_Time >= Segment_Time (Block, I))
                         then
-                           for J in 0 .. Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers) loop
-                              Enqueue_Command
-                                (Pos             => Shaped_Pos,
-                                 Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
-                                 Data            => Corner_Extra_Data (Block, I),
-                                 Index           => Current_Command_Index,
-                                 Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                                 Safe_Stop_After =>
-                                   J = Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers));
-                              Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
-                           end loop;
+                           declare
+                              Extra_Loops_Required : constant Input_Shapers.Cycle_Count :=
+                                Input_Shapers.Cycle_Count'Max
+                                  (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers));
+                           begin
+                              for J in 0 .. Extra_Loops_Required loop
+                                 Enqueue_Command
+                                   (Pos             => Shaped_Pos,
+                                    Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
+                                    Data            => Corner_Extra_Data (Block, I),
+                                    Index           => Current_Command_Index,
+                                    Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
+                                    Safe_Stop_After => J = Extra_Loops_Required);
+                                 Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
+                              end loop;
+                           end;
                         else
                            Enqueue_Command
                              (Pos             => Shaped_Pos,
