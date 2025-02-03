@@ -60,7 +60,9 @@ package Prunt.Step_Generator.Generator is
    type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
 
    task Runner with
-     CPU => Runner_CPU
+     CPU => Runner_CPU,
+     Storage_Size => 32 * 1024 * 1024
+     --  Allows for very large shapers and shaper buffers to be allocated.
    is
       entry Setup (Map : Stepper_Pos_Map);
       entry Finish;
