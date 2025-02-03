@@ -61,7 +61,7 @@ private
       Impulse_Count  : Impulse_Index;
       Buffer_Size    : Cycle_Count)
    is
-   new Shapers.Shaper (Input_Offset, Extra_End_Time) with record
+   new Shapers.Shaper (Input_Offset => Input_Offset, Extra_End_Time => Extra_End_Time) with record
       Impulses             : Impulses_Array (1 .. Impulse_Count);
       Buffer               : Buffer_Array (0 .. Buffer_Size);
       --  These buffers are technically 1 larger than Buffer_Size, but that does not matter. Starting at 0 makes the
