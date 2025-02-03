@@ -442,7 +442,7 @@ async function saveConfig(): Promise<void> {
         const responseData = await response.json();
         // TODO: Error handling for bad JSON.
         updateValues(responseData);
-        alert("Settings saved.");
+        alert("Settings saved. Restart Prunt to apply new settings.");
     }
 }
 
