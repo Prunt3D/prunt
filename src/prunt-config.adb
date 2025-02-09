@@ -1938,7 +1938,7 @@ package body Prunt.Config is
                             (Long_Float'Floor
                                (Long_Float'Min
                                   (12_500_000.0 /
-                                     (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step") /
+                                     (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step")) /
                                         (My_Get_Long_Float
                                            (Data,
                                             "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS") +
@@ -1954,7 +1954,7 @@ package body Prunt.Config is
                             (Long_Float'Floor
                                (Long_Float'Min
                                   (12_500_000.0 /
-                                     (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step") /
+                                     (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step")) /
                                         (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100)),
                                    2.0**20 - 1.0))),
                         Reserved => 0),
