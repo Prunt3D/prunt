@@ -138,6 +138,9 @@ package Prunt.Config is
    end record;
 
    procedure Disable_Prunt;
+   --  Modifies the configuration file to cause Prunt_Parameters.Enabled to be set to False. This does not take effect
+   --  until the next startup.
+
    procedure Read (Data : out Prunt_Parameters);
    procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
      Post => Data.Kind = Stepper_Kinds (Stepper);
@@ -150,12 +153,105 @@ package Prunt.Config is
    procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
    procedure Read (Data : out G_Code_Assignment_Parameters);
    procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
+   --  The above procedures read the initial configuration values, not configurations values that have been changed
+   --  after the first read.
+
    procedure Patch
      (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
+   --  Sets Data and the configuration file to the union of Data and Get_Values. Also reports any errors in the union
+   --  in the same way as Validate_Current_Config but atomically. The format of Data should match the format described
+   --  in the Get_Values documentation comment.
+
    procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));
+   --  Calls Report for each error in the initial configuration, i.e. the one used by Read.
+
    procedure Validate_Current_Config (Report : access procedure (Key, Message : String));
+   --  Calls Report for each error in the current configuration, i.e. not the one used by Read.
+
    function Get_Schema return Ada.Strings.Unbounded.Unbounded_String;
+   --  Returns the schema to be used to build a GUI as a JSON value.
+   --
+   --  The schema consists of:
+   --  - Integer and float fields, which contain a unit and an inclusive range.
+   --  - Boolean fields.
+   --  - Discrete fields, which may be set to one of a list of options and should be presented as a drop-down.
+   --  - Sequence fields, which contain a list of other fields that should all be shown at the same time and in order.
+   --  - Variant fields, which contain a set of fields where only one should be shown, controlled by the user.
+   --  - Tabbed sequence fields, which should be presented as tabs.
+   --
+   --  The returned schema matches SettingsSchemaEntry in the below TypeScript interface:
+   --
+   --  interface SettingsSchemaBase {
+   --      Description: string;
+   --  }
+   --
+   --  interface IntegerSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Integer";
+   --      Min: number;
+   --      Max: number;
+   --      Unit: string;
+   --  }
+   --
+   --  interface FloatSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Float";
+   --      Min: number;
+   --      Max: number;
+   --      Unit: string;
+   --  }
+   --
+   --  interface TabbedSequenceSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Tabbed_Sequence";
+   --      Children: Record<string, SettingsSchemaEntry>;
+   --  }
+   --
+   --  interface SequenceSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Sequence";
+   --      Children: Record<string, SettingsSchemaEntry>;
+   --  }
+   --
+   --  interface VariantSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Variant";
+   --      Children: Record<string, SettingsSchemaEntry>;
+   --  }
+   --
+   --  interface DiscreteSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Discrete";
+   --      Options: string[];
+   --  }
+   --
+   --  interface BooleanSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Boolean";
+   --  }
+   --
+   --  type SettingsSchemaEntry =
+   --      | IntegerSettingsSchema
+   --      | FloatSettingsSchema
+   --      | TabbedSequenceSettingsSchema
+   --      | SequenceSettingsSchema
+   --      | VariantSettingsSchema
+   --      | DiscreteSettingsSchema
+   --      | BooleanSettingsSchema;
+
+
    function Get_Values return Ada.Strings.Unbounded.Unbounded_String;
+   --  Get the values matching the schema returned by Get_Schema as a flat JSON map. The keys of the map are the paths
+   --  within the schema (i.e. the keys of the maps in sequences and variants) joined by the $ character. There may be
+   --  extra values if the user has manually edited the configuration file, these values should be ignored.
+   --
+   --  For an integer the value is a number with no decimal part.
+   --
+   --  For a float the value is a number.
+   --
+   --  For a boolean the value is a boolean.
+   --
+   --  For a discrete the value is a string matching the user-selected value.
+   --
+   --  For a sequence or tabbed sequence there is no key in the map.
+   --
+   --  For a variant the value is the key of the user-selected child. All the child keys are always present,
+   --  regardless of the selection.
+
+
    function Prunt_Is_Enabled return Boolean;
 
    function Get_Values_And_Validate
