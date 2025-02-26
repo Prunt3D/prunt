@@ -30,6 +30,7 @@ package body Prunt.Thermistors is
       case Params.Kind is
          when Disabled_Kind =>
             raise Constraint_Error with "Thermistor is disabled.";
+
          when Steinhart_Hart_Kind =>
             declare
                X : constant Dimensionless := (1.0 / Params.SH_C) * (Params.SH_A - 1.0 / (Temp / celsius + 273.15));
@@ -37,6 +38,7 @@ package body Prunt.Thermistors is
             begin
                return Math.Exp ((Y - X / 2.0)**(1 / 3) - (Y + X / 2.0)**(1 / 3)) * ohm;
             end;
+
          when Callendar_Van_Dusen_Kind =>
             return Params.CVD_R0 * (1.0 + Params.CVD_A * Temp / celsius + Params.CVD_B * (Temp / celsius)**2);
       end case;

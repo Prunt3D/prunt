@@ -40,8 +40,8 @@ package body Prunt.Motion_Planner.PH_Beziers is
          return abs Left < abs Right;
       end Abs_Less_Then;
 
-      procedure Sort is new Ada.Containers.Generic_Constrained_Array_Sort
-        (Sum_Terms_Type_Index, Area, Sum_Terms_Type, Abs_Less_Then);
+      procedure Sort is new
+        Ada.Containers.Generic_Constrained_Array_Sort (Sum_Terms_Type_Index, Area, Sum_Terms_Type, Abs_Less_Then);
 
       Sum_Terms : Sum_Terms_Type :=
         (23_940.0 * L**2,
@@ -158,22 +158,23 @@ package body Prunt.Motion_Planner.PH_Beziers is
       --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
    begin
       return
-        Bez.Control_Points (0) * ((1.0 - T)**15) +
-        Scaled_Position_Offset (Bez.Control_Points (1)) * (15.0 * T * (1.0 - T)**14) +
-        Scaled_Position_Offset (Bez.Control_Points (2)) * (105.0 * T**2 * (1.0 - T)**13) +
-        Scaled_Position_Offset (Bez.Control_Points (3)) * (455.0 * T**3 * (1.0 - T)**12) +
-        Scaled_Position_Offset (Bez.Control_Points (4)) * (1_365.0 * T**4 * (1.0 - T)**11) +
-        Scaled_Position_Offset (Bez.Control_Points (5)) * (3_003.0 * T**5 * (1.0 - T)**10) +
-        Scaled_Position_Offset (Bez.Control_Points (6)) * (5_005.0 * T**6 * (1.0 - T)**9) +
-        Scaled_Position_Offset (Bez.Control_Points (7)) * (6_435.0 * T**7 * (1.0 - T)**8) +
-        Scaled_Position_Offset (Bez.Control_Points (8)) * (6_435.0 * T**8 * (1.0 - T)**7) +
-        Scaled_Position_Offset (Bez.Control_Points (9)) * (5_005.0 * T**9 * (1.0 - T)**6) +
-        Scaled_Position_Offset (Bez.Control_Points (10)) * (3_003.0 * T**10 * (1.0 - T)**5) +
-        Scaled_Position_Offset (Bez.Control_Points (11)) * (1_365.0 * T**11 * (1.0 - T)**4) +
-        Scaled_Position_Offset (Bez.Control_Points (12)) * (455.0 * T**12 * (1.0 - T)**3) +
-        Scaled_Position_Offset (Bez.Control_Points (13)) * (105.0 * T**13 * (1.0 - T)**2) +
-        Scaled_Position_Offset (Bez.Control_Points (14)) * (15.0 * T**14 * (1.0 - T)) +
-        Scaled_Position_Offset (Bez.Control_Points (15)) * (T**15);
+        Bez.Control_Points (0)
+        * ((1.0 - T)**15)
+        + Scaled_Position_Offset (Bez.Control_Points (1)) * (15.0 * T * (1.0 - T)**14)
+        + Scaled_Position_Offset (Bez.Control_Points (2)) * (105.0 * T**2 * (1.0 - T)**13)
+        + Scaled_Position_Offset (Bez.Control_Points (3)) * (455.0 * T**3 * (1.0 - T)**12)
+        + Scaled_Position_Offset (Bez.Control_Points (4)) * (1_365.0 * T**4 * (1.0 - T)**11)
+        + Scaled_Position_Offset (Bez.Control_Points (5)) * (3_003.0 * T**5 * (1.0 - T)**10)
+        + Scaled_Position_Offset (Bez.Control_Points (6)) * (5_005.0 * T**6 * (1.0 - T)**9)
+        + Scaled_Position_Offset (Bez.Control_Points (7)) * (6_435.0 * T**7 * (1.0 - T)**8)
+        + Scaled_Position_Offset (Bez.Control_Points (8)) * (6_435.0 * T**8 * (1.0 - T)**7)
+        + Scaled_Position_Offset (Bez.Control_Points (9)) * (5_005.0 * T**9 * (1.0 - T)**6)
+        + Scaled_Position_Offset (Bez.Control_Points (10)) * (3_003.0 * T**10 * (1.0 - T)**5)
+        + Scaled_Position_Offset (Bez.Control_Points (11)) * (1_365.0 * T**11 * (1.0 - T)**4)
+        + Scaled_Position_Offset (Bez.Control_Points (12)) * (455.0 * T**12 * (1.0 - T)**3)
+        + Scaled_Position_Offset (Bez.Control_Points (13)) * (105.0 * T**13 * (1.0 - T)**2)
+        + Scaled_Position_Offset (Bez.Control_Points (14)) * (15.0 * T**14 * (1.0 - T))
+        + Scaled_Position_Offset (Bez.Control_Points (15)) * (T**15);
    end Point_At_T_V2;
 
    function Point_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position is
@@ -191,8 +192,8 @@ package body Prunt.Motion_Planner.PH_Beziers is
          function Sine_Secondary_Angle return Dimensionless is
             V1 : constant Scaled_Position_Offset := Start - Corner;
             V2 : constant Scaled_Position_Offset := Finish - Corner;
-            A  : constant Area                   := Dot (V1, V2);
-            B  : constant Area                   := 2.0 * (abs V1) * (abs V2);
+            A  : constant Area := Dot (V1, V2);
+            B  : constant Area := 2.0 * (abs V1) * (abs V2);
          begin
             if 0.5 + A / B < 0.0 then
                return 0.0;
@@ -206,8 +207,8 @@ package body Prunt.Motion_Planner.PH_Beziers is
          function Cosine_Secondary_Angle return Dimensionless is
             V1 : constant Scaled_Position_Offset := Corner - Start;
             V2 : constant Scaled_Position_Offset := Finish - Corner;
-            A  : constant Area                   := Dot (V1, V2);
-            B  : constant Area                   := 2.0 * (abs V1) * (abs V2);
+            A  : constant Area := Dot (V1, V2);
+            B  : constant Area := 2.0 * (abs V1) * (abs V2);
          begin
             if 0.5 + A / B < 0.0 then
                return 0.0;
@@ -222,13 +223,13 @@ package body Prunt.Motion_Planner.PH_Beziers is
             Incoming_Length : constant Length := abs (Start - Corner);
             Outgoing_Length : constant Length := abs (Finish - Corner);
 
-            Deviation_Base_Length_Numerator   : constant Length        := Deviation_Limit * 2.0**14;
+            Deviation_Base_Length_Numerator   : constant Length := Deviation_Limit * 2.0**14;
             Deviation_Base_Length_Denominator : constant Dimensionless :=
-              Sine_Secondary_Angle *
-              (4_072_849.0 / 429.0 + 714.0 + 2.0**14 * 1_225.0 / (858.0 * Cosine_Secondary_Angle));
-            Incoming_Limit                    : constant Length        :=
+              Sine_Secondary_Angle
+              * (4_072_849.0 / 429.0 + 714.0 + 2.0**14 * 1_225.0 / (858.0 * Cosine_Secondary_Angle));
+            Incoming_Limit                    : constant Length :=
               (0.49 * 858.0 * Incoming_Length * Cosine_Secondary_Angle) / (5_210.0 * Cosine_Secondary_Angle + 1_225.0);
-            Outgoing_Limit                    : constant Length        :=
+            Outgoing_Limit                    : constant Length :=
               (0.49 * 858.0 * Outgoing_Length * Cosine_Secondary_Angle) / (5_210.0 * Cosine_Secondary_Angle + 1_225.0);
          begin
             --  TODO: Do we need a small error margin here?
@@ -243,8 +244,8 @@ package body Prunt.Motion_Planner.PH_Beziers is
             end if;
          end Base_Length;
 
-         Incoming_Unit : constant Position_Scale         := (Start - Corner) / abs (Start - Corner);
-         Outgoing_Unit : constant Position_Scale         := (Finish - Corner) / abs (Finish - Corner);
+         Incoming_Unit : constant Position_Scale := (Start - Corner) / abs (Start - Corner);
+         Outgoing_Unit : constant Position_Scale := (Finish - Corner) / abs (Finish - Corner);
          M             : constant Scaled_Position_Offset :=
            ((Outgoing_Unit - Incoming_Unit) / abs (Outgoing_Unit - Incoming_Unit)) * Base_Length;
          Points        : PH_Control_Points;
@@ -268,8 +269,8 @@ package body Prunt.Motion_Planner.PH_Beziers is
          Points (12) := Points (13) - Outgoing_Unit * Base_Length;
          Points (11) := Points (12) - Outgoing_Unit * Base_Length;
          Points (10) := Points (11) - M * (10.0 / 143.0) - Outgoing_Unit * ((133.0 / 143.0) * Base_Length);
-         Points (9)  := Points (10) - M * (38.0 / 143.0) - Outgoing_Unit * ((105.0 / 143.0) * Base_Length);
-         Points (8)  := Points (9) - M * (254.0 / 429.0) - Outgoing_Unit * ((175.0 / 429.0) * Base_Length);
+         Points (9) := Points (10) - M * (38.0 / 143.0) - Outgoing_Unit * ((105.0 / 143.0) * Base_Length);
+         Points (8) := Points (9) - M * (254.0 / 429.0) - Outgoing_Unit * ((175.0 / 429.0) * Base_Length);
 
          --  TODO: Do we need a small error margin here?
          if Sine_Secondary_Angle = 0.0 then

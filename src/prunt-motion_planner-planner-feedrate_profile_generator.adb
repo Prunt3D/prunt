@@ -24,13 +24,12 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    procedure Run (Block : in out Execution_Block) is
       function Curve_Corner_Distance (Finishing_Corner : Corners_Index) return Length is
          Start_Curve_Half_Distance : constant Length :=
-           Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0) -
-           Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5);
+           Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)
+           - Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5);
          End_Curve_Half_Distance   : constant Length := Distance_At_T (Block.Beziers (Finishing_Corner), 0.5);
          Mid_Distance              : constant Length :=
-           abs
-           (Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
-            Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
+           abs (Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
+                - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
       begin
          return Start_Curve_Half_Distance + Mid_Distance + End_Curve_Half_Distance;
       end Curve_Corner_Distance;

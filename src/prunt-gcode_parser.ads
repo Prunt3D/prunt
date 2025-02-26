@@ -60,43 +60,57 @@ package Prunt.Gcode_Parser is
       case Kind is
          when None_Kind | Pause_Kind | TMC_Dump_Kind =>
             null;
+
          when Move_Kind =>
             Old_Pos  : Position;
             Feedrate : Velocity;
+
          when Dwell_Kind =>
             Dwell_Time : Time;
+
          when Home_Kind | Enable_Steppers_Kind | Disable_Steppers_Kind =>
             Axes : Axes_Set;
             case Kind is
                when Home_Kind =>
                   Pos_Before : Position;
+
                when others =>
                   null;
             end case;
+
          when Set_Hotend_Temperature_Kind
-           | Wait_Hotend_Temperature_Kind
-           | Set_Bed_Temperature_Kind
-           | Wait_Bed_Temperature_Kind
-           | Set_Chamber_Temperature_Kind
-           | Wait_Chamber_Temperature_Kind =>
+            | Wait_Hotend_Temperature_Kind
+            | Set_Bed_Temperature_Kind
+            | Wait_Bed_Temperature_Kind
+            | Set_Chamber_Temperature_Kind
+            | Wait_Chamber_Temperature_Kind
+         =>
             Target_Temperature : Temperature;
+
          when Set_Fan_Speed_Kind =>
             Fan_To_Set : Fan_Name;
             Fan_Speed  : PWM_Scale;
+
          when Heater_Autotune_Kind =>
             Tuning_Temperature : Temperature;
             Heater_To_Tune     : Heater_Name;
             Max_Cycles         : Heaters.PID_Autotune_Cycle_Count;
+
          when Set_Acceleration_Max_Kind =>
             Acceleration_Max : Acceleration;
+
          when Set_Jerk_Max_Kind =>
             Jerk_Max : Jerk;
+
          when Set_Snap_Max_Kind =>
             Snap_Max : Snap;
+
          when Set_Crackle_Max_Kind =>
             Crackle_Max : Crackle;
+
          when Set_Chord_Error_Max_Kind =>
             Chord_Error_Max : Length;
+
          when Set_Pressure_Advance_Time_Kind =>
             Pressure_Advance_Time : Time;
       end case;

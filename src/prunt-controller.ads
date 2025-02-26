@@ -51,13 +51,15 @@ generic
    --  Run any required setup and store parameters for later use. This procedure will only be called once and will be
    --  called before any other procedures. Should configure all heaters as disabled until Reconfigure_Heater is called.
 
-   with procedure Reconfigure_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters) with
-     Pre => Params.Kind not in (Prunt.Heaters.PID_Autotune_Kind);
+   with
+     procedure Reconfigure_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters)
+     with Pre => Params.Kind not in (Prunt.Heaters.PID_Autotune_Kind);
    --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from any
    --  task.
 
-   with procedure Autotune_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters) with
-     Pre => Params.Kind in (Prunt.Heaters.PID_Autotune_Kind);
+   with
+     procedure Autotune_Heater (Heater : Heater_Name; Params : Prunt.Heaters.Heater_Parameters)
+     with Pre => Params.Kind in (Prunt.Heaters.PID_Autotune_Kind);
    --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
    --
    --  TODO: Save the results to the config file.
@@ -166,20 +168,20 @@ private
    --  plain variable but that is a GNAT extension and of course introduces the risk of dangling pointers.
    pragma Warnings (On, "use of an anonymous access type allocator");
 
-   procedure Helper_Lock_Memory with
-     Import => True, Convention => C, External_Name => "prunt_controller_helper_lock_memory";
+   procedure Helper_Lock_Memory
+   with Import => True, Convention => C, External_Name => "prunt_controller_helper_lock_memory";
 
    type Flush_Resetting_Data is record
-      Is_Homing_Move           : Boolean           := False;
+      Is_Homing_Move           : Boolean := False;
       Home_Switch              : Input_Switch_Name := Input_Switch_Name'First;
-      Home_Hit_On_State        : Pin_State         := High_State;
-      Is_Conditional_Move      : Boolean           := False;
+      Home_Hit_On_State        : Pin_State := High_State;
+      Is_Conditional_Move      : Boolean := False;
       Conditional_Switch       : Input_Switch_Name := Input_Switch_Name'First;
-      Conditional_Hit_On_State : Pin_State         := High_State;
-      Wait_For_Heater          : Boolean           := False;
-      Wait_For_Heater_Name     : Heater_Name       := Heater_Name'First;
-      Dwell_Time               : Time              := Time (0.0);
-      Pause_After              : Boolean           := False;
+      Conditional_Hit_On_State : Pin_State := High_State;
+      Wait_For_Heater          : Boolean := False;
+      Wait_For_Heater_Name     : Heater_Name := Heater_Name'First;
+      Dwell_Time               : Time := Time (0.0);
+      Pause_After              : Boolean := False;
    end record;
 
    type Block_Persistent_Data is record
@@ -197,18 +199,19 @@ private
    package My_Logger is new Logger;
    pragma Warnings (On, "cannot call * before body seen");
 
-   package My_Planner is new Motion_Planner.Planner
-     (Flush_Resetting_Data_Type     => Flush_Resetting_Data,
-      Flush_Resetting_Data_Default  => (others => <>),
-      Block_Persistent_Data_Type    => Block_Persistent_Data,
-      Block_Persistent_Data_Default => (others => <>),
-      Corner_Extra_Data_Type        => Corner_Extra_Data,
-      Initial_Position              => [others => 0.0 * mm],
-      Max_Corners                   => Command_Line_Arguments.Max_Planner_Block_Corners,
-      Is_Homing_Move                => Is_Homing_Move,
-      Interpolation_Time            => Interpolation_Time,
-      Home_Move_Minimum_Coast_Time  => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
-      Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
+   package My_Planner is new
+     Motion_Planner.Planner
+       (Flush_Resetting_Data_Type     => Flush_Resetting_Data,
+        Flush_Resetting_Data_Default  => (others => <>),
+        Block_Persistent_Data_Type    => Block_Persistent_Data,
+        Block_Persistent_Data_Default => (others => <>),
+        Corner_Extra_Data_Type        => Corner_Extra_Data,
+        Initial_Position              => [others => 0.0 * mm],
+        Max_Corners                   => Command_Line_Arguments.Max_Planner_Block_Corners,
+        Is_Homing_Move                => Is_Homing_Move,
+        Interpolation_Time            => Interpolation_Time,
+        Home_Move_Minimum_Coast_Time  => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
+        Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
 
    procedure Start_Planner_Block (Data : Flush_Resetting_Data; Last_Command_Index : Command_Index);
    procedure Enqueue_Command_Internal
@@ -226,29 +229,31 @@ private
 
    function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters;
 
-   package My_Step_Generator is new Step_Generator.Generator
-     (Planner                     => My_Planner,
-      Stepper_Name                => Stepper_Name,
-      Stepper_Position            => Stepper_Position,
-      Start_Planner_Block         => Start_Planner_Block,
-      Enqueue_Command             => Enqueue_Command_Internal,
-      Finish_Planner_Block        => Finish_Planner_Block,
-      Get_Axial_Shaper_Parameters => Get_Axial_Shaper_Parameters,
-      Interpolation_Time          => Interpolation_Time,
-      Loop_Interpolation_Time     => Loop_Interpolation_Time,
-      Runner_CPU                  => Command_Line_Arguments.Step_Generator_CPU);
+   package My_Step_Generator is new
+     Step_Generator.Generator
+       (Planner                     => My_Planner,
+        Stepper_Name                => Stepper_Name,
+        Stepper_Position            => Stepper_Position,
+        Start_Planner_Block         => Start_Planner_Block,
+        Enqueue_Command             => Enqueue_Command_Internal,
+        Finish_Planner_Block        => Finish_Planner_Block,
+        Get_Axial_Shaper_Parameters => Get_Axial_Shaper_Parameters,
+        Interpolation_Time          => Interpolation_Time,
+        Loop_Interpolation_Time     => Loop_Interpolation_Time,
+        Runner_CPU                  => Command_Line_Arguments.Step_Generator_CPU);
 
    type Stepper_Kinds_Type is array (Stepper_Name) of Stepper_Kind;
 
-   package My_Config is new Config
-     (Stepper_Name       => Stepper_Name,
-      Stepper_Kinds_Type => Stepper_Kinds_Type,
-      Stepper_Kinds      => [for I in Stepper_Name => Stepper_Hardware (I).Kind],
-      Heater_Name        => Heater_Name,
-      Thermistor_Name    => Thermistor_Name,
-      Fan_Name           => Fan_Name,
-      Input_Switch_Name  => Input_Switch_Name,
-      Config_Path        => Config_Path);
+   package My_Config is new
+     Config
+       (Stepper_Name       => Stepper_Name,
+        Stepper_Kinds_Type => Stepper_Kinds_Type,
+        Stepper_Kinds      => [for I in Stepper_Name => Stepper_Hardware (I).Kind],
+        Heater_Name        => Heater_Name,
+        Thermistor_Name    => Thermistor_Name,
+        Fan_Name           => Fan_Name,
+        Input_Switch_Name  => Input_Switch_Name,
+        Config_Path        => Config_Path);
 
    procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
 
@@ -270,24 +275,25 @@ private
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
    pragma Warnings (Off, "cannot call * before body seen");
-   package My_Web_Server is new Web_Server
-     (My_Logger                         => My_Logger,
-      My_Config                         => My_Config,
-      Get_Position                      => Get_Position,
-      Get_Thermistor_Temperature        => Get_Temperature,
-      Get_Stepper_Temperature           => Get_Temperature,
-      Board_Temperature_Probe_Name      => Board_Temperature_Probe_Name,
-      Get_Board_Temperature             => Get_Temperature,
-      Get_Heater_Power                  => Get_Heater_Power,
-      Get_Input_Switch_State            => Get_Input_Switch_State,
-      Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
-      Submit_Gcode_Command              => Submit_Gcode_Command,
-      Submit_Gcode_File                 => Submit_Gcode_File,
-      Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
-      Pause_Stepgen                     => My_Step_Generator.Pause,
-      Resume_Stepgen                    => My_Step_Generator.Resume,
-      Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
-      Port                              => Command_Line_Arguments.Web_Server_Port);
+   package My_Web_Server is new
+     Web_Server
+       (My_Logger                         => My_Logger,
+        My_Config                         => My_Config,
+        Get_Position                      => Get_Position,
+        Get_Thermistor_Temperature        => Get_Temperature,
+        Get_Stepper_Temperature           => Get_Temperature,
+        Board_Temperature_Probe_Name      => Board_Temperature_Probe_Name,
+        Get_Board_Temperature             => Get_Temperature,
+        Get_Heater_Power                  => Get_Heater_Power,
+        Get_Input_Switch_State            => Get_Input_Switch_State,
+        Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
+        Submit_Gcode_Command              => Submit_Gcode_Command,
+        Submit_Gcode_File                 => Submit_Gcode_File,
+        Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
+        Pause_Stepgen                     => My_Step_Generator.Pause,
+        Resume_Stepgen                    => My_Step_Generator.Resume,
+        Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
+        Port                              => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");
 
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);

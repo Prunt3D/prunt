@@ -32,24 +32,27 @@ generic
    type Stepper_Position is array (Stepper_Name) of Dimensionless;
 
    with procedure Start_Planner_Block (Data : Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
-   with procedure Enqueue_Command
-     (Pos             : Position;
-      Stepper_Pos     : Stepper_Position;
-      Data            : Corner_Extra_Data_Type;
-      Index           : Command_Index;
-      Loop_Until_Hit  : Boolean;
-      Safe_Stop_After : Boolean);
-   with procedure Finish_Planner_Block
-     (Data                 : Flush_Resetting_Data_Type;
-      Next_Block_Pos       : Stepper_Position;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index);
+   with
+     procedure Enqueue_Command
+       (Pos             : Position;
+        Stepper_Pos     : Stepper_Position;
+        Data            : Corner_Extra_Data_Type;
+        Index           : Command_Index;
+        Loop_Until_Hit  : Boolean;
+        Safe_Stop_After : Boolean);
+   with
+     procedure Finish_Planner_Block
+       (Data                 : Flush_Resetting_Data_Type;
+        Next_Block_Pos       : Stepper_Position;
+        First_Accel_Distance : Length;
+        Last_Command_Index   : Command_Index);
    --  First_Accel_Distance is the distance length of the acceleration part of the first move. This is used to
    --  determine the position after a homing move as the loop move starts as soon as possible after the acceleration
    --  part.
 
-   with function Get_Axial_Shaper_Parameters
-     (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
+   with
+     function Get_Axial_Shaper_Parameters
+       (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
 
    Interpolation_Time : Time;
    Loop_Interpolation_Time : Time;
@@ -59,10 +62,11 @@ package Prunt.Step_Generator.Generator is
 
    type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
 
-   task Runner with
-     CPU => Runner_CPU,
-     Storage_Size => 32 * 1024 * 1024
-     --  Allows for very large shapers and shaper buffers to be allocated.
+   task Runner
+     with
+       CPU          => Runner_CPU,
+       Storage_Size => 32 * 1024 * 1024
+       --  Allows for very large shapers and shaper buffers to be allocated.
    is
       entry Setup (Map : Stepper_Pos_Map);
       entry Finish;

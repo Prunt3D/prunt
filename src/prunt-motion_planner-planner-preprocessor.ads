@@ -39,8 +39,8 @@ private
       entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
       entry Dequeue (Comm : out Command);
    private
-      Setup_Done            : Boolean    := False;
-      Is_Full               : Boolean    := False;
+      Setup_Done            : Boolean := False;
+      Is_Full               : Boolean := False;
       Next_Read, Next_Write : Count_Type := Command_Queue_Array_Type'First;
       Elements              : Command_Queue_Array_Type;
       Current_Params        : Kinematic_Parameters;
@@ -50,14 +50,15 @@ private
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       procedure Run (Block : aliased out Execution_Block);
    private
-      Setup_Done            : Boolean  := False;
+      Setup_Done            : Boolean := False;
       Last_Pos              : Position := Initial_Position;
       Current_Params        : Kinematic_Parameters;
       Block_Persistent_Data : Block_Persistent_Data_Type := Block_Persistent_Data_Default;
       pragma Warnings (Off, "use of an anonymous access type allocator");
-      Corners            : access Block_Plain_Corners      := new Block_Plain_Corners (1 .. Corners_Index'Last);
-      Segment_Feedrates  : access Block_Segment_Feedrates  := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
-      Corners_Extra_Data : access Block_Corners_Extra_Data := new Block_Corners_Extra_Data (2 .. Corners_Index'Last);
+      Corners               : access Block_Plain_Corners := new Block_Plain_Corners (1 .. Corners_Index'Last);
+      Segment_Feedrates     : access Block_Segment_Feedrates := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
+      Corners_Extra_Data    : access Block_Corners_Extra_Data :=
+        new Block_Corners_Extra_Data (2 .. Corners_Index'Last);
       pragma Warnings (On, "use of an anonymous access type allocator");
    end Runner;
 

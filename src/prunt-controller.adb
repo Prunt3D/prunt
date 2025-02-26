@@ -64,42 +64,39 @@ use type Prunt.TMC_Types.Unsigned_32;
 package body Prunt.Controller is
 
    --  Atomics are used rather than protected objects here to avoid any potential blocking in the stepgen task.
-   type Atomic_Volatile_Position is new Position with
-     Atomic_Components, Volatile_Components;
+   type Atomic_Volatile_Position is new Position with Atomic_Components, Volatile_Components;
    Last_Position : Atomic_Volatile_Position := (others => Length (0.0));
    --  Note that each element here is updated atomically, not the entire position. This value is only meant to be used
    --  for displaying a value in the GUI, so it is not an issue if elements are out of sync.
 
-   type Atomic_Volatile_Heater_Targets is new Heater_Targets with
-     Atomic_Components, Volatile_Components;
+   type Atomic_Volatile_Heater_Targets is new Heater_Targets with Atomic_Components, Volatile_Components;
    Last_Heater_Targets : Atomic_Volatile_Heater_Targets := (others => Temperature (0.0));
 
-   Last_Thermistor_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0)) with
-       Atomic_Components, Volatile_Components;
+   Last_Thermistor_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0))
+   with Atomic_Components, Volatile_Components;
 
-   Last_Stepper_Temperatures : array (Stepper_Name) of Temperature := (others => Temperature (0.0)) with
-       Atomic_Components, Volatile_Components;
+   Last_Stepper_Temperatures : array (Stepper_Name) of Temperature := (others => Temperature (0.0))
+   with Atomic_Components, Volatile_Components;
 
-   Last_Board_Temperatures : array (Board_Temperature_Probe_Name) of Temperature := (others => Temperature (0.0)) with
-       Atomic_Components, Volatile_Components;
+   Last_Board_Temperatures : array (Board_Temperature_Probe_Name) of Temperature := (others => Temperature (0.0))
+   with Atomic_Components, Volatile_Components;
 
-   Last_Input_Switch_States : array (Input_Switch_Name) of Pin_State := (others => Low_State) with
-       Atomic_Components, Volatile_Components;
+   Last_Input_Switch_States : array (Input_Switch_Name) of Pin_State := (others => Low_State)
+   with Atomic_Components, Volatile_Components;
 
-   Last_Heater_Powers : array (Heater_Name) of PWM_Scale := (others => PWM_Scale (0.0)) with
-       Atomic_Components, Volatile_Components;
+   Last_Heater_Powers : array (Heater_Name) of PWM_Scale := (others => PWM_Scale (0.0))
+   with Atomic_Components, Volatile_Components;
 
-   Last_Tachometer_Frequencies : array (Fan_Name) of Frequency := (others => Frequency (0.0)) with
-       Atomic_Components, Volatile_Components;
+   Last_Tachometer_Frequencies : array (Fan_Name) of Frequency := (others => Frequency (0.0))
+   with Atomic_Components, Volatile_Components;
 
-   type Atomic_Volatile_Heater_Thermistor_Map is new Heater_Thermistor_Map with
-     Atomic_Components, Volatile_Components;
+   type Atomic_Volatile_Heater_Thermistor_Map is new Heater_Thermistor_Map with Atomic_Components, Volatile_Components;
    Stored_Heater_Thermistors : Atomic_Volatile_Heater_Thermistor_Map;
 
    type Temperature_Report_Counter is mod 2**32;
 
-   Last_Thermistor_Temperatures_Counters : array (Thermistor_Name) of Temperature_Report_Counter := (others => 0) with
-     Atomic_Components, Volatile_Components;
+   Last_Thermistor_Temperatures_Counters : array (Thermistor_Name) of Temperature_Report_Counter := (others => 0)
+   with Atomic_Components, Volatile_Components;
 
    package My_Gcode_Handler is new Gcode_Handler;
 
@@ -172,6 +169,7 @@ package body Prunt.Controller is
             case Stepper_Hardware (S).Kind is
                when Basic_Kind =>
                   null;
+
                when TMC2240_UART_Kind =>
                   declare
                      Query          : TMC_Types.TMC2240.UART_Query_Message :=
@@ -308,7 +306,7 @@ package body Prunt.Controller is
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
    begin
-      Last_Thermistor_Temperatures (Thermistor)          := Temp;
+      Last_Thermistor_Temperatures (Thermistor) := Temp;
       Last_Thermistor_Temperatures_Counters (Thermistor) := @ + 1;
    end Report_Temperature;
 
@@ -374,8 +372,7 @@ package body Prunt.Controller is
       Data            : Corner_Extra_Data;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
-      Safe_Stop_After : Boolean)
-   is
+      Safe_Stop_After : Boolean) is
    begin
       Enqueue_Command
         ((Index           => Index,
@@ -384,7 +381,7 @@ package body Prunt.Controller is
           Heaters         => Data.Heaters,
           Safe_Stop_After => Safe_Stop_After,
           Loop_Until_Hit  => Loop_Until_Hit));
-      Last_Position       := (for A in Axis_Name => Pos (A));
+      Last_Position := (for A in Axis_Name => Pos (A));
       Last_Heater_Targets := (for H in Heater_Name => Data.Heaters (H));
    end Enqueue_Command_Internal;
 
@@ -392,8 +389,7 @@ package body Prunt.Controller is
      (Data                 : Flush_Resetting_Data;
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
-      Next_Command_Index   : Command_Index)
-   is
+      Next_Command_Index   : Command_Index) is
    begin
       if Data.Is_Conditional_Move or Data.Is_Homing_Move then
          Wait_Until_Idle (Next_Command_Index - 1);
@@ -415,14 +411,15 @@ package body Prunt.Controller is
               Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name));
          begin
             loop
-               exit when Last_Thermistor_Temperatures_Counters
-                   (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) /=
-                 Start_Counter;
+               exit when
+                 Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name))
+                 /= Start_Counter;
             end loop;
          end;
          loop
-            exit when Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name)) >=
-              Last_Heater_Targets (Data.Wait_For_Heater_Name);
+            exit when
+              Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name))
+              >= Last_Heater_Targets (Data.Wait_For_Heater_Name);
          end loop;
       end if;
 
@@ -439,7 +436,7 @@ package body Prunt.Controller is
             Heater_Params : My_Config.Heater_Full_Parameters;
          begin
             My_Config.Read (Heater_Params, H);
-            Heater_Thermistors (H)        := Heater_Params.Thermistor;
+            Heater_Thermistors (H) := Heater_Params.Thermistor;
             Stored_Heater_Thermistors (H) := Heater_Params.Thermistor;
          end;
       end loop;
@@ -451,14 +448,10 @@ package body Prunt.Controller is
       Setup (Heater_Thermistors, Thermistor_Params_Array);
    end Setup_Thermistors_And_Heater_Assignments;
 
-   procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name)
-   is
+   procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name) is
       Query          : TMC_Types.TMC2240.UART_Query_Message :=
         (Bytes_Mode => False,
-         Content    =>
-           (Node     => Message.Content.Node,
-            Register => Message.Content.Register,
-            others   => <>));
+         Content    => (Node => Message.Content.Node, Register => Message.Content.Register, others => <>));
       Reply          : TMC_Types.TMC2240.UART_Data_Message;
       Receive_Failed : Boolean;
 
@@ -496,6 +489,7 @@ package body Prunt.Controller is
       case Stepper_Hardware (Stepper).Kind is
          when Basic_Kind =>
             null;
+
          when TMC2240_UART_Kind =>
             null;
             declare
@@ -504,7 +498,7 @@ package body Prunt.Controller is
                   Content    =>
                     (Node     => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register => TMC_Types.TMC2240.IOIN_Address,
-                     others    => <>));
+                     others   => <>));
                Reply          : TMC_Types.TMC2240.UART_Data_Message;
                Receive_Failed : Boolean;
             begin
@@ -518,32 +512,29 @@ package body Prunt.Controller is
                   raise TMC_UART_Error with "Wrong register from stepper " & Stepper'Image;
                elsif Reply.Content.IOIN_Data.Version /= 16#40# then
                   raise TMC_UART_Error
-                    with "Unexpected version from " & Stepper'Image & " (" &
-                    Reply.Content.IOIN_Data.Version'Image & ")";
+                    with
+                      "Unexpected version from " & Stepper'Image & " (" & Reply.Content.IOIN_Data.Version'Image & ")";
                end if;
             end;
 
             declare
-               Message       : TMC_Types.TMC2240.UART_Data_Message;
+               Message : TMC_Types.TMC2240.UART_Data_Message;
             begin
                --  A delay greater than 8 bit times is required with multiple nodes or else nodes other than the
                --  addressed node may detect transmission errors during reads. Technically we should have a delay
                --  after reads until this is set for all nodes, but it's not currently an issue in any firmware
                --  implementations.
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register      => TMC_Types.TMC2240.NODECONF_Address,
-                     NODECONF_Data =>
-                       (Node_Addr  => 0,
-                        Send_Delay => TMC_Types.TMC2240.Delay_3x8,
-                        Reserved   => 0),
+                     NODECONF_Data => (Node_Addr => 0, Send_Delay => TMC_Types.TMC2240.Delay_3x8, Reserved => 0),
                      others        => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -553,7 +544,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -563,7 +554,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node               => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -573,7 +564,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node            => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -583,7 +574,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node            => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -593,7 +584,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -603,7 +594,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node           => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -613,7 +604,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -623,7 +614,7 @@ package body Prunt.Controller is
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
 
-               Message             :=
+               Message :=
                  (Bytes_Mode => False,
                   Content    =>
                     (Node         => Stepper_Hardware (Stepper).TMC2240_UART_Address,
@@ -639,8 +630,9 @@ package body Prunt.Controller is
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register      => TMC_Types.TMC2240.CHOPCONF_Address,
                      CHOPCONF_Data =>
-                       (Stepper_Params.CHOPCONF with delta
-                        Double_Edge => TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping)),
+                       (Stepper_Params
+                          .CHOPCONF with delta Double_Edge =>
+                         TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping)),
                      others        => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
@@ -666,8 +658,8 @@ package body Prunt.Controller is
 
       My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
       My_Planner.Enqueue
-        ((Kind               => My_Planner.Update_Persistent_Data_Kind,
-         New_Persistent_Data => (Shaper_Parameters => Shaper_Params)));
+        ((Kind                => My_Planner.Update_Persistent_Data_Kind,
+          New_Persistent_Data => (Shaper_Parameters => Shaper_Params)));
    end Setup_Planner;
 
    procedure Setup_Step_Generator is
@@ -691,6 +683,7 @@ package body Prunt.Controller is
                   if Kinematics_Params.Y_Steppers (S) then
                      Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
                   end if;
+
                when My_Config.Core_XY_Kind =>
                   if Kinematics_Params.A_Steppers (S) then
                      Map (X_Axis, S) := 0.5 * Stepper_Params.Mm_Per_Step;
@@ -729,6 +722,7 @@ package body Prunt.Controller is
                else
                   Corner_Data.Fans (F) := 0.0;
                end if;
+
             when My_Config.Always_On_Kind =>
                if Fan_Params.Invert_Output then
                   Corner_Data.Fans (F) := 1.0 - Fan_Params.Always_On_PWM;

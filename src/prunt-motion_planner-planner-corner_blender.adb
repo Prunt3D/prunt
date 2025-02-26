@@ -41,8 +41,8 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          --  TODO: More advanced corner shifting that allows for virtual corners to be outside the volume when the
          --  curve is fully inside the volume.
          for A in Axis_Name loop
-            if Unscaled_Corner (A) - Block.Params.Chord_Error_Max < Block.Params.Lower_Pos_Limit (A) or
-              Unscaled_Corner (A) + Block.Params.Chord_Error_Max > Block.Params.Upper_Pos_Limit (A)
+            if Unscaled_Corner (A) - Block.Params.Chord_Error_Max < Block.Params.Lower_Pos_Limit (A)
+              or Unscaled_Corner (A) + Block.Params.Chord_Error_Max > Block.Params.Upper_Pos_Limit (A)
             then
                return False;
             end if;
@@ -60,27 +60,27 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       end loop;
 
       Shifted_Corner_Error_Limits (Block.Corners'First) := 0.0 * mm;
-      Shifted_Corner_Error_Limits (Block.Corners'Last)  := 0.0 * mm;
+      Shifted_Corner_Error_Limits (Block.Corners'Last) := 0.0 * mm;
 
       Block.Beziers (Block.Beziers'First) :=
-         Create_Bezier
-            (Block.Corners (Block.Beziers'First),
-            Block.Corners (Block.Beziers'First),
-            Block.Corners (Block.Beziers'First),
-            0.0 * mm);
-      Block.Beziers (Block.Beziers'Last)  :=
-         Create_Bezier
-            (Block.Corners (Block.Beziers'Last),
-            Block.Corners (Block.Beziers'Last),
-            Block.Corners (Block.Beziers'Last),
-            0.0 * mm);
+        Create_Bezier
+          (Block.Corners (Block.Beziers'First),
+           Block.Corners (Block.Beziers'First),
+           Block.Corners (Block.Beziers'First),
+           0.0 * mm);
+      Block.Beziers (Block.Beziers'Last) :=
+        Create_Bezier
+          (Block.Corners (Block.Beziers'Last),
+           Block.Corners (Block.Beziers'Last),
+           Block.Corners (Block.Beziers'Last),
+           0.0 * mm);
 
       loop
          Last_Comp_Error := 0.0 * mm;
 
          for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
-            if Angle_Elementary_Functions.Sin (Corner_Blender_Max_Secondary_Angle_To_Blend) <
-              Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
+            if Angle_Elementary_Functions.Sin (Corner_Blender_Max_Secondary_Angle_To_Blend)
+              < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
             then
                Block.Beziers (I) := Create_Bezier (Block.Corners (I), Block.Corners (I), Block.Corners (I), 0.0 * mm);
             else
@@ -123,8 +123,8 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
    function Sine_Secondary_Angle (Start, Corner, Finish : Scaled_Position) return Dimensionless is
       V1 : constant Scaled_Position_Offset := Start - Corner;
       V2 : constant Scaled_Position_Offset := Finish - Corner;
-      A  : constant Area                   := Dot (V1, V2);
-      B  : constant Area                   := 2.0 * (abs V1) * (abs V2);
+      A  : constant Area := Dot (V1, V2);
+      B  : constant Area := 2.0 * (abs V1) * (abs V2);
    begin
       if B = 0.0 then
          return 1.0;
@@ -140,7 +140,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
    function Unit_Bisector (Start, Corner, Finish : Scaled_Position) return Position_Scale is
       A        : constant Scaled_Position_Offset := Start - Corner;
       B        : constant Scaled_Position_Offset := Finish - Corner;
-      Bisector : constant Position_Scale         :=
+      Bisector : constant Position_Scale :=
         (if abs A = 0.0 or abs B = 0.0 then (others => 0.0) else A / abs A + B / abs B);
    begin
       if abs Bisector = 0.0 then

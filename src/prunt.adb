@@ -32,8 +32,7 @@ package body Prunt is
       procedure Set
         (Cause      : Ada.Task_Termination.Cause_Of_Termination;
          ID         : Ada.Task_Identification.Task_Id;
-         Occurrence : Ada.Exceptions.Exception_Occurrence)
-      is
+         Occurrence : Ada.Exceptions.Exception_Occurrence) is
       begin
          if Ada.Exceptions.Is_Null_Occurrence (Data) then
             Ada.Exceptions.Save_Occurrence (Data, Occurrence);
@@ -49,7 +48,8 @@ package body Prunt is
          Ada.Exceptions.Save_Occurrence (Occurrence, Data);
       end Get;
 
-      function Is_Set return Boolean is (not Ada.Exceptions.Is_Null_Occurrence (Data));
+      function Is_Set return Boolean
+      is (not Ada.Exceptions.Is_Null_Occurrence (Data));
 
       function Null_Occurrence return Ada.Exceptions.Exception_Occurrence is
       begin
@@ -257,72 +257,106 @@ package body Prunt is
       case C is
          when Character'Val (16#00#) =>
             return "\u0000";
+
          when Character'Val (16#01#) =>
             return "\u0001";
+
          when Character'Val (16#02#) =>
             return "\u0002";
+
          when Character'Val (16#03#) =>
             return "\u0003";
+
          when Character'Val (16#04#) =>
             return "\u0004";
+
          when Character'Val (16#05#) =>
             return "\u0005";
+
          when Character'Val (16#06#) =>
             return "\u0006";
+
          when Character'Val (16#07#) =>
             return "\u0007";
+
          when Ada.Characters.Latin_1.BS =>
             return "\b";
+
          when Ada.Characters.Latin_1.HT =>
             return "\t";
+
          when Ada.Characters.Latin_1.LF =>
             return "\n";
+
          when Character'Val (16#0B#) =>
             return "\u000B";
+
          when Ada.Characters.Latin_1.FF =>
             return "\f";
+
          when Ada.Characters.Latin_1.CR =>
             return "\r";
+
          when Character'Val (16#0E#) =>
             return "\u000E";
+
          when Character'Val (16#0F#) =>
             return "\u000F";
+
          when Character'Val (16#10#) =>
             return "\u0010";
+
          when Character'Val (16#11#) =>
             return "\u0011";
+
          when Character'Val (16#12#) =>
             return "\u0012";
+
          when Character'Val (16#13#) =>
             return "\u0013";
+
          when Character'Val (16#14#) =>
             return "\u0014";
+
          when Character'Val (16#15#) =>
             return "\u0015";
+
          when Character'Val (16#16#) =>
             return "\u0016";
+
          when Character'Val (16#17#) =>
             return "\u0017";
+
          when Character'Val (16#18#) =>
             return "\u0018";
+
          when Character'Val (16#19#) =>
             return "\u0019";
+
          when Character'Val (16#1A#) =>
             return "\u001A";
+
          when Character'Val (16#1B#) =>
             return "\u001B";
+
          when Character'Val (16#1C#) =>
             return "\u001C";
+
          when Character'Val (16#1D#) =>
             return "\u001D";
+
          when Character'Val (16#1E#) =>
             return "\u001E";
+
          when Character'Val (16#1F#) =>
             return "\u001F";
+
          when '\' =>
             return "\\";
+
          when '"' =>
             return "\""";
+
          when others =>
             return (1 => C);
       end case;

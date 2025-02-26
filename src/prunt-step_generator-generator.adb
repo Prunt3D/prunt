@@ -27,10 +27,10 @@ package body Prunt.Step_Generator.Generator is
 
    package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
-   Do_Pause : Boolean := False with
-     Atomic, Volatile;
-   Paused   : Boolean := False with
-     Atomic, Volatile;
+   Do_Pause : Boolean := False
+   with Atomic, Volatile;
+   Paused   : Boolean := False
+   with Atomic, Volatile;
 
    procedure Pause is
    begin
@@ -66,7 +66,7 @@ package body Prunt.Step_Generator.Generator is
 
    task body Runner is
       Current_Command_Index : Command_Index := 0;
-      Current_Time          : Time          := 0.0 * s;
+      Current_Time          : Time := 0.0 * s;
       Pos_Map               : Stepper_Pos_Map;
 
       type Homing_Move_When_Kind is (Not_Pending_Kind, This_Block_Kind, This_Move_Kind);
@@ -74,7 +74,7 @@ package body Prunt.Step_Generator.Generator is
 
       type Pausing_State_Kind is (Running_Kind, Pausing_Kind, Paused_Kind, Resuming_Kind);
       Pausing_State : Pausing_State_Kind := Running_Kind;
-      Pause_Slew    : Pause_Slew_Index   := Pause_Slew_Index'First;
+      Pause_Slew    : Pause_Slew_Index := Pause_Slew_Index'First;
 
       type Block_Wrapper is record
          Block : aliased Execution_Block;
@@ -116,7 +116,7 @@ package body Prunt.Step_Generator.Generator is
                      Paused := False;
                   end if;
                   Pausing_State := Running_Kind;
-                  Pause_Slew    := Pause_Slew_Index'First;
+                  Pause_Slew := Pause_Slew_Index'First;
 
                   exit when not Timed_Out;
                end loop;
@@ -132,6 +132,7 @@ package body Prunt.Step_Generator.Generator is
                  Input_Shapers.Shapers.Create
                    ((others => (Kind => Input_Shapers.No_Shaper)), Interpolation_Time, Block_Start_Pos (Block));
                --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
+
             else
                Current_Shapers :=
                  Input_Shapers.Shapers.Create
@@ -151,12 +152,14 @@ package body Prunt.Step_Generator.Generator is
                         if Do_Pause and then Homing_Move_When = Not_Pending_Kind then
                            Pausing_State := Pausing_Kind;
                         end if;
+
                      when Pausing_Kind =>
                         if Pause_Slew = Pause_Slew_Index'Last then
                            Pausing_State := Paused_Kind;
                         else
                            Pause_Slew := @ + 1;
                         end if;
+
                      when Paused_Kind =>
                         Paused := True;
                         loop
@@ -169,8 +172,9 @@ package body Prunt.Step_Generator.Generator is
 
                            exit when not Do_Pause;
                         end loop;
-                        Paused        := False;
+                        Paused := False;
                         Pausing_State := Resuming_Kind;
+
                      when Resuming_Kind =>
                         if Pause_Slew = Pause_Slew_Index'First then
                            Pausing_State := Running_Kind;
@@ -219,9 +223,12 @@ package body Prunt.Step_Generator.Generator is
                            when This_Block_Kind =>
                               if Is_Past_Accel_Part then
                                  Homing_Move_When := This_Move_Kind; --  Next loop iteration, not this one.
+
                               end if;
+
                            when Not_Pending_Kind =>
                               null;
+
                            when This_Move_Kind =>
                               Homing_Move_When := Not_Pending_Kind;
                         end case;
@@ -245,6 +252,7 @@ package body Prunt.Step_Generator.Generator is
                      --  Ensure that the last corner is always enqueued from at least once and we always finish on
                      --  the exact final position. Having the wrong interpolation time here is fine because the
                      --  final bit of an execution block has very low velocity.
+
                   else
                      exit when Current_Time >= Segment_Time (Block, I);
                   end if;

@@ -93,9 +93,9 @@ package body Prunt.Web_Server is
       return Source'Length >= Pattern'Length and then Ada.Strings.Fixed.Head (Source, Pattern'Length) = Pattern;
    end Starts_With;
 
-   overriding procedure Read
-     (Stream : in out Array_Stream_Type; Item : out Stream_Element_Array; Last : out Stream_Element_Offset)
-   is
+   overriding
+   procedure Read
+     (Stream : in out Array_Stream_Type; Item : out Stream_Element_Array; Last : out Stream_Element_Offset) is
    begin
       if Stream.Position > Stream.Content'Last then
          Stream.Done := True;
@@ -105,7 +105,7 @@ package body Prunt.Web_Server is
          Last := Item'First - 1;
       else
          for I in Item'Range loop
-            Last     := I;
+            Last := I;
             Item (I) := Stream.Content (Stream.Position);
 
             if Stream.Position = Stream.Content'Last then
@@ -118,18 +118,21 @@ package body Prunt.Web_Server is
       end if;
    end Read;
 
-   overriding procedure Write (Stream : in out Array_Stream_Type; Item : Stream_Element_Array) is
+   overriding
+   procedure Write (Stream : in out Array_Stream_Type; Item : Stream_Element_Array) is
    begin
       raise Constraint_Error with "Writing not supported.";
    end Write;
 
-   overriding function Get (Source : access Directory_Content) return String is
+   overriding
+   function Get (Source : access Directory_Content) return String is
       Dir : Directory_Entry_Type;
    begin
       case Source.Step is
          when Starting =>
             Source.Step := First_Entry;
             return "[";
+
          when First_Entry | Continuing_Entries =>
             if More_Entries (Source.Search) then
                Get_Next_Entry (Source.Search, Dir);
@@ -143,31 +146,36 @@ package body Prunt.Web_Server is
                Source.Step := Finished;
                return "]";
             end if;
+
          when Finished =>
             return "";
       end case;
    end Get;
 
-   overriding procedure Finalize (Source : in out Directory_Content) is
+   overriding
+   procedure Finalize (Source : in out Directory_Content) is
    begin
       Finalize (Content_Source (Source));
    end Finalize;
 
-   overriding function Get (Source : access Unbounded_String_Source) return String is
+   overriding
+   function Get (Source : access Unbounded_String_Source) return String is
       New_Next_Start : Positive :=
         Positive'Min (Source.Next_Start + Buffer_Size - 100, Ada.Strings.Unbounded.Length (Source.Content) + 1);
-      Result         : String   := Slice (Source.Content, Source.Next_Start, New_Next_Start - 1);
+      Result         : String := Slice (Source.Content, Source.Next_Start, New_Next_Start - 1);
    begin
       Source.Next_Start := New_Next_Start;
       return Result;
    end Get;
 
-   overriding procedure Initialize (Client : in out Prunt_Client) is
+   overriding
+   procedure Initialize (Client : in out Prunt_Client) is
    begin
       Initialize (HTTP_Client (Client));
    end Initialize;
 
-   overriding procedure Connected (Client : in out Prunt_Client) is
+   overriding
+   procedure Connected (Client : in out Prunt_Client) is
    begin
       GNAT.Sockets.Set_Socket_Option (Client.Get_Socket, IP_Protocol_For_TCP_Level, (Keep_Alive_Idle, 30));
       GNAT.Sockets.Set_Socket_Option (Client.Get_Socket, IP_Protocol_For_TCP_Level, (Keep_Alive_Interval, 10));
@@ -177,12 +185,14 @@ package body Prunt.Web_Server is
       Connected (HTTP_Client (Client));
    end Connected;
 
-   overriding procedure Commit (Destination : in out Post_Body_Destination) is
+   overriding
+   procedure Commit (Destination : in out Post_Body_Destination) is
    begin
       null;
    end Commit;
 
-   overriding procedure Put (Destination : in out Post_Body_Destination; Data : String) is
+   overriding
+   procedure Put (Destination : in out Post_Body_Destination; Data : String) is
    begin
       Post_Bodies.Append (Destination.Content, Data);
    end Put;
@@ -208,9 +218,9 @@ package body Prunt.Web_Server is
       return "{""Values"":" & Values & ",""Errors"":" & Errors & "]}";
    end Patch_Config_Values;
 
-   overriding procedure Reply_HTML
-     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True)
-   is
+   overriding
+   procedure Reply_HTML
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True) is
    begin
       Send_Status_Line (Client, Code, Reason);
       Send_Date (Client);
@@ -222,9 +232,9 @@ package body Prunt.Web_Server is
       Send_Body (Client, Message, Get);
    end Reply_HTML;
 
-   overriding procedure Reply_Text
-     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True)
-   is
+   overriding
+   procedure Reply_Text
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True) is
    begin
       Send_Status_Line (Client, Code, Reason);
       Send_Date (Client);
@@ -237,8 +247,7 @@ package body Prunt.Web_Server is
    end Reply_Text;
 
    procedure Reply_JSON
-     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True)
-   is
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True) is
    begin
       Send_Status_Line (Client, Code, Reason);
       Send_Date (Client);
@@ -252,11 +261,10 @@ package body Prunt.Web_Server is
 
    procedure Reply_JSON
      (Client  : in out Prunt_Client;
-      Code    :        Positive;
-      Reason  :        String;
-      Message :        Unbounded_String;
-      Get     :        Boolean := True)
-   is
+      Code    : Positive;
+      Reason  : String;
+      Message : Unbounded_String;
+      Get     : Boolean := True) is
    begin
       Send_Status_Line (Client, Code, Reason);
       Send_Date (Client);
@@ -266,24 +274,25 @@ package body Prunt.Web_Server is
       Send (Client, "Pragma: no-cache" & CRLF);
       Send (Client, "Expires: 0" & CRLF);
 
-      Client.Content.Big_String_Content.Content    := Message;
+      Client.Content.Big_String_Content.Content := Message;
       Client.Content.Big_String_Content.Next_Start := 1;
 
       Send_Body (Client, Client.Content.Big_String_Content'Access, Get);
    end Reply_JSON;
 
-   overriding procedure Body_Error
-     (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence)
-   is
+   overriding
+   procedure Body_Error
+     (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence) is
    begin
       Save_Occurrence (Client, Error);
       Client.Content.Post_Content.Failed := True;
-      Client.Content.Put_Fail_Reason     := Unhandled_Exception_Kind;
+      Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
       --  It doesn't matter if we set both fields here as Do_Put or Do_Post will be called later and will use the
       --  correct field.
    end Body_Error;
 
-   overriding procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class) is
+   overriding
+   procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class) is
    begin
       if Is_Open (Client.Content.File) then
          Close (Client.Content.File);
@@ -294,18 +303,17 @@ package body Prunt.Web_Server is
          Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
    end Body_Received;
 
-   overriding procedure Body_Sent (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean)
-   is
+   overriding
+   procedure Body_Sent (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean) is
    begin
       if Is_Open (Client.Content.File) then
          Close (Client.Content.File);
       end if;
    end Body_Sent;
 
-   overriding function Create
-     (Factory  : access Prunt_HTTP_Factory;
-      Listener : access Connections_Server'Class;
-      From     : Sock_Addr_Type)
+   overriding
+   function Create
+     (Factory : access Prunt_HTTP_Factory; Listener : access Connections_Server'Class; From : Sock_Addr_Type)
       return Connection_Ptr
    is
       Result : Prunt_Client_Access;
@@ -314,16 +322,17 @@ package body Prunt.Web_Server is
          if Get_Clients_Count (Listener.all) > Positive (Float (Factory.Max_Connections) * 0.7) then
             --  TODO: Should we force the printer to pause and the heaters to cool down if the maximum is reached?
             My_Logger.Log
-              ("Warning: More than 70% of available HTTP connections used (Maximum = " &
-               Factory.Max_Connections'Image & ")");
+              ("Warning: More than 70% of available HTTP connections used (Maximum = "
+               & Factory.Max_Connections'Image
+               & ")");
          end if;
 
          Result :=
            new Prunt_Client
-             (Listener       => Listener.all'Unchecked_Access,
-              Request_Length => Factory.Request_Length,
-              Input_Size     => Factory.Input_Size,
-              Output_Size    => Factory.Output_Size);
+                 (Listener => Listener.all'Unchecked_Access,
+                  Request_Length => Factory.Request_Length,
+                  Input_Size => Factory.Input_Size,
+                  Output_Size => Factory.Output_Size);
 
          --  Receive_Body_Tracing (Prunt_Client (Result.all), True);
          --  Receive_Header_Tracing (Prunt_Client (Result.all), True);
@@ -377,10 +386,10 @@ package body Prunt.Web_Server is
             Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
             Send (Client, "Pragma: no-cache" & CRLF);
             Send (Client, "Expires: 0" & CRLF);
-            Client.Content.Array_Stream.Content  :=
+            Client.Content.Array_Stream.Content :=
               Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File));
             Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
-            Client.Content.Array_Stream.Done     := False;
+            Client.Content.Array_Stream.Done := False;
             Send_Body (Client, Client.Content.Array_Stream'Access, Get);
          elsif Status.File = "prunt-is-enabled" then
             if My_Config.Prunt_Is_Enabled then
@@ -487,17 +496,20 @@ package body Prunt.Web_Server is
          Save_Occurrence (Client, E);
    end Do_Get_Head;
 
-   overriding procedure Do_Get (Client : in out Prunt_Client) is
+   overriding
+   procedure Do_Get (Client : in out Prunt_Client) is
    begin
       Do_Get_Head (Client, True);
    end Do_Get;
 
-   overriding procedure Do_Head (Client : in out Prunt_Client) is
+   overriding
+   procedure Do_Head (Client : in out Prunt_Client) is
    begin
       Do_Get_Head (Client, False);
    end Do_Head;
 
-   overriding procedure Do_Post (Client : in out Prunt_Client) is
+   overriding
+   procedure Do_Post (Client : in out Prunt_Client) is
       Status : Status_Line renames Get_Status_Line (Client);
    begin
       if Client.Content.Post_Content.Failed then
@@ -587,7 +599,8 @@ package body Prunt.Web_Server is
          Save_Occurrence (Client, E);
    end Do_Post;
 
-   overriding procedure Do_Put (Client : in out Prunt_Client) is
+   overriding
+   procedure Do_Put (Client : in out Prunt_Client) is
       Status : Status_Line renames Get_Status_Line (Client);
    begin
       case Client.Content.Put_Fail_Reason is
@@ -595,6 +608,7 @@ package body Prunt.Web_Server is
             Reply_Text (Client, 204, "No Content", "", True);
             --  TODO: Currently we send a 204 when the user attempts to upload an empty file, but the file is not
             --  actually created or replaced. We should either send a reply that indicated that or write the file.
+
          when Uploads_Not_Dir_Kind =>
             Reply_Text
               (Client,
@@ -602,6 +616,7 @@ package body Prunt.Web_Server is
                "Internal Server Error",
                """uploads"" is not a directory. Delete or rename the file named uploads and restart Prunt.",
                True);
+
          when File_Not_Regular_Kind =>
             Reply_Text
               (Client,
@@ -609,6 +624,7 @@ package body Prunt.Web_Server is
                "Internal Server Error",
                "File exists and is not a regular file. Only regular files may be replaced.",
                True);
+
          when File_Name_Malformed_Kind =>
             Reply_Text
               (Client,
@@ -616,10 +632,13 @@ package body Prunt.Web_Server is
                "Bad Request",
                "File name is malformed. Only regular files directly in the uploads directory may be accessed.",
                True);
+
          when Wrong_Directory_Kind =>
             Reply_Text (Client, 400, "Bad Request", "Files may only be uploaded to the uploads directory.", True);
+
          when Wrong_Request_Target_Kind =>
             Reply_Text (Client, 400, "Bad Request", "Request target must be a file.", True);
+
          when Unhandled_Exception_Kind =>
             declare
                Error : Exception_Occurrence;
@@ -635,7 +654,8 @@ package body Prunt.Web_Server is
          Save_Occurrence (Client, E);
    end Do_Put;
 
-   overriding procedure Do_Body (Client : in out Prunt_Client) is
+   overriding
+   procedure Do_Body (Client : in out Prunt_Client) is
       Status : Status_Line renames Get_Status_Line (Client);
    begin
       if Client.Get_Method = HTTP_POST then
@@ -678,7 +698,7 @@ package body Prunt.Web_Server is
          exception
             when E : Ada.Directories.Name_Error =>
                Client.Content.Put_Fail_Reason := File_Name_Malformed_Kind;
-            when E : others                     =>
+            when E : others =>
                Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
                Save_Occurrence (Client, E);
          end;
@@ -764,7 +784,7 @@ package body Prunt.Web_Server is
 
    function Build_Status_Values return Unbounded_String is
       Result : Unbounded_String := To_Unbounded_String ("{""Status"":{");
-      Pos    : Position         := Get_Position;
+      Pos    : Position := Get_Position;
 
       use type My_Config.Thermistor_Name;
       use type My_Config.Fan_Name;
@@ -778,8 +798,9 @@ package body Prunt.Web_Server is
          begin
             Fatal_Exception_Occurrence_Holder.Get (Occurrence);
             return
-              To_Unbounded_String ("{""Fatal_Error"":""") &
-              JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence)) & """}";
+              To_Unbounded_String ("{""Fatal_Error"":""")
+              & JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence))
+              & """}";
          end;
       end if;
 
@@ -867,12 +888,14 @@ package body Prunt.Web_Server is
       return Result;
    end Build_Status_Values;
 
-   overriding procedure WebSocket_Finalize (Client : in out Prunt_Client) is
+   overriding
+   procedure WebSocket_Finalize (Client : in out Prunt_Client) is
    begin
       Server.Remove_WebSocket_Receiver (Client);
    end WebSocket_Finalize;
 
-   overriding procedure WebSocket_Initialize (Client : in out Prunt_Client) is
+   overriding
+   procedure WebSocket_Initialize (Client : in out Prunt_Client) is
    begin
       GNAT.Sockets.Set_Socket_Option (Client.Get_Socket, Socket_Level, (Send_Timeout, 0.000_001));
       if GNAT.Sockets.Get_Socket_Option (Client.Get_Socket, Socket_Level, Send_Buffer).Size < 20_000 then
@@ -888,7 +911,8 @@ package body Prunt.Web_Server is
       Server.Register_WebSocket_Receiver (Client);
    end WebSocket_Initialize;
 
-   overriding function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept is
+   overriding
+   function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept is
       Status : Status_Line renames Get_Status_Line (Client.all);
    begin
       if Status.File = "websocket/everything" then
@@ -898,19 +922,21 @@ package body Prunt.Web_Server is
       end if;
    end WebSocket_Open;
 
-   overriding procedure WebSocket_Received (Client : in out Prunt_Client; Message : String) is
+   overriding
+   procedure WebSocket_Received (Client : in out Prunt_Client; Message : String) is
    begin
       null;
    end WebSocket_Received;
 
-   overriding procedure Finalize (Client : in out Prunt_Client) is
+   overriding
+   procedure Finalize (Client : in out Prunt_Client) is
    begin
       if Is_Open (Client.Content.File) then
          Close (Client.Content.File);
       end if;
 
       Client.Content.Big_String_Content.Content := Null_Unbounded_String;
-      Client.Content.Post_Content.Content       := Post_Bodies.Null_Bounded_String;
+      Client.Content.Post_Content.Content := Post_Bodies.Null_Bounded_String;
       End_Search (Client.Content.Uploads_Directory_Content.Search);
 
       Finalize (HTTP_Client (Client));
@@ -938,10 +964,10 @@ package body Prunt.Web_Server is
    task body Server is
       Factory :
         aliased Prunt_HTTP_Factory
-          (Request_Length  => Buffer_Size,
-           Input_Size      => Buffer_Size,
-           Output_Size     => Buffer_Size,
-           Max_Connections => 300);
+                  (Request_Length => Buffer_Size,
+                   Input_Size => Buffer_Size,
+                   Output_Size => Buffer_Size,
+                   Max_Connections => 300);
 
       Next_Status_Send : Ada.Real_Time.Time := Clock;
 
@@ -958,9 +984,9 @@ package body Prunt.Web_Server is
                when E : others =>
                   Trace_Error (Factory, "Send_To_All_WebSocket_Receivers", E);
                   C.Shutdown;
-               --  Force the socket to close after the send syscall blocks due to buffer overrun.
-               --
-               --  TODO: Is there a better way to do this?
+                  --  Force the socket to close after the send syscall blocks due to buffer overrun.
+                  --
+                  --  TODO: Is there a better way to do this?
             end;
          end loop;
       end Send_To_All_WebSocket_Receivers;
@@ -1004,6 +1030,7 @@ package body Prunt.Web_Server is
                   --  It seems like this never occurs, but it's better to have it in case the library changes. I
                   --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
                   --  library is designed.
+
                end if;
 
                New_Client := Client'Unrestricted_Access;
@@ -1019,6 +1046,7 @@ package body Prunt.Web_Server is
                   --  It seems like this never occurs, but it's better to have it in case the library changes. I
                   --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
                   --  library is designed.
+
                end if;
 
                WebSocket_Receivers.Delete (Client'Unrestricted_Access);
@@ -1037,6 +1065,7 @@ package body Prunt.Web_Server is
             if Clock > Next_Status_Send then
                Next_Status_Send := Clock;
                --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
+
             end if;
          end select;
       end loop;

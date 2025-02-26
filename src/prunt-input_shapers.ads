@@ -36,10 +36,12 @@ package Prunt.Input_Shapers is
       case Kind is
          when No_Shaper =>
             null;
+
          when Zero_Vibration =>
             Zero_Vibration_Frequency     : Frequency;
             Zero_Vibration_Damping_Ratio : Shaper_Damping_Ratio;
             Zero_Vibration_Deriviatives  : Zero_Vibration_Deriviatives_Count;
+
          when Extra_Insensitive =>
             Extra_Insensitive_Frequency          : Frequency;
             Extra_Insensitive_Damping_Ratio      : Shaper_Damping_Ratio;

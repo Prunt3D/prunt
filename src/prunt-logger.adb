@@ -34,12 +34,14 @@ package body Prunt.Logger is
       Message_Queue.Enqueue (To_Unbounded_String (Message));
    end Log;
 
-   overriding procedure Initialize (Object : in out Handle) is
+   overriding
+   procedure Initialize (Object : in out Handle) is
    begin
       List_Handler.Initialize (Object);
    end Initialize;
 
-   overriding procedure Finalize (Object : in out Handle) is
+   overriding
+   procedure Finalize (Object : in out Handle) is
    begin
       List_Handler.Finalize (Object);
    end Finalize;

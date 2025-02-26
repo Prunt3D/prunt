@@ -54,10 +54,11 @@ package Prunt.Config is
 
    type Stepper_Parameters (Kind : Stepper_Kind := Basic_Kind) is record
       Enabled     : Boolean := False;
-      Mm_Per_Step : Length  := Length'Last / 2.0;
+      Mm_Per_Step : Length := Length'Last / 2.0;
       case Kind is
          when Basic_Kind =>
             null;
+
          when TMC2240_UART_Kind =>
             GCONF         : TMC_Types.TMC2240.GCONF;
             DRV_CONF      : TMC_Types.TMC2240.DRV_CONF;
@@ -76,12 +77,13 @@ package Prunt.Config is
 
    type Kinematics_Parameters (Kind : Kinematics_Kind := Cartesian_Kind) is record
       Planner_Parameters : Motion_Planner.Kinematic_Parameters := (others => <>);
-      Z_Steppers         : Attached_Steppers                   := [others => False];
-      E_Steppers         : Attached_Steppers                   := [others => False];
+      Z_Steppers         : Attached_Steppers := [others => False];
+      E_Steppers         : Attached_Steppers := [others => False];
       case Kind is
          when Cartesian_Kind =>
             X_Steppers : Attached_Steppers := [others => False];
             Y_Steppers : Attached_Steppers := [others => False];
+
          when Core_XY_Kind =>
             A_Steppers : Attached_Steppers := [others => False];
             B_Steppers : Attached_Steppers := [others => False];
@@ -99,13 +101,15 @@ package Prunt.Config is
       case Kind is
          when Disabled_Kind =>
             null;
+
          when Double_Tap_Kind =>
             Switch                 : Input_Switch_Name := Input_Switch_Name'First;
-            First_Move_Distance    : Length            := 0.0 * mm;
-            Back_Off_Move_Distance : Length            := 0.0 * mm;
-            Second_Move_Distance   : Length            := 0.0 * mm;
-            Switch_Position        : Length            := 0.0 * mm;
-            Move_To_After          : Length            := 5.0 * mm;
+            First_Move_Distance    : Length := 0.0 * mm;
+            Back_Off_Move_Distance : Length := 0.0 * mm;
+            Second_Move_Distance   : Length := 0.0 * mm;
+            Switch_Position        : Length := 0.0 * mm;
+            Move_To_After          : Length := 5.0 * mm;
+
          when Set_To_Value_Kind =>
             Value : Length := 0.0 * mm;
       end case;
@@ -121,12 +125,13 @@ package Prunt.Config is
    type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
 
    type Fan_Parameters (Kind : Fan_Kind := Always_On_Kind) is record
-      Invert_Output : Boolean           := False;
+      Invert_Output : Boolean := False;
       PWM_Frequency : Fan_PWM_Frequency := 30.0 * hertz;
       case Kind is
          when Dynamic_PWM_Kind =>
             Disable_Below_PWM : PWM_Scale := 0.5;
             Max_PWM           : PWM_Scale := 1.0;
+
          when Always_On_Kind =>
             Always_On_PWM : PWM_Scale := 1.0;
       end case;
@@ -142,14 +147,14 @@ package Prunt.Config is
    --  until the next startup.
 
    procedure Read (Data : out Prunt_Parameters);
-   procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
-     Post => Data.Kind = Stepper_Kinds (Stepper);
+   procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name)
+   with Post => Data.Kind = Stepper_Kinds (Stepper);
    procedure Read (Data : out Kinematics_Parameters);
    procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
    procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
    procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
-   procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) with
-     Post => Data.Params.Kind not in PID_Autotune_Kind;
+   procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name)
+   with Post => Data.Params.Kind not in PID_Autotune_Kind;
    procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
    procedure Read (Data : out G_Code_Assignment_Parameters);
    procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
@@ -232,7 +237,6 @@ package Prunt.Config is
    --      | DiscreteSettingsSchema
    --      | BooleanSettingsSchema;
 
-
    function Get_Values return Ada.Strings.Unbounded.Unbounded_String;
    --  Get the values matching the schema returned by Get_Schema as a flat JSON map. The keys of the map are the paths
    --  within the schema (i.e. the keys of the maps in sequences and variants) joined by the $ character. There may be
@@ -250,7 +254,6 @@ package Prunt.Config is
    --
    --  For a variant the value is the key of the user-selected child. All the child keys are always present,
    --  regardless of the selection.
-
 
    function Prunt_Is_Enabled return Boolean;
 
@@ -275,22 +278,27 @@ private
       case Kind is
          when Boolean_Kind =>
             Boolean_Default : Boolean;
+
          when Discrete_Kind =>
             Discrete_Options : Discrete_String_Sets.Set;
             Discrete_Default : Ada.Strings.Unbounded.Unbounded_String;
+
          when Integer_Kind =>
             Integer_Min     : Long_Long_Integer;
             Integer_Max     : Long_Long_Integer;
             Integer_Unit    : Ada.Strings.Unbounded.Unbounded_String;
             Integer_Default : Long_Long_Integer;
+
          when Float_Kind =>
             Float_Min     : Long_Float;
             Float_Max     : Long_Float;
             Float_Unit    : Ada.Strings.Unbounded.Unbounded_String;
             Float_Default : Long_Float;
+
          when Sequence_Kind =>
             Sequence_Children : Property_Maps.Map;
             Sequence_Tabbed   : Boolean;
+
          when Variant_Kind =>
             Variant_Children : Property_Maps.Map;
             Variant_Default  : Ada.Strings.Unbounded.Unbounded_String;
@@ -305,9 +313,10 @@ private
    function Schema_To_JSON (Schema : Property_Maps.Map) return Ada.Strings.Unbounded.Unbounded_String;
 
    --  This function leaks memory as it is only meant to be called once over the lifetime of the program.
-   function Build_Flat_Schema (Schema : Property_Maps.Map) return Flat_Schemas.Map with
+   function Build_Flat_Schema (Schema : Property_Maps.Map) return Flat_Schemas.Map
+   with
      Post =>
-      (for all P of Build_Flat_Schema'Result => P.Kind in Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind);
+       (for all P of Build_Flat_Schema'Result => P.Kind in Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind);
 
    type Stepper_Parameters_Array is array (Stepper_Name) of Stepper_Parameters;
 
@@ -339,14 +348,14 @@ private
    protected Config_File is
       procedure Disable_Prunt;
       procedure Read (Data : out Prunt_Parameters);
-      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) with
-        Post => Data.Kind = Stepper_Kinds (Stepper);
+      procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name)
+      with Post => Data.Kind = Stepper_Kinds (Stepper);
       procedure Read (Data : out Kinematics_Parameters);
       procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
       procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
       procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
-      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) with
-        Post => Data.Params.Kind not in PID_Autotune_Kind;
+      procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name)
+      with Post => Data.Params.Kind not in PID_Autotune_Kind;
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
       procedure Read (Data : out G_Code_Assignment_Parameters);
       procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
@@ -377,18 +386,18 @@ private
       Initial_Config       : Full_Config;
    end Config_File;
 
-   function Get (Val : JSON_Value; Field : UTF8_String) return Dimensionless with
-     Pre => Val.Kind = JSON_Object_Type and then Get (Val, Field).Kind in JSON_Float_Type | JSON_Int_Type;
+   function Get (Val : JSON_Value; Field : UTF8_String) return Dimensionless
+   with Pre => Val.Kind = JSON_Object_Type and then Get (Val, Field).Kind in JSON_Float_Type | JSON_Int_Type;
 
-   function My_Get_Long_Float (Val : JSON_Value; Field : UTF8_String) return Long_Float with
-     Pre => Val.Kind = JSON_Object_Type and then Get (Val, Field).Kind in JSON_Float_Type | JSON_Int_Type;
+   function My_Get_Long_Float (Val : JSON_Value; Field : UTF8_String) return Long_Float
+   with Pre => Val.Kind = JSON_Object_Type and then Get (Val, Field).Kind in JSON_Float_Type | JSON_Int_Type;
 
    generic
       type T is range <>;
    function Get_JSON_Integer (Val : JSON_Value; Field : UTF8_String) return T;
 
-   function To_Unbounded_String (Source : String) return Ada.Strings.Unbounded.Unbounded_String renames
-     Ada.Strings.Unbounded.To_Unbounded_String;
+   function To_Unbounded_String (Source : String) return Ada.Strings.Unbounded.Unbounded_String
+   renames Ada.Strings.Unbounded.To_Unbounded_String;
 
    function Get (Val : JSON_Value; Field : UTF8_String) return TMC_Boolean;
 

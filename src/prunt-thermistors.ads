@@ -31,15 +31,18 @@ package Prunt.Thermistors is
       case Kind is
          when Disabled_Kind =>
             null;
+
          when Steinhart_Hart_Kind =>
             SH_A, SH_B, SH_C : Dimensionless;
+
          when Callendar_Van_Dusen_Kind =>
             CVD_R0       : Resistance;
             CVD_A, CVD_B : Dimensionless;
       end case;
    end record;
 
-   function Temperature_To_Resistance (Params : Thermistor_Parameters; Temp : Temperature) return Resistance with
+   function Temperature_To_Resistance (Params : Thermistor_Parameters; Temp : Temperature) return Resistance
+   with
      Pre => Temp >= Params.Minimum_Temperature and Temp <= Params.Maximum_Temperature and Params.Kind /= Disabled_Kind;
 
 end Prunt.Thermistors;

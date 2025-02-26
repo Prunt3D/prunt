@@ -81,11 +81,13 @@ private
 
    type Post_Body_Destination is new Content_Destination with record
       Content : Post_Bodies.Bounded_String := Post_Bodies.Null_Bounded_String;
-      Failed  : Boolean                    := False;
+      Failed  : Boolean := False;
    end record;
 
-   overriding procedure Commit (Destination : in out Post_Body_Destination);
-   overriding procedure Put (Destination : in out Post_Body_Destination; Data : String);
+   overriding
+   procedure Commit (Destination : in out Post_Body_Destination);
+   overriding
+   procedure Put (Destination : in out Post_Body_Destination; Data : String);
 
    type Unbounded_String_Source is new Content_Source with record
       Content    : Unbounded_String;
@@ -94,7 +96,8 @@ private
       --  implementation copies the entire string in to a new allocation, so we do this instead to avoid some copies.
    end record;
 
-   overriding function Get (Source : access Unbounded_String_Source) return String;
+   overriding
+   function Get (Source : access Unbounded_String_Source) return String;
 
    type Array_Stream_Type is new Root_Stream_Type with record
       Content  : Web_Server_Resources.Content_Access;
@@ -102,15 +105,19 @@ private
       Done     : Boolean;
    end record;
 
-   overriding procedure Read
+   overriding
+   procedure Read
      (Stream : in out Array_Stream_Type; Item : out Stream_Element_Array; Last : out Stream_Element_Offset);
 
-   overriding procedure Write (Stream : in out Array_Stream_Type; Item : Stream_Element_Array);
+   overriding
+   procedure Write (Stream : in out Array_Stream_Type; Item : Stream_Element_Array);
 
    type Prunt_HTTP_Factory
-     (Request_Length : Positive; Input_Size : Buffer_Length; Output_Size : Buffer_Length; Max_Connections : Positive)
-   is
-   new Connections_Factory with null record;
+     (Request_Length  : Positive;
+      Input_Size      : Buffer_Length;
+      Output_Size     : Buffer_Length;
+      Max_Connections : Positive)
+   is new Connections_Factory with null record;
 
    type Prunt_Client;
 
@@ -134,11 +141,13 @@ private
       Search : Ada.Directories.Search_Type;
    end record;
 
-   overriding function Get (Source : access Directory_Content) return String;
-   overriding procedure Finalize (Source : in out Directory_Content);
+   overriding
+   function Get (Source : access Directory_Content) return String;
+   overriding
+   procedure Finalize (Source : in out Directory_Content);
 
    type Extra_Client_Content is record
-      Self_Access               : Prunt_Client_Access  := null;
+      Self_Access               : Prunt_Client_Access := null;
       --  Embedded file GET requests:
       Array_Stream              : aliased Array_Stream_Type;
       --  Unbounded_String GET requests:
@@ -162,12 +171,12 @@ private
       Input_Size     : Buffer_Length;
       Output_Size    : Buffer_Length)
    is
-   new HTTP_Client
-     (Listener       => Listener,
-      Request_Length => Request_Length,
-      Input_Size     => Input_Size,
-      Output_Size    => Output_Size) with
-   record
+     new HTTP_Client
+          (Listener => Listener,
+           Request_Length => Request_Length,
+           Input_Size => Input_Size,
+           Output_Size => Output_Size)
+   with record
       Content : Extra_Client_Content;
    end record;
 
@@ -177,14 +186,16 @@ private
       entry Log_To_WebSocket_Receivers (Message : String);
    end Server;
 
-   overriding procedure Reply_HTML
+   overriding
+   procedure Reply_HTML
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
    --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
    --  does whereas the original does not.
    --
    --  TODO: Take an Unbounded_String here to avoid some copies.
 
-   overriding procedure Reply_Text
+   overriding
+   procedure Reply_Text
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
    --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
    --  does whereas the original does not.
@@ -196,33 +207,46 @@ private
 
    procedure Reply_JSON
      (Client  : in out Prunt_Client;
-      Code    :        Positive;
-      Reason  :        String;
-      Message :        Unbounded_String;
-      Get     :        Boolean := True);
+      Code    : Positive;
+      Reason  : String;
+      Message : Unbounded_String;
+      Get     : Boolean := True);
 
-   overriding procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class);
-   overriding procedure Body_Sent
-     (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean);
-   overriding procedure Body_Error
+   overriding
+   procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class);
+   overriding
+   procedure Body_Sent (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean);
+   overriding
+   procedure Body_Error
      (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence);
-   overriding procedure Do_Get (Client : in out Prunt_Client);
-   overriding procedure Do_Head (Client : in out Prunt_Client);
-   overriding procedure Do_Post (Client : in out Prunt_Client);
-   overriding procedure Do_Put (Client : in out Prunt_Client);
-   overriding procedure Do_Body (Client : in out Prunt_Client);
-   overriding procedure Initialize (Client : in out Prunt_Client);
-   overriding procedure Finalize (Client : in out Prunt_Client);
-   overriding procedure Connected (Client : in out Prunt_Client);
-   overriding function Create
-     (Factory  : access Prunt_HTTP_Factory;
-      Listener : access Connections_Server'Class;
-      From     : Sock_Addr_Type)
+   overriding
+   procedure Do_Get (Client : in out Prunt_Client);
+   overriding
+   procedure Do_Head (Client : in out Prunt_Client);
+   overriding
+   procedure Do_Post (Client : in out Prunt_Client);
+   overriding
+   procedure Do_Put (Client : in out Prunt_Client);
+   overriding
+   procedure Do_Body (Client : in out Prunt_Client);
+   overriding
+   procedure Initialize (Client : in out Prunt_Client);
+   overriding
+   procedure Finalize (Client : in out Prunt_Client);
+   overriding
+   procedure Connected (Client : in out Prunt_Client);
+   overriding
+   function Create
+     (Factory : access Prunt_HTTP_Factory; Listener : access Connections_Server'Class; From : Sock_Addr_Type)
       return Connection_Ptr;
-   overriding function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept;
-   overriding procedure WebSocket_Received (Client : in out Prunt_Client; Message : String);
-   overriding procedure WebSocket_Initialize (Client : in out Prunt_Client);
-   overriding procedure WebSocket_Finalize (Client : in out Prunt_Client);
+   overriding
+   function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept;
+   overriding
+   procedure WebSocket_Received (Client : in out Prunt_Client; Message : String);
+   overriding
+   procedure WebSocket_Initialize (Client : in out Prunt_Client);
+   overriding
+   procedure WebSocket_Finalize (Client : in out Prunt_Client);
 
    function Build_Status_Schema return Unbounded_String;
    function Build_Status_Values return Unbounded_String;

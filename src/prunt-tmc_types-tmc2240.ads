@@ -23,12 +23,9 @@ with System; use System;
 
 package Prunt.TMC_Types.TMC2240 is
 
-   type UART_Node_Address is range 0 .. 2**8 - 1 with
-     Size => 8;
-   type UART_Sync_Nibble is range 0 .. 2**4 - 1 with
-     Size => 4;
-   type UART_CRC is mod 2**8 with
-     Size => 8;
+   type UART_Node_Address is range 0 .. 2**8 - 1 with Size => 8;
+   type UART_Sync_Nibble is range 0 .. 2**4 - 1 with Size => 4;
+   type UART_CRC is mod 2**8 with Size => 8;
 
    type GCONF is record
       Reserved_1       : Unsigned_1;
@@ -49,8 +46,8 @@ package Prunt.TMC_Types.TMC2240 is
       Stop_Enable      : TMC_Boolean;
       Direct_Mode      : TMC_Boolean;
       Reserved_3       : Unsigned_15;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type GSTAT is record
       Reset          : TMC_Boolean;
@@ -59,18 +56,17 @@ package Prunt.TMC_Types.TMC2240 is
       Register_Reset : TMC_Boolean;
       VM_UVLO        : TMC_Boolean;
       Reserved       : Unsigned_27;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type IFCNT is record
       If_Cnt   : Unsigned_8;
       Reserved : Unsigned_24;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type Send_Delay_Type is
-     (Delay_1x8, Delay_3x8, Delay_5x8, Delay_7x8, Delay_9x8, Delay_11x8, Delay_13x8, Delay_15x8) with
-     Size => 4;
+   type Send_Delay_Type is (Delay_1x8, Delay_3x8, Delay_5x8, Delay_7x8, Delay_9x8, Delay_11x8, Delay_13x8, Delay_15x8)
+   with Size => 4;
    for Send_Delay_Type use
      (Delay_1x8  => 16#0#,
       Delay_3x8  => 16#2#,
@@ -85,8 +81,8 @@ package Prunt.TMC_Types.TMC2240 is
       Node_Addr  : UART_Node_Address;
       Send_Delay : Send_Delay_Type;
       Reserved   : Unsigned_20;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type IOIN is record
       Step        : TMC_Boolean;
@@ -108,16 +104,15 @@ package Prunt.TMC_Types.TMC2240 is
       Silicon_RV  : Unsigned_3;
       Reserved_2  : Unsigned_5;
       Version     : Unsigned_8;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type Slope_Control_Type is (Slope_100V_Per_us, Slope_200V_Per_us, Slope_400V_Per_us, Slope_800V_Per_us) with
-     Size => 2;
+   type Slope_Control_Type is (Slope_100V_Per_us, Slope_200V_Per_us, Slope_400V_Per_us, Slope_800V_Per_us)
+   with Size => 2;
    for Slope_Control_Type use
      (Slope_100V_Per_us => 0, Slope_200V_Per_us => 1, Slope_400V_Per_us => 2, Slope_800V_Per_us => 3);
 
-   type Current_Range_Type is (Max_1A, Max_2A, Max_3A) with
-     Size => 2;
+   type Current_Range_Type is (Max_1A, Max_2A, Max_3A) with Size => 2;
    for Current_Range_Type use (Max_1A => 0, Max_2A => 1, Max_3A => 2);
 
    type DRV_CONF is record
@@ -125,17 +120,17 @@ package Prunt.TMC_Types.TMC2240 is
       Reserved_1    : Unsigned_2;
       Slope_Control : Slope_Control_Type;
       Reserved_2    : Unsigned_26;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type Global_Scaler_Type is range 0 .. 255 with
-     Size => 8, Static_Predicate => Global_Scaler_Type = 0 or Global_Scaler_Type > 31;
+   type Global_Scaler_Type is range 0 .. 255
+   with Size => 8, Static_Predicate => Global_Scaler_Type = 0 or Global_Scaler_Type > 31;
 
    type GLOBAL_SCALER is record
       Global_Scaler : Global_Scaler_Type;
       Reserved      : Unsigned_24;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type IHOLD_IRUN is record
       I_Hold       : Unsigned_5;
@@ -146,46 +141,46 @@ package Prunt.TMC_Types.TMC2240 is
       Reserved_3   : Unsigned_4;
       I_Run_Delay  : Unsigned_4;
       Reserved_4   : Unsigned_4;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type TPOWERDOWN is record
       T_Power_Down : Unsigned_8;
       Reserved     : Unsigned_24;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type TSTEP is record
       T_Step   : Unsigned_20;
       Reserved : Unsigned_12;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type TPWMTHRS is record
       T_PWM_Thrs : Unsigned_20;
       Reserved   : Unsigned_12;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type TCOOLTHRS is record
       T_Cool_Thrs : Unsigned_20;
       Reserved    : Unsigned_12;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type THIGH is record
       T_High   : Unsigned_20;
       Reserved : Unsigned_12;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type DIRECT_MODE is record
       Direct_Coil_A : Unsigned_9;
       Reserved_1    : Unsigned_7;
       Direct_Coil_B : Unsigned_9;
       Reserved_2    : Unsigned_7;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type ENCMODE is record
       Pol_A           : TMC_Boolean;
@@ -199,68 +194,67 @@ package Prunt.TMC_Types.TMC2240 is
       Reserved_1      : Unsigned_1;
       Enc_Sel_Decimal : TMC_Boolean;
       Reserved_2      : Unsigned_21;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type X_ENC is record
       X_Enc : Unsigned_32;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type ENC_CONST is record
       Enc_Const : Unsigned_32;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type ENC_STATUS is record
       N_Event  : TMC_Boolean;
       Reserved : Unsigned_31;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type ENC_LATCH is record
       Enc_Latch : Unsigned_32;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type ADC_V_Supply_Volts_Type is delta 0.009_732 range 0.0 .. 0.009_732 * (2**13 - 1) with
-     Size => 13, Small => 0.009_732;
-   type ADC_AIN_Volts_Type is delta 0.000_305_2 range 0.0 .. 0.000_305_2 * (2**13 - 1) with
-     Size => 13, Small => 0.000_305_2;
+   type ADC_V_Supply_Volts_Type is delta 0.009_732 range 0.0 .. 0.009_732 * (2**13 - 1)
+   with Size => 13, Small => 0.009_732;
+   type ADC_AIN_Volts_Type is delta 0.000_305_2 range 0.0 .. 0.000_305_2 * (2**13 - 1)
+   with Size => 13, Small => 0.000_305_2;
 
    type ADC_VSUPPLY_AIN is record
       ADC_V_Supply : ADC_V_Supply_Volts_Type;
       Reserved_1   : Unsigned_3;
       ADC_AIN      : ADC_AIN_Volts_Type;
       Reserved_2   : Unsigned_3;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type ADC_Temp_Almost_Kelvin_Type is delta 10.0 / 77.0 range 0.0 .. 10.0 / 77.0 * (2.0**13 - 1.0) with
-     Size => 13, Small => 10.0 / 77.0;
-     --  This range starts at −2038.0/(77.0/10.0) celsius (approx -264), but GNAT will not generate a biased
-     --  representation for delta types, so we can not represent this in kelvin.
+   type ADC_Temp_Almost_Kelvin_Type is delta 10.0 / 77.0 range 0.0 .. 10.0 / 77.0 * (2.0**13 - 1.0)
+   with Size => 13, Small => 10.0 / 77.0;
+   --  This range starts at −2038.0/(77.0/10.0) celsius (approx -264), but GNAT will not generate a biased
+   --  representation for delta types, so we can not represent this in kelvin.
 
    type ADC_TEMP is record
       ADC_Temp : ADC_Temp_Almost_Kelvin_Type;
       Reserved : Unsigned_19;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type OTW_OV_VTH is record
       OverVoltage_VTH        : ADC_V_Supply_Volts_Type;
       Reserved_1             : Unsigned_3;
       OverTempPreWarning_VTH : ADC_Temp_Almost_Kelvin_Type;
       Reserved_2             : Unsigned_3;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type MSLUT_Values_Type is array (1 .. 32) of Unsigned_1 with
-     Pack, Size => 32;
+   type MSLUT_Values_Type is array (1 .. 32) of Unsigned_1 with Pack, Size => 32;
    type MSLUT is record
       Values : MSLUT_Values_Type;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type MSLUTSEL is record
       W0 : Unsigned_2;
@@ -270,8 +264,8 @@ package Prunt.TMC_Types.TMC2240 is
       X1 : Unsigned_8;
       X2 : Unsigned_8;
       X3 : Unsigned_8;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type MSLUTSTART is record
       --  The below values are all two's complement, but there's no way to guarantee that we are on a two's complement
@@ -280,25 +274,25 @@ package Prunt.TMC_Types.TMC2240 is
       Reserved_1   : Unsigned_8;
       Start_Sin90  : Unsigned_8;
       Offset_Sin90 : Unsigned_8;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type MSCNT is record
       Count    : Unsigned_10;
       Reserved : Unsigned_22;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type MSCURACT is record
       Cur_B      : Unsigned_9;
       Reserved_1 : Unsigned_7;
       Cur_A      : Unsigned_9;
       Reserved_2 : Unsigned_7;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type Microstep_Resolution_Type is (MS_256, MS_128, MS_64, MS_32, MS_16, MS_8, MS_4, MS_2, MS_Full_Steps) with
-     Size => 4;
+   type Microstep_Resolution_Type is (MS_256, MS_128, MS_64, MS_32, MS_16, MS_8, MS_4, MS_2, MS_Full_Steps)
+   with Size => 4;
    for Microstep_Resolution_Type use
      (MS_256        => 0,
       MS_128        => 1,
@@ -310,8 +304,7 @@ package Prunt.TMC_Types.TMC2240 is
       MS_2          => 7,
       MS_Full_Steps => 8);
 
-   type CHM_Type is (SpreadCycle_Mode, Constant_Off_Time_Mode) with
-     Size => 1;
+   type CHM_Type is (SpreadCycle_Mode, Constant_Off_Time_Mode) with Size => 1;
    for CHM_Type use (SpreadCycle_Mode => 0, Constant_Off_Time_Mode => 1);
 
    type TOFF_Type is
@@ -330,8 +323,8 @@ package Prunt.TMC_Types.TMC2240 is
       Off_408,
       Off_440,
       Off_472,
-      Off_504) with
-     Size => 4;
+      Off_504)
+   with Size => 4;
    for TOFF_Type use
      (Disable_Driver => 0,
       Off_56         => 1,
@@ -350,8 +343,7 @@ package Prunt.TMC_Types.TMC2240 is
       Off_472        => 14,
       Off_504        => 15);
 
-   type TBL_Type is (Blank_16, Blank_24, Blank_36, Blank_54) with
-     Size => 2;
+   type TBL_Type is (Blank_16, Blank_24, Blank_36, Blank_54) with Size => 2;
    for TBL_Type use (Blank_16 => 0, Blank_24 => 1, Blank_36 => 2, Blank_54 => 3);
 
    type CHOPCONF is record
@@ -372,8 +364,8 @@ package Prunt.TMC_Types.TMC2240 is
       Double_Edge          : TMC_Boolean;
       Disable_S2G          : TMC_Boolean;
       Disable_S2Vs         : TMC_Boolean;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type COOLCONF is record
       SEMIN      : Unsigned_4;
@@ -387,8 +379,8 @@ package Prunt.TMC_Types.TMC2240 is
       SGT        : Unsigned_7;
       SFILT      : TMC_Boolean;
       Reserved_4 : Unsigned_7;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type DRV_STATUS is record
       SG_Result  : Unsigned_10;
@@ -407,11 +399,10 @@ package Prunt.TMC_Types.TMC2240 is
       OLA        : TMC_Boolean;
       OLB        : TMC_Boolean;
       STST       : TMC_Boolean;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type Freewheel_Type is (Normal, Freewheel, Short_Via_LS, Short_Via_HS) with
-     Size => 2;
+   type Freewheel_Type is (Normal, Freewheel, Short_Via_LS, Short_Via_HS) with Size => 2;
    for Freewheel_Type use (Normal => 0, Freewheel => 1, Short_Via_LS => 2, Short_Via_HS => 3);
 
    type PWM_Freq_Type is (Freq_1024, Freq_683, Freq_512, Freq_410);
@@ -427,53 +418,50 @@ package Prunt.TMC_Types.TMC2240 is
       PWM_Dis_Reg_Stst   : TMC_Boolean;
       PWM_Reg            : Unsigned_4;
       PWM_Lim            : Unsigned_4;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type PWM_SCALE is record
       PWM_Scale_Sum  : Unsigned_10;
       Reserved_1     : Unsigned_6;
       PWM_Scale_Auto : Unsigned_9;
       Reserved_2     : Unsigned_7;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type PWM_AUTO is record
       PWM_OFS_Auto  : Unsigned_8;
       Reserved_1    : Unsigned_8;
       PWM_Grad_Auto : Unsigned_8;
       Reserved_2    : Unsigned_8;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type SG4_THRS is record
       SG4_Thrs        : Unsigned_8;
       SG4_Filt_En     : TMC_Boolean;
       SG_Angle_Offset : TMC_Boolean;
       Reserved_2      : Unsigned_22;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type SG4_RESULT is record
       SG4_Result : Unsigned_10;
       Reserved   : Unsigned_22;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type SG4_IND is record
       SG4_Ind_0 : Unsigned_8;
       SG4_Ind_1 : Unsigned_8;
       SG4_Ind_2 : Unsigned_8;
       SG4_Ind_3 : Unsigned_8;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type UART_Byte is mod 2**8 with
-     Size => 8;
-   type UART_Data_Byte_Array is array (1 .. 8) of UART_Byte with
-     Pack;
-   type UART_Query_Byte_Array is array (1 .. 4) of UART_Byte with
-     Pack;
+   type UART_Byte is mod 2**8 with Size => 8;
+   type UART_Data_Byte_Array is array (1 .. 8) of UART_Byte with Pack;
+   type UART_Query_Byte_Array is array (1 .. 4) of UART_Byte with Pack;
 
    type UART_Register_Address is
      (GCONF_Address,
@@ -518,8 +506,8 @@ package Prunt.TMC_Types.TMC2240 is
       PWM_AUTO_Address,
       SG4_THRS_Address,
       SG4_RESULT_Address,
-      SG4_IND_Address) with
-     Size => 7;
+      SG4_IND_Address)
+   with Size => 7;
 
    for UART_Register_Address use
      (GCONF_Address           => 16#0#,
@@ -568,213 +556,261 @@ package Prunt.TMC_Types.TMC2240 is
 
    type UART_Data_Message_Inner (Register : UART_Register_Address := GCONF_Address) is record
       Sync     : UART_Sync_Nibble := 2#0101#;
-      Reserved : Unsigned_4       := 0;
+      Reserved : Unsigned_4 := 0;
       Node     : UART_Node_Address;
-      Is_Write : TMC_Boolean      := True;
+      Is_Write : TMC_Boolean := True;
       CRC      : UART_CRC;
       case Register is
          when GCONF_Address =>
             GCONF_Data : GCONF;
+
          when GSTAT_Address =>
             GSTAT_Data : GSTAT;
+
          when IOIN_Address =>
             IOIN_Data : IOIN;
+
          when GLOBAL_SCALER_Address =>
             GLOBAL_SCALER_Data : GLOBAL_SCALER;
+
          when IHOLD_IRUN_Address =>
             IHOLD_IRUN_Data : IHOLD_IRUN;
+
          when IFCNT_Address =>
             IFCNT_Data : IFCNT;
+
          when NODECONF_Address =>
             NODECONF_Data : NODECONF;
+
          when DRV_CONF_Address =>
             DRV_CONF_Data : DRV_CONF;
+
          when TPOWERDOWN_Address =>
             TPOWERDOWN_Data : TPOWERDOWN;
+
          when TSTEP_Address =>
             TSTEP_Data : TSTEP;
+
          when TPWMTHRS_Address =>
             TPWMTHRS_Data : TPWMTHRS;
+
          when TCOOLTHRS_Address =>
             TCOOLTHRS_Data : TCOOLTHRS;
+
          when THIGH_Address =>
             THIGH_Data : THIGH;
+
          when DIRECT_MODE_Address =>
             DIRECT_MODE_Data : DIRECT_MODE;
+
          when ENCMODE_Address =>
             ENCMODE_Data : ENCMODE;
+
          when X_ENC_Address =>
             X_ENC_Data : X_ENC;
+
          when ENC_CONST_Address =>
             ENC_CONST_Data : ENC_CONST;
+
          when ENC_STATUS_Address =>
             ENC_STATUS_Data : ENC_STATUS;
+
          when ENC_LATCH_Address =>
             ENC_LATCH_Data : ENC_LATCH;
+
          when ADC_VSUPPLY_AIN_Address =>
             ADC_VSUPPLY_AIN_Data : ADC_VSUPPLY_AIN;
+
          when ADC_TEMP_Address =>
             ADC_TEMP_Data : ADC_TEMP;
+
          when OTW_OV_VTH_Address =>
             OTW_OV_VTH_Data : OTW_OV_VTH;
+
          when MSLUT0_Address =>
             MSLUT0_Data : MSLUT;
+
          when MSLUT1_Address =>
             MSLUT1_Data : MSLUT;
+
          when MSLUT2_Address =>
             MSLUT2_Data : MSLUT;
+
          when MSLUT3_Address =>
             MSLUT3_Data : MSLUT;
+
          when MSLUT4_Address =>
             MSLUT4_Data : MSLUT;
+
          when MSLUT5_Address =>
             MSLUT5_Data : MSLUT;
+
          when MSLUT6_Address =>
             MSLUT6_Data : MSLUT;
+
          when MSLUT7_Address =>
             MSLUT7_Data : MSLUT;
+
          when MSLUTSEL_Address =>
             MSLUTSEL_Data : MSLUTSEL;
+
          when MSLUTSTART_Address =>
             MSLUTSTART_Data : MSLUTSTART;
+
          when MSCNT_Address =>
             MSCNT_Data : MSCNT;
+
          when MSCURACT_Address =>
             MSCURACT_Data : MSCURACT;
+
          when CHOPCONF_Address =>
             CHOPCONF_Data : CHOPCONF;
+
          when COOLCONF_Address =>
             COOLCONF_Data : COOLCONF;
+
          when DRV_STATUS_Address =>
             DRV_STATUS_Data : DRV_STATUS;
+
          when PWMCONF_Address =>
             PWMCONF_Data : PWMCONF;
+
          when PWM_SCALE_Address =>
             PWM_SCALE_Data : PWM_SCALE;
+
          when PWM_AUTO_Address =>
             PWM_AUTO_Data : PWM_AUTO;
+
          when SG4_THRS_Address =>
             SG4_THRS_Data : SG4_THRS;
+
          when SG4_RESULT_Address =>
             SG4_RESULT_Data : SG4_RESULT;
+
          when SG4_IND_Address =>
             SG4_IND_Data : SG4_IND;
       end case;
-   end record with
-     Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 64;
+   end record
+   with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 64;
 
-   for UART_Data_Message_Inner use record
-      Sync                 at 7 range 0 ..  3;
-      Reserved             at 7 range 4 ..  7;
-      Node                 at 6 range 0 ..  7;
-      Register             at 5 range 0 ..  6;
-      Is_Write             at 5 range 7 ..  7;
-      CRC                  at 0 range 0 ..  7;
-      GCONF_Data           at 1 range 0 .. 31;
-      GSTAT_Data           at 1 range 0 .. 31;
-      IOIN_Data            at 1 range 0 .. 31;
-      GLOBAL_SCALER_Data   at 1 range 0 .. 31;
-      IHOLD_IRUN_Data      at 1 range 0 .. 31;
-      IFCNT_Data           at 1 range 0 .. 31;
-      NODECONF_Data        at 1 range 0 .. 31;
-      DRV_CONF_Data        at 1 range 0 .. 31;
-      TPOWERDOWN_Data      at 1 range 0 .. 31;
-      TSTEP_Data           at 1 range 0 .. 31;
-      TPWMTHRS_Data        at 1 range 0 .. 31;
-      TCOOLTHRS_Data       at 1 range 0 .. 31;
-      THIGH_Data           at 1 range 0 .. 31;
-      DIRECT_MODE_Data     at 1 range 0 .. 31;
-      ENCMODE_Data         at 1 range 0 .. 31;
-      X_ENC_Data           at 1 range 0 .. 31;
-      ENC_CONST_Data       at 1 range 0 .. 31;
-      ENC_STATUS_Data      at 1 range 0 .. 31;
-      ENC_LATCH_Data       at 1 range 0 .. 31;
-      ADC_VSUPPLY_AIN_Data at 1 range 0 .. 31;
-      ADC_TEMP_Data        at 1 range 0 .. 31;
-      OTW_OV_VTH_Data      at 1 range 0 .. 31;
-      MSLUT0_Data          at 1 range 0 .. 31;
-      MSLUT1_Data          at 1 range 0 .. 31;
-      MSLUT2_Data          at 1 range 0 .. 31;
-      MSLUT3_Data          at 1 range 0 .. 31;
-      MSLUT4_Data          at 1 range 0 .. 31;
-      MSLUT5_Data          at 1 range 0 .. 31;
-      MSLUT6_Data          at 1 range 0 .. 31;
-      MSLUT7_Data          at 1 range 0 .. 31;
-      MSLUTSEL_Data        at 1 range 0 .. 31;
-      MSLUTSTART_Data      at 1 range 0 .. 31;
-      MSCNT_Data           at 1 range 0 .. 31;
-      MSCURACT_Data        at 1 range 0 .. 31;
-      CHOPCONF_Data        at 1 range 0 .. 31;
-      COOLCONF_Data        at 1 range 0 .. 31;
-      DRV_STATUS_Data      at 1 range 0 .. 31;
-      PWMCONF_Data         at 1 range 0 .. 31;
-      PWM_SCALE_Data       at 1 range 0 .. 31;
-      PWM_AUTO_Data        at 1 range 0 .. 31;
-      SG4_THRS_Data        at 1 range 0 .. 31;
-      SG4_RESULT_Data      at 1 range 0 .. 31;
-      SG4_IND_Data         at 1 range 0 .. 31;
-   end record;
+   for UART_Data_Message_Inner use
+     record
+       Sync at 7 range 0 .. 3;
+       Reserved at 7 range 4 .. 7;
+       Node at 6 range 0 .. 7;
+       Register at 5 range 0 .. 6;
+       Is_Write at 5 range 7 .. 7;
+       CRC at 0 range 0 .. 7;
+       GCONF_Data at 1 range 0 .. 31;
+       GSTAT_Data at 1 range 0 .. 31;
+       IOIN_Data at 1 range 0 .. 31;
+       GLOBAL_SCALER_Data at 1 range 0 .. 31;
+       IHOLD_IRUN_Data at 1 range 0 .. 31;
+       IFCNT_Data at 1 range 0 .. 31;
+       NODECONF_Data at 1 range 0 .. 31;
+       DRV_CONF_Data at 1 range 0 .. 31;
+       TPOWERDOWN_Data at 1 range 0 .. 31;
+       TSTEP_Data at 1 range 0 .. 31;
+       TPWMTHRS_Data at 1 range 0 .. 31;
+       TCOOLTHRS_Data at 1 range 0 .. 31;
+       THIGH_Data at 1 range 0 .. 31;
+       DIRECT_MODE_Data at 1 range 0 .. 31;
+       ENCMODE_Data at 1 range 0 .. 31;
+       X_ENC_Data at 1 range 0 .. 31;
+       ENC_CONST_Data at 1 range 0 .. 31;
+       ENC_STATUS_Data at 1 range 0 .. 31;
+       ENC_LATCH_Data at 1 range 0 .. 31;
+       ADC_VSUPPLY_AIN_Data at 1 range 0 .. 31;
+       ADC_TEMP_Data at 1 range 0 .. 31;
+       OTW_OV_VTH_Data at 1 range 0 .. 31;
+       MSLUT0_Data at 1 range 0 .. 31;
+       MSLUT1_Data at 1 range 0 .. 31;
+       MSLUT2_Data at 1 range 0 .. 31;
+       MSLUT3_Data at 1 range 0 .. 31;
+       MSLUT4_Data at 1 range 0 .. 31;
+       MSLUT5_Data at 1 range 0 .. 31;
+       MSLUT6_Data at 1 range 0 .. 31;
+       MSLUT7_Data at 1 range 0 .. 31;
+       MSLUTSEL_Data at 1 range 0 .. 31;
+       MSLUTSTART_Data at 1 range 0 .. 31;
+       MSCNT_Data at 1 range 0 .. 31;
+       MSCURACT_Data at 1 range 0 .. 31;
+       CHOPCONF_Data at 1 range 0 .. 31;
+       COOLCONF_Data at 1 range 0 .. 31;
+       DRV_STATUS_Data at 1 range 0 .. 31;
+       PWMCONF_Data at 1 range 0 .. 31;
+       PWM_SCALE_Data at 1 range 0 .. 31;
+       PWM_AUTO_Data at 1 range 0 .. 31;
+       SG4_THRS_Data at 1 range 0 .. 31;
+       SG4_RESULT_Data at 1 range 0 .. 31;
+       SG4_IND_Data at 1 range 0 .. 31;
+     end record;
 
    type UART_Data_Message (Bytes_Mode : Boolean := False) is record
       case Bytes_Mode is
          when True =>
             Bytes : UART_Data_Byte_Array;
+
          when False =>
             Content : UART_Data_Message_Inner;
       end case;
-   end record with
-     Unchecked_Union, Size => 64;
+   end record
+   with Unchecked_Union, Size => 64;
 
-   for UART_Data_Message use record
-      Bytes   at 0 range 0 .. 63;
-      Content at 0 range 0 .. 63;
-   end record;
+   for UART_Data_Message use
+     record
+       Bytes at 0 range 0 .. 63;
+       Content at 0 range 0 .. 63;
+     end record;
 
    type UART_Query_Message_Inner is record
       Sync     : UART_Sync_Nibble := 2#0101#;
-      Reserved : Unsigned_4       := 0;
+      Reserved : Unsigned_4 := 0;
       Node     : UART_Node_Address;
-      Is_Write : TMC_Boolean      := False;
+      Is_Write : TMC_Boolean := False;
       CRC      : UART_CRC;
       Register : UART_Register_Address;
-   end record with
-     Bit_Order => Low_Order_First, Size => 32;
+   end record
+   with Bit_Order => Low_Order_First, Size => 32;
 
-   for UART_Query_Message_Inner use record
-      Sync     at 3 range 0 .. 3;
-      Reserved at 3 range 4 .. 7;
-      Node     at 2 range 0 .. 7;
-      Register at 1 range 0 .. 6;
-      Is_Write at 1 range 7 .. 7;
-      CRC      at 0 range 0 .. 7;
-   end record;
+   for UART_Query_Message_Inner use
+     record
+       Sync at 3 range 0 .. 3;
+       Reserved at 3 range 4 .. 7;
+       Node at 2 range 0 .. 7;
+       Register at 1 range 0 .. 6;
+       Is_Write at 1 range 7 .. 7;
+       CRC at 0 range 0 .. 7;
+     end record;
 
    type UART_Query_Message (Bytes_Mode : Boolean := False) is record
       case Bytes_Mode is
          when True =>
             Bytes : UART_Query_Byte_Array;
+
          when False =>
             Content : UART_Query_Message_Inner;
       end case;
-   end record with
-     Unchecked_Union, Size => 32;
+   end record
+   with Unchecked_Union, Size => 32;
 
-   for UART_Query_Message use record
-      Bytes   at 0 range 0 .. 31;
-      Content at 0 range 0 .. 31;
-   end record;
+   for UART_Query_Message use
+     record
+       Bytes at 0 range 0 .. 31;
+       Content at 0 range 0 .. 31;
+     end record;
 
    function Compute_CRC (Message : UART_Data_Message) return UART_CRC;
    function Compute_CRC (Message : UART_Query_Message) return UART_CRC;
 
    procedure Optimize_Spreadcycle
-     (Driver_Voltage              :     Voltage;
-      TBL                         :     TBL_Type;
-      Motor_Inductance            :     Inductance;
-      Motor_Resistance            :     Resistance;
-      Motor_Peak_Current          :     Current;
-      TOFF                        :     TOFF_Type;
-      IRUN                        :     Unsigned_5;
+     (Driver_Voltage              : Voltage;
+      TBL                         : TBL_Type;
+      Motor_Inductance            : Inductance;
+      Motor_Resistance            : Resistance;
+      Motor_Peak_Current          : Current;
+      TOFF                        : TOFF_Type;
+      IRUN                        : Unsigned_5;
       HSTRT                       : out Unsigned_3;
       HEND                        : out Unsigned_4;
       Sum_Too_High                : out Boolean;

@@ -11,12 +11,14 @@ generic
    with function "<" (Left, Right : Key_Type) return Boolean is <>;
    with function "=" (Left, Right : Element_Type) return Boolean is <>;
 
-package Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
+package Prunt.Indefinite_Ordered_Maps_With_Insertion_Order
+is
 
    --  Not all methods from Indefinite_Ordered_Maps are exposed here, but they can be added in the future. If doing so,
    --  note that the current implementation does not support removal of elements.
 
-   type Map is tagged private with
+   type Map is tagged private
+   with
      Constant_Indexing => Constant_Reference,
      Variable_Indexing => Reference,
      Default_Iterator  => Iterate,
@@ -39,11 +41,10 @@ package Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    function Element (Position : Cursor) return Element_Type;
 
-   type Constant_Reference_Type (Element : not null access constant Element_Type) is private with
-     Implicit_Dereference => Element;
+   type Constant_Reference_Type (Element : not null access constant Element_Type) is private
+   with Implicit_Dereference => Element;
 
-   type Reference_Type (Element : not null access Element_Type) is private with
-     Implicit_Dereference => Element;
+   type Reference_Type (Element : not null access Element_Type) is private with Implicit_Dereference => Element;
 
    function Constant_Reference (Container : aliased Map; Key : Key_Type) return Constant_Reference_Type;
 
@@ -83,8 +84,8 @@ package Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
 private
 
-   package Inner_Maps is new Ada.Containers.Indefinite_Ordered_Maps
-     (Key_Type => Key_Type, Element_Type => Element_Type);
+   package Inner_Maps is new
+     Ada.Containers.Indefinite_Ordered_Maps (Key_Type => Key_Type, Element_Type => Element_Type);
    package Key_Vectors is new Ada.Containers.Indefinite_Vectors (Ada.Containers.Count_Type, Key_Type);
 
    type Map_Access is access all Map;
@@ -118,14 +119,19 @@ private
       Map      : Map_Access;
    end record;
 
-   overriding procedure Finalize (Object : in out Iterator);
+   overriding
+   procedure Finalize (Object : in out Iterator);
 
-   overriding function First (Object : Iterator) return Cursor;
+   overriding
+   function First (Object : Iterator) return Cursor;
 
-   overriding function Last (Object : Iterator) return Cursor;
+   overriding
+   function Last (Object : Iterator) return Cursor;
 
-   overriding function Next (Object : Iterator; Position : Cursor) return Cursor;
+   overriding
+   function Next (Object : Iterator; Position : Cursor) return Cursor;
 
-   overriding function Previous (Object : Iterator; Position : Cursor) return Cursor;
+   overriding
+   function Previous (Object : Iterator; Position : Cursor) return Cursor;
 
 end Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;

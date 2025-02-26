@@ -28,27 +28,27 @@ package body Prunt.Motion_Planner is
    function Fast_Distance_At_Max_Time
      (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Length
    is
-      T1 : constant Time     := Profile (1);
-      T2 : constant Time     := Profile (2);
-      T3 : constant Time     := Profile (3);
-      T4 : constant Time     := Profile (4);
-      Cm : constant Crackle  := Max_Crackle;
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
+      Cm : constant Crackle := Max_Crackle;
       Vs : constant Velocity := Start_Vel;
    begin
       return
-        (Vs + Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3 + T4) / 2.0) *
-        (8.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4);
+        (Vs + Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3 + T4) / 2.0)
+        * (8.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4);
       --  Symbolically equivalent to: return Distance_At_Time (Profile, Total_Time(Profile), Max_Crackle, Start_Vel);
    end Fast_Distance_At_Max_Time;
 
    function Fast_Velocity_At_Max_Time
      (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Velocity
    is
-      T1 : constant Time     := Profile (1);
-      T2 : constant Time     := Profile (2);
-      T3 : constant Time     := Profile (3);
-      T4 : constant Time     := Profile (4);
-      Cm : constant Crackle  := Max_Crackle;
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
+      Cm : constant Crackle := Max_Crackle;
       Vs : constant Velocity := Start_Vel;
    begin
       return Vs + Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3 + T4);
@@ -66,10 +66,10 @@ package body Prunt.Motion_Planner is
    end Total_Time;
 
    function Crackle_At_Time (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Crackle is
-      T1 : constant Time    := Profile (1);
-      T2 : constant Time    := Profile (2);
-      T3 : constant Time    := Profile (3);
-      T4 : constant Time    := Profile (4);
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
    begin
       pragma Assert (T <= Total_Time (Profile));
@@ -108,10 +108,10 @@ package body Prunt.Motion_Planner is
    end Crackle_At_Time;
 
    function Snap_At_Time (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Snap is
-      T1 : constant Time    := Profile (1);
-      T2 : constant Time    := Profile (2);
-      T3 : constant Time    := Profile (3);
-      T4 : constant Time    := Profile (4);
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
 
       function Snap_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Snap is
@@ -119,32 +119,46 @@ package body Prunt.Motion_Planner is
          case Stage is
             when 1 =>
                return Cm * DT;
+
             when 2 =>
                return Snap_At_Stage (T1, 1);
+
             when 3 =>
                return Snap_At_Stage (T2, 2) - Cm * DT;
+
             when 4 =>
                return Snap_At_Stage (T1, 3);
+
             when 5 =>
                return Snap_At_Stage (T3, 4) - Cm * DT;
+
             when 6 =>
                return Snap_At_Stage (T1, 5);
+
             when 7 =>
                return Snap_At_Stage (T2, 6) + Cm * DT;
+
             when 8 =>
                return Snap_At_Stage (T1, 7);
+
             when 9 =>
                return Snap_At_Stage (T4, 8) - Cm * DT;
+
             when 10 =>
                return Snap_At_Stage (T1, 9);
+
             when 11 =>
                return Snap_At_Stage (T2, 10) + Cm * DT;
+
             when 12 =>
                return Snap_At_Stage (T1, 11);
+
             when 13 =>
                return Snap_At_Stage (T3, 12) + Cm * DT;
+
             when 14 =>
                return Snap_At_Stage (T1, 13);
+
             when 15 =>
                return Snap_At_Stage (T2, 14) - Cm * DT;
          end case;
@@ -187,10 +201,10 @@ package body Prunt.Motion_Planner is
    end Snap_At_Time;
 
    function Jerk_At_Time (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Jerk is
-      T1 : constant Time    := Profile (1);
-      T2 : constant Time    := Profile (2);
-      T3 : constant Time    := Profile (3);
-      T4 : constant Time    := Profile (4);
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
 
       function Jerk_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Jerk is
@@ -198,32 +212,46 @@ package body Prunt.Motion_Planner is
          case Stage is
             when 1 =>
                return Cm * DT**2 / 2.0;
+
             when 2 =>
                return Jerk_At_Stage (T1, 1) + Cm * DT * T1;
+
             when 3 =>
                return Jerk_At_Stage (T2, 2) + Cm * DT * (-DT + 2.0 * T1) / 2.0;
+
             when 4 =>
                return Jerk_At_Stage (T1, 3);
+
             when 5 =>
                return Jerk_At_Stage (T3, 4) - Cm * DT**2 / 2.0;
+
             when 6 =>
                return Jerk_At_Stage (T1, 5) - Cm * DT * T1;
+
             when 7 =>
                return Jerk_At_Stage (T2, 6) + Cm * DT * (DT - 2.0 * T1) / 2.0;
+
             when 8 =>
                return Jerk_At_Stage (T1, 7);
+
             when 9 =>
                return Jerk_At_Stage (T4, 8) - Cm * DT**2 / 2.0;
+
             when 10 =>
                return Jerk_At_Stage (T1, 9) - Cm * DT * T1;
+
             when 11 =>
                return Jerk_At_Stage (T2, 10) + Cm * DT * (DT - 2.0 * T1) / 2.0;
+
             when 12 =>
                return Jerk_At_Stage (T1, 11);
+
             when 13 =>
                return Jerk_At_Stage (T3, 12) + Cm * DT**2 / 2.0;
+
             when 14 =>
                return Jerk_At_Stage (T1, 13) + Cm * DT * T1;
+
             when 15 =>
                return Jerk_At_Stage (T2, 14) + Cm * DT * (-DT + 2.0 * T1) / 2.0;
          end case;
@@ -268,10 +296,10 @@ package body Prunt.Motion_Planner is
    function Acceleration_At_Time
      (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Acceleration
    is
-      T1 : constant Time    := Profile (1);
-      T2 : constant Time    := Profile (2);
-      T3 : constant Time    := Profile (3);
-      T4 : constant Time    := Profile (4);
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
 
       function Acceleration_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Acceleration is
@@ -279,34 +307,48 @@ package body Prunt.Motion_Planner is
          case Stage is
             when 1 =>
                return Cm * DT**3 / 6.0;
+
             when 2 =>
                return Acceleration_At_Stage (T1, 1) + Cm * DT * T1 * (DT + T1) / 2.0;
+
             when 3 =>
                return
                  Acceleration_At_Stage (T2, 2) + Cm * DT * (-DT**2 + 3.0 * DT * T1 + 3.0 * T1 * (T1 + 2.0 * T2)) / 6.0;
+
             when 4 =>
                return Acceleration_At_Stage (T1, 3) + Cm * DT * T1 * (T1 + T2);
+
             when 5 =>
                return Acceleration_At_Stage (T3, 4) + Cm * DT * (-DT**2 + 6.0 * T1 * (T1 + T2)) / 6.0;
+
             when 6 =>
                return Acceleration_At_Stage (T1, 5) + Cm * DT * T1 * (-DT + T1 + 2.0 * T2) / 2.0;
+
             when 7 =>
                return Acceleration_At_Stage (T2, 6) + Cm * DT * (DT**2 - 3.0 * DT * T1 + 3.0 * T1**2) / 6.0;
+
             when 8 =>
                return Acceleration_At_Stage (T1, 7);
+
             when 9 =>
                return Acceleration_At_Stage (T4, 8) - Cm * DT**3 / 6.0;
+
             when 10 =>
                return Acceleration_At_Stage (T1, 9) + Cm * DT * T1 * (-DT - T1) / 2.0;
+
             when 11 =>
                return
                  Acceleration_At_Stage (T2, 10) + Cm * DT * (DT**2 - 3.0 * DT * T1 - 3.0 * T1 * (T1 + 2.0 * T2)) / 6.0;
+
             when 12 =>
                return Acceleration_At_Stage (T1, 11) - Cm * DT * T1 * (T1 + T2);
+
             when 13 =>
                return Acceleration_At_Stage (T3, 12) + Cm * DT * (DT**2 - 6.0 * T1 * (T1 + T2)) / 6.0;
+
             when 14 =>
                return Acceleration_At_Stage (T1, 13) + Cm * DT * T1 * (DT - T1 - 2.0 * T2) / 2.0;
+
             when 15 =>
                return Acceleration_At_Stage (T2, 14) + Cm * DT * (-DT**2 + 3.0 * DT * T1 - 3.0 * T1**2) / 6.0;
          end case;
@@ -351,10 +393,10 @@ package body Prunt.Motion_Planner is
    function Velocity_At_Time
      (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Velocity
    is
-      T1 : constant Time    := Profile (1);
-      T2 : constant Time    := Profile (2);
-      T3 : constant Time    := Profile (3);
-      T4 : constant Time    := Profile (4);
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
 
       function Velocity_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Velocity is
@@ -362,80 +404,129 @@ package body Prunt.Motion_Planner is
          case Stage is
             when 1 =>
                return Start_Vel + Cm * DT**4 / 24.0;
+
             when 2 =>
                return Velocity_At_Stage (T1, 1) + Cm * DT * T1 * (2.0 * DT**2 + 3.0 * DT * T1 + 2.0 * T1**2) / 12.0;
+
             when 3 =>
                return
-                 Velocity_At_Stage (T2, 2) +
-                 Cm * DT *
-                   (-DT**3 + 4.0 * DT**2 * T1 + 6.0 * DT * T1 * (T1 + 2.0 * T2) +
-                    4.0 * T1 * (T1**2 + 3.0 * T1 * T2 + 3.0 * T2**2)) /
-                   24.0;
+                 Velocity_At_Stage (T2, 2)
+                 + Cm
+                   * DT
+                   * (-DT**3
+                      + 4.0 * DT**2 * T1
+                      + 6.0 * DT * T1 * (T1 + 2.0 * T2)
+                      + 4.0 * T1 * (T1**2 + 3.0 * T1 * T2 + 3.0 * T2**2))
+                   / 24.0;
+
             when 4 =>
                return
-                 Velocity_At_Stage (T1, 3) +
-                 Cm * DT * T1 * (DT * (T1 + T2) + 2.0 * T1**2 + 3.0 * T1 * T2 + T2**2) / 2.0;
+                 Velocity_At_Stage (T1, 3)
+                 + Cm * DT * T1 * (DT * (T1 + T2) + 2.0 * T1**2 + 3.0 * T1 * T2 + T2**2) / 2.0;
+
             when 5 =>
                return
-                 Velocity_At_Stage (T3, 4) +
-                 Cm * DT *
-                   (-DT**3 + 12.0 * DT * T1 * (T1 + T2) +
-                    12.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3)) /
-                   24.0;
+                 Velocity_At_Stage (T3, 4)
+                 + Cm
+                   * DT
+                   * (-DT**3
+                      + 12.0 * DT * T1 * (T1 + T2)
+                      + 12.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3))
+                   / 24.0;
+
             when 6 =>
                return
-                 Velocity_At_Stage (T1, 5) +
-                 Cm * DT * T1 *
-                   (-2.0 * DT**2 + 3.0 * DT * (T1 + 2.0 * T2) + 22.0 * T1**2 + 30.0 * T1 * T2 + 12.0 * T1 * T3 +
-                    6.0 * T2**2 + 12.0 * T2 * T3) /
-                   12.0;
+                 Velocity_At_Stage (T1, 5)
+                 + Cm
+                   * DT
+                   * T1
+                   * (-2.0 * DT**2
+                      + 3.0 * DT * (T1 + 2.0 * T2)
+                      + 22.0 * T1**2
+                      + 30.0 * T1 * T2
+                      + 12.0 * T1 * T3
+                      + 6.0 * T2**2
+                      + 12.0 * T2 * T3)
+                   / 12.0;
+
             when 7 =>
                return
-                 Velocity_At_Stage (T2, 6) +
-                 Cm * DT *
-                   (DT**3 - 4.0 * DT**2 * T1 + 6.0 * DT * T1**2 +
-                    4.0 * T1 * (11.0 * T1**2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2**2 + 6.0 * T2 * T3)) /
-                   24.0;
+                 Velocity_At_Stage (T2, 6)
+                 + Cm
+                   * DT
+                   * (DT
+                      **3
+                      - 4.0 * DT**2 * T1
+                      + 6.0 * DT * T1**2
+                      + 4.0 * T1 * (11.0 * T1**2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2**2 + 6.0 * T2 * T3))
+                   / 24.0;
+
             when 8 =>
                return
                  Velocity_At_Stage (T1, 7) + Cm * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3);
+
             when 9 =>
                return
-                 Velocity_At_Stage (T4, 8) +
-                 Cm * DT * (-DT**3 + 24.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3)) / 24.0;
+                 Velocity_At_Stage (T4, 8)
+                 + Cm * DT * (-DT**3 + 24.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3)) / 24.0;
+
             when 10 =>
                return
-                 Velocity_At_Stage (T1, 9) +
-                 Cm * DT * T1 *
-                   (-2.0 * DT**2 - 3.0 * DT * T1 + 22.0 * T1**2 + 36.0 * T1 * T2 + 12.0 * T1 * T3 + 12.0 * T2**2 +
-                    12.0 * T2 * T3) /
-                   12.0;
+                 Velocity_At_Stage (T1, 9)
+                 + Cm
+                   * DT
+                   * T1
+                   * (-2.0 * DT**2
+                      - 3.0 * DT * T1
+                      + 22.0 * T1**2
+                      + 36.0 * T1 * T2
+                      + 12.0 * T1 * T3
+                      + 12.0 * T2**2
+                      + 12.0 * T2 * T3)
+                   / 12.0;
+
             when 11 =>
                return
-                 Velocity_At_Stage (T2, 10) +
-                 Cm * DT *
-                   (DT**3 - 4.0 * DT**2 * T1 - 6.0 * DT * T1 * (T1 + 2.0 * T2) +
-                    4.0 * T1 * (11.0 * T1**2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2**2 + 6.0 * T2 * T3)) /
-                   24.0;
+                 Velocity_At_Stage (T2, 10)
+                 + Cm
+                   * DT
+                   * (DT
+                      **3
+                      - 4.0 * DT**2 * T1
+                      - 6.0 * DT * T1 * (T1 + 2.0 * T2)
+                      + 4.0 * T1 * (11.0 * T1**2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2**2 + 6.0 * T2 * T3))
+                   / 24.0;
+
             when 12 =>
                return
-                 Velocity_At_Stage (T1, 11) +
-                 Cm * DT * T1 *
-                   (-DT * (T1 + T2) + 2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3) / 2.0;
+                 Velocity_At_Stage (T1, 11)
+                 + Cm
+                   * DT
+                   * T1
+                   * (-DT * (T1 + T2) + 2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3)
+                   / 2.0;
+
             when 13 =>
                return
-                 Velocity_At_Stage (T3, 12) +
-                 Cm * DT * (DT**3 - 12.0 * DT * T1 * (T1 + T2) + 12.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T2**2)) /
-                   24.0;
+                 Velocity_At_Stage (T3, 12)
+                 + Cm
+                   * DT
+                   * (DT**3 - 12.0 * DT * T1 * (T1 + T2) + 12.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T2**2))
+                   / 24.0;
+
             when 14 =>
                return
-                 Velocity_At_Stage (T1, 13) +
-                 Cm * DT * T1 *
-                   (2.0 * DT**2 - 3.0 * DT * (T1 + 2.0 * T2) + 2.0 * T1**2 + 6.0 * T1 * T2 + 6.0 * T2**2) / 12.0;
+                 Velocity_At_Stage (T1, 13)
+                 + Cm
+                   * DT
+                   * T1
+                   * (2.0 * DT**2 - 3.0 * DT * (T1 + 2.0 * T2) + 2.0 * T1**2 + 6.0 * T1 * T2 + 6.0 * T2**2)
+                   / 12.0;
+
             when 15 =>
                return
-                 Velocity_At_Stage (T2, 14) +
-                 Cm * DT * (-DT**3 + 4.0 * DT**2 * T1 - 6.0 * DT * T1**2 + 4.0 * T1**3) / 24.0;
+                 Velocity_At_Stage (T2, 14)
+                 + Cm * DT * (-DT**3 + 4.0 * DT**2 * T1 - 6.0 * DT * T1**2 + 4.0 * T1**3) / 24.0;
          end case;
       end Velocity_At_Stage;
 
@@ -478,10 +569,10 @@ package body Prunt.Motion_Planner is
    function Distance_At_Time
      (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length
    is
-      T1 : constant Time    := Profile (1);
-      T2 : constant Time    := Profile (2);
-      T3 : constant Time    := Profile (3);
-      T4 : constant Time    := Profile (4);
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
 
       function Distance_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Length is
@@ -489,136 +580,310 @@ package body Prunt.Motion_Planner is
          case Stage is
             when 1 =>
                return Start_Vel * T + Cm * DT**5 / 120.0;
+
             when 2 =>
                return
-                 Distance_At_Stage (T1, 1) +
-                 Cm * DT * T1 * (DT**3 + 2.0 * DT**2 * T1 + 2.0 * DT * T1**2 + T1**3) / 24.0;
+                 Distance_At_Stage (T1, 1)
+                 + Cm * DT * T1 * (DT**3 + 2.0 * DT**2 * T1 + 2.0 * DT * T1**2 + T1**3) / 24.0;
+
             when 3 =>
                return
-                 Distance_At_Stage (T2, 2) +
-                 Cm * DT *
-                   (-DT**4 + 5.0 * DT**3 * T1 + 10.0 * DT**2 * T1 * (T1 + 2.0 * T2) +
-                    10.0 * DT * T1 * (T1**2 + 3.0 * T1 * T2 + 3.0 * T2**2) +
-                    5.0 * T1 * (T1**3 + 4.0 * T1**2 * T2 + 6.0 * T1 * T2**2 + 4.0 * T2**3)) /
-                   120.0;
+                 Distance_At_Stage (T2, 2)
+                 + Cm
+                   * DT
+                   * (-DT**4
+                      + 5.0 * DT**3 * T1
+                      + 10.0 * DT**2 * T1 * (T1 + 2.0 * T2)
+                      + 10.0 * DT * T1 * (T1**2 + 3.0 * T1 * T2 + 3.0 * T2**2)
+                      + 5.0 * T1 * (T1**3 + 4.0 * T1**2 * T2 + 6.0 * T1 * T2**2 + 4.0 * T2**3))
+                   / 120.0;
+
             when 4 =>
                return
-                 Distance_At_Stage (T1, 3) +
-                 Cm * DT * T1 *
-                   (2.0 * DT**2 * (T1 + T2) + 3.0 * DT * (2.0 * T1**2 + 3.0 * T1 * T2 + T2**2) + 7.0 * T1**3 +
-                    14.0 * T1**2 * T2 + 9.0 * T1 * T2**2 + 2.0 * T2**3) /
-                   12.0;
+                 Distance_At_Stage (T1, 3)
+                 + Cm
+                   * DT
+                   * T1
+                   * (2.0
+                      * DT**2
+                      * (T1 + T2)
+                      + 3.0 * DT * (2.0 * T1**2 + 3.0 * T1 * T2 + T2**2)
+                      + 7.0 * T1**3
+                      + 14.0 * T1**2 * T2
+                      + 9.0 * T1 * T2**2
+                      + 2.0 * T2**3)
+                   / 12.0;
+
             when 5 =>
                return
-                 Distance_At_Stage (T3, 4) +
-                 Cm * DT *
-                   (-DT**4 + 20.0 * DT**2 * T1 * (T1 + T2) +
-                    30.0 * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3) +
-                    10.0 * T1 *
-                      (7.0 * T1**3 + 14.0 * T1**2 * T2 + 12.0 * T1**2 * T3 + 9.0 * T1 * T2**2 + 18.0 * T1 * T2 * T3 +
-                       6.0 * T1 * T3**2 + 2.0 * T2**3 + 6.0 * T2**2 * T3 + 6.0 * T2 * T3**2)) /
-                   120.0;
+                 Distance_At_Stage (T3, 4)
+                 + Cm
+                   * DT
+                   * (-DT**4
+                      + 20.0 * DT**2 * T1 * (T1 + T2)
+                      + 30.0 * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3)
+                      + 10.0
+                        * T1
+                        * (7.0
+                           * T1**3
+                           + 14.0 * T1**2 * T2
+                           + 12.0 * T1**2 * T3
+                           + 9.0 * T1 * T2**2
+                           + 18.0 * T1 * T2 * T3
+                           + 6.0 * T1 * T3**2
+                           + 2.0 * T2**3
+                           + 6.0 * T2**2 * T3
+                           + 6.0 * T2 * T3**2))
+                   / 120.0;
+
             when 6 =>
                return
-                 Distance_At_Stage (T1, 5) +
-                 Cm * DT * T1 *
-                   (-DT**3 + 2.0 * DT**2 * (T1 + 2.0 * T2) +
-                    2.0 * DT * (11.0 * T1**2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2**2 + 6.0 * T2 * T3) +
-                    49.0 * T1**3 + 76.0 * T1**2 * T2 + 48.0 * T1**2 * T3 + 30.0 * T1 * T2**2 + 60.0 * T1 * T2 * T3 +
-                    12.0 * T1 * T3**2 + 4.0 * T2**3 + 12.0 * T2**2 * T3 + 12.0 * T2 * T3**2) /
-                   24.0;
+                 Distance_At_Stage (T1, 5)
+                 + Cm
+                   * DT
+                   * T1
+                   * (-DT**3
+                      + 2.0 * DT**2 * (T1 + 2.0 * T2)
+                      + 2.0 * DT * (11.0 * T1**2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2**2 + 6.0 * T2 * T3)
+                      + 49.0 * T1**3
+                      + 76.0 * T1**2 * T2
+                      + 48.0 * T1**2 * T3
+                      + 30.0 * T1 * T2**2
+                      + 60.0 * T1 * T2 * T3
+                      + 12.0 * T1 * T3**2
+                      + 4.0 * T2**3
+                      + 12.0 * T2**2 * T3
+                      + 12.0 * T2 * T3**2)
+                   / 24.0;
+
             when 7 =>
                return
-                 Distance_At_Stage (T2, 6) +
-                 Cm * DT *
-                   (DT**4 - 5.0 * DT**3 * T1 + 10.0 * DT**2 * T1**2 +
-                    10.0 * DT * T1 * (11.0 * T1**2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2**2 + 6.0 * T2 * T3) +
-                    5.0 * T1 *
-                      (49.0 * T1**3 + 120.0 * T1**2 * T2 + 48.0 * T1**2 * T3 + 96.0 * T1 * T2**2 +
-                       84.0 * T1 * T2 * T3 + 12.0 * T1 * T3**2 + 24.0 * T2**3 + 36.0 * T2**2 * T3 +
-                       12.0 * T2 * T3**2)) /
-                   120.0;
+                 Distance_At_Stage (T2, 6)
+                 + Cm
+                   * DT
+                   * (DT
+                      **4
+                      - 5.0 * DT**3 * T1
+                      + 10.0 * DT**2 * T1**2
+                      + 10.0 * DT * T1 * (11.0 * T1**2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2**2 + 6.0 * T2 * T3)
+                      + 5.0
+                        * T1
+                        * (49.0
+                           * T1**3
+                           + 120.0 * T1**2 * T2
+                           + 48.0 * T1**2 * T3
+                           + 96.0 * T1 * T2**2
+                           + 84.0 * T1 * T2 * T3
+                           + 12.0 * T1 * T3**2
+                           + 24.0 * T2**3
+                           + 36.0 * T2**2 * T3
+                           + 12.0 * T2 * T3**2))
+                   / 120.0;
+
             when 8 =>
                return
-                 Distance_At_Stage (T1, 7) +
-                 Cm * DT * T1 *
-                   (DT * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3) + 8.0 * T1**3 + 16.0 * T1**2 * T2 +
-                    6.0 * T1**2 * T3 + 10.0 * T1 * T2**2 + 9.0 * T1 * T2 * T3 + T1 * T3**2 + 2.0 * T2**3 +
-                    3.0 * T2**2 * T3 + T2 * T3**2) /
-                   2.0;
+                 Distance_At_Stage (T1, 7)
+                 + Cm
+                   * DT
+                   * T1
+                   * (DT
+                      * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3)
+                      + 8.0 * T1**3
+                      + 16.0 * T1**2 * T2
+                      + 6.0 * T1**2 * T3
+                      + 10.0 * T1 * T2**2
+                      + 9.0 * T1 * T2 * T3
+                      + T1 * T3**2
+                      + 2.0 * T2**3
+                      + 3.0 * T2**2 * T3
+                      + T2 * T3**2)
+                   / 2.0;
+
             when 9 =>
                return
-                 Distance_At_Stage (T4, 8) +
-                 Cm * DT *
-                   (-DT**4 + 60.0 * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3) +
-                    60.0 * T1 *
-                      (8.0 * T1**3 + 16.0 * T1**2 * T2 + 6.0 * T1**2 * T3 + 4.0 * T1**2 * T4 + 10.0 * T1 * T2**2 +
-                       9.0 * T1 * T2 * T3 + 6.0 * T1 * T2 * T4 + T1 * T3**2 + 2.0 * T1 * T3 * T4 + 2.0 * T2**3 +
-                       3.0 * T2**2 * T3 + 2.0 * T2**2 * T4 + T2 * T3**2 + 2.0 * T2 * T3 * T4)) /
-                   120.0;
+                 Distance_At_Stage (T4, 8)
+                 + Cm
+                   * DT
+                   * (-DT**4
+                      + 60.0 * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3)
+                      + 60.0
+                        * T1
+                        * (8.0
+                           * T1**3
+                           + 16.0 * T1**2 * T2
+                           + 6.0 * T1**2 * T3
+                           + 4.0 * T1**2 * T4
+                           + 10.0 * T1 * T2**2
+                           + 9.0 * T1 * T2 * T3
+                           + 6.0 * T1 * T2 * T4
+                           + T1 * T3**2
+                           + 2.0 * T1 * T3 * T4
+                           + 2.0 * T2**3
+                           + 3.0 * T2**2 * T3
+                           + 2.0 * T2**2 * T4
+                           + T2 * T3**2
+                           + 2.0 * T2 * T3 * T4))
+                   / 120.0;
+
             when 10 =>
                return
-                 Distance_At_Stage (T1, 9) +
-                 Cm * DT * T1 *
-                   (-DT**3 - 2.0 * DT**2 * T1 +
-                    2.0 * DT * (11.0 * T1**2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2**2 + 6.0 * T2 * T3) +
-                    143.0 * T1**3 + 264.0 * T1**2 * T2 + 96.0 * T1**2 * T3 + 48.0 * T1**2 * T4 + 144.0 * T1 * T2**2 +
-                    132.0 * T1 * T2 * T3 + 72.0 * T1 * T2 * T4 + 12.0 * T1 * T3**2 + 24.0 * T1 * T3 * T4 +
-                    24.0 * T2**3 + 36.0 * T2**2 * T3 + 24.0 * T2**2 * T4 + 12.0 * T2 * T3**2 + 24.0 * T2 * T3 * T4) /
-                   24.0;
+                 Distance_At_Stage (T1, 9)
+                 + Cm
+                   * DT
+                   * T1
+                   * (-DT**3
+                      - 2.0 * DT**2 * T1
+                      + 2.0 * DT * (11.0 * T1**2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2**2 + 6.0 * T2 * T3)
+                      + 143.0 * T1**3
+                      + 264.0 * T1**2 * T2
+                      + 96.0 * T1**2 * T3
+                      + 48.0 * T1**2 * T4
+                      + 144.0 * T1 * T2**2
+                      + 132.0 * T1 * T2 * T3
+                      + 72.0 * T1 * T2 * T4
+                      + 12.0 * T1 * T3**2
+                      + 24.0 * T1 * T3 * T4
+                      + 24.0 * T2**3
+                      + 36.0 * T2**2 * T3
+                      + 24.0 * T2**2 * T4
+                      + 12.0 * T2 * T3**2
+                      + 24.0 * T2 * T3 * T4)
+                   / 24.0;
+
             when 11 =>
                return
-                 Distance_At_Stage (T2, 10) +
-                 Cm * DT *
-                   (DT**4 - 5.0 * DT**3 * T1 - 10.0 * DT**2 * T1 * (T1 + 2.0 * T2) +
-                    10.0 * DT * T1 * (11.0 * T1**2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2**2 + 6.0 * T2 * T3) +
-                    5.0 * T1 *
-                      (143.0 * T1**3 + 308.0 * T1**2 * T2 + 96.0 * T1**2 * T3 + 48.0 * T1**2 * T4 +
-                       210.0 * T1 * T2**2 + 156.0 * T1 * T2 * T3 + 72.0 * T1 * T2 * T4 + 12.0 * T1 * T3**2 +
-                       24.0 * T1 * T3 * T4 + 44.0 * T2**3 + 60.0 * T2**2 * T3 + 24.0 * T2**2 * T4 + 12.0 * T2 * T3**2 +
-                       24.0 * T2 * T3 * T4)) /
-                   120.0;
+                 Distance_At_Stage (T2, 10)
+                 + Cm
+                   * DT
+                   * (DT
+                      **4
+                      - 5.0 * DT**3 * T1
+                      - 10.0 * DT**2 * T1 * (T1 + 2.0 * T2)
+                      + 10.0 * DT * T1 * (11.0 * T1**2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2**2 + 6.0 * T2 * T3)
+                      + 5.0
+                        * T1
+                        * (143.0
+                           * T1**3
+                           + 308.0 * T1**2 * T2
+                           + 96.0 * T1**2 * T3
+                           + 48.0 * T1**2 * T4
+                           + 210.0 * T1 * T2**2
+                           + 156.0 * T1 * T2 * T3
+                           + 72.0 * T1 * T2 * T4
+                           + 12.0 * T1 * T3**2
+                           + 24.0 * T1 * T3 * T4
+                           + 44.0 * T2**3
+                           + 60.0 * T2**2 * T3
+                           + 24.0 * T2**2 * T4
+                           + 12.0 * T2 * T3**2
+                           + 24.0 * T2 * T3 * T4))
+                   / 120.0;
+
             when 12 =>
                return
-                 Distance_At_Stage (T1, 11) +
-                 Cm * DT * T1 *
-                   (-2.0 * DT**2 * (T1 + T2) +
-                    3.0 * DT * (2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3) + 89.0 * T1**3 +
-                    178.0 * T1**2 * T2 + 60.0 * T1**2 * T3 + 24.0 * T1**2 * T4 + 111.0 * T1 * T2**2 +
-                    90.0 * T1 * T2 * T3 + 36.0 * T1 * T2 * T4 + 6.0 * T1 * T3**2 + 12.0 * T1 * T3 * T4 + 22.0 * T2**3 +
-                    30.0 * T2**2 * T3 + 12.0 * T2**2 * T4 + 6.0 * T2 * T3**2 + 12.0 * T2 * T3 * T4) /
-                   12.0;
+                 Distance_At_Stage (T1, 11)
+                 + Cm
+                   * DT
+                   * T1
+                   * (-2.0 * DT**2 * (T1 + T2)
+                      + 3.0 * DT * (2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3)
+                      + 89.0 * T1**3
+                      + 178.0 * T1**2 * T2
+                      + 60.0 * T1**2 * T3
+                      + 24.0 * T1**2 * T4
+                      + 111.0 * T1 * T2**2
+                      + 90.0 * T1 * T2 * T3
+                      + 36.0 * T1 * T2 * T4
+                      + 6.0 * T1 * T3**2
+                      + 12.0 * T1 * T3 * T4
+                      + 22.0 * T2**3
+                      + 30.0 * T2**2 * T3
+                      + 12.0 * T2**2 * T4
+                      + 6.0 * T2 * T3**2
+                      + 12.0 * T2 * T3 * T4)
+                   / 12.0;
+
             when 13 =>
                return
-                 Distance_At_Stage (T3, 12) +
-                 Cm * DT *
-                   (DT**4 - 20.0 * DT**2 * T1 * (T1 + T2) + 30.0 * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T2**2) +
-                    10.0 * T1 *
-                      (89.0 * T1**3 + 178.0 * T1**2 * T2 + 72.0 * T1**2 * T3 + 24.0 * T1**2 * T4 + 111.0 * T1 * T2**2 +
-                       108.0 * T1 * T2 * T3 + 36.0 * T1 * T2 * T4 + 12.0 * T1 * T3**2 + 12.0 * T1 * T3 * T4 +
-                       22.0 * T2**3 + 36.0 * T2**2 * T3 + 12.0 * T2**2 * T4 + 12.0 * T2 * T3**2 +
-                       12.0 * T2 * T3 * T4)) /
-                   120.0;
+                 Distance_At_Stage (T3, 12)
+                 + Cm
+                   * DT
+                   * (DT
+                      **4
+                      - 20.0 * DT**2 * T1 * (T1 + T2)
+                      + 30.0 * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T2**2)
+                      + 10.0
+                        * T1
+                        * (89.0
+                           * T1**3
+                           + 178.0 * T1**2 * T2
+                           + 72.0 * T1**2 * T3
+                           + 24.0 * T1**2 * T4
+                           + 111.0 * T1 * T2**2
+                           + 108.0 * T1 * T2 * T3
+                           + 36.0 * T1 * T2 * T4
+                           + 12.0 * T1 * T3**2
+                           + 12.0 * T1 * T3 * T4
+                           + 22.0 * T2**3
+                           + 36.0 * T2**2 * T3
+                           + 12.0 * T2**2 * T4
+                           + 12.0 * T2 * T3**2
+                           + 12.0 * T2 * T3 * T4))
+                   / 120.0;
+
             when 14 =>
                return
-                 Distance_At_Stage (T1, 13) +
-                 Cm * DT * T1 *
-                   (DT**3 - 2.0 * DT**2 * (T1 + 2.0 * T2) + 2.0 * DT * (T1**2 + 3.0 * T1 * T2 + 3.0 * T2**2) +
-                    191.0 * T1**3 + 380.0 * T1**2 * T2 + 144.0 * T1**2 * T3 + 48.0 * T1**2 * T4 + 234.0 * T1 * T2**2 +
-                    216.0 * T1 * T2 * T3 + 72.0 * T1 * T2 * T4 + 24.0 * T1 * T3**2 + 24.0 * T1 * T3 * T4 +
-                    44.0 * T2**3 + 72.0 * T2**2 * T3 + 24.0 * T2**2 * T4 + 24.0 * T2 * T3**2 + 24.0 * T2 * T3 * T4) /
-                   24.0;
+                 Distance_At_Stage (T1, 13)
+                 + Cm
+                   * DT
+                   * T1
+                   * (DT
+                      **3
+                      - 2.0 * DT**2 * (T1 + 2.0 * T2)
+                      + 2.0 * DT * (T1**2 + 3.0 * T1 * T2 + 3.0 * T2**2)
+                      + 191.0 * T1**3
+                      + 380.0 * T1**2 * T2
+                      + 144.0 * T1**2 * T3
+                      + 48.0 * T1**2 * T4
+                      + 234.0 * T1 * T2**2
+                      + 216.0 * T1 * T2 * T3
+                      + 72.0 * T1 * T2 * T4
+                      + 24.0 * T1 * T3**2
+                      + 24.0 * T1 * T3 * T4
+                      + 44.0 * T2**3
+                      + 72.0 * T2**2 * T3
+                      + 24.0 * T2**2 * T4
+                      + 24.0 * T2 * T3**2
+                      + 24.0 * T2 * T3 * T4)
+                   / 24.0;
+
             when 15 =>
                return
-                 Distance_At_Stage (T2, 14) +
-                 Cm * DT *
-                   (-DT**4 + 5.0 * DT**3 * T1 - 10.0 * DT**2 * T1**2 + 10.0 * DT * T1**3 +
-                    5.0 * T1 *
-                      (191.0 * T1**3 + 384.0 * T1**2 * T2 + 144.0 * T1**2 * T3 + 48.0 * T1**2 * T4 +
-                       240.0 * T1 * T2**2 + 216.0 * T1 * T2 * T3 + 72.0 * T1 * T2 * T4 + 24.0 * T1 * T3**2 +
-                       24.0 * T1 * T3 * T4 + 48.0 * T2**3 + 72.0 * T2**2 * T3 + 24.0 * T2**2 * T4 + 24.0 * T2 * T3**2 +
-                       24.0 * T2 * T3 * T4)) /
-                   120.0;
+                 Distance_At_Stage (T2, 14)
+                 + Cm
+                   * DT
+                   * (-DT**4
+                      + 5.0 * DT**3 * T1
+                      - 10.0 * DT**2 * T1**2
+                      + 10.0 * DT * T1**3
+                      + 5.0
+                        * T1
+                        * (191.0
+                           * T1**3
+                           + 384.0 * T1**2 * T2
+                           + 144.0 * T1**2 * T3
+                           + 48.0 * T1**2 * T4
+                           + 240.0 * T1 * T2**2
+                           + 216.0 * T1 * T2 * T3
+                           + 72.0 * T1 * T2 * T4
+                           + 24.0 * T1 * T3**2
+                           + 24.0 * T1 * T3 * T4
+                           + 48.0 * T2**3
+                           + 72.0 * T2**2 * T3
+                           + 24.0 * T2**2 * T4
+                           + 24.0 * T2 * T3**2
+                           + 24.0 * T2 * T3 * T4))
+                   / 120.0;
          end case;
       end Distance_At_Stage;
 
@@ -734,9 +999,9 @@ package body Prunt.Motion_Planner is
    is
       Mid_Vel    : constant Velocity :=
         Velocity_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Accel_Dist : constant Length   :=
+      Accel_Dist : constant Length :=
         Distance_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Mid_Dist   : constant Length   := Mid_Vel * Profile.Coast;
+      Mid_Dist   : constant Length := Mid_Vel * Profile.Coast;
    begin
       pragma Assert (T <= Total_Time (Profile));
 
@@ -746,24 +1011,24 @@ package body Prunt.Motion_Planner is
          return Accel_Dist + Mid_Vel * (T - Total_Time (Profile.Accel));
       else
          return
-           Accel_Dist + Mid_Dist +
-           Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
+           Accel_Dist
+           + Mid_Dist
+           + Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
       end if;
    end Distance_At_Time;
 
    function Distance_At_Time
-     (Profile            :     Feedrate_Profile;
-      T                  :     Time;
-      Max_Crackle        :     Crackle;
-      Start_Vel          :     Velocity;
-      Is_Past_Accel_Part : out Boolean)
-      return Length
+     (Profile            : Feedrate_Profile;
+      T                  : Time;
+      Max_Crackle        : Crackle;
+      Start_Vel          : Velocity;
+      Is_Past_Accel_Part : out Boolean) return Length
    is
       Mid_Vel    : constant Velocity :=
         Velocity_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Accel_Dist : constant Length   :=
+      Accel_Dist : constant Length :=
         Distance_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Mid_Dist   : constant Length   := Mid_Vel * Profile.Coast;
+      Mid_Dist   : constant Length := Mid_Vel * Profile.Coast;
    begin
       pragma Assert (T <= Total_Time (Profile));
 
@@ -776,8 +1041,9 @@ package body Prunt.Motion_Planner is
       else
          Is_Past_Accel_Part := True;
          return
-           Accel_Dist + Mid_Dist +
-           Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
+           Accel_Dist
+           + Mid_Dist
+           + Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
       end if;
    end Distance_At_Time;
 
@@ -787,15 +1053,14 @@ package body Prunt.Motion_Planner is
       Acceleration_Max : Acceleration;
       Jerk_Max         : Jerk;
       Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
-      return Feedrate_Profile_Times
+      Crackle_Max      : Crackle) return Feedrate_Profile_Times
    is
-      D     : constant Length       := Distance;
-      Vs    : constant Velocity     := Start_Vel;
+      D     : constant Length := Distance;
+      Vs    : constant Velocity := Start_Vel;
       Am    : constant Acceleration := Acceleration_Max;
-      Jm    : constant Jerk         := Jerk_Max;
-      Sm    : constant Snap         := Snap_Max;
-      Cm    : constant Crackle      := Crackle_Max;
+      Jm    : constant Jerk := Jerk_Max;
+      Sm    : constant Snap := Snap_Max;
+      Cm    : constant Crackle := Crackle_Max;
       Cases : array (Feedrate_Profile_Times_Index) of Feedrate_Profile_Times;
 
       function Solve_Distance_At_Time
@@ -905,6 +1170,7 @@ package body Prunt.Motion_Planner is
             return Solve_Distance_At_Time (Cases (I), I);
             --  There are simple analytical solutions for a lot of these, but this is already fast so there is no
             --  reason to optimise it.
+
          end if;
       end loop;
 
@@ -913,23 +1179,17 @@ package body Prunt.Motion_Planner is
 
    end Optimal_Profile_For_Distance;
    function Optimal_Profile_For_Delta_V
-     (Delta_V          : Velocity;
-      Acceleration_Max : Acceleration;
-      Jerk_Max         : Jerk;
-      Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
+     (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
       return Feedrate_Profile_Times
    is
-      Vd : constant Velocity     := abs Delta_V;
+      Vd : constant Velocity := abs Delta_V;
       Am : constant Acceleration := Acceleration_Max;
-      Jm : constant Jerk         := Jerk_Max;
-      Sm : constant Snap         := Snap_Max;
-      Cm : constant Crackle      := Crackle_Max;
+      Jm : constant Jerk := Jerk_Max;
+      Sm : constant Snap := Snap_Max;
+      Cm : constant Crackle := Crackle_Max;
 
       function Solve_Velocity_At_Time
-        (Profile  : Feedrate_Profile_Times;
-         Variable : Feedrate_Profile_Times_Index;
-         Target   : Velocity)
+        (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index; Target : Velocity)
          return Feedrate_Profile_Times
       is
          Result : Feedrate_Profile_Times := Profile;
@@ -987,9 +1247,9 @@ package body Prunt.Motion_Planner is
                --  Reachable: Sm, Jm
                return
                  [Sm / Cm,
-                 Jm / Sm - Sm / Cm,
-                 0.5 * ((Jm / Sm + Sm / Cm)**2 + 4.0 * Vd / Jm)**(1 / 2) - 1.5 * (Jm / Sm + Sm / Cm),
-                 0.0 * s];
+                  Jm / Sm - Sm / Cm,
+                  0.5 * ((Jm / Sm + Sm / Cm)**2 + 4.0 * Vd / Jm)**(1 / 2) - 1.5 * (Jm / Sm + Sm / Cm),
+                  0.0 * s];
             elsif Vd > 8.0 * Sm**4 / Cm**3 then
                --  Reachable: Sm
                return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
@@ -1002,9 +1262,9 @@ package body Prunt.Motion_Planner is
                --  Reachable: Sm, Am
                return
                  [Sm / Cm,
-                 (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) - 1.5 * Sm / Cm,
-                 0.0 * s,
-                 Vd / Am - Sm / Cm - 2.0 * (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2)];
+                  (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) - 1.5 * Sm / Cm,
+                  0.0 * s,
+                  Vd / Am - Sm / Cm - 2.0 * (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2)];
             elsif Vd > 8.0 * Sm**4 / Cm**3 then
                --  Reachable: Sm
                return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
@@ -1027,9 +1287,9 @@ package body Prunt.Motion_Planner is
                --  Reachable: Jm, Am
                return
                  [(Jm / Cm)**(1 / 2),
-                 0.0 * s,
-                 Am / Jm - 2.0 * (Jm / Cm)**(1 / 2),
-                 Vd / Am - Am / Jm - 2.0 * (Jm / Cm)**(1 / 2)];
+                  0.0 * s,
+                  Am / Jm - 2.0 * (Jm / Cm)**(1 / 2),
+                  Vd / Am - Am / Jm - 2.0 * (Jm / Cm)**(1 / 2)];
             elsif Vd > 8.0 * Jm**2 / Cm then
                --  Reachable: Jm
                return [(Jm / Cm)**(1 / 2), 0.0 * s, (Jm / Cm + Vd / Jm)**(1 / 2) - 3.0 * (Jm / Cm)**(1 / 2), 0.0 * s];
@@ -1057,8 +1317,7 @@ package body Prunt.Motion_Planner is
       Acceleration_Max : Acceleration;
       Jerk_Max         : Jerk;
       Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
-      return Feedrate_Profile
+      Crackle_Max      : Crackle) return Feedrate_Profile
    is
       Profile : Feedrate_Profile;
    begin
@@ -1092,8 +1351,8 @@ package body Prunt.Motion_Planner is
         Optimal_Profile_For_Delta_V (End_Vel - Max_Vel, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
 
       declare
-         Accel_Distance : Length            := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
-         Decel_Distance : Length            := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Max_Vel);
+         Accel_Distance : Length := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
+         Decel_Distance : Length := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Max_Vel);
       begin
          if Accel_Distance + Decel_Distance <= Distance then
             Profile.Coast := (Distance - Accel_Distance - Decel_Distance) / Max_Vel;

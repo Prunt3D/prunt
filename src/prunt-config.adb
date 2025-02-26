@@ -110,9 +110,7 @@ package body Prunt.Config is
       begin
          return
            new Property_Parameters'
-             (Kind            => Boolean_Kind,
-              Description     => To_Unbounded_String (Description),
-              Boolean_Default => Default);
+             (Kind => Boolean_Kind, Description => To_Unbounded_String (Description), Boolean_Default => Default);
       end Boolean;
 
       function Sequence (Description : String; Children : Property_Maps.Map) return Property_Parameters_Access is
@@ -125,8 +123,7 @@ package body Prunt.Config is
               Sequence_Tabbed   => False);
       end Sequence;
 
-      function Tabbed_Sequence
-        (Description : String; Children : Property_Maps.Map) return Property_Parameters_Access
+      function Tabbed_Sequence (Description : String; Children : Property_Maps.Map) return Property_Parameters_Access
       is
       begin
          return
@@ -138,8 +135,7 @@ package body Prunt.Config is
       end Tabbed_Sequence;
 
       function Variant
-        (Description : String; Default : String; Children : Property_Maps.Map) return Property_Parameters_Access
-      is
+        (Description : String; Default : String; Children : Property_Maps.Map) return Property_Parameters_Access is
       begin
          return
            new Property_Parameters'
@@ -150,10 +146,7 @@ package body Prunt.Config is
       end Variant;
 
       function Integer
-        (Description       : String;
-         Default, Min, Max : Long_Long_Integer;
-         Unit              : String)
-         return Property_Parameters_Access
+        (Description : String; Default, Min, Max : Long_Long_Integer; Unit : String) return Property_Parameters_Access
       is
       begin
          return
@@ -167,8 +160,7 @@ package body Prunt.Config is
       end Integer;
 
       function Float
-        (Description : String; Default, Min, Max : Long_Float; Unit : String) return Property_Parameters_Access
-      is
+        (Description : String; Default, Min, Max : Long_Float; Unit : String) return Property_Parameters_Access is
       begin
          return
            new Property_Parameters'
@@ -181,10 +173,7 @@ package body Prunt.Config is
       end Float;
 
       function Discrete
-        (Description : String;
-         Default     : String;
-         Options     : Discrete_String_Sets.Set)
-         return Property_Parameters_Access
+        (Description : String; Default : String; Options : Discrete_String_Sets.Set) return Property_Parameters_Access
       is
       begin
          return
@@ -230,8 +219,8 @@ package body Prunt.Config is
       end Sequence_Over_Steppers;
 
       Input_Switch_Name_Strings : constant Discrete_String_Sets.Set := [for I in Input_Switch_Name => I'Image];
-      Thermistor_Name_Strings : constant Discrete_String_Sets.Set := [for T in Thermistor_Name => T'Image];
-      Heater_Name_Strings : constant Discrete_String_Sets.Set := [for H in Heater_Name => H'Image];
+      Thermistor_Name_Strings   : constant Discrete_String_Sets.Set := [for T in Thermistor_Name => T'Image];
+      Heater_Name_Strings       : constant Discrete_String_Sets.Set := [for H in Heater_Name => H'Image];
 
       --!pp off
       Basic_Stepper_Sequence : constant Property_Parameters_Access :=
@@ -1172,12 +1161,9 @@ package body Prunt.Config is
          Property_Maps.Insert
            (Property_Maps.Reference (Result, "Steppers").Element.all.Sequence_Children,
             S'Image,
-            (if Stepper_Kinds (S) = Basic_Kind then
-                Basic_Stepper_Sequence
-             elsif Stepper_Kinds (S) = TMC2240_UART_Kind then
-                TMC2240_Stepper_Sequence
-             else
-                raise Constraint_Error with "Config not implemented for stepper kind " & S'Image));
+            (if Stepper_Kinds (S) = Basic_Kind then Basic_Stepper_Sequence
+             elsif Stepper_Kinds (S) = TMC2240_UART_Kind then TMC2240_Stepper_Sequence
+             else raise Constraint_Error with "Config not implemented for stepper kind " & S'Image));
       end loop;
 
       for I in Input_Switch_Name loop
@@ -1234,6 +1220,7 @@ package body Prunt.Config is
             case Element (I).Kind is
                when Boolean_Kind =>
                   Append (Result, """Kind"":""Boolean""}");
+
                when Discrete_Kind =>
                   Append (Result, """Kind"":""Discrete"",""Options"":[");
                   declare
@@ -1247,20 +1234,31 @@ package body Prunt.Config is
                      end loop;
                   end;
                   Append (Result, "]}");
+
                when Integer_Kind =>
                   Append
                     (Result,
-                     """Kind"":""Integer""" &
-                       ",""Min"":" & Trim (Element (I).Integer_Min'Image) &
-                       ",""Max"":" & Trim (Element (I).Integer_Max'Image) &
-                       ",""Unit"":" & Element (I).Integer_Unit'Image & "}");
+                     """Kind"":""Integer"""
+                     & ",""Min"":"
+                     & Trim (Element (I).Integer_Min'Image)
+                     & ",""Max"":"
+                     & Trim (Element (I).Integer_Max'Image)
+                     & ",""Unit"":"
+                     & Element (I).Integer_Unit'Image
+                     & "}");
+
                when Float_Kind =>
                   Append
                     (Result,
-                     """Kind"":""Float""" &
-                       ",""Min"":" & Trim (Element (I).Float_Min'Image) &
-                       ",""Max"":" & Trim (Element (I).Float_Max'Image) &
-                       ",""Unit"":" & Element (I).Float_Unit'Image & "}");
+                     """Kind"":""Float"""
+                     & ",""Min"":"
+                     & Trim (Element (I).Float_Min'Image)
+                     & ",""Max"":"
+                     & Trim (Element (I).Float_Max'Image)
+                     & ",""Unit"":"
+                     & Element (I).Float_Unit'Image
+                     & "}");
+
                when Sequence_Kind =>
                   if Element (I).Sequence_Tabbed then
                      Append (Result, """Kind"":""Tabbed_Sequence"",""Children"":");
@@ -1269,6 +1267,7 @@ package body Prunt.Config is
                   end if;
                   DFS (Element (I).Sequence_Children);
                   Append (Result, "}");
+
                when Variant_Kind =>
                   Append (Result, """Kind"":""Variant"",""Children"":");
                   DFS (Element (I).Variant_Children);
@@ -1300,8 +1299,10 @@ package body Prunt.Config is
                case Element (I).Kind is
                   when Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind =>
                      Insert (Result, New_Path, Element (I));
+
                   when Sequence_Kind =>
                      DFS (Element (I).Sequence_Children, New_Path);
+
                   when Variant_Kind =>
                      declare
                         Children : constant Property_Maps.Map := Element (I).Variant_Children;
@@ -1383,20 +1384,17 @@ package body Prunt.Config is
          end if;
 
          for S in Stepper_Name loop
-            if Get
-                (Config,
-                 "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" & S'Image) /=
-              "NONE"
+            if Get (Config, "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" & S'Image)
+              /= "NONE"
             then
                if not Boolean'(Get (Config, "Steppers$" & S'Image & "$Enabled")) then
                   Report
                     ("Steppers$" & S'Image & "$Enabled",
-                     "Stepper is attached to " &
-                     Get
-                       (Config,
-                        "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" &
-                        S'Image) &
-                     " but stepper is not enabled.");
+                     "Stepper is attached to "
+                     & Get
+                         (Config,
+                          "Kinematics$Kinematics kind$" & Get (Config, "Kinematics$Kinematics kind") & "$" & S'Image)
+                     & " but stepper is not enabled.");
                end if;
             end if;
          end loop;
@@ -1405,6 +1403,7 @@ package body Prunt.Config is
             case Stepper_Kinds (S) is
                when Basic_Kind =>
                   null;
+
                when TMC2240_UART_Kind =>
                   declare
                      Sum_Too_High                : Boolean;
@@ -1420,81 +1419,79 @@ package body Prunt.Config is
                              Long_Float'Floor
                                (My_Get_Long_Float (Config, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0)));
                   begin
-                     if
-                       Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
-                         and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
+                     if Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                       and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                      then
                         TMC_Types.TMC2240.Optimize_Spreadcycle
-                          (Driver_Voltage =>
+                          (Driver_Voltage              =>
                              Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Input voltage") * volt,
-                           TBL =>
+                           TBL                         =>
                              TMC_Types.TMC2240.TBL_Type'Value
                                ("BLANK_" & Get (Config, "Steppers$" & S'Image & "$TBL")),
-                           Motor_Inductance =>
-                             Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase inductance") /
-                               1_000.0 * henry,
-                           Motor_Resistance =>
+                           Motor_Inductance            =>
+                             Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase inductance")
+                             / 1_000.0
+                             * henry,
+                           Motor_Resistance            =>
                              Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase resistance") * ohm,
-                           Motor_Peak_Current =>
-                             Get (Config, "Steppers$" & S'Image & "$Run current") * amp,
-                           TOFF  =>
+                           Motor_Peak_Current          => Get (Config, "Steppers$" & S'Image & "$Run current") * amp,
+                           TOFF                        =>
                              TMC_Types.TMC2240.TOFF_Type'Value
                                ("OFF_" & Get (Config, "Steppers$" & S'Image & "$TOFF")),
-                           IRUN  => IRUN,
-                           HSTRT => HSTRT,
-                           HEND  => HEND,
-                           Sum_Too_High => Sum_Too_High,
+                           IRUN                        => IRUN,
+                           HSTRT                       => HSTRT,
+                           HEND                        => HEND,
+                           Sum_Too_High                => Sum_Too_High,
                            Sum_Too_High_For_Full_Scale => Sum_Too_High_For_Full_Scale,
-                           Excessive_Heating => Excessive_Heating,
-                           Driver_Voltage_Too_Low => Driver_Voltage_Too_Low);
+                           Excessive_Heating           => Excessive_Heating,
+                           Driver_Voltage_Too_Low      => Driver_Voltage_Too_Low);
                         if Sum_Too_High then
                            Report
                              ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
-                              "Automatically computed hysteresis sum is too high. Check that motor parameters are " &
-                                "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual " &
-                                "tuning.");
+                              "Automatically computed hysteresis sum is too high. Check that motor parameters are "
+                              & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
+                              & "tuning.");
                         elsif Sum_Too_High_For_Full_Scale and IRUN = 31 then
                            Report
                              ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
-                              "Automatically computed hysteresis sum is too high. Check that motor parameters are " &
-                                "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual " &
-                                "tuning. A very small reduction of IRUN to 0.97 will allow the computed parameters " &
-                                "to be used.");
+                              "Automatically computed hysteresis sum is too high. Check that motor parameters are "
+                              & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
+                              & "tuning. A very small reduction of IRUN to 0.97 will allow the computed parameters "
+                              & "to be used.");
                         end if;
 
                         if Excessive_Heating then
                            Report
                              ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
-                              "The stepper motor is likely to heat up excessively at the given driver voltage. " &
-                                "Check that parameters are correct. If parameters are correct and you still want to " &
-                                "use this motor then use manual tuning.");
+                              "The stepper motor is likely to heat up excessively at the given driver voltage. "
+                              & "Check that parameters are correct. If parameters are correct and you still want to "
+                              & "use this motor then use manual tuning.");
                         end if;
 
                         if Driver_Voltage_Too_Low then
                            Report
                              ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
-                              "The stepper motor requires a higher driver voltage to reach full current. Check that " &
-                                "parameters are correct. If parameters are correct and you still want to use this " &
-                                "motor then use manual tuning.");
+                              "The stepper motor requires a higher driver voltage to reach full current. Check that "
+                              & "parameters are correct. If parameters are correct and you still want to use this "
+                              & "motor then use manual tuning.");
                         end if;
-                     elsif
-                       Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                     elsif Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                        and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Manual"
                      then
-                        if
-                          IRUN = 31 and then
-                            Integer'
-                              (Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") +
-                                 Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT")) > 14
+                        if IRUN = 31
+                          and then Integer'
+                                     (Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND")
+                                      + Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT"))
+                                   > 14
                         then
                            --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks
                            --  to be an off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but
                            --  the maximum is probably actually 255.
                            Report
                              ("Steppers$" & S'Image & "$CHM$SpreadCycle$Manual",
-                              "HSTRT + HEND must be less than 15 unless IRUN is reduced to 0.97 or below as " &
-                                "otherwise the hysteresis start setting will be greater than the full scale " &
-                                "current, leading to incorrect operation.");
+                              "HSTRT + HEND must be less than 15 unless IRUN is reduced to 0.97 or below as "
+                              & "otherwise the hysteresis start setting will be greater than the full scale "
+                              & "current, leading to incorrect operation.");
                         end if;
                      end if;
                   end;
@@ -1514,9 +1511,7 @@ package body Prunt.Config is
             if Ada.Directories.Exists (Config_Path & "_backup_19") then
                Ada.Directories.Delete_File (Config_Path & "_backup_18");
             else
-               Ada.Directories.Rename
-                 (Old_Name => Config_Path & "_backup_18",
-                  New_Name => Config_Path & "_backup_19");
+               Ada.Directories.Rename (Old_Name => Config_Path & "_backup_18", New_Name => Config_Path & "_backup_19");
             end if;
          end if;
 
@@ -1554,7 +1549,7 @@ package body Prunt.Config is
             return;
          end if;
 
-         Schema      := Build_Schema;
+         Schema := Build_Schema;
          Schema_JSON := Schema_To_JSON (Schema);
          Flat_Schema := Build_Flat_Schema (Schema);
 
@@ -1581,11 +1576,10 @@ package body Prunt.Config is
             raise Config_File_Format_Error with "Config file should contain a JSON object.";
          end if;
 
-         if
-           not Has_Field (Current_Properties, "Schema version") or else
-             Kind (Get (Current_Properties, "Schema version")) /= JSON_Int_Type or else
-             not Has_Field (Current_Properties, "Properties") or else
-             Kind (Get (Current_Properties, "Properties")) /= JSON_Object_Type
+         if not Has_Field (Current_Properties, "Schema version")
+           or else Kind (Get (Current_Properties, "Schema version")) /= JSON_Int_Type
+           or else not Has_Field (Current_Properties, "Properties")
+           or else Kind (Get (Current_Properties, "Properties")) /= JSON_Object_Type
          then
             raise Config_File_Format_Error
               with "Config file format should be {""Schema version"": Integer, ""Properties"": {...}}.";
@@ -1605,12 +1599,16 @@ package body Prunt.Config is
                case Element (X).Kind is
                   when Boolean_Kind =>
                      Set_Field (Get (Current_Properties, "Properties"), Key (X), Element (X).Boolean_Default);
+
                   when Discrete_Kind =>
                      Set_Field (Get (Current_Properties, "Properties"), Key (X), Element (X).Discrete_Default);
+
                   when Integer_Kind =>
                      Set_Field (Get (Current_Properties, "Properties"), Key (X), Create (Element (X).Integer_Default));
+
                   when Float_Kind =>
                      Set_Field_Long_Float (Get (Current_Properties, "Properties"), Key (X), Element (X).Float_Default);
+
                   when Sequence_Kind | Variant_Kind =>
                      raise Constraint_Error with "Field type should not exist here: " & Element (X).Kind'Image;
                end case;
@@ -1631,8 +1629,9 @@ package body Prunt.Config is
             if Has_Errors then
                Init_Failed := True;
                raise Config_File_Format_Error
-                 with "Config file errors logged to console. If you did not edit the config file by hand then this " &
-                 "is a bug in Prunt.";
+                 with
+                   "Config file errors logged to console. If you did not edit the config file by hand then this "
+                   & "is a bug in Prunt.";
             end if;
          end;
 
@@ -1742,8 +1741,7 @@ package body Prunt.Config is
          Config : Full_Config;
       begin
          Config.Prunt :=
-           (Enabled            => Get (Data, "Prunt$Enabled"),
-            Replace_G0_With_G1 => Get (Data, "Prunt$Replace G0 with G1"));
+           (Enabled => Get (Data, "Prunt$Enabled"), Replace_G0_With_G1 => Get (Data, "Prunt$Replace G0 with G1"));
 
          if Get (Data, "Kinematics$Kinematics kind") = "Cartesian" then
             Config.Kinematics :=
@@ -1837,20 +1835,19 @@ package body Prunt.Config is
                     (Kind        => Basic_Kind,
                      Enabled     => Get (Data, "Steppers$" & S'Image & "$Enabled"),
                      Mm_Per_Step => Get (Data, "Steppers$" & S'Image & "$Distance per step") * mm);
+
                when TMC2240_UART_Kind =>
                   Config.Steppers (S) :=
                     (Kind          => TMC2240_UART_Kind,
                      Enabled       => Get (Data, "Steppers$" & S'Image & "$Enabled"),
                      Mm_Per_Step   => Get (Data, "Steppers$" & S'Image & "$Distance per step") * mm,
                      GCONF         =>
-                     (Reserved_1       => 0,
+                       (Reserved_1       => 0,
                         Fast_Standstill  => Get (Data, "Steppers$" & S'Image & "$FAST_STANDSTILL"),
                         En_PWM_Mode      =>
-                          TMC_Boolean
-                            (Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)") = "Enabled"),
+                          TMC_Boolean (Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)") = "Enabled"),
                         Multistep_Filt   =>
-                          Get
-                            (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$MULTISTEP_FILT"),
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$MULTISTEP_FILT"),
                         Invert_Direction => False,
                         Diag0_Error      => False,
                         Diag0_OTPW       => False,
@@ -1867,12 +1864,11 @@ package body Prunt.Config is
                         Reserved_3       => 0),
                      DRV_CONF      =>
                        (Current_Range =>
-                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0 then
-                              TMC_Types.TMC2240.Max_3A
-                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 1.0 then
-                              TMC_Types.TMC2240.Max_2A
-                           else
-                              TMC_Types.TMC2240.Max_1A),
+                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0
+                           then TMC_Types.TMC2240.Max_3A
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 1.0
+                           then TMC_Types.TMC2240.Max_2A
+                           else TMC_Types.TMC2240.Max_1A),
                         Reserved_1    => 0,
                         Slope_Control =>
                           TMC_Types.TMC2240.Slope_Control_Type'Value
@@ -1880,27 +1876,24 @@ package body Prunt.Config is
                         Reserved_2    => 0),
                      GLOBAL_SCALER =>
                        (Global_Scaler =>
-                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 3.0 then
-                              0
-                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0 then
-                              TMC_Types.TMC2240.Global_Scaler_Type
-                                (Dimensionless'Floor
-                                   (Get (Data, "Steppers$" & S'Image & "$Run current") / 3.0 * 256.0))
-                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 2.0 then
-                              0
-                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 1.0 then
-                              TMC_Types.TMC2240.Global_Scaler_Type
-                                (Dimensionless'Floor
-                                   (Get (Data, "Steppers$" & S'Image & "$Run current") / 2.0 * 256.0))
-                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 1.0 then
-                              0
+                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 3.0 then 0
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0
+                           then
+                             TMC_Types.TMC2240.Global_Scaler_Type
+                               (Dimensionless'Floor (Get (Data, "Steppers$" & S'Image & "$Run current") / 3.0 * 256.0))
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 2.0 then 0
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 1.0
+                           then
+                             TMC_Types.TMC2240.Global_Scaler_Type
+                               (Dimensionless'Floor (Get (Data, "Steppers$" & S'Image & "$Run current") / 2.0 * 256.0))
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 1.0 then 0
                            else
-                              TMC_Types.TMC2240.Global_Scaler_Type
-                                (Dimensionless'Max
-                                   (32.0,
-                                    Dimensionless'Floor
-                                      (Get (Data, "Steppers$" & S'Image & "$Run current") / 1.0 * 256.0)))),
-                        Reserved    => 0),
+                             TMC_Types.TMC2240.Global_Scaler_Type
+                               (Dimensionless'Max
+                                  (32.0,
+                                   Dimensionless'Floor
+                                     (Get (Data, "Steppers$" & S'Image & "$Run current") / 1.0 * 256.0)))),
+                        Reserved      => 0),
                      IHOLD_IRUN    =>
                        (I_Hold       =>
                           TMC_Types.Unsigned_5
@@ -1914,7 +1907,7 @@ package body Prunt.Config is
                             (Long_Float'Max
                                (0.0,
                                 Long_Float'Floor
-                                   (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0))),
+                                  (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0))),
                         Reserved_2   => 0,
                         I_Hold_Delay =>
                           TMC_Types.Unsigned_4
@@ -1931,53 +1924,51 @@ package body Prunt.Config is
                           TMC_Types.Unsigned_8
                             (Long_Float'Floor
                                (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$TPOWERDOWN") / 21.0)),
-                        Reserved => 0),
+                        Reserved     => 0),
                      TPWMTHRS      =>
                        (T_PWM_Thrs =>
                           TMC_Types.Unsigned_20
                             (Long_Float'Floor
                                (Long_Float'Min
-                                  (12_500_000.0 /
-                                     (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step")) /
-                                        (My_Get_Long_Float
+                                  (12_500_000.0
+                                   / (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step"))
+                                      / (My_Get_Long_Float
                                            (Data,
-                                            "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS") +
-                                           1.0E-100) + 1.0E-100),
+                                            "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS")
+                                         + 1.0E-100)
+                                      + 1.0E-100),
                                    2.0**20 - 1.0))),
-                        Reserved => 0),
-                     TCOOLTHRS     =>
-                       (T_Cool_Thrs => 0,
-                        Reserved    => 0),
+                        Reserved   => 0),
+                     TCOOLTHRS     => (T_Cool_Thrs => 0, Reserved => 0),
                      THIGH         =>
-                       (T_High =>
+                       (T_High   =>
                           TMC_Types.Unsigned_20
                             (Long_Float'Floor
                                (Long_Float'Min
-                                  (12_500_000.0 /
-                                     (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step")) /
-                                        (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100)),
+                                  (12_500_000.0
+                                   / (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step"))
+                                      / (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100)),
                                    2.0**20 - 1.0))),
                         Reserved => 0),
                      CHOPCONF      =>
                        (TOFF                 =>
-                          TMC_Types.TMC2240.TOFF_Type'Value
-                            ("OFF_" & Get (Data, "Steppers$" & S'Image & "$TOFF")),
-                        HSTRT_TFD210         => <>, --  Set later.
-                        HEND_OFFSET          => <>, --  Set later.
-                        FD3                  => <>, --  Set later.
-                        DISFDCC              =>
-                          Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$DISFDCC"),
+                          TMC_Types.TMC2240.TOFF_Type'Value ("OFF_" & Get (Data, "Steppers$" & S'Image & "$TOFF")),
+                        HSTRT_TFD210         => <>,
+                        --  Set later.
+                        HEND_OFFSET          => <>,
+                        --  Set later.
+                        FD3                  => <>,
+                        --  Set later.
+                        DISFDCC              => Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$DISFDCC"),
                         Reserved_1           => 0,
                         CHM                  =>
-                          (if Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle" then
-                              TMC_Types.TMC2240.SpreadCycle_Mode
-                           elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "Constant off time" then
-                              TMC_Types.TMC2240.Constant_Off_Time_Mode
-                           else
-                              raise Constraint_Error with "Not implemented."),
+                          (if Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                           then TMC_Types.TMC2240.SpreadCycle_Mode
+                           elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "Constant off time"
+                           then TMC_Types.TMC2240.Constant_Off_Time_Mode
+                           else raise Constraint_Error with "Not implemented."),
                         TBL                  =>
-                          TMC_Types.TMC2240.TBL_Type'Value
-                            ("BLANK_" & Get (Data, "Steppers$" & S'Image & "$TBL")),
+                          TMC_Types.TMC2240.TBL_Type'Value ("BLANK_" & Get (Data, "Steppers$" & S'Image & "$TBL")),
                         Reserved_2           => 0,
                         VHIGHFS              => Get (Data, "Steppers$" & S'Image & "$VHIGHFS"),
                         VHIGHCHM             => Get (Data, "Steppers$" & S'Image & "$VHIGHCHM"),
@@ -1986,7 +1977,8 @@ package body Prunt.Config is
                           TMC_Types.TMC2240.Microstep_Resolution_Type'Value
                             (Get (Data, "Steppers$" & S'Image & "$MRES")),
                         Interpolate          => False,
-                        Double_Edge          => False, --  Set correctly in Prunt.Controller.
+                        Double_Edge          => False,
+                        --  Set correctly in Prunt.Controller.
                         Disable_S2G          => False,
                         Disable_S2Vs         => False),
                      PWMCONF       =>
@@ -1996,9 +1988,8 @@ package body Prunt.Config is
                           Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_GRAD"),
                         PWM_Freq           =>
                           TMC_Types.TMC2240.PWM_Freq_Type'Value
-                            ("FREQ_" &
-                               Get
-                                 (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_FREQ")),
+                            ("FREQ_"
+                             & Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_FREQ")),
                         PWM_Auto_Scale     =>
                           Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_AUTOSCALE"),
                         PWM_Auto_Grad      =>
@@ -2007,13 +1998,9 @@ package body Prunt.Config is
                           TMC_Types.TMC2240.Freewheel_Type'Value
                             (Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$FREEWHEEL")),
                         PWM_Meas_SD_Enable =>
-                          Get
-                            (Data,
-                             "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_MEAS_SD_ENABLE"),
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_MEAS_SD_ENABLE"),
                         PWM_Dis_Reg_Stst   =>
-                          Get
-                            (Data,
-                             "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_DIS_REG_STST"),
+                          Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_DIS_REG_STST"),
                         PWM_Reg            =>
                           Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_REG"),
                         PWM_Lim            =>
@@ -2024,28 +2011,22 @@ package body Prunt.Config is
                        Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$DISFDCC");
                      Config.Steppers (S).CHOPCONF.HEND_OFFSET :=
                        TMC_Types.Unsigned_4
-                         (Long_Integer'
-                            (Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$OFFSET") + 3));
+                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$OFFSET") + 3));
                      Config.Steppers (S).CHOPCONF.HSTRT_TFD210 :=
                        TMC_Types.Unsigned_3
-                         (Long_Integer'
-                            (Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$TFD") rem 8));
+                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$TFD") rem 8));
                      Config.Steppers (S).CHOPCONF.FD3 :=
                        TMC_Types.Unsigned_1
-                         (Long_Integer'
-                            (Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$TFD") / 8));
-                  elsif
-                    Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$TFD") / 8));
+                  elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                     and then Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Manual"
                   then
                      Config.Steppers (S).CHOPCONF.HEND_OFFSET :=
                        TMC_Types.Unsigned_4
-                         (Long_Integer'
-                            (Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") + 3));
+                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") + 3));
                      Config.Steppers (S).CHOPCONF.HSTRT_TFD210 :=
                        Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT");
-                  elsif
-                    Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                  elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                     and then Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                   then
                      declare
@@ -2055,24 +2036,24 @@ package body Prunt.Config is
                         Driver_Voltage_Too_Low      : Boolean;
                      begin
                         TMC_Types.TMC2240.Optimize_Spreadcycle
-                          (Driver_Voltage =>
+                          (Driver_Voltage              =>
                              Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Input voltage") * volt,
-                           TBL => Config.Steppers (S).CHOPCONF.TBL,
-                           Motor_Inductance =>
-                             Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase inductance") /
-                               1_000.0 * henry,
-                           Motor_Resistance =>
+                           TBL                         => Config.Steppers (S).CHOPCONF.TBL,
+                           Motor_Inductance            =>
+                             Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase inductance")
+                             / 1_000.0
+                             * henry,
+                           Motor_Resistance            =>
                              Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Phase resistance") * ohm,
-                           Motor_Peak_Current =>
-                             Get (Data, "Steppers$" & S'Image & "$Run current") * amp,
-                           TOFF  => Config.Steppers (S).CHOPCONF.TOFF,
-                           IRUN  => Config.Steppers (S).IHOLD_IRUN.I_Run,
-                           HSTRT => Config.Steppers (S).CHOPCONF.HSTRT_TFD210,
-                           HEND  => Config.Steppers (S).CHOPCONF.HEND_OFFSET,
-                           Sum_Too_High => Sum_Too_High,
+                           Motor_Peak_Current          => Get (Data, "Steppers$" & S'Image & "$Run current") * amp,
+                           TOFF                        => Config.Steppers (S).CHOPCONF.TOFF,
+                           IRUN                        => Config.Steppers (S).IHOLD_IRUN.I_Run,
+                           HSTRT                       => Config.Steppers (S).CHOPCONF.HSTRT_TFD210,
+                           HEND                        => Config.Steppers (S).CHOPCONF.HEND_OFFSET,
+                           Sum_Too_High                => Sum_Too_High,
                            Sum_Too_High_For_Full_Scale => Sum_Too_High_For_Full_Scale,
-                           Excessive_Heating => Excessive_Heating,
-                           Driver_Voltage_Too_Low => Driver_Voltage_Too_Low);
+                           Excessive_Heating           => Excessive_Heating,
+                           Driver_Voltage_Too_Low      => Driver_Voltage_Too_Low);
                         if Excessive_Heating or Driver_Voltage_Too_Low then
                            raise Constraint_Error with "Invalid config should have been caught earlier.";
                         end if;
@@ -2081,11 +2062,11 @@ package body Prunt.Config is
                      raise Constraint_Error with "Not implemented.";
                   end if;
 
-                  if
-                    Config.Steppers (S).CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode and
-                      (Dimensionless (Config.Steppers (S).CHOPCONF.HEND_OFFSET) +
-                         Dimensionless (Config.Steppers (S).CHOPCONF.HSTRT_TFD210) > 18.0) and
-                      (Config.Steppers (S).IHOLD_IRUN.I_Run = 31)
+                  if Config.Steppers (S).CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode
+                    and (Dimensionless (Config.Steppers (S).CHOPCONF.HEND_OFFSET)
+                         + Dimensionless (Config.Steppers (S).CHOPCONF.HSTRT_TFD210)
+                         > 18.0)
+                    and (Config.Steppers (S).IHOLD_IRUN.I_Run = 31)
                   then
                      raise Constraint_Error with "Invalid config should have been caught earlier.";
                   end if;
@@ -2112,25 +2093,17 @@ package body Prunt.Config is
                     -Get (Data, "Homing$" & A'Image & "$Use input switch$Back off move distance") * mm,
                   Second_Move_Distance   =>
                     Get (Data, "Homing$" & A'Image & "$Use input switch$Second move distance") * mm,
-                  Switch_Position        =>
-                    Get (Data, "Homing$" & A'Image & "$Use input switch$Switch position") * mm,
-                  Move_To_After          =>
-                    Get (Data, "Homing$" & A'Image & "$Use input switch$Move to after") * mm);
+                  Switch_Position        => Get (Data, "Homing$" & A'Image & "$Use input switch$Switch position") * mm,
+                  Move_To_After          => Get (Data, "Homing$" & A'Image & "$Use input switch$Move to after") * mm);
 
-               if Boolean'
-                 (Get (Data, "Homing$" & A'Image & "$Use input switch$Move towards negative infinity"))
-               then
-                  Config.Homing (A).First_Move_Distance    :=
-                    -Config.Homing (A).First_Move_Distance;
-                  Config.Homing (A).Back_Off_Move_Distance :=
-                    -Config.Homing (A).Back_Off_Move_Distance;
-                  Config.Homing (A).Second_Move_Distance   :=
-                    -Config.Homing (A).Second_Move_Distance;
+               if Boolean'(Get (Data, "Homing$" & A'Image & "$Use input switch$Move towards negative infinity")) then
+                  Config.Homing (A).First_Move_Distance := -Config.Homing (A).First_Move_Distance;
+                  Config.Homing (A).Back_Off_Move_Distance := -Config.Homing (A).Back_Off_Move_Distance;
+                  Config.Homing (A).Second_Move_Distance := -Config.Homing (A).Second_Move_Distance;
                end if;
             elsif Get (Data, "Homing$" & A'Image) = "Set to value" then
                Config.Homing (A) :=
-                 (Kind  => Set_To_Value_Kind,
-                  Value => Get (Data, "Homing$" & A'Image & "$Set to value$Position") * mm);
+                 (Kind => Set_To_Value_Kind, Value => Get (Data, "Homing$" & A'Image & "$Set to value$Position") * mm);
             else
                raise Constraint_Error;
             end if;
@@ -2153,17 +2126,14 @@ package body Prunt.Config is
                     Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Steinhart-Hart model$B"),
                   SH_C                =>
                     Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Steinhart-Hart model$C"));
-            elsif
-              Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Custom Callendar-Van Dusen model"
-            then
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "Custom Callendar-Van Dusen model" then
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
                   Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
                   Maximum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Maximum temperature") * celsius,
                   CVD_R0              =>
-                    Get
-                      (Data,
-                       "Thermistors$" & T'Image & "$Thermistor kind$Custom Callendar-Van Dusen model$R(0)") * ohm,
+                    Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Callendar-Van Dusen model$R(0)")
+                    * ohm,
                   CVD_A               =>
                     Get (Data, "Thermistors$" & T'Image & "$Thermistor kind$Custom Callendar-Van Dusen model$A"),
                   CVD_B               =>
@@ -2232,9 +2202,7 @@ package body Prunt.Config is
                   SH_A                => 5.4598E-4,
                   SH_B                => 2.4390E-4,
                   SH_C                => 0.0);
-            elsif
-              Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "PT-1000 (PT-385 class above 0C)"
-            then
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "PT-1000 (PT-385 class above 0C)" then
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
                   Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
@@ -2242,9 +2210,7 @@ package body Prunt.Config is
                   CVD_R0              => 1_000.0 * ohm,
                   CVD_A               => 3.9083E-3,
                   CVD_B               => -5.775E-7);
-            elsif
-              Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "PT-1000 (PT-392 class above 0C)"
-            then
+            elsif Get (Data, "Thermistors$" & T'Image & "$Thermistor kind") = "PT-1000 (PT-392 class above 0C)" then
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
                   Minimum_Temperature => Get (Data, "Thermistors$" & T'Image & "$Minimum temperature") * celsius,
@@ -2261,27 +2227,23 @@ package body Prunt.Config is
             if Get (Data, "Heaters$" & H'Image & "$Control method") = "Disabled" then
                Config.Heaters (H) :=
                  (Thermistor => Thermistor_Name'Value (Get (Data, "Heaters$" & H'Image & "$Thermistor")),
-                  Params =>
+                  Params     =>
                     (Kind                       => Disabled_Kind,
                      Check_Max_Cumulative_Error =>
                        Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celsius,
                      Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
-                     Check_Minimum_Gain         =>
-                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
-                     Check_Hysteresis           =>
-                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius));
+                     Check_Minimum_Gain         => Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
+                     Check_Hysteresis           => Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius));
             elsif Get (Data, "Heaters$" & H'Image & "$Control method") = "PID" then
                Config.Heaters (H) :=
                  (Thermistor => Thermistor_Name'Value (Get (Data, "Heaters$" & H'Image & "$Thermistor")),
-                  Params =>
+                  Params     =>
                     (Kind                       => PID_Kind,
                      Check_Max_Cumulative_Error =>
                        Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celsius,
                      Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
-                     Check_Minimum_Gain         =>
-                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
-                     Check_Hysteresis           =>
-                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius,
+                     Check_Minimum_Gain         => Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
+                     Check_Hysteresis           => Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius,
                      Proportional_Scale         =>
                        Get (Data, "Heaters$" & H'Image & "$Control method$PID$Proportional scale"),
                      Integral_Scale             =>
@@ -2291,15 +2253,13 @@ package body Prunt.Config is
             elsif Get (Data, "Heaters$" & H'Image & "$Control method") = "Bang bang" then
                Config.Heaters (H) :=
                  (Thermistor => Thermistor_Name'Value (Get (Data, "Heaters$" & H'Image & "$Thermistor")),
-                  Params =>
+                  Params     =>
                     (Kind                       => Bang_Bang_Kind,
                      Check_Max_Cumulative_Error =>
                        Get (Data, "Heaters$" & H'Image & "$Check maximum cumulative error") * celsius,
                      Check_Gain_Time            => Get (Data, "Heaters$" & H'Image & "$Check gain time") * s,
-                     Check_Minimum_Gain         =>
-                       Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
-                     Check_Hysteresis           =>
-                       Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius,
+                     Check_Minimum_Gain         => Get (Data, "Heaters$" & H'Image & "$Check minimum gain") * celsius,
+                     Check_Hysteresis           => Get (Data, "Heaters$" & H'Image & "$Check hysteresis") * celsius,
                      Bang_Bang_Hysteresis       =>
                        Get (Data, "Heaters$" & H'Image & "$Control method$Bang bang$Hysteresis") * celsius));
             else
@@ -2335,24 +2295,22 @@ package body Prunt.Config is
                Config.Shapers (A) :=
                  (Kind                         => Zero_Vibration,
                   Zero_Vibration_Frequency     =>
-                    Get (Data, "Input shaping$" & A'Image & "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Frequency") *
-                    hertz,
+                    Get (Data, "Input shaping$" & A'Image & "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Frequency") * hertz,
                   Zero_Vibration_Damping_Ratio =>
-                    Get
-                      (Data, "Input shaping$" & A'Image & "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Damping ratio"),
+                    Get (Data, "Input shaping$" & A'Image & "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Damping ratio"),
                   Zero_Vibration_Deriviatives  =>
                     Zero_Vibration_Deriviatives_Count
                       (Integer'
                          (Get
                             (Data,
-                             "Input shaping$" & A'Image &
-                             "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Number of derivatives"))));
+                             "Input shaping$"
+                             & A'Image
+                             & "$Zero vibration (ZV/ZVD/ZVDD/etc.)$Number of derivatives"))));
             elsif Get (Data, "Input shaping$" & A'Image) = "Extra insensitive (EI/2HEI/3HEI)" then
                Config.Shapers (A) :=
                  (Kind                                 => Extra_Insensitive,
                   Extra_Insensitive_Frequency          =>
-                    Get (Data, "Input shaping$" & A'Image & "$Extra insensitive (EI/2HEI/3HEI)$Frequency") *
-                    hertz,
+                    Get (Data, "Input shaping$" & A'Image & "$Extra insensitive (EI/2HEI/3HEI)$Frequency") * hertz,
                   Extra_Insensitive_Damping_Ratio      =>
                     Get (Data, "Input shaping$" & A'Image & "$Extra insensitive (EI/2HEI/3HEI)$Damping ratio"),
                   Extra_Insensitive_Residual_Vibration =>
@@ -2364,8 +2322,9 @@ package body Prunt.Config is
                       (Integer'
                          (Get
                             (Data,
-                             "Input shaping$" & A'Image &
-                             "$Extra insensitive (EI/2HEI/3HEI)$Number of derivatives"))));
+                             "Input shaping$"
+                             & A'Image
+                             & "$Extra insensitive (EI/2HEI/3HEI)$Number of derivatives"))));
             else
                raise Constraint_Error;
             end if;
@@ -2388,16 +2347,15 @@ package body Prunt.Config is
                   if Kind (Value) /= JSON_Boolean_Type then
                      Report (Name, "Element must be boolean.");
                   end if;
+
                when Discrete_Kind =>
                   if Kind (Value) /= JSON_String_Type then
                      Report (Name, "Element must be string.");
-                  elsif
-                    not Discrete_String_Sets.Contains (Element (Flat_Schema, Name).Discrete_Options, Get (Value))
+                  elsif not Discrete_String_Sets.Contains (Element (Flat_Schema, Name).Discrete_Options, Get (Value))
                   then
-                     Report
-                       (Name, "Element must be one of: " &
-                          Element (Flat_Schema, Name).Discrete_Options'Image);
+                     Report (Name, "Element must be one of: " & Element (Flat_Schema, Name).Discrete_Options'Image);
                   end if;
+
                when Integer_Kind =>
                   if Kind (Value) = JSON_Float_Type then
                      Report (Name, "Element must be integer, floats are not allowed even if they are whole numbers.");
@@ -2411,6 +2369,7 @@ package body Prunt.Config is
                        (Name,
                         "Element must not be greater than " & Trim (Element (Flat_Schema, Name).Integer_Max'Image));
                   end if;
+
                when Float_Kind =>
                   if Kind (Value) not in JSON_Float_Type | JSON_Int_Type then
                      Report (Name, "Element must be float or integer (automatically upcast).");
@@ -2422,6 +2381,7 @@ package body Prunt.Config is
                        (Name,
                         "Element must not be greater than " & Trim (Element (Flat_Schema, Name).Float_Max'Image));
                   end if;
+
                when Sequence_Kind | Variant_Kind =>
                   raise Constraint_Error with "Field type should not exist here: " & Element (Flat_Schema, Name)'Image;
             end case;
@@ -2432,7 +2392,7 @@ package body Prunt.Config is
             return;
          end if;
 
-            Map_JSON_Object (Config, Check_Field'Access);
+         Map_JSON_Object (Config, Check_Field'Access);
       end Validate_Config_To_Schema;
 
       procedure Get_Schema (Schema : out Ada.Strings.Unbounded.Unbounded_String) is
@@ -2459,8 +2419,7 @@ package body Prunt.Config is
       end Error_If_Initial_Config_Invalid;
 
       procedure Get_Values_And_Validate
-        (Report : access procedure (Key, Message : String); Values : out Ada.Strings.Unbounded.Unbounded_String)
-      is
+        (Report : access procedure (Key, Message : String); Values : out Ada.Strings.Unbounded.Unbounded_String) is
       begin
          Validate_Current_Config (Report);
          Get_Values (Values);
@@ -2530,8 +2489,7 @@ package body Prunt.Config is
    end Read;
 
    procedure Patch
-     (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String))
-   is
+     (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String)) is
    begin
       Config_File.Patch (Data, Report);
    end Patch;

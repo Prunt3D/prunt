@@ -55,13 +55,13 @@ package body Prunt.TMC_Types.TMC2240 is
    end Compute_CRC;
 
    procedure Optimize_Spreadcycle
-     (Driver_Voltage              :     Voltage;
-      TBL                         :     TBL_Type;
-      Motor_Inductance            :     Inductance;
-      Motor_Resistance            :     Resistance;
-      Motor_Peak_Current          :     Current;
-      TOFF                        :     TOFF_Type;
-      IRUN                        :     Unsigned_5;
+     (Driver_Voltage              : Voltage;
+      TBL                         : TBL_Type;
+      Motor_Inductance            : Inductance;
+      Motor_Resistance            : Resistance;
+      Motor_Peak_Current          : Current;
+      TOFF                        : TOFF_Type;
+      IRUN                        : Unsigned_5;
       HSTRT                       : out Unsigned_3;
       HEND                        : out Unsigned_4;
       Sum_Too_High                : out Boolean;
@@ -72,14 +72,14 @@ package body Prunt.TMC_Types.TMC2240 is
       package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
       use Math;
 
-      System_Cycle_Time : constant Time          := 1.0 / (12_500_000.0 * hertz);
+      System_Cycle_Time : constant Time := 1.0 / (12_500_000.0 * hertz);
       Blank_Time        : constant Time := 1.5**Dimensionless (TBL_Type'Enum_Rep (TBL)) * 16.0 * System_Cycle_Time;
-      Motor_RMS_Current : constant Current       := Motor_Peak_Current / Sqrt (2.0);
+      Motor_RMS_Current : constant Current := Motor_Peak_Current / Sqrt (2.0);
       Slow_Decay_Time   : constant Time := Dimensionless (24 + 32 * TOFF_Type'Enum_Rep (TOFF)) * System_Cycle_Time;
-      Blank_Drop        : constant Current       := Driver_Voltage * Blank_Time / Motor_Inductance;
-      Slow_Decay_Drop   : constant Current       :=
+      Blank_Drop        : constant Current := Driver_Voltage * Blank_Time / Motor_Inductance;
+      Slow_Decay_Drop   : constant Current :=
         Motor_Resistance * Motor_Peak_Current * 2.0 * Slow_Decay_Time / Motor_Inductance;
-      Total_Drop        : constant Current       := (Blank_Drop + Slow_Decay_Drop) * 2.0;
+      Total_Drop        : constant Current := (Blank_Drop + Slow_Decay_Drop) * 2.0;
       Current_Scaler    : constant Dimensionless := Dimensionless (IRUN) / 32.0;
       Hysteresis_Sum    : constant Dimensionless :=
         Dimensionless'Max
@@ -88,14 +88,14 @@ package body Prunt.TMC_Types.TMC2240 is
       Hysteresis_End    : constant Dimensionless := Dimensionless'Min (Hysteresis_Sum - Hysteresis_Start, 12.0);
    begin
       HSTRT := Unsigned_3 (Hysteresis_Start - 1.0);
-      HEND  := Unsigned_4 (Hysteresis_End + 3.0);
+      HEND := Unsigned_4 (Hysteresis_End + 3.0);
 
-      Sum_Too_High                := Hysteresis_Sum > 20.0;
+      Sum_Too_High := Hysteresis_Sum > 20.0;
       Sum_Too_High_For_Full_Scale := Hysteresis_Sum > 14.0;
       --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks to be an off-by-one
       --  error as the default sine wave peak is 248. 248 + 16/2 = 256 but the maximum is probably actually 255.
-      Excessive_Heating           := 20.0 * Motor_Resistance * Motor_Peak_Current / Sqrt (2.0) < Driver_Voltage;
-      Driver_Voltage_Too_Low      := 2.0 * Motor_Resistance * Motor_Peak_Current / Sqrt (2.0) > Driver_Voltage;
+      Excessive_Heating := 20.0 * Motor_Resistance * Motor_Peak_Current / Sqrt (2.0) < Driver_Voltage;
+      Driver_Voltage_Too_Low := 2.0 * Motor_Resistance * Motor_Peak_Current / Sqrt (2.0) > Driver_Voltage;
    end Optimize_Spreadcycle;
 
 end Prunt.TMC_Types.TMC2240;

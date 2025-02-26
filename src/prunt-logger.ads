@@ -49,8 +49,10 @@ private
       Cursor : Receiver_Lists.Cursor := Receiver_Lists.No_Element;
    end record;
 
-   overriding procedure Initialize (Object : in out Handle);
-   overriding procedure Finalize (Object : in out Handle);
+   overriding
+   procedure Initialize (Object : in out Handle);
+   overriding
+   procedure Finalize (Object : in out Handle);
 
    protected List_Handler is
       procedure Initialize (Log_Handle : in out Handle);
@@ -62,11 +64,11 @@ private
       Receivers_Has_Update : Boolean := True;
    end List_Handler;
 
-   package Unbounded_String_Queue_Interfaces is new Ada.Containers.Synchronized_Queue_Interfaces
-     (Element_Type => Unbounded_String);
+   package Unbounded_String_Queue_Interfaces is new
+     Ada.Containers.Synchronized_Queue_Interfaces (Element_Type => Unbounded_String);
 
-   package Unbounded_String_Queues is new Ada.Containers.Unbounded_Synchronized_Queues
-     (Queue_Interfaces => Unbounded_String_Queue_Interfaces);
+   package Unbounded_String_Queues is new
+     Ada.Containers.Unbounded_Synchronized_Queues (Queue_Interfaces => Unbounded_String_Queue_Interfaces);
 
    Message_Queue : Unbounded_String_Queues.Queue;
 

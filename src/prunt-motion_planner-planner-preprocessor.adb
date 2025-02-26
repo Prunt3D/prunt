@@ -38,13 +38,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          case Comm.Kind is
             when Flush_Kind | Update_Persistent_Data_Kind =>
                null;
+
             when Flush_And_Reset_Position_Kind =>
                if not Ignore_Bounds then
                   Check_Bounds (Comm.Reset_Pos, Current_Params);
                end if;
+
             when Flush_And_Change_Parameters_Kind =>
                Current_Params := Comm.New_Params;
                --  TODO: Check that scaler will not cause max step rate to be exceeded.
+
             when Move_Kind =>
                if not Ignore_Bounds then
                   Check_Bounds (Comm.Pos, Current_Params);
@@ -108,9 +111,9 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       procedure Run (Block : aliased out Execution_Block) is
          Flush_Resetting_Data : Flush_Resetting_Data_Type := Flush_Resetting_Data_Default;
-         N_Corners            : Corners_Index             := 1;
-         Block_N_Corners      : Corners_Index with
-           Address => Block.N_Corners'Address;
+         N_Corners            : Corners_Index := 1;
+         Block_N_Corners      : Corners_Index
+         with Address => Block.N_Corners'Address;
          Next_Params          : Kinematic_Parameters;
       begin
          if not Setup_Done then
@@ -131,35 +134,41 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   when Flush_Kind =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      exit;
+
                   when Flush_And_Reset_Position_Kind =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
-                     Last_Pos             := Next_Command.Reset_Pos;
+                     Last_Pos := Next_Command.Reset_Pos;
                      exit;
+
                   when Flush_And_Change_Parameters_Kind =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
-                     Next_Params          := Limit_Higher_Order_Params (Next_Command.New_Params);
+                     Next_Params := Limit_Higher_Order_Params (Next_Command.New_Params);
                      exit;
+
                   when Move_Kind =>
                      --  if abs (Last_Pos - Next_Command.Pos) >= Preprocessor_Minimum_Move_Distance then
-                     N_Corners                      := N_Corners + 1;
-                     Corners (N_Corners)            := Next_Command.Pos / Current_Params.Axial_Scaler;
+                     N_Corners := N_Corners + 1;
+                     Corners (N_Corners) := Next_Command.Pos / Current_Params.Axial_Scaler;
                      Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
-                     Segment_Feedrates (N_Corners)  := Next_Command.Feedrate;
+                     Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
 
-                     if N_Corners > 2 and then abs (Corners (N_Corners) - Corners (N_Corners - 1)) = 0.0 * mm
+                     if N_Corners > 2
+                       and then abs (Corners (N_Corners) - Corners (N_Corners - 1)) = 0.0 * mm
                        and then abs (Corners (N_Corners - 1) - Corners (N_Corners - 2)) = 0.0 * mm
                      then
-                        Corners (N_Corners - 1)            := Corners (N_Corners);
+                        Corners (N_Corners - 1) := Corners (N_Corners);
                         Corners_Extra_Data (N_Corners - 1) := Corners_Extra_Data (N_Corners);
                         --  Keep first feedrate.
-                        N_Corners                          := N_Corners - 1;
+                        N_Corners := N_Corners - 1;
                         --  Remove repeated zero-length segments.
+
                      end if;
 
                      Last_Pos := Next_Command.Pos;
 
                      exit when N_Corners = Corners_Index'Last;
                      --  end if;
+
                   when Update_Persistent_Data_Kind =>
                      Block_Persistent_Data := Next_Command.New_Persistent_Data;
                end case;
@@ -170,12 +179,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          --  This is hacky and not portable, but if we try to assign to the entire record as you normally would then
          --  GCC insists on creating a whole Execution_Block on the stack.
 
-         Block.Corners               := Corners (1 .. N_Corners);
-         Block.Corners_Extra_Data    := Corners_Extra_Data (2 .. N_Corners);
-         Block.Segment_Feedrates     := Segment_Feedrates (2 .. N_Corners);
-         Block.Flush_Resetting_Data  := Flush_Resetting_Data;
-         Block.Params                := Current_Params;
-         Block.Next_Block_Pos        := Last_Pos / Next_Params.Axial_Scaler;
+         Block.Corners := Corners (1 .. N_Corners);
+         Block.Corners_Extra_Data := Corners_Extra_Data (2 .. N_Corners);
+         Block.Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
+         Block.Flush_Resetting_Data := Flush_Resetting_Data;
+         Block.Params := Current_Params;
+         Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
          Block.Block_Persistent_Data := Block_Persistent_Data;
 
          Current_Params := Next_Params;
@@ -199,9 +208,9 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       New_Params.Acceleration_Max :=
         Acceleration'Min (New_Params.Acceleration_Max, New_Params.Tangential_Velocity_Max / Interpolation_Time);
-      New_Params.Jerk_Max         := Jerk'Min (New_Params.Jerk_Max, New_Params.Acceleration_Max / Interpolation_Time);
-      New_Params.Snap_Max         := Snap'Min (New_Params.Snap_Max, New_Params.Jerk_Max / Interpolation_Time);
-      New_Params.Crackle_Max      := Crackle'Min (New_Params.Crackle_Max, New_Params.Snap_Max / Interpolation_Time);
+      New_Params.Jerk_Max := Jerk'Min (New_Params.Jerk_Max, New_Params.Acceleration_Max / Interpolation_Time);
+      New_Params.Snap_Max := Snap'Min (New_Params.Snap_Max, New_Params.Jerk_Max / Interpolation_Time);
+      New_Params.Crackle_Max := Crackle'Min (New_Params.Crackle_Max, New_Params.Snap_Max / Interpolation_Time);
 
       return New_Params;
    end Limit_Higher_Order_Params;

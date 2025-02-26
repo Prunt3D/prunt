@@ -42,10 +42,11 @@ package body Prunt.Input_Shapers.Basic_Shapers is
          Current_Buffer_Index => 0);
    end Create;
 
-   overriding function Do_Step (This : in out Basic_Shaper; Step : Length) return Length is
+   overriding
+   function Do_Step (This : in out Basic_Shaper; Step : Length) return Length is
       Result : Length := 0.0 * mm;
    begin
-      This.Current_Buffer_Index               := (@ + 1) mod This.Buffer_Size;
+      This.Current_Buffer_Index := (@ + 1) mod This.Buffer_Size;
       This.Buffer (This.Current_Buffer_Index) := Step;
 
       for I of This.Impulses loop
@@ -61,17 +62,20 @@ package body Prunt.Input_Shapers.Basic_Shapers is
       case Parameters.Kind is
          when No_Shaper =>
             return (1 => (Output_Delay => 0, Output_Ratio => 1.0));
+
          when Zero_Vibration =>
             --  https://doi.org/10.1115/1.2894142
             declare
                K  : constant Dimensionless :=
                  Exp
-                   (-Parameters.Zero_Vibration_Damping_Ratio * Pi /
-                    (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2));
+                   (-Parameters.Zero_Vibration_Damping_Ratio
+                    * Pi
+                    / (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2));
                TD : constant Dimensionless :=
-                 1.0 /
-                 (Parameters.Zero_Vibration_Frequency * (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2) *
-                  Interpolation_Time);
+                 1.0
+                 / (Parameters.Zero_Vibration_Frequency
+                    * (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2)
+                    * Interpolation_Time);
                --  Note that the original paper uses rad/s, but we use hertz here so the 2 * pi term has been removed.
             begin
                case Parameters.Zero_Vibration_Deriviatives is
@@ -79,6 +83,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                      return
                        ((Output_Delay => 0, Output_Ratio => 1.0 / (1.0 + K)),
                         (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => K / (1.0 + K)));
+
                   when 1 =>
                      declare
                         A1         : constant Dimensionless := 1.0;
@@ -91,6 +96,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum));
                      end;
+
                   when 2 =>
                      declare
                         A1         : constant Dimensionless := 1.0;
@@ -105,6 +111,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum),
                            (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum));
                      end;
+
                   when 3 =>
                      declare
                         A1         : constant Dimensionless := 1.0;
@@ -123,17 +130,20 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                      end;
                end case;
             end;
+
          when Extra_Insensitive =>
             --  https://doi.org/10.1115/1.2801257
             declare
                K  : constant Dimensionless :=
                  Exp
-                   (-Parameters.Extra_Insensitive_Damping_Ratio * Pi /
-                    (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**(1 / 2));
+                   (-Parameters.Extra_Insensitive_Damping_Ratio
+                    * Pi
+                    / (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**(1 / 2));
                TD : constant Dimensionless :=
-                 1.0 /
-                 (Parameters.Zero_Vibration_Frequency * (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2) *
-                  Interpolation_Time);
+                 1.0
+                 / (Parameters.Zero_Vibration_Frequency
+                    * (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2)
+                    * Interpolation_Time);
                --  Note that the original paper uses rad/s, but we use hertz here so the 2 * pi term has been removed.
 
                V : constant Residual_Vibration_Level := Parameters.Extra_Insensitive_Residual_Vibration;
@@ -151,6 +161,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum));
                      end;
+
                   when 2 =>
                      declare
                         X          : constant Dimensionless := (V**2 * ((1.0 - V**2)**(1 / 2) + 1.0))**(1 / 3);
@@ -166,6 +177,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum),
                            (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum));
                      end;
+
                   when 3 =>
                      declare
                         A1         : constant Dimensionless := (1.0 + 3.0 * V + 2.0 * (2.0 * (V**2 + V))**(1 / 2));
@@ -184,6 +196,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                      end;
                end case;
             end;
+
          when others =>
             raise Constraint_Error with "Wrong Create function called for given shaper parameters.";
       end case;

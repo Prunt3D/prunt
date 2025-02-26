@@ -24,24 +24,23 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    procedure Run (Block : in out Execution_Block) is
       function Curve_Corner_Distance (Finishing_Corner : Corners_Index) return Length is
          Start_Curve_Half_Distance : constant Length :=
-           Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0) -
-           Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5);
+           Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)
+           - Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5);
          End_Curve_Half_Distance   : constant Length := Distance_At_T (Block.Beziers (Finishing_Corner), 0.5);
          Mid_Distance              : constant Length :=
-           abs
-           (Point_At_T (Block.Beziers (Finishing_Corner), 0.0) -
-            Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
+           abs (Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
+                - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
       begin
          return Start_Curve_Half_Distance + Mid_Distance + End_Curve_Half_Distance;
       end Curve_Corner_Distance;
    begin
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
-      Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last)  := 0.0 * mm / s;
+      Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
 
       for I in Block.Segment_Feedrates'Range loop
          declare
-            Offset   : constant Scaled_Position_Offset := Block.Corners (I - 1) - Block.Corners (I);
-            Has_XYZ  : constant Boolean                :=
+            Offset  : constant Scaled_Position_Offset := Block.Corners (I - 1) - Block.Corners (I);
+            Has_XYZ : constant Boolean :=
               (Offset with delta E_Axis => 0.0 * mm) /= Scaled_Position_Offset'(others => Length (0.0));
 
             Feedrate : Velocity := Block.Segment_Feedrates (I);
@@ -49,8 +48,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
             if Block.Params.Ignore_E_In_XYZE and Has_XYZ and Feedrate /= Velocity'Last then
                Feedrate := Feedrate * (abs Offset / abs [Offset with delta E_Axis => 0.0 * mm]);
                if abs [Offset with delta E_Axis => 0.0 * mm] > 0.0 * mm and Feedrate /= Velocity'Last then
-                  Feedrate := Feedrate * abs ([Offset with delta E_Axis => 0.0 * mm] / Block.Params.Axial_Scaler) /
-                    abs ([Offset with delta E_Axis => 0.0 * mm]);
+                  Feedrate :=
+                    Feedrate
+                    * abs ([Offset with delta E_Axis => 0.0 * mm] / Block.Params.Axial_Scaler)
+                    / abs ([Offset with delta E_Axis => 0.0 * mm]);
                end if;
             else
                if abs Offset > 0.0 * mm and Feedrate /= Velocity'Last then
@@ -64,6 +65,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                Feedrate := Velocity'Min (Feedrate, abs Offset / Interpolation_Time);
                --  This ensures that the step generator will not have to skip over many segments in a row, which could
                --  cause the command queue to run dry.
+
             end if;
 
             for A in Axis_Name loop
@@ -71,8 +73,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                   Feedrate :=
                     Velocity'Min
                       (Feedrate,
-                       Block.Params.Axial_Velocity_Maxes (A) / Block.Params.Axial_Scaler (A) * abs Offset /
-                       abs Offset (A));
+                       Block.Params.Axial_Velocity_Maxes (A)
+                       / Block.Params.Axial_Scaler (A)
+                       * abs Offset
+                       / abs Offset (A));
                end if;
             end loop;
 
@@ -106,7 +110,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                  Block.Params.Jerk_Max,
                  Block.Params.Snap_Max,
                  Block.Params.Crackle_Max);
-            Limit           :=
+            Limit :=
               Velocity'Min
                 (Limit,
                  Fast_Velocity_At_Max_Time
@@ -126,7 +130,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
          declare
             Optimal_Profile : Feedrate_Profile_Times;
          begin
-            Optimal_Profile                  :=
+            Optimal_Profile :=
               Optimal_Profile_For_Distance
                 (Block.Corner_Velocity_Limits (I + 1),
                  Curve_Corner_Distance (I + 1),

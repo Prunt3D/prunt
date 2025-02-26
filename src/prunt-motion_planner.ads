@@ -22,19 +22,19 @@
 package Prunt.Motion_Planner is
 
    type Kinematic_Parameters is record
-      Lower_Pos_Limit         : Position         := [others => 0.0 * mm];
-      Upper_Pos_Limit         : Position         := [others => 0.0 * mm];
-      Ignore_E_In_XYZE        : Boolean          := True;
-      Shift_Blended_Corners   : Boolean          := False;
-      Tangential_Velocity_Max : Velocity         := 0.0 * mm / s;
+      Lower_Pos_Limit         : Position := [others => 0.0 * mm];
+      Upper_Pos_Limit         : Position := [others => 0.0 * mm];
+      Ignore_E_In_XYZE        : Boolean := True;
+      Shift_Blended_Corners   : Boolean := False;
+      Tangential_Velocity_Max : Velocity := 0.0 * mm / s;
       Axial_Velocity_Maxes    : Axial_Velocities := [others => 0.0 * mm / s];
-      Pressure_Advance_Time   : Time             := 0.0 * s;
-      Acceleration_Max        : Acceleration     := 0.0 * mm / s**2;
-      Jerk_Max                : Jerk             := 0.0 * mm / s**3;
-      Snap_Max                : Snap             := 0.0 * mm / s**4;
-      Crackle_Max             : Crackle          := 0.0 * mm / s**5;
-      Chord_Error_Max         : Length           := 0.0 * mm;
-      Axial_Scaler            : Position_Scale   := [others => 1.0];
+      Pressure_Advance_Time   : Time := 0.0 * s;
+      Acceleration_Max        : Acceleration := 0.0 * mm / s**2;
+      Jerk_Max                : Jerk := 0.0 * mm / s**3;
+      Snap_Max                : Snap := 0.0 * mm / s**4;
+      Crackle_Max             : Crackle := 0.0 * mm / s**5;
+      Chord_Error_Max         : Length := 0.0 * mm;
+      Axial_Scaler            : Position_Scale := [others => 1.0];
    end record;
 
    type Max_Corners_Type is range 2 .. 2**63 - 1;
@@ -79,12 +79,11 @@ package Prunt.Motion_Planner is
    function Distance_At_Time
      (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length;
    function Distance_At_Time
-     (Profile            :     Feedrate_Profile;
-      T                  :     Time;
-      Max_Crackle        :     Crackle;
-      Start_Vel          :     Velocity;
-      Is_Past_Accel_Part : out Boolean)
-     return Length;
+     (Profile            : Feedrate_Profile;
+      T                  : Time;
+      Max_Crackle        : Crackle;
+      Start_Vel          : Velocity;
+      Is_Past_Accel_Part : out Boolean) return Length;
 
    function Optimal_Profile_For_Distance
      (Start_Vel        : Velocity;
@@ -92,17 +91,12 @@ package Prunt.Motion_Planner is
       Acceleration_Max : Acceleration;
       Jerk_Max         : Jerk;
       Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
-     return Feedrate_Profile_Times;
+      Crackle_Max      : Crackle) return Feedrate_Profile_Times;
    --  Compute the acceleration part of a feedrate profile that has the lowest total time to travel the given distance
    --  without violating any of the given constraints. Note that there is no velocity limit here.
 
    function Optimal_Profile_For_Delta_V
-     (Delta_V          : Velocity;
-      Acceleration_Max : Acceleration;
-      Jerk_Max         : Jerk;
-      Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
+     (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
       return Feedrate_Profile_Times;
    --  Compute the acceleration part of a feedrate profile that achieves the given change in velocity in the lowest
    --  time without violating any of the given constraints. Note that there is no distance limit here.
@@ -115,10 +109,9 @@ package Prunt.Motion_Planner is
       Acceleration_Max : Acceleration;
       Jerk_Max         : Jerk;
       Snap_Max         : Snap;
-      Crackle_Max      : Crackle)
-  return Feedrate_Profile;
---  Compute the feedrate profile with the minimal time without violating the given constraints. Raises Constraint_Error
---  if there is no legal feedrate profile which can meet the given constraints, specifically regarding End_Vel being
---  reachable. Also raised Constraint_Error if Start_Vel or End_Vel are higher than Max_Vel.
+      Crackle_Max      : Crackle) return Feedrate_Profile;
+   --  Compute the feedrate profile with the minimal time without violating the given constraints. Raises Constraint_Error
+   --  if there is no legal feedrate profile which can meet the given constraints, specifically regarding End_Vel being
+   --  reachable. Also raised Constraint_Error if Start_Vel or End_Vel are higher than Max_Vel.
 
 end Prunt.Motion_Planner;

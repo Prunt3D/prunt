@@ -4,8 +4,10 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    use type Key_Vectors.Cursor;
 
-   procedure Free is new Ada.Unchecked_Deallocation
-     (Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class, Key_Vectors_Iterator_Access);
+   procedure Free is new
+     Ada.Unchecked_Deallocation
+       (Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class,
+        Key_Vectors_Iterator_Access);
 
    function Empty return Map is
    begin
@@ -136,29 +138,33 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
    begin
       return
         Iterator'
-          (Ada.Finalization.Limited_Controlled with
-           Iterator =>
-             new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'(Container.Insertions.Iterate),
-           Map      => Container'Unrestricted_Access);
+          (Ada.Finalization.Limited_Controlled
+           with
+             Iterator =>
+               new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'(Container.Insertions.Iterate),
+             Map      => Container'Unrestricted_Access);
    end Iterate;
 
    function Iterate (Container : Map; Start : Cursor) return Map_Iterator_Interfaces.Reversible_Iterator'Class is
    begin
       return
         Iterator'
-          (Ada.Finalization.Limited_Controlled with
-           Iterator =>
-             new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'
-               (Container.Insertions.Iterate (Start.Cursor)),
-           Map      => Container'Unrestricted_Access);
+          (Ada.Finalization.Limited_Controlled
+           with
+             Iterator =>
+               new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'
+                 (Container.Insertions.Iterate (Start.Cursor)),
+             Map      => Container'Unrestricted_Access);
    end Iterate;
 
-   overriding procedure Finalize (Object : in out Iterator) is
+   overriding
+   procedure Finalize (Object : in out Iterator) is
    begin
       Free (Object.Iterator);
    end Finalize;
 
-   overriding function First (Object : Iterator) return Cursor is
+   overriding
+   function First (Object : Iterator) return Cursor is
       Inner_Cursor : constant Key_Vectors.Cursor := Object.Iterator.First;
    begin
       if Inner_Cursor = Key_Vectors.No_Element then
@@ -168,7 +174,8 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
       end if;
    end First;
 
-   overriding function Last (Object : Iterator) return Cursor is
+   overriding
+   function Last (Object : Iterator) return Cursor is
       Inner_Cursor : constant Key_Vectors.Cursor := Object.Iterator.Last;
    begin
       if Inner_Cursor = Key_Vectors.No_Element then
@@ -178,13 +185,15 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
       end if;
    end Last;
 
-   overriding function Next (Object : Iterator; Position : Cursor) return Cursor is
+   overriding
+   function Next (Object : Iterator; Position : Cursor) return Cursor is
    begin
       --  TODO: We should have tampering checks here.
       return Next (Position);
    end Next;
 
-   overriding function Previous (Object : Iterator; Position : Cursor) return Cursor is
+   overriding
+   function Previous (Object : Iterator; Position : Cursor) return Cursor is
    begin
       --  TODO: We should have tampering checks here.
       return Previous (Position);

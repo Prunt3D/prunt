@@ -57,15 +57,19 @@ package Prunt.Motion_Planner.Planner is
             case Kind is
                when Flush_And_Reset_Position_Kind =>
                   Reset_Pos : Position;
+
                when Flush_And_Change_Parameters_Kind =>
                   New_Params : Kinematic_Parameters;
+
                when others =>
                   null;
             end case;
+
          when Move_Kind =>
             Pos               : Position;
             Feedrate          : Velocity;
             Corner_Extra_Data : Corner_Extra_Data_Type;
+
          when Update_Persistent_Data_Kind =>
             New_Persistent_Data : Block_Persistent_Data_Type;
       end case;
@@ -85,12 +89,11 @@ package Prunt.Motion_Planner.Planner is
    --  Returns the distance between the two original corners for a given segment.
 
    function Segment_Pos_At_Time
-     (Block              :     Execution_Block;
-      Finishing_Corner   :     Corners_Index;
-      Time_Into_Segment  :     Time;
-      Is_Past_Accel_Part : out Boolean)
-      return Position with
-     Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and Time_Into_Segment >= 0.0 * s;
+     (Block              : Execution_Block;
+      Finishing_Corner   : Corners_Index;
+      Time_Into_Segment  : Time;
+      Is_Past_Accel_Part : out Boolean) return Position
+   with Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and Time_Into_Segment >= 0.0 * s;
    --  Returns the position at a given time in to a segment. Is_Past_Accel_Part indicates if the given time is past the
    --  acceleration part of the segment.
 
@@ -124,9 +127,8 @@ package Prunt.Motion_Planner.Planner is
 
    Out_Of_Bounds_Error : exception;
 
-   task Runner with
-     CPU => Runner_CPU
-   is
+   task Runner
+     with CPU => Runner_CPU is
       entry Setup (In_Params : Kinematic_Parameters);
 
       entry Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block);

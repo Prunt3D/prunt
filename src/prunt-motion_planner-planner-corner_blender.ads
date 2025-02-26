@@ -40,7 +40,7 @@ private
    type Shifted_Corners_Type is array (Corners_Index) of Scaled_Position;
 
    Shifted_Corner_Error_Limits : access Shifted_Corner_Error_Limits_Type := new Shifted_Corner_Error_Limits_Type;
-   Shifted_Corners             : access Shifted_Corners_Type             := new Shifted_Corners_Type;
+   Shifted_Corners             : access Shifted_Corners_Type := new Shifted_Corners_Type;
 
    pragma Warnings (On, "use of an anonymous access type allocator");
 

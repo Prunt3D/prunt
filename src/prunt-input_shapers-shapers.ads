@@ -23,7 +23,10 @@ private with Ada.Containers.Indefinite_Ordered_Maps;
 
 package Prunt.Input_Shapers.Shapers is
 
-   type Shaper (Input_Offset : Cycle_Count; Extra_End_Time : Cycle_Count) is abstract tagged null record;
+   type Shaper
+     (Input_Offset   : Cycle_Count;
+      Extra_End_Time : Cycle_Count)
+   is abstract tagged null record;
    --  New shapers are created for every block. This can be switched to a controlled type if resource deallocation is
    --  required for a future addition, although that should not be required as Axial_Shapers places these on the heap,
    --  meaning that it is fine to have a very large record if required.
@@ -77,9 +80,7 @@ package Prunt.Input_Shapers.Shapers is
    type Axial_Shapers is private;
 
    function Create
-     (Parameters         : Axial_Shaper_Parameters;
-      Interpolation_Time : Time;
-      Initial_Position   : Position)
+     (Parameters : Axial_Shaper_Parameters; Interpolation_Time : Time; Initial_Position : Position)
       return Axial_Shapers;
 
    function Do_Step (Shapers : in out Axial_Shapers; Step : Position) return Position;
@@ -95,11 +96,11 @@ private
       Current_Index : Cycle_Count;
    end record;
 
-   package Axial_Shaper_Maps is new Ada.Containers.Indefinite_Ordered_Maps
-     (Key_Type => Axis_Name, Element_Type => Shaper'Class);
+   package Axial_Shaper_Maps is new
+     Ada.Containers.Indefinite_Ordered_Maps (Key_Type => Axis_Name, Element_Type => Shaper'Class);
 
-   package Axial_Input_Buffer_Maps is new Ada.Containers.Indefinite_Ordered_Maps
-     (Key_Type => Axis_Name, Element_Type => Input_Buffer);
+   package Axial_Input_Buffer_Maps is new
+     Ada.Containers.Indefinite_Ordered_Maps (Key_Type => Axis_Name, Element_Type => Input_Buffer);
 
    type Axial_Shapers is record
       Shapers        : Axial_Shaper_Maps.Map;
