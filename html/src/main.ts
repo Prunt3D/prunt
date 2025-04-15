@@ -152,13 +152,29 @@ for (const name of tabs) {
     const tabContent = document.getElementById(`${name}TabContent`) as HTMLElement;
 
     tab.addEventListener("click", () => {
-        topTabContainer.querySelectorAll(":scope > .tab").forEach(t => t.classList.remove("active"));
-        topTabContentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
+        topTabContainer.querySelectorAll<HTMLElement>('[role="tab"]').forEach(t => {
+            t.classList.remove("active");
+            t.setAttribute('aria-selected', 'false');
+        });
+        topTabContentContainer.querySelectorAll<HTMLElement>('[role="tabpanel"]').forEach(c => {
+             c.classList.add("hidden");
+        });
 
         tab.classList.add("active");
+        tab.setAttribute('aria-selected', 'true');
         tab.classList.remove("has-update");
         tabContent.classList.remove("hidden");
-        messageLog.scrollTop = messageLog.scrollHeight;
+
+        if (name === 'log') {
+             messageLog.scrollTop = messageLog.scrollHeight;
+        }
+    });
+
+    tab.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            tab.click();
+        }
     });
 }
 

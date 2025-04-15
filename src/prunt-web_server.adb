@@ -369,6 +369,8 @@ package body Prunt.Web_Server is
                Send_Content_Type (Client, "text/html");
             elsif Ends_With (Status.File, ".js") then
                Send_Content_Type (Client, "text/javascript");
+            elsif Ends_With (Status.File, ".css") then
+               Send_Content_Type (Client, "text/css");
             elsif Ends_With (Status.File, ".ico") then
                Send_Content_Type (Client, "image/vnd.microsoft.icon");
             elsif Ends_With (Status.File, ".ico") then

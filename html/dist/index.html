@@ -15,250 +15,7 @@
         <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
         <meta name="msapplication-TileColor" content="#da532c">
         <meta name="theme-color" content="#ffffff">
-        <style>
-            .command-log {
-                height: 500px;
-                border: 1px solid #000000;
-                overflow-y: auto;
-                padding: 10px;
-            }
-
-            .message-log {
-                height: 500px;
-                border: 1px solid #000000;
-                overflow-y: auto;
-                padding: 10px;
-            }
-
-            .tab-container {
-                display: flex; margin-bottom: 0px; flex-wrap: wrap;
-            }
-
-            .tab {
-                margin-bottom: 1px;
-                padding: 10px;
-                outline: 1px solid #000000;
-                cursor: pointer;
-            }
-
-            .tab.has-update {
-                background-color: #f7d911;
-            }
-
-            .tab.active {
-                background-color: #000000 !important;
-                color: #ffffff;
-            }
-
-            .tab.local-invalid {
-                outline: 3px dashed #ff0000;
-                box-shadow: 0 0 0 1px #000000;
-                z-index: 3;
-            }
-
-            .tab.remote-invalid {
-                outline: 3px dotted #fa7a00;
-                box-shadow: 0 0 0 1px #000000;
-                z-index: 2;
-            }
-
-            .tab-content-container {
-                outline: 1px solid #000000;
-                padding: 10px;
-            }
-
-            .config-sequence {
-                border: 1px solid #000000;
-                padding: 10px !important;
-            }
-
-            .hidden {
-                display: none;
-            }
-
-            .vertical-list {
-                margin: 10px 0;
-            }
-
-            .config-form-row {
-                padding: 10px 0px;
-            }
-
-            .input-validity-error-label {
-                margin-left: 10px;
-                display: none;
-                color: #ff0000;
-            }
-
-            input:invalid {
-                outline: 2px dashed #ff0000;
-            }
-
-            input:invalid + .input-validity-error-label {
-                display: inline;
-            }
-
-            .title {
-                font-weight: bold;
-            }
-
-            .config-error-label {
-                color: #ff0000;
-            }
-
-            .warning-banner {
-                background-color: #f7d911;
-                text-align: center;
-                padding: 10px;
-                margin: 10px;
-            }
-
-            .uplot,
-            .uplot *,
-            .uplot *::before,
-            .uplot *::after {
-                box-sizing: border-box;
-            }
-
-            .uplot {
-                <!-- font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; -->
-                line-height: 1.5;
-                width: min-content;
-            }
-
-            .u-title {
-                text-align: center;
-                font-size: 18px;
-                font-weight: bold;
-            }
-
-            .u-wrap {
-                position: relative;
-                user-select: none;
-            }
-
-            .u-over,
-            .u-under {
-                position: absolute;
-            }
-
-            .u-under {
-                overflow: hidden;
-            }
-
-            .uplot canvas {
-                display: block;
-                position: relative;
-                width: 100%;
-                height: 100%;
-            }
-
-            .u-axis {
-                position: absolute;
-            }
-
-            .u-legend {
-                font-size: 14px;
-                margin: auto;
-                text-align: center;
-            }
-
-            .u-inline {
-                display: block;
-            }
-
-            .u-inline * {
-                display: inline-block;
-            }
-
-            .u-inline tr {
-                margin-right: 16px;
-            }
-
-            .u-legend th {
-                font-weight: 600;
-            }
-
-            .u-legend th > * {
-                vertical-align: middle;
-                display: inline-block;
-            }
-
-            .u-legend .u-marker {
-                width: 1em;
-                height: 1em;
-                margin-right: 4px;
-                background-clip: padding-box !important;
-            }
-
-            .u-inline.u-live th::after {
-                content: ":";
-                vertical-align: middle;
-            }
-
-            .u-inline:not(.u-live) .u-value {
-                display: none;
-            }
-
-            .u-series > * {
-                padding: 4px;
-            }
-
-            .u-series th {
-                cursor: pointer;
-            }
-
-            .u-legend .u-off > * {
-                opacity: 0.3;
-            }
-
-            .u-select {
-                background: rgba(0,0,0,0.07);
-                position: absolute;
-                pointer-events: none;
-            }
-
-            .u-cursor-x,
-            .u-cursor-y {
-                position: absolute;
-                left: 0;
-                top: 0;
-                pointer-events: none;
-                will-change: transform;
-            }
-
-            .u-hz .u-cursor-x,
-            .u-vt .u-cursor-y {
-                height: 100%;
-                border-right: 1px dashed #607D8B;
-            }
-
-            .u-hz .u-cursor-y,
-            .u-vt .u-cursor-x {
-                width: 100%;
-                border-bottom: 1px dashed #607D8B;
-            }
-
-            .u-cursor-pt {
-                position: absolute;
-                top: 0;
-                left: 0;
-                border-radius: 50%;
-                border: 0 solid;
-                pointer-events: none;
-                will-change: transform;
-                /* this has to be !important since we set inline "background" shorthand */
-                background-clip: padding-box !important;
-            }
-
-            .u-axis.u-off,
-            .u-select.u-off,
-            .u-cursor-x.u-off,
-            .u-cursor-y.u-off,
-            .u-cursor-pt.u-off {
-                display: none;
-            }
-        </style>
+        <link rel="stylesheet" href="style.css">
     </head>
     <body>
         <noscript>This page required JavaScript to be enabled.</noscript>
@@ -282,15 +39,16 @@
             <div id="pruntDisabledWarning" class="warning-banner hidden">
                 <h1>Prunt is disabled. Enable in configuration tab after setting other parameters and then restart.</h1>
             </div>
-            <div class="tab-container" id="topTabContainer">
-                <div class="tab active" id="statusTab">Status</div>
-                <div class="tab" id="configTab">Configuration</div>
-                <div class="tab" id="consoleTab">G-Code Console</div>
-                <div class="tab" id="fileTab">Files</div>
-                <div class="tab" id="logTab">Log</div>
+            <div class="tab-container" id="topTabContainer" role="tablist">
+                <div class="tab active" id="statusTab" role="tab" tabindex="0" aria-selected="true" aria-controls="statusTabContent">Status</div>
+                <div class="tab" id="configTab" role="tab" tabindex="0" aria-selected="false" aria-controls="configTabContent">Configuration</div>
+                <div class="tab" id="consoleTab" role="tab" tabindex="0" aria-selected="false" aria-controls="consoleTabContent">G-Code Console</div>
+                <div class="tab" id="fileTab" role="tab" tabindex="0" aria-selected="false" aria-controls="fileTabContent">Files</div>
+                <div class="tab" id="logTab" role="tab" tabindex="0" aria-selected="false" aria-controls="logTabContent">Log</div>
             </div>
+
             <div class="tab-content-container" id="topTabContentContainer">
-                <div class="tab-content" id="statusTabContent">
+                <div class="tab-content" id="statusTabContent" role="tabpanel" aria-labelledby="statusTab">
                     <div>
                         <button onClick="main.pauseStepgen()">Pause</button>
                         <button onClick="main.resumeStepgen()">Resume</button>
@@ -298,15 +56,15 @@
                     <div id="statusDetails"></div>
                     <div id="statusPlot"></div>
                 </div>
-                <div class="tab-content hidden" id="configTabContent"></div>
-                <div class="tab-content hidden" id="consoleTabContent">
+                <div class="tab-content hidden" id="configTabContent" role="tabpanel" aria-labelledby="configTab"></div>
+                <div class="tab-content hidden" id="consoleTabContent" role="tabpanel" aria-labelledby="consoleTab">
                     <div id="commandLog" class="command-log"></div>
                     <div>
                         <input id="commandRunInput" type="text" onkeydown="if (event.key == 'Enter') {main.runCommand()}"></input>
                         <button id="commandRunButton" onClick="main.runCommand()">Run command</button>
                     </div>
                 </div>
-                <div class="tab-content hidden" id="fileTabContent">
+                <div class="tab-content hidden" id="fileTabContent" role="tabpanel" aria-labelledby="fileTab">
                     <div>
                         <h1>Upload File</h1>
                         <input type="file" id="fileUploadInput"></input>
@@ -323,7 +81,7 @@
                         <button id="fileDownloadButton" onClick="main.downloadFile()">Download file</button>
                     </div>
                 </div>
-                <div class="tab-content hidden" id="logTabContent">
+                <div class="tab-content hidden" id="logTabContent" role="tabpanel" aria-labelledby="logTab">
                     <div id="messageLog" class="message-log"></div>
                 </div>
             </div>

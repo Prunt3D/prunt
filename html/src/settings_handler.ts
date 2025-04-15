@@ -177,6 +177,10 @@ function buildField(
     }
 }
 
+function sanitizeForId(str: string): string {
+    return str.replace(/[^a-zA-Z0-9-_]/g, '-');
+}
+
 function buildTabbedSequence(
     schema: Record<string, SettingsSchemaEntry>,
     path: string,
@@ -184,24 +188,51 @@ function buildTabbedSequence(
 ) {
     const tabContainer = document.createElement("div");
     tabContainer.classList.add("tab-container");
+    tabContainer.setAttribute("role", "tablist");
 
     const contentContainer = document.createElement("div");
     contentContainer.classList.add("tab-content-container");
 
     for (const [name, data] of Object.entries(schema)) {
+        const sanitizedPath = sanitizeForId(path);
+        const sanitizedName = sanitizeForId(name);
+        const uniquePrefix = `nested-${sanitizedPath ? sanitizedPath + '-' : ''}${sanitizedName}`;
+        const tabId = `${uniquePrefix}-tab`;
+        const panelId = `${uniquePrefix}-panel`;
+
         const tab = document.createElement("div");
         tab.classList.add("tab");
         tab.textContent = name;
 
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("id", tabId);
+        tab.setAttribute("aria-controls", panelId);
+        tab.setAttribute("tabindex", "0");
+        tab.setAttribute("aria-selected", "false");
+
         const tabContent = document.createElement("div");
         tabContent.classList.add("tab-content", "hidden");
+        tabContent.setAttribute("role", "tabpanel");
+        tabContent.setAttribute("id", panelId);
+        tabContent.setAttribute("aria-labelledby", tabId);
 
         tab.addEventListener("click", () => {
-            tabContainer.querySelectorAll(":scope > .tab").forEach(t => t.classList.remove("active"));
+            tabContainer.querySelectorAll<HTMLElement>(":scope > .tab").forEach(t => {
+                t.classList.remove("active");
+                t.setAttribute("aria-selected", "false");
+            });
             contentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
 
             tab.classList.add("active");
+            tab.setAttribute("aria-selected", "true");
             tabContent.classList.remove("hidden");
+        });
+
+        tab.addEventListener("keydown", (event: KeyboardEvent) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                tab.click();
+            }
         });
 
         buildField(data, `${path}${path === "" ? "" : "$"}${name}`, tabContent, tab);
@@ -241,6 +272,7 @@ function buildVariant(
 ) {
     const tabContainer = document.createElement("div");
     tabContainer.classList.add("tab-container");
+    tabContainer.setAttribute("role", "tablist");
 
     const contentContainer = document.createElement("div");
     contentContainer.classList.add("tab-content-container");
@@ -261,13 +293,27 @@ function buildVariant(
     document.body.appendChild(dialog);
 
     for (const [name, data] of Object.entries(schema)) {
+        const sanitizedPath = sanitizeForId(path);
+        const sanitizedName = sanitizeForId(name);
+        const uniquePrefix = `variant-${sanitizedPath ? sanitizedPath + '-' : ''}${sanitizedName}`;
+        const tabId = `${uniquePrefix}-tab`;
+        const panelId = `${uniquePrefix}-panel`;
+
         const tab = document.createElement("div");
         tab.classList.add("tab");
         tab.textContent = name;
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("id", tabId);
+        tab.setAttribute("aria-controls", panelId);
+        tab.setAttribute("tabindex", "0");
+        tab.setAttribute("aria-selected", "false");
 
         const tabContent = document.createElement("div");
         tabContent.classList.add("tab-content");
         tabContent.classList.add("hidden");
+        tabContent.setAttribute("role", "tabpanel");
+        tabContent.setAttribute("id", panelId);
+        tabContent.setAttribute("aria-labelledby", tabId);
 
         tab.addEventListener("click", () => {
             if (tab.classList.contains("active")) {
@@ -280,10 +326,14 @@ function buildVariant(
             yesButton.onclick = () => {
                 dialog.close();
 
-                tabContainer.querySelectorAll(":scope > .tab").forEach(t => t.classList.remove("active"));
+                tabContainer.querySelectorAll<HTMLElement>(":scope > .tab").forEach(t => {
+                    t.classList.remove("active");
+                    t.setAttribute("aria-selected", "false");
+                });
                 contentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
 
                 tab.classList.add("active");
+                tab.setAttribute("aria-selected", "true");
                 tabContent.classList.remove("hidden");
             };
 
@@ -292,11 +342,22 @@ function buildVariant(
             };
         });
 
+        tab.addEventListener("keydown", (event: KeyboardEvent) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                tab.click();
+            }
+        });
+
         tab.addEventListener("setVariant", () => {
-            tabContainer.querySelectorAll(":scope > .tab").forEach(t => t.classList.remove("active"));
+            tabContainer.querySelectorAll<HTMLElement>(":scope > .tab").forEach(t => {
+                t.classList.remove("active");
+                t.setAttribute("aria-selected", "false");
+            });
             contentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
 
             tab.classList.add("active");
+            tab.setAttribute("aria-selected", "true");
             tabContent.classList.remove("hidden");
         });
 
@@ -398,7 +459,7 @@ async function saveConfig(): Promise<void> {
     const configData: Record<string, any> = {};
 
     if (updateValidation() !== 0) {
-        alert("There out of range numbers in the config. Fix them before saving.");
+        alert("There are out of range numbers in the config. Fix them before saving.");
         return;
     }
 
