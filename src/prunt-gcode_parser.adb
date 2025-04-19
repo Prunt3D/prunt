@@ -402,7 +402,11 @@ package body Prunt.Gcode_Parser is
                end;
 
             when 4 =>
-               Runner ((Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s, Pos => Ctx.Pos));
+               if Params ('S').Kind /= Non_Existant_Kind then
+                  Runner ((Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('S') * s, Pos => Ctx.Pos));
+               else
+                  Runner ((Kind => Dwell_Kind, Dwell_Time => Floatify_Or_Error ('P') * ms, Pos => Ctx.Pos));
+               end if;
 
             when 10 =>
                if not Ctx.Is_Retracted then
