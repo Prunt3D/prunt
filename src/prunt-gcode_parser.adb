@@ -684,7 +684,7 @@ package body Prunt.Gcode_Parser is
 
             when 208 =>
                Ctx.M208_Feedrate := Floatify_Or_Default ('F', Ctx.M208_Feedrate / (mm / min)) * (mm / min);
-               Ctx.M208_Offset (E_Axis) := Floatify_Or_Default ('E', Ctx.M208_Offset (E_Axis) / mm) * mm;
+               Ctx.M208_Offset (E_Axis) := Floatify_Or_Default ('S', Ctx.M208_Offset (E_Axis) / mm) * mm;
 
             when 303 =>
                declare
