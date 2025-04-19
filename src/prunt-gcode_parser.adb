@@ -546,10 +546,14 @@ package body Prunt.Gcode_Parser is
                Ctx.E_Relative_Mode := True;
 
             when 104 =>
-               Runner
-                 ((Kind               => Set_Hotend_Temperature_Kind,
-                   Target_Temperature => Floatify_Or_Error ('S') * celsius,
-                   Pos                => Ctx.Pos));
+               declare
+                  Ignored : Parameter_Integer := Integer_Or_Default ('T', 0);
+               begin
+                  Runner
+                    ((Kind               => Set_Hotend_Temperature_Kind,
+                      Target_Temperature => Floatify_Or_Error ('S') * celsius,
+                      Pos                => Ctx.Pos));
+               end;
 
             when 106 | 107 =>
                declare
