@@ -747,7 +747,7 @@ package body Prunt.Gcode_Parser is
                   Runner (Comm);
                end;
 
-            when 73 | 486 =>
+            when 73 | 204 | 486 =>
                for I in Params'Range loop
                   Params (I).Consumed := True;
                end loop;
