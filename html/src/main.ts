@@ -152,11 +152,11 @@ for (const name of tabs) {
     const tabContent = document.getElementById(`${name}TabContent`) as HTMLElement;
 
     tab.addEventListener("click", () => {
-        topTabContainer.querySelectorAll<HTMLElement>('[role="tab"]').forEach(t => {
+        topTabContainer.querySelectorAll<HTMLElement>(':scope > [role="tab"]').forEach(t => {
             t.classList.remove("active");
             t.setAttribute('aria-selected', 'false');
         });
-        topTabContentContainer.querySelectorAll<HTMLElement>('[role="tabpanel"]').forEach(c => {
+        topTabContentContainer.querySelectorAll<HTMLElement>(':scope > [role="tabpanel"]').forEach(c => {
              c.classList.add("hidden");
         });
 
