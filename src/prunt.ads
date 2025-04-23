@@ -212,4 +212,17 @@ package Prunt is
    function JSON_Escape (S : String) return String;
    function JSON_Escape (S : Ada.Strings.Unbounded.Unbounded_String) return Ada.Strings.Unbounded.Unbounded_String;
 
+   type Update_Check_Method is (None, Github);
+
+   type Update_Check_Details (Method : Update_Check_Method := None) is record
+      case Method is
+         when None =>
+            null;
+
+         when Github =>
+            Repository   : Ada.Strings.Unbounded.Unbounded_String;
+            Expected_Tag : Ada.Strings.Unbounded.Unbounded_String;
+      end case;
+   end record;
+
 end Prunt;

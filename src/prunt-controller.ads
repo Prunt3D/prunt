@@ -33,6 +33,7 @@ with Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.Logger;
 with Prunt.Command_Line_Arguments;
+with Prunt.Update_Checker;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -115,6 +116,8 @@ generic
 
    Config_Path : String;
    --  Path of the printer configuration file.
+
+   Update_Check : Update_Check_Details := (Method => None);
 package Prunt.Controller is
 
    procedure Prompt_For_Update;
@@ -274,11 +277,14 @@ private
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
+   package My_Update_Checker is new Update_Checker (My_Logger => My_Logger, Details => Update_Check);
+
    pragma Warnings (Off, "cannot call * before body seen");
    package My_Web_Server is new
      Web_Server
        (My_Logger                         => My_Logger,
         My_Config                         => My_Config,
+        My_Update_Checker                 => My_Update_Checker,
         Get_Position                      => Get_Position,
         Get_Thermistor_Temperature        => Get_Temperature,
         Get_Stepper_Temperature           => Get_Temperature,

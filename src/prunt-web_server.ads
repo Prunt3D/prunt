@@ -21,6 +21,7 @@
 
 with Prunt.Logger;
 with Prunt.Config;
+with Prunt.Update_Checker;
 with Ada.Strings.Bounded;
 with Ada.Containers.Ordered_Sets;
 with Ada.Task_Termination;
@@ -37,6 +38,7 @@ with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connect
 generic
    with package My_Logger is new Prunt.Logger (<>);
    with package My_Config is new Prunt.Config (<>);
+   with package My_Update_Checker is new Prunt.Update_Checker (<>);
    with function Get_Position return Prunt.Position;
    with function Get_Thermistor_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;
    with function Get_Stepper_Temperature (Thermistor : My_Config.Stepper_Name) return Prunt.Temperature;

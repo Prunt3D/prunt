@@ -285,10 +285,10 @@ package body Prunt.Web_Server is
      (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence) is
    begin
       Save_Occurrence (Client, Error);
-      Client.Content.Post_Content.Failed := True;
-      Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
       --  It doesn't matter if we set both fields here as Do_Put or Do_Post will be called later and will use the
       --  correct field.
+      Client.Content.Post_Content.Failed := True;
+      Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
    end Body_Error;
 
    overriding
@@ -362,6 +362,28 @@ package body Prunt.Web_Server is
             Reply_JSON (Client, 200, "OK", Build_Status_Schema, Get);
          elsif Status.File = "status/values" then
             Reply_JSON (Client, 200, "OK", Build_Status_Values, Get);
+         elsif Status.File = "update_check" then
+            declare
+               Update_Available : Boolean;
+               Update_URL       : Unbounded_String;
+            begin
+               select
+                  My_Update_Checker.Checker.Get_Update_URL (Update_Available, Update_URL);
+                  Reply_JSON
+                    (Client,
+                     200,
+                     "OK",
+                     "{""Available"":"
+                     & (if Update_Available then "true" else "false")
+                     & ",""URL"":"""
+                     & JSON_Escape (Update_URL)
+                     & """}",
+                     Get);
+               or
+                  delay 30.0;
+                  Reply_JSON (Client, 500, "Internal Server Error", "Update check timed out.", Get);
+               end select;
+            end;
          elsif Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File)) /= null then
             Send_Status_Line (Client, 200, "OK");
             Send_Date (Client);
@@ -1029,11 +1051,10 @@ package body Prunt.Web_Server is
                if Client.Content.Self_Access /= Client'Unrestricted_Access then
                   raise Constraint_Error
                     with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
-                  --  It seems like this never occurs, but it's better to have it in case the library changes. I
-                  --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
-                  --  library is designed.
-
                end if;
+               --  It seems like this never occurs, but it's better to have it in case the library changes. I
+               --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
+               --  library is designed.
 
                New_Client := Client'Unrestricted_Access;
                WebSocket_Receivers.Insert (New_Client);
@@ -1045,11 +1066,10 @@ package body Prunt.Web_Server is
                if Client.Content.Self_Access /= Client'Unrestricted_Access then
                   raise Constraint_Error
                     with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
-                  --  It seems like this never occurs, but it's better to have it in case the library changes. I
-                  --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
-                  --  library is designed.
-
                end if;
+               --  It seems like this never occurs, but it's better to have it in case the library changes. I
+               --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
+               --  library is designed.
 
                WebSocket_Receivers.Delete (Client'Unrestricted_Access);
             end Remove_WebSocket_Receiver;
@@ -1066,9 +1086,8 @@ package body Prunt.Web_Server is
             --  TODO: Change the interval to 125ms and allow the client to specify a divisor to skip some updates.
             if Clock > Next_Status_Send then
                Next_Status_Send := Clock;
-               --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
-
             end if;
+            --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
          end select;
       end loop;
    end Server;

@@ -32,3 +32,9 @@ simple_components = "^4.68.0"
 
 [[depends-on]]
 are = "^1.5.1"
+
+[[depends-on]]
+utilada = "^2.8.0"
+
+[[depends-on]]
+utilada_curl = "^2.8.0"
