@@ -248,6 +248,34 @@ export async function allowFirmwareUpdate(): Promise<void> {
     });
 }
 
+async function checkUpdate(): Promise<void> {
+    const updateCheckFailedWarning = document.getElementById("updateCheckFailedWarning") as HTMLDivElement;
+    const updateAvailableWarning = document.getElementById("updateAvailableWarning") as HTMLDivElement;
+    const updateAvailableLink = document.getElementById("updateAvailableLink") as HTMLAnchorElement;
+
+    try {
+        const response = await fetch("./update_check");
+        if (!response.ok) {
+            console.error("Error during update check:", response.text());
+            updateAvailableWarning.classList.add("hidden");
+            updateCheckFailedWarning.classList.remove("hidden");
+            return;
+        }
+        const data = await response.json();
+        if (data.Available) {
+            updateAvailableLink.href = data.URL;
+            updateAvailableLink.textContent = data.URL;
+            updateAvailableWarning.classList.remove("hidden");
+        } else {
+            updateAvailableWarning.classList.add("hidden");
+        }
+    } catch (error) {
+        console.error("Error during update check:", error);
+        updateAvailableWarning.classList.add("hidden");
+        updateCheckFailedWarning.classList.remove("hidden");
+    }
+}
+
 const mainBody = document.getElementById("mainBody");
 Promise.all([setupStatus(), setupSettings(), refreshFiles(), setupPruntDisabledWarning()]).then(() => {
     mainBody.classList.remove("hidden");
@@ -256,3 +284,6 @@ Promise.all([setupStatus(), setupSettings(), refreshFiles(), setupPruntDisabledW
     mainBody.innerText = error + "\n\n" + error.stack;
     mainBody.classList.remove("hidden");
 });
+
+checkUpdate();
+setInterval(checkUpdate, 3600 * 1000);
