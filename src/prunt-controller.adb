@@ -19,6 +19,7 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Directories;
 with Prunt.Controller.Gcode_Handler;
 with Ada.Task_Termination;
 with Ada.Task_Identification;
@@ -219,6 +220,10 @@ package body Prunt.Controller is
       end Log_Config_Error;
    begin
       begin
+         if not Ada.Directories.Exists ("uploads") then
+            Ada.Directories.Create_Directory ("uploads");
+         end if;
+
          Ada.Task_Termination.Set_Specific_Handler
            (My_Planner.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
          Ada.Task_Termination.Set_Specific_Handler
