@@ -221,6 +221,7 @@ package body Prunt.Config is
       Input_Switch_Name_Strings : constant Discrete_String_Sets.Set := [for I in Input_Switch_Name => I'Image];
       Thermistor_Name_Strings   : constant Discrete_String_Sets.Set := [for T in Thermistor_Name => T'Image];
       Heater_Name_Strings       : constant Discrete_String_Sets.Set := [for H in Heater_Name => H'Image];
+      Fan_Name_Strings          : constant Discrete_String_Sets.Set := [for F in Fan_Name => F'Image];
 
       --!pp off
       Basic_Stepper_Sequence : constant Property_Parameters_Access :=
@@ -1154,7 +1155,12 @@ package body Prunt.Config is
                  Discrete
                    ("Heater to use for the bed.",
                     Default => Heater_Name'First'Image,
-                    Options => Heater_Name_Strings)])];
+                    Options => Heater_Name_Strings),
+              "Default fan" =>
+                 Discrete
+                   ("Fan to control when no P parameter is used for M106/M107.",
+                    Default => Fan_Name'First'Image,
+                    Options => Fan_Name_Strings)])];
       --!pp on
 
       for S in Stepper_Name loop
@@ -1615,6 +1621,11 @@ package body Prunt.Config is
             end if;
          end loop;
 
+         if Get (Current_Properties, "Schema version") = Long_Integer'(3) then
+            --  Version 4 adds g-code default fan parameter.
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(4));
+         end if;
+
          declare
             Has_Errors : Boolean := False;
 
@@ -1826,7 +1837,8 @@ package body Prunt.Config is
 
          Config.G_Code_Assignments :=
            (Bed_Heater    => Heater_Name'Value (Get (Data, "G-code assignments$Bed heater")),
-            Hotend_Heater => Heater_Name'Value (Get (Data, "G-code assignments$Hotend heater")));
+            Hotend_Heater => Heater_Name'Value (Get (Data, "G-code assignments$Hotend heater")),
+            Default_Fan   => Fan_Name'Value (Get (Data, "G-code assignments$Default fan")));
 
          for S in Stepper_Name loop
             case Stepper_Kinds (S) is

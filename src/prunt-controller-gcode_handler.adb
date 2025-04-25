@@ -32,13 +32,21 @@ package body Prunt.Controller.Gcode_Handler is
 
    use type My_Config.Fan_Kind;
 
+   function Get_Default_Fan return Generic_Types.Fan_Name is
+      Params : My_Config.G_Code_Assignment_Parameters;
+   begin
+      My_Config.Read (Params);
+      return Params.Default_Fan;
+   end Get_Default_Fan;
+
    package My_Gcode_Parser is new
      Prunt.Gcode_Parser
        (Stepper_Name      => Generic_Types.Stepper_Name,
         Heater_Name       => Generic_Types.Heater_Name,
         Thermistor_Name   => Generic_Types.Thermistor_Name,
         Fan_Name          => Generic_Types.Fan_Name,
-        Input_Switch_Name => Generic_Types.Input_Switch_Name);
+        Input_Switch_Name => Generic_Types.Input_Switch_Name,
+        Default_Fan       => Get_Default_Fan);
    use My_Gcode_Parser;
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean) is
@@ -78,7 +86,8 @@ package body Prunt.Controller.Gcode_Handler is
       procedure Double_Tap_Home_Axis (Axis : Axis_Name; Pos_After : in out Position) is
          Switch          : constant Generic_Types.Input_Switch_Name := Axial_Homing_Params (Axis).Switch;
          Hit_State       : constant Pin_State :=
-           (if Switchwise_Switch_Params (Axial_Homing_Params (Axis).Switch).Hit_On_High then High_State
+           (if Switchwise_Switch_Params (Axial_Homing_Params (Axis).Switch).Hit_On_High
+            then High_State
             else Low_State);
          First_Offset    : constant Position_Offset :=
            [Zero_Pos_Offset with delta Axis => Axial_Homing_Params (Axis).First_Move_Distance];
@@ -143,9 +152,9 @@ package body Prunt.Controller.Gcode_Handler is
             Data            : Flush_Resetting_Data;
             First_Seg_Accel : Length;
          begin
-            Finished_Block_Queue.Pop (Data, First_Seg_Accel);
             --  We do not care what about happened during the homing move at this point as long as
             --  the switch is not hit.
+            Finished_Block_Queue.Pop (Data, First_Seg_Accel);
          end;
 
          My_Planner.Enqueue
@@ -638,9 +647,8 @@ package body Prunt.Controller.Gcode_Handler is
       procedure Try_Set_File (In_File : String; Succeeded : out Boolean) is
       begin
          if File /= "" then
-            Succeeded := False;
             --  Other file already running.
-
+            Succeeded := False;
          else
             Set_Unbounded_String (File, In_File);
             Succeeded := True;
@@ -660,11 +668,11 @@ package body Prunt.Controller.Gcode_Handler is
       procedure Try_Set_Command (In_Command : String; Succeeded : out Boolean) is
       begin
          if Command /= "" then
-            Succeeded := False;
             --  Other command already running.
-         elsif File /= "" then
             Succeeded := False;
+         elsif File /= "" then
             --  File already running. Commands can not be run at same time.
+            Succeeded := False;
          else
             Set_Unbounded_String (Command, In_Command);
             Succeeded := True;

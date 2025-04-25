@@ -140,6 +140,7 @@ package Prunt.Config is
    type G_Code_Assignment_Parameters is record
       Bed_Heater    : Heater_Name := Heater_Name'First;
       Hotend_Heater : Heater_Name := Heater_Name'First;
+      Default_Fan   : Fan_Name    := Fan_Name'First;
    end record;
 
    procedure Disable_Prunt;

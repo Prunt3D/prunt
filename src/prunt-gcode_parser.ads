@@ -27,6 +27,7 @@ generic
    type Thermistor_Name is (<>);
    type Fan_Name is (<>);
    type Input_Switch_Name is (<>);
+   Default_Fan : Fan_Name;
 package Prunt.Gcode_Parser is
 
    type Command_Kind is

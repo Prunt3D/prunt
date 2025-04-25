@@ -558,7 +558,7 @@ package body Prunt.Gcode_Parser is
             when 106 | 107 =>
                declare
                   Comm : Command :=
-                    (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Fan_Name'First, Pos => Ctx.Pos);
+                    (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Default_Fan, Pos => Ctx.Pos);
                begin
                   if Params ('M').Integer_Value = 106 then
                      Comm.Fan_Speed :=
@@ -570,7 +570,7 @@ package body Prunt.Gcode_Parser is
                         raise Bad_Line with "Parameter 'P' has no value in command requiring value.";
 
                      when Non_Existant_Kind =>
-                        Comm.Fan_To_Set := Fan_Name'First;
+                        Comm.Fan_To_Set := Default_Fan;
 
                      when Integer_Kind =>
                         begin
