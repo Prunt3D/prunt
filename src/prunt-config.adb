@@ -1574,7 +1574,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(2));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(3));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
@@ -1596,7 +1596,12 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(2));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(2) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(2) then
+            --  Version 3 adds g-code default fan parameter.
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(3));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(3) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -1620,11 +1625,6 @@ package body Prunt.Config is
                end case;
             end if;
          end loop;
-
-         if Get (Current_Properties, "Schema version") = Long_Integer'(3) then
-            --  Version 4 adds g-code default fan parameter.
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(4));
-         end if;
 
          declare
             Has_Errors : Boolean := False;
