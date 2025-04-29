@@ -1167,8 +1167,10 @@ package body Prunt.Config is
          Property_Maps.Insert
            (Property_Maps.Reference (Result, "Steppers").Element.all.Sequence_Children,
             S'Image,
-            (if Stepper_Kinds (S) = Basic_Kind then Basic_Stepper_Sequence
-             elsif Stepper_Kinds (S) = TMC2240_UART_Kind then TMC2240_Stepper_Sequence
+            (if Stepper_Kinds (S) = Basic_Kind
+             then Basic_Stepper_Sequence
+             elsif Stepper_Kinds (S) = TMC2240_UART_Kind
+             then TMC2240_Stepper_Sequence
              else raise Constraint_Error with "Config not implemented for stepper kind " & S'Image));
       end loop;
 
@@ -1890,17 +1892,20 @@ package body Prunt.Config is
                         Reserved_2    => 0),
                      GLOBAL_SCALER =>
                        (Global_Scaler =>
-                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 3.0 then 0
+                          (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 3.0
+                           then 0
                            elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0
                            then
                              TMC_Types.TMC2240.Global_Scaler_Type
                                (Dimensionless'Floor (Get (Data, "Steppers$" & S'Image & "$Run current") / 3.0 * 256.0))
-                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 2.0 then 0
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 2.0
+                           then 0
                            elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 1.0
                            then
                              TMC_Types.TMC2240.Global_Scaler_Type
                                (Dimensionless'Floor (Get (Data, "Steppers$" & S'Image & "$Run current") / 2.0 * 256.0))
-                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 1.0 then 0
+                           elsif My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 1.0
+                           then 0
                            else
                              TMC_Types.TMC2240.Global_Scaler_Type
                                (Dimensionless'Max
