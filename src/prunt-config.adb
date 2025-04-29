@@ -1425,7 +1425,9 @@ package body Prunt.Config is
                              Long_Float'Floor
                                (My_Get_Long_Float (Config, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0)));
                   begin
-                     if Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                     if not Boolean'(Get (Config, "Steppers$" & S'Image & "$Enabled")) then
+                        null;
+                     elsif Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                        and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                      then
                         TMC_Types.TMC2240.Optimize_Spreadcycle
@@ -1908,18 +1910,24 @@ package body Prunt.Config is
                         Reserved      => 0),
                      IHOLD_IRUN    =>
                        (I_Hold       =>
-                          TMC_Types.Unsigned_5
-                            (Long_Float'Max
-                               (0.0,
-                                Long_Float'Floor
-                                  (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IHOLD") * 32.0 - 1.0))),
+                          (if Boolean'(Get (Data, "Steppers$" & S'Image & "$Enabled"))
+                           then
+                             TMC_Types.Unsigned_5
+                               (Long_Float'Max
+                                  (0.0,
+                                   Long_Float'Floor
+                                     (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IHOLD") * 32.0 - 1.0)))
+                           else 0),
                         Reserved_1   => 0,
                         I_Run        =>
-                          TMC_Types.Unsigned_5
-                            (Long_Float'Max
-                               (0.0,
-                                Long_Float'Floor
-                                  (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0))),
+                          (if Boolean'(Get (Data, "Steppers$" & S'Image & "$Enabled"))
+                           then
+                             TMC_Types.Unsigned_5
+                               (Long_Float'Max
+                                  (0.0,
+                                   Long_Float'Floor
+                                     (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0)))
+                           else 0),
                         Reserved_2   => 0,
                         I_Hold_Delay =>
                           TMC_Types.Unsigned_4
@@ -1964,17 +1972,21 @@ package body Prunt.Config is
                         Reserved => 0),
                      CHOPCONF      =>
                        (TOFF                 =>
-                          TMC_Types.TMC2240.TOFF_Type'Value ("OFF_" & Get (Data, "Steppers$" & S'Image & "$TOFF")),
-                        HSTRT_TFD210         => <>,
-                        --  Set later.
-                        HEND_OFFSET          => <>,
-                        --  Set later.
-                        FD3                  => <>,
-                        --  Set later.
+                          (if Boolean'(Get (Data, "Steppers$" & S'Image & "$Enabled"))
+                           then
+                             TMC_Types.TMC2240.TOFF_Type'Value ("OFF_" & Get (Data, "Steppers$" & S'Image & "$TOFF"))
+                           else Prunt.TMC_Types.TMC2240.Disable_Driver),
+                        HSTRT_TFD210         => 5,
+                        --  Set later if required.
+                        HEND_OFFSET          => 3,
+                        --  Set later if required.
+                        FD3                  => 0,
+                        --  Set later if required.
                         DISFDCC              => Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$DISFDCC"),
                         Reserved_1           => 0,
                         CHM                  =>
-                          (if Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
+                          (if Get (Data, "Steppers$" & S'Image & "$Enabled")
+                             or else Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                            then TMC_Types.TMC2240.SpreadCycle_Mode
                            elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "Constant off time"
                            then TMC_Types.TMC2240.Constant_Off_Time_Mode
@@ -2018,7 +2030,10 @@ package body Prunt.Config is
                         PWM_Lim            =>
                           Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_LIM")));
 
-                  if Get (Data, "Steppers$" & S'Image & "$CHM") = "Constant off time" then
+                  if not Boolean'(Get (Data, "Steppers$" & S'Image & "$Enabled")) then
+                     --  Use default parameters.
+                     null;
+                  elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "Constant off time" then
                      Config.Steppers (S).CHOPCONF.DISFDCC :=
                        Get (Data, "Steppers$" & S'Image & "$CHM$Constant off time$DISFDCC");
                      Config.Steppers (S).CHOPCONF.HEND_OFFSET :=
