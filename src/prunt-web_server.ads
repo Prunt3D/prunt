@@ -47,6 +47,8 @@ generic
    with function Get_Heater_Power (Heater : My_Config.Heater_Name) return Prunt.PWM_Scale;
    with function Get_Input_Switch_State (Switch : My_Config.Input_Switch_Name) return Prunt.Pin_State;
    with function Get_Tachometer_Frequency (Fan : My_Config.Fan_Name) return Frequency;
+   with function Get_File_Name return String;
+   with function Get_Line return File_Line_Count;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
    with function Is_Stepgen_Paused return Boolean;

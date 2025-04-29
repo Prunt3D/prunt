@@ -99,6 +99,9 @@ package body Prunt.Controller is
    Last_Thermistor_Temperatures_Counters : array (Thermistor_Name) of Temperature_Report_Counter := (others => 0)
    with Atomic_Components, Volatile_Components;
 
+   Last_Line : File_Line_Count := 0
+   with Atomic, Volatile;
+
    package My_Gcode_Handler is new Gcode_Handler;
 
    function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean is
@@ -150,6 +153,23 @@ package body Prunt.Controller is
    begin
       return Last_Tachometer_Frequencies (Fan);
    end Get_Tachometer_Frequency;
+
+   protected body Current_File_Name is
+      function Get_File_Name return String is
+      begin
+         return Ada.Strings.Unbounded.To_String (File);
+      end Get_File_Name;
+
+      procedure Set_File_Name (Name : String) is
+      begin
+         File := Ada.Strings.Unbounded.To_Unbounded_String (Name);
+      end Set_File_Name;
+   end Current_File_Name;
+
+   function Get_Line return File_Line_Count is
+   begin
+      return Last_Line;
+   end Get_Line;
 
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean) is
    begin
@@ -353,22 +373,27 @@ package body Prunt.Controller is
 
    First_Block : Boolean := True;
 
-   procedure Start_Planner_Block (Data : Flush_Resetting_Data; Last_Command_Index : Command_Index) is
+   procedure Start_Planner_Block
+     (Resetting_Data     : Flush_Resetting_Data;
+      Persistent_Data    : Block_Persistent_Data;
+      Last_Command_Index : Command_Index) is
    begin
       if First_Block then
          Reset_Position ([others => 0.0]);
          First_Block := False;
       end if;
 
-      if Data.Is_Homing_Move then
+      if Resetting_Data.Is_Homing_Move then
          Wait_Until_Idle (Last_Command_Index);
-         Setup_For_Loop_Move (Data.Home_Switch, Data.Home_Hit_On_State);
+         Setup_For_Loop_Move (Resetting_Data.Home_Switch, Resetting_Data.Home_Hit_On_State);
       end if;
 
-      if Data.Is_Conditional_Move then
+      if Resetting_Data.Is_Conditional_Move then
          Wait_Until_Idle (Last_Command_Index);
-         Setup_For_Conditional_Move (Data.Conditional_Switch, Data.Conditional_Hit_On_State);
+         Setup_For_Conditional_Move (Resetting_Data.Conditional_Switch, Resetting_Data.Conditional_Hit_On_State);
       end if;
+
+      Current_File_Name.Set_File_Name (Ada.Strings.Unbounded.To_String (Persistent_Data.Current_File));
    end Start_Planner_Block;
 
    procedure Enqueue_Command_Internal
@@ -388,47 +413,50 @@ package body Prunt.Controller is
           Loop_Until_Hit  => Loop_Until_Hit));
       Last_Position := (for A in Axis_Name => Pos (A));
       Last_Heater_Targets := (for H in Heater_Name => Data.Heaters (H));
+      Last_Line := Data.Current_Line;
    end Enqueue_Command_Internal;
 
    procedure Finish_Planner_Block
-     (Data                 : Flush_Resetting_Data;
+     (Resetting_Data       : Flush_Resetting_Data;
+      Persistent_Data      : Block_Persistent_Data;
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
       Next_Command_Index   : Command_Index) is
    begin
-      if Data.Is_Conditional_Move or Data.Is_Homing_Move then
+      if Resetting_Data.Is_Conditional_Move or Resetting_Data.Is_Homing_Move then
          Wait_Until_Idle (Next_Command_Index - 1);
       end if;
 
       --  TODO: Should we require the user to implement this instead for greater precision?
-      if Data.Dwell_Time /= Time (0.0) then
+      if Resetting_Data.Dwell_Time /= Time (0.0) then
          Wait_Until_Idle (Next_Command_Index - 1);
-         delay Duration (Data.Dwell_Time / s);
+         delay Duration (Resetting_Data.Dwell_Time / s);
       end if;
 
-      if Data.Pause_After then
+      if Resetting_Data.Pause_After then
          My_Step_Generator.Pause;
       end if;
 
-      if Data.Wait_For_Heater then
+      if Resetting_Data.Wait_For_Heater then
          declare
             Start_Counter : constant Temperature_Report_Counter :=
-              Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name));
+              Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name));
          begin
             loop
                exit when
-                 Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name))
+                 Last_Thermistor_Temperatures_Counters
+                   (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name))
                  /= Start_Counter;
             end loop;
          end;
          loop
             exit when
-              Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Data.Wait_For_Heater_Name))
-              >= Last_Heater_Targets (Data.Wait_For_Heater_Name);
+              Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name))
+              >= Last_Heater_Targets (Resetting_Data.Wait_For_Heater_Name);
          end loop;
       end if;
 
-      My_Gcode_Handler.Finished_Block (Data, First_Accel_Distance);
+      My_Gcode_Handler.Finished_Block (Resetting_Data, First_Accel_Distance);
       Reset_Position (Next_Block_Pos);
    end Finish_Planner_Block;
 
@@ -635,9 +663,9 @@ package body Prunt.Controller is
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register      => TMC_Types.TMC2240.CHOPCONF_Address,
                      CHOPCONF_Data =>
-                       (Stepper_Params
-                          .CHOPCONF with delta Double_Edge =>
-                         TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping)),
+                       (Stepper_Params.CHOPCONF
+                        with delta
+                          Double_Edge => TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping)),
                      others        => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);

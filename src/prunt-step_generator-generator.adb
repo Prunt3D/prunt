@@ -141,7 +141,7 @@ package body Prunt.Step_Generator.Generator is
                     Block_Start_Pos (Block));
             end if;
 
-            Start_Planner_Block (Flush_Resetting_Data (Block), Current_Command_Index);
+            Start_Planner_Block (Flush_Resetting_Data (Block), Block_Persistent_Data (Block), Current_Command_Index);
 
             for I in 2 .. Block.N_Corners loop
                loop
@@ -272,6 +272,7 @@ package body Prunt.Step_Generator.Generator is
 
                Finish_Planner_Block
                  (Flush_Resetting_Data (Block),
+                  Block_Persistent_Data (Block),
                   To_Stepper_Position (Next_Block_Pos (Block), Pos_Map),
                   First_Accel_Distance,
                   Current_Command_Index);

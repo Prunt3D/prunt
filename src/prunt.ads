@@ -225,4 +225,6 @@ package Prunt is
       end case;
    end record;
 
+   type File_Line_Count is range 0 .. 2**63 - 1;
+
 end Prunt;

@@ -59,7 +59,8 @@ package body Prunt.Controller.Gcode_Handler is
    end Try_Queue_Command;
 
    task body Runner is
-      Corner_Data : Corner_Extra_Data := (Fans => (others => 0.0), Heaters => (others => Temperature (0.0)));
+      Corner_Data : Corner_Extra_Data :=
+        (Fans => (others => 0.0), Heaters => (others => Temperature (0.0)), Current_Line => 0);
 
       --  TODO: Track down GNAT bug that stops [others => 0.0 * mm] from working specifically in this file.
       Zero_Pos        : constant Position :=
@@ -76,7 +77,8 @@ package body Prunt.Controller.Gcode_Handler is
       Switchwise_Switch_Params : array (Generic_Types.Input_Switch_Name) of My_Config.Input_Switch_Parameters;
       Fanwise_Fan_Params       : array (Generic_Types.Fan_Name) of My_Config.Fan_Parameters;
 
-      Shaper_Params : Input_Shapers.Axial_Shaper_Parameters;
+      Persistent_Data : Block_Persistent_Data :=
+        (Shaper_Parameters => <>, Current_File => Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE>"));
 
       G_Code_Assignment_Params : My_Config.G_Code_Assignment_Parameters;
 
@@ -534,7 +536,7 @@ package body Prunt.Controller.Gcode_Handler is
          My_Config.Read (Kinematics_Params);
          My_Config.Read (G_Code_Assignment_Params);
          for A in Axis_Name loop
-            My_Config.Read (Shaper_Params (A), A);
+            My_Config.Read (Persistent_Data.Shaper_Parameters (A), A);
          end loop;
 
          for I in Generic_Types.Input_Switch_Name loop
@@ -558,8 +560,7 @@ package body Prunt.Controller.Gcode_Handler is
 
          My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
          My_Planner.Enqueue
-           ((Kind                => My_Planner.Flush_And_Update_Persistent_Data_Kind,
-             New_Persistent_Data => (Shaper_Parameters => Shaper_Params)));
+           ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
       end Start;
 
       My_Planner.Enqueue
@@ -601,11 +602,15 @@ package body Prunt.Controller.Gcode_Handler is
             begin
                Open (File, In_File, Gcode_Queue.Get_File);
 
+               Persistent_Data.Current_File := Ada.Strings.Unbounded.To_Unbounded_String (Gcode_Queue.Get_File);
+               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
+               My_Planner.Enqueue
+                 ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
+
                declare
-                  type File_Line_Count is range 1 .. 2**63 - 1;
-                  Current_Line      : File_Line_Count := 1;
                   Command_Succeeded : Boolean := True;
                begin
+                  Corner_Data.Current_Line := 1;
                   while Command_Succeeded and not End_Of_File (File) loop
                      declare
                         Line : constant String := Get_Line (File);
@@ -617,7 +622,7 @@ package body Prunt.Controller.Gcode_Handler is
                              ("Error running line in file "
                               & Gcode_Queue.Get_File
                               & " on line "
-                              & Current_Line'Image
+                              & Corner_Data.Current_Line'Image
                               & " ("
                               & Line
                               & "): "
@@ -628,7 +633,7 @@ package body Prunt.Controller.Gcode_Handler is
                              ("Error parsing line in file "
                               & Gcode_Queue.Get_File
                               & " on line "
-                              & Current_Line'Image
+                              & Corner_Data.Current_Line'Image
                               & " ("
                               & Line
                               & "): "
@@ -639,7 +644,7 @@ package body Prunt.Controller.Gcode_Handler is
                              ("Error parsing line in file "
                               & Gcode_Queue.Get_File
                               & " on line "
-                              & Current_Line'Image
+                              & Corner_Data.Current_Line'Image
                               & " ("
                               & Line
                               & "): "
@@ -647,11 +652,16 @@ package body Prunt.Controller.Gcode_Handler is
                            Command_Succeeded := False;
                      end;
 
-                     Current_Line := @ + 1;
+                     Corner_Data.Current_Line := @ + 1;
                   end loop;
                end;
 
+               Corner_Data.Current_Line := 0;
+               Persistent_Data.Current_File :=
+                 Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE> (finished " & Gcode_Queue.Get_File & ")");
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
+               My_Planner.Enqueue
+                 ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
 
                Close (File);
             exception

@@ -19,6 +19,8 @@ interface StatusValues {
     Heater_Powers: Record<string, number>;
     Switch_Is_High_State: Record<string, boolean>;
     Tachometer_Frequencies: Record<string, number>;
+    Current_File_Name: string,
+    Current_File_Line: number,
     Stepgen_Is_Paused: boolean;
     Startup: "Done" | "Update running" | "Update required" | "Waiting";
 }
@@ -242,7 +244,8 @@ export async function setupStatus(): Promise<void> {
                 (status.Stepgen_Is_Paused ? "MACHINE IS PAUSED\n\n" : "") +
                 "Position:\n" + Object.entries(status.Position).map(([i, v], _) => `${i}: ${v}`).join("\n") +
                 "\n\nSwitch states:\n" + Object.entries(status.Switch_Is_High_State).map(([i, v], _) => `${i}: ${v ? "High" : "Low"}`).join("\n") +
-                "\n\nTachometers:\n" + Object.entries(status.Tachometer_Frequencies).map(([i, v], _) => `${i}: ${v} Hz`).join("\n");
+                "\n\nTachometers:\n" + Object.entries(status.Tachometer_Frequencies).map(([i, v], _) => `${i}: ${v} Hz`).join("\n") +
+                "\n\nCurrent Line:\n" + status.Current_File_Name + ":" + status.Current_File_Line;
 
             plotData[0].push(status.Time);
 

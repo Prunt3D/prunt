@@ -189,11 +189,13 @@ private
 
    type Block_Persistent_Data is record
       Shaper_Parameters : Input_Shapers.Axial_Shaper_Parameters := (others => (Kind => Input_Shapers.No_Shaper));
+      Current_File      : Ada.Strings.Unbounded.Unbounded_String;
    end record;
 
    type Corner_Extra_Data is record
-      Fans    : Fan_PWMs;
-      Heaters : Heater_Targets;
+      Fans         : Fan_PWMs;
+      Heaters      : Heater_Targets;
+      Current_Line : File_Line_Count;
    end record;
 
    function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean;
@@ -216,7 +218,10 @@ private
         Home_Move_Minimum_Coast_Time  => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
         Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
 
-   procedure Start_Planner_Block (Data : Flush_Resetting_Data; Last_Command_Index : Command_Index);
+   procedure Start_Planner_Block
+     (Resetting_Data     : Flush_Resetting_Data;
+      Persistent_Data    : Block_Persistent_Data;
+      Last_Command_Index : Command_Index);
    procedure Enqueue_Command_Internal
      (Pos             : Position;
       Stepper_Pos     : Stepper_Position;
@@ -225,7 +230,8 @@ private
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean);
    procedure Finish_Planner_Block
-     (Data                 : Flush_Resetting_Data;
+     (Resetting_Data       : Flush_Resetting_Data;
+      Persistent_Data      : Block_Persistent_Data;
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
       Next_Command_Index   : Command_Index);
@@ -274,10 +280,19 @@ private
 
    function Get_Tachometer_Frequency (Fan : Fan_Name) return Frequency;
 
+   function Get_Line return File_Line_Count;
+
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
 
    package My_Update_Checker is new Update_Checker (My_Logger => My_Logger, Details => Update_Check);
+
+   protected Current_File_Name is
+      function Get_File_Name return String;
+      procedure Set_File_Name (Name : String);
+   private
+      File : Ada.Strings.Unbounded.Unbounded_String := Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE>");
+   end Current_File_Name;
 
    pragma Warnings (Off, "cannot call * before body seen");
    package My_Web_Server is new
@@ -293,6 +308,8 @@ private
         Get_Heater_Power                  => Get_Heater_Power,
         Get_Input_Switch_State            => Get_Input_Switch_State,
         Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
+        Get_File_Name                     => Current_File_Name.Get_File_Name,
+        Get_Line                          => Get_Line,
         Submit_Gcode_Command              => Submit_Gcode_Command,
         Submit_Gcode_File                 => Submit_Gcode_File,
         Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,

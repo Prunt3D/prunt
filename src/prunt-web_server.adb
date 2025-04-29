@@ -897,6 +897,10 @@ package body Prunt.Web_Server is
 
       Append (Result, """Stepgen_Is_Paused"":" & (if Is_Stepgen_Paused then "true," else "false,"));
 
+      Append (Result, """Current_File_Name"":""" & JSON_Escape (Get_File_Name) & """,");
+
+      Append (Result, """Current_File_Line"":" & Get_Line'Image & ",");
+
       if Startup_Manager.Get_Startup_Done then
          Append (Result, """Startup"":""Done""");
       elsif Startup_Manager.Get_Update_Allowed then

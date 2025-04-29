@@ -31,7 +31,11 @@ generic
 
    type Stepper_Position is array (Stepper_Name) of Dimensionless;
 
-   with procedure Start_Planner_Block (Data : Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
+   with
+     procedure Start_Planner_Block
+       (Resetting_Data     : Flush_Resetting_Data_Type;
+        Persistent_Data    : Block_Persistent_Data_Type;
+        Last_Command_Index : Command_Index);
    with
      procedure Enqueue_Command
        (Pos             : Position;
@@ -42,7 +46,8 @@ generic
         Safe_Stop_After : Boolean);
    with
      procedure Finish_Planner_Block
-       (Data                 : Flush_Resetting_Data_Type;
+       (Resetting_Data       : Flush_Resetting_Data_Type;
+        Persistent_Data      : Block_Persistent_Data_Type;
         Next_Block_Pos       : Stepper_Position;
         First_Accel_Distance : Length;
         Last_Command_Index   : Command_Index);
