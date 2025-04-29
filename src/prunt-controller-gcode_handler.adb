@@ -45,8 +45,7 @@ package body Prunt.Controller.Gcode_Handler is
         Heater_Name       => Generic_Types.Heater_Name,
         Thermistor_Name   => Generic_Types.Thermistor_Name,
         Fan_Name          => Generic_Types.Fan_Name,
-        Input_Switch_Name => Generic_Types.Input_Switch_Name,
-        Default_Fan       => Get_Default_Fan);
+        Input_Switch_Name => Generic_Types.Input_Switch_Name);
    use My_Gcode_Parser;
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean) is
@@ -76,6 +75,8 @@ package body Prunt.Controller.Gcode_Handler is
       Axial_Homing_Params      : array (Axis_Name) of My_Config.Homing_Parameters;
       Switchwise_Switch_Params : array (Generic_Types.Input_Switch_Name) of My_Config.Input_Switch_Parameters;
       Fanwise_Fan_Params       : array (Generic_Types.Fan_Name) of My_Config.Fan_Parameters;
+
+      Shaper_Params : Input_Shapers.Axial_Shaper_Parameters;
 
       G_Code_Assignment_Params : My_Config.G_Code_Assignment_Parameters;
 
@@ -505,12 +506,36 @@ package body Prunt.Controller.Gcode_Handler is
          end case;
       end Run_Command;
    begin
-      accept Start (Initial_Data : Corner_Extra_Data) do
-         Corner_Data := Initial_Data;
+      accept Start do
+         declare
+            Fan_Params : My_Config.Fan_Parameters;
+         begin
+            for F in Generic_Types.Fan_Name loop
+               My_Config.Read (Fan_Params, F);
+               case Fan_Params.Kind is
+                  when My_Config.Dynamic_PWM_Kind =>
+                     if Fan_Params.Invert_Output then
+                        Corner_Data.Fans (F) := 1.0;
+                     else
+                        Corner_Data.Fans (F) := 0.0;
+                     end if;
+
+                  when My_Config.Always_On_Kind =>
+                     if Fan_Params.Invert_Output then
+                        Corner_Data.Fans (F) := 1.0 - Fan_Params.Always_On_PWM;
+                     else
+                        Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
+                     end if;
+               end case;
+            end loop;
+         end;
 
          My_Config.Read (Prunt_Params);
          My_Config.Read (Kinematics_Params);
          My_Config.Read (G_Code_Assignment_Params);
+         for A in Axis_Name loop
+            My_Config.Read (Shaper_Params (A), A);
+         end loop;
 
          for I in Generic_Types.Input_Switch_Name loop
             My_Config.Read (Switchwise_Switch_Params (I), I);
@@ -524,7 +549,17 @@ package body Prunt.Controller.Gcode_Handler is
             My_Config.Read (Axial_Homing_Params (I), I);
          end loop;
 
-         Parser_Context := Make_Context (Zero_Pos, 100.0 * mm / s, Prunt_Params.Replace_G0_With_G1);
+         Parser_Context :=
+           Make_Context
+             (Initial_Position   => Zero_Pos,
+              Initial_Feedrate   => 100.0 * mm / s,
+              Replace_G0_With_G1 => Prunt_Params.Replace_G0_With_G1,
+              Default_Fan        => Get_Default_Fan);
+
+         My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
+         My_Planner.Enqueue
+           ((Kind                => My_Planner.Flush_And_Update_Persistent_Data_Kind,
+             New_Persistent_Data => (Shaper_Parameters => Shaper_Params)));
       end Start;
 
       My_Planner.Enqueue

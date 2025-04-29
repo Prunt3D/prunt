@@ -27,7 +27,6 @@ generic
    type Thermistor_Name is (<>);
    type Fan_Name is (<>);
    type Input_Switch_Name is (<>);
-   Default_Fan : Fan_Name;
 package Prunt.Gcode_Parser is
 
    type Command_Kind is
@@ -120,7 +119,8 @@ package Prunt.Gcode_Parser is
    type Context is private;
 
    function Make_Context
-     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean) return Context;
+     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean; Default_Fan : Fan_Name)
+      return Context;
 
    type Command_Runner is access procedure (Comm : Command);
 
@@ -144,6 +144,7 @@ private
       M208_Offset               : Position_Offset;
       M208_Feedrate             : Velocity;
       Replace_G0_With_G1        : Boolean;
+      Default_Fan               : Fan_Name;
    end record;
 
 end Prunt.Gcode_Parser;

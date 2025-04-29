@@ -36,7 +36,7 @@ package Prunt.Controller.Gcode_Handler is
    --  first acceleration profile, this is used to determine at what point a homing loop move started in homing blocks.
 
    task Runner is
-      entry Start (Initial_Data : Corner_Extra_Data);
+      entry Start;
    end Runner;
 
 private

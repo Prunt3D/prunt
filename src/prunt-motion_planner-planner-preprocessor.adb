@@ -36,7 +36,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) when Setup_Done and not Is_Full is
       begin
          case Comm.Kind is
-            when Flush_Kind | Update_Persistent_Data_Kind =>
+            when Flush_Kind | Flush_And_Update_Persistent_Data_Kind =>
                null;
 
             when Flush_And_Reset_Position_Kind =>
@@ -169,8 +169,9 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      exit when N_Corners = Corners_Index'Last;
                      --  end if;
 
-                  when Update_Persistent_Data_Kind =>
+                  when Flush_And_Update_Persistent_Data_Kind =>
                      Block_Persistent_Data := Next_Command.New_Persistent_Data;
+                     exit;
                end case;
             end;
          end loop;

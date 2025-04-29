@@ -24,7 +24,8 @@ with Ada.Characters.Handling; use Ada.Characters.Handling;
 package body Prunt.Gcode_Parser is
 
    function Make_Context
-     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean) return Context is
+     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean; Default_Fan : Fan_Name)
+      return Context is
    begin
       return
         (XYZ_Relative_Mode         => False,
@@ -38,7 +39,8 @@ package body Prunt.Gcode_Parser is
          M207_Feedrate             => Velocity'Last,
          M208_Offset               => (others => Length (0.0)),
          M208_Feedrate             => 0.0 * mm / s,
-         Replace_G0_With_G1        => Replace_G0_With_G1);
+         Replace_G0_With_G1        => Replace_G0_With_G1,
+         Default_Fan               => Default_Fan);
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner) is
@@ -558,7 +560,7 @@ package body Prunt.Gcode_Parser is
             when 106 | 107 =>
                declare
                   Comm : Command :=
-                    (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Default_Fan, Pos => Ctx.Pos);
+                    (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Ctx.Default_Fan, Pos => Ctx.Pos);
                begin
                   if Params ('M').Integer_Value = 106 then
                      Comm.Fan_Speed :=
@@ -570,7 +572,7 @@ package body Prunt.Gcode_Parser is
                         raise Bad_Line with "Parameter 'P' has no value in command requiring value.";
 
                      when Non_Existant_Kind =>
-                        Comm.Fan_To_Set := Default_Fan;
+                        Comm.Fan_To_Set := Ctx.Default_Fan;
 
                      when Integer_Kind =>
                         begin

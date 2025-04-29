@@ -251,9 +251,6 @@ package body Prunt.Controller is
                   My_Logger.Log ("Running setup.");
 
                   Setup_Thermistors_And_Heater_Assignments;
-                  Setup_Planner;
-                  Setup_Step_Generator;
-                  Setup_Gcode_Handler;
 
                   for F in Fan_Name loop
                      declare
@@ -280,6 +277,9 @@ package body Prunt.Controller is
             end;
 
             TMC_Temperature_Updater.Start;
+
+            My_Gcode_Handler.Runner.Start;
+            Setup_Step_Generator;
          end if;
 
          My_Logger.Log ("Setup done.");
@@ -651,22 +651,6 @@ package body Prunt.Controller is
       end if;
    end Setup_Stepper;
 
-   procedure Setup_Planner is
-      Kinematics_Params : My_Config.Kinematics_Parameters;
-      Shaper_Params     : Input_Shapers.Axial_Shaper_Parameters;
-   begin
-      My_Config.Read (Kinematics_Params);
-
-      for A in Axis_Name loop
-         My_Config.Read (Shaper_Params (A), A);
-      end loop;
-
-      My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
-      My_Planner.Enqueue
-        ((Kind                => My_Planner.Update_Persistent_Data_Kind,
-          New_Persistent_Data => (Shaper_Parameters => Shaper_Params)));
-   end Setup_Planner;
-
    procedure Setup_Step_Generator is
       Map               : My_Step_Generator.Stepper_Pos_Map := [others => [others => Length'Last]];
       Kinematics_Params : My_Config.Kinematics_Parameters;
@@ -713,31 +697,6 @@ package body Prunt.Controller is
 
       My_Step_Generator.Runner.Setup (Map);
    end Setup_Step_Generator;
-
-   procedure Setup_Gcode_Handler is
-      Corner_Data : Corner_Extra_Data := (Fans => (others => 0.0), Heaters => (others => Temperature (0.0)));
-      Fan_Params  : My_Config.Fan_Parameters;
-   begin
-      for F in Fan_Name loop
-         My_Config.Read (Fan_Params, F);
-         case Fan_Params.Kind is
-            when My_Config.Dynamic_PWM_Kind =>
-               if Fan_Params.Invert_Output then
-                  Corner_Data.Fans (F) := 1.0;
-               else
-                  Corner_Data.Fans (F) := 0.0;
-               end if;
-
-            when My_Config.Always_On_Kind =>
-               if Fan_Params.Invert_Output then
-                  Corner_Data.Fans (F) := 1.0 - Fan_Params.Always_On_PWM;
-               else
-                  Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
-               end if;
-         end case;
-      end loop;
-      My_Gcode_Handler.Runner.Start (Corner_Data);
-   end Setup_Gcode_Handler;
 
    procedure Log (Message : String) is
    begin

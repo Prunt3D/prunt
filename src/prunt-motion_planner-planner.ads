@@ -48,7 +48,7 @@ package Prunt.Motion_Planner.Planner is
       Flush_Kind,
       Flush_And_Reset_Position_Kind,
       Flush_And_Change_Parameters_Kind,
-      Update_Persistent_Data_Kind);
+      Flush_And_Update_Persistent_Data_Kind);
 
    type Command (Kind : Command_Kind := Move_Kind) is record
       case Kind is
@@ -70,7 +70,7 @@ package Prunt.Motion_Planner.Planner is
             Feedrate          : Velocity;
             Corner_Extra_Data : Corner_Extra_Data_Type;
 
-         when Update_Persistent_Data_Kind =>
+         when Flush_And_Update_Persistent_Data_Kind =>
             New_Persistent_Data : Block_Persistent_Data_Type;
       end case;
    end record;

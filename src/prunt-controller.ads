@@ -305,9 +305,7 @@ private
    procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
    procedure Setup_Thermistors_And_Heater_Assignments;
    procedure Setup_Stepper (Stepper : Stepper_Name);
-   procedure Setup_Planner;
    procedure Setup_Step_Generator;
-   procedure Setup_Gcode_Handler;
 
    task TMC_Temperature_Updater is
       entry Start;
