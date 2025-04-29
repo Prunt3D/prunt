@@ -2081,7 +2081,11 @@ package body Prunt.Config is
                            Sum_Too_High_For_Full_Scale => Sum_Too_High_For_Full_Scale,
                            Excessive_Heating           => Excessive_Heating,
                            Driver_Voltage_Too_Low      => Driver_Voltage_Too_Low);
-                        if Excessive_Heating or Driver_Voltage_Too_Low then
+                        if Sum_Too_High
+                          or (Sum_Too_High_For_Full_Scale and Config.Steppers (S).IHOLD_IRUN.I_Run = 31)
+                          or Excessive_Heating
+                          or Driver_Voltage_Too_Low
+                        then
                            raise Constraint_Error with "Invalid config should have been caught earlier.";
                         end if;
                      end;
@@ -2089,10 +2093,15 @@ package body Prunt.Config is
                      raise Constraint_Error with "Not implemented.";
                   end if;
 
+                  --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks to be an
+                  --  off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but the maximum is
+                  --  probably actually 255.
                   if Config.Steppers (S).CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode
                     and (Dimensionless (Config.Steppers (S).CHOPCONF.HEND_OFFSET)
+                         + 3.0
                          + Dimensionless (Config.Steppers (S).CHOPCONF.HSTRT_TFD210)
-                         > 18.0)
+                         - 1.0
+                         > 14.0)
                     and (Config.Steppers (S).IHOLD_IRUN.I_Run = 31)
                   then
                      raise Constraint_Error with "Invalid config should have been caught earlier.";
