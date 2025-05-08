@@ -57,7 +57,10 @@ package body Prunt.Step_Generator.Generator is
    begin
       for S in Stepper_Name loop
          for A in Axis_Name loop
-            Ret (S) := Ret (S) + Pos (A) / Map (A, S);
+            --  TODO: Use multiplication for the map instead of division so we don't need this check.
+            if Map (A, S) /= Length'Last then
+               Ret (S) := Ret (S) + Pos (A) / Map (A, S);
+            end if;
          end loop;
       end loop;
 
