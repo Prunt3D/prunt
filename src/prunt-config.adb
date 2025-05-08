@@ -419,10 +419,11 @@ package body Prunt.Config is
                               "an oscilloscope is being performed.",
                             ["HSTRT" =>
                               Integer
-                                ("Hysteresis start setting as described in the TMC2240 datasheet.",
-                                 Default => 5,
-                                 Min     => 0,
-                                 Max     => 7,
+                                ("Hysteresis start setting as described in the TMC2240 datasheet. This is the " &
+                                    "resultant value from -3 to 12, not the raw register value.",
+                                 Default => 6,
+                                 Min     => 1,
+                                 Max     => 8,
                                  Unit    => ""),
                              "HEND" =>
                                Integer
@@ -1578,7 +1579,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(3));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(4));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
@@ -1605,7 +1606,25 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(3));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(3) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(3) then
+            --  Version 4 changes the range of HSTRT from 0..7 to 1..8.
+            for S in Stepper_Name loop
+               if Stepper_Kinds (S) = TMC2240_UART_Kind then
+                  Set_Field
+                    (Current_Properties,
+                     "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT",
+                     Integer'
+                       (Get
+                          (Get (Current_Properties, "Properties"),
+                           "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT"))
+                     + 1);
+               end if;
+            end loop;
+
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(4));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(4) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -2057,7 +2076,8 @@ package body Prunt.Config is
                        TMC_Types.Unsigned_4
                          (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") + 3));
                      Config.Steppers (S).CHOPCONF.HSTRT_TFD210 :=
-                       Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT");
+                       TMC_Types.Unsigned_3
+                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT") - 1));
                   elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                     and then Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                   then
