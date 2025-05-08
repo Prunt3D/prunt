@@ -2123,9 +2123,9 @@ package body Prunt.Config is
                   --  probably actually 255.
                   if Config.Steppers (S).CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode
                     and (Dimensionless (Config.Steppers (S).CHOPCONF.HEND_OFFSET)
-                         + 3.0
+                         - 3.0
                          + Dimensionless (Config.Steppers (S).CHOPCONF.HSTRT_TFD210)
-                         - 1.0
+                         + 1.0
                          > 14.0)
                     and (Config.Steppers (S).IHOLD_IRUN.I_Run = 31)
                   then
