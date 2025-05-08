@@ -249,7 +249,7 @@ package body Prunt.Config is
                  Default => False),
             "Distance per step" =>
               Float
-                ("Distance moved by the attached motor for each step signal.",
+                ("Distance moved by the attached motor for each step signal. May be negative to reverse direction.",
                  Default => 1.0E100,
                  Min     => -1.0E100,
                  Max     => 1.0E100,
