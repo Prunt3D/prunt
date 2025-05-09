@@ -721,7 +721,7 @@ package body Prunt.Gcode_Parser is
                      when Integer_Kind =>
                         begin
                            Comm.Heater_To_Tune := Heater_Name'Enum_Val (Integer_Or_Error ('T'));
-                           if not Comm.Fan_To_Set'Valid then
+                           if not Comm.Heater_To_Tune'Valid then
                               raise Constraint_Error;
                            end if;
                         exception
