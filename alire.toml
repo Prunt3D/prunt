@@ -21,11 +21,11 @@ gnatcoll = "^23.0.0"
 
 [[actions]]
 type = "pre-build"
-command = ["sh", "-c", "cd html && npm install webpack-cli && npx webpack"]
+command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (cd html && npm install webpack-cli && npx webpack)"]
 
 [[actions]]
 type = "pre-build"
-command = ["are", "--lang=Ada", "-o", "./generated_src_html", "--content-only", "--name-access", "--rule=./html/package.xml", "./html/dist"]
+command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || are --lang=Ada -o ./generated_src_html --content-only --name-access --rule=./html/package.xml ./html/dist"]
 
 [[depends-on]]
 simple_components = "^4.68.0"
