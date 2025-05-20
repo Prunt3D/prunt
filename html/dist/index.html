@@ -25,6 +25,18 @@
             <button onClick="main.allowFirmwareUpdate()">Update firmware</button>
         </dialog>
 
+        <dialog id="reloadServerDialog">
+            <p>Are you sure you want to reload the server? This will stop any ongoing prints.</p>
+            <div>
+                <button id="confirmReloadButton">Yes, reload</button>
+                <button id="cancelReloadButton">Cancel</button>
+            </div>
+        </dialog>
+
+        <dialog id="reloadingSoonDialog">
+            <p>Server is reloading. The page will refresh soon.</p>
+        </dialog>
+
         <div id="mainBody" class="hidden">
             <div id="fatalErrorWarning" class="warning-banner hidden">
                 <h1>Fatal error:</h1>
@@ -56,6 +68,9 @@
 
             <div class="tab-content-container" id="topTabContentContainer">
                 <div class="tab-content" id="statusTabContent" role="tabpanel" aria-labelledby="statusTab">
+                    <div>
+                        <button onClick="main.showReloadModal()">Reload Server</button>
+                    </div>
                     <div>
                         <button onClick="main.pauseStepgen()">Pause</button>
                         <button onClick="main.resumeStepgen()">Resume</button>

@@ -37,6 +37,7 @@ package Prunt.Controller.Gcode_Handler is
 
    task Runner is
       entry Start;
+      entry Reset;
    end Runner;
 
 private

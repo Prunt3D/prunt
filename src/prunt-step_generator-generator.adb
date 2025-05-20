@@ -68,16 +68,16 @@ package body Prunt.Step_Generator.Generator is
    end To_Stepper_Position;
 
    task body Runner is
-      Current_Command_Index : Command_Index := 0;
-      Current_Time          : Time := 0.0 * s;
+      Current_Command_Index : Command_Index;
+      Current_Time          : Time;
       Pos_Map               : Stepper_Pos_Map;
 
       type Homing_Move_When_Kind is (Not_Pending_Kind, This_Block_Kind, This_Move_Kind);
-      Homing_Move_When : Homing_Move_When_Kind := Not_Pending_Kind;
+      Homing_Move_When : Homing_Move_When_Kind;
 
       type Pausing_State_Kind is (Running_Kind, Pausing_Kind, Paused_Kind, Resuming_Kind);
-      Pausing_State : Pausing_State_Kind := Running_Kind;
-      Pause_Slew    : Pause_Slew_Index := Pause_Slew_Index'First;
+      Pausing_State : Pausing_State_Kind;
+      Pause_Slew    : Pause_Slew_Index;
 
       type Block_Wrapper is record
          Block : aliased Execution_Block;
@@ -90,13 +90,19 @@ package body Prunt.Step_Generator.Generator is
 
       Current_Shapers : Input_Shapers.Shapers.Axial_Shapers;
    begin
-      select
-         accept Finish;
-      or
+      loop
+         Current_Command_Index := 0;
+         Current_Time := 0.0 * s;
+         Homing_Move_When := Not_Pending_Kind;
+         Pausing_State := Running_Kind;
+         Pause_Slew := Pause_Slew_Index'First;
+         Paused := False;
+         Do_Pause := False;
+
          accept Setup (Map : Stepper_Pos_Map) do
             Pos_Map := Map;
          end Setup;
-         Outer :
+         Main :
          loop
             declare
                Timed_Out : Boolean;
@@ -104,15 +110,24 @@ package body Prunt.Step_Generator.Generator is
                loop
                   Dequeue (Block, Timed_Out);
 
+                  select
+                     accept Reset;
+                     exit Main;
+                  else
+                     null;
+                  end select;
+
                   if Do_Pause then
                      Paused := True;
                      loop
                         select
-                           accept Finish;
-                           exit Outer;
+                           accept Reset;
+                           exit Main;
                         else
                            null;
                         end select;
+
+                        delay 0.1;
 
                         exit when not Do_Pause;
                      end loop;
@@ -167,11 +182,13 @@ package body Prunt.Step_Generator.Generator is
                         Paused := True;
                         loop
                            select
-                              accept Finish;
-                              exit Outer;
+                              accept Reset;
+                              exit Main;
                            else
                               null;
                            end select;
+
+                           delay 0.1;
 
                            exit when not Do_Pause;
                         end loop;
@@ -280,8 +297,8 @@ package body Prunt.Step_Generator.Generator is
                   First_Accel_Distance,
                   Current_Command_Index);
             end;
-         end loop Outer;
-      end select;
+         end loop Main;
+      end loop;
    end Runner;
 
 end Prunt.Step_Generator.Generator;

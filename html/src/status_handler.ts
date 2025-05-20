@@ -290,9 +290,12 @@ export async function setupStatus(): Promise<void> {
         } else if ((data as WebsocketServerStartTimeValue).Server_Start_Time) {
             if (serverStartTime === null) {
                 serverStartTime = (data as WebsocketServerStartTimeValue).Server_Start_Time;
-            }
-
-            if (serverStartTime != (data as WebsocketServerStartTimeValue).Server_Start_Time) {
+            } else if (serverStartTime != (data as WebsocketServerStartTimeValue).Server_Start_Time) {
+                const reloadInfo = {
+                    magic: "e339 9f9a 0b42 07fe c2d2 b84b b189 e851",
+                    timestamp: Date.now()
+                };
+                localStorage.setItem("serverReloadTriggered", JSON.stringify(reloadInfo));
                 window.location.reload();
             }
         }

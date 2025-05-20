@@ -33,8 +33,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Setup_Done := True;
       end Setup;
 
-      entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) when Setup_Done and not Is_Full is
+      entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) when not Is_Full is
       begin
+         if not Setup_Done then
+            return;
+         end if;
+
          case Comm.Kind is
             when Flush_Kind | Flush_And_Update_Persistent_Data_Kind =>
                null;
@@ -68,8 +72,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
       end Enqueue;
 
-      entry Dequeue (Comm : out Command) when Is_Full or Next_Read /= Next_Write is
+      entry Dequeue (Comm : out Command; Reset_Called : out Boolean)
+        when Is_Full or Next_Read /= Next_Write or not Setup_Done
+      is
       begin
+         Reset_Called := not Setup_Done;
+
+         if not Setup_Done then
+            return;
+         end if;
+
          Comm := Elements (Next_Read);
 
          if Next_Read = Elements'Last then
@@ -79,6 +91,14 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
          Is_Full := False;
       end Dequeue;
+
+      procedure Reset is
+      begin
+         Setup_Done := False;
+         Is_Full := False;
+         Next_Read := Command_Queue_Array_Type'First;
+         Next_Write := Command_Queue_Array_Type'First;
+      end Reset;
    end Command_Queue;
 
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
@@ -86,9 +106,15 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Command_Queue.Enqueue (Comm, Ignore_Bounds);
    end Enqueue;
 
-   procedure Run (Block : aliased out Execution_Block) is
+   procedure Reset is
    begin
-      Runner.Run (Block);
+      Command_Queue.Reset;
+      Runner.Reset;
+   end Reset;
+
+   procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean) is
+   begin
+      Runner.Run (Block, Reset_Called);
    end Run;
 
    procedure Setup (Initial_Parameters : Kinematic_Parameters) is
@@ -109,13 +135,15 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Setup_Done := True;
       end Setup;
 
-      procedure Run (Block : aliased out Execution_Block) is
+      procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean) is
          Flush_Resetting_Data : Flush_Resetting_Data_Type := Flush_Resetting_Data_Default;
          N_Corners            : Corners_Index := 1;
          Block_N_Corners      : Corners_Index
          with Address => Block.N_Corners'Address;
          Next_Params          : Kinematic_Parameters;
       begin
+         Reset_Called := False;
+
          if not Setup_Done then
             raise Constraint_Error with "Setup not done.";
          end if;
@@ -128,7 +156,11 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             declare
                Next_Command : Command;
             begin
-               Command_Queue.Dequeue (Next_Command);
+               Command_Queue.Dequeue (Next_Command, Reset_Called);
+
+               if Reset_Called then
+                  return;
+               end if;
 
                case Next_Command.Kind is
                   when Flush_Kind =>
@@ -157,11 +189,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                        and then abs (Corners (N_Corners - 1) - Corners (N_Corners - 2)) = 0.0 * mm
                      then
                         Corners (N_Corners - 1) := Corners (N_Corners);
-                        Corners_Extra_Data (N_Corners - 1) := Corners_Extra_Data (N_Corners);
                         --  Keep first feedrate.
-                        N_Corners := N_Corners - 1;
+                        Corners_Extra_Data (N_Corners - 1) := Corners_Extra_Data (N_Corners);
                         --  Remove repeated zero-length segments.
-
+                        N_Corners := N_Corners - 1;
                      end if;
 
                      Last_Pos := Next_Command.Pos;
@@ -188,8 +219,18 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
          Block.Block_Persistent_Data := Block_Persistent_Data;
 
+         Reset_Called := False;
+
          Current_Params := Next_Params;
       end Run;
+
+      procedure Reset is
+      begin
+         Setup_Done := False;
+         Last_Pos := Initial_Position;
+         Block_Persistent_Data := Block_Persistent_Data_Default;
+      end Reset;
+
    end Runner;
 
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters) is

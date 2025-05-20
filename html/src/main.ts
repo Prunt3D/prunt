@@ -157,7 +157,7 @@ for (const name of tabs) {
             t.setAttribute('aria-selected', 'false');
         });
         topTabContentContainer.querySelectorAll<HTMLElement>(':scope > [role="tabpanel"]').forEach(c => {
-             c.classList.add("hidden");
+            c.classList.add("hidden");
         });
 
         tab.classList.add("active");
@@ -166,7 +166,7 @@ for (const name of tabs) {
         tabContent.classList.remove("hidden");
 
         if (name === 'log') {
-             messageLog.scrollTop = messageLog.scrollHeight;
+            messageLog.scrollTop = messageLog.scrollHeight;
         }
     });
 
@@ -214,6 +214,35 @@ export async function resumeStepgen(): Promise<void> {
     });
 }
 
+export function showReloadModal(): void {
+    const reloadServerDialog = document.getElementById("reloadServerDialog") as HTMLDialogElement;
+    reloadServerDialog.showModal();
+}
+
+async function reloadServer(): Promise<void> {
+    const reloadServerDialog = document.getElementById("reloadServerDialog") as HTMLDialogElement;
+    reloadServerDialog.close();
+
+    await fetch("./reload-server", {
+        method: "POST"
+    }).then((response) => {
+        if (!response.ok) {
+            response.text().then((error) => {
+                const message = `Failed to reload server:\n${response.statusText}\n${error}`;
+                console.error(message);
+                alert(message);
+            });
+        } else {
+            const reloadingSoonDialog = document.getElementById("reloadingSoonDialog") as HTMLDialogElement;
+            reloadingSoonDialog.showModal();
+        }
+    }).catch((error) => {
+        const message = `Failed to reload server:\n${error}\n${error.stack}`;
+        console.error(message);
+        alert(message);
+    });
+}
+
 async function setupPruntDisabledWarning(): Promise<void> {
     const response = await fetch("./prunt-is-enabled");
 
@@ -248,6 +277,41 @@ export async function allowFirmwareUpdate(): Promise<void> {
     });
 }
 
+const reloadServerDialog = document.getElementById("reloadServerDialog") as HTMLDialogElement;
+const confirmReloadButton = document.getElementById("confirmReloadButton") as HTMLButtonElement;
+const cancelReloadButton = document.getElementById("cancelReloadButton") as HTMLButtonElement;
+
+confirmReloadButton.addEventListener("click", reloadServer);
+cancelReloadButton.addEventListener("click", () => {
+    reloadServerDialog.close();
+});
+
+function checkServerReloadFlag(): void {
+    const reloadInfoString = localStorage.getItem("serverReloadTriggered");
+    localStorage.removeItem("serverReloadTriggered");
+
+    if (reloadInfoString) {
+        try {
+            const reloadInfo = JSON.parse(reloadInfoString);
+            const now = Date.now();
+
+            if (reloadInfo && reloadInfo.magic === "e339 9f9a 0b42 07fe c2d2 b84b b189 e851"
+                && typeof reloadInfo.timestamp === "number") {
+                if (now - reloadInfo.timestamp < 10000) {
+                    const serverRestartedDialog = document.getElementById("serverRestartedDialog") as HTMLDialogElement;
+                    serverRestartedDialog.showModal();
+                } else {
+                    console.warn("Ignoring stale server reload flag.");
+                }
+            } else {
+                console.warn("Ignoring malformed server reload flag in localStorage.");
+            }
+        } catch (e) {
+            console.error("Failed to parse server reload flag from localStorage:", e);
+        }
+    }
+}
+
 async function checkUpdate(): Promise<void> {
     const updateCheckFailedWarning = document.getElementById("updateCheckFailedWarning") as HTMLDivElement;
     const updateAvailableWarning = document.getElementById("updateAvailableWarning") as HTMLDivElement;
@@ -279,6 +343,7 @@ async function checkUpdate(): Promise<void> {
 const mainBody = document.getElementById("mainBody");
 Promise.all([setupStatus(), setupSettings(), refreshFiles(), setupPruntDisabledWarning()]).then(() => {
     mainBody.classList.remove("hidden");
+    checkServerReloadFlag();
 }).catch((error) => {
     alert("Error occurred during loading.");
     mainBody.innerText = error + "\n\n" + error.stack;

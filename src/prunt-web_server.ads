@@ -54,6 +54,7 @@ generic
    with function Is_Stepgen_Paused return Boolean;
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
+   with procedure Reload_Server;
    Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
@@ -61,6 +62,7 @@ package Prunt.Web_Server is
    procedure Wait_For_User_To_Allow_Update;
    procedure Notify_Startup_Done;
    procedure Task_Termination_Set_Specific_Handler (Handler : Ada.Task_Termination.Termination_Handler);
+   procedure Reset;
 
 private
 
@@ -69,6 +71,7 @@ private
       procedure Set_Update_Required;
       function Get_Update_Required return Boolean;
       procedure Set_Startup_Done;
+      procedure Clear_Startup_Done;
       function Get_Startup_Done return Boolean;
       procedure Set_Update_Allowed;
       function Get_Update_Allowed return Boolean;
@@ -188,6 +191,7 @@ private
       entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Log_To_WebSocket_Receivers (Message : String);
+      entry Reset_Server_Start_Time;
    end Server;
 
    overriding

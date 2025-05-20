@@ -1694,6 +1694,13 @@ package body Prunt.Config is
          Init_Done := True;
       end Maybe_Do_Init;
 
+      procedure Reset is
+      begin
+         Init_Done := False;
+         Init_Failed := False;
+         Initial_Config_Valid := False;
+      end Reset;
+
       procedure Disable_Prunt is
       begin
          Maybe_Do_Init;
@@ -2593,5 +2600,10 @@ package body Prunt.Config is
          Config_File.Prunt_Is_Enabled (Result);
       end return;
    end Prunt_Is_Enabled;
+
+   procedure Reset is
+   begin
+      Config_File.Reset;
+   end Reset;
 
 end Prunt.Config;

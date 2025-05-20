@@ -508,183 +508,206 @@ package body Prunt.Controller.Gcode_Handler is
          end case;
       end Run_Command;
    begin
-      accept Start do
-         declare
-            Fan_Params : My_Config.Fan_Parameters;
-         begin
-            for F in Generic_Types.Fan_Name loop
-               My_Config.Read (Fan_Params, F);
-               case Fan_Params.Kind is
-                  when My_Config.Dynamic_PWM_Kind =>
-                     if Fan_Params.Invert_Output then
-                        Corner_Data.Fans (F) := 1.0;
-                     else
-                        Corner_Data.Fans (F) := 0.0;
-                     end if;
-
-                  when My_Config.Always_On_Kind =>
-                     if Fan_Params.Invert_Output then
-                        Corner_Data.Fans (F) := 1.0 - Fan_Params.Always_On_PWM;
-                     else
-                        Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
-                     end if;
-               end case;
-            end loop;
-         end;
-
-         My_Config.Read (Prunt_Params);
-         My_Config.Read (Kinematics_Params);
-         My_Config.Read (G_Code_Assignment_Params);
-         for A in Axis_Name loop
-            My_Config.Read (Persistent_Data.Shaper_Parameters (A), A);
-         end loop;
-
-         for I in Generic_Types.Input_Switch_Name loop
-            My_Config.Read (Switchwise_Switch_Params (I), I);
-         end loop;
-
-         for I in Generic_Types.Fan_Name loop
-            My_Config.Read (Fanwise_Fan_Params (I), I);
-         end loop;
-
-         for I in Axis_Name loop
-            My_Config.Read (Axial_Homing_Params (I), I);
-         end loop;
-
-         Parser_Context :=
-           Make_Context
-             (Initial_Position   => Zero_Pos,
-              Initial_Feedrate   => 100.0 * mm / s,
-              Replace_G0_With_G1 => Prunt_Params.Replace_G0_With_G1,
-              Default_Fan        => Get_Default_Fan);
-
-         My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
-         My_Planner.Enqueue
-           ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
-      end Start;
-
-      My_Planner.Enqueue
-        ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
-          Flush_Resetting_Data => (others => <>),
-          Reset_Pos            => Zero_Pos));
-      My_Planner.Enqueue
-        ((Kind => My_Planner.Move_Kind, Pos => Zero_Pos, Feedrate => Velocity'Last, Corner_Extra_Data => Corner_Data));
-      My_Planner.Enqueue
-        ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
-          Flush_Resetting_Data => (others => <>),
-          Reset_Pos            => Zero_Pos));
-
       loop
-         delay 0.1;
-
-         if Gcode_Queue.Get_Command /= "" then
+         accept Start do
             declare
-               Line : constant String := Gcode_Queue.Get_Command;
+               Fan_Params : My_Config.Fan_Parameters;
             begin
-               Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
-            exception
-               when E : Command_Constraint_Error =>
-                  My_Logger.Log
-                    ("Error running manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
-               when E : Bad_Line =>
-                  My_Logger.Log
-                    ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
-               when E : My_Planner.Out_Of_Bounds_Error =>
-                  My_Logger.Log
-                    ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
+               for F in Generic_Types.Fan_Name loop
+                  My_Config.Read (Fan_Params, F);
+                  case Fan_Params.Kind is
+                     when My_Config.Dynamic_PWM_Kind =>
+                        if Fan_Params.Invert_Output then
+                           Corner_Data.Fans (F) := 1.0;
+                        else
+                           Corner_Data.Fans (F) := 0.0;
+                        end if;
+
+                     when My_Config.Always_On_Kind =>
+                        if Fan_Params.Invert_Output then
+                           Corner_Data.Fans (F) := 1.0 - Fan_Params.Always_On_PWM;
+                        else
+                           Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
+                        end if;
+                  end case;
+               end loop;
             end;
 
-            Gcode_Queue.Clear_Command;
-         elsif Gcode_Queue.Get_File /= "" then
-            declare
-               File : File_Type;
-            begin
-               Open (File, In_File, Gcode_Queue.Get_File);
+            My_Config.Read (Prunt_Params);
+            My_Config.Read (Kinematics_Params);
+            My_Config.Read (G_Code_Assignment_Params);
+            for A in Axis_Name loop
+               My_Config.Read (Persistent_Data.Shaper_Parameters (A), A);
+            end loop;
 
-               Persistent_Data.Current_File := Ada.Strings.Unbounded.To_Unbounded_String (Gcode_Queue.Get_File);
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
-               My_Planner.Enqueue
-                 ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
+            for I in Generic_Types.Input_Switch_Name loop
+               My_Config.Read (Switchwise_Switch_Params (I), I);
+            end loop;
 
+            for I in Generic_Types.Fan_Name loop
+               My_Config.Read (Fanwise_Fan_Params (I), I);
+            end loop;
+
+            for I in Axis_Name loop
+               My_Config.Read (Axial_Homing_Params (I), I);
+            end loop;
+
+            Parser_Context :=
+              Make_Context
+                (Initial_Position   => Zero_Pos,
+                 Initial_Feedrate   => 100.0 * mm / s,
+                 Replace_G0_With_G1 => Prunt_Params.Replace_G0_With_G1,
+                 Default_Fan        => Get_Default_Fan);
+
+            My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
+            My_Planner.Enqueue
+              ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
+         end Start;
+
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Zero_Pos));
+         My_Planner.Enqueue
+           ((Kind              => My_Planner.Move_Kind,
+             Pos               => Zero_Pos,
+             Feedrate          => Velocity'Last,
+             Corner_Extra_Data => Corner_Data));
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Zero_Pos));
+
+         Main :
+         loop
+            select
+               accept Reset;
+               exit Main;
+            else
+               null;
+            end select;
+
+            if Gcode_Queue.Get_Command /= "" then
                declare
-                  Command_Succeeded : Boolean := True;
+                  Line : constant String := Gcode_Queue.Get_Command;
                begin
-                  Corner_Data.Current_Line := 1;
-                  while Command_Succeeded and not End_Of_File (File) loop
-                     declare
-                        Line : constant String := Get_Line (File);
-                     begin
-                        Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
-                     exception
-                        when E : Command_Constraint_Error =>
-                           My_Logger.Log
-                             ("Error running line in file "
-                              & Gcode_Queue.Get_File
-                              & " on line "
-                              & Corner_Data.Current_Line'Image
-                              & " ("
-                              & Line
-                              & "): "
-                              & Ada.Exceptions.Exception_Information (E));
-                           Command_Succeeded := False;
-                        when E : Bad_Line =>
-                           My_Logger.Log
-                             ("Error parsing line in file "
-                              & Gcode_Queue.Get_File
-                              & " on line "
-                              & Corner_Data.Current_Line'Image
-                              & " ("
-                              & Line
-                              & "): "
-                              & Ada.Exceptions.Exception_Information (E));
-                           Command_Succeeded := False;
-                        when E : My_Planner.Out_Of_Bounds_Error =>
-                           My_Logger.Log
-                             ("Error parsing line in file "
-                              & Gcode_Queue.Get_File
-                              & " on line "
-                              & Corner_Data.Current_Line'Image
-                              & " ("
-                              & Line
-                              & "): "
-                              & Ada.Exceptions.Exception_Information (E));
-                           Command_Succeeded := False;
-                     end;
-
-                     Corner_Data.Current_Line := @ + 1;
-                  end loop;
+                  Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
+                  My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
+               exception
+                  when E : Command_Constraint_Error =>
+                     My_Logger.Log
+                       ("Error running manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
+                  when E : Bad_Line =>
+                     My_Logger.Log
+                       ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
+                  when E : My_Planner.Out_Of_Bounds_Error =>
+                     My_Logger.Log
+                       ("Error parsing manual command (" & Line & "): " & Ada.Exceptions.Exception_Information (E));
                end;
 
-               Corner_Data.Current_Line := 0;
-               Persistent_Data.Current_File :=
-                 Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE> (finished " & Gcode_Queue.Get_File & ")");
-               My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
-               My_Planner.Enqueue
-                 ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
+               Gcode_Queue.Clear_Command;
+            elsif Gcode_Queue.Get_File /= "" then
+               declare
+                  File : File_Type;
+               begin
+                  --  Note that we do not need to handle resets here as My_Planner.Enqueue drops all commands after the
+                  --  planner is reset.
 
-               Close (File);
-            exception
-               when
-                 E :
-                   Ada.IO_Exceptions.Status_Error
-                   | Ada.IO_Exceptions.Mode_Error
-                   | Ada.IO_Exceptions.Name_Error
-                   | Ada.IO_Exceptions.Use_Error
-                   | Ada.IO_Exceptions.Device_Error
-                   | Ada.IO_Exceptions.End_Error
-                   | Ada.IO_Exceptions.Data_Error
-                   | Ada.IO_Exceptions.Layout_Error
-               =>
-                  My_Logger.Log
-                    ("IO error when processing file "
-                     & Gcode_Queue.Get_File
-                     & ": "
-                     & Ada.Exceptions.Exception_Information (E));
-            end;
+                  Open (File, In_File, Gcode_Queue.Get_File);
 
-            Gcode_Queue.Clear_File;
-         end if;
+                  Persistent_Data.Current_File := Ada.Strings.Unbounded.To_Unbounded_String (Gcode_Queue.Get_File);
+                  My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
+                  My_Planner.Enqueue
+                    ((Kind                => My_Planner.Flush_And_Update_Persistent_Data_Kind,
+                      New_Persistent_Data => Persistent_Data));
+
+                  declare
+                     Command_Succeeded : Boolean := True;
+                  begin
+                     Corner_Data.Current_Line := 1;
+                     while Command_Succeeded and not End_Of_File (File) loop
+                        select
+                           accept Reset;
+                           exit Main;
+                        else
+                           null;
+                        end select;
+
+                        declare
+                           Line : constant String := Get_Line (File);
+                        begin
+                           Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
+                        exception
+                           when E : Command_Constraint_Error =>
+                              My_Logger.Log
+                                ("Error running line in file "
+                                 & Gcode_Queue.Get_File
+                                 & " on line "
+                                 & Corner_Data.Current_Line'Image
+                                 & " ("
+                                 & Line
+                                 & "): "
+                                 & Ada.Exceptions.Exception_Information (E));
+                              Command_Succeeded := False;
+                           when E : Bad_Line =>
+                              My_Logger.Log
+                                ("Error parsing line in file "
+                                 & Gcode_Queue.Get_File
+                                 & " on line "
+                                 & Corner_Data.Current_Line'Image
+                                 & " ("
+                                 & Line
+                                 & "): "
+                                 & Ada.Exceptions.Exception_Information (E));
+                              Command_Succeeded := False;
+                           when E : My_Planner.Out_Of_Bounds_Error =>
+                              My_Logger.Log
+                                ("Error parsing line in file "
+                                 & Gcode_Queue.Get_File
+                                 & " on line "
+                                 & Corner_Data.Current_Line'Image
+                                 & " ("
+                                 & Line
+                                 & "): "
+                                 & Ada.Exceptions.Exception_Information (E));
+                              Command_Succeeded := False;
+                        end;
+
+                        Corner_Data.Current_Line := @ + 1;
+                     end loop;
+                  end;
+
+                  Corner_Data.Current_Line := 0;
+                  Persistent_Data.Current_File :=
+                    Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE> (finished " & Gcode_Queue.Get_File & ")");
+                  My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
+                  My_Planner.Enqueue
+                    ((Kind                => My_Planner.Flush_And_Update_Persistent_Data_Kind,
+                      New_Persistent_Data => Persistent_Data));
+
+                  Close (File);
+               exception
+                  when
+                    E :
+                      Ada.IO_Exceptions.Status_Error
+                      | Ada.IO_Exceptions.Mode_Error
+                      | Ada.IO_Exceptions.Name_Error
+                      | Ada.IO_Exceptions.Use_Error
+                      | Ada.IO_Exceptions.Device_Error
+                      | Ada.IO_Exceptions.End_Error
+                      | Ada.IO_Exceptions.Data_Error
+                      | Ada.IO_Exceptions.Layout_Error
+                  =>
+                     My_Logger.Log
+                       ("IO error when processing file "
+                        & Gcode_Queue.Get_File
+                        & ": "
+                        & Ada.Exceptions.Exception_Information (E));
+               end;
+
+               Gcode_Queue.Clear_File;
+            end if;
+         end loop Main;
       end loop;
    end Runner;
 

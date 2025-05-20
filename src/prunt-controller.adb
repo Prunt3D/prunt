@@ -183,45 +183,53 @@ package body Prunt.Controller is
 
    task body TMC_Temperature_Updater is
    begin
-      accept Start;
-
       loop
-         for S in Stepper_Name loop
-            case Stepper_Hardware (S).Kind is
-               when Basic_Kind =>
-                  null;
+         accept Start;
 
-               when TMC2240_UART_Kind =>
-                  declare
-                     Query          : TMC_Types.TMC2240.UART_Query_Message :=
-                       (Bytes_Mode => False,
-                        Content    =>
-                          (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
-                           Register => TMC_Types.TMC2240.ADC_TEMP_Address,
-                           others   => <>));
-                     Receive_Failed : Boolean;
-                     Reply          : TMC_Types.TMC2240.UART_Data_Message;
-                  begin
-                     Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-                     Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
+         Inner :
+         loop
+            for S in Stepper_Name loop
+               case Stepper_Hardware (S).Kind is
+                  when Basic_Kind =>
+                     null;
 
-                     if Receive_Failed then
-                        null;
-                     elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-                        null;
-                     elsif Reply.Content.Node /= 255 then
-                        null;
-                     elsif Reply.Content.Register /= Query.Content.Register then
-                        null;
-                     else
-                        Last_Stepper_Temperatures (S) :=
-                          Temperature (Reply.Content.ADC_TEMP_Data.ADC_Temp) - 264.675 * celsius;
-                     end if;
-                  end;
-            end case;
-         end loop;
+                  when TMC2240_UART_Kind =>
+                     declare
+                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
+                          (Bytes_Mode => False,
+                           Content    =>
+                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
+                              Register => TMC_Types.TMC2240.ADC_TEMP_Address,
+                              others   => <>));
+                        Receive_Failed : Boolean;
+                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
+                     begin
+                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
 
-         delay 1.0;
+                        if Receive_Failed then
+                           null;
+                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
+                           null;
+                        elsif Reply.Content.Node /= 255 then
+                           null;
+                        elsif Reply.Content.Register /= Query.Content.Register then
+                           null;
+                        else
+                           Last_Stepper_Temperatures (S) :=
+                             Temperature (Reply.Content.ADC_TEMP_Data.ADC_Temp) - 264.675 * celsius;
+                        end if;
+                     end;
+               end case;
+            end loop;
+
+            select
+               accept Reset;
+               exit Inner;
+            or
+               delay 1.0;
+            end select;
+         end loop Inner;
       end loop;
    end TMC_Temperature_Updater;
 
@@ -231,97 +239,151 @@ package body Prunt.Controller is
    end Prompt_For_Update;
 
    procedure Run is
-      Is_Config_Valid : Boolean := True;
-
-      procedure Log_Config_Error (Key, Message : String) is
-      begin
-         Is_Config_Valid := False;
-         My_Logger.Log ("Config error: " & Key & ": " & Message);
-      end Log_Config_Error;
    begin
-      begin
-         if not Ada.Directories.Exists ("uploads") then
-            Ada.Directories.Create_Directory ("uploads");
-         end if;
+      if not Ada.Directories.Exists ("uploads") then
+         Ada.Directories.Create_Directory ("uploads");
+      end if;
 
-         Ada.Task_Termination.Set_Specific_Handler
-           (My_Planner.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         Ada.Task_Termination.Set_Specific_Handler
-           (My_Gcode_Handler.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         Ada.Task_Termination.Set_Specific_Handler
-           (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         Ada.Task_Termination.Set_Specific_Handler
-           (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
-         --  TODO: The above should occur before this procedure is called.
+      Ada.Task_Termination.Set_Specific_Handler
+        (My_Planner.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+      Ada.Task_Termination.Set_Specific_Handler
+        (My_Gcode_Handler.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+      Ada.Task_Termination.Set_Specific_Handler
+        (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+      Ada.Task_Termination.Set_Specific_Handler
+        (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+      My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
-         My_Config.Validate_Initial_Config (Log_Config_Error'Access);
+      <<Restart_Main>>
+      Main :
+      loop
+         declare
+            Is_Config_Valid : Boolean := True;
 
-         if not Is_Config_Valid then
-            My_Logger.Log ("Prunt is disabled. Config is not valid.");
-            My_Config.Disable_Prunt;
-         else
-            declare
-               Prunt_Params : My_Config.Prunt_Parameters;
+            procedure Log_Config_Error (Key, Message : String) is
             begin
-               My_Config.Read (Prunt_Params);
-               if not Prunt_Params.Enabled then
-                  My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
-               else
-                  My_Logger.Log ("Running setup.");
+               Is_Config_Valid := False;
+               My_Logger.Log ("Config error: " & Key & ": " & Message);
+            end Log_Config_Error;
+         begin
+            --  Configuration validation and initial setup
+            My_Config.Validate_Initial_Config (Log_Config_Error'Access);
 
-                  Setup_Thermistors_And_Heater_Assignments;
+            if My_Config.Prunt_Is_Enabled and not Is_Config_Valid then
+               My_Logger.Log ("Prunt disabled due to invalid config.");
+               My_Config.Disable_Prunt;
+               My_Config.Reset;
+               My_Web_Server.Reset;
+               goto Restart_Main;
+            end if;
+         end;
 
-                  for F in Fan_Name loop
-                     declare
-                        Fan_Params : My_Config.Fan_Parameters;
-                     begin
-                        My_Config.Read (Fan_Params, F);
-                        Reconfigure_Fan (F, Fan_Params.PWM_Frequency);
-                     end;
-                  end loop;
+         if not My_Config.Prunt_Is_Enabled then
+            My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
 
-                  for S in Stepper_Name loop
-                     Setup_Stepper (S);
-                  end loop;
-
-                  for H in Heater_Name loop
-                     declare
-                        Heater_Params : My_Config.Heater_Full_Parameters;
-                     begin
-                        My_Config.Read (Heater_Params, H);
-                        Reconfigure_Heater (H, Heater_Params.Params);
-                     end;
-                  end loop;
-               end if;
+            declare
+               Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
+            begin
+               select
+                  Reload_Signal.Wait;
+                  goto Restart_Main;
+               then abort
+                  Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
+                  exit Main;
+               end select;
             end;
-
-            TMC_Temperature_Updater.Start;
-
-            My_Gcode_Handler.Runner.Start;
-            Setup_Step_Generator;
          end if;
+
+         declare
+            Prunt_Params : My_Config.Prunt_Parameters;
+         begin
+            My_Config.Read (Prunt_Params);
+
+            My_Logger.Log ("Running setup.");
+
+            Setup_Thermistors_And_Heater_Assignments;
+
+            for F in Fan_Name loop
+               declare
+                  Fan_Params : My_Config.Fan_Parameters;
+               begin
+                  My_Config.Read (Fan_Params, F);
+                  Reconfigure_Fan (F, Fan_Params.PWM_Frequency);
+               end;
+            end loop;
+
+            for S in Stepper_Name loop
+               Setup_Stepper (S);
+            end loop;
+
+            for H in Heater_Name loop
+               declare
+                  Heater_Params : My_Config.Heater_Full_Parameters;
+               begin
+                  My_Config.Read (Heater_Params, H);
+                  Reconfigure_Heater (H, Heater_Params.Params);
+               end;
+            end loop;
+         end;
+
+         TMC_Temperature_Updater.Start;
+
+         My_Gcode_Handler.Runner.Start;
+         Setup_Step_Generator;
 
          My_Logger.Log ("Setup done.");
-      exception
-         when E : others =>
-            Fatal_Exception_Occurrence_Holder.all.Set
-              (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-      end;
 
-      My_Web_Server.Notify_Startup_Done;
+         My_Web_Server.Notify_Startup_Done;
 
-      declare
-         Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
-      begin
-         Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
-         My_Step_Generator.Pause;
-         My_Step_Generator.Runner.Finish;
-         Shutdown;
+         declare
+            Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
+         begin
+            select
+               Reload_Signal.Wait;
+            then abort
+               Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
+               exit Main;
+            end select;
+         end;
 
-         delay 5.0;
-         --  Give some time for the GUI to get the exception.
-      end;
+         My_Logger.Log ("Reload requested. Resetting...");
+
+         loop
+            My_Step_Generator.Pause;
+            select
+               My_Step_Generator.Runner.Reset;
+               exit;
+            or
+               delay 1.0;
+               --  Rather than making sure the user can't click resume we instead just call Pause repeatedly until the
+               --  Reset entry call is accepted.
+            end select;
+         end loop;
+         My_Planner.Reset;
+         My_Gcode_Handler.Runner.Reset;
+         TMC_Temperature_Updater.Reset;
+         My_Config.Reset;
+         Reset;
+         My_Web_Server.Reset;
+      end loop Main;
+
+      --  Currently we only exit the above loop if there is an exception in a different task.
+
+      raise Constraint_Error with "Error in other task.";
+   exception
+      when E : others =>
+         Fatal_Exception_Occurrence_Holder.all.Set
+           (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+
+         for I in 1 .. 100 loop
+            My_Step_Generator.Pause;
+            delay 0.1;
+            --  Make sure the step generator stays paused even if the user is sending resume requests.
+         end loop;
+
+         Reset;
+
+         raise;
    end Run;
 
    procedure Report_Input_Switch_State (Switch : Input_Switch_Name; State : Pin_State) is
@@ -735,5 +797,22 @@ package body Prunt.Controller is
    begin
       return Data.Shaper_Parameters;
    end Get_Axial_Shaper_Parameters;
+
+   protected body Reload_Signal is
+      entry Wait when Reload_Requested is
+      begin
+         Reload_Requested := False;
+      end Wait;
+
+      procedure Signal is
+      begin
+         Reload_Requested := True;
+      end Signal;
+   end Reload_Signal;
+
+   procedure Signal_Reload is
+   begin
+      Reload_Signal.Signal;
+   end Signal_Reload;
 
 end Prunt.Controller;

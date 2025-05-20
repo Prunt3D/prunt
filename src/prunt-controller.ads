@@ -111,8 +111,8 @@ generic
    --  Enqueue_Command had the Safe_Stop_After parameter set to False. This procedure should not wait for heaters to
    --  reach targets. Last_Command indicates the last command index that was enqueued. May be called from any task.
 
-   with procedure Shutdown;
-   --  Shutdown the board and do not accept any new commands.
+   with procedure Reset;
+   --  Reset the device to power-on state.
 
    Config_Path : String;
    --  Path of the printer configuration file.
@@ -294,6 +294,15 @@ private
       File : Ada.Strings.Unbounded.Unbounded_String := Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE>");
    end Current_File_Name;
 
+   protected Reload_Signal is
+      entry Wait;
+      procedure Signal;
+   private
+      Reload_Requested : Boolean := False;
+   end Reload_Signal;
+
+   procedure Signal_Reload;
+
    pragma Warnings (Off, "cannot call * before body seen");
    package My_Web_Server is new
      Web_Server
@@ -315,6 +324,7 @@ private
         Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
         Pause_Stepgen                     => My_Step_Generator.Pause,
         Resume_Stepgen                    => My_Step_Generator.Resume,
+        Reload_Server                     => Signal_Reload,
         Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
         Port                              => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");
@@ -326,6 +336,7 @@ private
 
    task TMC_Temperature_Updater is
       entry Start;
+      entry Reset;
    end TMC_Temperature_Updater;
 
 end Prunt.Controller;

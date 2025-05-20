@@ -121,6 +121,8 @@ package Prunt.Motion_Planner.Planner is
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
    --  Send a new command to the planner queue. May be called before Setup, but will block once the queue if full.
 
+   procedure Reset;
+
    procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean);
    --  Pop a block from the queue of processed blocks. If a block is not ready then Timed_Out will be set to True,
    --  otherwise it will be set to False and Block will be set.
@@ -130,7 +132,9 @@ package Prunt.Motion_Planner.Planner is
    task Runner
      with CPU => Runner_CPU is
       entry Setup (In_Params : Kinematic_Parameters);
-
+      entry Reset_Do_Not_Call_From_Other_Packages;
+      --  Call the Reset procedure rather than this entry to avoid blocking and reset the preprocessor.
+      --  TODO: There must be some way to hide this while still exposing the task.
       entry Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block);
       --  Call the Dequeue procedure rather than this entry as it may be replaced with a queue in the future.
    end Runner;

@@ -74,7 +74,7 @@ package Prunt.Step_Generator.Generator is
        --  Allows for very large shapers and shaper buffers to be allocated.
    is
       entry Setup (Map : Stepper_Pos_Map);
-      entry Finish;
+      entry Reset;
    end Runner;
 
    procedure Pause;

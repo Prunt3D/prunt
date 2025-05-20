@@ -31,6 +31,12 @@ package body Prunt.Motion_Planner.Planner is
    package My_Kinematic_Limiter is new Kinematic_Limiter;
    package My_Feedrate_Profile_Generator is new Feedrate_Profile_Generator;
 
+   procedure Reset is
+   begin
+      My_Preprocessor.Reset;
+      Runner.Reset_Do_Not_Call_From_Other_Packages;
+   end Reset;
+
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
    begin
       My_Preprocessor.Enqueue (Comm, Ignore_Bounds);
@@ -57,34 +63,48 @@ package body Prunt.Motion_Planner.Planner is
       Working_Block_Wrapper : constant access Block_Wrapper := new Block_Wrapper;
       Block renames Working_Block_Wrapper.Block;
       pragma Warnings (On, "use of an anonymous access type allocator");
+
+      Reset_Called : Boolean := False;
    begin
-      accept Setup (In_Params : Kinematic_Parameters) do
-         My_Preprocessor.Setup (In_Params);
-      end Setup;
-
       loop
-         My_Preprocessor.Run (Block);
-
-         if Is_Homing_Move (Block.Flush_Resetting_Data) and Block.N_Corners /= 2 then
-            raise Constraint_Error with "Homing move must have exactly 2 corners.";
-         end if;
-
-         My_Corner_Blender.Run (Block);
+         accept Setup (In_Params : Kinematic_Parameters) do
+            My_Preprocessor.Setup (In_Params);
+         end Setup;
 
          loop
-            My_Kinematic_Limiter.Run (Block);
-            My_Feedrate_Profile_Generator.Run (Block);
+            My_Preprocessor.Run (Block, Reset_Called);
 
-            exit when
-              (not Is_Homing_Move (Block.Flush_Resetting_Data))
-              or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
+            if Reset_Called then
+               accept Reset_Do_Not_Call_From_Other_Packages;
+               exit;
+            end if;
 
-            Block.Segment_Feedrates (2) := Block.Segment_Feedrates (2) * 0.9;
+            if Is_Homing_Move (Block.Flush_Resetting_Data) and Block.N_Corners /= 2 then
+               raise Constraint_Error with "Homing move must have exactly 2 corners.";
+            end if;
+
+            My_Corner_Blender.Run (Block);
+
+            loop
+               My_Kinematic_Limiter.Run (Block);
+               My_Feedrate_Profile_Generator.Run (Block);
+
+               exit when
+                 (not Is_Homing_Move (Block.Flush_Resetting_Data))
+                 or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
+
+               Block.Segment_Feedrates (2) := Block.Segment_Feedrates (2) * 0.9;
+            end loop;
+
+            select
+               accept Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block) do
+                  Out_Block := Block;
+               end Dequeue_Do_Not_Call_From_Other_Packages;
+            or
+               accept Reset_Do_Not_Call_From_Other_Packages;
+               exit;
+            end select;
          end loop;
-
-         accept Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block) do
-            Out_Block := Block;
-         end Dequeue_Do_Not_Call_From_Other_Packages;
       end loop;
    end Runner;
 

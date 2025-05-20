@@ -263,6 +263,8 @@ package Prunt.Config is
    --  Identical to Validate_Current_Config followed by Get_Values, but guarantees that the values will not change
    --  between the two operations.
 
+   procedure Reset;
+
 private
 
    package Discrete_String_Sets is new Ada.Containers.Indefinite_Ordered_Sets (String);
@@ -369,6 +371,7 @@ private
       procedure Get_Values_And_Validate
         (Report : access procedure (Key, Message : String); Values : out Ada.Strings.Unbounded.Unbounded_String);
       procedure Prunt_Is_Enabled (Result : out Boolean);
+      procedure Reset;
    private
       procedure Error_If_Initial_Config_Invalid;
       procedure Validate_Config (Config : JSON_Value; Report : access procedure (Key, Message : String));

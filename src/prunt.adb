@@ -32,8 +32,19 @@ package body Prunt is
       procedure Set
         (Cause      : Ada.Task_Termination.Cause_Of_Termination;
          ID         : Ada.Task_Identification.Task_Id;
-         Occurrence : Ada.Exceptions.Exception_Occurrence) is
+         Occurrence : Ada.Exceptions.Exception_Occurrence)
+      is
+         use type Ada.Task_Termination.Cause_Of_Termination;
       begin
+         if Cause = Ada.Task_Termination.Normal then
+            return;
+         end if;
+
+         if Cause = Ada.Task_Termination.Abnormal then
+            --  TODO: This indicates that a task was aborted. What is the correct action here?
+            return;
+         end if;
+
          if Ada.Exceptions.Is_Null_Occurrence (Data) then
             Ada.Exceptions.Save_Occurrence (Data, Occurrence);
          end if;

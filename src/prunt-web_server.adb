@@ -62,6 +62,11 @@ package body Prunt.Web_Server is
          Startup_Done := True;
       end Set_Startup_Done;
 
+      procedure Clear_Startup_Done is
+      begin
+         Startup_Done := False;
+      end Clear_Startup_Done;
+
       function Get_Startup_Done return Boolean is
       begin
          return Startup_Done;
@@ -610,6 +615,9 @@ package body Prunt.Web_Server is
          elsif Status.File = "allow-firmware-update" then
             Startup_Manager.Set_Update_Allowed;
             Reply_Text (Client, 204, "No Content", "", True);
+         elsif Status.File = "reload-server" then
+            Reload_Server;
+            Reply_Text (Client, 204, "No Content", "", True);
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", True);
          end if;
@@ -989,6 +997,12 @@ package body Prunt.Web_Server is
       Ada.Task_Termination.Set_Specific_Handler (Server'Identity, Handler);
    end Task_Termination_Set_Specific_Handler;
 
+   procedure Reset is
+   begin
+      Startup_Manager.Clear_Startup_Done;
+      Server.Reset_Server_Start_Time;
+   end Reset;
+
    task body Server is
       Factory :
         aliased Prunt_HTTP_Factory
@@ -1081,6 +1095,10 @@ package body Prunt.Web_Server is
             accept Log_To_WebSocket_Receivers (Message : String) do
                Send_To_All_WebSocket_Receivers ("{""Log"":""" & JSON_Escape (Message) & """}");
             end Log_To_WebSocket_Receivers;
+         or
+            accept Reset_Server_Start_Time;
+            Server_Start_Time := Clock;
+            Send_To_All_WebSocket_Receivers ("{""Server_Start_Time"":""" & Server_Start_Time'Image & """}");
          or
             delay until Next_Status_Send;
 

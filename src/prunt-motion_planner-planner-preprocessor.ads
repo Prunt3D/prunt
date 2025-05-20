@@ -28,7 +28,10 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
 
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
 
-   procedure Run (Block : aliased out Execution_Block);
+   procedure Reset;
+   --  Cause Run to immediately return with Reset_Called set to True and resets the planner back to its initial state.
+
+   procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
 
 private
 
@@ -37,7 +40,10 @@ private
    protected Command_Queue is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
-      entry Dequeue (Comm : out Command);
+      entry Dequeue (Comm : out Command; Reset_Called : out Boolean);
+      --  Reset_Called should not be part of Dequeue, but GNAT does not seem to work correctly when using a
+      --  select-then-abort with two entries to the same object, as you would with a separate Enter_When_Reset entry.
+      procedure Reset;
    private
       Setup_Done            : Boolean := False;
       Is_Full               : Boolean := False;
@@ -48,7 +54,8 @@ private
 
    protected Runner is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
-      procedure Run (Block : aliased out Execution_Block);
+      procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
+      procedure Reset;
    private
       Setup_Done            : Boolean := False;
       Last_Pos              : Position := Initial_Position;
