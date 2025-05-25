@@ -690,7 +690,7 @@ package body Prunt.Gcode_Parser is
 
             when 303 =>
                declare
-                  Cycles : Parameter_Integer := Integer_Or_Default ('C', 5);
+                  Cycles : constant Parameter_Integer := Integer_Or_Default ('C', 5);
                   Comm   : Command :=
                     (Kind               => Heater_Autotune_Kind,
                      Tuning_Temperature => Floatify_Or_Error ('S') * celsius,

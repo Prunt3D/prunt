@@ -74,7 +74,6 @@ package body Prunt.TMC_Types.TMC2240 is
 
       System_Cycle_Time : constant Time := 1.0 / (12_500_000.0 * hertz);
       Blank_Time        : constant Time := 1.5**Dimensionless (TBL_Type'Enum_Rep (TBL)) * 16.0 * System_Cycle_Time;
-      Motor_RMS_Current : constant Current := Motor_Peak_Current / Sqrt (2.0);
       Slow_Decay_Time   : constant Time := Dimensionless (24 + 32 * TOFF_Type'Enum_Rep (TOFF)) * System_Cycle_Time;
       Blank_Drop        : constant Current := Driver_Voltage * Blank_Time / Motor_Inductance;
       Slow_Decay_Drop   : constant Current :=

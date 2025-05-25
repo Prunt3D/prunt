@@ -40,12 +40,7 @@ package body Prunt.Controller.Gcode_Handler is
    end Get_Default_Fan;
 
    package My_Gcode_Parser is new
-     Prunt.Gcode_Parser
-       (Stepper_Name      => Generic_Types.Stepper_Name,
-        Heater_Name       => Generic_Types.Heater_Name,
-        Thermistor_Name   => Generic_Types.Thermistor_Name,
-        Fan_Name          => Generic_Types.Fan_Name,
-        Input_Switch_Name => Generic_Types.Input_Switch_Name);
+     Prunt.Gcode_Parser (Heater_Name => Generic_Types.Heater_Name, Fan_Name => Generic_Types.Fan_Name);
    use My_Gcode_Parser;
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean) is

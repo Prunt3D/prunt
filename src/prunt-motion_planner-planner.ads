@@ -23,6 +23,9 @@ with System.Multiprocessors;
 with Ada.Containers;
 private with Prunt.Motion_Planner.PH_Beziers;
 
+pragma Warnings (Off, "formal object * is not referenced");
+--  Silence bogus warnings related to generic parameters used in child packages.
+
 generic
    type Flush_Resetting_Data_Type is private;
    Flush_Resetting_Data_Default : Flush_Resetting_Data_Type;

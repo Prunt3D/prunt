@@ -19,14 +19,13 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Ada.Directories;       use Ada.Directories;
-with Ada.Real_Time;         use Ada.Real_Time;
-with Ada.Streams.Stream_IO; use Ada.Streams.Stream_IO;
+with Ada.Directories; use Ada.Directories;
+with Ada.Real_Time;   use Ada.Real_Time;
 with Ada.Strings;
 with Ada.Strings.Fixed;
-with Prunt.Web_Server_Resources;
 with System;
 with GNAT.Sockets;
+with Ada.Containers.Ordered_Sets;
 
 package body Prunt.Web_Server is
 
@@ -165,9 +164,9 @@ package body Prunt.Web_Server is
 
    overriding
    function Get (Source : access Unbounded_String_Source) return String is
-      New_Next_Start : Positive :=
+      New_Next_Start : constant Positive :=
         Positive'Min (Source.Next_Start + Buffer_Size - 100, Ada.Strings.Unbounded.Length (Source.Content) + 1);
-      Result         : String := Slice (Source.Content, Source.Next_Start, New_Next_Start - 1);
+      Result         : constant String := Slice (Source.Content, Source.Next_Start, New_Next_Start - 1);
    begin
       Source.Next_Start := New_Next_Start;
       return Result;
@@ -454,7 +453,7 @@ package body Prunt.Web_Server is
                   Send (Client, "Expires: 0" & CRLF);
                   Send_Body (Client, Client.Content.Uploads_Directory_Content'Access, Get);
                exception
-                  when E : Ada.Directories.Use_Error =>
+                  when Ada.Directories.Use_Error =>
                      Reply_Text (Client, 500, "Internal Server Error", """uploads"" directory is not readable.", Get);
                end;
             end if;
@@ -469,9 +468,9 @@ package body Prunt.Web_Server is
             else
                begin
                   declare
-                     File_Name : String :=
+                     File_Name : constant String :=
                        Status.File (Status.File'First + String'("uploads/")'Length .. Status.File'Last);
-                     File_Path : String := Compose (Containing_Directory => "uploads", Name => File_Name);
+                     File_Path : constant String := Compose (Containing_Directory => "uploads", Name => File_Name);
                   begin
                      if not Exists (File_Path) then
                         Reply_Text (Client, 404, "Not Found", "File not found.", Get);
@@ -503,7 +502,7 @@ package body Prunt.Web_Server is
                      end if;
                   end;
                exception
-                  when E : Ada.Directories.Name_Error =>
+                  when Ada.Directories.Name_Error =>
                      Reply_Text
                        (Client,
                         400,
@@ -573,7 +572,7 @@ package body Prunt.Web_Server is
                   True);
             else
                declare
-                  File_Path : String :=
+                  File_Path : constant String :=
                     Compose
                       (Containing_Directory => "uploads",
                        Name                 => Post_Bodies.To_String (Client.Content.Post_Content.Content));
@@ -633,7 +632,6 @@ package body Prunt.Web_Server is
 
    overriding
    procedure Do_Put (Client : in out Prunt_Client) is
-      Status : Status_Line renames Get_Status_Line (Client);
    begin
       case Client.Content.Put_Fail_Reason is
          when No_Failure_Kind =>
@@ -702,9 +700,9 @@ package body Prunt.Web_Server is
                   end if;
 
                   declare
-                     File_Name : String :=
+                     File_Name : constant String :=
                        Status.File (Status.File'First + String'("uploads/")'Length .. Status.File'Last);
-                     File_Path : String := Compose (Containing_Directory => "uploads", Name => File_Name);
+                     File_Path : constant String := Compose (Containing_Directory => "uploads", Name => File_Name);
                   begin
                      if Exists (File_Path) and then Kind (File_Path) /= Ordinary_File then
                         Client.Content.Put_Fail_Reason := File_Not_Regular_Kind;
@@ -728,7 +726,7 @@ package body Prunt.Web_Server is
                Client.Content.Put_Fail_Reason := Wrong_Request_Target_Kind;
             end if;
          exception
-            when E : Ada.Directories.Name_Error =>
+            when Ada.Directories.Name_Error =>
                Client.Content.Put_Fail_Reason := File_Name_Malformed_Kind;
             when E : others =>
                Client.Content.Put_Fail_Reason := Unhandled_Exception_Kind;
@@ -816,7 +814,7 @@ package body Prunt.Web_Server is
 
    function Build_Status_Values return Unbounded_String is
       Result : Unbounded_String := To_Unbounded_String ("{""Status"":{");
-      Pos    : Position := Get_Position;
+      Pos    : constant Position := Get_Position;
 
       use type My_Config.Thermistor_Name;
       use type My_Config.Fan_Name;
