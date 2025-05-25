@@ -23,7 +23,6 @@ with Prunt.Logger;
 with Prunt.Config;
 with Prunt.Update_Checker;
 with Ada.Strings.Bounded;
-with Ada.Containers.Ordered_Sets;
 with Ada.Task_Termination;
 with Ada.Directories;
 with Prunt.Web_Server_Resources;

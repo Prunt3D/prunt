@@ -22,7 +22,6 @@
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Text_IO;
-with Prunt.Logger;
 with Ada.Characters;
 with Ada.Characters.Latin_1;
 

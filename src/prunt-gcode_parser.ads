@@ -22,11 +22,8 @@
 with Prunt.Heaters;
 
 generic
-   type Stepper_Name is (<>);
    type Heater_Name is (<>);
-   type Thermistor_Name is (<>);
    type Fan_Name is (<>);
-   type Input_Switch_Name is (<>);
 package Prunt.Gcode_Parser is
 
    type Command_Kind is

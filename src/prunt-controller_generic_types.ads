@@ -21,7 +21,6 @@
 
 with Prunt.Thermistors;
 with Prunt.TMC_Types.TMC2240;
-with Prunt.Heaters;
 
 generic
    --  'Image of each value of these types will be shown in the GUI. The names should correspond to names on the board.
