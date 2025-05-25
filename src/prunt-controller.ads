@@ -339,4 +339,7 @@ private
       entry Reset;
    end TMC_Temperature_Updater;
 
+   procedure Enable_Stepper (Stepper : Stepper_Name);
+   procedure Disable_Stepper (Stepper : Stepper_Name);
+
 end Prunt.Controller;

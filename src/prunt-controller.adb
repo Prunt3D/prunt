@@ -623,6 +623,18 @@ package body Prunt.Controller is
                  (Bytes_Mode => False,
                   Content    =>
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
+                     CHOPCONF_Data => (Stepper_Params.CHOPCONF with delta TOFF => TMC_Types.TMC2240.Disable_Driver),
+                     others        => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
+               --  We set TOFF correctly later. Using it to disable the driver before setting other registers ensures
+               --  that a half-configured driver will be in a safe state.
+
+               Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register      => TMC_Types.TMC2240.NODECONF_Address,
                      NODECONF_Data => (Node_Addr => 0, Send_Delay => TMC_Types.TMC2240.Delay_3x8, Reserved => 0),
                      others        => <>));
@@ -735,9 +747,9 @@ package body Prunt.Controller is
       end case;
 
       if Stepper_Params.Enabled then
-         Stepper_Hardware (Stepper).Enable_Stepper (Stepper);
+         Enable_Stepper (Stepper);
       else
-         Stepper_Hardware (Stepper).Disable_Stepper (Stepper);
+         Disable_Stepper (Stepper);
       end if;
    end Setup_Stepper;
 
@@ -814,5 +826,57 @@ package body Prunt.Controller is
    begin
       Reload_Signal.Signal;
    end Signal_Reload;
+
+   procedure Enable_Stepper (Stepper : Stepper_Name) is
+   begin
+      case Stepper_Hardware (Stepper).Kind is
+         when Basic_Kind =>
+            Stepper_Hardware (Stepper).Enable_Stepper (Stepper);
+
+         when TMC2240_UART_Kind =>
+            declare
+               Stepper_Params : My_Config.Stepper_Parameters;
+               Message        : TMC_Types.TMC2240.UART_Data_Message;
+            begin
+               My_Config.Read (Stepper_Params, Stepper);
+
+               Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
+                     CHOPCONF_Data => Stepper_Params.CHOPCONF,
+                     others        => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
+            end;
+      end case;
+   end Enable_Stepper;
+
+   procedure Disable_Stepper (Stepper : Stepper_Name) is
+   begin
+      case Stepper_Hardware (Stepper).Kind is
+         when Basic_Kind =>
+            Stepper_Hardware (Stepper).Disable_Stepper (Stepper);
+
+         when TMC2240_UART_Kind =>
+            declare
+               Stepper_Params : My_Config.Stepper_Parameters;
+               Message        : TMC_Types.TMC2240.UART_Data_Message;
+            begin
+               My_Config.Read (Stepper_Params, Stepper);
+
+               Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
+                     CHOPCONF_Data => (Stepper_Params.CHOPCONF with delta TOFF => TMC_Types.TMC2240.Disable_Driver),
+                     others        => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
+            end;
+      end case;
+   end Disable_Stepper;
 
 end Prunt.Controller;

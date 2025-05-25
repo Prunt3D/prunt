@@ -288,30 +288,30 @@ package body Prunt.Controller.Gcode_Handler is
                             or Command.Axes = Axes_Set'(others => False))
                           and (Kinematics_Params.A_Steppers (S) or Kinematics_Params.B_Steppers (S))
                         then
-                           Stepper_Hardware (S).Enable_Stepper (S);
+                           Enable_Stepper (S);
                         end if;
 
                      when My_Config.Cartesian_Kind =>
                         if (Command.Axes (X_Axis) and Kinematics_Params.X_Steppers (S))
                           or Command.Axes = Axes_Set'(others => False)
                         then
-                           Stepper_Hardware (S).Enable_Stepper (S);
+                           Enable_Stepper (S);
                         end if;
                         if (Command.Axes (Y_Axis) and Kinematics_Params.Y_Steppers (S))
                           or Command.Axes = Axes_Set'(others => False)
                         then
-                           Stepper_Hardware (S).Enable_Stepper (S);
+                           Enable_Stepper (S);
                         end if;
                   end case;
                   if (Command.Axes (E_Axis) and Kinematics_Params.E_Steppers (S))
                     or Command.Axes = Axes_Set'(others => False)
                   then
-                     Stepper_Hardware (S).Enable_Stepper (S);
+                     Enable_Stepper (S);
                   end if;
                   if (Command.Axes (Z_Axis) and Kinematics_Params.Z_Steppers (S))
                     or Command.Axes = Axes_Set'(others => False)
                   then
-                     Stepper_Hardware (S).Enable_Stepper (S);
+                     Enable_Stepper (S);
                   end if;
                end loop;
 
@@ -326,7 +326,7 @@ package body Prunt.Controller.Gcode_Handler is
                         then
                            Is_Homed (X_Axis) := False;
                            Is_Homed (Y_Axis) := False;
-                           Stepper_Hardware (S).Disable_Stepper (S);
+                           Disable_Stepper (S);
                         end if;
 
                      when My_Config.Cartesian_Kind =>
@@ -334,26 +334,26 @@ package body Prunt.Controller.Gcode_Handler is
                           or Command.Axes = Axes_Set'(others => False)
                         then
                            Is_Homed (X_Axis) := False;
-                           Stepper_Hardware (S).Disable_Stepper (S);
+                           Disable_Stepper (S);
                         end if;
                         if (Command.Axes (Y_Axis) and Kinematics_Params.Y_Steppers (S))
                           or Command.Axes = Axes_Set'(others => False)
                         then
                            Is_Homed (Y_Axis) := False;
-                           Stepper_Hardware (S).Disable_Stepper (S);
+                           Disable_Stepper (S);
                         end if;
                   end case;
                   if (Command.Axes (E_Axis) and Kinematics_Params.E_Steppers (S))
                     or Command.Axes = Axes_Set'(others => False)
                   then
                      Is_Homed (E_Axis) := False;
-                     Stepper_Hardware (S).Disable_Stepper (S);
+                     Disable_Stepper (S);
                   end if;
                   if (Command.Axes (Z_Axis) and Kinematics_Params.Z_Steppers (S))
                     or Command.Axes = Axes_Set'(others => False)
                   then
                      Is_Homed (Z_Axis) := False;
-                     Stepper_Hardware (S).Disable_Stepper (S);
+                     Disable_Stepper (S);
                   end if;
                end loop;
 

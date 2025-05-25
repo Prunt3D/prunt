@@ -65,13 +65,17 @@ package Prunt.Controller_Generic_Types is
    --  Vendor defined parameters:
 
    type Stepper_Hardware_Parameters (Kind : Stepper_Kind := Basic_Kind) is record
-      Enable_Stepper  : access procedure (Stepper : Stepper_Name);
-      Disable_Stepper : access procedure (Stepper : Stepper_Name);
       case Kind is
          when Basic_Kind =>
-            null;
+            Enable_Stepper  : access procedure (Stepper : Stepper_Name);
+            Disable_Stepper : access procedure (Stepper : Stepper_Name);
 
          when TMC2240_UART_Kind =>
+            --  The Enable_Stepper and Disable_Stepper procedures are not used for TMC2240 steppers as the TOFF
+            --  register is used instead. If the enable pin is connected to a toggleable pin then it should be driven
+            --  low at all times. It is also generally a good idea to reset TOFF as part of your startup and reset
+            --  procedures.
+
             Double_Edge_Stepping : Boolean;
             TMC2240_UART_Address : TMC_Types.TMC2240.UART_Node_Address;
             TMC2240_UART_Write   : access procedure (Message : TMC_Types.TMC2240.UART_Data_Byte_Array);
