@@ -1168,9 +1168,9 @@ package body Prunt.Config is
          Property_Maps.Insert
            (Property_Maps.Reference (Result, "Steppers").Element.all.Sequence_Children,
             S'Image,
-            (if Stepper_Kinds (S) = Basic_Kind
+            (if Stepper_Hardware_Kinds (S) = Basic_Kind
              then Basic_Stepper_Sequence
-             elsif Stepper_Kinds (S) = TMC2240_UART_Kind
+             elsif Stepper_Hardware_Kinds (S) = TMC2240_UART_Kind
              then TMC2240_Stepper_Sequence
              else raise Constraint_Error with "Config not implemented for stepper kind " & S'Image));
       end loop;
@@ -1409,7 +1409,7 @@ package body Prunt.Config is
          end loop;
 
          for S in Stepper_Name loop
-            case Stepper_Kinds (S) is
+            case Stepper_Hardware_Kinds (S) is
                when Basic_Kind =>
                   null;
 
@@ -1609,7 +1609,7 @@ package body Prunt.Config is
          if Get (Current_Properties, "Schema version") = Long_Integer'(3) then
             --  Version 4 changes the range of HSTRT from 0..7 to 1..8.
             for S in Stepper_Name loop
-               if Stepper_Kinds (S) = TMC2240_UART_Kind then
+               if Stepper_Hardware_Kinds (S) = TMC2240_UART_Kind then
                   Set_Field
                     (Current_Properties,
                      "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT",
@@ -1871,7 +1871,7 @@ package body Prunt.Config is
             Default_Fan   => Fan_Name'Value (Get (Data, "G-code assignments$Default fan")));
 
          for S in Stepper_Name loop
-            case Stepper_Kinds (S) is
+            case Stepper_Hardware_Kinds (S) is
                when Basic_Kind =>
                   Config.Steppers (S) :=
                     (Kind        => Basic_Kind,

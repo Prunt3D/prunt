@@ -27,7 +27,7 @@ with Ada.Strings.Unbounded;
 
 package Prunt is
 
-   type Stepper_Kind is (Basic_Kind, TMC2240_UART_Kind);
+   type Stepper_Hardware_Kind is (Basic_Kind, TMC2240_UART_Kind);
 
    type Command_Index is range 0 .. 2**63 - 2;
 

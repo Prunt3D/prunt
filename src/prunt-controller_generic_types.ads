@@ -63,7 +63,7 @@ package Prunt.Controller_Generic_Types is
 
    --  Vendor defined parameters:
 
-   type Stepper_Hardware_Parameters (Kind : Stepper_Kind := Basic_Kind) is record
+   type Stepper_Hardware_Parameters (Kind : Stepper_Hardware_Kind := Basic_Kind) is record
       case Kind is
          when Basic_Kind =>
             Enable_Stepper  : access procedure (Stepper : Stepper_Name);

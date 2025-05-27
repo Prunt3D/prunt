@@ -250,18 +250,18 @@ private
         Loop_Interpolation_Time     => Loop_Interpolation_Time,
         Runner_CPU                  => Command_Line_Arguments.Step_Generator_CPU);
 
-   type Stepper_Kinds_Type is array (Stepper_Name) of Stepper_Kind;
+   type Stepper_Hardware_Kinds_Type is array (Stepper_Name) of Stepper_Hardware_Kind;
 
    package My_Config is new
      Config
-       (Stepper_Name       => Stepper_Name,
-        Stepper_Kinds_Type => Stepper_Kinds_Type,
-        Stepper_Kinds      => [for I in Stepper_Name => Stepper_Hardware (I).Kind],
-        Heater_Name        => Heater_Name,
-        Thermistor_Name    => Thermistor_Name,
-        Fan_Name           => Fan_Name,
-        Input_Switch_Name  => Input_Switch_Name,
-        Config_Path        => Config_Path);
+       (Stepper_Name                => Stepper_Name,
+        Stepper_Hardware_Kinds_Type => Stepper_Hardware_Kinds_Type,
+        Stepper_Hardware_Kinds      => [for I in Stepper_Name => Stepper_Hardware (I).Kind],
+        Heater_Name                 => Heater_Name,
+        Thermistor_Name             => Thermistor_Name,
+        Fan_Name                    => Fan_Name,
+        Input_Switch_Name           => Input_Switch_Name,
+        Config_Path                 => Config_Path);
 
    procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
 

@@ -32,8 +32,8 @@ with Prunt.TMC_Types.TMC2240;
 
 generic
    type Stepper_Name is (<>);
-   type Stepper_Kinds_Type is array (Stepper_Name) of Stepper_Kind;
-   Stepper_Kinds : Stepper_Kinds_Type;
+   type Stepper_Hardware_Kinds_Type is array (Stepper_Name) of Stepper_Hardware_Kind;
+   Stepper_Hardware_Kinds : Stepper_Hardware_Kinds_Type;
    type Heater_Name is (<>);
    type Thermistor_Name is (<>);
    type Fan_Name is (<>);
@@ -51,7 +51,7 @@ package Prunt.Config is
       Replace_G0_With_G1 : Boolean := False;
    end record;
 
-   type Stepper_Parameters (Kind : Stepper_Kind := Basic_Kind) is record
+   type Stepper_Parameters (Kind : Stepper_Hardware_Kind := Basic_Kind) is record
       Enabled     : Boolean := False;
       Mm_Per_Step : Length := Length'Last / 2.0;
       case Kind is
@@ -148,7 +148,7 @@ package Prunt.Config is
 
    procedure Read (Data : out Prunt_Parameters);
    procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name)
-   with Post => Data.Kind = Stepper_Kinds (Stepper);
+   with Post => Data.Kind = Stepper_Hardware_Kinds (Stepper);
    procedure Read (Data : out Kinematics_Parameters);
    procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
    procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
@@ -351,7 +351,7 @@ private
       procedure Disable_Prunt;
       procedure Read (Data : out Prunt_Parameters);
       procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name)
-      with Post => Data.Kind = Stepper_Kinds (Stepper);
+      with Post => Data.Kind = Stepper_Hardware_Kinds (Stepper);
       procedure Read (Data : out Kinematics_Parameters);
       procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
       procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
