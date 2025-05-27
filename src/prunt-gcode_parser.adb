@@ -698,17 +698,17 @@ package body Prunt.Gcode_Parser is
                      Max_Cycles         => <>,
                      Pos                => Ctx.Pos);
                begin
-                  if Integer (Cycles) < Integer (Heaters.PID_Autotune_Cycle_Count'First)
-                    or Integer (Cycles) > Integer (Heaters.PID_Autotune_Cycle_Count'Last)
+                  if Integer (Cycles) < Integer (PID_Autotune_Cycle_Count'First)
+                    or Integer (Cycles) > Integer (PID_Autotune_Cycle_Count'Last)
                   then
                      raise Bad_Line
                        with
                          "Valid range for parameter 'C' is "
-                         & Heaters.PID_Autotune_Cycle_Count'First'Image
+                         & PID_Autotune_Cycle_Count'First'Image
                          & " .. "
-                         & Heaters.PID_Autotune_Cycle_Count'Last'Image;
+                         & PID_Autotune_Cycle_Count'Last'Image;
                   else
-                     Comm.Max_Cycles := Heaters.PID_Autotune_Cycle_Count (Cycles);
+                     Comm.Max_Cycles := PID_Autotune_Cycle_Count (Cycles);
                   end if;
 
                   case Params ('T').Kind is

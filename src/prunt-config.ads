@@ -20,7 +20,6 @@
 -----------------------------------------------------------------------------
 
 with Prunt.Thermistors;   use Prunt.Thermistors;
-with Prunt.Heaters;       use Prunt.Heaters;
 with GNATCOLL.JSON;       use GNATCOLL.JSON;
 with Prunt.TMC_Types;     use Prunt.TMC_Types;
 with Prunt.Input_Shapers; use Prunt.Input_Shapers;
@@ -119,7 +118,7 @@ package Prunt.Config is
 
    type Heater_Full_Parameters is record
       Thermistor : Thermistor_Name := Thermistor_Name'First;
-      Params     : Heaters.Heater_Parameters;
+      Params     : Heater_Parameters;
    end record;
 
    type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);

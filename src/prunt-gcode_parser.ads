@@ -19,8 +19,6 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Prunt.Heaters;
-
 generic
    type Heater_Name is (<>);
    type Fan_Name is (<>);
@@ -91,7 +89,7 @@ package Prunt.Gcode_Parser is
          when Heater_Autotune_Kind =>
             Tuning_Temperature : Temperature;
             Heater_To_Tune     : Heater_Name;
-            Max_Cycles         : Heaters.PID_Autotune_Cycle_Count;
+            Max_Cycles         : PID_Autotune_Cycle_Count;
 
          when Set_Acceleration_Max_Kind =>
             Acceleration_Max : Acceleration;

@@ -23,7 +23,6 @@ with Prunt.Gcode_Parser;
 with Ada.Text_IO;   use Ada.Text_IO;
 with Ada.Exceptions;
 with Prunt.TMC_Types.TMC2240;
-with Prunt.Heaters; use Prunt.Heaters;
 with Ada.IO_Exceptions;
 
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
