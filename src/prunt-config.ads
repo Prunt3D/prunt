@@ -29,15 +29,15 @@ with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 with Ada.Containers.Indefinite_Ordered_Sets;
 with Prunt.Motion_Planner;
 with Prunt.TMC_Types.TMC2240;
+with Prunt.Controller_Generic_Types;
 
 generic
-   type Stepper_Name is (<>);
-   type Stepper_Hardware_Kinds_Type is array (Stepper_Name) of Stepper_Hardware_Kind;
-   Stepper_Hardware_Kinds : Stepper_Hardware_Kinds_Type;
-   type Heater_Name is (<>);
-   type Thermistor_Name is (<>);
-   type Fan_Name is (<>);
-   type Input_Switch_Name is (<>);
+   with package Generic_Types is new Controller_Generic_Types (<>);
+   use Generic_Types;
+
+   Stepper_Hardware : Generic_Types.Stepper_Hardware_Parameters_Array_Type;
+   Fan_Hardware : Generic_Types.Fan_Hardware_Parameters_Array_Type;
+
    Config_Path : String;
 package Prunt.Config is
 
@@ -121,11 +121,21 @@ package Prunt.Config is
       Params     : Heater_Parameters;
    end record;
 
+   type G_Code_Assignment_Parameters is record
+      Bed_Heater    : Heater_Name := Heater_Name'First;
+      Hotend_Heater : Heater_Name := Heater_Name'First;
+      Default_Fan   : Fan_Name := Fan_Name'First;
+   end record;
+
    type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
 
    type Fan_Parameters (Kind : Fan_Kind := Always_On_Kind) is record
       Invert_Output : Boolean := False;
       PWM_Frequency : Fan_PWM_Frequency := 30.0 * hertz;
+
+      Use_High_Side_Switching : Boolean := True;
+      --  Ignore if not using a Low_Or_High_Side_Switching_Kind.
+
       case Kind is
          when Dynamic_PWM_Kind =>
             Disable_Below_PWM : PWM_Scale := 0.5;
@@ -136,19 +146,13 @@ package Prunt.Config is
       end case;
    end record;
 
-   type G_Code_Assignment_Parameters is record
-      Bed_Heater    : Heater_Name := Heater_Name'First;
-      Hotend_Heater : Heater_Name := Heater_Name'First;
-      Default_Fan   : Fan_Name    := Fan_Name'First;
-   end record;
-
    procedure Disable_Prunt;
    --  Modifies the configuration file to cause Prunt_Parameters.Enabled to be set to False. This does not take effect
    --  until the next startup.
 
    procedure Read (Data : out Prunt_Parameters);
    procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name)
-   with Post => Data.Kind = Stepper_Hardware_Kinds (Stepper);
+   with Post => Data.Kind = Stepper_Hardware (Stepper).Kind;
    procedure Read (Data : out Kinematics_Parameters);
    procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
    procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
@@ -351,7 +355,7 @@ private
       procedure Disable_Prunt;
       procedure Read (Data : out Prunt_Parameters);
       procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name)
-      with Post => Data.Kind = Stepper_Hardware_Kinds (Stepper);
+      with Post => Data.Kind = Stepper_Hardware (Stepper).Kind;
       procedure Read (Data : out Kinematics_Parameters);
       procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
       procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);

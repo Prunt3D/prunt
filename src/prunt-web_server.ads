@@ -39,13 +39,15 @@ generic
    with package My_Config is new Prunt.Config (<>);
    with package My_Update_Checker is new Prunt.Update_Checker (<>);
    with function Get_Position return Prunt.Position;
-   with function Get_Thermistor_Temperature (Thermistor : My_Config.Thermistor_Name) return Prunt.Temperature;
-   with function Get_Stepper_Temperature (Thermistor : My_Config.Stepper_Name) return Prunt.Temperature;
+   with
+     function Get_Thermistor_Temperature
+       (Thermistor : My_Config.Generic_Types.Thermistor_Name) return Prunt.Temperature;
+   with function Get_Stepper_Temperature (Thermistor : My_Config.Generic_Types.Stepper_Name) return Prunt.Temperature;
    type Board_Temperature_Probe_Name is (<>);
    with function Get_Board_Temperature (Thermistor : Board_Temperature_Probe_Name) return Prunt.Temperature;
-   with function Get_Heater_Power (Heater : My_Config.Heater_Name) return Prunt.PWM_Scale;
-   with function Get_Input_Switch_State (Switch : My_Config.Input_Switch_Name) return Prunt.Pin_State;
-   with function Get_Tachometer_Frequency (Fan : My_Config.Fan_Name) return Frequency;
+   with function Get_Heater_Power (Heater : My_Config.Generic_Types.Heater_Name) return Prunt.PWM_Scale;
+   with function Get_Input_Switch_State (Switch : My_Config.Generic_Types.Input_Switch_Name) return Prunt.Pin_State;
+   with function Get_Tachometer_Frequency (Fan : My_Config.Generic_Types.Fan_Name) return Frequency;
    with function Get_File_Name return String;
    with function Get_Line return File_Line_Count;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);

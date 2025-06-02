@@ -308,7 +308,15 @@ package body Prunt.Controller is
                   Fan_Params : My_Config.Fan_Parameters;
                begin
                   My_Config.Read (Fan_Params, F);
-                  Reconfigure_Fan (F, Fan_Params.PWM_Frequency);
+
+                  case Fan_Hardware (F).Kind is
+                     when Fixed_Switching_Kind =>
+                        Fan_Hardware (F).Reconfigure_Fixed_Switching_Fan (F, Fan_Params.PWM_Frequency);
+
+                     when Low_Or_High_Side_Switching_Kind =>
+                        Fan_Hardware (F).Reconfigure_Low_Or_High_Side_Switching_Fan
+                          (F, Fan_Params.PWM_Frequency, Fan_Params.Use_High_Side_Switching);
+                  end case;
                end;
             end loop;
 

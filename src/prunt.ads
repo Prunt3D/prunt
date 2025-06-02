@@ -256,4 +256,6 @@ package Prunt is
       end case;
    end record;
 
+   type Fan_Hardware_Kind is (Fixed_Switching_Kind, Low_Or_High_Side_Switching_Kind);
+
 end Prunt;

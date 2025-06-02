@@ -41,6 +41,9 @@ generic
    Stepper_Hardware : Generic_Types.Stepper_Hardware_Parameters_Array_Type;
    --  The parameters of the stepper drivers installed on the hardware that the implementation is designed for.
 
+   Fan_Hardware : Generic_Types.Fan_Hardware_Parameters_Array_Type;
+   --  The parameters of the fan drivers installed on the hardware that the implementation is designed for.
+
    Interpolation_Time : Time;
    --  The time delta for all moves except loop moves.
 
@@ -63,10 +66,6 @@ generic
    --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
    --
    --  TODO: Save the results to the config file.
-
-   with procedure Reconfigure_Fan (Fan : Fan_Name; PWM_Freq : Fan_PWM_Frequency);
-   --  Set the frequency of a fan PWM output. May be called multiple times per heater with different parameters. May be
-   --  called from any task. A fan should keep the same duty cycle after changing frequency.
 
    with procedure Setup_For_Loop_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
    --  Setup the step generator for an upcoming loop move. A loop move should stop looping when the state of Switch =
@@ -250,18 +249,12 @@ private
         Loop_Interpolation_Time     => Loop_Interpolation_Time,
         Runner_CPU                  => Command_Line_Arguments.Step_Generator_CPU);
 
-   type Stepper_Hardware_Kinds_Type is array (Stepper_Name) of Stepper_Hardware_Kind;
-
    package My_Config is new
      Config
-       (Stepper_Name                => Stepper_Name,
-        Stepper_Hardware_Kinds_Type => Stepper_Hardware_Kinds_Type,
-        Stepper_Hardware_Kinds      => [for I in Stepper_Name => Stepper_Hardware (I).Kind],
-        Heater_Name                 => Heater_Name,
-        Thermistor_Name             => Thermistor_Name,
-        Fan_Name                    => Fan_Name,
-        Input_Switch_Name           => Input_Switch_Name,
-        Config_Path                 => Config_Path);
+       (Generic_Types    => Generic_Types,
+        Stepper_Hardware => Stepper_Hardware,
+        Fan_Hardware     => Fan_Hardware,
+        Config_Path      => Config_Path);
 
    procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
 
@@ -328,9 +321,10 @@ private
         Port                              => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");
 
-   procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name);
+   procedure TMC2240_UART_Write_And_Validate
+     (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Generic_Types.Stepper_Name);
    procedure Setup_Thermistors_And_Heater_Assignments;
-   procedure Setup_Stepper (Stepper : Stepper_Name);
+   procedure Setup_Stepper (Stepper : Generic_Types.Stepper_Name);
    procedure Setup_Step_Generator;
 
    task TMC_Temperature_Updater is
@@ -338,7 +332,7 @@ private
       entry Reset;
    end TMC_Temperature_Updater;
 
-   procedure Enable_Stepper (Stepper : Stepper_Name);
-   procedure Disable_Stepper (Stepper : Stepper_Name);
+   procedure Enable_Stepper (Stepper : Generic_Types.Stepper_Name);
+   procedure Disable_Stepper (Stepper : Generic_Types.Stepper_Name);
 
 end Prunt.Controller;

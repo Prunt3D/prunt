@@ -840,7 +840,7 @@ package body Prunt.Config is
                             Max     => 1.0E100,
                             Unit    => "C")])])]);
 
-      Fan_Sequence : constant Property_Parameters_Access :=
+      Fixed_Switching_Fan_Sequence : constant Property_Parameters_Access :=
         Sequence
           ("Settings for this fan.",
            ["Invert PWM output" =>
@@ -854,6 +854,8 @@ package body Prunt.Config is
                  Default => 30.0,
                  Min     => 1.0,
                  Max     => 50_000.0,
+                 --  TODO: The above range should be set based on Fan_Hardware, currently the range is only checked on
+                 --  the server side.
                  Unit    => "Hz"),
             "Control method" =>
               Variant
@@ -886,6 +888,60 @@ package body Prunt.Config is
                             Min     => 0.0,
                             Max     => 1.0,
                             Unit    => "")])])]);
+
+      Low_Or_High_Side_Switching_Fan_Sequence : constant Property_Parameters_Access :=
+        Sequence
+          ("Settings for this fan.",
+           ["Invert PWM output" =>
+              Boolean
+                ("Invert the PWM output.",
+                 Default => False),
+           "PWM frequency" =>
+              Float
+                ("Frequency of the PWM output. 30Hz is usually the best value for 2-wire fans and 25000Hz is " &
+                   "usually required for 4-wire fans.",
+                 Default => 30.0,
+                 Min     => 1.0,
+                 Max     => 50_000.0,
+                 --  TODO: The above range should be set based on Fan_Hardware, currently the range is only checked on
+                 --  the server side.
+                 Unit    => "Hz"),
+            "Control method" =>
+              Variant
+                ("Type of control used for this fan.",
+                 "Always on",
+                 ["Dynamic duty cycle" =>
+                    Sequence
+                      ("Allow for setting of the duty cycle while the printer is running (e.g. via M106/M107).",
+                      ["Disable below" =>
+                         Float
+                           ("Set the duty cycle to zero if it falls below this value.",
+                            Default => 0.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => ""),
+                      "Maximum duty cycle" =>
+                         Float
+                           ("Duty cycle corresponding to 100%.",
+                            Default => 1.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => "")]),
+                  "Always on" =>
+                    Sequence
+                      ("The fan always stays with a fixed PWM duty cycle.",
+                      ["Duty cycle" =>
+                         Float
+                           ("Duty cycle to send to the fan.",
+                            Default => 1.0,
+                            Min     => 0.0,
+                            Max     => 1.0,
+                            Unit    => "")])]),
+            "Use high-side switching" =>
+              Boolean
+                ("If set then the power pin will be toggled to control the fan instead of the PWM pin. This allows " &
+                   "for the tachometer to be used on 3-pin fans with a tachometer if the ground pin of the fan is" &
+                   "connected to the ground pin of the connector rather than the PWM pin.", False)]);
 
       Shaper_Sequence : constant Property_Parameters_Access :=
         Variant
@@ -1168,9 +1224,9 @@ package body Prunt.Config is
          Property_Maps.Insert
            (Property_Maps.Reference (Result, "Steppers").Element.all.Sequence_Children,
             S'Image,
-            (if Stepper_Hardware_Kinds (S) = Basic_Kind
+            (if Stepper_Hardware (S).Kind = Basic_Kind
              then Basic_Stepper_Sequence
-             elsif Stepper_Hardware_Kinds (S) = TMC2240_UART_Kind
+             elsif Stepper_Hardware (S).Kind = TMC2240_UART_Kind
              then TMC2240_Stepper_Sequence
              else raise Constraint_Error with "Config not implemented for stepper kind " & S'Image));
       end loop;
@@ -1196,7 +1252,13 @@ package body Prunt.Config is
 
       for F in Fan_Name loop
          Property_Maps.Insert
-           (Property_Maps.Reference (Result, "Fans").Element.all.Sequence_Children, F'Image, Fan_Sequence);
+           (Property_Maps.Reference (Result, "Fans").Element.all.Sequence_Children,
+            F'Image,
+            (if Fan_Hardware (F).Kind = Fixed_Switching_Kind
+             then Fixed_Switching_Fan_Sequence
+             elsif Fan_Hardware (F).Kind = Low_Or_High_Side_Switching_Kind
+             then Low_Or_High_Side_Switching_Fan_Sequence
+             else raise Constraint_Error with "Config not implemented for fan kind " & F'Image));
       end loop;
 
       for A in Axis_Name loop
@@ -1409,7 +1471,7 @@ package body Prunt.Config is
          end loop;
 
          for S in Stepper_Name loop
-            case Stepper_Hardware_Kinds (S) is
+            case Stepper_Hardware (S).Kind is
                when Basic_Kind =>
                   null;
 
@@ -1509,7 +1571,47 @@ package body Prunt.Config is
             end case;
          end loop;
 
-         --  TODO: Check that scaler will not cause max step rate to be exceeded.
+         for F in Fan_Name loop
+            declare
+               Freq : Frequency := Get (Config, "Fans$" & F'Image & "$PWM frequency") * hertz;
+            begin
+               case Fan_Hardware (F).Kind is
+                  when Fixed_Switching_Kind =>
+                     if Freq > Fan_Hardware (F).Maximum_PWM_Frequency then
+                        Report
+                          ("Fans$" & F'Image & "$PWM frequency",
+                           "Fan frequency must be less than or equal to "
+                           & Trim (Fan_Hardware (F).Maximum_PWM_Frequency'Image)
+                           & " Hz.");
+                     end if;
+
+                  when Low_Or_High_Side_Switching_Kind =>
+                     if Boolean'(Get (Config, "Fans$" & F'Image & "$Use high-side switching")) then
+                        if Freq > Fan_Hardware (F).Maximum_High_Side_PWM_Frequency then
+                           Report
+                             ("Fans$" & F'Image & "$PWM frequency",
+                              "Fan frequency must be less than or equal to "
+                              & Trim (Fan_Hardware (F).Maximum_High_Side_PWM_Frequency'Image)
+                              & " Hz when in high-side switching mode, which is currently selected (the limit is "
+                              & Trim (Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency'Image)
+                              & " in low-side mode).");
+                        end if;
+                     else
+                        if Freq > Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency then
+                           Report
+                             ("Fans$" & F'Image & "$PWM frequency",
+                              "Fan frequency must be less than or equal to "
+                              & Trim (Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency'Image)
+                              & " Hz when in low-side switching mode, which is currently selected (the limit is "
+                              & Trim (Fan_Hardware (F).Maximum_High_Side_PWM_Frequency'Image)
+                              & " in high-side mode).");
+                        end if;
+                     end if;
+               end case;
+            end;
+         end loop;
+
+      --  TODO: Check that scaler will not cause max step rate to be exceeded.
       end Validate_Config;
 
       procedure Write_File is
@@ -1609,7 +1711,7 @@ package body Prunt.Config is
          if Get (Current_Properties, "Schema version") = Long_Integer'(3) then
             --  Version 4 changes the range of HSTRT from 0..7 to 1..8.
             for S in Stepper_Name loop
-               if Stepper_Hardware_Kinds (S) = TMC2240_UART_Kind then
+               if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
                   Set_Field
                     (Current_Properties,
                      "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT",
@@ -1871,7 +1973,7 @@ package body Prunt.Config is
             Default_Fan   => Fan_Name'Value (Get (Data, "G-code assignments$Default fan")));
 
          for S in Stepper_Name loop
-            case Stepper_Hardware_Kinds (S) is
+            case Stepper_Hardware (S).Kind is
                when Basic_Kind =>
                   Config.Steppers (S) :=
                     (Kind        => Basic_Kind,
@@ -2338,18 +2440,26 @@ package body Prunt.Config is
          for F in Fan_Name loop
             if Get (Data, "Fans$" & F'Image & "$Control method") = "Always on" then
                Config.Fans (F) :=
-                 (Kind          => Always_On_Kind,
-                  Invert_Output => Get (Data, "Fans$" & F'Image & "$Invert PWM output"),
-                  PWM_Frequency => Get (Data, "Fans$" & F'Image & "$PWM frequency") * hertz,
-                  Always_On_PWM => Get (Data, "Fans$" & F'Image & "$Control method$Always on$Duty cycle"));
+                 (Kind                    => Always_On_Kind,
+                  Invert_Output           => Get (Data, "Fans$" & F'Image & "$Invert PWM output"),
+                  PWM_Frequency           => Get (Data, "Fans$" & F'Image & "$PWM frequency") * hertz,
+                  Use_High_Side_Switching =>
+                    (if Fan_Hardware (F).Kind = Low_Or_High_Side_Switching_Kind
+                     then Get (Data, "Fans$" & F'Image & "$Use high-side switching")
+                     else False),
+                  Always_On_PWM           => Get (Data, "Fans$" & F'Image & "$Control method$Always on$Duty cycle"));
             elsif Get (Data, "Fans$" & F'Image & "$Control method") = "Dynamic duty cycle" then
                Config.Fans (F) :=
-                 (Kind              => Dynamic_PWM_Kind,
-                  Invert_Output     => Get (Data, "Fans$" & F'Image & "$Invert PWM output"),
-                  PWM_Frequency     => Get (Data, "Fans$" & F'Image & "$PWM frequency") * hertz,
-                  Disable_Below_PWM =>
+                 (Kind                    => Dynamic_PWM_Kind,
+                  Invert_Output           => Get (Data, "Fans$" & F'Image & "$Invert PWM output"),
+                  PWM_Frequency           => Get (Data, "Fans$" & F'Image & "$PWM frequency") * hertz,
+                  Use_High_Side_Switching =>
+                    (if Fan_Hardware (F).Kind = Low_Or_High_Side_Switching_Kind
+                     then Get (Data, "Fans$" & F'Image & "$Use high-side switching")
+                     else False),
+                  Disable_Below_PWM       =>
                     Get (Data, "Fans$" & F'Image & "$Control method$Dynamic duty cycle$Disable below"),
-                  Max_PWM           =>
+                  Max_PWM                 =>
                     Get (Data, "Fans$" & F'Image & "$Control method$Dynamic duty cycle$Maximum duty cycle"));
             else
                raise Constraint_Error;

@@ -96,6 +96,23 @@ package Prunt.Controller_Generic_Types is
 
    type Stepper_Hardware_Parameters_Array_Type is array (Stepper_Name) of Stepper_Hardware_Parameters;
 
+   type Fan_Hardware_Parameters (Kind : Fan_Hardware_Kind := Fixed_Switching_Kind) is record
+      case Kind is
+         when Fixed_Switching_Kind =>
+            Reconfigure_Fixed_Switching_Fan : access procedure (Fan : Fan_Name; PWM_Freq : Fan_PWM_Frequency);
+            Maximum_PWM_Frequency           : Frequency;
+
+         when Low_Or_High_Side_Switching_Kind =>
+            Reconfigure_Low_Or_High_Side_Switching_Fan :
+              access procedure (Fan : Fan_Name; PWM_Freq : Fan_PWM_Frequency; Use_High_Side_Switching : Boolean);
+            Maximum_Low_Side_PWM_Frequency             : Frequency;
+            Maximum_High_Side_PWM_Frequency            : Frequency;
+
+      end case;
+   end record;
+
+   type Fan_Hardware_Parameters_Array_Type is array (Fan_Name) of Fan_Hardware_Parameters;
+
    --  User defined parameters:
 
    type Heater_Thermistor_Map is array (Heater_Name) of Thermistor_Name;

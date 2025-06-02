@@ -24,10 +24,10 @@ with Ada.Real_Time;   use Ada.Real_Time;
 with Ada.Strings;
 with Ada.Strings.Fixed;
 with System;
-with GNAT.Sockets;
 with Ada.Containers.Ordered_Sets;
 
 package body Prunt.Web_Server is
+   use My_Config.Generic_Types;
 
    procedure Wait_For_User_To_Allow_Update is
    begin
@@ -737,12 +737,6 @@ package body Prunt.Web_Server is
 
    function Build_Status_Schema return Unbounded_String is
       Result : Unbounded_String := To_Unbounded_String ("{");
-
-      use type My_Config.Thermistor_Name;
-      use type My_Config.Fan_Name;
-      use type My_Config.Heater_Name;
-      use type My_Config.Stepper_Name;
-      use type My_Config.Input_Switch_Name;
    begin
       Append (Result, """Position"":[");
       for A in Axis_Name loop
@@ -754,18 +748,18 @@ package body Prunt.Web_Server is
       Append (Result, "],");
 
       Append (Result, """Thermistor_Temperatures"":[");
-      for T in My_Config.Thermistor_Name loop
+      for T in Thermistor_Name loop
          Append (Result, """" & Trim (T'Image) & """");
-         if T /= My_Config.Thermistor_Name'Last then
+         if T /= Thermistor_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
       Append (Result, "],");
 
       Append (Result, """Stepper_Temperatures"":[");
-      for S in My_Config.Stepper_Name loop
+      for S in Stepper_Name loop
          Append (Result, """" & Trim (S'Image) & """");
-         if S /= My_Config.Stepper_Name'Last then
+         if S /= Stepper_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
@@ -781,27 +775,27 @@ package body Prunt.Web_Server is
       Append (Result, "],");
 
       Append (Result, """Heater_Powers"":[");
-      for H in My_Config.Heater_Name loop
+      for H in Heater_Name loop
          Append (Result, """" & Trim (H'Image) & """");
-         if H /= My_Config.Heater_Name'Last then
+         if H /= Heater_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
       Append (Result, "],");
 
       Append (Result, """Switch_Is_High_State"":[");
-      for I in My_Config.Input_Switch_Name loop
+      for I in Input_Switch_Name loop
          Append (Result, """" & Trim (I'Image) & """");
-         if I /= My_Config.Input_Switch_Name'Last then
+         if I /= Input_Switch_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
       Append (Result, "],");
 
       Append (Result, """Tachometer_Frequencies"":[");
-      for F in My_Config.Fan_Name loop
+      for F in Fan_Name loop
          Append (Result, """" & Trim (F'Image) & """");
-         if F /= My_Config.Fan_Name'Last then
+         if F /= Fan_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
@@ -815,12 +809,6 @@ package body Prunt.Web_Server is
    function Build_Status_Values return Unbounded_String is
       Result : Unbounded_String := To_Unbounded_String ("{""Status"":{");
       Pos    : constant Position := Get_Position;
-
-      use type My_Config.Thermistor_Name;
-      use type My_Config.Fan_Name;
-      use type My_Config.Heater_Name;
-      use type My_Config.Stepper_Name;
-      use type My_Config.Input_Switch_Name;
    begin
       if Fatal_Exception_Occurrence_Holder.Is_Set then
          declare
@@ -846,18 +834,18 @@ package body Prunt.Web_Server is
       Append (Result, "},");
 
       Append (Result, """Thermistor_Temperatures"":{");
-      for T in My_Config.Thermistor_Name loop
+      for T in Thermistor_Name loop
          Append (Result, """" & Trim (T'Image) & """:" & Get_Thermistor_Temperature (T)'Image);
-         if T /= My_Config.Thermistor_Name'Last then
+         if T /= Thermistor_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
       Append (Result, "},");
 
       Append (Result, """Stepper_Temperatures"":{");
-      for S in My_Config.Stepper_Name loop
+      for S in Stepper_Name loop
          Append (Result, """" & Trim (S'Image) & """:" & Get_Stepper_Temperature (S)'Image);
-         if S /= My_Config.Stepper_Name'Last then
+         if S /= Stepper_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
@@ -873,29 +861,29 @@ package body Prunt.Web_Server is
       Append (Result, "},");
 
       Append (Result, """Heater_Powers"":{");
-      for H in My_Config.Heater_Name loop
+      for H in Heater_Name loop
          Append (Result, """" & Trim (H'Image) & """:" & Get_Heater_Power (H)'Image);
-         if H /= My_Config.Heater_Name'Last then
+         if H /= Heater_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
       Append (Result, "},");
 
       Append (Result, """Switch_Is_High_State"":{");
-      for I in My_Config.Input_Switch_Name loop
+      for I in Input_Switch_Name loop
          Append
            (Result,
             """" & Trim (I'Image) & """:" & (if Get_Input_Switch_State (I) = High_State then "true" else "false"));
-         if I /= My_Config.Input_Switch_Name'Last then
+         if I /= Input_Switch_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
       Append (Result, "},");
 
       Append (Result, """Tachometer_Frequencies"":{");
-      for F in My_Config.Fan_Name loop
+      for F in Fan_Name loop
          Append (Result, """" & Trim (F'Image) & """:" & Get_Tachometer_Frequency (F)'Image);
-         if F /= My_Config.Fan_Name'Last then
+         if F /= Fan_Name'Last then
             Append (Result, ",");
          end if;
       end loop;
