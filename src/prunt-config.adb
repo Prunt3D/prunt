@@ -1713,7 +1713,7 @@ package body Prunt.Config is
             for S in Stepper_Name loop
                if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
                   Set_Field
-                    (Current_Properties,
+                    (Get (Current_Properties, "Properties"),
                      "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT",
                      Integer'
                        (Get
