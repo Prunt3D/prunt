@@ -74,6 +74,7 @@ package body Prunt.Update_Checker is
                      My_Logger.Log
                        ("Exception in update checker, retrying in 60 minutes:"
                         & Ada.Characters.Latin_1.CR
+                        & Ada.Characters.Latin_1.LF
                         & Ada.Exceptions.Exception_Information (E));
                      delay 3600.0;
                end;
