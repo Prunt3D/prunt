@@ -25,6 +25,7 @@ with Ada.Strings;
 with Ada.Strings.Fixed;
 with System;
 with Ada.Containers.Ordered_Sets;
+with GNAT.Sockets.Server.Pooled;
 
 package body Prunt.Web_Server is
    use My_Config.Generic_Types;
@@ -176,6 +177,7 @@ package body Prunt.Web_Server is
    procedure Initialize (Client : in out Prunt_Client) is
    begin
       Initialize (HTTP_Client (Client));
+      Client.Request_Start_Time := Clock;
    end Initialize;
 
    overriding
@@ -383,9 +385,12 @@ package body Prunt.Web_Server is
                      & JSON_Escape (Update_URL)
                      & """}",
                      Get);
-               or
-                  delay 30.0;
-                  Reply_JSON (Client, 500, "Internal Server Error", "Update check timed out.", Get);
+               else
+                  if Client.Request_Start_Time + Seconds (30) < Clock then
+                     Reply_Text (Client, 500, "Internal Server Error", "Update check timed out.", Get);
+                  else
+                     raise Content_Not_Ready;
+                  end if;
                end select;
             end;
          elsif Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File)) /= null then
@@ -518,6 +523,8 @@ package body Prunt.Web_Server is
          Reply_Text (Client, 404, "Not Found", "File not found.", Get);
       end if;
    exception
+      when Content_Not_Ready =>
+         raise;
       when E : others =>
          Reply_Text (Client, 500, "Internal Server Error", Exception_Information (E), Get);
          My_Logger.Log ("Unhandled exception in Web_Server.Do_Get_Head: " & Exception_Information (E));

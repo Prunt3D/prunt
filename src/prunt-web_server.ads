@@ -25,6 +25,7 @@ with Prunt.Update_Checker;
 with Ada.Strings.Bounded;
 with Ada.Task_Termination;
 with Ada.Directories;
+with Ada.Real_Time;
 with Prunt.Web_Server_Resources;
 with Ada.Exceptions;                                    use Ada.Exceptions;
 with Ada.Streams;                                       use Ada.Streams;
@@ -185,7 +186,8 @@ private
            Input_Size => Input_Size,
            Output_Size => Output_Size)
    with record
-      Content : Extra_Client_Content;
+      Request_Start_Time : Ada.Real_Time.Time;
+      Content            : Extra_Client_Content;
    end record;
 
    task Server is
