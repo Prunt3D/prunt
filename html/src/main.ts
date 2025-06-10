@@ -330,8 +330,10 @@ async function checkUpdate(): Promise<void> {
             updateAvailableLink.href = data.URL;
             updateAvailableLink.textContent = data.URL;
             updateAvailableWarning.classList.remove("hidden");
+            updateCheckFailedWarning.classList.add("hidden");
         } else {
             updateAvailableWarning.classList.add("hidden");
+            updateCheckFailedWarning.classList.add("hidden");
         }
     } catch (error) {
         console.error("Error during update check:", error);
