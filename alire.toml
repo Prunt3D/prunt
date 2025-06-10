@@ -38,3 +38,6 @@ utilada = "^2.8.0"
 
 [[depends-on]]
 utilada_curl = "^2.8.0"
+
+[[pins]]
+simple_components = { url = "https://github.com/Prunt3D/dak_simple_components.git" }
