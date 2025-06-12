@@ -369,7 +369,7 @@ package body Prunt.Config is
               --  TODO: This description assumes the internal oscillator is used.
               Boolean
                 ("If enabled, wait 2^18 TMC clock cycles (typically 21ms) instead of 2^20 cycles (84ms) after a " &
-                   "step signal be before beginning standstill detection.",
+                   "step signal before beginning standstill detection.",
                  Default => False),
             "CHM" =>
               Variant
