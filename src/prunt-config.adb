@@ -2134,7 +2134,7 @@ package body Prunt.Config is
                           TMC_Types.TMC2240.Microstep_Resolution_Type'Value
                             (Get (Data, "Steppers$" & S'Image & "$MRES")),
                         Interpolate          => False,
-                        Double_Edge          => False,
+                        Double_Edge          => TMC_Types.TMC_Boolean (Stepper_Hardware (S).Double_Edge_Stepping),
                         --  Set correctly in Prunt.Controller.
                         Disable_S2G          => False,
                         Disable_S2Vs         => False),

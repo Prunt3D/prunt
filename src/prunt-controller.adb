@@ -744,10 +744,7 @@ package body Prunt.Controller is
                   Content    =>
                     (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register      => TMC_Types.TMC2240.CHOPCONF_Address,
-                     CHOPCONF_Data =>
-                       (Stepper_Params.CHOPCONF
-                        with delta
-                          Double_Edge => TMC_Types.TMC_Boolean (Stepper_Hardware (Stepper).Double_Edge_Stepping)),
+                     CHOPCONF_Data => Stepper_Params.CHOPCONF,
                      others        => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
