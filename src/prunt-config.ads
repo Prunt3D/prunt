@@ -94,9 +94,28 @@ package Prunt.Config is
       Hit_On_High : Boolean := False;
    end record;
 
+   type Homing_Prerequisite_Kind is (No_Requirement_Kind, Must_Be_Homed_Kind, Must_Be_At_Position_Kind);
+
+   type Homing_Prerequisite_Parameters (Kind : Homing_Prerequisite_Kind := No_Requirement_Kind) is record
+      case Kind is
+         when No_Requirement_Kind =>
+            null;
+
+         when Must_Be_Homed_Kind =>
+            null;
+
+         when Must_Be_At_Position_Kind =>
+            Position : Length;
+      end case;
+   end record;
+
+   type Axial_Homing_Prerequisites is array (Axis_Name) of Homing_Prerequisite_Parameters;
+
    type Homing_Kind is (Disabled_Kind, Double_Tap_Kind, Set_To_Value_Kind);
 
    type Homing_Parameters (Kind : Homing_Kind := Disabled_Kind) is record
+      Prerequisites : Axial_Homing_Prerequisites := (others => (Kind => No_Requirement_Kind));
+
       case Kind is
          when Disabled_Kind =>
             null;

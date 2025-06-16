@@ -244,26 +244,59 @@ package body Prunt.Controller.Gcode_Handler is
                declare
                   Pos_After    : Position := Command.Pos_Before;
                   Homing_Order : constant array (Axis_Name) of Axis_Name := [E_Axis, Z_Axis, X_Axis, Y_Axis];
+
+                  --  Loops in axis homing prerequisites are prevented by the config validator.
+                  procedure Home_Axis (Axis : Axis_Name) is
+                  begin
+                     for B in Axis_Name loop
+                        case Axial_Homing_Params (Axis).Prerequisites (B).Kind is
+                           when My_Config.No_Requirement_Kind =>
+                              null;
+
+                           when My_Config.Must_Be_Homed_Kind =>
+                              if not Is_Homed (B) then
+                                 Home_Axis (B);
+                              end if;
+
+                           when My_Config.Must_Be_At_Position_Kind =>
+                              if not Is_Homed (B) then
+                                 Home_Axis (B);
+                              end if;
+
+                              Pos_After (B) := Axial_Homing_Params (Axis).Prerequisites (B).Position;
+                              My_Planner.Enqueue
+                                ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
+                              My_Planner.Enqueue
+                                ((Kind              => My_Planner.Move_Kind,
+                                  Pos               => Pos_After,
+                                  Feedrate          => 299_792_458_000.1 * mm / s,
+                                  Corner_Extra_Data => Corner_Data));
+                              My_Planner.Enqueue
+                                ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
+                        end case;
+                     end loop;
+
+                     case Axial_Homing_Params (Axis).Kind is
+                        when My_Config.Disabled_Kind =>
+                           raise Command_Constraint_Error with "Homing is not configured for axis " & Axis'Image & ".";
+
+                        when My_Config.Set_To_Value_Kind =>
+                           Pos_After (Axis) := Axial_Homing_Params (Axis).Value;
+                           My_Planner.Enqueue
+                             ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+                               Reset_Pos            => Pos_After,
+                               Flush_Resetting_Data => (others => <>)));
+                           My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
+
+                        when My_Config.Double_Tap_Kind =>
+                           Double_Tap_Home_Axis (Axis, Pos_After);
+                     end case;
+                     Is_Homed (Axis) := True;
+                  end Home_Axis;
                begin
                   for Axis of Homing_Order loop
                      if Command.Axes (Axis) then
-                        case Axial_Homing_Params (Axis).Kind is
-                           when My_Config.Disabled_Kind =>
-                              raise Command_Constraint_Error
-                                with "Homing is not configured for axis " & Axis'Image & ".";
-
-                           when My_Config.Set_To_Value_Kind =>
-                              Pos_After (Axis) := Axial_Homing_Params (Axis).Value;
-                              My_Planner.Enqueue
-                                ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
-                                  Reset_Pos            => Pos_After,
-                                  Flush_Resetting_Data => (others => <>)));
-                              My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
-
-                           when My_Config.Double_Tap_Kind =>
-                              Double_Tap_Home_Axis (Axis, Pos_After);
-                        end case;
-                        Is_Homed (Axis) := True;
+                        Home_Axis (Axis);
                      end if;
                   end loop;
                exception

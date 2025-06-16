@@ -690,74 +690,103 @@ package body Prunt.Config is
                  Default => False)]);
 
       Homing_Sequence : constant Property_Parameters_Access :=
-        Variant
-          ("Homing method for this axis. Usually ""Set to value"" should be used for E axis and " &
-             """Use input switch"" should be used for XYZ.",
-           "Disabled",
-           ["Disabled" =>
-              Sequence
-                ("Homing not yet configured. Axis will not allow movement until homing is configured.",
-                 []),
-            "Set to value" =>
-              Sequence
-                ("Set this axis to a given position when homing is performed without actually moving.",
-                 ["Position" =>
-                    Float
-                      ("Position to set the axis to.",
-                       Default => 0.0,
-                       Min     => -1.0E100,
-                       Max     => 1.0E100,
-                       Unit    => "mm")]),
-            "Use input switch" =>
-              Sequence
-                ("Move towards a switch until it is hit, then back off, then move towards it slower and record the " &
-                   "position.",
-                 ["Switch" =>
-                    Discrete
-                      ("Input switch to use.",
-                       Default => Input_Switch_Name'First'Image,
-                       Options => Input_Switch_Name_Strings),
-                  "Move towards negative infinity" =>
-                    Boolean
-                      ("If set then homing will move towards lower positions, otherwise homing will move towards " &
-                         "higher positions.",
-                       Default => True),
-                  "First move distance" =>
-                    Float
-                      ("Distance past switch hit point allowed in first seeking move.",
-                       Default => 0.1,
-                       Min     => 0.000_001,
-                       Max     => 1.0E100,
-                       Unit    => "mm"),
-                  "Back off move distance" =>
-                    Float
-                      ("Distance that is moved back after the switch is first hit.",
-                       Default => 2.0,
-                       Min     => 0.0,
-                       Max     => 1.0E100,
-                       Unit    => "mm"),
-                  "Second move distance" =>
-                    Float
-                      ("Distance past switch hit point allowed in second seeking move.",
-                       Default => 0.1,
-                       Min     => 0.000_001,
-                       Max     => 1.0E100,
-                       Unit    => "mm"),
-                  "Switch position" =>
-                    Float
-                      ("Position of the switch on the axis. This value is allowed to be outside of the machine " &
-                         "limits.",
-                       Default => 0.0,
-                       Min     => -1.0E100,
-                       Max     => 1.0E100,
-                       Unit    => "mm"),
-                  "Move to after" =>
-                    Float
-                      ("Position to move to after homing. This position must be inside the machine limits.",
-                       Default => 0.0,
-                       Min     => -1.0E100,
-                       Max     => 1.0E100,
-                       Unit    => "mm")])]);
+        Sequence
+          ("Homing parameters for this axis.",
+           ["Homing method" =>
+              Variant
+                ("Homing method for this axis. Usually ""Set to value"" should be used for E axis and "
+                 & """Use input switch"" should be used for XYZ.",
+                 "Disabled",
+                 ["Disabled" =>
+                    Sequence
+                      ("Homing not yet configured. Axis will not allow movement until homing is configured.", []),
+                  "Set to value" =>
+                    Sequence
+                      ("Set this axis to a given position when homing is performed without actually moving.",
+                       ["Position" =>
+                          Float
+                            ("Position to set the axis to.",
+                             Default => 0.0,
+                             Min => -1.0E100,
+                             Max => 1.0E100,
+                             Unit => "mm")]),
+                  "Use input switch" =>
+                    Sequence
+                      ("Move towards a switch until it is hit, then back off, then move towards it slower and record "
+                       & "the position.",
+                       ["Switch" =>
+                          Discrete
+                            ("Input switch to use.",
+                             Default => Input_Switch_Name'First'Image,
+                             Options => Input_Switch_Name_Strings),
+                        "Move towards negative infinity" =>
+                          Boolean
+                            ("If set then homing will move towards lower positions, otherwise homing will move "
+                             & "towards higher positions.",
+                             Default => True),
+                        "First move distance" =>
+                          Float
+                            ("Distance past switch hit point allowed in first seeking move.",
+                             Default => 0.1,
+                             Min => 0.000_001,
+                             Max => 1.0E100,
+                             Unit => "mm"),
+                        "Back off move distance" =>
+                          Float
+                            ("Distance that is moved back after the switch is first hit.",
+                             Default => 2.0,
+                             Min => 0.0,
+                             Max => 1.0E100,
+                             Unit => "mm"),
+                        "Second move distance" =>
+                          Float
+                            ("Distance past switch hit point allowed in second seeking move.",
+                             Default => 0.1,
+                             Min => 0.000_001,
+                             Max => 1.0E100,
+                             Unit => "mm"),
+                        "Switch position" =>
+                          Float
+                            ("Position of the switch on the axis. This value is allowed to be outside of the machine "
+                             & "limits.",
+                             Default => 0.0,
+                             Min => -1.0E100,
+                             Max => 1.0E100,
+                             Unit => "mm"),
+                        "Move to after" =>
+                          Float
+                            ("Position to move to after homing. This position must be inside the machine limits.",
+                             Default => 0.0,
+                             Min => -1.0E100,
+                             Max => 1.0E100,
+                             Unit => "mm")])]),
+            "Prerequisites" =>
+              Sequence_Over_Axes
+                ("Required states of other axes.",
+                 Variant
+                   ("Required state of selected axis.",
+                    "No requirement",
+                    ["No requirement" =>
+                      Sequence ("There are no requirements for this axis during homing.", []),
+                     "Must be homed" =>
+                       Sequence
+                         ("This axis must be homed prior to the parent axis, but the position does not matter. " &
+                            "Homing of the parent axis will also trigger homing of this axis if it is not already " &
+                            "homed.",
+                          []),
+                     "Must be at position" =>
+                       Sequence
+                         ("This axis must be homed prior to the parent axis and it must be at a specified position. " &
+                            "Homing of the parent axis will also trigger homing of this axis if it is not already " &
+                            "homed. After this axis is homed it will move to the specified position.",
+                          ["Position" =>
+                            Float
+                              ("Position to move to before homing the parent axis. This position must be inside the " &
+                                 "machine limits.",
+                               Default => 0.0,
+                               Min => -1.0E100,
+                               Max => 1.0E100,
+                               Unit => "mm")])]))]);
 
       Heater_Sequence : constant Property_Parameters_Access :=
         Sequence
@@ -1611,6 +1640,95 @@ package body Prunt.Config is
             end;
          end loop;
 
+         for Start_Axis in Axis_Name loop
+            declare
+               Visited_Axes : array (Axis_Name) of Boolean := (for A in Axis_Name => A = Start_Axis);
+
+               procedure Report_Loops (Current_Axis : Axis_Name; Report_Location : Axis_Name; Path : String) is
+                  --  Report_Location is set in second iteration, set to Start_Axis in first.
+               begin
+                  for Next_Axis in Axis_Name loop
+                     if Next_Axis /= Current_Axis then
+                        --  Self-references are detected elsewhere and a better error message is emitted, so we ignore
+                        --  them here.
+                        if Get (Config, "Homing$" & Current_Axis'Image & "$Prerequisites$" & Next_Axis'Image)
+                          /= "No requirement"
+                        then
+                           if Visited_Axes (Next_Axis) then
+                              if Next_Axis = Start_Axis then
+                                 --  Only report within the loop, not in paths that lead in to it.
+                                 Report
+                                   ("Homing$" & Start_Axis'Image & "$Prerequisites$" & Report_Location'Image,
+                                    "Loop detected in homing prerequisites: " & Path & " -> " & Next_Axis'Image & ".");
+                              end if;
+                           else
+                              Visited_Axes (Next_Axis) := True;
+                              Report_Loops
+                                (Next_Axis,
+                                 (if Report_Location = Start_Axis then Next_Axis else Report_Location),
+                                 Path & " -> " & Next_Axis'Image);
+                           end if;
+                        end if;
+                     end if;
+                  end loop;
+               end Report_Loops;
+            begin
+               if Get (Config, "Homing$" & Start_Axis'Image & "$Prerequisites$" & Start_Axis'Image) /= "No requirement"
+               then
+                  Report
+                    ("Homing$" & Start_Axis'Image & "$Prerequisites$" & Start_Axis'Image,
+                     "The homing procedure for an axis can not have itself as a prerequisite.");
+               end if;
+               Report_Loops (Start_Axis, Start_Axis, Start_Axis'Image);
+            end;
+         end loop;
+
+         for A in Axis_Name loop
+            for B in Axis_Name loop
+               if Get (Config, "Homing$" & A'Image & "$Prerequisites$" & B'Image) = "Must be at position" then
+                  declare
+                     Position    : constant Length :=
+                       Get
+                         (Config, "Homing$" & A'Image & "$Prerequisites$" & B'Image & "$Must be at position$Position")
+                       * mm;
+                     Lower_Limit : constant Length := Get (Config, "Kinematics$Lower position limit$" & B'Image) * mm;
+                     Upper_Limit : constant Length := Get (Config, "Kinematics$Upper position limit$" & B'Image) * mm;
+                  begin
+                     if Position < Lower_Limit or Position > Upper_Limit then
+                        Report
+                          ("Homing$" & A'Image & "$Prerequisites$" & B'Image & "$Must be at position$Position",
+                           "Position is outside of axis limits ("
+                           & Lower_Limit'Image
+                           & " mm to "
+                           & Upper_Limit'Image
+                           & " mm).");
+                     end if;
+                  end;
+               end if;
+            end loop;
+         end loop;
+
+         for A in Axis_Name loop
+            if Get (Config, "Homing$" & A'Image & "$Homing method") = "Use input switch" then
+               declare
+                  Position    : constant Length :=
+                    Get (Config, "Homing$" & A'Image & "$Homing method$Use input switch$Move to after") * mm;
+                  Lower_Limit : constant Length := Get (Config, "Kinematics$Lower position limit$" & A'Image) * mm;
+                  Upper_Limit : constant Length := Get (Config, "Kinematics$Upper position limit$" & A'Image) * mm;
+               begin
+                  if Position < Lower_Limit or Position > Upper_Limit then
+                     Report
+                       ("Homing$" & A'Image & "$Homing method$Use input switch$Move to after",
+                        "Position is outside of axis limits ("
+                        & Lower_Limit'Image
+                        & " mm to "
+                        & Upper_Limit'Image
+                        & " mm).");
+                  end if;
+               end;
+            end if;
+         end loop;
+
       --  TODO: Check that scaler will not cause max step rate to be exceeded.
       end Validate_Config;
 
@@ -1681,7 +1799,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(4));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(5));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
@@ -1726,7 +1844,35 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(4));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(4) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(4) then
+            --  Version 5 adds homing prerequisites.
+            declare
+               procedure Rename_Field_For_Axes (Field_Name : String) is
+               begin
+                  for A in Axis_Name loop
+                     Set_Field
+                       (Get (Current_Properties, "Properties"),
+                        "Homing$" & A'Image & "$Homing method" & Field_Name,
+                        JSON_Value'(Get (Get (Current_Properties, "Properties"), "Homing$" & A'Image & Field_Name)));
+                     Unset_Field (Get (Current_Properties, "Properties"), "Homing$" & A'Image & Field_Name);
+                  end loop;
+               end Rename_Field_For_Axes;
+            begin
+               Rename_Field_For_Axes ("");
+               Rename_Field_For_Axes ("$Set to value$Position");
+               Rename_Field_For_Axes ("$Use input switch$Back off move distance");
+               Rename_Field_For_Axes ("$Use input switch$First move distance");
+               Rename_Field_For_Axes ("$Use input switch$Move to after");
+               Rename_Field_For_Axes ("$Use input switch$Move towards negative infinity");
+               Rename_Field_For_Axes ("$Use input switch$Second move distance");
+               Rename_Field_For_Axes ("$Use input switch$Switch");
+               Rename_Field_For_Axes ("$Use input switch$Switch position");
+            end;
+
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(5));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(5) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -2250,33 +2396,55 @@ package body Prunt.Config is
          end loop;
 
          for A in Axis_Name loop
-            if Get (Data, "Homing$" & A'Image) = "Disabled" then
-               Config.Homing (A) := (Kind => Disabled_Kind);
-            elsif Get (Data, "Homing$" & A'Image) = "Use input switch" then
+            if Get (Data, "Homing$" & A'Image & "$Homing method") = "Disabled" then
+               Config.Homing (A) := (Kind => Disabled_Kind, Prerequisites => (others => <>));
+            elsif Get (Data, "Homing$" & A'Image & "$Homing method") = "Use input switch" then
                Config.Homing (A) :=
                  (Kind                   => Double_Tap_Kind,
                   Switch                 =>
-                    Input_Switch_Name'Value (Get (Data, "Homing$" & A'Image & "$Use input switch$Switch")),
+                    Input_Switch_Name'Value
+                      (Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Switch")),
                   First_Move_Distance    =>
-                    Get (Data, "Homing$" & A'Image & "$Use input switch$First move distance") * mm,
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$First move distance") * mm,
                   Back_Off_Move_Distance =>
-                    -Get (Data, "Homing$" & A'Image & "$Use input switch$Back off move distance") * mm,
+                    -Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Back off move distance") * mm,
                   Second_Move_Distance   =>
-                    Get (Data, "Homing$" & A'Image & "$Use input switch$Second move distance") * mm,
-                  Switch_Position        => Get (Data, "Homing$" & A'Image & "$Use input switch$Switch position") * mm,
-                  Move_To_After          => Get (Data, "Homing$" & A'Image & "$Use input switch$Move to after") * mm);
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Second move distance") * mm,
+                  Switch_Position        =>
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Switch position") * mm,
+                  Move_To_After          =>
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Move to after") * mm,
+                  Prerequisites          => (others => <>));
 
-               if Boolean'(Get (Data, "Homing$" & A'Image & "$Use input switch$Move towards negative infinity")) then
+               if Boolean'
+                   (Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Move towards negative infinity"))
+               then
                   Config.Homing (A).First_Move_Distance := -Config.Homing (A).First_Move_Distance;
                   Config.Homing (A).Back_Off_Move_Distance := -Config.Homing (A).Back_Off_Move_Distance;
                   Config.Homing (A).Second_Move_Distance := -Config.Homing (A).Second_Move_Distance;
                end if;
-            elsif Get (Data, "Homing$" & A'Image) = "Set to value" then
+            elsif Get (Data, "Homing$" & A'Image & "$Homing method") = "Set to value" then
                Config.Homing (A) :=
-                 (Kind => Set_To_Value_Kind, Value => Get (Data, "Homing$" & A'Image & "$Set to value$Position") * mm);
+                 (Kind          => Set_To_Value_Kind,
+                  Value         => Get (Data, "Homing$" & A'Image & "$Homing method$Set to value$Position") * mm,
+                  Prerequisites => (others => <>));
             else
                raise Constraint_Error;
             end if;
+
+            for B in Axis_Name loop
+               if Get (Data, "Homing$" & A'Image & "$Prerequisites$" & B'Image) = "No requirement" then
+                  Config.Homing (A).Prerequisites (B) := (Kind => No_Requirement_Kind);
+               elsif Get (Data, "Homing$" & A'Image & "$Prerequisites$" & B'Image) = "Must be homed" then
+                  Config.Homing (A).Prerequisites (B) := (Kind => Must_Be_Homed_Kind);
+               elsif Get (Data, "Homing$" & A'Image & "$Prerequisites$" & B'Image) = "Must be at position" then
+                  Config.Homing (A).Prerequisites (B) :=
+                    (Kind     => Must_Be_At_Position_Kind,
+                     Position =>
+                       Get (Data, "Homing$" & A'Image & "$Prerequisites$" & B'Image & "Must be at position$Position")
+                       * mm);
+               end if;
+            end loop;
          end loop;
 
          for T in Thermistor_Name loop
