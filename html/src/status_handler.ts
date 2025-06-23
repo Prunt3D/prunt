@@ -79,7 +79,7 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
             v = d[d.length - 1];
         }
 
-        return v == null ? null : v.toFixed(1) + suffix;
+        return v == null ? null : v.toFixed(2) + suffix;
     };
 
     let opts: uPlot.Options = {
