@@ -2441,7 +2441,7 @@ package body Prunt.Config is
                   Config.Homing (A).Prerequisites (B) :=
                     (Kind     => Must_Be_At_Position_Kind,
                      Position =>
-                       Get (Data, "Homing$" & A'Image & "$Prerequisites$" & B'Image & "Must be at position$Position")
+                       Get (Data, "Homing$" & A'Image & "$Prerequisites$" & B'Image & "$Must be at position$Position")
                        * mm);
                end if;
             end loop;
