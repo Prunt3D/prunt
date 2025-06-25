@@ -254,6 +254,8 @@ package body Prunt.Controller is
         (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
       My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
+      Reload_Signal.Mark_Startup_Done;
+
       <<Restart_Main>>
       Main :
       loop
@@ -825,8 +827,19 @@ package body Prunt.Controller is
 
       procedure Signal is
       begin
-         Reload_Requested := True;
+         if Startup_Done then
+            Reload_Requested := True;
+         else
+            --  Nothing has actually started yet, so there's nothing to restart. We reload the web server anyway to
+            --  prevent any confusion when the reload button does nothing.
+            My_Web_Server.Reset;
+         end if;
       end Signal;
+
+      procedure Mark_Startup_Done is
+      begin
+         Startup_Done := True;
+      end Mark_Startup_Done;
    end Reload_Signal;
 
    procedure Signal_Reload is

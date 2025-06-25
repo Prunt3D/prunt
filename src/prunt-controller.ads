@@ -289,8 +289,10 @@ private
    protected Reload_Signal is
       entry Wait;
       procedure Signal;
+      procedure Mark_Startup_Done;
    private
       Reload_Requested : Boolean := False;
+      Startup_Done     : Boolean := False;
    end Reload_Signal;
 
    procedure Signal_Reload;
