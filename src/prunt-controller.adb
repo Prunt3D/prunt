@@ -286,6 +286,8 @@ package body Prunt.Controller is
             begin
                select
                   Reload_Signal.Wait;
+                  My_Config.Reset;
+                  My_Web_Server.Reset;
                   goto Restart_Main;
                then abort
                   Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
