@@ -255,6 +255,8 @@ package body Prunt.Controller is
       My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
 
       Reload_Signal.Mark_Startup_Done;
+      --  Mark_Startup_Done must be called before we do anything as the config may be reset by the protected object
+      --  before that.
 
       <<Restart_Main>>
       Main :
@@ -831,7 +833,9 @@ package body Prunt.Controller is
             Reload_Requested := True;
          else
             --  Nothing has actually started yet, so there's nothing to restart. We reload the web server anyway to
-            --  prevent any confusion when the reload button does nothing.
+            --  prevent any confusion when the reload button does nothing. We also reload the config in case the user
+            --  has changed any settings.
+            My_Config.Reset;
             My_Web_Server.Reset;
          end if;
       end Signal;
