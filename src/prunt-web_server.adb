@@ -516,6 +516,45 @@ package body Prunt.Web_Server is
                         Get);
                end;
             end if;
+         elsif Starts_With (Status.File, "extras/") then
+            declare
+               File_Name : constant String :=
+                 Status.File (Status.File'First + String'("extras/")'Length .. Status.File'Last);
+            begin
+               if Get_Extra_HTTP_Content (File_Name) = null then
+                  Reply_Text (Client, 404, "Not Found", "File not found.", Get);
+               else
+                  Send_Status_Line (Client, 200, "OK");
+                  Send_Date (Client);
+                  if Status.File = "" or else Ends_With (Status.File, ".html") then
+                     Send_Content_Type (Client, "text/html");
+                  elsif Ends_With (Status.File, ".js") then
+                     Send_Content_Type (Client, "text/javascript");
+                  elsif Ends_With (Status.File, ".css") then
+                     Send_Content_Type (Client, "text/css");
+                  elsif Ends_With (Status.File, ".ico") then
+                     Send_Content_Type (Client, "image/vnd.microsoft.icon");
+                  elsif Ends_With (Status.File, ".ico") then
+                     Send_Content_Type (Client, "image/png");
+                  elsif Ends_With (Status.File, ".svg") then
+                     Send_Content_Type (Client, "image/svg+xml");
+                  elsif Ends_With (Status.File, ".webmanifest") then
+                     Send_Content_Type (Client, "application/manifest+json");
+                  elsif Ends_With (Status.File, ".xml") then
+                     Send_Content_Type (Client, "text/xml");
+                  else
+                     Send_Content_Type (Client, "application/octet-stream");
+                  end if;
+                  Send_Connection (Client, Persistent => False);
+                  Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
+                  Send (Client, "Pragma: no-cache" & CRLF);
+                  Send (Client, "Expires: 0" & CRLF);
+                  Client.Content.Array_Stream.Content := Get_Extra_HTTP_Content (File_Name);
+                  Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
+                  Client.Content.Array_Stream.Done := False;
+                  Send_Body (Client, Client.Content.Array_Stream'Access, Get);
+               end if;
+            end;
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", Get);
          end if;

@@ -33,6 +33,7 @@ with Prunt.TMC_Types.TMC2240;
 with Prunt.Logger;
 with Prunt.Command_Line_Arguments;
 with Prunt.Update_Checker;
+with Ada.Streams;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -115,7 +116,10 @@ generic
    Config_Path : String;
    --  Path of the printer configuration file.
 
+   with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
+
    Update_Check : Update_Check_Details := (Method => None);
+
 package Prunt.Controller is
 
    procedure Prompt_For_Update;
@@ -319,6 +323,7 @@ private
         Pause_Stepgen                     => My_Step_Generator.Pause,
         Resume_Stepgen                    => My_Step_Generator.Resume,
         Reload_Server                     => Signal_Reload,
+        Get_Extra_HTTP_Content            => Get_Extra_HTTP_Content,
         Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
         Port                              => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");

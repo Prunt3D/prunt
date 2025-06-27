@@ -57,6 +57,7 @@ generic
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
    with procedure Reload_Server;
+   with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
    Fatal_Exception_Occurrence_Holder : in out Fatal_Exception_Occurrence_Holder_Type;
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
