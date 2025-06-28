@@ -38,7 +38,11 @@ generic
    Stepper_Hardware : Generic_Types.Stepper_Hardware_Parameters_Array_Type;
    Fan_Hardware : Generic_Types.Fan_Hardware_Parameters_Array_Type;
 
+   with function Get_Board_Specific_Documentation (Key : String) return String;
+
    Config_Path : String;
+
+   Enable_Documentation_Dev_Mode : Boolean;
 package Prunt.Config is
 
    type Attached_Steppers is array (Stepper_Name) of Boolean;

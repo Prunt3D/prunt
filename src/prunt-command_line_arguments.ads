@@ -29,5 +29,6 @@ package Prunt.Command_Line_Arguments is
    function Motion_Planner_CPU return System.Multiprocessors.CPU_Range;
    function Step_Generator_CPU return System.Multiprocessors.CPU_Range;
    function Max_Planner_Block_Corners return Motion_Planner.Max_Corners_Type;
+   function Enable_Documentation_Dev_Mode return Boolean;
 
 end Prunt.Command_Line_Arguments;

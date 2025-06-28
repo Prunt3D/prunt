@@ -404,7 +404,7 @@ package body Prunt.Web_Server is
                Send_Content_Type (Client, "text/css");
             elsif Ends_With (Status.File, ".ico") then
                Send_Content_Type (Client, "image/vnd.microsoft.icon");
-            elsif Ends_With (Status.File, ".ico") then
+            elsif Ends_With (Status.File, ".png") then
                Send_Content_Type (Client, "image/png");
             elsif Ends_With (Status.File, ".svg") then
                Send_Content_Type (Client, "image/svg+xml");
@@ -534,7 +534,7 @@ package body Prunt.Web_Server is
                      Send_Content_Type (Client, "text/css");
                   elsif Ends_With (Status.File, ".ico") then
                      Send_Content_Type (Client, "image/vnd.microsoft.icon");
-                  elsif Ends_With (Status.File, ".ico") then
+                  elsif Ends_With (Status.File, ".png") then
                      Send_Content_Type (Client, "image/png");
                   elsif Ends_With (Status.File, ".svg") then
                      Send_Content_Type (Client, "image/svg+xml");

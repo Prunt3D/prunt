@@ -1304,19 +1304,33 @@ package body Prunt.Config is
    end Build_Schema;
 
    function Schema_To_JSON (Schema : Property_Maps.Map) return Ada.Strings.Unbounded.Unbounded_String is
-      --  String escape functionality can be added here if required.
-
       use Ada.Strings.Unbounded;
 
       Result : Unbounded_String;
 
-      procedure DFS (Node : Property_Maps.Map) is
+      procedure DFS (Node : Property_Maps.Map; Path : String) is
          use Property_Maps;
          use Discrete_String_Sets;
       begin
          Append (Result, "{");
          for I in Node.Iterate loop
-            Append (Result, """" & Key (I) & """:{""Description"":""" & JSON_Escape (Element (I).Description) & """,");
+            Append
+              (Result,
+               """" & Key (I) & """:{""Description"":""" & "<p>" & JSON_Escape (Element (I).Description) & "</p>");
+
+            if Get_Board_Specific_Documentation (Path & (if Path = "" then "" else "$") & Key (I)) /= "" then
+               Append
+                 (Result,
+                  "<p><br>Board-specific documentation:</p>"
+                  & JSON_Escape (Get_Board_Specific_Documentation (Path & (if Path = "" then "" else "$") & Key (I))));
+            end if;
+
+            if Enable_Documentation_Dev_Mode then
+               Append (Result, "<p>Schema key: " & Path & (if Path = "" then "" else "$") & Key (I) & "</p>");
+            end if;
+
+            Append (Result, """,");
+
             case Element (I).Kind is
                when Boolean_Kind =>
                   Append (Result, """Kind"":""Boolean""}");
@@ -1365,12 +1379,12 @@ package body Prunt.Config is
                   else
                      Append (Result, """Kind"":""Sequence"",""Children"":");
                   end if;
-                  DFS (Element (I).Sequence_Children);
+                  DFS (Element (I).Sequence_Children, Path & (if Path = "" then "" else "$") & Key (I));
                   Append (Result, "}");
 
                when Variant_Kind =>
                   Append (Result, """Kind"":""Variant"",""Children"":");
-                  DFS (Element (I).Variant_Children);
+                  DFS (Element (I).Variant_Children, Path & (if Path = "" then "" else "$") & Key (I));
                   Append (Result, "}");
             end case;
             if Key (I) /= Last_Key (Node) then
@@ -1380,7 +1394,7 @@ package body Prunt.Config is
          Append (Result, "}");
       end DFS;
    begin
-      DFS (Schema);
+      DFS (Schema, "");
       return Result;
    end Schema_To_JSON;
 

@@ -118,9 +118,12 @@ generic
 
    with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
 
+   with function Get_Board_Specific_Documentation (Key : String) return String;
+
    Update_Check : Update_Check_Details := (Method => None);
 
-package Prunt.Controller is
+package Prunt.Controller
+is
 
    procedure Prompt_For_Update;
    --  Prompts the user to click a button to allow a firmware update in the GUI and returns when the user clicks the
@@ -255,10 +258,12 @@ private
 
    package My_Config is new
      Config
-       (Generic_Types    => Generic_Types,
-        Stepper_Hardware => Stepper_Hardware,
-        Fan_Hardware     => Fan_Hardware,
-        Config_Path      => Config_Path);
+       (Generic_Types                    => Generic_Types,
+        Stepper_Hardware                 => Stepper_Hardware,
+        Fan_Hardware                     => Fan_Hardware,
+        Get_Board_Specific_Documentation => Get_Board_Specific_Documentation,
+        Config_Path                      => Config_Path,
+        Enable_Documentation_Dev_Mode    => Command_Line_Arguments.Enable_Documentation_Dev_Mode);
 
    procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
 

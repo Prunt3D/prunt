@@ -129,7 +129,7 @@ function buildField(
     configOwnerTabs.set(path, ownerTab);
 
     const label = document.createElement("div");
-    label.textContent = schema.Description;
+    label.innerHTML = schema.Description;
     container.appendChild(label);
 
     const errorLabel = document.createElement("div");
@@ -162,13 +162,13 @@ function buildField(
             break;
         case "Integer":
             if (schema.Unit !== "") {
-                label.textContent += ` (Units: ${schema.Unit})`;
+                label.innerHTML += ` (Units: ${schema.Unit})`;
             }
             buildInteger(schema, path, container);
             break;
         case "Float":
             if (schema.Unit !== "") {
-                label.textContent += ` (Units: ${schema.Unit})`;
+                label.innerHTML += ` (Units: ${schema.Unit})`;
             }
             buildFloat(schema, path, container);
             break;
