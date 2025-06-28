@@ -91,6 +91,9 @@ package body Prunt.Controller is
    Last_Tachometer_Frequencies : array (Fan_Name) of Frequency := (others => Frequency (0.0))
    with Atomic_Components, Volatile_Components;
 
+   Last_Heater_Currents : array (Heater_Name) of Current := (others => Current (0.0))
+   with Atomic_Components, Volatile_Components;
+
    type Atomic_Volatile_Heater_Thermistor_Map is new Heater_Thermistor_Map with Atomic_Components, Volatile_Components;
    Stored_Heater_Thermistors : Atomic_Volatile_Heater_Thermistor_Map;
 
@@ -153,6 +156,11 @@ package body Prunt.Controller is
    begin
       return Last_Tachometer_Frequencies (Fan);
    end Get_Tachometer_Frequency;
+
+   function Get_Heater_Current (Heater : Heater_Name) return Current is
+   begin
+      return Last_Heater_Currents (Heater);
+   end Get_Heater_Current;
 
    protected body Current_File_Name is
       function Get_File_Name return String is
@@ -425,6 +433,11 @@ package body Prunt.Controller is
    begin
       Last_Tachometer_Frequencies (Fan) := Freq;
    end Report_Tachometer_Frequency;
+
+   procedure Report_Heater_Current (Heater : Heater_Name; Curr : Current) is
+   begin
+      Last_Heater_Currents (Heater) := Curr;
+   end Report_Heater_Current;
 
    --  TODO
    procedure Report_Last_Command_Executed (Index : Command_Index) is null;

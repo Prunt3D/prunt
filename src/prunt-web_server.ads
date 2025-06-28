@@ -47,6 +47,7 @@ generic
    type Board_Temperature_Probe_Name is (<>);
    with function Get_Board_Temperature (Thermistor : Board_Temperature_Probe_Name) return Prunt.Temperature;
    with function Get_Heater_Power (Heater : My_Config.Generic_Types.Heater_Name) return Prunt.PWM_Scale;
+   with function Get_Heater_Current (Heater : My_Config.Generic_Types.Heater_Name) return Current;
    with function Get_Input_Switch_State (Switch : My_Config.Generic_Types.Input_Switch_Name) return Prunt.Pin_State;
    with function Get_Tachometer_Frequency (Fan : My_Config.Generic_Types.Fan_Name) return Frequency;
    with function Get_File_Name return String;

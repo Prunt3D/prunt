@@ -6,6 +6,7 @@ interface StatusSchema {
     Stepper_Temperatures: string[];
     Board_Probe_Temperatures: string[];
     Heater_Powers: string[];
+    Heater_Currents: string[];
     Switch_Is_High_State: string[];
     Tachometer_Frequencies: string[];
 }
@@ -17,6 +18,7 @@ interface StatusValues {
     Stepper_Temperatures: Record<string, number>;
     Board_Probe_Temperatures: Record<string, number>;
     Heater_Powers: Record<string, number>;
+    Heater_Currents: Record<string, number>;
     Switch_Is_High_State: Record<string, boolean>;
     Tachometer_Frequencies: Record<string, number>;
     Current_File_Name: string,
@@ -44,8 +46,11 @@ interface WebsocketServerStartTimeValue extends WebsocketValue {
     Server_Start_Time: string;
 };
 
-let plotData: number[][];
-let plot: uPlot;
+let thermalPlotData: number[][];
+let thermalPlot: uPlot;
+
+let powerPlotData: number[][];
+let powerPlot: uPlot;
 
 // From https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js
 function cyrb53(str: string, seed = 0) {
@@ -72,7 +77,7 @@ function stringToHSL(input: string): string {
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
-async function setupPlot(schema: StatusSchema): Promise<void> {
+async function setupThermalPlot(schema: StatusSchema): Promise<void> {
     const makeFmt = (suffix: string) => (u: any, v: any, sidx: any, didx: any) => {
         if (didx == null) {
             let d = u.data[sidx];
@@ -83,7 +88,7 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
     };
 
     let opts: uPlot.Options = {
-        title: "Temperatures and Heater Powers",
+        title: "Temperatures",
         width: Math.max(300, Math.min(600, document.documentElement.clientWidth - 35)),
         height: 300,
         cursor: {
@@ -130,13 +135,72 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
                     }
                 }
             }),
+        ),
+        axes: [
+            {},
+            {
+                // side: 1,
+                scale: "°C",
+                values: (u, vals, space) => vals.map(v => +v.toFixed(0) + "°C"),
+                // grid: { show: false },
+            },
+        ],
+        scales: {
+            "x": {
+                time: false,
+            },
+        },
+    };
+
+    thermalPlotData = Array.from({ length: opts.series.length }, (): number[] => []);
+    thermalPlot = new uPlot(opts, thermalPlotData as uPlot.AlignedData, document.getElementById("thermalPlot"));
+}
+
+async function setupPowerPlot(schema: StatusSchema): Promise<void> {
+    const makeFmt = (suffix: string) => (u: any, v: any, sidx: any, didx: any) => {
+        if (didx == null) {
+            let d = u.data[sidx];
+            v = d[d.length - 1];
+        }
+
+        return v == null ? null : v.toFixed(2) + suffix;
+    };
+
+    let opts: uPlot.Options = {
+        title: "Heater Duty Cycles and Currents",
+        width: Math.max(300, Math.min(600, document.documentElement.clientWidth - 35)),
+        height: 300,
+        cursor: {
+            drag: {
+                setScale: false,
+            }
+        },
+        // @ts-ignore
+        select: {
+            show: false,
+        },
+        series: [
+            {
+                label: "Seconds"
+            }
+        ].concat(
+            schema.Heater_Currents.map((h) => {
+                {
+                    return {
+                        label: h,
+                        scale: "A",
+                        value: makeFmt("A"),
+                        stroke: stringToHSL(h + "heater_current")
+                    }
+                }
+            }),
             schema.Heater_Powers.map((h) => {
                 {
                     return {
                         label: h,
                         scale: "%",
                         value: makeFmt("%"),
-                        stroke: stringToHSL(h + "heater")
+                        stroke: stringToHSL(h + "heater_power")
                     }
                 }
             }),
@@ -146,11 +210,12 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
             {
                 scale: "%",
                 values: (u, vals, space) => vals.map(v => +v.toFixed(0) + "%"),
+                // grid: { show: false },
             },
             {
                 side: 1,
-                scale: "°C",
-                values: (u, vals, space) => vals.map(v => +v.toFixed(0) + "°C"),
+                scale: "A",
+                values: (u, vals, space) => vals.map(v => +v.toFixed(0) + "A"),
                 grid: { show: false },
             },
         ],
@@ -161,12 +226,15 @@ async function setupPlot(schema: StatusSchema): Promise<void> {
             "%": {
                 auto: false,
                 range: [0, 100],
+            },
+            "A": {
+                auto: true,
             }
         },
     };
 
-    plotData = Array.from({ length: opts.series.length }, (): number[] => []);
-    plot = new uPlot(opts, plotData as uPlot.AlignedData, document.getElementById("statusPlot"));
+    powerPlotData = Array.from({ length: opts.series.length }, (): number[] => []);
+    powerPlot = new uPlot(opts, powerPlotData as uPlot.AlignedData, document.getElementById("powerPlot"));
 }
 
 export async function setupStatus(): Promise<void> {
@@ -247,33 +315,44 @@ export async function setupStatus(): Promise<void> {
                 "\n\nTachometers:\n" + Object.entries(status.Tachometer_Frequencies).map(([i, v], _) => `${i}: ${v} Hz`).join("\n") +
                 "\n\nCurrent Line:\n" + status.Current_File_Name + ":" + status.Current_File_Line;
 
-            plotData[0].push(status.Time);
+            thermalPlotData[0].push(status.Time);
+            powerPlotData[0].push(status.Time);
 
             let i = 1;
             for (const t of schema.Thermistor_Temperatures) {
-                plotData[i].push(status.Thermistor_Temperatures[t]);
+                thermalPlotData[i].push(status.Thermistor_Temperatures[t]);
                 ++i;
             }
             for (const s of schema.Stepper_Temperatures) {
-                plotData[i].push(status.Stepper_Temperatures[s]);
+                thermalPlotData[i].push(status.Stepper_Temperatures[s]);
                 ++i;
             }
             for (const p of schema.Board_Probe_Temperatures) {
-                plotData[i].push(status.Board_Probe_Temperatures[p]);
-                ++i;
-            }
-            for (const h of schema.Heater_Powers) {
-                plotData[i].push(status.Heater_Powers[h] * 100);
+                thermalPlotData[i].push(status.Board_Probe_Temperatures[p]);
                 ++i;
             }
 
-            if (plotData[0].length > 600) {
-                for (let x of plotData) {
+            i = 1;
+            for (const h of schema.Heater_Currents) {
+                powerPlotData[i].push(status.Heater_Currents[h]);
+                ++i;
+            }
+            for (const h of schema.Heater_Powers) {
+                powerPlotData[i].push(status.Heater_Powers[h] * 100);
+                ++i;
+            }
+
+            if (thermalPlotData[0].length > 600) {
+                for (let x of thermalPlotData) {
+                    x.shift();
+                }
+                for (let x of powerPlotData) {
                     x.shift();
                 }
             }
 
-            plot.setData(plotData as uPlot.AlignedData);
+            thermalPlot.setData(thermalPlotData as uPlot.AlignedData);
+            powerPlot.setData(powerPlotData as uPlot.AlignedData);
         } else if ((data as WebsocketFatalErrorValue).Fatal_Error) {
             if (fatalErrorWarningText.innerText == "") {
                 fatalErrorWarningText.innerText = (data as WebsocketFatalErrorValue).Fatal_Error;
@@ -318,7 +397,8 @@ export async function setupStatus(): Promise<void> {
         }
     }
 
-    setupPlot(schema);
+    setupThermalPlot(schema);
+    setupPowerPlot(schema);
 
     connectWebSocket();
 

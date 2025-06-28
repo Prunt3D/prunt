@@ -829,6 +829,15 @@ package body Prunt.Web_Server is
       end loop;
       Append (Result, "],");
 
+      Append (Result, """Heater_Currents"":[");
+      for H in Heater_Name loop
+         Append (Result, """" & Trim (H'Image) & """");
+         if H /= Heater_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "],");
+
       Append (Result, """Switch_Is_High_State"":[");
       for I in Input_Switch_Name loop
          Append (Result, """" & Trim (I'Image) & """");
@@ -909,6 +918,15 @@ package body Prunt.Web_Server is
       Append (Result, """Heater_Powers"":{");
       for H in Heater_Name loop
          Append (Result, """" & Trim (H'Image) & """:" & Get_Heater_Power (H)'Image);
+         if H /= Heater_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """Heater_Currents"":{");
+      for H in Heater_Name loop
+         Append (Result, """" & Trim (H'Image) & """:" & Get_Heater_Current (H)'Image);
          if H /= Heater_Name'Last then
             Append (Result, ",");
          end if;

@@ -155,6 +155,9 @@ is
    procedure Report_Tachometer_Frequency (Fan : Fan_Name; Freq : Frequency);
    --  Report the current frequency of a tachometer input.
 
+   procedure Report_Heater_Current (Heater : Heater_Name; Curr : Current);
+   --  Report the current current draw of a heater.
+
    procedure Report_Last_Command_Executed (Index : Command_Index);
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
@@ -281,6 +284,8 @@ private
 
    function Get_Tachometer_Frequency (Fan : Fan_Name) return Frequency;
 
+   function Get_Heater_Current (Heater : Heater_Name) return Current;
+
    function Get_Line return File_Line_Count;
 
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
@@ -318,6 +323,7 @@ private
         Board_Temperature_Probe_Name      => Board_Temperature_Probe_Name,
         Get_Board_Temperature             => Get_Temperature,
         Get_Heater_Power                  => Get_Heater_Power,
+        Get_Heater_Current                => Get_Heater_Current,
         Get_Input_Switch_State            => Get_Input_Switch_State,
         Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
         Get_File_Name                     => Current_File_Name.Get_File_Name,
