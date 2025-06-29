@@ -112,6 +112,6 @@ package Prunt.Motion_Planner is
       Crackle_Max      : Crackle) return Feedrate_Profile;
    --  Compute the feedrate profile with the minimal time without violating the given constraints. Raises Constraint_Error
    --  if there is no legal feedrate profile which can meet the given constraints, specifically regarding End_Vel being
-   --  reachable. Also raised Constraint_Error if Start_Vel or End_Vel are higher than Max_Vel.
+   --  reachable. Also raises Constraint_Error if Start_Vel or End_Vel are higher than Max_Vel.
 
 end Prunt.Motion_Planner;
