@@ -865,13 +865,14 @@ package body Prunt.Web_Server is
       Result : Unbounded_String := To_Unbounded_String ("{""Status"":{");
       Pos    : constant Position := Get_Position;
    begin
-      if Fatal_Exception_Occurrence_Holder.Is_Set then
+      if Exception_Occurrence_Holder.Is_Set then
          declare
             Occurrence : Ada.Exceptions.Exception_Occurrence;
+            Is_Fatal   : Boolean;
          begin
-            Fatal_Exception_Occurrence_Holder.Get (Occurrence);
+            Exception_Occurrence_Holder.Get (Occurrence, Is_Fatal);
             return
-              To_Unbounded_String ("{""Fatal_Error"":""")
+              To_Unbounded_String ((if Is_Fatal then "{""Fatal_Error"":""" else "{""Recoverable_Error"":"""))
               & JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence))
               & """}";
          end;
@@ -1108,7 +1109,7 @@ package body Prunt.Web_Server is
          end if;
       exception
          when E : others =>
-            Fatal_Exception_Occurrence_Holder.Set (Ada.Task_Termination.Unhandled_Exception, Server'Identity, E);
+            Exception_Occurrence_Holder.Set_Fatal (Ada.Task_Termination.Unhandled_Exception, Server'Identity, E);
       end;
 
       Log_Handle.Set_Receiver (Logger_Receiver'Unrestricted_Access);

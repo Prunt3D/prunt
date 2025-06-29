@@ -326,6 +326,12 @@ progress::-moz-progress-bar {
     border-color: var(--color-error);
 }
 
+#recoverableErrorWarning {
+    background-color: var(--color-error-container);
+    color: var(--color-on-error-container);
+    border-color: var(--color-error);
+}
+
 dialog {
     border: 1px solid var(--color-outline);
     border-radius: var(--border-radius);

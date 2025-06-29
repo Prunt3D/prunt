@@ -38,6 +38,10 @@ interface WebsocketFatalErrorValue extends WebsocketValue {
     Fatal_Error: string;
 };
 
+interface WebsocketRecoverableErrorValue extends WebsocketValue {
+    Recoverable_Error: string;
+};
+
 interface WebsocketLogValue extends WebsocketValue {
     Log: string;
 };
@@ -245,6 +249,8 @@ export async function setupStatus(): Promise<void> {
     const firmwareUpdateDialog = document.getElementById("firmwareUpdateDialog") as HTMLDialogElement;
     const fatalErrorWarning = document.getElementById("fatalErrorWarning");
     const fatalErrorWarningText = document.getElementById("fatalErrorWarningText");
+    const recoverableErrorWarning = document.getElementById("recoverableErrorWarning");
+    const recoverableErrorWarningText = document.getElementById("recoverableErrorWarningText");
     const statusDetails = document.getElementById("statusDetails");
     let websocket: WebSocket | null = null;
     let lastMessageTime = Date.now();
@@ -358,6 +364,11 @@ export async function setupStatus(): Promise<void> {
                 fatalErrorWarningText.innerText = (data as WebsocketFatalErrorValue).Fatal_Error;
             }
             fatalErrorWarning.classList.remove("hidden");
+        } else if ((data as WebsocketRecoverableErrorValue).Recoverable_Error) {
+            if (recoverableErrorWarningText.innerText == "") {
+                recoverableErrorWarningText.innerText = (data as WebsocketRecoverableErrorValue).Recoverable_Error;
+            }
+            recoverableErrorWarning.classList.remove("hidden");
         } else if ((data as WebsocketLogValue).Log) {
             const entry = document.createElement("p");
             entry.innerText = `${new Date().toLocaleTimeString()}: ${(data as WebsocketLogValue).Log}`;

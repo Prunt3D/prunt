@@ -249,14 +249,14 @@ package body Prunt.Controller is
    procedure Run is
    begin
       Ada.Task_Termination.Set_Specific_Handler
-        (My_Planner.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+        (My_Planner.Runner'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
       Ada.Task_Termination.Set_Specific_Handler
-        (My_Gcode_Handler.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+        (My_Gcode_Handler.Runner'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
       Ada.Task_Termination.Set_Specific_Handler
-        (My_Step_Generator.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
+        (My_Step_Generator.Runner'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
       Ada.Task_Termination.Set_Specific_Handler
-        (TMC_Temperature_Updater'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
-      My_Web_Server.Task_Termination_Set_Specific_Handler (Fatal_Exception_Occurrence_Holder.all.Set'Access);
+        (TMC_Temperature_Updater'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
+      My_Web_Server.Task_Termination_Set_Specific_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
 
       Reload_Signal.Mark_Startup_Done;
       --  Mark_Startup_Done must be called before we do anything as the config may be reset by the protected object
@@ -289,19 +289,16 @@ package body Prunt.Controller is
          if not My_Config.Prunt_Is_Enabled then
             My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
 
-            declare
-               Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
-            begin
-               select
-                  Reload_Signal.Wait;
-                  My_Config.Reset;
-                  My_Web_Server.Reset;
-                  goto Restart_Main;
-               then abort
-                  Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
-                  exit Main;
-               end select;
-            end;
+            select
+               Reload_Signal.Wait;
+               Exception_Occurrence_Holder.Reset;
+               My_Config.Reset;
+               My_Web_Server.Reset;
+               goto Restart_Main;
+            then abort
+               Exception_Occurrence_Holder.Enter_When_Fatal_Set;
+               exit Main;
+            end select;
          end if;
 
          declare
@@ -353,16 +350,12 @@ package body Prunt.Controller is
 
          My_Web_Server.Notify_Startup_Done;
 
-         declare
-            Fatal_Exception : Ada.Exceptions.Exception_Occurrence;
-         begin
-            select
-               Reload_Signal.Wait;
-            then abort
-               Fatal_Exception_Occurrence_Holder.Get (Fatal_Exception);
-               exit Main;
-            end select;
-         end;
+         select
+            Reload_Signal.Wait;
+         then abort
+            Exception_Occurrence_Holder.Enter_When_Fatal_Set;
+            exit Main;
+         end select;
 
          My_Logger.Log ("Reload requested. Resetting...");
 
@@ -377,6 +370,7 @@ package body Prunt.Controller is
                --  Reset entry call is accepted.
             end select;
          end loop;
+         Exception_Occurrence_Holder.Reset;
          My_Planner.Reset;
          My_Gcode_Handler.Runner.Reset;
          TMC_Temperature_Updater.Reset;
@@ -390,7 +384,7 @@ package body Prunt.Controller is
       raise Constraint_Error with "Error in other task.";
    exception
       when E : others =>
-         Fatal_Exception_Occurrence_Holder.all.Set
+         Exception_Occurrence_Holder.all.Set_Fatal
            (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
 
          for I in 1 .. 100 loop
@@ -438,22 +432,32 @@ package body Prunt.Controller is
    --  TODO
    procedure Report_Last_Command_Executed (Index : Command_Index) is null;
 
-   procedure Report_External_Error (Message : String) is
+   procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True) is
       External_Error : exception;
    begin
       My_Config.Disable_Prunt;
       raise External_Error with Message;
    exception
       when E : External_Error =>
-         Fatal_Exception_Occurrence_Holder.Set
-           (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, E);
+         if Is_Fatal then
+            Exception_Occurrence_Holder.Set_Fatal
+              (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+         else
+            Exception_Occurrence_Holder.Set_Recoverable
+              (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+         end if;
    end Report_External_Error;
 
-   procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence) is
+   procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True) is
    begin
       My_Config.Disable_Prunt;
-      Fatal_Exception_Occurrence_Holder.Set
-        (Ada.Task_Termination.Abnormal, Ada.Task_Identification.Current_Task, Occurrence);
+      if Is_Fatal then
+         Exception_Occurrence_Holder.Set_Fatal
+           (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
+      else
+         Exception_Occurrence_Holder.Set_Recoverable
+           (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
+      end if;
    end Report_External_Error;
 
    First_Block : Boolean := True;

@@ -162,8 +162,8 @@ is
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
 
-   procedure Report_External_Error (Message : String);
-   procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence);
+   procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
+   procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True);
    --  Report an error to Prunt and cause the printer to halt.
 
    procedure Log (Message : String);
@@ -172,8 +172,8 @@ is
 private
 
    pragma Warnings (Off, "use of an anonymous access type allocator");
-   Fatal_Exception_Occurrence_Holder : constant access Fatal_Exception_Occurrence_Holder_Type :=
-     new Fatal_Exception_Occurrence_Holder_Type;
+   Exception_Occurrence_Holder : constant access Exception_Occurrence_Holder_Type :=
+     new Exception_Occurrence_Holder_Type;
    --  The only reason that this is an allocation is so that we can safely call 'Access on the Set procedure to be
    --  passed to Ada.Task_Termination.Set_Specific_Handler. 'Unrestricted_Access works if we replace this with just a
    --  plain variable but that is a GNAT extension and of course introduces the risk of dangling pointers.
@@ -335,7 +335,7 @@ private
         Resume_Stepgen                    => My_Step_Generator.Resume,
         Reload_Server                     => Signal_Reload,
         Get_Extra_HTTP_Content            => Get_Extra_HTTP_Content,
-        Fatal_Exception_Occurrence_Holder => Fatal_Exception_Occurrence_Holder.all,
+        Exception_Occurrence_Holder       => Exception_Occurrence_Holder.all,
         Port                              => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");
 

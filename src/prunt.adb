@@ -27,8 +27,32 @@ with Ada.Characters.Latin_1;
 
 package body Prunt is
 
-   protected body Fatal_Exception_Occurrence_Holder_Type is
-      procedure Set
+   protected body Exception_Occurrence_Holder_Type is
+      procedure Set_Fatal
+        (Cause      : Ada.Task_Termination.Cause_Of_Termination;
+         ID         : Ada.Task_Identification.Task_Id;
+         Occurrence : Ada.Exceptions.Exception_Occurrence)
+      is
+         use type Ada.Task_Termination.Cause_Of_Termination;
+      begin
+         if Cause = Ada.Task_Termination.Normal then
+            return;
+         end if;
+
+         if Cause = Ada.Task_Termination.Abnormal then
+            --  TODO: This indicates that a task was aborted. What is the correct action here?
+            return;
+         end if;
+
+         if Ada.Exceptions.Is_Null_Occurrence (Data) or else not Fatal_Occurrence_Stored then
+            Ada.Exceptions.Save_Occurrence (Data, Occurrence);
+            Fatal_Occurrence_Stored := True;
+         end if;
+
+         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
+      end Set_Fatal;
+
+      procedure Set_Recoverable
         (Cause      : Ada.Task_Termination.Cause_Of_Termination;
          ID         : Ada.Task_Identification.Task_Id;
          Occurrence : Ada.Exceptions.Exception_Occurrence)
@@ -49,17 +73,30 @@ package body Prunt is
          end if;
 
          Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
-      end Set;
+      end Set_Recoverable;
 
-      entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence)
+      entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence; Is_Fatal : out Boolean)
         when not Ada.Exceptions.Is_Null_Occurrence (Data)
       is
       begin
+         Is_Fatal := Fatal_Occurrence_Stored;
          Ada.Exceptions.Save_Occurrence (Occurrence, Data);
       end Get;
 
+      entry Enter_When_Fatal_Set when Fatal_Occurrence_Stored is
+      begin
+         null;
+      end Enter_When_Fatal_Set;
+
       function Is_Set return Boolean
       is (not Ada.Exceptions.Is_Null_Occurrence (Data));
+
+      procedure Reset is
+      begin
+         if not Fatal_Occurrence_Stored then
+            Ada.Exceptions.Save_Occurrence (Data, Ada.Exceptions.Null_Occurrence);
+         end if;
+      end Reset;
 
       function Null_Occurrence return Ada.Exceptions.Exception_Occurrence is
       begin
@@ -67,7 +104,7 @@ package body Prunt is
             Ada.Exceptions.Save_Occurrence (X, Ada.Exceptions.Null_Occurrence);
          end return;
       end Null_Occurrence;
-   end Fatal_Exception_Occurrence_Holder_Type;
+   end Exception_Occurrence_Holder_Type;
 
    package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
    use Math;
