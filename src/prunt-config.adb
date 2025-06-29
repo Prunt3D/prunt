@@ -1794,9 +1794,11 @@ package body Prunt.Config is
             return;
          end if;
 
-         Schema := Build_Schema;
-         Schema_JSON := Schema_To_JSON (Schema);
-         Flat_Schema := Build_Flat_Schema (Schema);
+         if Is_Empty (Flat_Schema) then
+            Schema := Build_Schema;
+            Schema_JSON := Schema_To_JSON (Schema);
+            Flat_Schema := Build_Flat_Schema (Schema);
+         end if;
 
          if Ada.Directories.Exists (Config_Path) then
             declare

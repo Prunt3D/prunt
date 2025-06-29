@@ -410,9 +410,9 @@ private
       Initial_Config_Valid : Boolean := False;
       Initial_Properties   : JSON_Value;
       Current_Properties   : JSON_Value;
-      Schema               : Property_Maps.Map;
+      Schema               : Property_Maps.Map := Property_Maps.Empty;
       Schema_JSON          : Ada.Strings.Unbounded.Unbounded_String;
-      Flat_Schema          : Flat_Schemas.Map;
+      Flat_Schema          : Flat_Schemas.Map := Flat_Schemas.Empty;
       Initial_Config       : Full_Config;
    end Config_File;
 
