@@ -291,8 +291,10 @@ package body Prunt.Controller is
 
             select
                Reload_Signal.Wait;
+               My_Logger.Log ("Reload requested. Resetting...");
                Exception_Occurrence_Holder.Reset;
                My_Config.Reset;
+               Reset;
                My_Web_Server.Reset;
                goto Restart_Main;
             then abort
@@ -328,7 +330,21 @@ package body Prunt.Controller is
             end loop;
 
             for S in Stepper_Name loop
-               Setup_Stepper (S);
+               begin
+                  Setup_Stepper (S);
+               exception
+                  when E : TMC_UART_Error =>
+                     Exception_Occurrence_Holder.Set_Recoverable
+                       (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+                     Reset;
+                     My_Config.Disable_Prunt;
+                     Reload_Signal.Wait;
+                     My_Logger.Log ("Reload requested. Resetting...");
+                     Exception_Occurrence_Holder.Reset;
+                     My_Config.Reset;
+                     My_Web_Server.Reset;
+                     goto Restart_Main;
+               end;
             end loop;
 
             for H in Heater_Name loop
