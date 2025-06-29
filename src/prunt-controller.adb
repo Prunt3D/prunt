@@ -105,6 +105,21 @@ package body Prunt.Controller is
    Last_Line : File_Line_Count := 0
    with Atomic, Volatile;
 
+   procedure Reset_Last_Values is
+   begin
+      Last_Position := (others => Length (0.0));
+      Last_Heater_Targets := (others => Temperature (0.0));
+      Last_Thermistor_Temperatures := (others => Temperature (0.0));
+      Last_Stepper_Temperatures := (others => Temperature (0.0));
+      Last_Board_Temperatures := (others => Temperature (0.0));
+      Last_Input_Switch_States := (others => Low_State);
+      Last_Heater_Powers := (others => PWM_Scale (0.0));
+      Last_Tachometer_Frequencies := (others => Frequency (0.0));
+      Last_Heater_Currents := (others => Current (0.0));
+      Last_Thermistor_Temperatures_Counters := (others => 0);
+      Last_Line := 0;
+   end Reset_Last_Values;
+
    package My_Gcode_Handler is new Gcode_Handler;
 
    function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean is
@@ -295,6 +310,7 @@ package body Prunt.Controller is
                Exception_Occurrence_Holder.Reset;
                My_Config.Reset;
                Reset;
+               Reset_Last_Values;
                My_Web_Server.Reset;
                goto Restart_Main;
             then abort
@@ -340,6 +356,7 @@ package body Prunt.Controller is
                      My_Config.Disable_Prunt;
                      Reload_Signal.Wait;
                      My_Logger.Log ("Reload requested. Resetting...");
+                     Reset_Last_Values;
                      Exception_Occurrence_Holder.Reset;
                      My_Config.Reset;
                      My_Web_Server.Reset;
@@ -392,6 +409,7 @@ package body Prunt.Controller is
          TMC_Temperature_Updater.Reset;
          My_Config.Reset;
          Reset;
+         Reset_Last_Values;
          My_Web_Server.Reset;
       end loop Main;
 
