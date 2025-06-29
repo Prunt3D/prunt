@@ -248,10 +248,6 @@ package body Prunt.Controller is
 
    procedure Run is
    begin
-      if not Ada.Directories.Exists ("uploads") then
-         Ada.Directories.Create_Directory ("uploads");
-      end if;
-
       Ada.Task_Termination.Set_Specific_Handler
         (My_Planner.Runner'Identity, Fatal_Exception_Occurrence_Holder.all.Set'Access);
       Ada.Task_Termination.Set_Specific_Handler
