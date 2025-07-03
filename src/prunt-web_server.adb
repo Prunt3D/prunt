@@ -145,7 +145,7 @@ package body Prunt.Web_Server is
                   Source.Step := Continuing_Entries;
                   return """" & JSON_Escape (Simple_Name (Dir)) & """";
                else
-                  return ",""" & Simple_Name (Dir) & """";
+                  return ",""" & JSON_Escape (Simple_Name (Dir)) & """";
                end if;
             else
                Source.Step := Finished;
