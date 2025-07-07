@@ -146,7 +146,7 @@ const topTabContainer = document.getElementById("topTabContainer") as HTMLElemen
 const topTabContentContainer = document.getElementById("topTabContentContainer") as HTMLElement;
 const messageLog = document.getElementById("messageLog") as HTMLDivElement;
 
-const tabs = ["status", "config", "console", "file", "log"];
+const tabs = ["status", "config", "console", "file", "log", "upcomingFeatures"];
 for (const name of tabs) {
     const tab = document.getElementById(`${name}Tab`) as HTMLElement;
     const tabContent = document.getElementById(`${name}TabContent`) as HTMLElement;
