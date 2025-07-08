@@ -1002,6 +1002,8 @@ package body Prunt.Web_Server is
    function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept is
       Status : Status_Line renames Get_Status_Line (Client.all);
    begin
+      Client.WebSocket_Speed_Divisor := 20;
+
       if Status.File = "websocket/everything" then
          return (Accepted => True, Length => 0, Size => 5_000, Duplex => True, Chunked => False, Protocols => "");
       else
@@ -1012,7 +1014,11 @@ package body Prunt.Web_Server is
    overriding
    procedure WebSocket_Received (Client : in out Prunt_Client; Message : String) is
    begin
-      null;
+      Client.Websocket_Speed_Divisor :=
+        WebSocket_Message_Index_Type'Max (1, WebSocket_Message_Index_Type'Value (Message));
+   exception
+      when others =>
+         null;
    end WebSocket_Received;
 
    overriding
@@ -1068,11 +1074,19 @@ package body Prunt.Web_Server is
       WebSocket_Receivers : WebSocket_Receiver_Sets.Set;
       Sockets_Server      : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
 
-      procedure Send_To_All_WebSocket_Receivers (Message : String) is
+      WebSocket_Message_Index : WebSocket_Message_Index_Type := 0;
+
+      procedure Send_To_All_WebSocket_Receivers (Message : String; Ignore_Divisors : Boolean) is
       begin
+         if not Ignore_Divisors then
+            WebSocket_Message_Index := @ + 1;
+         end if;
+
          for C of WebSocket_Receivers loop
             begin
-               WebSocket_Send (C.all, Message);
+               if Ignore_Divisors or else WebSocket_Message_Index mod C.all.WebSocket_Speed_Divisor = 0 then
+                  WebSocket_Send (C.all, Message);
+               end if;
             exception
                when E : others =>
                   Trace_Error (Factory, "Send_To_All_WebSocket_Receivers", E);
@@ -1144,23 +1158,24 @@ package body Prunt.Web_Server is
             end Remove_WebSocket_Receiver;
          or
             accept Log_To_WebSocket_Receivers (Message : String) do
-               Send_To_All_WebSocket_Receivers ("{""Log"":""" & JSON_Escape (Message) & """}");
+               Send_To_All_WebSocket_Receivers
+                 ("{""Log"":""" & JSON_Escape (Message) & """}", Ignore_Divisors => True);
             end Log_To_WebSocket_Receivers;
          or
             accept Reset_Server_Start_Time;
             Server_Start_Time := Clock;
-            Send_To_All_WebSocket_Receivers ("{""Server_Start_Time"":""" & Server_Start_Time'Image & """}");
+            Send_To_All_WebSocket_Receivers
+              ("{""Server_Start_Time"":""" & Server_Start_Time'Image & """}", Ignore_Divisors => True);
          or
             delay until Next_Status_Send;
 
-            Send_To_All_WebSocket_Receivers (To_String (Build_Status_Values));
+            Send_To_All_WebSocket_Receivers (To_String (Build_Status_Values), Ignore_Divisors => False);
 
-            Next_Status_Send := Next_Status_Send + Seconds (1);
-            --  TODO: Change the interval to 125ms and allow the client to specify a divisor to skip some updates.
+            Next_Status_Send := Next_Status_Send + Milliseconds (50);
             if Clock > Next_Status_Send then
                Next_Status_Send := Clock;
             end if;
-            --  Try to keep to a 1 second interval, but if we can not keep up then avoid building up a backlog.
+            --  Try to keep to a 50 millisecond interval, but if we can not keep up then avoid building up a backlog.
          end select;
       end loop;
    end Server;

@@ -176,6 +176,8 @@ private
    procedure Write (Stream : access Root_Stream_Type'Class; Item : Extra_Client_Content);
    for Extra_Client_Content'Write use Write;
 
+   type WebSocket_Message_Index_Type is mod 2**32;
+
    type Prunt_Client
      (Listener       : access Connections_Server'Class;
       Request_Length : Positive;
@@ -188,8 +190,9 @@ private
            Input_Size => Input_Size,
            Output_Size => Output_Size)
    with record
-      Request_Start_Time : Ada.Real_Time.Time;
-      Content            : Extra_Client_Content;
+      Request_Start_Time      : Ada.Real_Time.Time;
+      Content                 : Extra_Client_Content;
+      WebSocket_Speed_Divisor : WebSocket_Message_Index_Type := 20;
    end record;
 
    task Server is

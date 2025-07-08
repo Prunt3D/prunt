@@ -268,11 +268,17 @@ export async function setupStatus(): Promise<void> {
     const schema: StatusSchema = await schemaResponse.json();
 
     function connectWebSocket() {
-        websocket = new WebSocket("./websocket/everything");
+        let websocket = new WebSocket("./websocket/everything");
+        const updateRateSlider = document.getElementById("updateRateSlider") as HTMLInputElement;
+
+        function sendSliderValue(this: HTMLInputElement, event: Event) {
+            websocket.send((20 - Number(this.value)).toString());
+        }
 
         websocket.onopen = () => {
             lastMessageTime = Date.now();
             webSocketConnectionWarning.classList.add("hidden");
+            updateRateSlider.addEventListener("input", sendSliderValue);
         };
 
         websocket.onmessage = (event) => {
@@ -284,6 +290,7 @@ export async function setupStatus(): Promise<void> {
 
         websocket.onclose = (event) => {
             webSocketConnectionWarning.classList.remove("hidden");
+            updateRateSlider.removeEventListener("input", sendSliderValue);
             attemptReconnect();
         };
 
