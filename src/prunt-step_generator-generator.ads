@@ -83,7 +83,7 @@ package Prunt.Step_Generator.Generator is
 
 private
 
-   type Pause_Slew_Index is new Integer range 0 .. Integer (10.0 * s / Interpolation_Time);
+   type Pause_Slew_Index is new Integer range 0 .. Integer (3.0 * s / Interpolation_Time);
    --  Max at paused end of slew.
 
    function Pause_Slew_Interpolation_Time (Index : Pause_Slew_Index) return Time;
