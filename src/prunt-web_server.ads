@@ -21,6 +21,7 @@
 
 with Prunt.Logger;
 with Prunt.Config;
+with Prunt.TMC_Types;
 with Prunt.Update_Checker;
 with Ada.Strings.Bounded;
 with Ada.Task_Termination;
@@ -50,6 +51,8 @@ generic
    with function Get_Heater_Current (Heater : My_Config.Generic_Types.Heater_Name) return Current;
    with function Get_Input_Switch_State (Switch : My_Config.Generic_Types.Input_Switch_Name) return Prunt.Pin_State;
    with function Get_Tachometer_Frequency (Fan : My_Config.Generic_Types.Fan_Name) return Frequency;
+   with function Get_StallGuard_2_Value (Heater : My_Config.Generic_Types.Stepper_Name) return TMC_Types.Unsigned_10;
+   with function Get_StallGuard_4_Value (Heater : My_Config.Generic_Types.Stepper_Name) return TMC_Types.Unsigned_10;
    with function Get_File_Name return String;
    with function Get_Line return File_Line_Count;
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);

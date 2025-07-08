@@ -25,6 +25,7 @@ with Ada.Task_Termination;
 with Ada.Task_Identification;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.TMC_Types;
+with Ada.Real_Time;
 
 use type Prunt.TMC_Types.TMC2240.UART_CRC;
 use type Prunt.TMC_Types.TMC2240.UART_Node_Address;
@@ -77,6 +78,12 @@ package body Prunt.Controller is
    with Atomic_Components, Volatile_Components;
 
    Last_Stepper_Temperatures : array (Stepper_Name) of Temperature := (others => Temperature (0.0))
+   with Atomic_Components, Volatile_Components;
+
+   Last_Stepper_SG4_Results : array (Stepper_Name) of Prunt.TMC_Types.Unsigned_10 := (others => 0)
+   with Atomic_Components, Volatile_Components;
+
+   Last_Stepper_SG2_Results : array (Stepper_Name) of Prunt.TMC_Types.Unsigned_10 := (others => 0)
    with Atomic_Components, Volatile_Components;
 
    Last_Board_Temperatures : array (Board_Temperature_Probe_Name) of Temperature := (others => Temperature (0.0))
@@ -177,6 +184,16 @@ package body Prunt.Controller is
       return Last_Heater_Currents (Heater);
    end Get_Heater_Current;
 
+   function Get_StallGuard_2_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10 is
+   begin
+      return Last_Stepper_SG2_Results (Stepper);
+   end Get_StallGuard_2_Value;
+
+   function Get_StallGuard_4_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10 is
+   begin
+      return Last_Stepper_SG4_Results (Stepper);
+   end Get_StallGuard_4_Value;
+
    protected body Current_File_Name is
       function Get_File_Name return String is
       begin
@@ -204,10 +221,20 @@ package body Prunt.Controller is
       My_Gcode_Handler.Try_Set_File (Path, Succeeded);
    end Submit_Gcode_File;
 
-   task body TMC_Temperature_Updater is
+   task body TMC_Readings_Updater is
+      use Ada.Real_Time;
+
+      TMC_Status_Error : exception;
    begin
       loop
-         accept Start;
+         loop
+            select
+               accept Start;
+               exit;
+            or
+               accept Reset;
+            end select;
+         end loop;
 
          Inner :
          loop
@@ -243,6 +270,130 @@ package body Prunt.Controller is
                              Temperature (Reply.Content.ADC_TEMP_Data.ADC_Temp) - 264.675 * celsius;
                         end if;
                      end;
+
+                     declare
+                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
+                          (Bytes_Mode => False,
+                           Content    =>
+                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
+                              Register => TMC_Types.TMC2240.SG4_RESULT_Address,
+                              others   => <>));
+                        Receive_Failed : Boolean;
+                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
+                     begin
+                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
+
+                        if Receive_Failed then
+                           null;
+                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
+                           null;
+                        elsif Reply.Content.Node /= 255 then
+                           null;
+                        elsif Reply.Content.Register /= Query.Content.Register then
+                           null;
+                        else
+                           Last_Stepper_SG4_Results (S) := Reply.Content.SG4_Result_Data.SG4_Result;
+                        end if;
+                     end;
+
+                     declare
+                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
+                          (Bytes_Mode => False,
+                           Content    =>
+                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
+                              Register => TMC_Types.TMC2240.DRV_STATUS_Address,
+                              others   => <>));
+                        Receive_Failed : Boolean;
+                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
+                     begin
+                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
+
+                        if Receive_Failed then
+                           null;
+                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
+                           null;
+                        elsif Reply.Content.Node /= 255 then
+                           null;
+                        elsif Reply.Content.Register /= Query.Content.Register then
+                           null;
+                        else
+                           Last_Stepper_SG2_Results (S) := Reply.Content.DRV_STATUS_Data.SG_Result;
+
+                           if Reply.Content.DRV_STATUS_Data.S2VSA then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports short to 24V on phase A.";
+                           end if;
+                           if Reply.Content.DRV_STATUS_Data.S2VSB then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports short to 24V on phase B.";
+                           end if;
+                           if Reply.Content.DRV_STATUS_Data.S2GA then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports short to ground on phase A.";
+                           end if;
+                           if Reply.Content.DRV_STATUS_Data.S2GB then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports short to ground on phase B.";
+                           end if;
+                           if Reply.Content.DRV_STATUS_Data.OT then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " has reached its temperature limit.";
+                           end if;
+                        end if;
+                     exception
+                        when E : TMC_Status_Error =>
+                           Exception_Occurrence_Holder.Set_Recoverable
+                             (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+                           exit Inner;
+                     end;
+
+                     declare
+                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
+                          (Bytes_Mode => False,
+                           Content    =>
+                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
+                              Register => TMC_Types.TMC2240.GSTAT_Address,
+                              others   => <>));
+                        Receive_Failed : Boolean;
+                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
+                     begin
+                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
+
+                        if Receive_Failed then
+                           null;
+                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
+                           null;
+                        elsif Reply.Content.Node /= 255 then
+                           null;
+                        elsif Reply.Content.Register /= Query.Content.Register then
+                           null;
+                        else
+                           if Reply.Content.GSTAT_Data.VM_UVLO then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports undervoltage on 24V rail.";
+                           end if;
+                           if Reply.Content.GSTAT_Data.UV_CP then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports undervoltage on charge pump.";
+                           end if;
+                           if Reply.Content.GSTAT_Data.Register_Reset then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports an unexpected register reset.";
+                           end if;
+                           if Reply.Content.GSTAT_Data.Reset then
+                              raise TMC_Status_Error
+                                with "The TMC2240 driver for " & S'Image & " reports an unexpected reset.";
+                           end if;
+                        end if;
+                     exception
+                        when E : TMC_Status_Error =>
+                           Exception_Occurrence_Holder.Set_Recoverable
+                             (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+                           exit Inner;
+                     end;
                end case;
             end loop;
 
@@ -250,11 +401,11 @@ package body Prunt.Controller is
                accept Reset;
                exit Inner;
             or
-               delay 1.0;
+               delay 0.2;
             end select;
          end loop Inner;
       end loop;
-   end TMC_Temperature_Updater;
+   end TMC_Readings_Updater;
 
    procedure Prompt_For_Update is
    begin
@@ -270,7 +421,7 @@ package body Prunt.Controller is
       Ada.Task_Termination.Set_Specific_Handler
         (My_Step_Generator.Runner'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
       Ada.Task_Termination.Set_Specific_Handler
-        (TMC_Temperature_Updater'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
+        (TMC_Readings_Updater'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
       My_Web_Server.Task_Termination_Set_Specific_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
 
       Reload_Signal.Mark_Startup_Done;
@@ -374,7 +525,7 @@ package body Prunt.Controller is
             end loop;
          end;
 
-         TMC_Temperature_Updater.Start;
+         TMC_Readings_Updater.Start;
 
          My_Gcode_Handler.Runner.Start;
          Setup_Step_Generator;
@@ -406,7 +557,7 @@ package body Prunt.Controller is
          Exception_Occurrence_Holder.Reset;
          My_Planner.Reset;
          My_Gcode_Handler.Runner.Reset;
-         TMC_Temperature_Updater.Reset;
+         TMC_Readings_Updater.Reset;
          My_Config.Reset;
          Reset;
          Reset_Last_Values;
@@ -623,8 +774,9 @@ package body Prunt.Controller is
          raise TMC_UART_Error with "Bad CRC from stepper " & Stepper'Image;
       elsif Reply.Content.Node /= 255 then
          raise TMC_UART_Error with "Bad node address from stepper " & Stepper'Image;
-      elsif (Reply.Content with delta CRC => 0, Node => 0)
-        /= (Message.Content with delta CRC => 0, Node => 0, Is_Write => TMC_Types.False)
+      elsif Query.Content.Register /= TMC_Types.TMC2240.GSTAT_Address
+        and then (Reply.Content with delta CRC => 0, Node => 0)
+                 /= (Message.Content with delta CRC => 0, Node => 0, Is_Write => TMC_Types.False)
       then
          raise TMC_UART_Error with "Data read from TMC stepper does not match sent data for stepper " & Stepper'Image;
       end if;
@@ -707,7 +859,19 @@ package body Prunt.Controller is
                   Content    =>
                     (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
                      Register   => TMC_Types.TMC2240.GCONF_Address,
-                     GCONF_Data => Stepper_Params.GCONF,
+                     GCONF_Data =>
+                       (Stepper_Params.GCONF
+                        with delta
+                          Diag0_Error      => TMC_Types.False,
+                          Diag0_OTPW       => TMC_Types.False,
+                          Diag0_Stall      => TMC_Types.True,
+                          Diag1_Stall      => TMC_Types.False,
+                          Diag1_Index      => TMC_Types.False,
+                          Diag1_On_State   => TMC_Types.False,
+                          Diag_0_Push_Pull => TMC_Types.False,
+                          Diag_1_Push_Pull => TMC_Types.False,
+                          Stop_Enable      => TMC_Types.False,
+                          Direct_Mode      => TMC_Types.False),
                      others     => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
@@ -799,6 +963,22 @@ package body Prunt.Controller is
                      Register      => TMC_Types.TMC2240.CHOPCONF_Address,
                      CHOPCONF_Data => Stepper_Params.CHOPCONF,
                      others        => <>));
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Stepper);
+
+               Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.GSTAT_Address,
+                     GSTAT_Data =>
+                       (Reset          => TMC_Types.True,
+                        Drv_Err        => TMC_Types.True,
+                        UV_CP          => TMC_Types.True,
+                        Register_Reset => TMC_Types.True,
+                        VM_UVLO        => TMC_Types.True,
+                        Reserved       => 0),
+                     others     => <>));
                Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                TMC2240_UART_Write_And_Validate (Message, Stepper);
             end;

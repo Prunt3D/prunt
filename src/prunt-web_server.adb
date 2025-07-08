@@ -854,6 +854,15 @@ package body Prunt.Web_Server is
             Append (Result, ",");
          end if;
       end loop;
+      Append (Result, "],");
+
+      Append (Result, """StallGuard_Values"":[");
+      for S in Stepper_Name loop
+         Append (Result, """" & Trim (S'Image) & " (SG2)"", """ & Trim (S'Image) & " (SG4)""");
+         if S /= Stepper_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
       Append (Result, "]");
 
       Append (Result, "}");
@@ -949,6 +958,16 @@ package body Prunt.Web_Server is
       for F in Fan_Name loop
          Append (Result, """" & Trim (F'Image) & """:" & Get_Tachometer_Frequency (F)'Image);
          if F /= Fan_Name'Last then
+            Append (Result, ",");
+         end if;
+      end loop;
+      Append (Result, "},");
+
+      Append (Result, """StallGuard_Values"":{");
+      for S in Stepper_Name loop
+         Append (Result, """" & Trim (S'Image) & " (SG2)"":" & Get_StallGuard_2_Value (S)'Image & ",");
+         Append (Result, """" & Trim (S'Image) & " (SG4)"":" & Get_StallGuard_4_Value (S)'Image);
+         if S /= Stepper_Name'Last then
             Append (Result, ",");
          end if;
       end loop;

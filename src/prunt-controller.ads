@@ -286,6 +286,10 @@ private
 
    function Get_Heater_Current (Heater : Heater_Name) return Current;
 
+   function Get_StallGuard_2_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10;
+
+   function Get_StallGuard_4_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10;
+
    function Get_Line return File_Line_Count;
 
    procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
@@ -314,29 +318,31 @@ private
    pragma Warnings (Off, "cannot call * before body seen");
    package My_Web_Server is new
      Web_Server
-       (My_Logger                         => My_Logger,
-        My_Config                         => My_Config,
-        My_Update_Checker                 => My_Update_Checker,
-        Get_Position                      => Get_Position,
-        Get_Thermistor_Temperature        => Get_Temperature,
-        Get_Stepper_Temperature           => Get_Temperature,
-        Board_Temperature_Probe_Name      => Board_Temperature_Probe_Name,
-        Get_Board_Temperature             => Get_Temperature,
-        Get_Heater_Power                  => Get_Heater_Power,
-        Get_Heater_Current                => Get_Heater_Current,
-        Get_Input_Switch_State            => Get_Input_Switch_State,
-        Get_Tachometer_Frequency          => Get_Tachometer_Frequency,
-        Get_File_Name                     => Current_File_Name.Get_File_Name,
-        Get_Line                          => Get_Line,
-        Submit_Gcode_Command              => Submit_Gcode_Command,
-        Submit_Gcode_File                 => Submit_Gcode_File,
-        Is_Stepgen_Paused                 => My_Step_Generator.Is_Paused,
-        Pause_Stepgen                     => My_Step_Generator.Pause,
-        Resume_Stepgen                    => My_Step_Generator.Resume,
-        Reload_Server                     => Signal_Reload,
-        Get_Extra_HTTP_Content            => Get_Extra_HTTP_Content,
-        Exception_Occurrence_Holder       => Exception_Occurrence_Holder.all,
-        Port                              => Command_Line_Arguments.Web_Server_Port);
+       (My_Logger                    => My_Logger,
+        My_Config                    => My_Config,
+        My_Update_Checker            => My_Update_Checker,
+        Get_Position                 => Get_Position,
+        Get_Thermistor_Temperature   => Get_Temperature,
+        Get_Stepper_Temperature      => Get_Temperature,
+        Board_Temperature_Probe_Name => Board_Temperature_Probe_Name,
+        Get_Board_Temperature        => Get_Temperature,
+        Get_Heater_Power             => Get_Heater_Power,
+        Get_Heater_Current           => Get_Heater_Current,
+        Get_Input_Switch_State       => Get_Input_Switch_State,
+        Get_Tachometer_Frequency     => Get_Tachometer_Frequency,
+        Get_StallGuard_2_Value       => Get_StallGuard_2_Value,
+        Get_StallGuard_4_Value       => Get_StallGuard_4_Value,
+        Get_File_Name                => Current_File_Name.Get_File_Name,
+        Get_Line                     => Get_Line,
+        Submit_Gcode_Command         => Submit_Gcode_Command,
+        Submit_Gcode_File            => Submit_Gcode_File,
+        Is_Stepgen_Paused            => My_Step_Generator.Is_Paused,
+        Pause_Stepgen                => My_Step_Generator.Pause,
+        Resume_Stepgen               => My_Step_Generator.Resume,
+        Reload_Server                => Signal_Reload,
+        Get_Extra_HTTP_Content       => Get_Extra_HTTP_Content,
+        Exception_Occurrence_Holder  => Exception_Occurrence_Holder.all,
+        Port                         => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");
 
    procedure TMC2240_UART_Write_And_Validate
@@ -345,10 +351,10 @@ private
    procedure Setup_Stepper (Stepper : Generic_Types.Stepper_Name);
    procedure Setup_Step_Generator;
 
-   task TMC_Temperature_Updater is
+   task TMC_Readings_Updater is
       entry Start;
       entry Reset;
-   end TMC_Temperature_Updater;
+   end TMC_Readings_Updater;
 
    procedure Enable_Stepper (Stepper : Generic_Types.Stepper_Name);
    procedure Disable_Stepper (Stepper : Generic_Types.Stepper_Name);

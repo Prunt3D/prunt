@@ -7,6 +7,7 @@ interface StatusSchema {
     Board_Probe_Temperatures: string[];
     Heater_Powers: string[];
     Heater_Currents: string[];
+    StallGuard_Values: string[];
     Switch_Is_High_State: string[];
     Tachometer_Frequencies: string[];
 }
@@ -19,6 +20,7 @@ interface StatusValues {
     Board_Probe_Temperatures: Record<string, number>;
     Heater_Powers: Record<string, number>;
     Heater_Currents: Record<string, number>;
+    StallGuard_Values: Record<string, number>;
     Switch_Is_High_State: Record<string, boolean>;
     Tachometer_Frequencies: Record<string, number>;
     Current_File_Name: string,
@@ -55,6 +57,9 @@ let thermalPlot: uPlot;
 
 let powerPlotData: number[][];
 let powerPlot: uPlot;
+
+let stallguardPlotData: number[][];
+let stallguardPlot: uPlot;
 
 // From https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js
 function cyrb53(str: string, seed = 0) {
@@ -241,6 +246,67 @@ async function setupPowerPlot(schema: StatusSchema): Promise<void> {
     powerPlot = new uPlot(opts, powerPlotData as uPlot.AlignedData, document.getElementById("powerPlot"));
 }
 
+async function setupStallGuardPlot(schema: StatusSchema): Promise<void> {
+    const makeFmt = (suffix: string) => (u: any, v: any, sidx: any, didx: any) => {
+        if (didx == null) {
+            let d = u.data[sidx];
+            v = d[d.length - 1];
+        }
+
+        return v == null ? null : v.toFixed(2) + suffix;
+    };
+
+    let opts: uPlot.Options = {
+        title: "StallGuard Values",
+        width: Math.max(300, Math.min(600, document.documentElement.clientWidth - 35)),
+        height: 300,
+        cursor: {
+            drag: {
+                setScale: false,
+            }
+        },
+        // @ts-ignore
+        select: {
+            show: false,
+        },
+        series: [
+            {
+                label: "Seconds"
+            }
+        ].concat(
+            schema.StallGuard_Values.map((s) => {
+                {
+                    return {
+                        label: s,
+                        scale: "",
+                        value: makeFmt(""),
+                        stroke: stringToHSL(s)
+                    }
+                }
+            })
+        ),
+        axes: [
+            {},
+            {
+                scale: "",
+                values: (u, vals, space) => vals.map(v => +v.toFixed(0) + ""),
+                // grid: { show: false },
+            }
+        ],
+        scales: {
+            "x": {
+                time: false,
+            },
+            "": {
+                auto: true,
+            }
+        },
+    };
+
+    stallguardPlotData = Array.from({ length: opts.series.length }, (): number[] => []);
+    stallguardPlot = new uPlot(opts, stallguardPlotData as uPlot.AlignedData, document.getElementById("stallguardPlot"));
+}
+
 export async function setupStatus(): Promise<void> {
     const messageLog = document.getElementById("messageLog") as HTMLDivElement;
     const logTab = document.getElementById("logTab");
@@ -330,6 +396,7 @@ export async function setupStatus(): Promise<void> {
 
             thermalPlotData[0].push(status.Time);
             powerPlotData[0].push(status.Time);
+            stallguardPlotData[0].push(status.Time);
 
             let i = 1;
             for (const t of schema.Thermistor_Temperatures) {
@@ -355,6 +422,12 @@ export async function setupStatus(): Promise<void> {
                 ++i;
             }
 
+            i = 1;
+            for (const s of schema.StallGuard_Values) {
+                stallguardPlotData[i].push(status.StallGuard_Values[s]);
+                ++i;
+            }
+
             if (thermalPlotData[0].length > 600) {
                 for (let x of thermalPlotData) {
                     x.shift();
@@ -362,10 +435,14 @@ export async function setupStatus(): Promise<void> {
                 for (let x of powerPlotData) {
                     x.shift();
                 }
+                for (let x of stallguardPlotData) {
+                    x.shift();
+                }
             }
 
             thermalPlot.setData(thermalPlotData as uPlot.AlignedData);
             powerPlot.setData(powerPlotData as uPlot.AlignedData);
+            stallguardPlot.setData(stallguardPlotData as uPlot.AlignedData);
         } else if ((data as WebsocketFatalErrorValue).Fatal_Error) {
             if (fatalErrorWarningText.innerText == "") {
                 fatalErrorWarningText.innerText = (data as WebsocketFatalErrorValue).Fatal_Error;
@@ -417,6 +494,7 @@ export async function setupStatus(): Promise<void> {
 
     setupThermalPlot(schema);
     setupPowerPlot(schema);
+    setupStallGuardPlot(schema);
 
     connectWebSocket();
 
