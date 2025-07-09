@@ -420,7 +420,7 @@ package body Prunt.Config is
                             ["HSTRT" =>
                               Integer
                                 ("Hysteresis start setting as described in the TMC2240 datasheet. This is the " &
-                                    "resultant value from -3 to 12, not the raw register value.",
+                                    "resultant value from 1 to 8, not the raw register value.",
                                  Default => 6,
                                  Min     => 1,
                                  Max     => 8,
