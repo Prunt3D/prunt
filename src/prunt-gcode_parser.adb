@@ -341,9 +341,9 @@ package body Prunt.Gcode_Parser is
                begin
                   Comm := (Kind => Move_Kind, others => <>);
                   if Ctx.XYZ_Relative_Mode then
-                     Comm.Pos (X_Axis) := Comm.Pos (X_Axis) + Floatify_Or_Default ('X', 0.0) * mm;
-                     Comm.Pos (Y_Axis) := Comm.Pos (Y_Axis) + Floatify_Or_Default ('Y', 0.0) * mm;
-                     Comm.Pos (Z_Axis) := Comm.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
+                     Comm.Pos (X_Axis) := Ctx.Pos (X_Axis) + Floatify_Or_Default ('X', 0.0) * mm;
+                     Comm.Pos (Y_Axis) := Ctx.Pos (Y_Axis) + Floatify_Or_Default ('Y', 0.0) * mm;
+                     Comm.Pos (Z_Axis) := Ctx.Pos (Z_Axis) + Floatify_Or_Default ('Z', 0.0) * mm;
                   else
                      Comm.Pos (X_Axis) :=
                        Floatify_Or_Default
