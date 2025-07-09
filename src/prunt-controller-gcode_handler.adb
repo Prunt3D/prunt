@@ -20,7 +20,7 @@
 -----------------------------------------------------------------------------
 
 with Prunt.Gcode_Parser;
-with Ada.Text_IO;   use Ada.Text_IO;
+with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Exceptions;
 with Prunt.TMC_Types.TMC2240;
 with Ada.IO_Exceptions;
@@ -536,6 +536,8 @@ package body Prunt.Controller.Gcode_Handler is
       end Run_Command;
    begin
       loop
+         Corner_Data := (Fans => (others => 0.0), Heaters => (others => Temperature (0.0)), Current_Line => 0);
+
          accept Start do
             declare
                Fan_Params : My_Config.Fan_Parameters;
