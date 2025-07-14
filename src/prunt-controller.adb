@@ -1015,13 +1015,13 @@ package body Prunt.Controller is
 
                when My_Config.Core_XY_Kind =>
                   if Kinematics_Params.A_Steppers (S) then
-                     Map (X_Axis, S) := 0.5 * Stepper_Params.Mm_Per_Step;
-                     Map (Y_Axis, S) := 0.5 * Stepper_Params.Mm_Per_Step;
+                     Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
+                     Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
                   end if;
 
                   if Kinematics_Params.B_Steppers (S) then
-                     Map (X_Axis, S) := 0.5 * Stepper_Params.Mm_Per_Step;
-                     Map (Y_Axis, S) := -0.5 * Stepper_Params.Mm_Per_Step;
+                     Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
+                     Map (Y_Axis, S) := -Stepper_Params.Mm_Per_Step;
                   end if;
             end case;
 

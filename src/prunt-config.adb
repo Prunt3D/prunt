@@ -1888,7 +1888,27 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(5));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(5) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(5) then
+            --  Version 6 changes the Core XY mapping function to match other motion controllers.
+            if Get (Get (Current_Properties, "Properties"), "Kinematics$Kinematics kind") = "Core XY" then
+               for S in Stepper_Name loop
+                  if Get (Get (Current_Properties, "Properties"), "Kinematics$Kinematics kind$Core XY$" & S'Image)
+                     in "A_AXIS" | "B_AXIS"
+                  then
+                     Set_Field_Long_Float
+                       (Get (Current_Properties, "Properties"),
+                        "Steppers$" & S'Image & "$Distance per step",
+                        Get_Long_Float
+                          (Get (Current_Properties, "Properties"), "Steppers$" & S'Image & "$Distance per step")
+                        * 0.5);
+                  end if;
+               end loop;
+            end if;
+
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(6));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(6) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
