@@ -18,6 +18,12 @@ interface FloatSettingsSchema extends SettingsSchemaBase {
     Unit: string;
 }
 
+interface FloatRatioSettingsSchema extends SettingsSchemaBase {
+    Kind: "Float_Ratio";
+    Min: number;
+    Max: number;
+}
+
 interface TabbedSequenceSettingsSchema extends SettingsSchemaBase {
     Kind: "Tabbed_Sequence";
     Children: Record<string, SettingsSchemaEntry>;
@@ -45,6 +51,7 @@ interface BooleanSettingsSchema extends SettingsSchemaBase {
 type SettingsSchemaEntry =
     | IntegerSettingsSchema
     | FloatSettingsSchema
+    | FloatRatioSettingsSchema
     | TabbedSequenceSettingsSchema
     | SequenceSettingsSchema
     | VariantSettingsSchema
@@ -171,6 +178,11 @@ function buildField(
                 label.innerHTML += ` (Units: ${schema.Unit})`;
             }
             buildFloat(schema, path, container);
+            break;
+        case "Float_Ratio":
+            configErrorLabels.set(path + "$Numerator", errorLabel);
+            configErrorLabels.set(path + "$Denominator", errorLabel);
+            buildFloatRatio(schema, path, container);
             break;
         default:
             throw new Error("Unknown field type.");
@@ -453,6 +465,82 @@ function buildFloat(schema: FloatSettingsSchema, path: string, container: HTMLEl
 
     container.appendChild(input);
     container.appendChild(rangeMessage);
+}
+
+function buildFloatRatio(schema: FloatRatioSettingsSchema, path: string, container: HTMLElement) {
+    const inputA = document.createElement("input");
+    inputA.type = "number";
+    inputA.step = "any";
+    inputA.setAttribute("required", "");
+
+    const inputB = document.createElement("input");
+    inputB.type = "number";
+    inputB.step = "any";
+    inputB.setAttribute("required", "");
+
+    let oldValidityA: boolean | null = null;
+    let oldValidityB: boolean | null = null;
+
+    function validate() {
+        inputA.setCustomValidity("");
+        inputB.setCustomValidity("");
+
+        const a = parseFloat(inputA.value);
+        const b = parseFloat(inputB.value);
+
+        if (!isNaN(a) && !isNaN(b)) {
+            if (b == 0.0) {
+                inputB.setCustomValidity("Denominator cannot be zero.");
+            } else {
+                const ratio = a / b;
+                if (ratio < schema.Min || ratio > schema.Max) {
+                    const errorMessage = `Ratio A/B for A:B must be between ${schema.Min} and ${schema.Max}. Denominator cannot be zero.`;
+                    inputA.setCustomValidity(errorMessage);
+                    inputB.setCustomValidity(errorMessage);
+                }
+            }
+        }
+
+        const newValidityA = inputA.checkValidity();
+        const newValidityB = inputB.checkValidity();
+
+        if (oldValidityA !== newValidityA || oldValidityB !== newValidityB) {
+            oldValidityA = newValidityA;
+            oldValidityB = newValidityB;
+            updateValidation();
+        }
+    };
+
+    inputA.addEventListener("input", validate);
+    inputB.addEventListener("input", validate);
+
+    function resetHandler() {
+        oldValidityA = null;
+        oldValidityB = null;
+        validate();
+    };
+    inputA.addEventListener("configFieldValidationReset", resetHandler);
+    inputB.addEventListener("configFieldValidationReset", resetHandler);
+
+    configElements.set(path + "$Numerator", inputA);
+    configElements.set(path + "$Denominator", inputB);
+
+    const rangeMessage = document.createElement("span");
+    rangeMessage.textContent = `Ratio A/B for A:B must be between ${schema.Min} and ${schema.Max}. Denominator cannot be zero.`;
+    rangeMessage.classList.add("input-validity-error-label");
+
+    const inputsWrapper = document.createElement("div");
+    inputsWrapper.style.display = "flex";
+    inputsWrapper.style.alignItems = "center";
+    inputsWrapper.style.gap = "0.5em";
+    inputsWrapper.appendChild(inputA);
+    const div = document.createElement("div");
+    div.textContent = ":";
+    inputsWrapper.appendChild(div);
+    inputsWrapper.appendChild(inputB);
+    inputsWrapper.appendChild(rangeMessage);
+
+    container.appendChild(inputsWrapper);
 }
 
 async function saveConfig(): Promise<void> {

@@ -172,6 +172,20 @@ package body Prunt.Config is
               Float_Default => Default);
       end Float;
 
+      function Float_Ratio
+        (Description : String; Default_Numerator, Default_Denominator, Min, Max : Long_Float)
+         return Property_Parameters_Access is
+      begin
+         return
+           new Property_Parameters'
+             (Kind                            => Float_Ratio_Kind,
+              Description                     => To_Unbounded_String (Description),
+              Float_Ratio_Min                 => Min,
+              Float_Ratio_Max                 => Max,
+              Float_Ratio_Default_Numerator   => Default_Numerator,
+              Float_Ratio_Default_Denominator => Default_Denominator);
+      end Float_Ratio;
+
       function Discrete
         (Description : String; Default : String; Options : Discrete_String_Sets.Set) return Property_Parameters_Access
       is
@@ -224,6 +238,120 @@ package body Prunt.Config is
       Fan_Name_Strings          : constant Discrete_String_Sets.Set := [for F in Fan_Name => F'Image];
 
       --!pp off
+      Stepper_Distance_Variant_Children : constant Property_Maps.Map :=
+        ["Direct entry" =>
+          Sequence
+            ("Directly enter the resulting movement from a step.",
+             ["Distance per step" =>
+               Float
+                 ("Distance moved by the attached motor for each step.",
+                  Default => 1.0E100,
+                  Min     => 1.0E-100,
+                  Max     => 1.0E100,
+                  Unit    => "mm"),
+               "Reverse direction" =>
+                 Boolean
+                   ("Reverse the rotation direction for this motor.",
+                    Default => False)]),
+         "Lead screw" =>
+           Sequence
+             ("Calculate the distance per step based on a lead screw.",
+              ["Lead" =>
+                Float
+                  ("Distance moved by the nut after one full rotation. This is different from the " &
+                     "pitch if your screw has multiple starts.",
+                   Default => 1.0E100,
+                   Min     => -1.0E100,
+                   Max     => 1.0E100,
+                   Unit    => "mm"),
+               "Reverse direction" =>
+                 Boolean
+                   ("Reverse the rotation direction for this motor.",
+                    Default => False),
+               "Gear ratio" =>
+                 Float_Ratio
+                   ("Ratio of gears where the A is on the lead screw and B is on the motor in A:B. " &
+                      "Set to 1:1 for direct drive.",
+                    Default_Numerator   => 1.0,
+                    Default_Denominator => 1.0,
+                    Min                 => 1.0E-100,
+                    Max                 => 1.0E100),
+               "Full steps per rotation" =>
+                 Float
+                   ("Number of steps for the motor shaft to make one full rotation before any gearing. " &
+                      "This is 200 for most stepper motors.",
+                    Default => 200.0,
+                    Min     => 1.0E-100,
+                    Max     => 1.0E100,
+                    Unit    => "")]),
+         "Gear with circumference" =>
+           Sequence
+             ("Calculate the distance per step based on a gear where the circumference is known.",
+              ["Circumference" =>
+                Float
+                  ("Circumference of the main gear driving the main belts.",
+                   Default => 1.0E100,
+                   Min     => -1.0E100,
+                   Max     => 1.0E100,
+                   Unit    => "mm"),
+               "Reverse direction" =>
+                 Boolean
+                   ("Reverse the rotation direction for this motor.",
+                    Default => False),
+               "Gear ratio" =>
+                 Float_Ratio
+                   ("Ratio of gears where the A is on the main gear and B is on the motor in A:B. " &
+                      "Set to 1:1 for direct drive.",
+                    Default_Numerator   => 1.0,
+                    Default_Denominator => 1.0,
+                    Min                 => 1.0E-100,
+                    Max                 => 1.0E100),
+               "Full steps per rotation" =>
+                 Float
+                   ("Number of steps for the motor shaft to make one full rotation before any gearing. " &
+                      "This is 200 for most stepper motors.",
+                    Default => 200.0,
+                    Min     => 1.0E-100,
+                    Max     => 1.0E100,
+                    Unit    => "")]),
+         "Gear with tooth count and pitch" =>
+           Sequence
+             ("Calculate the distance per step based on a gear where the tooth count and pitch is known.",
+              ["Tooth count" =>
+                Float
+                  ("Tooth count of the main gear driving the main belts.",
+                   Default => 1.0E100,
+                   Min     => 1.0E-100,
+                   Max     => 1.0E100,
+                   Unit    => ""),
+               "Tooth pitch" =>
+                 Float
+                  ("Tooth pitch of the main gear driving the main belts.",
+                   Default => 1.0E100,
+                   Min     => -1.0E100,
+                   Max     => 1.0E100,
+                   Unit    => "mm"),
+               "Reverse direction" =>
+                 Boolean
+                   ("Reverse the rotation direction for this motor.",
+                    Default => False),
+               "Gear ratio" =>
+                 Float_Ratio
+                   ("Ratio of gears where the A is on the main gear and B is on the motor in A:B. " &
+                      "Set to 1:1 for direct drive.",
+                    Default_Numerator   => 1.0,
+                    Default_Denominator => 1.0,
+                    Min                 => 1.0E-100,
+                    Max                 => 1.0E100),
+               "Full steps per rotation" =>
+                 Float
+                   ("Number of steps for the motor shaft to make one full rotation before any gearing. " &
+                      "This is 200 for most stepper motors.",
+                    Default => 200.0,
+                    Min     => 1.0E-100,
+                    Max     => 1.0E100,
+                    Unit    => "")])];
+
       Basic_Stepper_Sequence : constant Property_Parameters_Access :=
         Sequence
           ("Basic stepper driver settings.",
@@ -232,12 +360,11 @@ package body Prunt.Config is
                 ("Enable this stepper driver, allowing it to be attached to an axis.",
                  Default => False),
             "Distance per step" =>
-              Float
-                ("Distance moved by the attached motor for each step signal.",
-                 Default => 1.0E100,
-                 Min     => -1.0E100,
-                 Max     => 1.0E100,
-                 Unit    => "mm")]);
+              Variant
+                ("Distance moved by the attached motor for each step signal. " &
+                   "This does not take in to account any microstepping settings in the driver.",
+                 "Direct entry",
+                 Stepper_Distance_Variant_Children)]);
 
       --  TODO: Add StallGuard and CoolStep.
       TMC2240_Stepper_Sequence : constant Property_Parameters_Access :=
@@ -248,12 +375,10 @@ package body Prunt.Config is
                 ("Enable this stepper driver, allowing it to be attached to an axis.",
                  Default => False),
             "Distance per step" =>
-              Float
-                ("Distance moved by the attached motor for each step signal. May be negative to reverse direction.",
-                 Default => 1.0E100,
-                 Min     => -1.0E100,
-                 Max     => 1.0E100,
-                 Unit    => "mm"),
+              Variant
+                ("Distance moved by the attached motor for each step. Microstepping is automatically accounted for.",
+                 "Direct entry",
+                 Stepper_Distance_Variant_Children),
             "Run current" =>
               Float
                 ("Peak current limit for each motor coil. This parameter will be used to set CURRENT_RANGE to the " &
@@ -1373,6 +1498,16 @@ package body Prunt.Config is
                      & Element (I).Float_Unit'Image
                      & "}");
 
+               when Float_Ratio_Kind =>
+                  Append
+                    (Result,
+                     """Kind"":""Float_Ratio"""
+                     & ",""Min"":"
+                     & Trim (Element (I).Float_Ratio_Min'Image)
+                     & ",""Max"":"
+                     & Trim (Element (I).Float_Ratio_Max'Image)
+                     & "}");
+
                when Sequence_Kind =>
                   if Element (I).Sequence_Tabbed then
                      Append (Result, """Kind"":""Tabbed_Sequence"",""Children"":");
@@ -1413,6 +1548,10 @@ package body Prunt.Config is
                case Element (I).Kind is
                   when Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind =>
                      Insert (Result, New_Path, Element (I));
+
+                  when Float_Ratio_Kind =>
+                     Insert (Result, New_Path & "$Numerator", Element (I));
+                     Insert (Result, New_Path & "$Denominator", Element (I));
 
                   when Sequence_Kind =>
                      DFS (Element (I).Sequence_Children, New_Path);
@@ -1908,7 +2047,54 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(6));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(6) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(6) then
+            --  Version 7 adds more options for defining distance per step.
+            for S in Stepper_Name loop
+               declare
+                  use TMC_Types.TMC2240;
+
+                  MS_Lookup : constant array (Microstep_Resolution_Type) of Long_Float :=
+                    (MS_256        => 256.0,
+                     MS_128        => 128.0,
+                     MS_64         => 64.0,
+                     MS_32         => 32.0,
+                     MS_16         => 16.0,
+                     MS_8          => 8.0,
+                     MS_4          => 4.0,
+                     MS_2          => 2.0,
+                     MS_Full_Steps => 1.0);
+
+                  Microsteps : constant Long_Float :=
+                    (if Stepper_Hardware (S).Kind = TMC2240_UART_Kind
+                     then
+                       MS_Lookup
+                         (Microstep_Resolution_Type'Value
+                            (Get (Get (Current_Properties, "Properties"), "Steppers$" & S'Image & "$MRES")))
+                     else 1.0);
+
+                  Distance : constant Long_Float :=
+                    Get_Long_Float
+                      (Get (Current_Properties, "Properties"), "Steppers$" & S'Image & "$Distance per step");
+               begin
+                  Set_Field_Long_Float
+                    (Get (Current_Properties, "Properties"),
+                     "Steppers$" & S'Image & "$Distance per step$Direct entry$Distance per step",
+                     abs Distance * Microsteps);
+                  Set_Field
+                    (Get (Current_Properties, "Properties"),
+                     "Steppers$" & S'Image & "$Distance per step$Direct entry$Reverse direction",
+                     Distance < 0.0);
+                  Set_Field
+                    (Get (Current_Properties, "Properties"),
+                     "Steppers$" & S'Image & "$Distance per step",
+                     "Direct entry");
+               end;
+            end loop;
+
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(7));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(7) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -1926,6 +2112,20 @@ package body Prunt.Config is
 
                   when Float_Kind =>
                      Set_Field_Long_Float (Get (Current_Properties, "Properties"), Key (X), Element (X).Float_Default);
+
+                  when Float_Ratio_Kind =>
+                     if Key (X) (Key (X)'Last - String'("$Numerator")'Length + 1 .. Key (X)'Last) = "$Numerator" then
+                        Set_Field_Long_Float
+                          (Get (Current_Properties, "Properties"), Key (X), Element (X).Float_Ratio_Default_Numerator);
+                     elsif Key (X) (Key (X)'Last - String'("$Denominator")'Length + 1 .. Key (X)'Last) = "$Denominator"
+                     then
+                        Set_Field_Long_Float
+                          (Get (Current_Properties, "Properties"),
+                           Key (X),
+                           Element (X).Float_Ratio_Default_Denominator);
+                     else
+                        raise Constraint_Error;
+                     end if;
 
                   when Sequence_Kind | Variant_Kind =>
                      raise Constraint_Error with "Field type should not exist here: " & Element (X).Kind'Image;
@@ -2064,6 +2264,82 @@ package body Prunt.Config is
 
       function JSON_To_Config (Data : JSON_Value) return Full_Config is
          Config : Full_Config;
+
+         function Get_Distance_Per_Step (S : Stepper_Name) return Length is
+            use TMC_Types.TMC2240;
+
+            MS_Lookup : constant array (Microstep_Resolution_Type) of Dimensionless :=
+              (MS_256        => 256.0,
+               MS_128        => 128.0,
+               MS_64         => 64.0,
+               MS_32         => 32.0,
+               MS_16         => 16.0,
+               MS_8          => 8.0,
+               MS_4          => 4.0,
+               MS_2          => 2.0,
+               MS_Full_Steps => 1.0);
+
+            Microsteps : constant Dimensionless :=
+              (if Stepper_Hardware (S).Kind = TMC2240_UART_Kind
+               then MS_Lookup (Microstep_Resolution_Type'Value (Get (Data, "Steppers$" & S'Image & "$MRES")))
+               else 1.0);
+         begin
+            if Get (Data, "Steppers$" & S'Image & "$Distance per step") = "Direct entry" then
+               declare
+                  Prefix               : constant String := "Steppers$" & S'Image & "$Distance per step$Direct entry$";
+                  Direction_Multiplier : constant Dimensionless :=
+                    (if Boolean'(Get (Data, Prefix & "Reverse direction")) then -1.0 else 1.0);
+                  Distance             : constant Length := Get (Data, Prefix & "Distance per step") * mm;
+               begin
+                  return Direction_Multiplier * Distance / Microsteps;
+               end;
+            elsif Get (Data, "Steppers$" & S'Image & "$Distance per step") = "Lead screw" then
+               declare
+                  Prefix               : constant String := "Steppers$" & S'Image & "$Distance per step$Lead screw$";
+                  Direction_Multiplier : constant Dimensionless :=
+                    (if Boolean'(Get (Data, Prefix & "Reverse direction")) then -1.0 else 1.0);
+                  Lead                 : constant Length := Get (Data, Prefix & "Lead") * mm;
+                  Numerator            : constant Dimensionless := Get (Data, Prefix & "Gear ratio$Numerator");
+                  Denominator          : constant Dimensionless := Get (Data, Prefix & "Gear ratio$Denominator");
+                  Full_Steps           : constant Dimensionless := Get (Data, Prefix & "Full steps per rotation");
+               begin
+                  return Direction_Multiplier * Lead / (Full_Steps * Microsteps * Numerator / Denominator);
+               end;
+            elsif Get (Data, "Steppers$" & S'Image & "$Distance per step") = "Gear with circumference" then
+               declare
+                  Prefix               : constant String :=
+                    "Steppers$" & S'Image & "$Distance per step$Gear with circumference$";
+                  Direction_Multiplier : constant Dimensionless :=
+                    (if Boolean'(Get (Data, Prefix & "Reverse direction")) then -1.0 else 1.0);
+                  Circumference        : constant Length := Get (Data, Prefix & "Circumference") * mm;
+                  Numerator            : constant Dimensionless := Get (Data, Prefix & "Gear ratio$Numerator");
+                  Denominator          : constant Dimensionless := Get (Data, Prefix & "Gear ratio$Denominator");
+                  Full_Steps           : constant Dimensionless := Get (Data, Prefix & "Full steps per rotation");
+               begin
+                  return Direction_Multiplier * Circumference / (Full_Steps * Microsteps * Numerator / Denominator);
+               end;
+            elsif Get (Data, "Steppers$" & S'Image & "$Distance per step") = "Gear with tooth count and pitch" then
+               declare
+                  Prefix               : constant String :=
+                    "Steppers$" & S'Image & "$Distance per step$Gear with tooth count and pitch$";
+                  Direction_Multiplier : constant Dimensionless :=
+                    (if Boolean'(Get (Data, Prefix & "Reverse direction")) then -1.0 else 1.0);
+                  Tooth_Count          : constant Dimensionless := Get (Data, Prefix & "Tooth count");
+                  Tooth_Pitch          : constant Length := Get (Data, Prefix & "Tooth pitch") * mm;
+                  Numerator            : constant Dimensionless := Get (Data, Prefix & "Gear ratio$Numerator");
+                  Denominator          : constant Dimensionless := Get (Data, Prefix & "Gear ratio$Denominator");
+                  Full_Steps           : constant Dimensionless := Get (Data, Prefix & "Full steps per rotation");
+               begin
+                  return
+                    Direction_Multiplier
+                    * Tooth_Count
+                    * Tooth_Pitch
+                    / (Full_Steps * Microsteps * Numerator / Denominator);
+               end;
+            else
+               raise Constraint_Error;
+            end if;
+         end Get_Distance_Per_Step;
       begin
          Config.Prunt :=
            (Enabled => Get (Data, "Prunt$Enabled"), Replace_G0_With_G1 => Get (Data, "Prunt$Replace G0 with G1"));
@@ -2160,13 +2436,13 @@ package body Prunt.Config is
                   Config.Steppers (S) :=
                     (Kind        => Basic_Kind,
                      Enabled     => Get (Data, "Steppers$" & S'Image & "$Enabled"),
-                     Mm_Per_Step => Get (Data, "Steppers$" & S'Image & "$Distance per step") * mm);
+                     Mm_Per_Step => Get_Distance_Per_Step (S));
 
                when TMC2240_UART_Kind =>
                   Config.Steppers (S) :=
                     (Kind          => TMC2240_UART_Kind,
                      Enabled       => Get (Data, "Steppers$" & S'Image & "$Enabled"),
-                     Mm_Per_Step   => Get (Data, "Steppers$" & S'Image & "$Distance per step") * mm,
+                     Mm_Per_Step   => Get_Distance_Per_Step (S),
                      GCONF         =>
                        (Reserved_1       => 0,
                         Fast_Standstill  => Get (Data, "Steppers$" & S'Image & "$FAST_STANDSTILL"),
@@ -2763,6 +3039,70 @@ package body Prunt.Config is
                        (Name,
                         "Element must not be greater than " & Trim (Element (Flat_Schema, Name).Float_Max'Image));
                   end if;
+
+               when Float_Ratio_Kind =>
+                  declare
+                     function Get_Split_Point return Positive is
+                     begin
+                        for I in reverse Name'Range loop
+                           if Name (I) = '$' then
+                              return I - 1;
+                           end if;
+                        end loop;
+
+                        raise Constraint_Error;
+                     end Get_Split_Point;
+
+                     Prefix : constant String := Name (Name'First .. Get_Split_Point);
+                  begin
+
+                     if (not Has_Field (Config, Prefix & "$Numerator"))
+                       or else (not Has_Field (Config, Prefix & "$Denominator"))
+                     then
+                        --  TODO: Document that numerator and denominator must both be present.
+                        Report
+                          (Name,
+                           "Both numerator and denominator must be present. "
+                           & "This is an error in the config editor, not in the entered values.");
+                     elsif Kind (Get (Config, Prefix & "$Numerator")) not in JSON_Float_Type | JSON_Int_Type then
+                        if Name = Prefix & "$Numerator" then
+                           --  Only report errors once per ratio.
+                           Report (Prefix & "$Numerator", "Element must be float or integer (automatically upcast).");
+                        end if;
+                     elsif Kind (Get (Config, Prefix & "$Denominator")) not in JSON_Float_Type | JSON_Int_Type then
+                        if Name = Prefix & "$Denominator" then
+                           --  Only report errors once per ratio.
+                           Report
+                             (Prefix & "$Denominator", "Element must be float or integer (automatically upcast).");
+                        end if;
+                     elsif My_Get_Long_Float (Config, Prefix & "$Denominator") = 0.0 then
+                        if Name = Prefix & "$Denominator" then
+                           --  Only report errors once per ratio.
+                           Report (Name, "Denominator must not be zero.");
+                        end if;
+                     elsif My_Get_Long_Float (Config, Prefix & "$Numerator")
+                       / My_Get_Long_Float (Config, Prefix & "$Denominator")
+                       > Element (Flat_Schema, Name).Float_Ratio_Max
+                     then
+                        if Name = Prefix & "$Numerator" then
+                           --  Only report errors once per ratio.
+                           Report
+                             (Name,
+                              "A/B for A:B must not be greater than "
+                              & Element (Flat_Schema, Name).Float_Ratio_Max'Image);
+                        end if;
+                     elsif My_Get_Long_Float (Config, Prefix & "$Numerator")
+                       / My_Get_Long_Float (Config, Prefix & "$Denominator")
+                       < Element (Flat_Schema, Name).Float_Ratio_Min
+                     then
+                        if Name = Prefix & "$Numerator" then
+                           Report
+                             (Name,
+                              "A/B for A:B must not be less than "
+                              & Element (Flat_Schema, Name).Float_Ratio_Min'Image);
+                        end if;
+                     end if;
+                  end;
 
                when Sequence_Kind | Variant_Kind =>
                   raise Constraint_Error with "Field type should not exist here: " & Element (Flat_Schema, Name)'Image;

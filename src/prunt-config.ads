@@ -205,6 +205,7 @@ package Prunt.Config is
    --
    --  The schema consists of:
    --  - Integer and float fields, which contain a unit and an inclusive range.
+   --  - Float ratio fields, which should be presented at A:B and contain an inclusive range which is based on A/B.
    --  - Boolean fields.
    --  - Discrete fields, which may be set to one of a list of options and should be presented as a drop-down.
    --  - Sequence fields, which contain a list of other fields that should all be shown at the same time and in order.
@@ -231,6 +232,13 @@ package Prunt.Config is
    --      Unit: string;
    --  }
    --
+   --
+   --  interface FloatRatioSettingsSchema extends SettingsSchemaBase {
+   --      Kind: "Float_Ratio";
+   --      Min: number;
+   --      Max: number;
+   --  }
+
    --  interface TabbedSequenceSettingsSchema extends SettingsSchemaBase {
    --      Kind: "Tabbed_Sequence";
    --      Children: Record<string, SettingsSchemaEntry>;
@@ -273,6 +281,8 @@ package Prunt.Config is
    --
    --  For a float the value is a number.
    --
+   --  For a float ratio the value is two numbers under Numerator and Denominator subkeys.
+   --
    --  For a boolean the value is a boolean.
    --
    --  For a discrete the value is a string matching the user-selected value.
@@ -295,7 +305,8 @@ private
 
    package Discrete_String_Sets is new Ada.Containers.Indefinite_Ordered_Sets (String);
 
-   type Property_Kind is (Boolean_Kind, Discrete_Kind, Integer_Kind, Float_Kind, Sequence_Kind, Variant_Kind);
+   type Property_Kind is
+     (Boolean_Kind, Discrete_Kind, Integer_Kind, Float_Kind, Float_Ratio_Kind, Sequence_Kind, Variant_Kind);
 
    type Property_Parameters (Kind : Property_Kind);
    type Property_Parameters_Access is not null access constant Property_Parameters;
@@ -324,6 +335,12 @@ private
             Float_Unit    : Ada.Strings.Unbounded.Unbounded_String;
             Float_Default : Long_Float;
 
+         when Float_Ratio_Kind =>
+            Float_Ratio_Min                 : Long_Float;
+            Float_Ratio_Max                 : Long_Float;
+            Float_Ratio_Default_Numerator   : Long_Float;
+            Float_Ratio_Default_Denominator : Long_Float;
+
          when Sequence_Kind =>
             Sequence_Children : Property_Maps.Map;
             Sequence_Tabbed   : Boolean;
@@ -345,7 +362,8 @@ private
    function Build_Flat_Schema (Schema : Property_Maps.Map) return Flat_Schemas.Map
    with
      Post =>
-       (for all P of Build_Flat_Schema'Result => P.Kind in Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind);
+       (for all P of Build_Flat_Schema'Result =>
+          P.Kind in Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind | Float_Ratio_Kind);
 
    type Stepper_Parameters_Array is array (Stepper_Name) of Stepper_Parameters;
 
