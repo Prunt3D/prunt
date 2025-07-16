@@ -2539,26 +2539,27 @@ package body Prunt.Config is
                      TPWMTHRS      =>
                        (T_PWM_Thrs =>
                           TMC_Types.Unsigned_20
-                            (Long_Float'Floor
-                               (Long_Float'Min
+                            (Dimensionless'Floor
+                               (Dimensionless'Min
                                   (12_500_000.0
-                                   / (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step"))
-                                      / (My_Get_Long_Float
-                                           (Data,
-                                            "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS")
-                                         + 1.0E-100)
-                                      + 1.0E-100),
+                                   * hertz
+                                   * abs (Get_Distance_Per_Step (S))
+                                   / ((Get
+                                         (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$TPWMTHRS")
+                                       + 1.0E-100)
+                                      * (mm / Prunt.s)),
                                    2.0**20 - 1.0))),
                         Reserved   => 0),
                      TCOOLTHRS     => (T_Cool_Thrs => 0, Reserved => 0),
                      THIGH         =>
                        (T_High   =>
                           TMC_Types.Unsigned_20
-                            (Long_Float'Floor
-                               (Long_Float'Min
+                            (Dimensionless'Floor
+                               (Dimensionless'Min
                                   (12_500_000.0
-                                   / (abs (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Distance per step"))
-                                      / (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100)),
+                                   * hertz
+                                   * abs (Get_Distance_Per_Step (S))
+                                   / ((Get (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100) * mm / Prunt.s),
                                    2.0**20 - 1.0))),
                         Reserved => 0),
                      CHOPCONF      =>
