@@ -2037,7 +2037,7 @@ package body Prunt.Config is
                      Set_Field_Long_Float
                        (Get (Current_Properties, "Properties"),
                         "Steppers$" & S'Image & "$Distance per step",
-                        Get_Long_Float
+                        My_Get_Long_Float
                           (Get (Current_Properties, "Properties"), "Steppers$" & S'Image & "$Distance per step")
                         * 0.5);
                   end if;
@@ -2073,7 +2073,7 @@ package body Prunt.Config is
                      else 1.0);
 
                   Distance : constant Long_Float :=
-                    Get_Long_Float
+                    My_Get_Long_Float
                       (Get (Current_Properties, "Properties"), "Steppers$" & S'Image & "$Distance per step");
                begin
                   Set_Field_Long_Float
