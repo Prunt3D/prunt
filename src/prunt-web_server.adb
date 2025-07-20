@@ -758,9 +758,10 @@ package body Prunt.Web_Server is
                         end if;
                         if Exists (File_Path) then
                            Open (Client.Content.File, Out_File, File_Path);
-                        else
-                           Create (Client.Content.File, Out_File, File_Path);
+                           Delete (Client.Content.File);
                         end if;
+
+                        Create (Client.Content.File, Out_File, File_Path);
 
                         Receive_Body (Client, Stream (Client.Content.File));
                      end if;
