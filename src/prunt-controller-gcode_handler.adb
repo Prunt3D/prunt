@@ -588,7 +588,50 @@ package body Prunt.Controller.Gcode_Handler is
                  Replace_G0_With_G1 => Prunt_Params.Replace_G0_With_G1,
                  Default_Fan        => Get_Default_Fan);
 
-            My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters);
+            declare
+               Map : My_Planner.Stepper_Pos_Map := [others => [others => Length'Last]];
+            begin
+               for S in Generic_Types.Stepper_Name loop
+                  declare
+                     Stepper_Params : My_Config.Stepper_Parameters;
+                  begin
+                     My_Config.Read (Stepper_Params, S);
+
+                     case Kinematics_Params.Kind is
+                        when My_Config.Cartesian_Kind =>
+                           if Kinematics_Params.X_Steppers (S) then
+                              Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
+                           end if;
+
+                           if Kinematics_Params.Y_Steppers (S) then
+                              Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
+                           end if;
+
+                        when My_Config.Core_XY_Kind =>
+                           if Kinematics_Params.A_Steppers (S) then
+                              Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
+                              Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
+                           end if;
+
+                           if Kinematics_Params.B_Steppers (S) then
+                              Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
+                              Map (Y_Axis, S) := -Stepper_Params.Mm_Per_Step;
+                           end if;
+                     end case;
+
+                     if Kinematics_Params.Z_Steppers (S) then
+                        Map (Z_Axis, S) := Stepper_Params.Mm_Per_Step;
+                     end if;
+
+                     if Kinematics_Params.E_Steppers (S) then
+                        Map (E_Axis, S) := Stepper_Params.Mm_Per_Step;
+                     end if;
+                  end;
+               end loop;
+
+               My_Planner.Runner.Setup (Kinematics_Params.Planner_Parameters, Map);
+            end;
+
             My_Planner.Enqueue
               ((Kind => My_Planner.Flush_And_Update_Persistent_Data_Kind, New_Persistent_Data => Persistent_Data));
          end Start;

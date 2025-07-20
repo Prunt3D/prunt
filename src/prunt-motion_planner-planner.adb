@@ -23,6 +23,7 @@ with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
 with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
+with Prunt.Motion_Planner.Planner.Step_Rate_Limiter;
 
 package body Prunt.Motion_Planner.Planner is
 
@@ -30,6 +31,7 @@ package body Prunt.Motion_Planner.Planner is
    package My_Corner_Blender is new Corner_Blender;
    package My_Kinematic_Limiter is new Kinematic_Limiter;
    package My_Feedrate_Profile_Generator is new Feedrate_Profile_Generator;
+   package My_Step_Rate_Limiter is new Step_Rate_Limiter;
 
    procedure Reset is
    begin
@@ -67,8 +69,9 @@ package body Prunt.Motion_Planner.Planner is
       Reset_Called : Boolean := False;
    begin
       loop
-         accept Setup (In_Params : Kinematic_Parameters) do
+         accept Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map) do
             My_Preprocessor.Setup (In_Params);
+            My_Step_Rate_Limiter.Setup (In_Map);
          end Setup;
 
          loop
@@ -76,6 +79,7 @@ package body Prunt.Motion_Planner.Planner is
 
             if Reset_Called then
                accept Reset_Do_Not_Call_From_Other_Packages;
+               My_Step_Rate_Limiter.Reset;
                exit;
             end if;
 
@@ -86,14 +90,27 @@ package body Prunt.Motion_Planner.Planner is
             My_Corner_Blender.Run (Block);
 
             loop
-               My_Kinematic_Limiter.Run (Block);
-               My_Feedrate_Profile_Generator.Run (Block);
+               loop
+                  My_Kinematic_Limiter.Run (Block);
+                  My_Feedrate_Profile_Generator.Run (Block);
 
-               exit when
-                 (not Is_Homing_Move (Block.Flush_Resetting_Data))
-                 or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
+                  exit when
+                    (not Is_Homing_Move (Block.Flush_Resetting_Data))
+                    or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
 
-               Block.Segment_Feedrates (2) := Block.Segment_Feedrates (2) * 0.9;
+                  Block.Segment_Feedrates (2) := Block.Segment_Feedrates (2) * 0.9;
+               end loop;
+
+               declare
+                  Needs_New_Profiles : Boolean;
+               begin
+                  My_Step_Rate_Limiter.Run (Block, Needs_New_Profiles);
+                  exit when not Needs_New_Profiles;
+                  Log
+                    ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by " &
+                       "a high velocity limit combined with a high microstepping ratio or a high pressure " &
+                       "advance value.");
+               end;
             end loop;
 
             select
@@ -102,6 +119,7 @@ package body Prunt.Motion_Planner.Planner is
                end Dequeue_Do_Not_Call_From_Other_Packages;
             or
                accept Reset_Do_Not_Call_From_Other_Packages;
+               My_Step_Rate_Limiter.Reset;
                exit;
             end select;
          end loop;

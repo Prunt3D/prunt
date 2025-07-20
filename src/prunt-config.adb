@@ -1247,7 +1247,10 @@ package body Prunt.Config is
                  Float
                    ("The E axis velocity is multiplied by this value and then added to the E axis position. " &
                       "This means that the maximum E axis velocity is the set maximum plus the pressure advance " &
-                      "time multiplied by the set maximum acceleration. The same applies to jerk etc..",
+                      "time multiplied by the set maximum acceleration. The same applies to jerk etc.. There is " &
+                      "currently no option for smoothing of this value, so anything beyond a very small value may " &
+                      "cause the velocity to be lowered significantly to avoid exceeding the maximum step rate of " &
+                      "the stepper drivers.",
                     Default => 0.0,
                     Min     => -1.0E100,
                     Max     => 1.0E100,

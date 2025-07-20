@@ -21,6 +21,7 @@
 
 with System.Multiprocessors;
 with Ada.Containers;
+with Prunt.Input_Shapers;
 private with Prunt.Motion_Planner.PH_Beziers;
 
 pragma Warnings (Off, "formal object * is not referenced");
@@ -36,6 +37,14 @@ generic
    Home_Move_Minimum_Coast_Time : Time;
    with function Is_Homing_Move (Data : Flush_Resetting_Data_Type) return Boolean;
    Interpolation_Time : Time;
+   type Stepper_Name is (<>);
+   type Stepper_Position is array (Stepper_Name) of Dimensionless;
+   Maximum_Stepper_Delta : Stepper_Position;
+   with
+     function Get_Axial_Shaper_Parameters
+       (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
+   with procedure Log (Message : String);
+   Runner_CPU : System.Multiprocessors.CPU_Range;
    Max_Corners : Max_Corners_Type := 50_000;
    --  Preprocessor_Minimum_Move_Distance : Length := 0.001 * mm;
    Corner_Blender_Max_Computational_Error : Length := 0.001 * mm;
@@ -43,8 +52,9 @@ generic
    Input_Queue_Length : Ada.Containers.Count_Type := 1_000;
    Initial_Position : Position := [others => 0.0 * mm];
    Preprocessor_Division_Time : Time := 1.0 * s;
-   Runner_CPU : System.Multiprocessors.CPU_Range;
 package Prunt.Motion_Planner.Planner is
+
+   type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
 
    type Command_Kind is
      (Move_Kind,
@@ -133,8 +143,9 @@ package Prunt.Motion_Planner.Planner is
    Out_Of_Bounds_Error : exception;
 
    task Runner
-     with CPU => Runner_CPU is
-      entry Setup (In_Params : Kinematic_Parameters);
+     with CPU => Runner_CPU, Storage_Size => 32 * 1024 * 1024 is
+      --  Large Storage_Size to allow for large shapers in the step rate limiter.
+      entry Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map);
       entry Reset_Do_Not_Call_From_Other_Packages;
       --  Call the Reset procedure rather than this entry to avoid blocking and reset the preprocessor.
       --  TODO: There must be some way to hide this while still exposing the task.

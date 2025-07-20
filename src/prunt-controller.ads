@@ -49,7 +49,8 @@ generic
    --  The time delta for all moves except loop moves.
 
    Loop_Interpolation_Time : Time;
-   --  The time delta for loop moves.
+   --  The time delta for loop moves. This currently needs to be an integer multiple of Interpolation_Time for the
+   --  step rate limit to be correctly enforced under all conditions.
 
    with procedure Setup (Heater_Thermistors : Heater_Thermistor_Map; Thermistors : Thermistor_Parameters_Array_Type);
    --  Run any required setup and store parameters for later use. This procedure will only be called once and will be
@@ -212,6 +213,8 @@ private
    package My_Logger is new Logger;
    pragma Warnings (On, "cannot call * before body seen");
 
+   function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters;
+
    package My_Planner is new
      Motion_Planner.Planner
        (Flush_Resetting_Data_Type     => Flush_Resetting_Data,
@@ -221,9 +224,14 @@ private
         Corner_Extra_Data_Type        => Corner_Extra_Data,
         Initial_Position              => [others => 0.0 * mm],
         Max_Corners                   => Command_Line_Arguments.Max_Planner_Block_Corners,
+        Home_Move_Minimum_Coast_Time  => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
         Is_Homing_Move                => Is_Homing_Move,
         Interpolation_Time            => Interpolation_Time,
-        Home_Move_Minimum_Coast_Time  => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
+        Stepper_Name                  => Stepper_Name,
+        Stepper_Position              => Stepper_Position,
+        Maximum_Stepper_Delta         => (for S in Stepper_Name => Stepper_Hardware (S).Maximum_Delta_Per_Command),
+        Get_Axial_Shaper_Parameters   => Get_Axial_Shaper_Parameters,
+        Log                           => Log,
         Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
 
    procedure Start_Planner_Block
@@ -243,8 +251,6 @@ private
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
       Next_Command_Index   : Command_Index);
-
-   function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters;
 
    package My_Step_Generator is new
      Step_Generator.Generator

@@ -64,6 +64,8 @@ package Prunt.Controller_Generic_Types is
    --  Vendor defined parameters:
 
    type Stepper_Hardware_Parameters (Kind : Stepper_Hardware_Kind := Basic_Kind) is record
+      Maximum_Delta_Per_Command : Dimensionless;
+
       case Kind is
          when Basic_Kind =>
             Enable_Stepper  : access procedure (Stepper : Stepper_Name);
