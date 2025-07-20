@@ -114,7 +114,7 @@ private
    function Get (Source : access Unbounded_String_Source) return String;
 
    type Array_Stream_Type is new Root_Stream_Type with record
-      Content  : Web_Server_Resources.Content_Access;
+      Content  : access constant Ada.Streams.Stream_Element_Array;
       Position : Stream_Element_Offset;
       Done     : Boolean;
    end record;
