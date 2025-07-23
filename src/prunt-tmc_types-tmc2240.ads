@@ -405,7 +405,8 @@ package Prunt.TMC_Types.TMC2240 is
    type Freewheel_Type is (Normal, Freewheel, Short_Via_LS, Short_Via_HS) with Size => 2;
    for Freewheel_Type use (Normal => 0, Freewheel => 1, Short_Via_LS => 2, Short_Via_HS => 3);
 
-   type PWM_Freq_Type is (Freq_1024, Freq_683, Freq_512, Freq_410);
+   type PWM_Freq_Type is (Freq_1024, Freq_683, Freq_512, Freq_410) with Size => 2;
+   for PWM_Freq_Type use (Freq_1024 => 0, Freq_683 => 1, Freq_512 => 2, Freq_410 => 3);
 
    type PWMCONF is record
       PWM_OFS            : Unsigned_8;
