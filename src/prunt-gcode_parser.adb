@@ -641,9 +641,11 @@ package body Prunt.Gcode_Parser is
 
             when 205 =>
                declare
-                  Junk : constant Boolean := No_Value_Or_False_Or_Error ('P');
+                  P_Present : constant Boolean := No_Value_Or_False_Or_Error ('P');
                begin
-                  null;
+                  if not P_Present then
+                     raise Bad_Line;
+                  end if;
                exception
                   when Bad_Line =>
                      raise Bad_Line
