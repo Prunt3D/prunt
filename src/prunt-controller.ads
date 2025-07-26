@@ -183,17 +183,19 @@ private
    procedure Helper_Lock_Memory
    with Import => True, Convention => C, External_Name => "prunt_controller_helper_lock_memory";
 
+   --  TODO: This should be a variant record.
    type Flush_Resetting_Data is record
-      Is_Homing_Move           : Boolean := False;
-      Home_Switch              : Input_Switch_Name := Input_Switch_Name'First;
-      Home_Hit_On_State        : Pin_State := High_State;
-      Is_Conditional_Move      : Boolean := False;
-      Conditional_Switch       : Input_Switch_Name := Input_Switch_Name'First;
-      Conditional_Hit_On_State : Pin_State := High_State;
-      Wait_For_Heater          : Boolean := False;
-      Wait_For_Heater_Name     : Heater_Name := Heater_Name'First;
-      Dwell_Time               : Time := Time (0.0);
-      Pause_After              : Boolean := False;
+      Is_Homing_Move              : Boolean := False;
+      Home_Switch                 : Input_Switch_Name := Input_Switch_Name'First;
+      Home_Hit_On_State           : Pin_State := High_State;
+      Is_Conditional_Move         : Boolean := False;
+      Conditional_Switch          : Input_Switch_Name := Input_Switch_Name'First;
+      Conditional_Hit_On_State    : Pin_State := High_State;
+      Wait_For_Heater             : Boolean := False;
+      Wait_For_Heater_Name        : Heater_Name := Heater_Name'First;
+      Dwell_Time                  : Time := Time (0.0);
+      Pause_After                 : Boolean := False;
+      Check_Conditional_Hit_After : Boolean := False;
    end record;
 
    type Block_Persistent_Data is record

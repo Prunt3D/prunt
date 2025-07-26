@@ -114,10 +114,11 @@ package body Prunt.Controller.Gcode_Handler is
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Resetting_Data =>
-               (Is_Conditional_Move      => True,
-                Conditional_Switch       => Switch,
-                Conditional_Hit_On_State => (if Hit_State = High_State then Low_State else High_State),
-                others                   => <>),
+               (Is_Conditional_Move         => True,
+                Conditional_Switch          => Switch,
+                Conditional_Hit_On_State    => (if Hit_State = High_State then Low_State else High_State),
+                Check_Conditional_Hit_After => True,
+                others                      => <>),
              Reset_Pos            => Zero_Pos),
             Ignore_Bounds => True);
 
@@ -141,7 +142,12 @@ package body Prunt.Controller.Gcode_Handler is
             Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
-             Flush_Resetting_Data => (others => <>),
+             Flush_Resetting_Data =>
+               (Is_Conditional_Move         => False,
+                Conditional_Switch          => Switch,
+                Conditional_Hit_On_State    => (if Hit_State = High_State then Low_State else High_State),
+                Check_Conditional_Hit_After => True,
+                others                      => <>),
              Reset_Pos            => Zero_Pos),
             Ignore_Bounds => True);
 

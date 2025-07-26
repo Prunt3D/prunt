@@ -104,9 +104,12 @@ package body Prunt.Controller is
    type Atomic_Volatile_Heater_Thermistor_Map is new Heater_Thermistor_Map with Atomic_Components, Volatile_Components;
    Stored_Heater_Thermistors : Atomic_Volatile_Heater_Thermistor_Map;
 
-   type Temperature_Report_Counter is mod 2**32;
+   type Report_Counter is mod 2**32;
 
-   Last_Thermistor_Temperatures_Counters : array (Thermistor_Name) of Temperature_Report_Counter := (others => 0)
+   Last_Thermistor_Temperatures_Counters : array (Thermistor_Name) of Report_Counter := (others => 0)
+   with Atomic_Components, Volatile_Components;
+
+   Last_Input_Switch_State_Counters : array (Input_Switch_Name) of Report_Counter := (others => 0)
    with Atomic_Components, Volatile_Components;
 
    Last_Line : File_Line_Count := 0
@@ -124,6 +127,7 @@ package body Prunt.Controller is
       Last_Tachometer_Frequencies := (others => Frequency (0.0));
       Last_Heater_Currents := (others => Current (0.0));
       Last_Thermistor_Temperatures_Counters := (others => 0);
+      Last_Input_Switch_State_Counters := (others => 0);
       Last_Line := 0;
    end Reset_Last_Values;
 
@@ -586,6 +590,7 @@ package body Prunt.Controller is
    procedure Report_Input_Switch_State (Switch : Input_Switch_Name; State : Pin_State) is
    begin
       Last_Input_Switch_States (Switch) := State;
+      Last_Input_Switch_State_Counters (Switch) := @ + 1;
    end Report_Input_Switch_State;
 
    procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
@@ -713,7 +718,7 @@ package body Prunt.Controller is
 
       if Resetting_Data.Wait_For_Heater then
          declare
-            Start_Counter : constant Temperature_Report_Counter :=
+            Start_Counter : constant Report_Counter :=
               Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name));
          begin
             loop
@@ -728,6 +733,33 @@ package body Prunt.Controller is
               Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name))
               >= Last_Heater_Targets (Resetting_Data.Wait_For_Heater_Name);
          end loop;
+      end if;
+
+      if Resetting_Data.Check_Conditional_Hit_After then
+         Wait_Until_Idle (Next_Command_Index - 1);
+
+         declare
+            Start_Counter : constant Report_Counter :=
+              Last_Input_Switch_State_Counters (Resetting_Data.Conditional_Switch);
+         begin
+            loop
+               exit when Last_Input_Switch_State_Counters (Resetting_Data.Conditional_Switch) /= Start_Counter;
+            end loop;
+
+            if Last_Input_Switch_States (Resetting_Data.Conditional_Switch) /= Resetting_Data.Conditional_Hit_On_State
+            then
+               declare
+                  Homing_Back_Off_Error : exception;
+               begin
+                  raise Homing_Back_Off_Error
+                    with "Switch " & Resetting_Data.Conditional_Switch'Image & " is still hit after back off move.";
+               exception
+                  when E : Homing_Back_Off_Error =>
+                     Exception_Occurrence_Holder.Set_Recoverable
+                       (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+               end;
+            end if;
+         end;
       end if;
 
       My_Gcode_Handler.Finished_Block (Resetting_Data, First_Accel_Distance);
