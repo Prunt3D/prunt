@@ -125,7 +125,7 @@ package body Prunt.Controller.Gcode_Handler is
          My_Planner.Enqueue
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + First_Offset,
-             Feedrate          => Velocity'Last,
+             Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
@@ -163,7 +163,7 @@ package body Prunt.Controller.Gcode_Handler is
          My_Planner.Enqueue
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + Second_Offset,
-             Feedrate          => Velocity'Last,
+             Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
