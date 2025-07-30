@@ -409,6 +409,14 @@ package body Prunt.Config is
                  Min     => 0.031_25,
                  Max     => 1.0,
                  Unit    => ""),
+            "IRUN during homing" =>
+              Float
+                ("Run current scale during homing moves. This will be applied while any axis is homing. "
+                   & "0 = 0% of set current, 1 = 100% of set current. Resolution of 1/32.",
+                 Default => 1.0,
+                 Min     => 0.031_25,
+                 Max     => 1.0,
+                 Unit    => ""),
             "IHOLDDELAY" =>
               Float
                 ("Slew time for motor power down after standstill detected. Resolution of 21ms.",
@@ -1674,12 +1682,26 @@ package body Prunt.Config is
                             (0.0,
                              Long_Float'Floor
                                (My_Get_Long_Float (Config, "Steppers$" & S'Image & "$IRUN") * 32.0 - 1.0)));
+                     IRUN_During_Homing          : constant TMC_Types.Unsigned_5 :=
+                       TMC_Types.Unsigned_5
+                         (Long_Float'Max
+                            (0.0,
+                             Long_Float'Floor
+                               (My_Get_Long_Float (Config, "Steppers$" & S'Image & "$IRUN during homing")
+                                * 32.0
+                                - 1.0)));
                   begin
                      if not Boolean'(Get (Config, "Steppers$" & S'Image & "$Enabled")) then
                         null;
                      elsif Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                        and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                      then
+                        if IRUN_During_Homing > IRUN then
+                           Report
+                             ("Steppers$" & S'Image & "$IRUN during homing",
+                              "IRUN during homing must be less than or equal to IRUN.");
+                        end if;
+
                         TMC_Types.TMC2240.Optimize_Spreadcycle
                           (Driver_Voltage              =>
                              Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Derived$Input voltage") * volt,
@@ -1736,6 +1758,12 @@ package body Prunt.Config is
                      elsif Get (Config, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                        and then Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Manual"
                      then
+                        if IRUN_During_Homing > IRUN then
+                           Report
+                             ("Steppers$" & S'Image & "$IRUN during homing",
+                              "IRUN during homing must be less than or equal to IRUN.");
+                        end if;
+
                         if IRUN = 31
                           and then Integer'
                                      (Get (Config, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND")
@@ -2097,7 +2125,21 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(7));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(7) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(7) then
+            --  Version 8 adds IRUN during homing for TMC2240 drivers.
+            for S in Stepper_Name loop
+               if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
+                  Set_Field_Long_Float
+                    (Get (Current_Properties, "Properties"),
+                     "Steppers$" & S'Image & "$IRUN during homing",
+                     My_Get_Long_Float (Get (Current_Properties, "Properties"), "Steppers$" & S'Image & "$IRUN"));
+               end if;
+            end loop;
+
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(8));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(8) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -2443,10 +2485,10 @@ package body Prunt.Config is
 
                when TMC2240_UART_Kind =>
                   Config.Steppers (S) :=
-                    (Kind          => TMC2240_UART_Kind,
-                     Enabled       => Get (Data, "Steppers$" & S'Image & "$Enabled"),
-                     Mm_Per_Step   => Get_Distance_Per_Step (S),
-                     GCONF         =>
+                    (Kind               => TMC2240_UART_Kind,
+                     Enabled            => Get (Data, "Steppers$" & S'Image & "$Enabled"),
+                     Mm_Per_Step        => Get_Distance_Per_Step (S),
+                     GCONF              =>
                        (Reserved_1       => 0,
                         Fast_Standstill  => Get (Data, "Steppers$" & S'Image & "$FAST_STANDSTILL"),
                         En_PWM_Mode      =>
@@ -2467,7 +2509,7 @@ package body Prunt.Config is
                         Stop_Enable      => False,
                         Direct_Mode      => False,
                         Reserved_3       => 0),
-                     DRV_CONF      =>
+                     DRV_CONF           =>
                        (Current_Range =>
                           (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") > 2.0
                            then TMC_Types.TMC2240.Max_3A
@@ -2479,7 +2521,7 @@ package body Prunt.Config is
                           TMC_Types.TMC2240.Slope_Control_Type'Value
                             (Get (Data, "Steppers$" & S'Image & "$SLOPE_CONTROL")),
                         Reserved_2    => 0),
-                     GLOBAL_SCALER =>
+                     GLOBAL_SCALER      =>
                        (Global_Scaler =>
                           (if My_Get_Long_Float (Data, "Steppers$" & S'Image & "$Run current") = 3.0
                            then 0
@@ -2502,7 +2544,7 @@ package body Prunt.Config is
                                    Dimensionless'Floor
                                      (Get (Data, "Steppers$" & S'Image & "$Run current") / 1.0 * 256.0)))),
                         Reserved      => 0),
-                     IHOLD_IRUN    =>
+                     IHOLD_IRUN         =>
                        (I_Hold       =>
                           (if Boolean'(Get (Data, "Steppers$" & S'Image & "$Enabled"))
                            then
@@ -2533,13 +2575,24 @@ package body Prunt.Config is
                             (Long_Float'Floor
                                (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUNDELAY") / 0.041)),
                         Reserved_4   => 0),
-                     TPOWERDOWN    =>
+                     IRUN_During_Homing =>
+                       (if Boolean'(Get (Data, "Steppers$" & S'Image & "$Enabled"))
+                        then
+                          TMC_Types.Unsigned_5
+                            (Long_Float'Max
+                               (0.0,
+                                Long_Float'Floor
+                                  (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$IRUN during homing")
+                                   * 32.0
+                                   - 1.0)))
+                        else 0),
+                     TPOWERDOWN         =>
                        (T_Power_Down =>
                           TMC_Types.Unsigned_8
                             (Long_Float'Floor
                                (My_Get_Long_Float (Data, "Steppers$" & S'Image & "$TPOWERDOWN") / 21.0)),
                         Reserved     => 0),
-                     TPWMTHRS      =>
+                     TPWMTHRS           =>
                        (T_PWM_Thrs =>
                           TMC_Types.Unsigned_20
                             (Dimensionless'Floor
@@ -2553,8 +2606,8 @@ package body Prunt.Config is
                                       * (mm / Prunt.s)),
                                    2.0**20 - 1.0))),
                         Reserved   => 0),
-                     TCOOLTHRS     => (T_Cool_Thrs => 0, Reserved => 0),
-                     THIGH         =>
+                     TCOOLTHRS          => (T_Cool_Thrs => 0, Reserved => 0),
+                     THIGH              =>
                        (T_High   =>
                           TMC_Types.Unsigned_20
                             (Dimensionless'Floor
@@ -2565,7 +2618,7 @@ package body Prunt.Config is
                                    / ((Get (Data, "Steppers$" & S'Image & "$THIGH") + 1.0E-100) * mm / Prunt.s),
                                    2.0**20 - 1.0))),
                         Reserved => 0),
-                     CHOPCONF      =>
+                     CHOPCONF           =>
                        (TOFF                 =>
                           (if Boolean'(Get (Data, "Steppers$" & S'Image & "$Enabled"))
                            then
@@ -2600,7 +2653,7 @@ package body Prunt.Config is
                         --  Set correctly in Prunt.Controller.
                         Disable_S2G          => False,
                         Disable_S2Vs         => False),
-                     PWMCONF       =>
+                     PWMCONF            =>
                        (PWM_OFS            =>
                           Get (Data, "Steppers$" & S'Image & "$StealthChop2 (EN_PWM_MODE)$Enabled$PWM_OFS"),
                         PWM_Grad           =>

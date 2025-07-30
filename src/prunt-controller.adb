@@ -665,6 +665,34 @@ package body Prunt.Controller is
       if Resetting_Data.Is_Homing_Move then
          Wait_Until_Idle (Last_Command_Index);
          Setup_For_Loop_Move (Resetting_Data.Home_Switch, Resetting_Data.Home_Hit_On_State);
+
+         for S in Stepper_Name loop
+            declare
+               Stepper_Params : My_Config.Stepper_Parameters;
+               Message        : TMC_Types.TMC2240.UART_Data_Message;
+            begin
+               My_Config.Read (Stepper_Params, S);
+
+               case Stepper_Hardware (S).Kind is
+                  when Basic_Kind =>
+                     null;
+
+                  when TMC2240_UART_Kind =>
+                     if Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing then
+                        Message :=
+                          (Bytes_Mode => False,
+                           Content    =>
+                             (Node            => Stepper_Hardware (S).TMC2240_UART_Address,
+                              Register        => TMC_Types.TMC2240.IHOLD_IRUN_Address,
+                              IHOLD_IRUN_Data =>
+                                (Stepper_Params.IHOLD_IRUN with delta I_Run => Stepper_Params.IRUN_During_Homing),
+                              others          => <>));
+                        Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+                        TMC2240_UART_Write_And_Validate (Message, S);
+                     end if;
+               end case;
+            end;
+         end loop;
       end if;
 
       if Resetting_Data.Is_Conditional_Move then
@@ -704,6 +732,35 @@ package body Prunt.Controller is
    begin
       if Resetting_Data.Is_Conditional_Move or Resetting_Data.Is_Homing_Move then
          Wait_Until_Idle (Next_Command_Index - 1);
+      end if;
+
+      if Resetting_Data.Is_Homing_Move then
+         for S in Stepper_Name loop
+            declare
+               Stepper_Params : My_Config.Stepper_Parameters;
+               Message        : TMC_Types.TMC2240.UART_Data_Message;
+            begin
+               My_Config.Read (Stepper_Params, S);
+
+               case Stepper_Hardware (S).Kind is
+                  when Basic_Kind =>
+                     null;
+
+                  when TMC2240_UART_Kind =>
+                     if Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing then
+                        Message :=
+                          (Bytes_Mode => False,
+                           Content    =>
+                             (Node            => Stepper_Hardware (S).TMC2240_UART_Address,
+                              Register        => TMC_Types.TMC2240.IHOLD_IRUN_Address,
+                              IHOLD_IRUN_Data => Stepper_Params.IHOLD_IRUN,
+                              others          => <>));
+                        Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+                        TMC2240_UART_Write_And_Validate (Message, S);
+                     end if;
+               end case;
+            end;
+         end loop;
       end if;
 
       --  TODO: Should we require the user to implement this instead for greater precision?
@@ -831,7 +888,6 @@ package body Prunt.Controller is
             null;
 
          when TMC2240_UART_Kind =>
-            null;
             declare
                Query          : TMC_Types.TMC2240.UART_Query_Message :=
                  (Bytes_Mode => False,

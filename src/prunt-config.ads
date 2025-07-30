@@ -63,16 +63,17 @@ package Prunt.Config is
             null;
 
          when TMC2240_UART_Kind =>
-            GCONF         : TMC_Types.TMC2240.GCONF;
-            DRV_CONF      : TMC_Types.TMC2240.DRV_CONF;
-            GLOBAL_SCALER : TMC_Types.TMC2240.GLOBAL_SCALER;
-            IHOLD_IRUN    : TMC_Types.TMC2240.IHOLD_IRUN;
-            TPOWERDOWN    : TMC_Types.TMC2240.TPOWERDOWN;
-            TPWMTHRS      : TMC_Types.TMC2240.TPWMTHRS;
-            TCOOLTHRS     : TMC_Types.TMC2240.TCOOLTHRS;
-            THIGH         : TMC_Types.TMC2240.THIGH;
-            PWMCONF       : TMC_Types.TMC2240.PWMCONF;
-            CHOPCONF      : TMC_Types.TMC2240.CHOPCONF;
+            GCONF              : TMC_Types.TMC2240.GCONF;
+            DRV_CONF           : TMC_Types.TMC2240.DRV_CONF;
+            GLOBAL_SCALER      : TMC_Types.TMC2240.GLOBAL_SCALER;
+            IHOLD_IRUN         : TMC_Types.TMC2240.IHOLD_IRUN;
+            IRUN_During_Homing : TMC_Types.Unsigned_5;
+            TPOWERDOWN         : TMC_Types.TMC2240.TPOWERDOWN;
+            TPWMTHRS           : TMC_Types.TMC2240.TPWMTHRS;
+            TCOOLTHRS          : TMC_Types.TMC2240.TCOOLTHRS;
+            THIGH              : TMC_Types.TMC2240.THIGH;
+            PWMCONF            : TMC_Types.TMC2240.PWMCONF;
+            CHOPCONF           : TMC_Types.TMC2240.CHOPCONF;
       end case;
    end record;
 
