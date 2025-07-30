@@ -115,6 +115,8 @@ package Prunt.Controller_Generic_Types is
 
    type Fan_Hardware_Parameters_Array_Type is array (Fan_Name) of Fan_Hardware_Parameters;
 
+   type Input_Switch_Visible_To_User_Type is array (Input_Switch_Name) of Boolean;
+
    --  User defined parameters:
 
    type Heater_Thermistor_Map is array (Heater_Name) of Thermistor_Name;

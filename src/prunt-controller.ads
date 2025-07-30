@@ -123,6 +123,8 @@ generic
 
    Update_Check : Update_Check_Details := (Method => None);
 
+   Input_Switch_Visible_To_User : Input_Switch_Visible_To_User_Type := (others => True);
+
 package Prunt.Controller
 is
 
@@ -274,7 +276,8 @@ private
         Fan_Hardware                     => Fan_Hardware,
         Get_Board_Specific_Documentation => Get_Board_Specific_Documentation,
         Config_Path                      => Config_Path,
-        Enable_Documentation_Dev_Mode    => Command_Line_Arguments.Enable_Documentation_Dev_Mode);
+        Enable_Documentation_Dev_Mode    => Command_Line_Arguments.Enable_Documentation_Dev_Mode,
+        Input_Switch_Visible_To_User     => Input_Switch_Visible_To_User);
 
    procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
 

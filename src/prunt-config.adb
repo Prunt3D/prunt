@@ -232,7 +232,9 @@ package body Prunt.Config is
               Sequence_Tabbed   => False);
       end Sequence_Over_Steppers;
 
-      Input_Switch_Name_Strings : constant Discrete_String_Sets.Set := [for I in Input_Switch_Name => I'Image];
+      Input_Switch_Name_Strings : constant Discrete_String_Sets.Set :=
+        Discrete_String_Sets.Difference
+          ([for I in Input_Switch_Name => (if Input_Switch_Visible_To_User (I) then I'Image else "")], [""]);
       Thermistor_Name_Strings   : constant Discrete_String_Sets.Set := [for T in Thermistor_Name => T'Image];
       Heater_Name_Strings       : constant Discrete_String_Sets.Set := [for H in Heater_Name => H'Image];
       Fan_Name_Strings          : constant Discrete_String_Sets.Set := [for F in Fan_Name => F'Image];
@@ -850,7 +852,7 @@ package body Prunt.Config is
                        ["Switch" =>
                           Discrete
                             ("Input switch to use.",
-                             Default => Input_Switch_Name'First'Image,
+                             Default => Input_Switch_Name_Strings.First_Element,
                              Options => Input_Switch_Name_Strings),
                         "Move towards negative infinity" =>
                           Boolean
@@ -1405,10 +1407,13 @@ package body Prunt.Config is
       end loop;
 
       for I in Input_Switch_Name loop
-         Property_Maps.Insert
-           (Property_Maps.Reference (Result, "Input switches").Element.all.Sequence_Children,
-            I'Image,
-            Input_Switch_Sequence);
+         --  Do not use a iterator filter here due to GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=121316
+         if Input_Switch_Visible_To_User (I) then
+            Property_Maps.Insert
+              (Property_Maps.Reference (Result, "Input switches").Element.all.Sequence_Children,
+               I'Image,
+               Input_Switch_Sequence);
+         end if;
       end loop;
 
       for T in Thermistor_Name loop
@@ -1993,7 +1998,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(5));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(10));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
@@ -2152,8 +2157,34 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(9));
          end if;
 
+         if Get (Current_Properties, "Schema version") = Long_Integer'(9) then
+            --  Version 10 adds the ability to hide input switches from the user.
+            for I in Input_Switch_Name loop
+               if not Input_Switch_Visible_To_User (I) then
+                  Unset_Field (Get (Current_Properties, "Properties"), "Input switches$" & I'Image & "$Enabled");
+                  Unset_Field (Get (Current_Properties, "Properties"), "Input switches$" & I'Image & "$Hit on high");
+               end if;
+            end loop;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(9) then
+            for A in Axis_Name loop
+               if not Input_Switch_Visible_To_User
+                        (Input_Switch_Name'Value
+                           (Get
+                              (Get (Current_Properties, "Properties"),
+                               "Homing$" & A'Image & "$Homing method$Use input switch$Switch")))
+               then
+                  Unset_Field
+                    (Get (Current_Properties, "Properties"),
+                     "Homing$" & A'Image & "$Homing method$Use input switch$Switch");
+                  Set_Field
+                    (Get (Current_Properties, "Properties"), "Homing$" & A'Image & "$Homing method", "Disabled");
+               end if;
+            end loop;
+
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(10));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(10) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -2773,9 +2804,14 @@ package body Prunt.Config is
          end loop;
 
          for I in Input_Switch_Name loop
-            Config.Switches (I) :=
-              (Enabled     => Get (Data, "Input switches$" & I'Image & "$Enabled"),
-               Hit_On_High => Get (Data, "Input switches$" & I'Image & "$Hit on high"));
+            --  Do not use a iterator filter here due to GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=121316
+            if Input_Switch_Visible_To_User (I) then
+               Config.Switches (I) :=
+                 (Enabled     => Get (Data, "Input switches$" & I'Image & "$Enabled"),
+                  Hit_On_High => Get (Data, "Input switches$" & I'Image & "$Hit on high"));
+            else
+               Config.Switches (I) := (Enabled => False, Hit_On_High => False);
+            end if;
          end loop;
 
          for A in Axis_Name loop

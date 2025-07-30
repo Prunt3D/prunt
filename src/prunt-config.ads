@@ -43,6 +43,8 @@ generic
    Config_Path : String;
 
    Enable_Documentation_Dev_Mode : Boolean;
+
+   Input_Switch_Visible_To_User : Generic_Types.Input_Switch_Visible_To_User_Type;
 package Prunt.Config is
 
    type Attached_Steppers is array (Stepper_Name) of Boolean;
