@@ -779,6 +779,7 @@ package body Prunt.Controller is
               Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name));
          begin
             loop
+               delay 0.1;
                exit when
                  Last_Thermistor_Temperatures_Counters
                    (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name))
@@ -786,6 +787,7 @@ package body Prunt.Controller is
             end loop;
          end;
          loop
+            delay 0.1;
             exit when
               Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name))
               >= Last_Heater_Targets (Resetting_Data.Wait_For_Heater_Name);
@@ -800,6 +802,8 @@ package body Prunt.Controller is
               Last_Input_Switch_State_Counters (Resetting_Data.Conditional_Switch);
          begin
             loop
+               --  TODO: Looks like there's a GCC bug that generates an infinite loop when the below delay is omitted.
+               delay 0.1;
                exit when Last_Input_Switch_State_Counters (Resetting_Data.Conditional_Switch) /= Start_Counter;
             end loop;
 
