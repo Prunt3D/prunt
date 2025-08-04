@@ -118,7 +118,7 @@ package Prunt.Config is
 
    type Axial_Homing_Prerequisites is array (Axis_Name) of Homing_Prerequisite_Parameters;
 
-   type Homing_Kind is (Disabled_Kind, Double_Tap_Kind, Set_To_Value_Kind);
+   type Homing_Kind is (Disabled_Kind, Double_Tap_Kind, Set_To_Value_Kind, StallGuard2_Kind, StallGuard4_Kind);
 
    type Homing_Parameters (Kind : Homing_Kind := Disabled_Kind) is record
       Prerequisites : Axial_Homing_Prerequisites := (others => (Kind => No_Requirement_Kind));
@@ -127,17 +127,41 @@ package Prunt.Config is
          when Disabled_Kind =>
             null;
 
-         when Double_Tap_Kind =>
-            Switch                 : Input_Switch_Name := Input_Switch_Name'First;
-            First_Move_Distance    : Length := 0.0 * mm;
-            Back_Off_Move_Distance : Length := 0.0 * mm;
-            Second_Move_Distance   : Length := 0.0 * mm;
-            Switch_Position        : Length := 0.0 * mm;
-            Move_To_After          : Length := 5.0 * mm;
-            Velocity_Limit         : Velocity := 1.0E100 * mm / s;
-
          when Set_To_Value_Kind =>
             Value : Length := 0.0 * mm;
+
+         when Double_Tap_Kind | StallGuard2_Kind | StallGuard4_Kind =>
+            Switch_Position : Length := 0.0 * mm;
+            Move_To_After   : Length := 5.0 * mm;
+            Velocity_Limit  : Velocity := 1.0E100 * mm / s;
+
+            case Kind is
+               when Disabled_Kind | Set_To_Value_Kind =>
+                  null;
+
+               when Double_Tap_Kind =>
+                  Switch                 : Input_Switch_Name := Input_Switch_Name'First;
+                  First_Move_Distance    : Length := 0.0 * mm;
+                  Back_Off_Move_Distance : Length := 0.0 * mm;
+                  Second_Move_Distance   : Length := 0.0 * mm;
+
+               when StallGuard2_Kind | StallGuard4_Kind =>
+                  Move_To_Negative   : Boolean;
+                  Enable_Filter      : Boolean;
+                  Motor              : Stepper_Name;
+                  Acceleration_Limit : Acceleration;
+
+                  case Kind is
+                     when Disabled_Kind | Set_To_Value_Kind | Double_Tap_Kind =>
+                        null;
+
+                     when StallGuard2_Kind =>
+                        SG2_Threshold : TMC_Types.Unsigned_7;
+
+                     when StallGuard4_Kind =>
+                        SG4_Threshold : TMC_Types.Unsigned_8;
+                  end case;
+            end case;
       end case;
    end record;
 

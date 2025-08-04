@@ -956,7 +956,7 @@ package body Prunt.Controller is
                         with delta
                           Diag0_Error      => TMC_Types.False,
                           Diag0_OTPW       => TMC_Types.False,
-                          Diag0_Stall      => TMC_Types.True,
+                          Diag0_Stall      => TMC_Types.False,
                           Diag1_Stall      => TMC_Types.False,
                           Diag1_Index      => TMC_Types.False,
                           Diag1_On_State   => TMC_Types.False,
