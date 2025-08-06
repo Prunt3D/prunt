@@ -955,10 +955,17 @@ package body Prunt.Config is
                         "Velocity limit" =>
                           Float
                            ("Velocity limit for this axis. Does not override regular velocity limit.",
-                             Default => 1.0E100,
+                             Default => 50.0,
                              Min => 0.000_001,
-                             Max => 1.0E100,
-                            Unit => "mm/s")]),
+                             Max => 50.0,
+                            Unit => "mm/s"),
+                        "Acceleration limit" =>
+                          Float
+                           ("Acceleration limit for this axis. Does not override regular acceleration limit.",
+                             Default => 1_000.0,
+                             Min => 0.000_001,
+                             Max => 1_000.0,
+                            Unit => "mm/s^2")]),
                   "Use StallGuard4" =>
                     --  TODO: StallGuard 4 settings should not be available on machines with only SG2 capable drivers.
                     Sequence
@@ -1009,7 +1016,14 @@ package body Prunt.Config is
                              Default => 1.0E100,
                              Min => 0.000_001,
                              Max => 1.0E100,
-                            Unit => "mm/s")])]),
+                            Unit => "mm/s"),
+                        "Acceleration limit" =>
+                          Float
+                           ("Acceleration limit for this axis. Does not override regular acceleration limit.",
+                             Default => 1_000.0,
+                             Min => 0.000_001,
+                             Max => 1_000.0,
+                            Unit => "mm/s^2")])]),
             "Prerequisites" =>
               Sequence_Over_Axes
                 ("Required states of other axes.",
@@ -3101,39 +3115,45 @@ package body Prunt.Config is
                   Prerequisites => (others => <>));
             elsif Get (Data, "Homing$" & A'Image & "$Homing method") = "Use StallGuard2" then
                Config.Homing (A) :=
-                 (Kind             => StallGuard2_Kind,
-                  Move_To_Negative =>
+                 (Kind               => StallGuard2_Kind,
+                  Move_To_Negative   =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Move towards negative infinity"),
-                  Enable_Filter    => Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Enable filter"),
-                  Motor            =>
+                  Enable_Filter      =>
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Enable filter"),
+                  Motor              =>
                     Stepper_Name'Value (Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Motor")),
-                  SG2_Threshold    =>
+                  SG2_Threshold      =>
                     TMC_Types.Unsigned_7
                       (Integer'
                          (Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Threshold") mod 2**7)),
-                  Switch_Position  =>
+                  Switch_Position    =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Stop position") * mm,
-                  Move_To_After    =>
+                  Move_To_After      =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Move to after") * mm,
-                  Velocity_Limit   =>
+                  Velocity_Limit     =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Velocity limit") * mm / s,
-                  Prerequisites    => (others => <>));
+                  Acceleration_Limit =>
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard2$Acceleration limit") * mm / s**2,
+                  Prerequisites      => (others => <>));
             elsif Get (Data, "Homing$" & A'Image & "$Homing method") = "Use StallGuard4" then
                Config.Homing (A) :=
-                 (Kind             => StallGuard4_Kind,
-                  Move_To_Negative =>
+                 (Kind               => StallGuard4_Kind,
+                  Move_To_Negative   =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Move towards negative infinity"),
-                  Enable_Filter    => Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Enable filter"),
-                  Motor            =>
+                  Enable_Filter      =>
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Enable filter"),
+                  Motor              =>
                     Stepper_Name'Value (Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Motor")),
-                  SG4_Threshold    => Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Threshold"),
-                  Switch_Position  =>
+                  SG4_Threshold      => Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Threshold"),
+                  Switch_Position    =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Stop position") * mm,
-                  Move_To_After    =>
+                  Move_To_After      =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Move to after") * mm,
-                  Velocity_Limit   =>
+                  Velocity_Limit     =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Velocity limit") * mm / s,
-                  Prerequisites    => (others => <>));
+                  Acceleration_Limit =>
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use StallGuard4$Acceleration limit") * mm / s**2,
+                  Prerequisites      => (others => <>));
             else
                raise Constraint_Error;
             end if;

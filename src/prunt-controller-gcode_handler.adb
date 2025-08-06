@@ -211,6 +211,202 @@ package body Prunt.Controller.Gcode_Handler is
          My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
       end Double_Tap_Home_Axis;
 
+      procedure StallGuard_Home_Axis (Axis : Axis_Name; Pos_After : in out Position) is
+         Switch    : constant Generic_Types.Input_Switch_Name := Axial_Homing_Params (Axis).Switch;
+         Offset    : constant Position_Offset :=
+           [Zero_Pos_Offset with delta
+              Axis =>
+                (if Axial_Homing_Params (Axis).Move_To_Negative then -1.0 else 1.0)
+                * 1.5
+                * Axial_Homing_Params (Axis).Velocity_Limit**2
+                / Axial_Homing_Params (Axis).Acceleration_Limit];
+      begin
+         if Axial_Homing_Params (Axis).Move_To_After < Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis)
+           or Axial_Homing_Params (Axis).Move_To_After > Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis)
+         then
+            raise Command_Constraint_Error with "Final position for homing axis " & Axis'Image & " is out of bounds.";
+         end if;
+
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Zero_Pos),
+            Ignore_Bounds => True);
+
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Change_Parameters_Kind,
+             New_Params           =>
+               (Lower_Pos_Limit         => [others => 0.0 * mm],
+                Upper_Pos_Limit         => [others => 0.0 * mm],
+                Ignore_E_In_XYZE        => True,
+                Shift_Blended_Corners   => False,
+                Tangential_Velocity_Max => Axial_Homing_Params (Axis).Velocity_Limit,
+                Axial_Velocity_Maxes    => [others => 1.0E100 * mm / s],
+                Pressure_Advance_Time   => 0.0 * s,
+                Acceleration_Max        => Axial_Homing_Params (Axis).Acceleration_Limit,
+                Jerk_Max                => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E2 / s**1,
+                Snap_Max                => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E5 / s**2,
+                Crackle_Max             => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E9 / s**3,
+                Chord_Error_Max         => 0.0 * mm,
+                Axial_Scaler            => [others => 1.0]),
+             Flush_Resetting_Data => (others => <>)),
+            Ignore_Bounds => True);
+
+         if Stepper_Hardware (Axial_Homing_Params (Axis).Motor).Kind /= TMC2240_UART_Kind then
+            raise Constraint_Error;
+         end if;
+
+         declare
+            Stepper_Params : My_Config.Stepper_Parameters;
+         begin
+            My_Config.Read (Stepper_Params, Axial_Homing_Params (Axis).Motor);
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.GCONF_Address,
+                     GCONF_Data =>
+                       (Stepper_Params.GCONF
+                        with delta
+                          Diag0_Error      => TMC_Types.False,
+                          Diag0_OTPW       => TMC_Types.False,
+                          Diag0_Stall      => TMC_Types.True,
+                          Diag1_Stall      => TMC_Types.False,
+                          Diag1_Index      => TMC_Types.False,
+                          Diag1_On_State   => TMC_Types.False,
+                          Diag_0_Push_Pull => TMC_Types.False,
+                          Diag_1_Push_Pull => TMC_Types.False,
+                          Stop_Enable      => TMC_Types.False,
+                          Direct_Mode      => TMC_Types.False),
+                     others     => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
+         end;
+
+         case Axial_Homing_Params (Axis).Kind is
+            when My_Config.Disabled_Kind | My_Config.Double_Tap_Kind | My_Config.Set_To_Value_Kind =>
+               raise Constraint_Error;
+
+            when My_Config.StallGuard2_Kind =>
+               declare
+                  --  TODO: When COOLCONF support is added we need to avoid clobbering the register here.
+                  Message : TMC_Types.TMC2240.UART_Data_Message :=
+                    (Bytes_Mode => False,
+                     Content    =>
+                       (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                        Register      => TMC_Types.TMC2240.COOLCONF_Address,
+                        COOLCONF_Data =>
+                          (SEMIN      => 0,
+                           Reserved_1 => 0,
+                           SEUP       => 0,
+                           Reserved_2 => 0,
+                           SEMAX      => 0,
+                           Reserved_3 => 0,
+                           SEDN       => 0,
+                           SEIMIN     => 0,
+                           SGT        => Axial_Homing_Params (Axis).SG2_Threshold,
+                           SFILT      =>
+                             (if Axial_Homing_Params (Axis).Enable_Filter then TMC_Types.True else TMC_Types.False),
+                           Reserved_4 => 0),
+                        others        => <>));
+               begin
+                  Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+                  TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+               end;
+
+            when My_Config.StallGuard4_Kind =>
+               declare
+                  Message : TMC_Types.TMC2240.UART_Data_Message :=
+                    (Bytes_Mode => False,
+                     Content    =>
+                       (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                        Register      => TMC_Types.TMC2240.SG4_THRS_Address,
+                        SG4_THRS_Data =>
+                          (SG4_Thrs        => Axial_Homing_Params (Axis).SG4_Threshold,
+                           SG4_Filt_En     =>
+                             (if Axial_Homing_Params (Axis).Enable_Filter then TMC_Types.True else TMC_Types.False),
+                           SG_Angle_Offset => TMC_Types.True,
+                           Reserved_2      => 0),
+                        others        => <>));
+               begin
+                  Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+                  TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+               end;
+         end case;
+
+         My_Planner.Enqueue
+           ((Kind              => My_Planner.Move_Kind,
+             Pos               => Zero_Pos + Offset,
+             Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
+             Corner_Extra_Data => Corner_Data),
+            Ignore_Bounds => True);
+
+         declare
+            Stepper_Params : My_Config.Stepper_Parameters;
+         begin
+            My_Config.Read (Stepper_Params, Axial_Homing_Params (Axis).Motor);
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.GCONF_Address,
+                     GCONF_Data =>
+                       (Stepper_Params.GCONF
+                        with delta
+                          Diag0_Error      => TMC_Types.False,
+                          Diag0_OTPW       => TMC_Types.False,
+                          Diag0_Stall      => TMC_Types.False,
+                          Diag1_Stall      => TMC_Types.False,
+                          Diag1_Index      => TMC_Types.False,
+                          Diag1_On_State   => TMC_Types.False,
+                          Diag_0_Push_Pull => TMC_Types.False,
+                          Diag_1_Push_Pull => TMC_Types.False,
+                          Stop_Enable      => TMC_Types.False,
+                          Direct_Mode      => TMC_Types.False),
+                     others     => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
+         end;
+
+         Pos_After (Axis) := Axial_Homing_Params (Axis).Switch_Position;
+
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data =>
+               (Is_Homing_Move => True, Home_Switch => Switch, Home_Hit_On_State => Low_State, others => <>),
+             Reset_Pos            => Pos_After),
+            Ignore_Bounds => True);
+
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Change_Parameters_Kind,
+             New_Params           => Kinematics_Params.Planner_Parameters,
+             Flush_Resetting_Data => (others => <>)),
+            Ignore_Bounds => True);
+
+         Pos_After (Axis) := Axial_Homing_Params (Axis).Move_To_After;
+
+         My_Planner.Enqueue
+           ((Kind              => My_Planner.Move_Kind,
+             Pos               => Pos_After,
+             Feedrate          => Velocity'Last,
+             Corner_Extra_Data => Corner_Data),
+            Ignore_Bounds => True);
+
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Pos_After),
+            Ignore_Bounds => True);
+
+         My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
+      end StallGuard_Home_Axis;
+
       procedure Run_Command (Command : My_Gcode_Parser.Command) is
       begin
          case Command.Kind is
@@ -296,6 +492,10 @@ package body Prunt.Controller.Gcode_Handler is
 
                         when My_Config.Double_Tap_Kind =>
                            Double_Tap_Home_Axis (Axis, Pos_After);
+
+                        when My_Config.StallGuard2_Kind | My_Config.StallGuard4_Kind =>
+                           StallGuard_Home_Axis (Axis, Pos_After);
+
                      end case;
                      Is_Homed (Axis) := True;
                   end Home_Axis;

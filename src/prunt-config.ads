@@ -146,9 +146,10 @@ package Prunt.Config is
                   Second_Move_Distance   : Length := 0.0 * mm;
 
                when StallGuard2_Kind | StallGuard4_Kind =>
-                  Move_To_Negative : Boolean;
-                  Enable_Filter    : Boolean;
-                  Motor            : Stepper_Name;
+                  Move_To_Negative   : Boolean;
+                  Enable_Filter      : Boolean;
+                  Motor              : Stepper_Name;
+                  Acceleration_Limit : Acceleration;
 
                   case Kind is
                      when Disabled_Kind | Set_To_Value_Kind | Double_Tap_Kind =>
