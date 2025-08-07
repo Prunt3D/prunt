@@ -212,15 +212,22 @@ package body Prunt.Controller.Gcode_Handler is
       end Double_Tap_Home_Axis;
 
       procedure StallGuard_Home_Axis (Axis : Axis_Name; Pos_After : in out Position) is
-         Switch    : constant Generic_Types.Input_Switch_Name := Axial_Homing_Params (Axis).Switch;
-         Offset    : constant Position_Offset :=
+         use type My_Config.Homing_Kind;
+         use type TMC_Types.TMC2240.CHM_Type;
+
+         Switch         : constant Generic_Types.Input_Switch_Name :=
+           Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_Diag_0;
+         Offset         : constant Position_Offset :=
            [Zero_Pos_Offset with delta
               Axis =>
                 (if Axial_Homing_Params (Axis).Move_To_Negative then -1.0 else 1.0)
                 * 1.5
                 * Axial_Homing_Params (Axis).Velocity_Limit**2
                 / Axial_Homing_Params (Axis).Acceleration_Limit];
+         Stepper_Params : My_Config.Stepper_Parameters;
       begin
+         My_Config.Read (Stepper_Params, Axial_Homing_Params (Axis).Motor);
+
          if Axial_Homing_Params (Axis).Move_To_After < Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis)
            or Axial_Homing_Params (Axis).Move_To_After > Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis)
          then
@@ -236,12 +243,12 @@ package body Prunt.Controller.Gcode_Handler is
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Change_Parameters_Kind,
              New_Params           =>
-               (Lower_Pos_Limit         => [others => 0.0 * mm],
-                Upper_Pos_Limit         => [others => 0.0 * mm],
+               (Lower_Pos_Limit         => Zero_Pos,
+                Upper_Pos_Limit         => Zero_Pos,
                 Ignore_E_In_XYZE        => True,
                 Shift_Blended_Corners   => False,
                 Tangential_Velocity_Max => Axial_Homing_Params (Axis).Velocity_Limit,
-                Axial_Velocity_Maxes    => [others => 1.0E100 * mm / s],
+                Axial_Velocity_Maxes    => [others => Axial_Homing_Params (Axis).Velocity_Limit],
                 Pressure_Advance_Time   => 0.0 * s,
                 Acceleration_Max        => Axial_Homing_Params (Axis).Acceleration_Limit,
                 Jerk_Max                => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E2 / s**1,
@@ -257,33 +264,32 @@ package body Prunt.Controller.Gcode_Handler is
          end if;
 
          declare
-            Stepper_Params : My_Config.Stepper_Parameters;
+            Message : TMC_Types.TMC2240.UART_Data_Message :=
+              (Bytes_Mode => False,
+               Content    =>
+                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                  Register   => TMC_Types.TMC2240.GCONF_Address,
+                  GCONF_Data =>
+                    (Stepper_Params.GCONF
+                     with delta
+                       Diag0_Error      => TMC_Types.False,
+                       Diag0_OTPW       => TMC_Types.False,
+                       Diag0_Stall      => TMC_Types.True,
+                       Diag1_Stall      => TMC_Types.False,
+                       Diag1_Index      => TMC_Types.False,
+                       Diag1_On_State   => TMC_Types.False,
+                       Diag_0_Push_Pull => TMC_Types.False,
+                       Diag_1_Push_Pull => TMC_Types.False,
+                       Stop_Enable      => TMC_Types.False,
+                       Direct_Mode      => TMC_Types.False,
+                       En_PWM_Mode      =>
+                         (if Axial_Homing_Params (Axis).Kind = My_Config.StallGuard2_Kind
+                          then TMC_Types.False
+                          else TMC_Types.True)),
+                  others     => <>));
          begin
-            My_Config.Read (Stepper_Params, Axial_Homing_Params (Axis).Motor);
-            declare
-               Message : TMC_Types.TMC2240.UART_Data_Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                     Register   => TMC_Types.TMC2240.GCONF_Address,
-                     GCONF_Data =>
-                       (Stepper_Params.GCONF
-                        with delta
-                          Diag0_Error      => TMC_Types.False,
-                          Diag0_OTPW       => TMC_Types.False,
-                          Diag0_Stall      => TMC_Types.True,
-                          Diag1_Stall      => TMC_Types.False,
-                          Diag1_Index      => TMC_Types.False,
-                          Diag1_On_State   => TMC_Types.False,
-                          Diag_0_Push_Pull => TMC_Types.False,
-                          Diag_1_Push_Pull => TMC_Types.False,
-                          Stop_Enable      => TMC_Types.False,
-                          Direct_Mode      => TMC_Types.False),
-                     others     => <>));
-            begin
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-            end;
+            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
          end;
 
          case Axial_Homing_Params (Axis).Kind is
@@ -317,6 +323,25 @@ package body Prunt.Controller.Gcode_Handler is
                   TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
                end;
 
+               if Stepper_Params.CHOPCONF.CHM = TMC_Types.TMC2240.Constant_Off_Time_Mode then
+                  declare
+                     Message : TMC_Types.TMC2240.UART_Data_Message :=
+                       (Bytes_Mode => False,
+                        Content    =>
+                          (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                           Register      => TMC_Types.TMC2240.CHOPCONF_Address,
+                           CHOPCONF_Data =>
+                             (Stepper_Params.CHOPCONF
+                              with delta
+                                CHM          => TMC_Types.TMC2240.SpreadCycle_Mode,
+                                HSTRT_TFD210 => 5,
+                                HEND_OFFSET  => 2),
+                           others        => <>));
+                  begin
+                     Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+                     TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+                  end;
+               end if;
             when My_Config.StallGuard4_Kind =>
                declare
                   Message : TMC_Types.TMC2240.UART_Data_Message :=
@@ -337,42 +362,38 @@ package body Prunt.Controller.Gcode_Handler is
                end;
          end case;
 
+         declare
+            Message : TMC_Types.TMC2240.UART_Data_Message :=
+              (Bytes_Mode => False,
+               Content    =>
+                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                  Register   => TMC_Types.TMC2240.THIGH_Address,
+                  THIGH_Data => (T_High => 0, Reserved => 0),
+                  others     => <>));
+         begin
+            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+         end;
+
+         declare
+            Message : TMC_Types.TMC2240.UART_Data_Message :=
+              (Bytes_Mode => False,
+               Content    =>
+                 (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                  Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
+                  TPWMTHRS_Data => (T_PWM_Thrs => 0, Reserved => 0),
+                  others        => <>));
+         begin
+            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+         end;
+
          My_Planner.Enqueue
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + Offset,
              Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
-
-         declare
-            Stepper_Params : My_Config.Stepper_Parameters;
-         begin
-            My_Config.Read (Stepper_Params, Axial_Homing_Params (Axis).Motor);
-            declare
-               Message : TMC_Types.TMC2240.UART_Data_Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                     Register   => TMC_Types.TMC2240.GCONF_Address,
-                     GCONF_Data =>
-                       (Stepper_Params.GCONF
-                        with delta
-                          Diag0_Error      => TMC_Types.False,
-                          Diag0_OTPW       => TMC_Types.False,
-                          Diag0_Stall      => TMC_Types.False,
-                          Diag1_Stall      => TMC_Types.False,
-                          Diag1_Index      => TMC_Types.False,
-                          Diag1_On_State   => TMC_Types.False,
-                          Diag_0_Push_Pull => TMC_Types.False,
-                          Diag_1_Push_Pull => TMC_Types.False,
-                          Stop_Enable      => TMC_Types.False,
-                          Direct_Mode      => TMC_Types.False),
-                     others     => <>));
-            begin
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-            end;
-         end;
 
          Pos_After (Axis) := Axial_Homing_Params (Axis).Switch_Position;
 
@@ -382,6 +403,77 @@ package body Prunt.Controller.Gcode_Handler is
                (Is_Homing_Move => True, Home_Switch => Switch, Home_Hit_On_State => Low_State, others => <>),
              Reset_Pos            => Pos_After),
             Ignore_Bounds => True);
+
+         declare
+            Data            : Flush_Resetting_Data;
+            First_Seg_Accel : Length;
+         begin
+            Finished_Block_Queue.Pop (Data, First_Seg_Accel);
+         end;
+
+         declare
+            Message : TMC_Types.TMC2240.UART_Data_Message :=
+              (Bytes_Mode => False,
+               Content    =>
+                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                  Register   => TMC_Types.TMC2240.THIGH_Address,
+                  THIGH_Data => Stepper_Params.THIGH,
+                  others     => <>));
+         begin
+            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+         end;
+
+         declare
+            Message : TMC_Types.TMC2240.UART_Data_Message :=
+              (Bytes_Mode => False,
+               Content    =>
+                 (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                  Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
+                  TPWMTHRS_Data => Stepper_Params.TPWMTHRS,
+                  others        => <>));
+         begin
+            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+         end;
+
+         declare
+            Message : TMC_Types.TMC2240.UART_Data_Message :=
+              (Bytes_Mode => False,
+               Content    =>
+                 (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                  Register      => TMC_Types.TMC2240.CHOPCONF_Address,
+                  CHOPCONF_Data => Stepper_Params.CHOPCONF,
+                  others        => <>));
+         begin
+            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+         end;
+
+         declare
+            Message : TMC_Types.TMC2240.UART_Data_Message :=
+              (Bytes_Mode => False,
+               Content    =>
+                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                  Register   => TMC_Types.TMC2240.GCONF_Address,
+                  GCONF_Data =>
+                    (Stepper_Params.GCONF
+                     with delta
+                       Diag0_Error      => TMC_Types.False,
+                       Diag0_OTPW       => TMC_Types.False,
+                       Diag0_Stall      => TMC_Types.False,
+                       Diag1_Stall      => TMC_Types.False,
+                       Diag1_Index      => TMC_Types.False,
+                       Diag1_On_State   => TMC_Types.False,
+                       Diag_0_Push_Pull => TMC_Types.False,
+                       Diag_1_Push_Pull => TMC_Types.False,
+                       Stop_Enable      => TMC_Types.False,
+                       Direct_Mode      => TMC_Types.False),
+                  others     => <>));
+         begin
+            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+         end;
 
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Change_Parameters_Kind,
@@ -405,6 +497,7 @@ package body Prunt.Controller.Gcode_Handler is
             Ignore_Bounds => True);
 
          My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
+
       end StallGuard_Home_Axis;
 
       procedure Run_Command (Command : My_Gcode_Parser.Command) is

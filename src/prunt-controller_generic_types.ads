@@ -79,6 +79,7 @@ package Prunt.Controller_Generic_Types is
 
             Double_Edge_Stepping : Boolean;
             TMC2240_UART_Address : TMC_Types.TMC2240.UART_Node_Address;
+            TMC2240_Diag_0       : Input_Switch_Name;
             TMC2240_UART_Write   : access procedure (Message : TMC_Types.TMC2240.UART_Data_Byte_Array);
             --  Bytes sent in reverse order. Least significant bit sent first.
             --

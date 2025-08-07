@@ -964,7 +964,7 @@ package body Prunt.Config is
                            ("Acceleration limit for this axis. Does not override regular acceleration limit.",
                              Default => 1_000.0,
                              Min => 0.000_001,
-                             Max => 1_000.0,
+                             Max => 1.0E100,
                             Unit => "mm/s^2")]),
                   "Use StallGuard4" =>
                     --  TODO: StallGuard 4 settings should not be available on machines with only SG2 capable drivers.
@@ -1013,7 +1013,7 @@ package body Prunt.Config is
                         "Velocity limit" =>
                           Float
                            ("Velocity limit for this axis. Does not override regular velocity limit.",
-                             Default => 1.0E100,
+                             Default => 50.0,
                              Min => 0.000_001,
                              Max => 1.0E100,
                             Unit => "mm/s"),
@@ -1022,7 +1022,7 @@ package body Prunt.Config is
                            ("Acceleration limit for this axis. Does not override regular acceleration limit.",
                              Default => 1_000.0,
                              Min => 0.000_001,
-                             Max => 1_000.0,
+                             Max => 1.0E100,
                             Unit => "mm/s^2")])]),
             "Prerequisites" =>
               Sequence_Over_Axes
@@ -1668,15 +1668,25 @@ package body Prunt.Config is
       end loop;
 
       for A in Axis_Name loop
-         if [for S in Stepper_Name => Stepper_Hardware (S).Kind in TMC2240_UART_Kind]'Reduce ("or", False) then
-            Property_Maps.Insert
-              (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children, A'Image, TMC_Homing_Sequence);
-         else
-            Property_Maps.Insert
-              (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children,
-               A'Image,
-               Regular_Homing_Sequence);
-         end if;
+         declare
+            Have_TMC : Standard.Boolean := False;
+         begin
+            for S in Stepper_Name loop
+               Have_TMC := @ or Stepper_Hardware (S).Kind in TMC2240_UART_Kind;
+            end loop;
+
+            if Have_TMC then
+               Property_Maps.Insert
+                 (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children,
+                  A'Image,
+                  TMC_Homing_Sequence);
+            else
+               Property_Maps.Insert
+                 (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children,
+                  A'Image,
+                  Regular_Homing_Sequence);
+            end if;
+         end;
       end loop;
 
       for A in Axis_Name loop
@@ -2915,7 +2925,7 @@ package body Prunt.Config is
                                       * (mm / Prunt.s)),
                                    2.0**20 - 1.0))),
                         Reserved   => 0),
-                     TCOOLTHRS          => (T_Cool_Thrs => 0, Reserved => 0),
+                     TCOOLTHRS          => (T_Cool_Thrs => TMC_Types.Unsigned_20'Last, Reserved => 0),
                      THIGH              =>
                        (T_High   =>
                           TMC_Types.Unsigned_20
@@ -3010,7 +3020,7 @@ package body Prunt.Config is
                          (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") + 3));
                      Config.Steppers (S).CHOPCONF.HSTRT_TFD210 :=
                        TMC_Types.Unsigned_3
-                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT") - 1));
+                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$Spread Cycle$Manual$HSTRT") - 1));
                   elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                     and then Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                   then
