@@ -34,6 +34,7 @@ with Prunt.Logger;
 with Prunt.Command_Line_Arguments;
 with Prunt.Update_Checker;
 with Ada.Streams;
+with Prunt.TMC_Readings_Updater_Blocker;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -355,6 +356,8 @@ private
         Exception_Occurrence_Holder  => Exception_Occurrence_Holder.all,
         Port                         => Command_Line_Arguments.Web_Server_Port);
    pragma Warnings (On, "cannot call * before body seen");
+
+   package My_TMC_Readings_Updater_Blocker is new Prunt.TMC_Readings_Updater_Blocker;
 
    procedure TMC2240_UART_Write_And_Validate
      (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Generic_Types.Stepper_Name);

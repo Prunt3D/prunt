@@ -264,128 +264,135 @@ package body Prunt.Controller.Gcode_Handler is
          end if;
 
          declare
-            Message : TMC_Types.TMC2240.UART_Data_Message :=
-              (Bytes_Mode => False,
-               Content    =>
-                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                  Register   => TMC_Types.TMC2240.GCONF_Address,
-                  GCONF_Data =>
-                    (Stepper_Params.GCONF
-                     with delta
-                       Diag0_Error      => TMC_Types.False,
-                       Diag0_OTPW       => TMC_Types.False,
-                       Diag0_Stall      => TMC_Types.True,
-                       Diag1_Stall      => TMC_Types.False,
-                       Diag1_Index      => TMC_Types.False,
-                       Diag1_On_State   => TMC_Types.False,
-                       Diag_0_Push_Pull => TMC_Types.False,
-                       Diag_1_Push_Pull => TMC_Types.False,
-                       Stop_Enable      => TMC_Types.False,
-                       Direct_Mode      => TMC_Types.False,
-                       En_PWM_Mode      =>
-                         (if Axial_Homing_Params (Axis).Kind = My_Config.StallGuard2_Kind
-                          then TMC_Types.False
-                          else TMC_Types.True)),
-                  others     => <>));
+            TMC_Blocker : My_TMC_Readings_Updater_Blocker.Blocker;
+            pragma Unreferenced (TMC_Blocker);
          begin
-            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-         end;
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.GCONF_Address,
+                     GCONF_Data =>
+                       (Stepper_Params.GCONF
+                        with delta
+                          Diag0_Error      => TMC_Types.False,
+                          Diag0_OTPW       => TMC_Types.False,
+                          Diag0_Stall      => TMC_Types.True,
+                          Diag1_Stall      => TMC_Types.False,
+                          Diag1_Index      => TMC_Types.False,
+                          Diag1_On_State   => TMC_Types.False,
+                          Diag_0_Push_Pull => TMC_Types.False,
+                          Diag_1_Push_Pull => TMC_Types.False,
+                          Stop_Enable      => TMC_Types.False,
+                          Direct_Mode      => TMC_Types.False,
+                          En_PWM_Mode      =>
+                            (if Axial_Homing_Params (Axis).Kind = My_Config.StallGuard2_Kind
+                             then TMC_Types.False
+                             else TMC_Types.True)),
+                     others     => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
 
-         case Axial_Homing_Params (Axis).Kind is
-            when My_Config.Disabled_Kind | My_Config.Double_Tap_Kind | My_Config.Set_To_Value_Kind =>
-               raise Constraint_Error;
+            case Axial_Homing_Params (Axis).Kind is
+               when My_Config.Disabled_Kind | My_Config.Double_Tap_Kind | My_Config.Set_To_Value_Kind =>
+                  raise Constraint_Error;
 
-            when My_Config.StallGuard2_Kind =>
-               declare
-                  --  TODO: When COOLCONF support is added we need to avoid clobbering the register here.
-                  Message : TMC_Types.TMC2240.UART_Data_Message :=
-                    (Bytes_Mode => False,
-                     Content    =>
-                       (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                        Register      => TMC_Types.TMC2240.COOLCONF_Address,
-                        COOLCONF_Data =>
-                          (SEMIN      => 0,
-                           Reserved_1 => 0,
-                           SEUP       => 0,
-                           Reserved_2 => 0,
-                           SEMAX      => 0,
-                           Reserved_3 => 0,
-                           SEDN       => 0,
-                           SEIMIN     => 0,
-                           SGT        => Axial_Homing_Params (Axis).SG2_Threshold,
-                           SFILT      =>
-                             (if Axial_Homing_Params (Axis).Enable_Filter then TMC_Types.True else TMC_Types.False),
-                           Reserved_4 => 0),
-                        others        => <>));
-               begin
-                  Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-                  TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-               end;
-
-               if Stepper_Params.CHOPCONF.CHM = TMC_Types.TMC2240.Constant_Off_Time_Mode then
+               when My_Config.StallGuard2_Kind =>
                   declare
+                     --  TODO: When COOLCONF support is added we need to avoid clobbering the register here.
                      Message : TMC_Types.TMC2240.UART_Data_Message :=
                        (Bytes_Mode => False,
                         Content    =>
                           (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                           Register      => TMC_Types.TMC2240.CHOPCONF_Address,
-                           CHOPCONF_Data =>
-                             (Stepper_Params.CHOPCONF
-                              with delta
-                                CHM          => TMC_Types.TMC2240.SpreadCycle_Mode,
-                                HSTRT_TFD210 => 5,
-                                HEND_OFFSET  => 2),
+                           Register      => TMC_Types.TMC2240.COOLCONF_Address,
+                           COOLCONF_Data =>
+                             (SEMIN      => 0,
+                              Reserved_1 => 0,
+                              SEUP       => 0,
+                              Reserved_2 => 0,
+                              SEMAX      => 0,
+                              Reserved_3 => 0,
+                              SEDN       => 0,
+                              SEIMIN     => 0,
+                              SGT        => Axial_Homing_Params (Axis).SG2_Threshold,
+                              SFILT      =>
+                                (if Axial_Homing_Params (Axis).Enable_Filter then TMC_Types.True else TMC_Types.False),
+                              Reserved_4 => 0),
                            others        => <>));
                   begin
                      Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
                      TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
                   end;
-               end if;
-            when My_Config.StallGuard4_Kind =>
-               declare
-                  Message : TMC_Types.TMC2240.UART_Data_Message :=
-                    (Bytes_Mode => False,
-                     Content    =>
-                       (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                        Register      => TMC_Types.TMC2240.SG4_THRS_Address,
-                        SG4_THRS_Data =>
-                          (SG4_Thrs        => Axial_Homing_Params (Axis).SG4_Threshold,
-                           SG4_Filt_En     =>
-                             (if Axial_Homing_Params (Axis).Enable_Filter then TMC_Types.True else TMC_Types.False),
-                           SG_Angle_Offset => TMC_Types.True,
-                           Reserved_2      => 0),
-                        others        => <>));
-               begin
-                  Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-                  TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-               end;
-         end case;
 
-         declare
-            Message : TMC_Types.TMC2240.UART_Data_Message :=
-              (Bytes_Mode => False,
-               Content    =>
-                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                  Register   => TMC_Types.TMC2240.THIGH_Address,
-                  THIGH_Data => (T_High => 0, Reserved => 0),
-                  others     => <>));
-         begin
-            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-         end;
+                  if Stepper_Params.CHOPCONF.CHM = TMC_Types.TMC2240.Constant_Off_Time_Mode then
+                     declare
+                        Message : TMC_Types.TMC2240.UART_Data_Message :=
+                          (Bytes_Mode => False,
+                           Content    =>
+                             (Node          =>
+                                Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                              Register      => TMC_Types.TMC2240.CHOPCONF_Address,
+                              CHOPCONF_Data =>
+                                (Stepper_Params.CHOPCONF
+                                 with delta
+                                   CHM          => TMC_Types.TMC2240.SpreadCycle_Mode,
+                                   HSTRT_TFD210 => 5,
+                                   HEND_OFFSET  => 2),
+                              others        => <>));
+                     begin
+                        Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+                        TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+                     end;
+                  end if;
 
-         declare
-            Message : TMC_Types.TMC2240.UART_Data_Message :=
-              (Bytes_Mode => False,
-               Content    =>
-                 (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                  Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
-                  TPWMTHRS_Data => (T_PWM_Thrs => 0, Reserved => 0),
-                  others        => <>));
-         begin
-            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+               when My_Config.StallGuard4_Kind =>
+                  declare
+                     Message : TMC_Types.TMC2240.UART_Data_Message :=
+                       (Bytes_Mode => False,
+                        Content    =>
+                          (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                           Register      => TMC_Types.TMC2240.SG4_THRS_Address,
+                           SG4_THRS_Data =>
+                             (SG4_Thrs        => Axial_Homing_Params (Axis).SG4_Threshold,
+                              SG4_Filt_En     =>
+                                (if Axial_Homing_Params (Axis).Enable_Filter then TMC_Types.True else TMC_Types.False),
+                              SG_Angle_Offset => TMC_Types.True,
+                              Reserved_2      => 0),
+                           others        => <>));
+                  begin
+                     Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+                     TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+                  end;
+            end case;
+
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.THIGH_Address,
+                     THIGH_Data => (T_High => 0, Reserved => 0),
+                     others     => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
+
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
+                     TPWMTHRS_Data => (T_PWM_Thrs => 0, Reserved => 0),
+                     others        => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
          end;
 
          My_Planner.Enqueue
@@ -412,67 +419,72 @@ package body Prunt.Controller.Gcode_Handler is
          end;
 
          declare
-            Message : TMC_Types.TMC2240.UART_Data_Message :=
-              (Bytes_Mode => False,
-               Content    =>
-                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                  Register   => TMC_Types.TMC2240.THIGH_Address,
-                  THIGH_Data => Stepper_Params.THIGH,
-                  others     => <>));
+            TMC_Blocker : My_TMC_Readings_Updater_Blocker.Blocker;
+            pragma Unreferenced (TMC_Blocker);
          begin
-            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-         end;
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.THIGH_Address,
+                     THIGH_Data => Stepper_Params.THIGH,
+                     others     => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
 
-         declare
-            Message : TMC_Types.TMC2240.UART_Data_Message :=
-              (Bytes_Mode => False,
-               Content    =>
-                 (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                  Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
-                  TPWMTHRS_Data => Stepper_Params.TPWMTHRS,
-                  others        => <>));
-         begin
-            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-         end;
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
+                     TPWMTHRS_Data => Stepper_Params.TPWMTHRS,
+                     others        => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
 
-         declare
-            Message : TMC_Types.TMC2240.UART_Data_Message :=
-              (Bytes_Mode => False,
-               Content    =>
-                 (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                  Register      => TMC_Types.TMC2240.CHOPCONF_Address,
-                  CHOPCONF_Data => Stepper_Params.CHOPCONF,
-                  others        => <>));
-         begin
-            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
-         end;
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node          => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
+                     CHOPCONF_Data => Stepper_Params.CHOPCONF,
+                     others        => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
 
-         declare
-            Message : TMC_Types.TMC2240.UART_Data_Message :=
-              (Bytes_Mode => False,
-               Content    =>
-                 (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
-                  Register   => TMC_Types.TMC2240.GCONF_Address,
-                  GCONF_Data =>
-                    (Stepper_Params.GCONF
-                     with delta
-                       Diag0_Error      => TMC_Types.False,
-                       Diag0_OTPW       => TMC_Types.False,
-                       Diag0_Stall      => TMC_Types.False,
-                       Diag1_Stall      => TMC_Types.False,
-                       Diag1_Index      => TMC_Types.False,
-                       Diag1_On_State   => TMC_Types.False,
-                       Diag_0_Push_Pull => TMC_Types.False,
-                       Diag_1_Push_Pull => TMC_Types.False,
-                       Stop_Enable      => TMC_Types.False,
-                       Direct_Mode      => TMC_Types.False),
-                  others     => <>));
-         begin
-            Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-            TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            declare
+               Message : TMC_Types.TMC2240.UART_Data_Message :=
+                 (Bytes_Mode => False,
+                  Content    =>
+                    (Node       => Stepper_Hardware (Axial_Homing_Params (Axis).Motor).TMC2240_UART_Address,
+                     Register   => TMC_Types.TMC2240.GCONF_Address,
+                     GCONF_Data =>
+                       (Stepper_Params.GCONF
+                        with delta
+                          Diag0_Error      => TMC_Types.False,
+                          Diag0_OTPW       => TMC_Types.False,
+                          Diag0_Stall      => TMC_Types.False,
+                          Diag1_Stall      => TMC_Types.False,
+                          Diag1_Index      => TMC_Types.False,
+                          Diag1_On_State   => TMC_Types.False,
+                          Diag_0_Push_Pull => TMC_Types.False,
+                          Diag_1_Push_Pull => TMC_Types.False,
+                          Stop_Enable      => TMC_Types.False,
+                          Direct_Mode      => TMC_Types.False),
+                     others     => <>));
+            begin
+               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
+               TMC2240_UART_Write_And_Validate (Message, Axial_Homing_Params (Axis).Motor);
+            end;
          end;
 
          My_Planner.Enqueue

@@ -259,6 +259,7 @@ package body Prunt.Controller is
                         Reply          : TMC_Types.TMC2240.UART_Data_Message;
                      begin
                         Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
                         Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
 
                         if Receive_Failed then
@@ -286,6 +287,7 @@ package body Prunt.Controller is
                         Reply          : TMC_Types.TMC2240.UART_Data_Message;
                      begin
                         Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
                         Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
 
                         if Receive_Failed then
@@ -312,6 +314,7 @@ package body Prunt.Controller is
                         Reply          : TMC_Types.TMC2240.UART_Data_Message;
                      begin
                         Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
                         Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
 
                         if Receive_Failed then
@@ -364,6 +367,7 @@ package body Prunt.Controller is
                         Reply          : TMC_Types.TMC2240.UART_Data_Message;
                      begin
                         Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
                         Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
 
                         if Receive_Failed then
