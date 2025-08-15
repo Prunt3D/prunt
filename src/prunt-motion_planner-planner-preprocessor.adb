@@ -56,6 +56,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                if not Ignore_Bounds then
                   Check_Bounds (Comm.Pos, Current_Params);
                end if;
+
+               if Comm.Dwell_After < 0.0 * s then
+                  raise Constraint_Error with "Negative dwell times are not allowed.";
+               end if;
          end case;
          --  Checking happens here so we can provide instant feedback to the user when g-code is typed in manually.
 
@@ -183,11 +187,14 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      Corners (N_Corners) := Next_Command.Pos / Current_Params.Axial_Scaler;
                      Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
                      Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
+                     Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
 
                      if N_Corners > 2
                        and then abs (Corners (N_Corners) - Corners (N_Corners - 1)) = 0.0 * mm
                        and then abs (Corners (N_Corners - 1) - Corners (N_Corners - 2)) = 0.0 * mm
                      then
+                        Corner_Dwell_Times (N_Corners - 1) :=
+                          Corner_Dwell_Times (N_Corners - 1) + Corner_Dwell_Times (N_Corners);
                         Corners (N_Corners - 1) := Corners (N_Corners);
                         --  Keep first feedrate.
                         Corners_Extra_Data (N_Corners - 1) := Corners_Extra_Data (N_Corners);

@@ -63,6 +63,8 @@ private
       Block_Persistent_Data : Block_Persistent_Data_Type := Block_Persistent_Data_Default;
       pragma Warnings (Off, "use of an anonymous access type allocator");
       Corners               : access Block_Plain_Corners := new Block_Plain_Corners (1 .. Corners_Index'Last);
+      Corner_Dwell_Times    : access Block_Corner_Dwell_Times :=
+        new Block_Corner_Dwell_Times (1 .. Corners_Index'Last);
       Segment_Feedrates     : access Block_Segment_Feedrates := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
       Corners_Extra_Data    : access Block_Corners_Extra_Data :=
         new Block_Corners_Extra_Data (2 .. Corners_Index'Last);

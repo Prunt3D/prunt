@@ -82,6 +82,7 @@ package Prunt.Motion_Planner.Planner is
             Pos               : Position;
             Feedrate          : Velocity;
             Corner_Extra_Data : Corner_Extra_Data_Type;
+            Dwell_After       : Time := 0.0 * s;
 
          when Flush_And_Update_Persistent_Data_Kind =>
             New_Persistent_Data : Block_Persistent_Data_Type;
@@ -161,6 +162,7 @@ private
    type Block_Plain_Corners is array (Corners_Index range <>) of Scaled_Position;
    type Block_Segment_Feedrates is array (Corners_Index range <>) of Velocity;
    type Block_Corners_Extra_Data is array (Corners_Index range <>) of Corner_Extra_Data_Type;
+   type Block_Corner_Dwell_Times is array (Corners_Index range <>) of Time;
 
    --  Corner_Blender
    type Block_Beziers is array (Corners_Index range <>) of PH_Bezier;
@@ -188,6 +190,7 @@ private
       Corners               : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
       Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);  --  Adjusted with scaler in Kinematic_Limiter.
       Corners_Extra_Data    : Block_Corners_Extra_Data (2 .. N_Corners);
+      Corner_Dwell_Times    : Block_Corner_Dwell_Times (2 .. N_Corners);
 
       --  Corner_Blender
       Beziers : Block_Beziers (1 .. N_Corners);
