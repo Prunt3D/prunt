@@ -196,7 +196,6 @@ private
       Conditional_Hit_On_State    : Pin_State := High_State;
       Wait_For_Heater             : Boolean := False;
       Wait_For_Heater_Name        : Heater_Name := Heater_Name'First;
-      Dwell_Time                  : Time := Time (0.0);
       Pause_After                 : Boolean := False;
       Check_Conditional_Hit_After : Boolean := False;
    end record;

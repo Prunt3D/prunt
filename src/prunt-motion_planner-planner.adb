@@ -128,7 +128,7 @@ package body Prunt.Motion_Planner.Planner is
 
    function Segment_Time (Block : Execution_Block; Finishing_Corner : Corners_Index) return Time is
    begin
-      return Total_Time (Block.Feedrate_Profiles (Finishing_Corner));
+      return Total_Time (Block.Feedrate_Profiles (Finishing_Corner)) + Block.Corner_Dwell_Times (Finishing_Corner);
    end Segment_Time;
 
    function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
@@ -156,7 +156,7 @@ package body Prunt.Motion_Planner.Planner is
       Distance : constant Length :=
         Distance_At_Time
           (Block.Feedrate_Profiles (Finishing_Corner),
-           Time_Into_Segment,
+           Time'Min (Time_Into_Segment, Total_Time (Block.Feedrate_Profiles (Finishing_Corner))),
            Block.Params.Crackle_Max,
            Block.Corner_Velocity_Limits (Finishing_Corner - 1),
            Is_Past_Accel_Part);
@@ -165,17 +165,17 @@ package body Prunt.Motion_Planner.Planner is
       Tangent                 : Scaled_Position_Offset;
       Scaled_Velocity_Tangent : Axial_Velocities;
    begin
-      if Time_Into_Segment = Total_Time (Block.Feedrate_Profiles (Finishing_Corner))
-        and Finishing_Corner = Block.N_Corners
+      if Time_Into_Segment >= Total_Time (Block.Feedrate_Profiles (Finishing_Corner))
+        and (Finishing_Corner = Block.N_Corners or Block.Corner_Dwell_Times (Finishing_Corner) /= 0.0 * s)
       then
-         --  Ensure the return value here will be equal to start of the next block if the position was not reset.
+         --  Ensure the return value will be at the exact position.
          Pos := Point_At_Distance (Block.Beziers (Finishing_Corner), 0.0 * mm);
          pragma Assert (Distance_At_T (Block.Beziers (Finishing_Corner), 0.5) = 0.0 * mm);
          pragma
            Assert
              (Velocity_At_Time
                 (Block.Feedrate_Profiles (Finishing_Corner),
-                 Time_Into_Segment,
+                 Total_Time (Block.Feedrate_Profiles (Finishing_Corner)),
                  Block.Params.Crackle_Max,
                  Block.Corner_Velocity_Limits (Finishing_Corner - 1))
                 < 0.000_1 * mm / s);
@@ -184,51 +184,57 @@ package body Prunt.Motion_Planner.Planner is
          --  precision here.
 
          return Position (Pos * Block.Params.Axial_Scaler);
-      elsif Distance < Start_Curve_Half_Distance then
-         Pos :=
-           Point_At_Distance
-             (Block.Beziers (Finishing_Corner - 1),
-              Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
-         Tangent :=
-           Tangent_At_Distance
-             (Block.Beziers (Finishing_Corner - 1),
-              Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
-      elsif Distance < Start_Curve_Half_Distance + Mid_Distance or End_Curve_Half_Distance = 0.0 * mm then
-         if Mid_Distance = 0.0 * mm then
-            Pos := Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
+      else
+         pragma Assert (Time_Into_Segment <= Total_Time (Block.Feedrate_Profiles (Finishing_Corner)));
+
+         if Distance < Start_Curve_Half_Distance then
+            Pos :=
+              Point_At_Distance
+                (Block.Beziers (Finishing_Corner - 1),
+                 Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
             Tangent :=
               Tangent_At_Distance
-                (Block.Beziers (Finishing_Corner - 1), Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
+                (Block.Beziers (Finishing_Corner - 1),
+                 Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
+         elsif Distance < Start_Curve_Half_Distance + Mid_Distance or End_Curve_Half_Distance = 0.0 * mm then
+            if Mid_Distance = 0.0 * mm then
+               Pos := Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
+               Tangent :=
+                 Tangent_At_Distance
+                   (Block.Beziers (Finishing_Corner - 1), Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
+            else
+               Pos :=
+                 Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)
+                 + (Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
+                    - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0))
+                   * ((Distance - Start_Curve_Half_Distance) / Mid_Distance);
+               Tangent :=
+                 Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
+                 - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
+            end if;
          else
             Pos :=
-              Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)
-              + (Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
-                 - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0))
-                * ((Distance - Start_Curve_Half_Distance) / Mid_Distance);
+              Point_At_Distance
+                (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
             Tangent :=
-              Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
-              - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
+              Tangent_At_Distance
+                (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
          end if;
-      else
-         Pos :=
-           Point_At_Distance (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
-         Tangent :=
-           Tangent_At_Distance (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
+
+         if abs Tangent /= 0.0 * mm then
+            Scaled_Velocity_Tangent :=
+              (Tangent / abs Tangent)
+              * Velocity_At_Time
+                  (Block.Feedrate_Profiles (Finishing_Corner),
+                   Time_Into_Segment,
+                   Block.Params.Crackle_Max,
+                   Block.Corner_Velocity_Limits (Finishing_Corner - 1));
+
+            Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Scaled_Velocity_Tangent (E_Axis);
+         end if;
+
+         return Position (Pos * Block.Params.Axial_Scaler);
       end if;
-
-      if abs Tangent /= 0.0 * mm then
-         Scaled_Velocity_Tangent :=
-           (Tangent / abs Tangent)
-           * Velocity_At_Time
-               (Block.Feedrate_Profiles (Finishing_Corner),
-                Time_Into_Segment,
-                Block.Params.Crackle_Max,
-                Block.Corner_Velocity_Limits (Finishing_Corner - 1));
-
-         Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Scaled_Velocity_Tangent (E_Axis);
-      end if;
-
-      return Position (Pos * Block.Params.Axial_Scaler);
    end Segment_Pos_At_Time;
 
    function Next_Block_Pos (Block : Execution_Block) return Position is

@@ -79,8 +79,9 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          Last_Comp_Error := 0.0 * mm;
 
          for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
-            if Angle_Elementary_Functions.Sin (Corner_Blender_Max_Secondary_Angle_To_Blend)
-              < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
+            if Block.Corner_Dwell_Times (I) /= 0.0 * s
+              or else Angle_Elementary_Functions.Sin (Corner_Blender_Max_Secondary_Angle_To_Blend)
+                      < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
             then
                Block.Beziers (I) := Create_Bezier (Block.Corners (I), Block.Corners (I), Block.Corners (I), 0.0 * mm);
             else

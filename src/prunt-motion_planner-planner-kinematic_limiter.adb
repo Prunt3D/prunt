@@ -102,6 +102,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
             --  TODO: Add limit based on interpolation time.
             --  TODO: Snap and crackle limits currently do not match the paper and are likely overly conservative.
 
+            if Block.Corner_Dwell_Times (I) /= 0.0 * s then
+               pragma Assert (Limit = 0.0 * mm / s);
+            end if;
+
             Optimal_Profile :=
               Optimal_Profile_For_Distance
                 (Block.Corner_Velocity_Limits (I - 1),

@@ -767,12 +767,6 @@ package body Prunt.Controller is
          end loop;
       end if;
 
-      --  TODO: Should we require the user to implement this instead for greater precision?
-      if Resetting_Data.Dwell_Time /= Time (0.0) then
-         Wait_Until_Idle (Next_Command_Index - 1);
-         delay Duration (Resetting_Data.Dwell_Time / s);
-      end if;
-
       if Resetting_Data.Pause_After then
          My_Step_Generator.Pause;
       end if;

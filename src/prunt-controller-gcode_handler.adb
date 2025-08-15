@@ -111,6 +111,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + Back_Off_Offset,
              Feedrate          => Velocity'Last,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
@@ -128,6 +129,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + First_Offset,
              Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
@@ -140,6 +142,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + Back_Off_Offset,
              Feedrate          => Velocity'Last,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
@@ -166,6 +169,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + Second_Offset,
              Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
@@ -203,6 +207,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Pos_After,
              Feedrate          => Velocity'Last,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
          My_Planner.Enqueue
@@ -401,6 +406,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos + Offset,
              Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
 
@@ -501,6 +507,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Pos_After,
              Feedrate          => Velocity'Last,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data),
             Ignore_Bounds => True);
 
@@ -541,13 +548,20 @@ package body Prunt.Controller.Gcode_Handler is
                     ((Kind              => My_Planner.Move_Kind,
                       Pos               => Command.Pos,
                       Feedrate          => Command.Feedrate,
+                      Dwell_After       => 0.0 * s,
                       Corner_Extra_Data => Corner_Data));
                end if;
 
             when Dwell_Kind =>
-               My_Planner.Enqueue
-                 ((Kind                 => My_Planner.Flush_Kind,
-                   Flush_Resetting_Data => (Dwell_Time => Command.Dwell_Time, others => <>)));
+               if Command.Dwell_Time < 0.0 * s then
+                  raise Command_Constraint_Error with "Negative dwell times are not allowed.";
+               end if;
+                  My_Planner.Enqueue
+                    ((Kind              => My_Planner.Move_Kind,
+                      Pos               => Command.Pos,
+                      Feedrate          => 0.000_1 * mm / s,
+                      Dwell_After       => Command.Dwell_Time,
+                      Corner_Extra_Data => Corner_Data));
 
             when Home_Kind =>
                declare
@@ -578,7 +592,8 @@ package body Prunt.Controller.Gcode_Handler is
                               My_Planner.Enqueue
                                 ((Kind              => My_Planner.Move_Kind,
                                   Pos               => Pos_After,
-                                  Feedrate          => 299_792_458_000.1 * mm / s,
+                                  Feedrate          => Velocity'Last,
+                                  Dwell_After       => 0.0 * s,
                                   Corner_Extra_Data => Corner_Data));
                               My_Planner.Enqueue
                                 ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
@@ -703,6 +718,7 @@ package body Prunt.Controller.Gcode_Handler is
                  ((Kind              => My_Planner.Move_Kind,
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
+                   Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
@@ -712,6 +728,7 @@ package body Prunt.Controller.Gcode_Handler is
                  ((Kind              => My_Planner.Move_Kind,
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
+                   Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue
                  ((Kind                 => My_Planner.Flush_Kind,
@@ -726,6 +743,7 @@ package body Prunt.Controller.Gcode_Handler is
                  ((Kind              => My_Planner.Move_Kind,
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
+                   Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
@@ -735,6 +753,7 @@ package body Prunt.Controller.Gcode_Handler is
                  ((Kind              => My_Planner.Move_Kind,
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
+                   Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue
                  ((Kind                 => My_Planner.Flush_Kind,
@@ -765,6 +784,7 @@ package body Prunt.Controller.Gcode_Handler is
                  ((Kind              => My_Planner.Move_Kind,
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
+                   Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => Corner_Data));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
@@ -957,6 +977,7 @@ package body Prunt.Controller.Gcode_Handler is
            ((Kind              => My_Planner.Move_Kind,
              Pos               => Zero_Pos,
              Feedrate          => Velocity'Last,
+             Dwell_After       => 0.0 * s,
              Corner_Extra_Data => Corner_Data));
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
