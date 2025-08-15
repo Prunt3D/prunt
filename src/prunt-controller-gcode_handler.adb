@@ -19,6 +19,8 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Characters;
+with Ada.Characters.Latin_1;
 with Prunt.Gcode_Parser;
 with Ada.Text_IO; use Ada.Text_IO;
 with Ada.Exceptions;
@@ -1019,7 +1021,11 @@ package body Prunt.Controller.Gcode_Handler is
                         declare
                            Line : constant String := Get_Line (File);
                         begin
-                           Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
+                           if Line'Length >= 1 and then Line (Line'Last) = Ada.Characters.Latin_1.CR then
+                              Parse_Line (Parser_Context, Line (Line'First..Line'Last - 1), Run_Command'Unrestricted_Access);
+                           else
+                              Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
+                           end if;
                         exception
                            when E : Command_Constraint_Error =>
                               My_Logger.Log
