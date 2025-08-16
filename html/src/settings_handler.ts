@@ -247,7 +247,9 @@ function buildTabbedSequence(
             }
         });
 
-        buildField(data, `${path}${path === "" ? "" : "$"}${name}`, tabContent, tab);
+        if (data.Kind !== "Tabbed_Sequence" || Object.keys(data.Children).length != 0) {
+            buildField(data, `${path}${path === "" ? "" : "$"}${name}`, tabContent, tab);
+        }
 
         tabContainer.appendChild(tab);
         contentContainer.appendChild(tabContent);
