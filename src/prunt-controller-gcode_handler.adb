@@ -37,11 +37,31 @@ package body Prunt.Controller.Gcode_Handler is
       Params : My_Config.G_Code_Assignment_Parameters;
    begin
       My_Config.Read (Params);
-      return Params.Default_Fan;
+      if Params.Has_Fans then
+         return Params.Default_Fan;
+      else
+         --  TODO: Is assigning Fan_Name'First to Fan_Name valid when the range is empty?
+         return Generic_Types.Fan_Name'First;
+      end if;
    end Get_Default_Fan;
 
+   function Get_Default_Laser return Generic_Types.Laser_Name is
+      Params : My_Config.G_Code_Assignment_Parameters;
+   begin
+      My_Config.Read (Params);
+      if Params.Has_Lasers then
+         return Params.Default_Laser;
+      else
+         --  TODO: Is assigning Laser_Name'First to Laser_Name valid when the range is empty?
+         return Generic_Types.Laser_Name'First;
+      end if;
+   end Get_Default_Laser;
+
    package My_Gcode_Parser is new
-     Prunt.Gcode_Parser (Heater_Name => Generic_Types.Heater_Name, Fan_Name => Generic_Types.Fan_Name);
+     Prunt.Gcode_Parser
+       (Heater_Name => Generic_Types.Heater_Name,
+        Fan_Name    => Generic_Types.Fan_Name,
+        Laser_Name  => Generic_Types.Laser_Name);
    use My_Gcode_Parser;
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean) is
@@ -56,7 +76,11 @@ package body Prunt.Controller.Gcode_Handler is
 
    task body Runner is
       Corner_Data : Corner_Extra_Data :=
-        (Fans => (others => 0.0), Heaters => (others => Temperature (0.0)), Current_Line => 0);
+        (Fans            => (others => 0.0),
+         Heaters         => (others => Temperature (0.0)),
+         Lasers          => (others => 0.0),
+         Modulate_Lasers => (others => True),
+         Current_Line    => 0);
 
       --  TODO: Track down GNAT bug that stops [others => 0.0 * mm] from working specifically in this file.
       Zero_Pos        : constant Position :=
@@ -112,7 +136,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Zero_Pos + Back_Off_Offset,
              Feedrate          => Velocity'Last,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data),
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))),
             Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
@@ -130,7 +154,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Zero_Pos + First_Offset,
              Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data),
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))),
             Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
@@ -143,7 +167,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Zero_Pos + Back_Off_Offset,
              Feedrate          => Velocity'Last,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data),
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))),
             Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
@@ -170,7 +194,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Zero_Pos + Second_Offset,
              Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data),
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))),
             Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
@@ -208,7 +232,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Pos_After,
              Feedrate          => Velocity'Last,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data),
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))),
             Ignore_Bounds => True);
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
@@ -407,7 +431,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Zero_Pos + Offset,
              Feedrate          => Axial_Homing_Params (Axis).Velocity_Limit,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data),
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))),
             Ignore_Bounds => True);
 
          Pos_After (Axis) := Axial_Homing_Params (Axis).Switch_Position;
@@ -508,7 +532,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Pos_After,
              Feedrate          => Velocity'Last,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data),
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))),
             Ignore_Bounds => True);
 
          My_Planner.Enqueue
@@ -533,8 +557,8 @@ package body Prunt.Controller.Gcode_Handler is
 
             when Move_Kind =>
                if Command.Pos /= Command.Old_Pos then
-                  if Command.Feedrate = 0.0 * mm / s then
-                     raise Command_Constraint_Error with "Feedrate of zero is not allowed.";
+                  if Command.Feedrate <= 0.0 * mm / s then
+                     raise Command_Constraint_Error with "Feedrate must be positive.";
                   end if;
 
                   for I in Axis_Name loop
@@ -549,19 +573,22 @@ package body Prunt.Controller.Gcode_Handler is
                       Pos               => Command.Pos,
                       Feedrate          => Command.Feedrate,
                       Dwell_After       => 0.0 * s,
-                      Corner_Extra_Data => Corner_Data));
+                      Corner_Extra_Data =>
+                        (if Command.Is_Rapid
+                         then (Corner_Data with delta Lasers => (others => 0.0))
+                         else Corner_Data)));
                end if;
 
             when Dwell_Kind =>
                if Command.Dwell_Time < 0.0 * s then
                   raise Command_Constraint_Error with "Negative dwell times are not allowed.";
                end if;
-                  My_Planner.Enqueue
-                    ((Kind              => My_Planner.Move_Kind,
-                      Pos               => Command.Pos,
-                      Feedrate          => 0.000_1 * mm / s,
-                      Dwell_After       => Command.Dwell_Time,
-                      Corner_Extra_Data => Corner_Data));
+               My_Planner.Enqueue
+                 ((Kind              => My_Planner.Move_Kind,
+                   Pos               => Command.Pos,
+                   Feedrate          => 0.000_1 * mm / s,
+                   Dwell_After       => Command.Dwell_Time,
+                   Corner_Extra_Data => Corner_Data));
 
             when Home_Kind =>
                declare
@@ -594,7 +621,7 @@ package body Prunt.Controller.Gcode_Handler is
                                   Pos               => Pos_After,
                                   Feedrate          => Velocity'Last,
                                   Dwell_After       => 0.0 * s,
-                                  Corner_Extra_Data => Corner_Data));
+                                  Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                               My_Planner.Enqueue
                                 ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
                         end case;
@@ -719,7 +746,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Dwell_After       => 0.0 * s,
-                   Corner_Extra_Data => Corner_Data));
+                   Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
             when Wait_Hotend_Temperature_Kind =>
@@ -729,7 +756,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Dwell_After       => 0.0 * s,
-                   Corner_Extra_Data => Corner_Data));
+                   Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue
                  ((Kind                 => My_Planner.Flush_Kind,
                    Flush_Resetting_Data =>
@@ -744,7 +771,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Dwell_After       => 0.0 * s,
-                   Corner_Extra_Data => Corner_Data));
+                   Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
             when Wait_Bed_Temperature_Kind =>
@@ -754,7 +781,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Dwell_After       => 0.0 * s,
-                   Corner_Extra_Data => Corner_Data));
+                   Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue
                  ((Kind                 => My_Planner.Flush_Kind,
                    Flush_Resetting_Data =>
@@ -785,7 +812,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Pos               => Command.Pos,
                    Feedrate          => 0.000_1 * mm / s,
                    Dwell_After       => 0.0 * s,
-                   Corner_Extra_Data => Corner_Data));
+                   Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
             when TMC_Dump_Kind =>
@@ -863,13 +890,22 @@ package body Prunt.Controller.Gcode_Handler is
                    New_Params           => Kinematics_Params.Planner_Parameters,
                    Flush_Resetting_Data => (others => <>)));
 
-            when others =>
+            when Set_Laser_Power_Kind =>
+               --  Laser powers are not allowed to be buffered, so we do not flush here as we do with heaters and fans.
+               Corner_Data.Lasers (Command.Laser_To_Set) := Command.Laser_Power;
+
+            when Set_Chamber_Temperature_Kind | Wait_Chamber_Temperature_Kind =>
                raise Constraint_Error with "Command not implemented.";
          end case;
       end Run_Command;
    begin
       loop
-         Corner_Data := (Fans => (others => 0.0), Heaters => (others => Temperature (0.0)), Current_Line => 0);
+         Corner_Data :=
+           (Fans            => (others => 0.0),
+            Heaters         => (others => Temperature (0.0)),
+            Lasers          => (others => 0.0),
+            Modulate_Lasers => (others => True),
+            Current_Line    => 0);
 
          accept Start do
             declare
@@ -892,6 +928,15 @@ package body Prunt.Controller.Gcode_Handler is
                            Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
                         end if;
                   end case;
+               end loop;
+            end;
+
+            declare
+               Laser_Params : My_Config.Laser_Parameters;
+            begin
+               for L in Generic_Types.Laser_Name loop
+                  My_Config.Read (Laser_Params, L);
+                  Corner_Data.Modulate_Lasers (L) := Laser_Params.Modulate_With_Velocity;
                end loop;
             end;
 
@@ -919,7 +964,8 @@ package body Prunt.Controller.Gcode_Handler is
                 (Initial_Position   => Zero_Pos,
                  Initial_Feedrate   => 100.0 * mm / s,
                  Replace_G0_With_G1 => Prunt_Params.Replace_G0_With_G1,
-                 Default_Fan        => Get_Default_Fan);
+                 Default_Fan        => Get_Default_Fan,
+                 Default_Laser      => Get_Default_Laser);
 
             declare
                Map : My_Planner.Stepper_Pos_Map := [others => [others => Length'Last]];
@@ -978,7 +1024,7 @@ package body Prunt.Controller.Gcode_Handler is
              Pos               => Zero_Pos,
              Feedrate          => Velocity'Last,
              Dwell_After       => 0.0 * s,
-             Corner_Extra_Data => Corner_Data));
+             Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Resetting_Data => (others => <>),
@@ -1043,7 +1089,8 @@ package body Prunt.Controller.Gcode_Handler is
                            Line : constant String := Get_Line (File);
                         begin
                            if Line'Length >= 1 and then Line (Line'Last) = Ada.Characters.Latin_1.CR then
-                              Parse_Line (Parser_Context, Line (Line'First..Line'Last - 1), Run_Command'Unrestricted_Access);
+                              Parse_Line
+                                (Parser_Context, Line (Line'First .. Line'Last - 1), Run_Command'Unrestricted_Access);
                            else
                               Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
                            end if;

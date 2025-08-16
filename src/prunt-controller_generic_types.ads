@@ -30,6 +30,7 @@ generic
    type Board_Temperature_Probe_Name is (<>);
    type Fan_Name is (<>);
    type Input_Switch_Name is (<>);
+   type Laser_Name is (<>);
 package Prunt.Controller_Generic_Types is
 
    type Stepper_Position is array (Stepper_Name) of Dimensionless;
@@ -38,6 +39,7 @@ package Prunt.Controller_Generic_Types is
 
    type Fan_PWMs is array (Fan_Name) of PWM_Scale;
    type Heater_Targets is array (Heater_Name) of Temperature;
+   type Laser_PWMs is array (Laser_Name) of PWM_Scale;
 
    type Queued_Command is record
       Index           : Command_Index;
@@ -51,6 +53,8 @@ package Prunt.Controller_Generic_Types is
       --  that a value is too high, an exception should be raised.
       --
       --  TODO: We should accept a maximum value here and raise the exception within Prunt.
+      Lasers          : Laser_PWMs;
+      --  Laser PWMs to set.
       Safe_Stop_After : Boolean;
       --  If True then the machine can stop after executing this move without violating kinematic constraints. If the
       --  implementation runs out of moves to execute before receiving a Safe_Stop_After move then an exception should

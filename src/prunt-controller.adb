@@ -713,13 +713,20 @@ package body Prunt.Controller is
       Data            : Corner_Extra_Data;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
-      Safe_Stop_After : Boolean) is
+      Safe_Stop_After : Boolean;
+      Vel_Ratio       : Dimensionless) is
    begin
       Enqueue_Command
         ((Index           => Index,
           Pos             => Stepper_Pos,
           Fans            => Data.Fans,
           Heaters         => Data.Heaters,
+          Lasers          =>
+            (for L in Laser_Name =>
+               (if Safe_Stop_After
+                then 0.0
+                else
+                  Dimensionless'Min (1.0, Data.Lasers (L) * (if Data.Modulate_Lasers (L) then Vel_Ratio else 1.0)))),
           Safe_Stop_After => Safe_Stop_After,
           Loop_Until_Hit  => Loop_Until_Hit));
       Last_Position := (for A in Axis_Name => Pos (A));

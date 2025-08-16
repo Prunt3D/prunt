@@ -163,7 +163,8 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
             if Maximum_Overspeed (I) > 1.0 then
                Needs_New_Profiles := True;
                --  TODO: Take the pressure advance value in to account to set the 1.1 constant in a better way.
-               Block.Segment_Feedrates (I) := Block.Segment_Feedrates (I) / (Maximum_Overspeed (I) * 1.1);
+               Block.Limited_Segment_Feedrates (I) :=
+                 Block.Limited_Segment_Feedrates (I) / (Maximum_Overspeed (I) * 1.1);
             end if;
          end loop;
       end Run;

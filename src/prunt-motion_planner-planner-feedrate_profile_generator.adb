@@ -38,7 +38,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          Block.Feedrate_Profiles (I) :=
            Optimal_Full_Profile
              (Start_Vel        => Block.Corner_Velocity_Limits (I - 1),
-              Max_Vel          => Block.Segment_Feedrates (I),
+              Max_Vel          => Block.Limited_Segment_Feedrates (I),
               End_Vel          => Block.Corner_Velocity_Limits (I),
               Distance         => Curve_Corner_Distance (I),
               Acceleration_Max => Block.Params.Acceleration_Max,

@@ -99,7 +99,10 @@ generic
    --
    --  Index starts at 1 and will increase by 1 for each call.
    --
-   --  The implementation is allowed to buffer fan and heater targets and only send the latest value every n commands.
+   --  The implementation is allowed to buffer fan and heater targets and only send the latest value every n commands
+   --  where n is sufficiently small to prevent any practical difference from being updated with every command.
+   --
+   --  Laser targets should not be buffered.
 
    with procedure Reset_Position (Pos : Stepper_Position);
    --  Reset the position of all steppers to the given position. This procedure should not cause the steppers to move,
@@ -205,10 +208,16 @@ private
       Current_File      : Ada.Strings.Unbounded.Unbounded_String;
    end record;
 
+   type Modulate_Lasers_Map is array (Laser_Name) of Boolean;
+
    type Corner_Extra_Data is record
-      Fans         : Fan_PWMs;
-      Heaters      : Heater_Targets;
-      Current_Line : File_Line_Count;
+      Fans            : Fan_PWMs;
+      Heaters         : Heater_Targets;
+      Lasers          : Laser_PWMs;
+      Modulate_Lasers : Modulate_Lasers_Map;
+      --  TODO: Modulate_Lasers does not need to be attached to every corner, but it's the easiest way to do things
+      --  right now.
+      Current_Line    : File_Line_Count;
    end record;
 
    function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean;
@@ -248,7 +257,8 @@ private
       Data            : Corner_Extra_Data;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
-      Safe_Stop_After : Boolean);
+      Safe_Stop_After : Boolean;
+      Vel_Ratio       : Dimensionless);
    procedure Finish_Planner_Block
      (Resetting_Data       : Flush_Resetting_Data;
       Persistent_Data      : Block_Persistent_Data;

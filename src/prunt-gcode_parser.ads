@@ -22,6 +22,7 @@
 generic
    type Heater_Name is (<>);
    type Fan_Name is (<>);
+   type Laser_Name is (<>);
 package Prunt.Gcode_Parser is
 
    type Command_Kind is
@@ -46,7 +47,8 @@ package Prunt.Gcode_Parser is
       Set_Snap_Max_Kind,
       Set_Crackle_Max_Kind,
       Set_Chord_Error_Max_Kind,
-      Set_Pressure_Advance_Time_Kind);
+      Set_Pressure_Advance_Time_Kind,
+      Set_Laser_Power_Kind);
 
    type Axes_Set is array (Axis_Name) of Boolean;
 
@@ -59,6 +61,7 @@ package Prunt.Gcode_Parser is
          when Move_Kind =>
             Old_Pos  : Position;
             Feedrate : Velocity;
+            Is_Rapid : Boolean;
 
          when Dwell_Kind =>
             Dwell_Time : Time;
@@ -108,14 +111,21 @@ package Prunt.Gcode_Parser is
 
          when Set_Pressure_Advance_Time_Kind =>
             Pressure_Advance_Time : Time;
+
+         when Set_Laser_Power_Kind =>
+            Laser_To_Set : Laser_Name;
+            Laser_Power  : PWM_Scale;
       end case;
    end record;
 
    type Context is private;
 
    function Make_Context
-     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean; Default_Fan : Fan_Name)
-      return Context;
+     (Initial_Position   : Position;
+      Initial_Feedrate   : Velocity;
+      Replace_G0_With_G1 : Boolean;
+      Default_Fan        : Fan_Name;
+      Default_Laser      : Laser_Name) return Context;
 
    type Command_Runner is access procedure (Comm : Command);
 
@@ -140,6 +150,7 @@ private
       M208_Feedrate             : Velocity;
       Replace_G0_With_G1        : Boolean;
       Default_Fan               : Fan_Name;
+      Default_Laser             : Laser_Name;
    end record;
 
 end Prunt.Gcode_Parser;
