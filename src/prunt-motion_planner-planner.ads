@@ -111,6 +111,12 @@ package Prunt.Motion_Planner.Planner is
    --  Returns the position at a given time in to a segment. Is_Past_Accel_Part indicates if the given time is past the
    --  acceleration part of the segment.
 
+   function Segment_Vel_Ratio_At_Time
+     (Block : Execution_Block; Finishing_Corner : Corners_Index; Time_Into_Segment : Time) return Dimensionless
+   with Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and Time_Into_Segment >= 0.0 * s;
+   --  Returns the velocity at the given time in to a segment divided by the target velocity for the given segment.
+   --  Always returns 1.0 inside dwell parts.
+
    function Next_Block_Pos (Block : Execution_Block) return Position;
    --  Returns the start position of the next block. At the end of a block, the motion executor should assume it is at
    --  this position, even if is not.
@@ -183,14 +189,17 @@ private
       --  faster than the same code without discriminated types (refer to the no-discriminated-records branch).
 
       --  Preprocessor
-      Flush_Resetting_Data  : Flush_Resetting_Data_Type;
-      Block_Persistent_Data : Block_Persistent_Data_Type;
-      Next_Block_Pos        : Scaled_Position;
-      Params                : Kinematic_Parameters;
-      Corners               : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
-      Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);  --  Adjusted with scaler in Kinematic_Limiter.
-      Corners_Extra_Data    : Block_Corners_Extra_Data (2 .. N_Corners);
-      Corner_Dwell_Times    : Block_Corner_Dwell_Times (2 .. N_Corners);
+      Flush_Resetting_Data       : Flush_Resetting_Data_Type;
+      Block_Persistent_Data      : Block_Persistent_Data_Type;
+      Next_Block_Pos             : Scaled_Position;
+      Params                     : Kinematic_Parameters;
+      Corners                    : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
+      Original_Segment_Feedrates : Block_Segment_Feedrates (2 .. N_Corners);
+      --  Adjusted with scaler in Kinematic_Limiter.
+      Limited_Segment_Feedrates  : Block_Segment_Feedrates (2 .. N_Corners);
+      --  Adjusted with scaler in Kinematic_Limiter and limited by maximum velocity and step rate.
+      Corners_Extra_Data         : Block_Corners_Extra_Data (2 .. N_Corners);
+      Corner_Dwell_Times         : Block_Corner_Dwell_Times (2 .. N_Corners);
 
       --  Corner_Blender
       Beziers : Block_Beziers (1 .. N_Corners);

@@ -98,7 +98,7 @@ package body Prunt.Motion_Planner.Planner is
                     (not Is_Homing_Move (Block.Flush_Resetting_Data))
                     or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
 
-                  Block.Segment_Feedrates (2) := Block.Segment_Feedrates (2) * 0.9;
+                  Block.Limited_Segment_Feedrates (2) := Block.Limited_Segment_Feedrates (2) * 0.9;
                end loop;
 
                declare
@@ -107,9 +107,9 @@ package body Prunt.Motion_Planner.Planner is
                   My_Step_Rate_Limiter.Run (Block, Needs_New_Profiles);
                   exit when not Needs_New_Profiles;
                   Log
-                    ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by " &
-                       "a high velocity limit combined with a high microstepping ratio or a high pressure " &
-                       "advance value.");
+                    ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by "
+                     & "a high velocity limit combined with a high microstepping ratio or a high pressure "
+                     & "advance value.");
                end;
             end loop;
 
@@ -236,6 +236,25 @@ package body Prunt.Motion_Planner.Planner is
          return Position (Pos * Block.Params.Axial_Scaler);
       end if;
    end Segment_Pos_At_Time;
+
+   function Segment_Vel_Ratio_At_Time
+     (Block : Execution_Block; Finishing_Corner : Corners_Index; Time_Into_Segment : Time) return Dimensionless is
+   begin
+      if Time_Into_Segment > Total_Time (Block.Feedrate_Profiles (Finishing_Corner)) then
+         --  Return 1.0 inside dwell parts so the laser can be set to the programmed power level.
+         return 1.0;
+      else
+         return
+           Velocity'Max
+             (0.0 * mm / s,
+              Velocity_At_Time
+                (Block.Feedrate_Profiles (Finishing_Corner),
+                 Time_Into_Segment,
+                 Block.Params.Crackle_Max,
+                 Block.Corner_Velocity_Limits (Finishing_Corner - 1)))
+           / Block.Original_Segment_Feedrates (Finishing_Corner);
+      end if;
+   end Segment_Vel_Ratio_At_Time;
 
    function Next_Block_Pos (Block : Execution_Block) return Position is
    begin

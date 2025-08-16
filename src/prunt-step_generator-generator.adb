@@ -209,6 +209,8 @@ package body Prunt.Step_Generator.Generator is
                         Unshaped_Pos       : constant Position :=
                           Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
                         Shaped_Pos         : Position := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
+                        Vel_Ratio          : constant Dimensionless :=
+                          Segment_Vel_Ratio_At_Time (Block, I, Current_Time);
                      begin
                         if Pausing_State = Paused_Kind
                           or else (I = Block.N_Corners and Current_Time >= Segment_Time (Block, I))
@@ -225,7 +227,8 @@ package body Prunt.Step_Generator.Generator is
                                     Data            => Corner_Extra_Data (Block, I),
                                     Index           => Current_Command_Index,
                                     Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                                    Safe_Stop_After => J = Extra_Loops_Required);
+                                    Safe_Stop_After => J = Extra_Loops_Required,
+                                    Vel_Ratio       => Vel_Ratio);
                                  Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
                               end loop;
                            end;
@@ -236,7 +239,8 @@ package body Prunt.Step_Generator.Generator is
                               Data            => Corner_Extra_Data (Block, I),
                               Index           => Current_Command_Index,
                               Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                              Safe_Stop_After => False);
+                              Safe_Stop_After => False,
+                              Vel_Ratio       => Vel_Ratio);
                         end if;
 
                         case Homing_Move_When is

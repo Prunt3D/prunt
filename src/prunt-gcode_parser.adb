@@ -24,8 +24,11 @@ with Ada.Characters.Handling; use Ada.Characters.Handling;
 package body Prunt.Gcode_Parser is
 
    function Make_Context
-     (Initial_Position : Position; Initial_Feedrate : Velocity; Replace_G0_With_G1 : Boolean; Default_Fan : Fan_Name)
-      return Context is
+     (Initial_Position   : Position;
+      Initial_Feedrate   : Velocity;
+      Replace_G0_With_G1 : Boolean;
+      Default_Fan        : Fan_Name;
+      Default_Laser      : Laser_Name) return Context is
    begin
       return
         (XYZ_Relative_Mode         => False,
@@ -40,7 +43,8 @@ package body Prunt.Gcode_Parser is
          M208_Offset               => (others => Length (0.0)),
          M208_Feedrate             => 0.0 * mm / s,
          Replace_G0_With_G1        => Replace_G0_With_G1,
-         Default_Fan               => Default_Fan);
+         Default_Fan               => Default_Fan,
+         Default_Laser             => Default_Laser);
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : Command_Runner) is
@@ -339,7 +343,7 @@ package body Prunt.Gcode_Parser is
                declare
                   Comm : Command;
                begin
-                  Comm := (Kind => Move_Kind, others => <>);
+                  Comm := (Kind => Move_Kind, Is_Rapid => Params ('G').Integer_Value = 0, others => <>);
                   if Ctx.XYZ_Relative_Mode then
                      Comm.Pos (X_Axis) := Ctx.Pos (X_Axis) + Floatify_Or_Default ('X', 0.0) * mm;
                      Comm.Pos (Y_Axis) := Ctx.Pos (Y_Axis) + Floatify_Or_Default ('Y', 0.0) * mm;
@@ -418,7 +422,11 @@ package body Prunt.Gcode_Parser is
                      if Ctx.M207_Offset (E_Axis) /= Length (0.0) then
                         New_Pos (E_Axis) := New_Pos (E_Axis) - Ctx.M207_Offset (E_Axis);
                         Runner
-                          ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Ctx.M207_Feedrate));
+                          ((Kind     => Move_Kind,
+                            Pos      => New_Pos,
+                            Old_Pos  => Ctx.Pos,
+                            Feedrate => Ctx.M207_Feedrate,
+                            Is_Rapid => False));
                         Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
                         Ctx.Current_Retraction_Offset (E_Axis) :=
                           Ctx.Current_Retraction_Offset (E_Axis) - Ctx.M207_Offset (E_Axis);
@@ -428,7 +436,12 @@ package body Prunt.Gcode_Parser is
 
                      if Ctx.M207_Offset (Z_Axis) /= Length (0.0) then
                         New_Pos (Z_Axis) := New_Pos (Z_Axis) + Ctx.M207_Offset (Z_Axis);
-                        Runner ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Velocity'Last));
+                        Runner
+                          ((Kind     => Move_Kind,
+                            Pos      => New_Pos,
+                            Old_Pos  => Ctx.Pos,
+                            Feedrate => Velocity'Last,
+                            Is_Rapid => False));
                         Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
                         Ctx.Current_Retraction_Offset (Z_Axis) := Ctx.M207_Offset (Z_Axis);
                      end if;
@@ -442,7 +455,12 @@ package body Prunt.Gcode_Parser is
                   begin
                      if Ctx.Current_Retraction_Offset (Z_Axis) /= Length (0.0) then
                         New_Pos (Z_Axis) := New_Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis);
-                        Runner ((Kind => Move_Kind, Pos => New_Pos, Old_Pos => Ctx.Pos, Feedrate => Velocity'Last));
+                        Runner
+                          ((Kind     => Move_Kind,
+                            Pos      => New_Pos,
+                            Old_Pos  => Ctx.Pos,
+                            Feedrate => Velocity'Last,
+                            Is_Rapid => False));
                         Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
                         Ctx.Current_Retraction_Offset (Z_Axis) := Length (0.0);
                      end if;
@@ -453,7 +471,8 @@ package body Prunt.Gcode_Parser is
                           ((Kind     => Move_Kind,
                             Pos      => New_Pos,
                             Old_Pos  => Ctx.Pos,
-                            Feedrate => Ctx.M207_Feedrate + Ctx.M208_Feedrate));
+                            Feedrate => Ctx.M207_Feedrate + Ctx.M208_Feedrate,
+                            Is_Rapid => False));
                         Ctx.Pos := New_Pos; --  Must occur here in case Runner raises an exception.
                         Ctx.Current_Retraction_Offset (E_Axis) :=
                           Ctx.Current_Retraction_Offset (E_Axis) + Ctx.M207_Offset (E_Axis) + Ctx.M208_Offset (E_Axis);
@@ -520,6 +539,58 @@ package body Prunt.Gcode_Parser is
          case Params ('M').Integer_Value is
             when 0 | 1 =>
                Runner ((Kind => Pause_Kind, Pos => Ctx.Pos));
+
+            when 3 | 5 =>
+               declare
+                  Comm : Command :=
+                    (Kind         => Set_Laser_Power_Kind,
+                     Laser_Power  => 0.0,
+                     Laser_To_Set => Ctx.Default_Laser,
+                     Pos          => Ctx.Pos);
+               begin
+                  if Params ('M').Integer_Value = 3 then
+                     Comm.Laser_Power :=
+                       Dimensionless'Min (1.0, Dimensionless'Max (0.0, Floatify_Or_Error ('S') / 255.0));
+                  end if;
+
+                  case Params ('P').Kind is
+                     when No_Value_Kind =>
+                        raise Bad_Line with "Parameter 'P' has no value in command requiring value.";
+
+                     when Non_Existant_Kind =>
+                        Comm.Laser_To_Set := Ctx.Default_Laser;
+
+                     when Integer_Kind =>
+                        begin
+                           Comm.Laser_To_Set := Laser_Name'Enum_Val (Integer_Or_Error ('P'));
+                           if not Comm.Laser_To_Set'Valid then
+                              raise Constraint_Error;
+                           end if;
+                        exception
+                           when Constraint_Error =>
+                              raise Bad_Line with "Invalid laser index (" & Params ('P').Integer_Value'Image & ").";
+                        end;
+
+                     when Float_Kind =>
+                        raise Bad_Line
+                          with "Parameter 'P' must be integer between 0 and 999 or string in this command.";
+
+                     when String_Kind =>
+                        declare
+                           Name : constant String := String_Or_Error ('P');
+                        begin
+                           Comm.Laser_To_Set := Laser_Name'Value (Name);
+                           if not Comm.Laser_To_Set'Valid then
+                              raise Constraint_Error;
+                           end if;
+                        exception
+                           when Constraint_Error =>
+                              raise Bad_Line with "Invalid laser name (" & Name & ").";
+                        end;
+                  end case;
+
+                  Runner (Comm);
+               end;
 
             when 17 =>
                Runner

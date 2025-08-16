@@ -29,6 +29,14 @@ package body Prunt.Config is
 
    pragma Unsuppress (All_Checks);
 
+   Has_Heaters       : constant Boolean := Heater_Name'Pos (Heater_Name'Last) >= Heater_Name'Pos (Heater_Name'First);
+   Has_Thermistors   : constant Boolean :=
+     Thermistor_Name'Pos (Thermistor_Name'Last) >= Thermistor_Name'Pos (Thermistor_Name'First);
+   Has_Fans          : constant Boolean := Fan_Name'Pos (Fan_Name'Last) >= Fan_Name'Pos (Fan_Name'First);
+   Has_Input_Switchs : constant Boolean :=
+     Input_Switch_Name'Pos (Input_Switch_Name'Last) >= Input_Switch_Name'Pos (Input_Switch_Name'First);
+   Has_Lasers        : constant Boolean := Laser_Name'Pos (Laser_Name'Last) >= Laser_Name'Pos (Laser_Name'First);
+
    use type TMC_Types.TMC2240.CHM_Type;
 
    pragma Warnings (Off, "cannot call * before body seen");
@@ -244,6 +252,7 @@ package body Prunt.Config is
       Thermistor_Name_Strings          : constant Discrete_String_Sets.Set := [for T in Thermistor_Name => T'Image];
       Heater_Name_Strings              : constant Discrete_String_Sets.Set := [for H in Heater_Name => H'Image];
       Fan_Name_Strings                 : constant Discrete_String_Sets.Set := [for F in Fan_Name => F'Image];
+      Laser_Name_Strings               : constant Discrete_String_Sets.Set := [for L in Laser_Name => L'Image];
 
       --!pp off
       Stepper_Distance_Variant_Children : constant Property_Maps.Map :=
@@ -830,229 +839,17 @@ package body Prunt.Config is
                 ("Consider the switch to be hit when the input pin is in the high state.",
                  Default => False)]);
 
-      TMC_Homing_Sequence : constant Property_Parameters_Access :=
+      Laser_Sequence : constant Property_Parameters_Access :=
         Sequence
-          ("Homing parameters for this axis.",
-           ["Homing method" =>
-              Variant
-                ("Homing method for this axis. Usually ""Set to value"" should be used for E axis and "
-                 & """Use input switch"" should be used for XYZ.",
-                 "Disabled",
-                 ["Disabled" =>
-                    Sequence
-                      ("Homing not yet configured. Axis will not allow movement until homing is configured.", []),
-                  "Set to value" =>
-                    Sequence
-                      ("Set this axis to a given position when homing is performed without actually moving.",
-                       ["Position" =>
-                          Float
-                            ("Position to set the axis to.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm")]),
-                  "Use input switch" =>
-                    Sequence
-                      ("Move towards a switch until it is hit, then back off, then move towards it slower and record "
-                       & "the position.",
-                       ["Switch" =>
-                          Discrete
-                            ("Input switch to use.",
-                             Default => Input_Switch_Name_Strings.First_Element,
-                             Options => Input_Switch_Name_Strings),
-                        "Move towards negative infinity" =>
-                          Boolean
-                            ("If set then homing will move towards lower positions, otherwise homing will move "
-                             & "towards higher positions.",
-                             Default => True),
-                        "First move distance" =>
-                          Float
-                            ("Distance past switch hit point allowed in first seeking move.",
-                             Default => 0.1,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Back off move distance" =>
-                          Float
-                            ("Distance that is moved back after the switch is first hit.",
-                             Default => 2.0,
-                             Min => 0.0,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Second move distance" =>
-                          Float
-                            ("Distance past switch hit point allowed in second seeking move.",
-                             Default => 0.1,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Switch position" =>
-                          Float
-                            ("Position of the switch on the axis. This value is allowed to be outside of the machine "
-                             & "limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Move to after" =>
-                          Float
-                            ("Position to move to after homing. This position must be inside the machine limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Velocity limit" =>
-                          Float
-                           ("Velocity limit for this axis. May be safely set to 1E100 mm/s to solely use distance "
-                            & "limits. Does not override regular velocity limit.",
-                             Default => 1.0E100,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                            Unit => "mm/s")]),
-                  "Use StallGuard2" =>
-                    Sequence
-                      ("Move until StallGuard2 is triggered on the selected motor. Configured SpreadCycle parameters "
-                       & "will be used if SpreadCycle is enabled, otherwise the default SpreadCycle parameters "
-                       & "will be used. The motor is always switched to SpreadCycle mode when homing this axis, "
-                       & "regardless of configured velocity limits.",
-                       ["Motor" =>
-                          Discrete
-                            ("Motor to use. Must be attached to the given axis, or the A/B axis for X/Y in Core XY.",
-                             Default => StallGuard2_Stepper_Name_Strings.First_Element,
-                             Options => StallGuard2_Stepper_Name_Strings),
-                        "Move towards negative infinity" =>
-                          Boolean
-                            ("If set then homing will move towards lower positions, otherwise homing will move "
-                             & "towards higher positions.",
-                             Default => True),
-                        "Threshold" =>
-                          Integer
-                            ("Threshold for StallGuard2. Higher values are less sensitive.",
-                             Default => -64,
-                             Min => -64,
-                             Max => 63,
-                             Unit => ""),
-                        "Enable filter" =>
-                          Boolean
-                            ("Enable filter for more precise measurements. Causes measurement frequency to reduce "
-                             & "to every 4 full steps.",
-                             Default => False),
-                        "Stop position" =>
-                          Float
-                            ("Position where the axis will hit a hard limit. This value is allowed to be outside of "
-                             & "the machine limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Move to after" =>
-                          Float
-                            ("Position to move to after homing. This position must be inside the machine limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Velocity limit" =>
-                          Float
-                           ("Velocity limit for this axis. Does not override regular velocity limit.",
-                             Default => 50.0,
-                             Min => 0.000_001,
-                             Max => 50.0,
-                            Unit => "mm/s"),
-                        "Acceleration limit" =>
-                          Float
-                           ("Acceleration limit for this axis. Does not override regular acceleration limit.",
-                             Default => 1_000.0,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                            Unit => "mm/s^2")]),
-                  "Use StallGuard4" =>
-                    --  TODO: StallGuard 4 settings should not be available on machines with only SG2 capable drivers.
-                    Sequence
-                      ("Move until StallGuard4 is triggered on the selected motor. Configured StealthChop parameters "
-                       & "will be used if StealthChop is enabled, otherwise the default StealthChop parameters "
-                       & "will be used. The motor is always switched to StealthChop mode when homing this axis, "
-                       & "regardless of configured velocity limits.",
-                       ["Motor" =>
-                          Discrete
-                            ("Motor to use. Must be attached to the given axis, or the A/B axis for X/Y in Core XY.",
-                             Default => StallGuard4_Stepper_Name_Strings.First_Element,
-                             Options => StallGuard4_Stepper_Name_Strings),
-                        "Move towards negative infinity" =>
-                          Boolean
-                            ("If set then homing will move towards lower positions, otherwise homing will move "
-                             & "towards higher positions.",
-                             Default => True),
-                        "Threshold" =>
-                          Integer
-                            ("Threshold for StallGuard4. Higher values are more sensitive.",
-                             Default => 255,
-                             Min => 0,
-                             Max => 255,
-                             Unit => ""),
-                        "Enable filter" =>
-                          Boolean
-                            ("Enable filter for more precise measurements. Causes measurements to become average of "
-                             & "last 4 full steps.",
-                             Default => False),
-                        "Stop position" =>
-                          Float
-                            ("Position where the axis will hit a hard limit. This value is allowed to be outside of "
-                             & "the machine limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Move to after" =>
-                          Float
-                            ("Position to move to after homing. This position must be inside the machine limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Velocity limit" =>
-                          Float
-                           ("Velocity limit for this axis. Does not override regular velocity limit.",
-                             Default => 50.0,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                            Unit => "mm/s"),
-                        "Acceleration limit" =>
-                          Float
-                           ("Acceleration limit for this axis. Does not override regular acceleration limit.",
-                             Default => 1_000.0,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                            Unit => "mm/s^2")])]),
-            "Prerequisites" =>
-              Sequence_Over_Axes
-                ("Required states of other axes.",
-                 Variant
-                   ("Required state of selected axis.",
-                    "No requirement",
-                    ["No requirement" =>
-                      Sequence ("There are no requirements for this axis during homing.", []),
-                     "Must be homed" =>
-                       Sequence
-                         ("This axis must be homed prior to the parent axis, but the position does not matter. " &
-                            "Homing of the parent axis will also trigger homing of this axis if it is not already " &
-                            "homed.",
-                          []),
-                     "Must be at position" =>
-                       Sequence
-                         ("This axis must be homed prior to the parent axis and it must be at a specified position. " &
-                            "Homing of the parent axis will also trigger homing of this axis if it is not already " &
-                            "homed. After this axis is homed it will move to the specified position.",
-                          ["Position" =>
-                            Float
-                              ("Position to move to before homing the parent axis. This position must be inside the " &
-                                 "machine limits.",
-                               Default => 0.0,
-                               Min => -1.0E100,
-                               Max => 1.0E100,
-                               Unit => "mm")])]))]);
+          ("Laser settings.",
+           ["Modulate with velocity" =>
+              Boolean
+               ("Multiply the laser duty cycle by the current velocity divided by the target velocity. This allows "
+                & "the energy over distance value of a cut to remain constant during acceleration. During dwells "
+                & "where the velocity is zero the power is always set to the programmed power.",
+                Default => True)]);
 
-      Regular_Homing_Sequence : constant Property_Parameters_Access :=
+      Homing_Sequence : constant Property_Parameters_Access :=
         Sequence
           ("Homing parameters for this axis.",
            ["Homing method" =>
@@ -1072,65 +869,7 @@ package body Prunt.Config is
                              Default => 0.0,
                              Min => -1.0E100,
                              Max => 1.0E100,
-                             Unit => "mm")]),
-                  "Use input switch" =>
-                    Sequence
-                      ("Move towards a switch until it is hit, then back off, then move towards it slower and record "
-                       & "the position.",
-                       ["Switch" =>
-                          Discrete
-                            ("Input switch to use.",
-                             Default => Input_Switch_Name_Strings.First_Element,
-                             Options => Input_Switch_Name_Strings),
-                        "Move towards negative infinity" =>
-                          Boolean
-                            ("If set then homing will move towards lower positions, otherwise homing will move "
-                             & "towards higher positions.",
-                             Default => True),
-                        "First move distance" =>
-                          Float
-                            ("Distance past switch hit point allowed in first seeking move.",
-                             Default => 0.1,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Back off move distance" =>
-                          Float
-                            ("Distance that is moved back after the switch is first hit.",
-                             Default => 2.0,
-                             Min => 0.0,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Second move distance" =>
-                          Float
-                            ("Distance past switch hit point allowed in second seeking move.",
-                             Default => 0.1,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Switch position" =>
-                          Float
-                            ("Position of the switch on the axis. This value is allowed to be outside of the machine "
-                             & "limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Move to after" =>
-                          Float
-                            ("Position to move to after homing. This position must be inside the machine limits.",
-                             Default => 0.0,
-                             Min => -1.0E100,
-                             Max => 1.0E100,
-                             Unit => "mm"),
-                        "Velocity limit" =>
-                          Float
-                           ("Velocity limit for this axis. May be safely set to 1E100 mm/s to solely use distance "
-                            & "limits. Does not override regular velocity limit.",
-                             Default => 1.0E100,
-                             Min => 0.000_001,
-                             Max => 1.0E100,
-                            Unit => "mm/s")])]),
+                             Unit => "mm")])]),
             "Prerequisites" =>
               Sequence_Over_Axes
                 ("Required states of other axes.",
@@ -1429,7 +1168,8 @@ package body Prunt.Config is
               "Replace G0 with G1" =>
                 Boolean
                   ("Replace all G0 g-code commands with G1 commands to mimic the behaviour of some other 3D " &
-                     "printer motion controllers.",
+                     "printer motion controllers. This only affects feedrates, lasers are always disabled during " &
+                     "G0 moves regardless of this setting.",
                    Default => False)]),
          "Steppers" =>
            Tabbed_Sequence
@@ -1591,6 +1331,10 @@ package body Prunt.Config is
            Tabbed_Sequence
              ("Heater settings.",
               []),
+         "Lasers" =>
+           Tabbed_Sequence
+             ("Laser settings.",
+              []),
          "Homing" =>
            Tabbed_Sequence
              ("Homing settings.",
@@ -1605,23 +1349,240 @@ package body Prunt.Config is
               []),
          "G-code assignments" =>
            Sequence
-             ("Assign heaters to g-code commands.",
-              ["Hotend heater" =>
-                 Discrete
-                   ("Heater to use for the hotend.",
-                    Default => Heater_Name'First'Image,
-                    Options => Heater_Name_Strings),
-              "Bed heater" =>
-                 Discrete
-                   ("Heater to use for the bed.",
-                    Default => Heater_Name'First'Image,
-                    Options => Heater_Name_Strings),
-              "Default fan" =>
-                 Discrete
-                   ("Fan to control when no P parameter is used for M106/M107.",
-                    Default => Fan_Name'First'Image,
-                    Options => Fan_Name_Strings)])];
+             ("Assign heaters/fans/lasers to g-code commands.",
+              [])];
       --!pp on
+
+      if Has_Heaters then
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "G-code assignments").Element.all.Sequence_Children,
+            "Hotend heater",
+            Discrete
+              ("Heater to use for the hotend.", Default => Heater_Name'First'Image, Options => Heater_Name_Strings));
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "G-code assignments").Element.all.Sequence_Children,
+            "Bed heater",
+            Discrete
+              ("Heater to use for the bed.", Default => Heater_Name'First'Image, Options => Heater_Name_Strings));
+      end if;
+
+      if Has_Fans then
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "G-code assignments").Element.all.Sequence_Children,
+            "Default fan",
+            Discrete
+              ("Fan to control when no P parameter is used for M106/M107.",
+               Default => Fan_Name'First'Image,
+               Options => Fan_Name_Strings));
+      end if;
+
+      if Has_Lasers then
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "G-code assignments").Element.all.Sequence_Children,
+            "Default laser",
+            Discrete
+              ("Laser to control when no P parameter is used for M3/M5.",
+               Default => Laser_Name'First'Image,
+               Options => Laser_Name_Strings));
+      end if;
+
+      if Has_Input_Switchs then
+         Property_Maps.Insert
+           (Property_Maps.Reference (Homing_Sequence.all.Sequence_Children, "Homing method").Element.all
+              .Variant_Children,
+            "Use input switch",
+            Sequence
+              ("Move towards a switch until it is hit, then back off, then move towards it slower and record "
+               & "the position.",
+               ["Switch"                         =>
+                  Discrete
+                    ("Input switch to use.",
+                     Default => Input_Switch_Name_Strings.First_Element,
+                     Options => Input_Switch_Name_Strings),
+                "Move towards negative infinity" =>
+                  Boolean
+                    ("If set then homing will move towards lower positions, otherwise homing will move "
+                     & "towards higher positions.",
+                     Default => True),
+                "First move distance"            =>
+                  Float
+                    ("Distance past switch hit point allowed in first seeking move.",
+                     Default => 0.1,
+                     Min     => 0.000_001,
+                     Max     => 1.0E100,
+                     Unit    => "mm"),
+                "Back off move distance"         =>
+                  Float
+                    ("Distance that is moved back after the switch is first hit.",
+                     Default => 2.0,
+                     Min     => 0.0,
+                     Max     => 1.0E100,
+                     Unit    => "mm"),
+                "Second move distance"           =>
+                  Float
+                    ("Distance past switch hit point allowed in second seeking move.",
+                     Default => 0.1,
+                     Min     => 0.000_001,
+                     Max     => 1.0E100,
+                     Unit    => "mm"),
+                "Switch position"                =>
+                  Float
+                    ("Position of the switch on the axis. This value is allowed to be outside of the machine "
+                     & "limits.",
+                     Default => 0.0,
+                     Min     => -1.0E100,
+                     Max     => 1.0E100,
+                     Unit    => "mm"),
+                "Move to after"                  =>
+                  Float
+                    ("Position to move to after homing. This position must be inside the machine limits.",
+                     Default => 0.0,
+                     Min     => -1.0E100,
+                     Max     => 1.0E100,
+                     Unit    => "mm"),
+                "Velocity limit"                 =>
+                  Float
+                    ("Velocity limit for this axis. May be safely set to 1E100 mm/s to solely use distance "
+                     & "limits. Does not override regular velocity limit.",
+                     Default => 1.0E100,
+                     Min     => 0.000_001,
+                     Max     => 1.0E100,
+                     Unit    => "mm/s")]));
+      end if;
+
+      declare
+         Have_TMC : Standard.Boolean := False;
+      begin
+         for S in Stepper_Name loop
+            Have_TMC := @ or Stepper_Hardware (S).Kind in TMC2240_UART_Kind;
+         end loop;
+
+         if Have_TMC then
+            Property_Maps.Insert
+              (Property_Maps.Reference (Homing_Sequence.all.Sequence_Children, "Homing method").Element.all
+                 .Variant_Children,
+               "Use StallGuard2",
+               Sequence
+                 ("Move until StallGuard2 is triggered on the selected motor. Configured SpreadCycle parameters "
+                  & "will be used if SpreadCycle is enabled, otherwise the default SpreadCycle parameters "
+                  & "will be used. The motor is always switched to SpreadCycle mode when homing this axis, "
+                  & "regardless of configured velocity limits.",
+                  ["Motor"                          =>
+                     Discrete
+                       ("Motor to use. Must be attached to the given axis, or the A/B axis for X/Y in Core XY.",
+                        Default => StallGuard2_Stepper_Name_Strings.First_Element,
+                        Options => StallGuard2_Stepper_Name_Strings),
+                   "Move towards negative infinity" =>
+                     Boolean
+                       ("If set then homing will move towards lower positions, otherwise homing will move "
+                        & "towards higher positions.",
+                        Default => True),
+                   "Threshold"                      =>
+                     Integer
+                       ("Threshold for StallGuard2. Higher values are less sensitive.",
+                        Default => -64,
+                        Min     => -64,
+                        Max     => 63,
+                        Unit    => ""),
+                   "Enable filter"                  =>
+                     Boolean
+                       ("Enable filter for more precise measurements. Causes measurement frequency to reduce "
+                        & "to every 4 full steps.",
+                        Default => False),
+                   "Stop position"                  =>
+                     Float
+                       ("Position where the axis will hit a hard limit. This value is allowed to be outside of "
+                        & "the machine limits.",
+                        Default => 0.0,
+                        Min     => -1.0E100,
+                        Max     => 1.0E100,
+                        Unit    => "mm"),
+                   "Move to after"                  =>
+                     Float
+                       ("Position to move to after homing. This position must be inside the machine limits.",
+                        Default => 0.0,
+                        Min     => -1.0E100,
+                        Max     => 1.0E100,
+                        Unit    => "mm"),
+                   "Velocity limit"                 =>
+                     Float
+                       ("Velocity limit for this axis. Does not override regular velocity limit.",
+                        Default => 50.0,
+                        Min     => 0.000_001,
+                        Max     => 50.0,
+                        Unit    => "mm/s"),
+                   "Acceleration limit"             =>
+                     Float
+                       ("Acceleration limit for this axis. Does not override regular acceleration limit.",
+                        Default => 1_000.0,
+                        Min     => 0.000_001,
+                        Max     => 1.0E100,
+                        Unit    => "mm/s^2")]));
+
+            --  TODO: StallGuard 4 settings should not be available on machines with only SG2 capable drivers.
+            Property_Maps.Insert
+              (Property_Maps.Reference (Homing_Sequence.all.Sequence_Children, "Homing method").Element.all
+                 .Variant_Children,
+               "Use StallGuard4",
+               Sequence
+                 ("Move until StallGuard4 is triggered on the selected motor. Configured StealthChop parameters "
+                  & "will be used if StealthChop is enabled, otherwise the default StealthChop parameters "
+                  & "will be used. The motor is always switched to StealthChop mode when homing this axis, "
+                  & "regardless of configured velocity limits.",
+                  ["Motor"                          =>
+                     Discrete
+                       ("Motor to use. Must be attached to the given axis, or the A/B axis for X/Y in Core XY.",
+                        Default => StallGuard4_Stepper_Name_Strings.First_Element,
+                        Options => StallGuard4_Stepper_Name_Strings),
+                   "Move towards negative infinity" =>
+                     Boolean
+                       ("If set then homing will move towards lower positions, otherwise homing will move "
+                        & "towards higher positions.",
+                        Default => True),
+                   "Threshold"                      =>
+                     Integer
+                       ("Threshold for StallGuard4. Higher values are more sensitive.",
+                        Default => 255,
+                        Min     => 0,
+                        Max     => 255,
+                        Unit    => ""),
+                   "Enable filter"                  =>
+                     Boolean
+                       ("Enable filter for more precise measurements. Causes measurements to become average of "
+                        & "last 4 full steps.",
+                        Default => False),
+                   "Stop position"                  =>
+                     Float
+                       ("Position where the axis will hit a hard limit. This value is allowed to be outside of "
+                        & "the machine limits.",
+                        Default => 0.0,
+                        Min     => -1.0E100,
+                        Max     => 1.0E100,
+                        Unit    => "mm"),
+                   "Move to after"                  =>
+                     Float
+                       ("Position to move to after homing. This position must be inside the machine limits.",
+                        Default => 0.0,
+                        Min     => -1.0E100,
+                        Max     => 1.0E100,
+                        Unit    => "mm"),
+                   "Velocity limit"                 =>
+                     Float
+                       ("Velocity limit for this axis. Does not override regular velocity limit.",
+                        Default => 50.0,
+                        Min     => 0.000_001,
+                        Max     => 1.0E100,
+                        Unit    => "mm/s"),
+                   "Acceleration limit"             =>
+                     Float
+                       ("Acceleration limit for this axis. Does not override regular acceleration limit.",
+                        Default => 1_000.0,
+                        Min     => 0.000_001,
+                        Max     => 1.0E100,
+                        Unit    => "mm/s^2")]));
+
+         end if;
+      end;
 
       for S in Stepper_Name loop
          Property_Maps.Insert
@@ -1668,30 +1629,18 @@ package body Prunt.Config is
       end loop;
 
       for A in Axis_Name loop
-         declare
-            Have_TMC : Standard.Boolean := False;
-         begin
-            for S in Stepper_Name loop
-               Have_TMC := @ or Stepper_Hardware (S).Kind in TMC2240_UART_Kind;
-            end loop;
-
-            if Have_TMC then
-               Property_Maps.Insert
-                 (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children,
-                  A'Image,
-                  TMC_Homing_Sequence);
-            else
-               Property_Maps.Insert
-                 (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children,
-                  A'Image,
-                  Regular_Homing_Sequence);
-            end if;
-         end;
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Homing").Element.all.Sequence_Children, A'Image, Homing_Sequence);
       end loop;
 
       for A in Axis_Name loop
          Property_Maps.Insert
            (Property_Maps.Reference (Result, "Input shaping").Element.all.Sequence_Children, A'Image, Shaper_Sequence);
+      end loop;
+
+      for L in Laser_Name loop
+         Property_Maps.Insert
+           (Property_Maps.Reference (Result, "Lasers").Element.all.Sequence_Children, L'Image, Laser_Sequence);
       end loop;
 
       return Result;
@@ -2626,6 +2575,13 @@ package body Prunt.Config is
          Data := Initial_Config.Shapers (Axis);
       end Read;
 
+      procedure Read (Data : out Laser_Parameters; Laser : Laser_Name) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Lasers (Laser);
+      end Read;
+
       function JSON_To_Config (Data : JSON_Value) return Full_Config is
          Config : Full_Config;
 
@@ -2790,9 +2746,22 @@ package body Prunt.Config is
                E_Axis => Get (Data, "Kinematics$Axial scaler$E_AXIS")));
 
          Config.G_Code_Assignments :=
-           (Bed_Heater    => Heater_Name'Value (Get (Data, "G-code assignments$Bed heater")),
-            Hotend_Heater => Heater_Name'Value (Get (Data, "G-code assignments$Hotend heater")),
-            Default_Fan   => Fan_Name'Value (Get (Data, "G-code assignments$Default fan")));
+           (Has_Heaters => Has_Heaters, Has_Fans => Has_Fans, Has_Lasers => Has_Lasers, others => <>);
+
+         if Has_Heaters then
+            Config.G_Code_Assignments.Bed_Heater := Heater_Name'Value (Get (Data, "G-code assignments$Bed heater"));
+            Config.G_Code_Assignments.Hotend_Heater :=
+              Heater_Name'Value (Get (Data, "G-code assignments$Hotend heater"));
+         end if;
+
+         if Has_Fans then
+            Config.G_Code_Assignments.Default_Fan := Fan_Name'Value (Get (Data, "G-code assignments$Default fan"));
+         end if;
+
+         if Has_Lasers then
+            Config.G_Code_Assignments.Default_Laser :=
+              Laser_Name'Value (Get (Data, "G-code assignments$Default laser"));
+         end if;
 
          for S in Stepper_Name loop
             case Stepper_Hardware (S).Kind is
@@ -3412,6 +3381,11 @@ package body Prunt.Config is
             end if;
          end loop;
 
+         for L in Laser_Name loop
+            Config.Lasers (L) :=
+              (Modulate_With_Velocity => Get (Data, "Lasers$" & L'Image & "$Modulate with velocity"));
+         end loop;
+
          return Config;
       end JSON_To_Config;
 
@@ -3632,6 +3606,11 @@ package body Prunt.Config is
    procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name) is
    begin
       Config_File.Read (Data, Axis);
+   end Read;
+
+   procedure Read (Data : out Laser_Parameters; Laser : Laser_Name) is
+   begin
+      Config_File.Read (Data, Laser);
    end Read;
 
    procedure Patch

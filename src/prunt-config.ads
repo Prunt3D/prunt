@@ -172,10 +172,15 @@ package Prunt.Config is
       Params     : Heater_Parameters;
    end record;
 
-   type G_Code_Assignment_Parameters is record
+   type G_Code_Assignment_Parameters
+     (Has_Heaters : Boolean := False;
+      Has_Fans    : Boolean := False;
+      Has_Lasers  : Boolean := False)
+   is record
       Bed_Heater    : Heater_Name := Heater_Name'First;
       Hotend_Heater : Heater_Name := Heater_Name'First;
       Default_Fan   : Fan_Name := Fan_Name'First;
+      Default_Laser : Laser_Name := Laser_Name'First;
    end record;
 
    type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
@@ -197,6 +202,10 @@ package Prunt.Config is
       end case;
    end record;
 
+   type Laser_Parameters is record
+      Modulate_With_Velocity : Boolean;
+   end record;
+
    procedure Disable_Prunt;
    --  Modifies the configuration file to cause Prunt_Parameters.Enabled to be set to False. This does not take effect
    --  until the next startup.
@@ -213,6 +222,7 @@ package Prunt.Config is
    procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
    procedure Read (Data : out G_Code_Assignment_Parameters);
    procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
+   procedure Read (Data : out Laser_Parameters; Laser : Laser_Name);
    --  The above procedures read the initial configuration values, not configurations values that have been changed
    --  after the first read.
 
@@ -337,7 +347,8 @@ private
      (Boolean_Kind, Discrete_Kind, Integer_Kind, Float_Kind, Float_Ratio_Kind, Sequence_Kind, Variant_Kind);
 
    type Property_Parameters (Kind : Property_Kind);
-   type Property_Parameters_Access is not null access constant Property_Parameters;
+   --  TODO: It's not ideal for the below access type to not be constant.
+   type Property_Parameters_Access is not null access Property_Parameters;
 
    package Property_Maps is new Indefinite_Ordered_Maps_With_Insertion_Order (String, Property_Parameters_Access);
 
@@ -407,6 +418,8 @@ private
 
    type Shaper_Parameters_Array is array (Axis_Name) of Shaper_Parameters;
 
+   type Laser_Parameters_Array is array (Laser_Name) of Laser_Parameters;
+
    type Full_Config is record
       Prunt              : Prunt_Parameters;
       Kinematics         : Kinematics_Parameters;
@@ -418,6 +431,7 @@ private
       Heaters            : Heater_Full_Parameters_Array;
       Fans               : Fan_Parameters_Array;
       Shapers            : Shaper_Parameters_Array;
+      Lasers             : Laser_Parameters_Array;
    end record;
 
    protected Config_File is
@@ -434,6 +448,7 @@ private
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
       procedure Read (Data : out G_Code_Assignment_Parameters);
       procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
+      procedure Read (Data : out Laser_Parameters; Laser : Laser_Name);
       procedure Patch
         (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
       procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));

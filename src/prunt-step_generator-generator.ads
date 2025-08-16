@@ -43,7 +43,8 @@ generic
         Data            : Corner_Extra_Data_Type;
         Index           : Command_Index;
         Loop_Until_Hit  : Boolean;
-        Safe_Stop_After : Boolean);
+        Safe_Stop_After : Boolean;
+        Vel_Ratio       : Dimensionless);
    with
      procedure Finish_Planner_Block
        (Resetting_Data       : Flush_Resetting_Data_Type;

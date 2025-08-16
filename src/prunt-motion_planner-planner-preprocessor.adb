@@ -60,6 +60,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                if Comm.Dwell_After < 0.0 * s then
                   raise Constraint_Error with "Negative dwell times are not allowed.";
                end if;
+
+               if Comm.Feedrate <= 0.0 * mm / s then
+                  raise Constraint_Error with "Feedrate must be positive.";
+               end if;
          end case;
          --  Checking happens here so we can provide instant feedback to the user when g-code is typed in manually.
 
@@ -220,7 +224,8 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
          Block.Corners := Corners (1 .. N_Corners);
          Block.Corners_Extra_Data := Corners_Extra_Data (2 .. N_Corners);
-         Block.Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
+         Block.Original_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
+         Block.Limited_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
          Block.Corner_Dwell_Times := Corner_Dwell_Times (2 .. N_Corners);
          Block.Flush_Resetting_Data := Flush_Resetting_Data;
          Block.Params := Current_Params;
