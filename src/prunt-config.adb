@@ -2989,7 +2989,7 @@ package body Prunt.Config is
                          (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HEND") + 3));
                      Config.Steppers (S).CHOPCONF.HSTRT_TFD210 :=
                        TMC_Types.Unsigned_3
-                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$Spread Cycle$Manual$HSTRT") - 1));
+                         (Long_Integer'(Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle$Manual$HSTRT") - 1));
                   elsif Get (Data, "Steppers$" & S'Image & "$CHM") = "SpreadCycle"
                     and then Get (Data, "Steppers$" & S'Image & "$CHM$SpreadCycle") = "Derived"
                   then
