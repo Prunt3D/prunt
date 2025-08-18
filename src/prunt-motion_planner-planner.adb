@@ -19,9 +19,11 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Text_IO;
 with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
 with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
+with Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
 with Prunt.Motion_Planner.Planner.Step_Rate_Limiter;
 
@@ -30,6 +32,7 @@ package body Prunt.Motion_Planner.Planner is
    package My_Preprocessor is new Preprocessor;
    package My_Corner_Blender is new Corner_Blender;
    package My_Kinematic_Limiter is new Kinematic_Limiter;
+   package My_Early_Kinematic_Limiter is new Early_Kinematic_Limiter;
    package My_Feedrate_Profile_Generator is new Feedrate_Profile_Generator;
    package My_Step_Rate_Limiter is new Step_Rate_Limiter;
 
@@ -88,6 +91,7 @@ package body Prunt.Motion_Planner.Planner is
             end if;
 
             My_Corner_Blender.Run (Block);
+            My_Early_Kinematic_Limiter.Run (Block);
 
             loop
                loop
@@ -244,6 +248,7 @@ package body Prunt.Motion_Planner.Planner is
          --  Return 1.0 inside dwell parts so the laser can be set to the programmed power level.
          return 1.0;
       else
+         Ada.Text_IO.Put_Line (Block.Original_Segment_Feedrates (Finishing_Corner)'Image);
          return
            Velocity'Max
              (0.0 * mm / s,

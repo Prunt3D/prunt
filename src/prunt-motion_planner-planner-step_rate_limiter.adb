@@ -19,6 +19,7 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Text_IO;
 with Prunt.Input_Shapers.Shapers;
 
 package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
