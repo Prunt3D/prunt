@@ -27,8 +27,8 @@ package body Prunt.Gcode_Parser is
      (Initial_Position   : Position;
       Initial_Feedrate   : Velocity;
       Replace_G0_With_G1 : Boolean;
-      Default_Fan        : Fan_Name;
-      Default_Laser      : Laser_Name) return Context is
+      Default_Fan        : Optional_Fan;
+      Default_Laser      : Optional_Laser) return Context is
    begin
       return
         (XYZ_Relative_Mode         => False,
@@ -541,11 +541,15 @@ package body Prunt.Gcode_Parser is
                Runner ((Kind => Pause_Kind, Pos => Ctx.Pos));
 
             when 3 | 5 =>
+               if not Has_Lasers then
+                  raise Bad_Line with "This board does not support lasers. Laser commands can not be used.";
+               end if;
+
                declare
                   Comm : Command :=
                     (Kind         => Set_Laser_Power_Kind,
                      Laser_Power  => 0.0,
-                     Laser_To_Set => Ctx.Default_Laser,
+                     Laser_To_Set => Ctx.Default_Laser.Name,
                      Pos          => Ctx.Pos);
                begin
                   if Params ('M').Integer_Value = 3 then
@@ -558,7 +562,7 @@ package body Prunt.Gcode_Parser is
                         raise Bad_Line with "Parameter 'P' has no value in command requiring value.";
 
                      when Non_Existant_Kind =>
-                        Comm.Laser_To_Set := Ctx.Default_Laser;
+                        Comm.Laser_To_Set := Ctx.Default_Laser.Name;
 
                      when Integer_Kind =>
                         begin
@@ -619,6 +623,10 @@ package body Prunt.Gcode_Parser is
                Ctx.E_Relative_Mode := True;
 
             when 104 =>
+               if not Has_Heaters then
+                  raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
+               end if;
+
                declare
                   Ignored : Parameter_Integer := Integer_Or_Default ('T', 0);
                begin
@@ -629,9 +637,13 @@ package body Prunt.Gcode_Parser is
                end;
 
             when 106 | 107 =>
+               if not Has_Fans then
+                  raise Bad_Line with "This board does not support fans. Fan commands can not be used.";
+               end if;
+
                declare
                   Comm : Command :=
-                    (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Ctx.Default_Fan, Pos => Ctx.Pos);
+                    (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Ctx.Default_Fan.Name, Pos => Ctx.Pos);
                begin
                   if Params ('M').Integer_Value = 106 then
                      Comm.Fan_Speed :=
@@ -643,7 +655,7 @@ package body Prunt.Gcode_Parser is
                         raise Bad_Line with "Parameter 'P' has no value in command requiring value.";
 
                      when Non_Existant_Kind =>
-                        Comm.Fan_To_Set := Ctx.Default_Fan;
+                        Comm.Fan_To_Set := Ctx.Default_Fan.Name;
 
                      when Integer_Kind =>
                         begin
@@ -678,6 +690,10 @@ package body Prunt.Gcode_Parser is
                end;
 
             when 109 =>
+               if not Has_Heaters then
+                  raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
+               end if;
+
                Runner
                  ((Kind               => Wait_Hotend_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celsius,
@@ -687,24 +703,40 @@ package body Prunt.Gcode_Parser is
                Runner ((Kind => TMC_Dump_Kind, Pos => Ctx.Pos));
 
             when 140 =>
+               if not Has_Heaters then
+                  raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
+               end if;
+
                Runner
                  ((Kind               => Set_Bed_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
 
             when 141 =>
+               if not Has_Heaters then
+                  raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
+               end if;
+
                Runner
                  ((Kind               => Set_Chamber_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
 
             when 190 =>
+               if not Has_Heaters then
+                  raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
+               end if;
+
                Runner
                  ((Kind               => Wait_Bed_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celsius,
                    Pos                => Ctx.Pos));
 
             when 191 =>
+               if not Has_Heaters then
+                  raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
+               end if;
+
                Runner
                  ((Kind               => Wait_Chamber_Temperature_Kind,
                    Target_Temperature => Floatify_Or_Error ('S') * celsius,
@@ -762,6 +794,10 @@ package body Prunt.Gcode_Parser is
                Ctx.M208_Offset (E_Axis) := Floatify_Or_Default ('S', Ctx.M208_Offset (E_Axis) / mm) * mm;
 
             when 303 =>
+               if not Has_Heaters then
+                  raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
+               end if;
+
                declare
                   Cycles : constant Parameter_Integer := Integer_Or_Default ('C', 5);
                   Comm   : Command :=

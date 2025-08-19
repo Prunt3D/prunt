@@ -25,6 +25,32 @@ generic
    type Laser_Name is (<>);
 package Prunt.Gcode_Parser is
 
+   Has_Heaters : constant Boolean := Heater_Name'Pos (Heater_Name'Last) >= Heater_Name'Pos (Heater_Name'First);
+   Has_Fans    : constant Boolean := Fan_Name'Pos (Fan_Name'Last) >= Fan_Name'Pos (Fan_Name'First);
+   Has_Lasers  : constant Boolean := Laser_Name'Pos (Laser_Name'Last) >= Laser_Name'Pos (Laser_Name'First);
+
+   type Optional_Fan (Has_Fans : Boolean := Gcode_Parser.Has_Fans) is record
+      case Has_Fans is
+         when True =>
+            Name : Fan_Name;
+
+         when False =>
+            null;
+      end case;
+   end record
+   with Dynamic_Predicate => Optional_Fan.Has_Fans = Has_Fans;
+
+   type Optional_Laser (Has_Lasers : Boolean := Gcode_Parser.Has_Lasers) is record
+      case Has_Lasers is
+         when True =>
+            Name : Laser_Name;
+
+         when False =>
+            null;
+      end case;
+   end record
+   with Dynamic_Predicate => Optional_Laser.Has_Lasers = Has_Lasers;
+
    type Command_Kind is
      (None_Kind,
       Pause_Kind,
@@ -124,8 +150,8 @@ package Prunt.Gcode_Parser is
      (Initial_Position   : Position;
       Initial_Feedrate   : Velocity;
       Replace_G0_With_G1 : Boolean;
-      Default_Fan        : Fan_Name;
-      Default_Laser      : Laser_Name) return Context;
+      Default_Fan        : Optional_Fan;
+      Default_Laser      : Optional_Laser) return Context;
 
    type Command_Runner is access procedure (Comm : Command);
 
@@ -149,8 +175,8 @@ private
       M208_Offset               : Position_Offset;
       M208_Feedrate             : Velocity;
       Replace_G0_With_G1        : Boolean;
-      Default_Fan               : Fan_Name;
-      Default_Laser             : Laser_Name;
+      Default_Fan               : Optional_Fan;
+      Default_Laser             : Optional_Laser;
    end record;
 
 end Prunt.Gcode_Parser;

@@ -33,36 +33,36 @@ package body Prunt.Controller.Gcode_Handler is
 
    use type My_Config.Fan_Kind;
 
-   function Get_Default_Fan return Generic_Types.Fan_Name is
-      Params : My_Config.G_Code_Assignment_Parameters;
-   begin
-      My_Config.Read (Params);
-      if Params.Has_Fans then
-         return Params.Default_Fan;
-      else
-         --  TODO: Is assigning Fan_Name'First to Fan_Name valid when the range is empty?
-         return Generic_Types.Fan_Name'First;
-      end if;
-   end Get_Default_Fan;
-
-   function Get_Default_Laser return Generic_Types.Laser_Name is
-      Params : My_Config.G_Code_Assignment_Parameters;
-   begin
-      My_Config.Read (Params);
-      if Params.Has_Lasers then
-         return Params.Default_Laser;
-      else
-         --  TODO: Is assigning Laser_Name'First to Laser_Name valid when the range is empty?
-         return Generic_Types.Laser_Name'First;
-      end if;
-   end Get_Default_Laser;
-
    package My_Gcode_Parser is new
      Prunt.Gcode_Parser
        (Heater_Name => Generic_Types.Heater_Name,
         Fan_Name    => Generic_Types.Fan_Name,
         Laser_Name  => Generic_Types.Laser_Name);
    use My_Gcode_Parser;
+
+   function Get_Default_Fan return My_Gcode_Parser.Optional_Fan is
+      Params : My_Config.G_Code_Assignment_Parameters;
+   begin
+      My_Config.Read (Params);
+      if My_Gcode_Parser.Has_Fans then
+         pragma Assert (Params.Has_Fans);
+         return (Has_Fans => True, Name => Params.Default_Fan);
+      else
+         return (Has_Fans => False);
+      end if;
+   end Get_Default_Fan;
+
+   function Get_Default_Laser return My_Gcode_Parser.Optional_Laser is
+      Params : My_Config.G_Code_Assignment_Parameters;
+   begin
+      My_Config.Read (Params);
+      if My_Gcode_Parser.Has_Lasers then
+         pragma Assert (Params.Has_Lasers);
+         return (Has_Lasers => True, Name => Params.Default_Laser);
+      else
+         return (Has_Lasers => False);
+      end if;
+   end Get_Default_Laser;
 
    procedure Try_Set_File (Path : String; Succeeded : out Boolean) is
    begin
