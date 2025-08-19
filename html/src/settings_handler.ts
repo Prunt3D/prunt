@@ -206,53 +206,54 @@ function buildTabbedSequence(
     contentContainer.classList.add("tab-content-container");
 
     for (const [name, data] of Object.entries(schema)) {
-        const sanitizedPath = sanitizeForId(path);
-        const sanitizedName = sanitizeForId(name);
-        const uniquePrefix = `nested-${sanitizedPath ? sanitizedPath + '-' : ''}${sanitizedName}`;
-        const tabId = `${uniquePrefix}-tab`;
-        const panelId = `${uniquePrefix}-panel`;
-
-        const tab = document.createElement("div");
-        tab.classList.add("tab");
-        tab.textContent = name;
-
-        tab.setAttribute("role", "tab");
-        tab.setAttribute("id", tabId);
-        tab.setAttribute("aria-controls", panelId);
-        tab.setAttribute("tabindex", "0");
-        tab.setAttribute("aria-selected", "false");
-
-        const tabContent = document.createElement("div");
-        tabContent.classList.add("tab-content", "hidden");
-        tabContent.setAttribute("role", "tabpanel");
-        tabContent.setAttribute("id", panelId);
-        tabContent.setAttribute("aria-labelledby", tabId);
-
-        tab.addEventListener("click", () => {
-            tabContainer.querySelectorAll<HTMLElement>(":scope > .tab").forEach(t => {
-                t.classList.remove("active");
-                t.setAttribute("aria-selected", "false");
-            });
-            contentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
-
-            tab.classList.add("active");
-            tab.setAttribute("aria-selected", "true");
-            tabContent.classList.remove("hidden");
-        });
-
-        tab.addEventListener("keydown", (event: KeyboardEvent) => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                tab.click();
-            }
-        });
-
         if (data.Kind !== "Tabbed_Sequence" || Object.keys(data.Children).length != 0) {
-            buildField(data, `${path}${path === "" ? "" : "$"}${name}`, tabContent, tab);
-        }
+            const sanitizedPath = sanitizeForId(path);
+            const sanitizedName = sanitizeForId(name);
+            const uniquePrefix = `nested-${sanitizedPath ? sanitizedPath + '-' : ''}${sanitizedName}`;
+            const tabId = `${uniquePrefix}-tab`;
+            const panelId = `${uniquePrefix}-panel`;
 
-        tabContainer.appendChild(tab);
-        contentContainer.appendChild(tabContent);
+            const tab = document.createElement("div");
+            tab.classList.add("tab");
+            tab.textContent = name;
+
+            tab.setAttribute("role", "tab");
+            tab.setAttribute("id", tabId);
+            tab.setAttribute("aria-controls", panelId);
+            tab.setAttribute("tabindex", "0");
+            tab.setAttribute("aria-selected", "false");
+
+            const tabContent = document.createElement("div");
+            tabContent.classList.add("tab-content", "hidden");
+            tabContent.setAttribute("role", "tabpanel");
+            tabContent.setAttribute("id", panelId);
+            tabContent.setAttribute("aria-labelledby", tabId);
+
+            tab.addEventListener("click", () => {
+                tabContainer.querySelectorAll<HTMLElement>(":scope > .tab").forEach(t => {
+                    t.classList.remove("active");
+                    t.setAttribute("aria-selected", "false");
+                });
+                contentContainer.querySelectorAll(":scope > .tab-content").forEach(c => c.classList.add("hidden"));
+
+                tab.classList.add("active");
+                tab.setAttribute("aria-selected", "true");
+                tabContent.classList.remove("hidden");
+            });
+
+            tab.addEventListener("keydown", (event: KeyboardEvent) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    tab.click();
+                }
+            });
+
+            console.log(data);
+            buildField(data, `${path}${path === "" ? "" : "$"}${name}`, tabContent, tab);
+
+            tabContainer.appendChild(tab);
+            contentContainer.appendChild(tabContent);
+        }
     }
 
     container.appendChild(tabContainer);
