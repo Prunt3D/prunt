@@ -177,10 +177,10 @@ package Prunt.Config is
       Has_Fans    : Boolean := False;
       Has_Lasers  : Boolean := False)
    is record
-      Bed_Heater    : Heater_Name := Heater_Name'First;
-      Hotend_Heater : Heater_Name := Heater_Name'First;
-      Default_Fan   : Fan_Name := Fan_Name'First;
-      Default_Laser : Laser_Name := Laser_Name'First;
+      Bed_Heater    : Heater_Name;
+      Hotend_Heater : Heater_Name;
+      Default_Fan   : Fan_Name;
+      Default_Laser : Laser_Name;
    end record;
 
    type Fan_Kind is (Dynamic_PWM_Kind, Always_On_Kind);
