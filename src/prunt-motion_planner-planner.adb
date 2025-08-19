@@ -248,7 +248,6 @@ package body Prunt.Motion_Planner.Planner is
          --  Return 1.0 inside dwell parts so the laser can be set to the programmed power level.
          return 1.0;
       else
-         Ada.Text_IO.Put_Line (Block.Original_Segment_Feedrates (Finishing_Corner)'Image);
          return
            Velocity'Max
              (0.0 * mm / s,
