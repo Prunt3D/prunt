@@ -27,14 +27,18 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
 
       for I in Block.Original_Segment_Feedrates'Range loop
+         Block.Original_Segment_Feedrates (I) :=
+           Velocity'Min (Block.Original_Segment_Feedrates (I), 299_792_458_000.1 * mm / s);
+
          declare
             Offset  : constant Scaled_Position_Offset := Block.Corners (I - 1) - Block.Corners (I);
             Has_XYZ : constant Boolean :=
               (Offset with delta E_Axis => 0.0 * mm) /= Scaled_Position_Offset'(others => Length (0.0));
 
-            Feedrate : Velocity := Block.Original_Segment_Feedrates (I);
+            Feedrate : Velocity :=
+              Velocity'Min (Block.Original_Segment_Feedrates (I), Block.Params.Tangential_Velocity_Max);
          begin
-            if Block.Params.Ignore_E_In_XYZE and Has_XYZ and Feedrate /= Velocity'Last then
+            if Block.Params.Ignore_E_In_XYZE and Has_XYZ then
                Feedrate := Feedrate * (abs Offset / abs [Offset with delta E_Axis => 0.0 * mm]);
                if abs [Offset with delta E_Axis => 0.0 * mm] > 0.0 * mm and Feedrate /= Velocity'Last then
                   Feedrate :=
@@ -42,15 +46,19 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                     * abs ([Offset with delta E_Axis => 0.0 * mm] / Block.Params.Axial_Scaler)
                     / abs ([Offset with delta E_Axis => 0.0 * mm]);
                end if;
+
+               Block.Original_Segment_Feedrates (I) :=
+                 Block.Original_Segment_Feedrates (I)
+                 * abs ([Offset with delta E_Axis => 0.0 * mm] / Block.Params.Axial_Scaler)
+                 / abs ([Offset with delta E_Axis => 0.0 * mm]);
             else
-               if abs Offset > 0.0 * mm and Feedrate /= Velocity'Last then
+               if abs Offset > 0.0 * mm then
                   Feedrate := Feedrate * abs (Offset / Block.Params.Axial_Scaler) / abs (Offset);
+
+                  Block.Original_Segment_Feedrates (I) :=
+                    Block.Original_Segment_Feedrates (I) * abs (Offset / Block.Params.Axial_Scaler) / abs (Offset);
                end if;
             end if;
-
-            Block.Original_Segment_Feedrates (I) := Feedrate;
-
-            Feedrate := Velocity'Min (Feedrate, Block.Params.Tangential_Velocity_Max);
 
             if abs Offset > 0.0 * mm then
                Feedrate := Velocity'Min (Feedrate, abs Offset / Interpolation_Time);
