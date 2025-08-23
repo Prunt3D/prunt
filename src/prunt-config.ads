@@ -213,14 +213,46 @@ package Prunt.Config is
    function Read return Prunt_Parameters;
    function Read (Stepper : Stepper_Name) return Stepper_Parameters
    with Post => Read'Result.Kind = Stepper_Hardware (Stepper).Kind;
-   function Read return Kinematics_Parameters;
+   function Read return Kinematics_Parameters
+   with
+     Post =>
+       Read'Result.Planner_Parameters.Tangential_Velocity_Max > 0.0 * mm / s
+       and Read'Result.Planner_Parameters.Acceleration_Max > 0.0 * mm / s**2
+       and Read'Result.Planner_Parameters.Jerk_Max > 0.0 * mm / s**3
+       and Read'Result.Planner_Parameters.Snap_Max > 0.0 * mm / s**4
+       and Read'Result.Planner_Parameters.Crackle_Max > 0.0 * mm / s**5
+       and Read'Result.Planner_Parameters.Chord_Error_Max >= 0.0 * mm
+       and (for all X of Read'Result.Planner_Parameters.Axial_Velocity_Maxes => X > 0.0 * mm / s)
+       and (for all X of Read'Result.Planner_Parameters.Axial_Scaler => X > 0.0);
    function Read (Input_Switch : Input_Switch_Name) return Input_Switch_Parameters;
-   function Read (Axis : Axis_Name) return Homing_Parameters;
+   function Read (Axis : Axis_Name) return Homing_Parameters
+   with
+     Post =>
+       (for all A in Axis_Name =>
+          (case Read'Result.Prerequisites (A).Kind is
+             when No_Requirement_Kind | Must_Be_Homed_Kind => True,
+             when Must_Be_At_Position_Kind =>
+               Read'Result.Prerequisites (A).Position
+               <= Kinematics_Parameters'(Read).Planner_Parameters.Upper_Pos_Limit (A)
+               and Read'Result.Prerequisites (A).Position
+                   >= Kinematics_Parameters'(Read).Planner_Parameters.Lower_Pos_Limit (A)))
+       and (case Read'Result.Kind is
+              when Disabled_Kind | Set_To_Value_Kind => True,
+              when Double_Tap_Kind | StallGuard2_Kind | StallGuard4_Kind =>
+                Read'Result.Velocity_Limit > 0.0 * mm / s
+                and Read'Result.Move_To_After <= Kinematics_Parameters'(Read).Planner_Parameters.Upper_Pos_Limit (Axis)
+                and Read'Result.Move_To_After
+                    >= Kinematics_Parameters'(Read).Planner_Parameters.Lower_Pos_Limit (Axis));
    function Read (Thermistor : Thermistor_Name) return Thermistor_Parameters;
    function Read (Heater : Heater_Name) return Heater_Full_Parameters
    with Post => Read'Result.Params.Kind not in PID_Autotune_Kind;
    function Read (Fan : Fan_Name) return Fan_Parameters;
-   function Read return G_Code_Assignment_Parameters;
+   function Read return G_Code_Assignment_Parameters
+   with
+     Post =>
+       Read'Result.Has_Heaters = (Heater_Name'Pos (Heater_Name'Last) >= Heater_Name'Pos (Heater_Name'First))
+       and Read'Result.Has_Fans = (Fan_Name'Pos (Fan_Name'Last) >= Fan_Name'Pos (Fan_Name'First))
+       and Read'Result.Has_Lasers = (Laser_Name'Pos (Laser_Name'Last) >= Laser_Name'Pos (Laser_Name'First));
    function Read (Axis : Axis_Name) return Shaper_Parameters;
    function Read (Laser : Laser_Name) return Laser_Parameters;
    --  The above functions read the initial configuration values, not configurations values that have been changed
