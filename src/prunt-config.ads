@@ -210,20 +210,20 @@ package Prunt.Config is
    --  Modifies the configuration file to cause Prunt_Parameters.Enabled to be set to False. This does not take effect
    --  until the next startup.
 
-   procedure Read (Data : out Prunt_Parameters);
-   procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name)
-   with Post => Data.Kind = Stepper_Hardware (Stepper).Kind;
-   procedure Read (Data : out Kinematics_Parameters);
-   procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name);
-   procedure Read (Data : out Homing_Parameters; Axis : Axis_Name);
-   procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name);
-   procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name)
-   with Post => Data.Params.Kind not in PID_Autotune_Kind;
-   procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
-   procedure Read (Data : out G_Code_Assignment_Parameters);
-   procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
-   procedure Read (Data : out Laser_Parameters; Laser : Laser_Name);
-   --  The above procedures read the initial configuration values, not configurations values that have been changed
+   function Read return Prunt_Parameters;
+   function Read (Stepper : Stepper_Name) return Stepper_Parameters
+   with Post => Read'Result.Kind = Stepper_Hardware (Stepper).Kind;
+   function Read return Kinematics_Parameters;
+   function Read (Input_Switch : Input_Switch_Name) return Input_Switch_Parameters;
+   function Read (Axis : Axis_Name) return Homing_Parameters;
+   function Read (Thermistor : Thermistor_Name) return Thermistor_Parameters;
+   function Read (Heater : Heater_Name) return Heater_Full_Parameters
+   with Post => Read'Result.Params.Kind not in PID_Autotune_Kind;
+   function Read (Fan : Fan_Name) return Fan_Parameters;
+   function Read return G_Code_Assignment_Parameters;
+   function Read (Axis : Axis_Name) return Shaper_Parameters;
+   function Read (Laser : Laser_Name) return Laser_Parameters;
+   --  The above functions read the initial configuration values, not configurations values that have been changed
    --  after the first read.
 
    procedure Patch

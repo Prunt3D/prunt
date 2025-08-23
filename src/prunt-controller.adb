@@ -480,20 +480,16 @@ package body Prunt.Controller is
          end if;
 
          declare
-            Prunt_Params : My_Config.Prunt_Parameters;
+            Prunt_Params : constant My_Config.Prunt_Parameters := My_Config.Read;
          begin
-            My_Config.Read (Prunt_Params);
-
             My_Logger.Log ("Running setup.");
 
             Setup_Thermistors_And_Heater_Assignments;
 
             for F in Fan_Name loop
                declare
-                  Fan_Params : My_Config.Fan_Parameters;
+                  Fan_Params : constant My_Config.Fan_Parameters := My_Config.Read (F);
                begin
-                  My_Config.Read (Fan_Params, F);
-
                   case Fan_Hardware (F).Kind is
                      when Fixed_Switching_Kind =>
                         Fan_Hardware (F).Reconfigure_Fixed_Switching_Fan (F, Fan_Params.PWM_Frequency);
@@ -526,9 +522,8 @@ package body Prunt.Controller is
 
             for H in Heater_Name loop
                declare
-                  Heater_Params : My_Config.Heater_Full_Parameters;
+                  Heater_Params : constant My_Config.Heater_Full_Parameters := My_Config.Read (H);
                begin
-                  My_Config.Read (Heater_Params, H);
                   Reconfigure_Heater (H, Heater_Params.Params);
                end;
             end loop;
@@ -673,11 +668,9 @@ package body Prunt.Controller is
 
          for S in Stepper_Name loop
             declare
-               Stepper_Params : My_Config.Stepper_Parameters;
+               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (S);
                Message        : TMC_Types.TMC2240.UART_Data_Message;
             begin
-               My_Config.Read (Stepper_Params, S);
-
                case Stepper_Hardware (S).Kind is
                   when Basic_Kind =>
                      null;
@@ -750,11 +743,9 @@ package body Prunt.Controller is
       if Resetting_Data.Is_Homing_Move then
          for S in Stepper_Name loop
             declare
-               Stepper_Params : My_Config.Stepper_Parameters;
+               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (S);
                Message        : TMC_Types.TMC2240.UART_Data_Message;
             begin
-               My_Config.Read (Stepper_Params, S);
-
                case Stepper_Hardware (S).Kind is
                   when Basic_Kind =>
                      null;
@@ -840,16 +831,15 @@ package body Prunt.Controller is
    begin
       for H in Heater_Name loop
          declare
-            Heater_Params : My_Config.Heater_Full_Parameters;
+            Heater_Params : constant My_Config.Heater_Full_Parameters := My_Config.Read (H);
          begin
-            My_Config.Read (Heater_Params, H);
             Heater_Thermistors (H) := Heater_Params.Thermistor;
             Stored_Heater_Thermistors (H) := Heater_Params.Thermistor;
          end;
       end loop;
 
       for T in Thermistor_Name loop
-         My_Config.Read (Thermistor_Params_Array (T), T);
+         Thermistor_Params_Array (T) := My_Config.Read (T);
       end loop;
 
       Setup (Heater_Thermistors, Thermistor_Params_Array);
@@ -889,11 +879,9 @@ package body Prunt.Controller is
    end TMC2240_UART_Write_And_Validate;
 
    procedure Setup_Stepper (Stepper : Stepper_Name) is
-      Stepper_Params : My_Config.Stepper_Parameters;
+      Stepper_Params : My_Config.Stepper_Parameters := My_Config.Read (Stepper);
 
    begin
-      My_Config.Read (Stepper_Params, Stepper);
-
       case Stepper_Hardware (Stepper).Kind is
          when Basic_Kind =>
             null;
@@ -1092,16 +1080,12 @@ package body Prunt.Controller is
 
    procedure Setup_Step_Generator is
       Map               : My_Step_Generator.Stepper_Pos_Map := [others => [others => Length'Last]];
-      Kinematics_Params : My_Config.Kinematics_Parameters;
+      Kinematics_Params : constant My_Config.Kinematics_Parameters := My_Config.Read;
    begin
-      My_Config.Read (Kinematics_Params);
-
       for S in Stepper_Name loop
          declare
-            Stepper_Params : My_Config.Stepper_Parameters;
+            Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (S);
          begin
-            My_Config.Read (Stepper_Params, S);
-
             case Kinematics_Params.Kind is
                when My_Config.Cartesian_Kind =>
                   if Kinematics_Params.X_Steppers (S) then
@@ -1185,11 +1169,9 @@ package body Prunt.Controller is
 
          when TMC2240_UART_Kind =>
             declare
-               Stepper_Params : My_Config.Stepper_Parameters;
+               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (Stepper);
                Message        : TMC_Types.TMC2240.UART_Data_Message;
             begin
-               My_Config.Read (Stepper_Params, Stepper);
-
                Message :=
                  (Bytes_Mode => False,
                   Content    =>
@@ -1211,11 +1193,9 @@ package body Prunt.Controller is
 
          when TMC2240_UART_Kind =>
             declare
-               Stepper_Params : My_Config.Stepper_Parameters;
+               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (Stepper);
                Message        : TMC_Types.TMC2240.UART_Data_Message;
             begin
-               My_Config.Read (Stepper_Params, Stepper);
-
                Message :=
                  (Bytes_Mode => False,
                   Content    =>

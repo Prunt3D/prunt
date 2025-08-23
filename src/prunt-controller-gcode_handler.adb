@@ -41,9 +41,8 @@ package body Prunt.Controller.Gcode_Handler is
    use My_Gcode_Parser;
 
    function Get_Default_Fan return My_Gcode_Parser.Optional_Fan is
-      Params : My_Config.G_Code_Assignment_Parameters;
+      Params : constant My_Config.G_Code_Assignment_Parameters := My_Config.Read;
    begin
-      My_Config.Read (Params);
       if My_Gcode_Parser.Has_Fans then
          pragma Assert (Params.Has_Fans);
          return (Has_Fans => True, Name => Params.Default_Fan);
@@ -53,9 +52,8 @@ package body Prunt.Controller.Gcode_Handler is
    end Get_Default_Fan;
 
    function Get_Default_Laser return My_Gcode_Parser.Optional_Laser is
-      Params : My_Config.G_Code_Assignment_Parameters;
+      Params : constant My_Config.G_Code_Assignment_Parameters := My_Config.Read;
    begin
-      My_Config.Read (Params);
       if My_Gcode_Parser.Has_Lasers then
          pragma Assert (Params.Has_Lasers);
          return (Has_Lasers => True, Name => Params.Default_Laser);
@@ -255,10 +253,8 @@ package body Prunt.Controller.Gcode_Handler is
                 * 1.5
                 * Axial_Homing_Params (Axis).Velocity_Limit**2
                 / Axial_Homing_Params (Axis).Acceleration_Limit];
-         Stepper_Params : My_Config.Stepper_Parameters;
+         Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (Axial_Homing_Params (Axis).Motor);
       begin
-         My_Config.Read (Stepper_Params, Axial_Homing_Params (Axis).Motor);
-
          if Axial_Homing_Params (Axis).Move_To_After < Kinematics_Params.Planner_Parameters.Lower_Pos_Limit (Axis)
            or Axial_Homing_Params (Axis).Move_To_After > Kinematics_Params.Planner_Parameters.Upper_Pos_Limit (Axis)
          then
@@ -908,11 +904,10 @@ package body Prunt.Controller.Gcode_Handler is
             Current_Line    => 0);
 
          accept Start do
-            declare
-               Fan_Params : My_Config.Fan_Parameters;
-            begin
-               for F in Generic_Types.Fan_Name loop
-                  My_Config.Read (Fan_Params, F);
+            for F in Generic_Types.Fan_Name loop
+               declare
+                  Fan_Params : constant My_Config.Fan_Parameters := My_Config.Read (F);
+               begin
                   case Fan_Params.Kind is
                      when My_Config.Dynamic_PWM_Kind =>
                         if Fan_Params.Invert_Output then
@@ -928,35 +923,34 @@ package body Prunt.Controller.Gcode_Handler is
                            Corner_Data.Fans (F) := Fan_Params.Always_On_PWM;
                         end if;
                   end case;
-               end loop;
-            end;
+               end;
+            end loop;
 
-            declare
-               Laser_Params : My_Config.Laser_Parameters;
-            begin
-               for L in Generic_Types.Laser_Name loop
-                  My_Config.Read (Laser_Params, L);
+            for L in Generic_Types.Laser_Name loop
+               declare
+                  Laser_Params : constant My_Config.Laser_Parameters := My_Config.Read (L);
+               begin
                   Corner_Data.Modulate_Lasers (L) := Laser_Params.Modulate_With_Velocity;
-               end loop;
-            end;
+               end;
+            end loop;
 
-            My_Config.Read (Prunt_Params);
-            My_Config.Read (Kinematics_Params);
-            My_Config.Read (G_Code_Assignment_Params);
+            Prunt_Params := My_Config.Read;
+            Kinematics_Params := My_Config.Read;
+            G_Code_Assignment_Params := My_Config.Read;
             for A in Axis_Name loop
-               My_Config.Read (Persistent_Data.Shaper_Parameters (A), A);
+               Persistent_Data.Shaper_Parameters (A) := My_Config.Read (A);
             end loop;
 
             for I in Generic_Types.Input_Switch_Name loop
-               My_Config.Read (Switchwise_Switch_Params (I), I);
+               Switchwise_Switch_Params (I) := My_Config.Read (I);
             end loop;
 
             for I in Generic_Types.Fan_Name loop
-               My_Config.Read (Fanwise_Fan_Params (I), I);
+               Fanwise_Fan_Params (I) := My_Config.Read (I);
             end loop;
 
             for I in Axis_Name loop
-               My_Config.Read (Axial_Homing_Params (I), I);
+               Axial_Homing_Params (I) := My_Config.Read (I);
             end loop;
 
             Parser_Context :=
@@ -972,10 +966,8 @@ package body Prunt.Controller.Gcode_Handler is
             begin
                for S in Generic_Types.Stepper_Name loop
                   declare
-                     Stepper_Params : My_Config.Stepper_Parameters;
+                     Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (S);
                   begin
-                     My_Config.Read (Stepper_Params, S);
-
                      case Kinematics_Params.Kind is
                         when My_Config.Cartesian_Kind =>
                            if Kinematics_Params.X_Steppers (S) then

@@ -3558,59 +3558,81 @@ package body Prunt.Config is
       Config_File.Disable_Prunt;
    end Disable_Prunt;
 
-   procedure Read (Data : out Prunt_Parameters) is
+   function Read return Prunt_Parameters is
+      Data : Prunt_Parameters;
    begin
       Config_File.Read (Data);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Stepper_Parameters; Stepper : Stepper_Name) is
+   function Read (Stepper : Stepper_Name) return Stepper_Parameters is
+      Data : Stepper_Parameters;
    begin
       Config_File.Read (Data, Stepper);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Kinematics_Parameters) is
+   function Read return Kinematics_Parameters is
+      Data : Kinematics_Parameters;
    begin
       Config_File.Read (Data);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Input_Switch_Parameters; Input_Switch : Input_Switch_Name) is
+   function Read (Input_Switch : Input_Switch_Name) return Input_Switch_Parameters is
+      Data : Input_Switch_Parameters;
    begin
       Config_File.Read (Data, Input_Switch);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Homing_Parameters; Axis : Axis_Name) is
+   function Read (Axis : Axis_Name) return Homing_Parameters is
+      Data : Homing_Parameters;
    begin
       Config_File.Read (Data, Axis);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Thermistor_Parameters; Thermistor : Thermistor_Name) is
+   function Read (Thermistor : Thermistor_Name) return Thermistor_Parameters is
+      Data : Thermistor_Parameters;
    begin
       Config_File.Read (Data, Thermistor);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Heater_Full_Parameters; Heater : Heater_Name) is
+   function Read (Heater : Heater_Name) return Heater_Full_Parameters is
+      Data : Heater_Full_Parameters;
    begin
       Config_File.Read (Data, Heater);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Fan_Parameters; Fan : Fan_Name) is
+   function Read (Fan : Fan_Name) return Fan_Parameters is
+      Data : Fan_Parameters;
    begin
       Config_File.Read (Data, Fan);
+      return Data;
    end Read;
 
-   procedure Read (Data : out G_Code_Assignment_Parameters) is
+   function Read return G_Code_Assignment_Parameters is
+      Data : G_Code_Assignment_Parameters;
    begin
       Config_File.Read (Data);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name) is
+   function Read (Axis : Axis_Name) return Shaper_Parameters is
+      Data : Shaper_Parameters;
    begin
       Config_File.Read (Data, Axis);
+      return Data;
    end Read;
 
-   procedure Read (Data : out Laser_Parameters; Laser : Laser_Name) is
+   function Read (Laser : Laser_Name) return Laser_Parameters is
+      Data : Laser_Parameters;
    begin
       Config_File.Read (Data, Laser);
+      return Data;
    end Read;
 
    procedure Patch
