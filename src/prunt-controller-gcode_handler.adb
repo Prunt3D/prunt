@@ -1031,6 +1031,8 @@ package body Prunt.Controller.Gcode_Handler is
                null;
             end select;
 
+            delay 0.2;
+
             if Gcode_Queue.Get_Command /= "" then
                declare
                   Line : constant String := Gcode_Queue.Get_Command;
