@@ -26,9 +26,18 @@ with Prunt.Motion_Planner;
 package Prunt.Command_Line_Arguments is
 
    function Web_Server_Port return GNAT.Sockets.Port_Type;
+   --  Returns the last argument supplied to --prunt-web-server-port=, or 8080 if no argument is provided.
+
    function Motion_Planner_CPU return System.Multiprocessors.CPU_Range;
+   --  Returns the last argument supplied to --prunt-motion-planner-cpu=, or 0 if no argument is provided.
+
    function Step_Generator_CPU return System.Multiprocessors.CPU_Range;
+   --  Returns the last argument supplied to --prunt-step-generator-cpu=, or 0 if no argument is provided.
+
    function Max_Planner_Block_Corners return Motion_Planner.Max_Corners_Type;
+   --  Returns the last argument supplied to --prunt-max-planner-block-corners=, or 50000 if no argument is provided.
+
    function Enable_Documentation_Dev_Mode return Boolean;
+   --  Returns the last argument supplied to --enable-documentation-dev-mode=, or False if no argument is provided.
 
 end Prunt.Command_Line_Arguments;

@@ -122,12 +122,20 @@ generic
    --  Path of the printer configuration file.
 
    with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
+   --  Get a file to be exposed via the built in web server under the extras/ path. This is intended to be used for
+   --  images for board-specific documentation.
 
    with function Get_Board_Specific_Documentation (Key : String) return String;
+   --  Get the board specific documentation HTML to be appended to the documentation for a given configuration option.
+   --  Keys can be displayed in the web interface by running the server with `--enable-documentation-dev-mode=true`.
 
    Update_Check : Update_Check_Details := (Method => None);
+   --  Method to be used for update checking. When an update is available it will be displayed via the web interface.
 
    Input_Switch_Visible_To_User : Input_Switch_Visible_To_User_Type := (others => True);
+   --  Controls whether input switches are presented to the user in the configuration interface. This is primarily
+   --  intended for hiding of DIAG0 pins on TMC drivers which are required for StallGuard homing but should not be
+   --  directly selectable by the user.
 
 package Prunt.Controller
 is
@@ -170,6 +178,8 @@ is
    --  needs to be called.
 
    procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
+   --  Report an error to Prunt and cause the printer to halt.
+
    procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True);
    --  Report an error to Prunt and cause the printer to halt.
 
