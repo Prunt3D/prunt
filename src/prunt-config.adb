@@ -3375,7 +3375,7 @@ package body Prunt.Config is
                             (Data,
                              "Input shaping$"
                              & A'Image
-                             & "$Extra insensitive (EI/2HEI/3HEI)$Number of derivatives"))));
+                             & "$Extra insensitive (EI/2HEI/3HEI)$Number of humps"))));
             else
                raise Constraint_Error;
             end if;
