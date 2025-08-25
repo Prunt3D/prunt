@@ -141,8 +141,8 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                     / (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**(1 / 2));
                TD : constant Dimensionless :=
                  1.0
-                 / (Parameters.Zero_Vibration_Frequency
-                    * (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2)
+                 / (Parameters.Extra_Insensitive_Frequency
+                    * (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**(1 / 2)
                     * Interpolation_Time);
                --  Note that the original paper uses rad/s, but we use hertz here so the 2 * pi term has been removed.
 
