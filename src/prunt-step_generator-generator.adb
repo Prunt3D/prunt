@@ -89,6 +89,12 @@ package body Prunt.Step_Generator.Generator is
       Block renames Working_Block_Wrapper.Block;
 
       Current_Shapers : Input_Shapers.Shapers.Axial_Shapers;
+
+      Loop_Move_Offset        : Position_Offset;
+      Loop_Move_Command_Index : Command_Index;
+      Previous_Position       : Position;
+
+      Zero_Length : constant Length := 0.0 * mm;
    begin
       loop
          Current_Command_Index := 0;
@@ -98,6 +104,9 @@ package body Prunt.Step_Generator.Generator is
          Pause_Slew := Pause_Slew_Index'First;
          Paused := False;
          Do_Pause := False;
+         Loop_Move_Offset := [others => Zero_Length];
+         Loop_Move_Command_Index := 0;
+         Previous_Position := [others => Zero_Length];
 
          accept Setup (Map : Stepper_Pos_Map) do
             Pos_Map := Map;
@@ -226,13 +235,26 @@ package body Prunt.Step_Generator.Generator is
                                     Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
                                     Data            => Corner_Extra_Data (Block, I),
                                     Index           => Current_Command_Index,
-                                    Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
+                                    Loop_Until_Hit  => Homing_Move_When = This_Move_Kind and J = 0,
                                     Safe_Stop_After => J = Extra_Loops_Required,
                                     Vel_Ratio       => Vel_Ratio);
+
+                                 if Homing_Move_When = This_Move_Kind and J = 0 then
+                                    pragma Assert (Loop_Move_Command_Index = 0);
+                                    Loop_Move_Offset := Shaped_Pos - Previous_Position;
+                                    Loop_Move_Command_Index := Current_Command_Index;
+                                 end if;
+
                                  Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
                               end loop;
                            end;
                         else
+                           if Homing_Move_When = This_Move_Kind then
+                              pragma Assert (Loop_Move_Command_Index = 0);
+                              Loop_Move_Offset := Shaped_Pos - Previous_Position;
+                              Loop_Move_Command_Index := Current_Command_Index;
+                           end if;
+
                            Enqueue_Command
                              (Pos             => Shaped_Pos,
                               Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
@@ -242,6 +264,8 @@ package body Prunt.Step_Generator.Generator is
                               Safe_Stop_After => False,
                               Vel_Ratio       => Vel_Ratio);
                         end if;
+
+                        Previous_Position := Shaped_Pos;
 
                         case Homing_Move_When is
                            when This_Block_Kind =>
@@ -292,6 +316,12 @@ package body Prunt.Step_Generator.Generator is
                   First_Accel_Distance := 0.0 * mm;
                else
                   First_Accel_Distance := Segment_Accel_Distance (Block, 2);
+               end if;
+
+               if Is_Homing_Move (Flush_Resetting_Data (Block)) then
+                  pragma Assert (Loop_Move_Command_Index /= 0);
+                  Report_Loop_Move_Offset (Loop_Move_Command_Index, Loop_Move_Offset);
+                  Loop_Move_Command_Index := 0;
                end if;
 
                Finish_Planner_Block
