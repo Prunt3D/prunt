@@ -1209,4 +1209,44 @@ package body Prunt.Controller is
       end case;
    end Disable_Stepper;
 
+   procedure Report_Loop_Move_Offset (Index : Command_Index; Offset : Position_Offset) is
+   begin
+      Loop_Move_Recorder.Report_Offset (Index, Offset);
+   end Report_Loop_Move_Offset;
+
+   procedure Report_Loop_Cycles (Index : Command_Index; Cycles : Dimensionless) is
+   begin
+      Loop_Move_Recorder.Report (Index, Cycles);
+   end Report_Loop_Cycles;
+
+   protected body Loop_Move_Recorder is
+      entry Report (Index : Command_Index; Cycles : Dimensionless) when not Report_Ready is
+      begin
+         if Offset_Ready and then Stored_Index /= Index then
+            raise Constraint_Error with "Loop move index reported by implementation does not match index reported by step generator.";
+         end if;
+         Stored_Index := Index;
+         Stored_Cycles := Cycles;
+         Report_Ready := True;
+      end Report;
+
+      entry Report_Offset (Index : Command_Index; Offset : Position_Offset) when not Offset_Ready is
+      begin
+         if Report_Ready and then Stored_Index /= Index then
+            raise Constraint_Error with "Loop move index reported by implementation does not match index reported by step generator.";
+         end if;
+         Stored_Index := Index;
+         Stored_Offset := Offset;
+         Offset_Ready := True;
+      end Report_Offset;
+
+      entry Retrieve (Cycles : out Dimensionless; Offset : out Position_Offset) when Report_Ready and Offset_Ready is
+      begin
+         Cycles := Stored_Cycles;
+         Offset := Stored_Offset;
+         Report_Ready := False;
+         Offset_Ready := False;
+      end Retrieve;
+   end Loop_Move_Recorder;
+
 end Prunt.Controller;

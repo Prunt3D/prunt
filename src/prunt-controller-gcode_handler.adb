@@ -1213,6 +1213,14 @@ package body Prunt.Controller.Gcode_Handler is
    begin
       if Data.Is_Homing_Move then
          Finished_Block_Queue.Push (Data, First_Segment_Accel_Distance);
+
+         declare
+            Cycles : Dimensionless;
+            Offset : Position_Offset;
+         begin
+            Loop_Move_Recorder.Retrieve (Cycles, Offset);
+            My_Logger.Log ("Loop move distance: " & Length'Image (abs Offset * Cycles) & " mm");
+         end;
       end if;
    end Finished_Block;
 

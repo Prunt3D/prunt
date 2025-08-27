@@ -91,7 +91,7 @@ generic
    --
    --  If Loop_Until_Hit = True then the move should be repeated indefinitely until the condition set by
    --  Setup_For_Loop_Move is met. If the condition is met before the loop move is reached then Report_External_Error
-   --  should be called.
+   --  should be called. After the loop move is completed, Report_Loop_Cycles must be called.
    --
    --  If the queue runs dry on a move where Safe_Stop_After = False then Report_External_Error should be called and
    --  all heaters and motors should be disabled. Keep in mind that the motors may still be moving when the queue runs
@@ -176,6 +176,9 @@ is
    procedure Report_Last_Command_Executed (Index : Command_Index);
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
+
+   procedure Report_Loop_Cycles (Index : Command_Index; Cycles : Dimensionless);
+   --  Report the number of loops executed for a given loop move.
 
    procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
    --  Report an error to Prunt and cause the printer to halt.
@@ -275,6 +278,7 @@ private
       Next_Block_Pos       : Stepper_Position;
       First_Accel_Distance : Length;
       Next_Command_Index   : Command_Index);
+   procedure Report_Loop_Move_Offset (Index : Command_Index; Offset : Position_Offset);
 
    package My_Step_Generator is new
      Step_Generator.Generator
@@ -285,6 +289,7 @@ private
         Enqueue_Command             => Enqueue_Command_Internal,
         Finish_Planner_Block        => Finish_Planner_Block,
         Get_Axial_Shaper_Parameters => Get_Axial_Shaper_Parameters,
+        Report_Loop_Move_Offset     => Report_Loop_Move_Offset,
         Interpolation_Time          => Interpolation_Time,
         Loop_Interpolation_Time     => Loop_Interpolation_Time,
         Runner_CPU                  => Command_Line_Arguments.Step_Generator_CPU);
@@ -391,5 +396,17 @@ private
 
    procedure Enable_Stepper (Stepper : Generic_Types.Stepper_Name);
    procedure Disable_Stepper (Stepper : Generic_Types.Stepper_Name);
+
+   protected Loop_Move_Recorder is
+      entry Report (Index : Command_Index; Cycles : Dimensionless);
+      entry Report_Offset (Index : Command_Index; Offset : Position_Offset);
+      entry Retrieve (Cycles : out Dimensionless; Offset : out Position_Offset);
+   private
+      Report_Ready  : Boolean := False;
+      Offset_Ready  : Boolean := False;
+      Stored_Index  : Command_Index;
+      Stored_Cycles : Dimensionless;
+      Stored_Offset : Position_Offset;
+   end Loop_Move_Recorder;
 
 end Prunt.Controller;
