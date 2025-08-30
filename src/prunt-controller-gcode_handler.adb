@@ -521,6 +521,12 @@ package body Prunt.Controller.Gcode_Handler is
              Flush_Resetting_Data => (others => <>)),
             Ignore_Bounds => True);
 
+         My_Planner.Enqueue
+           ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
+             Flush_Resetting_Data => (others => <>),
+             Reset_Pos            => Pos_After),
+            Ignore_Bounds => True);
+
          Pos_After (Axis) := Axial_Homing_Params (Axis).Move_To_After;
 
          My_Planner.Enqueue
@@ -538,7 +544,6 @@ package body Prunt.Controller.Gcode_Handler is
             Ignore_Bounds => True);
 
          My_Gcode_Parser.Reset_Position (Parser_Context, Pos_After);
-
       end StallGuard_Home_Axis;
 
       procedure Run_Command (Command : My_Gcode_Parser.Command) is
