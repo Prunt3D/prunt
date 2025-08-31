@@ -39,18 +39,28 @@ generic
    Fan_Hardware : Generic_Types.Fan_Hardware_Parameters_Array_Type;
 
    with function Get_Board_Specific_Documentation (Key : String) return String;
+   --  For each Description field returned by Get_Schema, the return value of this function will be appended after a
+   --  string denoting it as board specific documentation. If there is no relevant board specific documentation them
+   --  this function should return an empty string. JSON escaping is applied to the returned string.
 
    Config_Path : String;
+   --  The path to store the configuration file. This is passed to Ada.Text_IO.Create as-is. Multiple backup files
+   --  named `Config_Path & "_backup_NN"` will also be created.
 
    Enable_Documentation_Dev_Mode : Boolean;
+   --  If this value is True then each Description field returned by Get_Schema will have its schema key appended to
+   --  it. This is the same key used in the return value of Get_Values and passed to Get_Board_Specific_Documentation.
 
    Input_Switch_Visible_To_User : Generic_Types.Input_Switch_Visible_To_User_Type;
+   --  Input switches set to false in this array will have no configuration options presented to the user. This is
+   --  intended to be used for StallGuard inputs.
 package Prunt.Config is
 
    type Attached_Steppers is array (Stepper_Name) of Boolean;
 
-   IO_Error                 : exception;
    Config_File_Format_Error : exception;
+   --  Raised by the first function called which needs access to the configuration file values if the configuration
+   --  file is for a newer Prunt version or if the configuration file does not match the schema.
 
    type Prunt_Parameters is record
       Enabled            : Boolean := False;
@@ -262,7 +272,7 @@ package Prunt.Config is
      (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
    --  Sets Data and the configuration file to the union of Data and Get_Values. Also reports any errors in the union
    --  in the same way as Validate_Current_Config but atomically. The format of Data should match the format described
-   --  in the Get_Values documentation comment.
+   --  in the Get_Values documentation comment. If the values do not match the schema then no values will be saved.
 
    procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));
    --  Calls Report for each error in the initial configuration, i.e. the one used by Read.
