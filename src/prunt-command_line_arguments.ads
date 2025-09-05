@@ -27,24 +27,29 @@ package Prunt.Command_Line_Arguments is
 
    Duplicate_Argument_Error : exception;
 
+   function Argument_Value (Switch, Default : String) return String;
+   --  Returns the value of the argument beginning with Switch, excluding the prefix equal to Switch. If the argument
+   --  is not found then Default is returned. If the argument is provided more than once then Duplicate_Argument_Error
+   --  is raised.
+
    function Web_Server_Port return GNAT.Sockets.Port_Type;
    --  Returns the argument supplied to --prunt-web-server-port=, or 8080 if no argument is provided. If the
-   --  argument is provided more than once then an error is raised.
+   --  argument is provided more than once then Duplicate_Argument_Error is raised.
 
    function Motion_Planner_CPU return System.Multiprocessors.CPU_Range;
    --  Returns the argument supplied to --prunt-motion-planner-cpu=, or 0 if no argument is provided. If the
-   --  argument is provided more than once then an error is raised.
+   --  argument is provided more than once then Duplicate_Argument_Error is raised.
 
    function Step_Generator_CPU return System.Multiprocessors.CPU_Range;
    --  Returns the argument supplied to --prunt-step-generator-cpu=, or 0 if no argument is provided. If the
-   --  argument is provided more than once then an error is raised.
+   --  argument is provided more than once then Duplicate_Argument_Error is raised.
 
    function Max_Planner_Block_Corners return Motion_Planner.Max_Corners_Type;
    --  Returns the argument supplied to --prunt-max-planner-block-corners=, or 50000 if no argument is provided.
-   --  If the argument is provided more than once then an error is raised.
+   --  If the argument is provided more than once then Duplicate_Argument_Error is raised.
 
    function Enable_Documentation_Dev_Mode return Boolean;
    --  Returns the argument supplied to --enable-documentation-dev-mode=, or False if no argument is provided. If
-   --  the argument is provided more than once then an error is raised.
+   --  the argument is provided more than once then Duplicate_Argument_Error is raised.
 
 end Prunt.Command_Line_Arguments;
