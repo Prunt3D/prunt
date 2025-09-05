@@ -19,6 +19,46 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+--  This package provides a 5th-order (bounded crackle) motion planner with adjustable velocity, acceleration, jerk,
+--  snap, and crackle limits. Blending of corners is also provided to limit axial acceleration through crackle.
+--
+--  The package works by collecting a series of corners before processing them as a single batch, called an
+--  `Execution_Block` which starts and ends at zero velocity. Corners are collected until a flush command is received
+--  or the block is full. Once a block is filled, it passes through a multi-stage planning pipeline, each of which is
+--  implemented in a sub-package of this one:
+--
+--  1. Corner_Blender: Sharp corners are replaced with C⁴ continuous Pythagorean-Hodograph (PH) Bézier
+--     curves. The maximal deviation of these curves from the original path is determined by the `Chord_Error_Max`
+--     parameter. Corners may optionally be shifted so that the midpoint of the curve is equal to the original corner,
+--     this can produce paths which more closely match original CAD files before conversion to triangulated surface
+--     formats such as STL files.
+--
+--  2. Early_Kinematic_Limiter: The programmed feed-rate is adjusted if `Ignore_E_In_XYZE` is set so that it is equal
+--     to the desired feedrate when the E axis movement is included. After this the total time of each move is adjusted
+--     such that no move will be less than `Interpolation_Time`. Finally the axial limits defined in
+--     `Axial_Velocity_Maxes` are applied.
+--
+--  3. Kinematic_Limiter: A forward and backward pass are performed to generate corner velocities that confirm to the
+--    specified kinematic limits. The forward pass starts from zero velocity and generates a series of time-optimal
+--    profiles for each segment to find the maximum reachable corner velocity, these are also clamped based on the
+--    curvature of the corner to maintain axial kinematic limits. The backward pass sets a velocity of zero on the
+--    final corner and then goes back one corner at a time, limiting the corner velocities such that the next corner
+--    can be reached without violating the kinematic limits.
+--
+--  4. Feedrate_Profile_Generator: Using the corner velocities, an optimal velocity profile is generated for each
+--     segment.
+--
+--  5. Homing move limits: If the move is a homing sequence, an inner loop first checks if the generated profile has a
+--     sufficiently long constant-velocity (coast) phase, as defined by `Home_Move_Minimum_Coast_Time`. If the coast
+--     time is too short, the segment's maximum velocity is reduced before going back to stage 3 (Kinematic_Limiter).
+--
+--  6. Step_Rate_Limiter: The planner simulates the complete motion of the block, including input shaping. It
+--     calculates the required steps for each motor at each interpolation interval. If any motor's maximum step rate is
+--     exceeded, the planner reduces the velocity of the corresponding segment. If any segments are reduced then the
+--     planner goes back to stage 3 (Kinematic_Limiter).
+--
+--  The fully processed `Execution_Block` is then made available via the `Dequeue` procedure.
+
 with System.Multiprocessors;
 with Ada.Containers;
 with Prunt.Input_Shapers;
