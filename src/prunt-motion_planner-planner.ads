@@ -25,7 +25,7 @@
 --  The package works by collecting a series of corners before processing them as a single batch, called an
 --  `Execution_Block` which starts and ends at zero velocity. Corners are collected until a flush command is received
 --  or the block is full. Once a block is filled, it passes through a multi-stage planning pipeline, each of which is
---  implemented in a sub-package of this one:
+--  implemented in a child package of this one:
 --
 --  1. Corner_Blender: Sharp corners are replaced with C⁴ continuous Pythagorean-Hodograph (PH) Bézier
 --     curves. The maximal deviation of these curves from the original path is determined by the `Chord_Error_Max`
