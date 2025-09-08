@@ -86,7 +86,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
 
             for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
                if Block.Corner_Dwell_Times (I) /= 0.0 * s
-                 or else Angle_Elementary_Functions.Sin (Corner_Blender_Max_Secondary_Angle_To_Blend)
+                 or else Angle_Elementary_Functions.Sin (90.0 * deg - 0.5 * Corner_Blender_Min_Corner_Angle_To_Blend)
                          < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
                then
                   Block.Beziers (I) :=

@@ -88,7 +88,7 @@ generic
    Max_Corners : Max_Corners_Type := 50_000;
    --  Preprocessor_Minimum_Move_Distance : Length := 0.001 * mm;
    Corner_Blender_Max_Computational_Error : Length := 0.001 * mm;
-   Corner_Blender_Max_Secondary_Angle_To_Blend : Angle := 89.5 * deg;
+   Corner_Blender_Min_Corner_Angle_To_Blend : Angle := 1.0 * deg;
    Input_Queue_Length : Ada.Containers.Count_Type := 1_000;
    Initial_Position : Position := [others => 0.0 * mm];
    Preprocessor_Division_Time : Time := 1.0 * s;
