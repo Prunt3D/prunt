@@ -20,6 +20,7 @@
 -----------------------------------------------------------------------------
 
 with Ada.Numerics.Generic_Elementary_Functions;
+with System.Pool_Local;
 with Prunt.Input_Shapers.Shapers;
 use type Prunt.Input_Shapers.Cycle_Count;
 
@@ -83,9 +84,11 @@ package body Prunt.Step_Generator.Generator is
          Block : aliased Execution_Block;
       end record;
 
-      pragma Warnings (Off, "use of an anonymous access type allocator");
-      Working_Block_Wrapper : constant access Block_Wrapper := new Block_Wrapper;
-      pragma Warnings (On, "use of an anonymous access type allocator");
+      Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+
+      type Block_Wrapper_Access is access Block_Wrapper with Storage_Pool => Pool;
+
+      Working_Block_Wrapper : constant Block_Wrapper_Access := new Block_Wrapper;
       Block renames Working_Block_Wrapper.Block;
 
       Current_Shapers : Input_Shapers.Shapers.Axial_Shapers;

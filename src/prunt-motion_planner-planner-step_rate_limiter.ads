@@ -19,6 +19,8 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+private with System.Pool_Local;
+
 private generic
 package Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
 
@@ -28,7 +30,10 @@ package Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
 
 private
 
+   Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+
    type Maximum_Overspeed_Type is array (2 .. Corners_Index'Last) of Dimensionless;
+   type Maximum_Overspeed_Type_Access is access Maximum_Overspeed_Type with Storage_Pool => Pool;
 
    protected Runner is
       procedure Setup (In_Map : Stepper_Pos_Map);
@@ -38,9 +43,7 @@ private
    private
       Setup_Done        : Boolean := False;
       Pos_Map           : Stepper_Pos_Map;
-      pragma Warnings (Off, "use of an anonymous access type allocator");
-      Maximum_Overspeed : access Maximum_Overspeed_Type := new Maximum_Overspeed_Type;
-      pragma Warnings (On, "use of an anonymous access type allocator");
+      Maximum_Overspeed : Maximum_Overspeed_Type_Access := new Maximum_Overspeed_Type;
    end Runner;
 
 end Prunt.Motion_Planner.Planner.Step_Rate_Limiter;

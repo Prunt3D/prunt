@@ -20,6 +20,7 @@
 -----------------------------------------------------------------------------
 
 with Ada.Containers; use Ada.Containers;
+private with System.Pool_Local;
 
 private generic
 package Prunt.Motion_Planner.Planner.Preprocessor is
@@ -52,6 +53,13 @@ private
       Current_Params        : Kinematic_Parameters;
    end Command_Queue;
 
+   Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+
+   type Block_Plain_Corners_Access is access Block_Plain_Corners with Storage_Pool => Pool;
+   type Block_Corner_Dwell_Times_Access is access Block_Corner_Dwell_Times with Storage_Pool => Pool;
+   type Block_Segment_Feedrates_Access is access Block_Segment_Feedrates with Storage_Pool => Pool;
+   type Block_Corners_Extra_Data_Access is access Block_Corners_Extra_Data with Storage_Pool => Pool;
+
    protected Runner is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
@@ -61,14 +69,12 @@ private
       Last_Pos              : Position := Initial_Position;
       Current_Params        : Kinematic_Parameters;
       Block_Persistent_Data : Block_Persistent_Data_Type := Block_Persistent_Data_Default;
-      pragma Warnings (Off, "use of an anonymous access type allocator");
-      Corners               : access Block_Plain_Corners := new Block_Plain_Corners (1 .. Corners_Index'Last);
-      Corner_Dwell_Times    : access Block_Corner_Dwell_Times :=
+      Corners               : Block_Plain_Corners_Access := new Block_Plain_Corners (1 .. Corners_Index'Last);
+      Corner_Dwell_Times    : Block_Corner_Dwell_Times_Access :=
         new Block_Corner_Dwell_Times (1 .. Corners_Index'Last);
-      Segment_Feedrates     : access Block_Segment_Feedrates := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
-      Corners_Extra_Data    : access Block_Corners_Extra_Data :=
+      Segment_Feedrates     : Block_Segment_Feedrates_Access := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
+      Corners_Extra_Data    : Block_Corners_Extra_Data_Access :=
         new Block_Corners_Extra_Data (2 .. Corners_Index'Last);
-      pragma Warnings (On, "use of an anonymous access type allocator");
    end Runner;
 
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters);

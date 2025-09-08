@@ -30,6 +30,7 @@ with Ada.Containers.Indefinite_Ordered_Sets;
 with Prunt.Motion_Planner;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.Controller_Generic_Types;
+with System.Pool_Local;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -383,6 +384,8 @@ package Prunt.Config is
 
 private
 
+   Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+
    package Discrete_String_Sets is new Ada.Containers.Indefinite_Ordered_Sets (String);
 
    type Property_Kind is
@@ -390,7 +393,8 @@ private
 
    type Property_Parameters (Kind : Property_Kind);
    --  TODO: It's not ideal for the below access type to not be constant.
-   type Property_Parameters_Access is not null access Property_Parameters;
+   type Property_Parameters_Access is not null access Property_Parameters
+   with Storage_Pool => Pool;
 
    package Property_Maps is new Indefinite_Ordered_Maps_With_Insertion_Order (String, Property_Parameters_Access);
 

@@ -20,6 +20,7 @@
 -----------------------------------------------------------------------------
 
 with Ada.Text_IO;
+with System.Pool_Local;
 with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
 with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
@@ -64,10 +65,12 @@ package body Prunt.Motion_Planner.Planner is
          Block : aliased Execution_Block;
       end record;
 
-      pragma Warnings (Off, "use of an anonymous access type allocator");
-      Working_Block_Wrapper : constant access Block_Wrapper := new Block_Wrapper;
+      Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+
+      type Block_Wrapper_Access is access Block_Wrapper with Storage_Pool => Pool;
+
+      Working_Block_Wrapper : constant Block_Wrapper_Access := new Block_Wrapper;
       Block renames Working_Block_Wrapper.Block;
-      pragma Warnings (On, "use of an anonymous access type allocator");
 
       Reset_Called : Boolean := False;
    begin
