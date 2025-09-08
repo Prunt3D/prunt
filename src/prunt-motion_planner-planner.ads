@@ -35,8 +35,9 @@
 --
 --  2. Early_Kinematic_Limiter: The programmed feed-rate is adjusted if `Ignore_E_In_XYZE` is set so that it is equal
 --     to the desired feedrate when the E axis movement is included. After this the total time of each move is adjusted
---     such that no move will be less than `Interpolation_Time`. Finally the axial limits defined in
---     `Axial_Velocity_Maxes` are applied.
+--     such that no move will be less than `Interpolation_Time`, This ensures that the step generator will not have to
+--     skip over many segments in a row, which could cause the command queue to run dry.. Finally the axial limits
+--     defined in `Axial_Velocity_Maxes` are applied.
 --
 --  3. Kinematic_Limiter: A forward and backward pass are performed to generate corner velocities that confirm to the
 --    specified kinematic limits. The forward pass starts from zero velocity and generates a series of time-optimal
@@ -69,32 +70,87 @@ pragma Warnings (Off, "formal object * is not referenced");
 
 generic
    type Flush_Resetting_Data_Type is private;
+   --  Data to be included in each `Execution_Block` which is reset to a default value at the start of each block. Can
+   --  be used to indicate if a move is a homing move or if the machine should pause after completion.
+
    Flush_Resetting_Data_Default : Flush_Resetting_Data_Type;
+   --  Default value for the resetting data included in each block if no value is specified.
+
    type Block_Persistent_Data_Type is private;
+   --  Data to be included in each `Execution_Block` which is not reset between blocks. Can be used for holding shaper
+   --  parameters or the name of the currently executing file.
+   --
    --  TODO: This should be passed around everywhere when a block finishes like Flush_Resetting_Data_Type is.
+
    Block_Persistent_Data_Default : Block_Persistent_Data_Type;
+   --  Default value for persistent data to be included in the first block and all subsequent blocks until a new value
+   --  is provided.
+
    type Corner_Extra_Data_Type is private;
+   --  Data to be included with each corner such as heater targets or the current file line number.
+
    Home_Move_Minimum_Coast_Time : Time;
+   --  The minimum time that should be used for the coasting phase of a move where `Is_Homing_Move` returns True. This
+   --  can be used to have a section that can be repeated in a loop until a switch is hit.
+
+
    with function Is_Homing_Move (Data : Flush_Resetting_Data_Type) return Boolean;
+   --  Indicates whether a move is a homing move for the purposes of applying `Home_Move_Minimum_Coast_Time`. Currently
+   --  a block containing a homing move must have exactly 2 corners, however this is trivial to change if required as
+   --  the planner does not do anything with homing moves beyond setting the minimum coast time.
+
    Interpolation_Time : Time;
+   --  The length of each interpolation period to be used by the step rate checker. This also determines the minimum
+   --  time of a segment.
+
    type Stepper_Name is (<>);
+
    type Stepper_Position is array (Stepper_Name) of Dimensionless;
+
    Maximum_Stepper_Delta : Stepper_Position;
+   --  The maximum change in position for each axis within a single interpolation period. Step generation will be
+   --  simulated and any moves that result in these limits being exceeded will be slowed down.
+
    with
      function Get_Axial_Shaper_Parameters
-       (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
+     (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
+   --  Retrieve the shaper parameters for a given block. These are used during step rate limiting as shapers can change
+   --  the number of steps within an interpolation period.
+
    with procedure Log (Message : String);
-   Runner_CPU : System.Multiprocessors.CPU_Range;
+   --  Used to warn the user if the step rate is limited.
+
+   Runner_CPU : System.Multiprocessors.CPU_Range := System.Multiprocessors.Not_A_Specific_CPU;
+   --  CPU to run all motion planning on.
+
    Max_Corners : Max_Corners_Type := 50_000;
+   --  The maximum number of corners that can be processed in a single execution block. This impacts the memory usage
+   --  of the planner. Memory is allocated for the maximum block size during initialisation, memory is not allocated
+   --  per-block.
+
    --  Preprocessor_Minimum_Move_Distance : Length := 0.001 * mm;
+   --  Unused. Can be uncommented in the preprocessor package if required.
+
    Corner_Blender_Max_Computational_Error : Length := 0.001 * mm;
+   --  The maximum allowed distance between a corner and a blended corner's Bézier curve midpoint when shifting of
+   --  blended corners is enabled. A smaller value will require more iterations.
+
    Corner_Blender_Min_Corner_Angle_To_Blend : Angle := 1.0 * deg;
+   --  The minimum angle that will be blended in to a rounded corner instead of being left as a sharp corner. Corner
+   --  angles are always considered to be between 0° and 180° with 180° being a straight line.
+
    Input_Queue_Length : Ada.Containers.Count_Type := 1_000;
+   --  The maximum number of corners that can be enqueued before the enqueue procedure begins to block. This queue acts
+   --  as a buffer while the planner is processing another block or waiting for a block to be consumed, when a block is
+   --  not being processed or waiting to be consumed commands are rapidly transferred out of the queue. This impacts
+   --  the memory usage of the planner. Memory is allocated for the maximum queue size during initialisation, memory is
+   --  not allocated per-item.
+
    Initial_Position : Position := [others => 0.0 * mm];
-   Preprocessor_Division_Time : Time := 1.0 * s;
 package Prunt.Motion_Planner.Planner is
 
    type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
+   --  Defines how each axis moves in response to a step from a given motor. This is used during step simulation.
 
    type Command_Kind is
      (Move_Kind,

@@ -22,6 +22,12 @@
 package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
 
    procedure Run (Block : in out Execution_Block) is
+      function Curve_Corner_Distance (Finishing_Corner : Corners_Index) return Length;
+      --  Calculates the total path length for a given segment, this is not equivalent to the l² norm of the difference
+      --  between the corners. A segment runs from the midpoint of one blended corner along the curve, through a
+      --  straight section, to the midpoint of the next blended corner along the curve, this function returns the
+      --  length of that path.
+
       function Curve_Corner_Distance (Finishing_Corner : Corners_Index) return Length is
          Start_Curve_Half_Distance : constant Length :=
            Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)
@@ -37,6 +43,19 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
 
+      --  Forward pass: Iterate from the second corner to the second-to-last corner. This pass calculates the maximum
+      --  corner velocity based on:
+      --
+      --  1. The acceleration/jerk/etc. constraints imposed by the maximum curvature of the corner blend which
+      --     approximately limit the axial acceleration/jerk/etc..
+      --
+      --  2. The maximum velocity achievable by accelerating from the previous corner's velocity over the length of the
+      --     segment.
+      --
+      --  3. The maximum velocity allowed in the segment leading in to and out of the corner.
+      --
+      --  In this pass we are only concerned about the maximum reachable velocity under the above constraints.
+      --  Deceleration constraints are added in the reverse pass.
       for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
          declare
             Limit           : Velocity :=
@@ -45,7 +64,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
 
             Inverse_Curvature : constant Length := PH_Beziers.Inverse_Curvature (Block.Beziers (I));
          begin
-            --  Inverse curvature range is 0..Length'Last. Make sure to avoid overflow here.  GCC with optimisation
+            --  Inverse curvature range is 0..Length'Last. Make sure to avoid overflow here. GCC with optimisation
             --  enabled may transform sqrt(x)*sqrt(y) to sqrt(x*y) etc., but that should be fine in optimised builds
             --  with Ada's checks disabled as the Velocity'Min call will immediately discard the resulting infinity.
             Limit := Velocity'Min (Limit, Block.Params.Acceleration_Max**(1 / 2) * Inverse_Curvature**(1 / 2));
@@ -84,6 +103,9 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
          end;
       end loop;
 
+      --  Reverse pass: Iterate in reverse from the second-to-last corner to the second corner. For each corner, check
+      --  if it's possible to decelerate from its current velocity limit to the next corner's velocity limit over the
+      --  length of the connecting segment, if it is not then reduce the corner velocity so that it is possible.
       for I in reverse Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
          declare
             Optimal_Profile : Feedrate_Profile_Times;

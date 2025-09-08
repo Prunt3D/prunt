@@ -22,6 +22,12 @@
 package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
    procedure Run (Block : in out Execution_Block) is
+      function Curve_Corner_Distance (Finishing_Corner : Corners_Index) return Length;
+      --  Calculates the total path length for a given segment, this is not equivalent to the l² norm of the difference
+      --  between the corners. A segment runs from the midpoint of one blended corner along the curve, through a
+      --  straight section, to the midpoint of the next blended corner along the curve, this function returns the
+      --  length of that path.
+
       function Curve_Corner_Distance (Finishing_Corner : Corners_Index) return Length is
          Start_Curve_Half_Distance : constant Length :=
            Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)

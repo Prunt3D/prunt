@@ -23,6 +23,6 @@ private generic
 package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
    procedure Run (Block : in out Execution_Block);
-   --  Fills Block.Feedrate_Profiles with profiles based on Block.Corner_Velocity_Limits and Block.Params.
+   --  Fills `Block.Feedrate_Profiles` with profiles based on `Block.Corner_Velocity_Limits` and `Block.Params`.
 
 end Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;

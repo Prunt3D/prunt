@@ -23,7 +23,7 @@ private generic
 package Prunt.Motion_Planner.Planner.Kinematic_Limiter is
 
    procedure Run (Block : in out Execution_Block);
-   --  Fill Block.Corner_Velocity_Limits with velocity limits, that when enforced at corners, will prevent other limits
-   --  from being violated.
+   --  Fill `Block.Corner_Velocity_Limits` with velocity limits, that when enforced at corners, will prevent other
+   --  limits from being violated.
 
 end Prunt.Motion_Planner.Planner.Kinematic_Limiter;

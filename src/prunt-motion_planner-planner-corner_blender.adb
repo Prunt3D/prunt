@@ -33,11 +33,14 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
    protected body Runner is
       procedure Run (Block : in out Execution_Block) is
          Last_Comp_Error : Length := 0.0 * mm;
+         --  Tracks the maximum deviation between a curve's midpoint and the original corner's position during the
+         --  iterative corner shifting process.
 
          function Allow_Corner_Shift (I : Corners_Index) return Boolean;
          --  Determines if the given corner should be shifted. This checks both the `Shift_Blended_Corners` parameter
          --  and whether the corner is sufficiently far from the work area boundaries as to ensure that no shift will
-         --  place the new path outside of the work area boundaries.
+         --  place the new path outside of the work area boundaries. This is based on the original corner and not the
+         --  new virtual corner.
 
          function Allow_Corner_Shift (I : Corners_Index) return Boolean is
             Unscaled_Corner : constant Position := Position (Block.Corners (I) * Block.Params.Axial_Scaler);
@@ -65,6 +68,10 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             Shifted_Corner_Error_Limits (I) := Block.Params.Chord_Error_Max;
          end loop;
 
+         --  The start and end positions of a block are not blended as these positions need to align exactly with the
+         --  previous and next block. We generate a Bézier curve for these corners where all control points are equal
+         --  to the corner.
+
          Shifted_Corner_Error_Limits (Block.Corners'First) := 0.0 * mm;
          Shifted_Corner_Error_Limits (Block.Corners'Last) := 0.0 * mm;
 
@@ -73,15 +80,38 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
              (Block.Corners (Block.Beziers'First),
               Block.Corners (Block.Beziers'First),
               Block.Corners (Block.Beziers'First),
-              0.0 * mm);
+              Deviation_Limit => 0.0 * mm);
          Block.Beziers (Block.Beziers'Last) :=
            Create_Bezier
              (Block.Corners (Block.Beziers'Last),
               Block.Corners (Block.Beziers'Last),
               Block.Corners (Block.Beziers'Last),
-              0.0 * mm);
+              Deviation_Limit => 0.0 * mm);
 
          loop
+            --  For all other corners we:
+            --
+            --  1. Generate the Bézier curves based on the shifted virtual corners (initially equal to the original
+            --     corners) with the allowed deviation value. We skip corners that are too sharp as defined by
+            --     `Corner_Blender_Min_Corner_Angle_To_Blend` and corners that have a dwell time.
+            --
+            --  2. Find the maximum distance between any given original corner and the midpoint of the generated
+            --     curves. This is skipped for any corners that are too close to the position limits and is skipped
+            --     entirely is corner shifting is turned off.
+            --
+            --  3. Exit the loop if this distance is less than or equal to the allowed computational error specified by
+            --     the generic parameter `Corner_Blender_Max_Computational_Error`.
+            --
+            --  4. Translate the virtual corners such that the midpoints of the generated curves intersect with the
+            --     corners. Again this is skipped for any corners that are too close to the position limits and is
+            --     skipped entirely is corner shifting is turned off.
+            --
+            --  5. Adjust the maximum allowed error for each corner to account for translations in later iterations
+            --     where the shifted corner may not intersect the bisector of the original corner. This occurs due to
+            --     the fact that all virtual corners are shifting in different directions.
+            --
+            --  6. Repeat from step 1 until the exit condition in step 3 is met.
+
             Last_Comp_Error := 0.0 * mm;
 
             for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop

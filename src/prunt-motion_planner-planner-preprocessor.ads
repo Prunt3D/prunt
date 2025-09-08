@@ -26,13 +26,22 @@ private generic
 package Prunt.Motion_Planner.Planner.Preprocessor is
 
    procedure Setup (Initial_Parameters : Kinematic_Parameters);
+   --  Initialize the preprocessor with the initial kinematic parameters. This must be called before any other
+   --  operations and establishes the baseline motion limits for the planning system.
 
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
+   --  Add a new command to the processing queue. Commands are processed in FIFO order. If `Ignore_Bounds` is True,
+   --  position bounds checking is bypassed for this command (useful for homing operations).  May block if the queue is
+   --  full.
 
    procedure Reset;
-   --  Cause Run to immediately return with Reset_Called set to True and resets the planner back to its initial state.
+   --  Cause Run to immediately return with `Reset_Called` set to True and resets the planner back to its initial state.
+   --  This clears the command queue and resets position tracking to the initial values.
 
    procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
+   --  Process queued commands and assemble them into an execution block. This procedure blocks until either a complete
+   --  block is assembled or a reset is requested. `Reset_Called` indicates whether the operation was terminated by a
+   --  reset request.
 
 private
 
@@ -42,8 +51,8 @@ private
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean);
-      --  Reset_Called should not be part of Dequeue, but GNAT does not seem to work correctly when using a
-      --  select-then-abort with two entries to the same object, as you would with a separate Enter_When_Reset entry.
+      --  `Reset_Called` should not be part of Dequeue, but GNAT does not seem to work correctly when using a
+      --  select-then-abort with two entries to the same object, as you would with a separate `Enter_When_Reset` entry.
       procedure Reset;
    private
       Setup_Done            : Boolean := False;
@@ -78,6 +87,8 @@ private
    end Runner;
 
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters);
+   --  Check if a given position is within the machine's boundaries defined in `Params`. Raises `Out_Of_Bounds_Error`
+   --  if the check fails.
 
    function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters;
    --  Limit the higher order kinematic limits to those reachable within a single interpolation period. This may be

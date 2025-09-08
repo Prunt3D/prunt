@@ -23,5 +23,9 @@ private generic
 package Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
    procedure Run (Block : in out Execution_Block);
+   --  Apply early kinematic limitations to the execution block. The programmed feed-rate is adjusted if
+   --  `Ignore_E_In_XYZE` is set so that it is equal to the desired feedrate when the E axis movement is included.
+   --  After this the total time of each move is adjusted such that no move will be less than `Interpolation_Time`.
+   --  Finally the axial limits defined in `Axial_Velocity_Maxes` are applied.
 
 end Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;
