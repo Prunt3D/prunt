@@ -46,8 +46,12 @@ private
    type Shifted_Corners_Type_Access is access Shifted_Corners_Type
    with Storage_Pool => Pool;
 
-   Shifted_Corner_Error_Limits : Shifted_Corner_Error_Limits_Type_Access := new Shifted_Corner_Error_Limits_Type;
-   Shifted_Corners             : Shifted_Corners_Type_Access := new Shifted_Corners_Type;
+   protected Runner is
+      procedure Run (Block : in out Execution_Block);
+   private
+      Shifted_Corner_Error_Limits : Shifted_Corner_Error_Limits_Type_Access := new Shifted_Corner_Error_Limits_Type;
+      Shifted_Corners             : Shifted_Corners_Type_Access := new Shifted_Corners_Type;
+   end Runner;
 
    function Sine_Secondary_Angle (Start, Corner, Finish : Scaled_Position) return Dimensionless;
    --  Compute sin(x) where x is one of the two identical angles of the triangle formed by the normalised vectors

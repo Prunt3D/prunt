@@ -26,100 +26,108 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
    package Angle_Elementary_Functions is new Ada.Numerics.Generic_Elementary_Functions (Angle);
 
    procedure Run (Block : in out Execution_Block) is
-      Last_Comp_Error : Length := 0.0 * mm;
+   begin
+      Runner.Run (Block);
+   end Run;
 
-      function Allow_Corner_Shift (I : Corners_Index) return Boolean is
-         Unscaled_Corner : constant Position := Position (Block.Corners (I) * Block.Params.Axial_Scaler);
-      begin
-         if not Block.Params.Shift_Blended_Corners then
-            return False;
-         end if;
+   protected body Runner is
+      procedure Run (Block : in out Execution_Block) is
+         Last_Comp_Error : Length := 0.0 * mm;
 
-         --  If all virtual corners are within the allowed volume, then no point on any curve will be outside of the
-         --  allowed volume. This assumes that all original points were within the allowed volume.
-         --
-         --  TODO: More advanced corner shifting that allows for virtual corners to be outside the volume when the
-         --  curve is fully inside the volume.
-         for A in Axis_Name loop
-            if Unscaled_Corner (A) - Block.Params.Chord_Error_Max < Block.Params.Lower_Pos_Limit (A)
-              or Unscaled_Corner (A) + Block.Params.Chord_Error_Max > Block.Params.Upper_Pos_Limit (A)
-            then
+         function Allow_Corner_Shift (I : Corners_Index) return Boolean;
+         --  Determines if the given corner should be shifted. This checks both the `Shift_Blended_Corners` parameter
+         --  and whether the corner is sufficiently far from the work area boundaries as to ensure that no shift will
+         --  place the new path outside of the work area boundaries.
+
+         function Allow_Corner_Shift (I : Corners_Index) return Boolean is
+            Unscaled_Corner : constant Position := Position (Block.Corners (I) * Block.Params.Axial_Scaler);
+         begin
+            if not Block.Params.Shift_Blended_Corners then
                return False;
             end if;
-         end loop;
 
-         return True;
-      end Allow_Corner_Shift;
-   begin
-      for I in Block.Corners'Range loop
-         Shifted_Corners (I) := Block.Corners (I);
-      end loop;
-
-      for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
-         Shifted_Corner_Error_Limits (I) := Block.Params.Chord_Error_Max;
-      end loop;
-
-      Shifted_Corner_Error_Limits (Block.Corners'First) := 0.0 * mm;
-      Shifted_Corner_Error_Limits (Block.Corners'Last) := 0.0 * mm;
-
-      Block.Beziers (Block.Beziers'First) :=
-        Create_Bezier
-          (Block.Corners (Block.Beziers'First),
-           Block.Corners (Block.Beziers'First),
-           Block.Corners (Block.Beziers'First),
-           0.0 * mm);
-      Block.Beziers (Block.Beziers'Last) :=
-        Create_Bezier
-          (Block.Corners (Block.Beziers'Last),
-           Block.Corners (Block.Beziers'Last),
-           Block.Corners (Block.Beziers'Last),
-           0.0 * mm);
-
-      loop
-         Last_Comp_Error := 0.0 * mm;
-
-         for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
-            if Block.Corner_Dwell_Times (I) /= 0.0 * s
-              or else Angle_Elementary_Functions.Sin (Corner_Blender_Max_Secondary_Angle_To_Blend)
-                      < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
-            then
-               Block.Beziers (I) := Create_Bezier (Block.Corners (I), Block.Corners (I), Block.Corners (I), 0.0 * mm);
-            else
-               Block.Beziers (I) :=
-                 Create_Bezier
-                   (Shifted_Corners (I - 1),
-                    Shifted_Corners (I),
-                    Shifted_Corners (I + 1),
-                    Shifted_Corner_Error_Limits (I));
-               if Allow_Corner_Shift (I) then
-                  Last_Comp_Error :=
-                    Length'Max (Last_Comp_Error, abs (Midpoint (Block.Beziers (I)) - Block.Corners (I)));
+            for A in Axis_Name loop
+               if Unscaled_Corner (A) - Block.Params.Chord_Error_Max < Block.Params.Lower_Pos_Limit (A)
+                 or Unscaled_Corner (A) + Block.Params.Chord_Error_Max > Block.Params.Upper_Pos_Limit (A)
+               then
+                  return False;
                end if;
-            end if;
-         end loop;
+            end loop;
 
-         exit when Last_Comp_Error <= Corner_Blender_Max_Computational_Error;
-
-         for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
-            if Allow_Corner_Shift (I) then
-               Shifted_Corners (I) := @ + (Block.Corners (I) - Midpoint (Block.Beziers (I)));
-            end if;
+            return True;
+         end Allow_Corner_Shift;
+      begin
+         for I in Block.Corners'Range loop
+            Shifted_Corners (I) := Block.Corners (I);
          end loop;
 
          for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
-            if Allow_Corner_Shift (I) then
-               declare
-                  Start  : constant Scaled_Position := Shifted_Corners (I - 1);
-                  Corner : constant Scaled_Position := Shifted_Corners (I);
-                  Finish : constant Scaled_Position := Shifted_Corners (I + 1);
-               begin
-                  Shifted_Corner_Error_Limits (I) :=
-                    abs Dot (Block.Corners (I) - Shifted_Corners (I), Unit_Bisector (Start, Corner, Finish));
-               end;
-            end if;
+            Shifted_Corner_Error_Limits (I) := Block.Params.Chord_Error_Max;
          end loop;
-      end loop;
-   end Run;
+
+         Shifted_Corner_Error_Limits (Block.Corners'First) := 0.0 * mm;
+         Shifted_Corner_Error_Limits (Block.Corners'Last) := 0.0 * mm;
+
+         Block.Beziers (Block.Beziers'First) :=
+           Create_Bezier
+             (Block.Corners (Block.Beziers'First),
+              Block.Corners (Block.Beziers'First),
+              Block.Corners (Block.Beziers'First),
+              0.0 * mm);
+         Block.Beziers (Block.Beziers'Last) :=
+           Create_Bezier
+             (Block.Corners (Block.Beziers'Last),
+              Block.Corners (Block.Beziers'Last),
+              Block.Corners (Block.Beziers'Last),
+              0.0 * mm);
+
+         loop
+            Last_Comp_Error := 0.0 * mm;
+
+            for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
+               if Block.Corner_Dwell_Times (I) /= 0.0 * s
+                 or else Angle_Elementary_Functions.Sin (Corner_Blender_Max_Secondary_Angle_To_Blend)
+                         < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
+               then
+                  Block.Beziers (I) :=
+                    Create_Bezier (Block.Corners (I), Block.Corners (I), Block.Corners (I), 0.0 * mm);
+               else
+                  Block.Beziers (I) :=
+                    Create_Bezier
+                      (Shifted_Corners (I - 1),
+                       Shifted_Corners (I),
+                       Shifted_Corners (I + 1),
+                       Shifted_Corner_Error_Limits (I));
+                  if Allow_Corner_Shift (I) then
+                     Last_Comp_Error :=
+                       Length'Max (Last_Comp_Error, abs (Midpoint (Block.Beziers (I)) - Block.Corners (I)));
+                  end if;
+               end if;
+            end loop;
+
+            exit when Last_Comp_Error <= Corner_Blender_Max_Computational_Error;
+
+            for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
+               if Allow_Corner_Shift (I) then
+                  Shifted_Corners (I) := @ + (Block.Corners (I) - Midpoint (Block.Beziers (I)));
+               end if;
+            end loop;
+
+            for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
+               if Allow_Corner_Shift (I) then
+                  declare
+                     Start  : constant Scaled_Position := Shifted_Corners (I - 1);
+                     Corner : constant Scaled_Position := Shifted_Corners (I);
+                     Finish : constant Scaled_Position := Shifted_Corners (I + 1);
+                  begin
+                     Shifted_Corner_Error_Limits (I) :=
+                       abs Dot (Block.Corners (I) - Shifted_Corners (I), Unit_Bisector (Start, Corner, Finish));
+                  end;
+               end if;
+            end loop;
+         end loop;
+      end Run;
+   end Runner;
 
    function Sine_Secondary_Angle (Start, Corner, Finish : Scaled_Position) return Dimensionless is
       V1 : constant Scaled_Position_Offset := Start - Corner;
