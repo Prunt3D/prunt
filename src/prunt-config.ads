@@ -132,6 +132,7 @@ package Prunt.Config is
             Second_Move_Distance   : Length := 0.0 * mm;
             Switch_Position        : Length := 0.0 * mm;
             Move_To_After          : Length := 5.0 * mm;
+            Homing_Velocity        : Velocity := 50.0 * mm / s;
 
          when Set_To_Value_Kind =>
             Value : Length := 0.0 * mm;

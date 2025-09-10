@@ -892,7 +892,15 @@ package body Prunt.Config is
                              Default => 0.0,
                              Min => -1.0E100,
                              Max => 1.0E100,
-                             Unit => "mm")])]),
+                             Unit => "mm"),
+                        "Homing velocity" =>
+                          Float
+                            ("Velocity limit for all homing moves (first, second, and back-off). "
+                             & "Setting this to a very high value will use the maximum velocity allowed by other system constraints.",
+                             Default => 50.0,
+                             Min => 0.1,
+                             Max => 1.0E100,
+                             Unit => "mm/s")])]),
             "Prerequisites" =>
               Sequence_Over_Axes
                 ("Required states of other axes.",
@@ -2139,7 +2147,12 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(8));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(8) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(8) then
+            --  Version 9 adds homing velocity parameter.
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(9));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(9) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -2783,6 +2796,8 @@ package body Prunt.Config is
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Switch position") * mm,
                   Move_To_After          =>
                     Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Move to after") * mm,
+                  Homing_Velocity        =>
+                    Get (Data, "Homing$" & A'Image & "$Homing method$Use input switch$Homing velocity") * mm / s,
                   Prerequisites          => (others => <>));
 
                if Boolean'
