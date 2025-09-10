@@ -25,16 +25,25 @@ package body Prunt.Command_Line_Arguments is
 
    function Argument_Value (Switch, Default : String) return String is
       use Ada.Command_Line;
+      Found_Index : Natural := 0;
    begin
-      --  The last argument takes priority in case of duplicates.
-      for Arg in reverse 1 .. Argument_Count loop
+      --  Check for duplicate arguments and raise an error if found.
+      for Arg in 1 .. Argument_Count loop
          if Argument (Arg)'Length > Switch'Length
            and then Argument (Arg) (Argument (Arg)'First .. Argument (Arg)'First + Switch'Length - 1) = Switch
          then
-            return Argument (Arg) (Argument (Arg)'First + Switch'Length .. Argument (Arg)'Last);
+            if Found_Index /= 0 then
+               raise Constraint_Error with "Duplicate command line argument: " & Switch;
+            end if;
+            Found_Index := Arg;
          end if;
       end loop;
-      return Default;
+      
+      if Found_Index /= 0 then
+         return Argument (Found_Index) (Argument (Found_Index)'First + Switch'Length .. Argument (Found_Index)'Last);
+      else
+         return Default;
+      end if;
    end Argument_Value;
 
    function Web_Server_Port return GNAT.Sockets.Port_Type
