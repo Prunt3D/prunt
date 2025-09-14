@@ -82,6 +82,8 @@ is
 
    function Iterate (Container : Map; Start : Cursor) return Map_Iterator_Interfaces.Reversible_Iterator'Class;
 
+   function "+" (Left, Right : Map) return Map;
+
 private
 
    package Inner_Maps is new

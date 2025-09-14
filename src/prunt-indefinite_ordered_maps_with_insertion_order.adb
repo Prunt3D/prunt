@@ -199,4 +199,18 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
       return Previous (Position);
    end Previous;
 
+   function "+" (Left, Right : Map) return Map is
+      Result : Map := Empty;
+   begin
+      for I in Left.Iterate loop
+         Result.Insert (Key (I), Element (I));
+      end loop;
+
+      for I in Right.Iterate loop
+         Result.Insert (Key (I), Element (I));
+      end loop;
+
+      return Result;
+   end "+";
+
 end Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;

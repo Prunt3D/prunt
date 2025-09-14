@@ -127,14 +127,15 @@ package Prunt is
    nanohenry : constant Inductance := 1.0;
    pragma Warnings (On, "assumed to be");
 
-   volt  : constant Voltage := 1_000_000_000.0 * nanovolt;
-   ohm   : constant Resistance := 1_000_000_000.0 * nanoohm;
-   watt  : constant Power := 1_000_000_000.0 * nanowatt;
-   joule : constant Energy := 1_000_000_000.0 * nanojoule;
-   henry : constant Inductance := 1_000_000_000.0 * nanohenry;
-   ms    : constant Time := s / 1_000.0;
-   min   : constant Time := s * 60.0;
-   deg   : constant Angle := (Ada.Numerics.Pi / 180.0) * radian;
+   volt       : constant Voltage := 1_000_000_000.0 * nanovolt;
+   ohm        : constant Resistance := 1_000_000_000.0 * nanoohm;
+   watt       : constant Power := 1_000_000_000.0 * nanowatt;
+   joule      : constant Energy := 1_000_000_000.0 * nanojoule;
+   henry      : constant Inductance := 1_000_000_000.0 * nanohenry;
+   millihenry : constant Inductance := 1_000_000.0 * nanohenry;
+   ms         : constant Time := s / 1_000.0;
+   min        : constant Time := s * 60.0;
+   deg        : constant Angle := (Ada.Numerics.Pi / 180.0) * radian;
 
    subtype Fan_PWM_Frequency is Frequency range 1.0 * hertz .. 50_000.0 * hertz;
 
