@@ -179,10 +179,11 @@ package Prunt is
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis);
 
    type Position is array (Axis_Name) of Length;
-   type Scaled_Position is array (Axis_Name) of Length;
+   type Scaled_Position is new Position;
    --  A Scaled_Position is any absolute position that does not represent real machine coordinates.
-   type Position_Offset is array (Axis_Name) of Length;
-   type Scaled_Position_Offset is array (Axis_Name) of Length;
+   type Position_Offset is new Position;
+   type Scaled_Position_Offset is new Position;
+   --  Using the same root type for all these types avoids some copies, see RM 4.6(58.5/5).
    type Position_Scale is array (Axis_Name) of Dimensionless;
    type Axial_Velocities is array (Axis_Name) of Velocity;
 
