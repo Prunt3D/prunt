@@ -241,6 +241,9 @@ private
 
    function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters;
 
+   Maximum_Stepper_Delta : constant Stepper_Position :=
+     (for S in Stepper_Name => Stepper_Hardware (S).Maximum_Delta_Per_Command);
+
    package My_Planner is new
      Motion_Planner.Planner
        (Flush_Resetting_Data_Type     => Flush_Resetting_Data,
@@ -255,7 +258,7 @@ private
         Interpolation_Time            => Interpolation_Time,
         Stepper_Name                  => Stepper_Name,
         Stepper_Position              => Stepper_Position,
-        Maximum_Stepper_Delta         => (for S in Stepper_Name => Stepper_Hardware (S).Maximum_Delta_Per_Command),
+        Maximum_Stepper_Delta         => Maximum_Stepper_Delta,
         Get_Axial_Shaper_Parameters   => Get_Axial_Shaper_Parameters,
         Log                           => Log,
         Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
