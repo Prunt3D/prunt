@@ -14,7 +14,7 @@ release.optimization = ["-O3", "-gnatn", "-fdata-sections", "-ffunction-sections
 development.contracts = "Yes"
 
 [[depends-on]]
-gnat_native = "^14.2.1"
+gnat_native = "^15.2.0"
 
 [[depends-on]]
 gnatcoll = "^23.0.0"
