@@ -25,7 +25,6 @@ with Prunt.Input_Shapers;
 
 generic
    with package Planner is new Motion_Planner.Planner (<>);
-   use Planner;
 
    type Stepper_Name is (<>);
 
@@ -33,22 +32,22 @@ generic
 
    with
      procedure Start_Planner_Block
-       (Resetting_Data     : Flush_Resetting_Data_Type;
-        Persistent_Data    : Block_Persistent_Data_Type;
+       (Resetting_Data     : Planner.Flush_Resetting_Data_Type;
+        Persistent_Data    : Planner.Block_Persistent_Data_Type;
         Last_Command_Index : Command_Index);
    with
      procedure Enqueue_Command
        (Pos             : Position;
         Stepper_Pos     : Stepper_Position;
-        Data            : Corner_Extra_Data_Type;
+        Data            : Planner.Corner_Extra_Data_Type;
         Index           : Command_Index;
         Loop_Until_Hit  : Boolean;
         Safe_Stop_After : Boolean;
         Vel_Ratio       : Dimensionless);
    with
      procedure Finish_Planner_Block
-       (Resetting_Data       : Flush_Resetting_Data_Type;
-        Persistent_Data      : Block_Persistent_Data_Type;
+       (Resetting_Data       : Planner.Flush_Resetting_Data_Type;
+        Persistent_Data      : Planner.Block_Persistent_Data_Type;
         Next_Block_Pos       : Stepper_Position;
         First_Accel_Distance : Length;
         Last_Command_Index   : Command_Index);
@@ -58,7 +57,7 @@ generic
 
    with
      function Get_Axial_Shaper_Parameters
-       (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
+       (Data : Planner.Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
 
    with procedure Report_Loop_Move_Offset (Index : Command_Index; Distance_Delta : Position_Offset);
 
@@ -67,6 +66,7 @@ generic
 
    Runner_CPU : System.Multiprocessors.CPU_Range;
 package Prunt.Step_Generator.Generator is
+   use Planner;
 
    type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
 
