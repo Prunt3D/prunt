@@ -19,16 +19,16 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Prunt.Thermistors;   use Prunt.Thermistors;
-with GNATCOLL.JSON;       use GNATCOLL.JSON;
-with Prunt.TMC_Types;     use Prunt.TMC_Types;
-with Prunt.Input_Shapers; use Prunt.Input_Shapers;
+with Prunt.Thermistors;       use Prunt.Thermistors;
+with GNATCOLL.JSON;           use GNATCOLL.JSON;
+with Prunt.TMC_Types;         use Prunt.TMC_Types;
+with Prunt.Input_Shapers;     use Prunt.Input_Shapers;
 with Ada.Strings.Unbounded;
 with Ada.Containers.Indefinite_Ordered_Maps;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 with Ada.Containers.Indefinite_Ordered_Sets;
 with Prunt.Motion_Planner;
-with Prunt.TMC_Types.TMC2240;
+with Prunt.TMC_Types.TMC2240; use Prunt.TMC_Types.TMC2240;
 with Prunt.Controller_Generic_Types;
 with System.Pool_Local;
 
@@ -479,6 +479,10 @@ private
       Lasers             : Laser_Parameters_Array;
    end record;
 
+   type User_Config;
+
+   function JSON_To_User_Config (Data : JSON_Value) return User_Config;
+
    protected Config_File is
       procedure Disable_Prunt;
       procedure Read (Data : out Prunt_Parameters);
@@ -534,8 +538,6 @@ private
 
    function To_Unbounded_String (Source : String) return Ada.Strings.Unbounded.Unbounded_String
    renames Ada.Strings.Unbounded.To_Unbounded_String;
-
-   function Get (Val : JSON_Value; Field : UTF8_String) return TMC_Boolean;
 
    type Dimensionless_Ratio is record
       Numerator   : Dimensionless;
@@ -828,15 +830,15 @@ private
             --  Key: Direct_Entry
 
          when Lead_Screw =>
-            Distance_Per_Step_Lead_Screw : User_Config_Steppers_Lead_Screw;
+            Lead_Screw : User_Config_Steppers_Lead_Screw;
             --  Key: Lead_Screw
 
          when Gear_With_Circumference =>
-            Distance_Per_Step_Gear_With_Circumference : User_Config_Steppers_Gear_With_Circumference;
+            Gear_With_Circumference : User_Config_Steppers_Gear_With_Circumference;
             --  Key: Gear_With_Circumference
 
          when Gear_With_Tooth_Count_And_Pitch =>
-            Distance_Per_Step_Gear_With_Tooth_Count_And_Pitch : User_Config_Steppers_Gear_With_Tooth_Count_And_Pitch;
+            Gear_With_Tooth_Count_And_Pitch : User_Config_Steppers_Gear_With_Tooth_Count_And_Pitch;
             --  Key: Gear_With_Tooth_Count_And_Pitch
       end case;
    end record;
@@ -901,15 +903,15 @@ private
       --  Min: 0
       --  Max: 255
 
-      PWM_FREQ : TMC_Types.TMC2240.PWM_Freq_Type := TMC_Types.TMC2240.Freq_683;
+      PWM_FREQ : TMC_Types.TMC2240.PWM_Freq_Type := Freq_683;
       --  Key: PWM_FREQ
       --  Description: This setting determines the PWM frequency for StealthChop2. The duration is measured in half TMC
       --               clock cycles (a half cycle is typically 40ns). A value of 683, resulting in a frequency of
       --               approximately 36kHz, is a good starting point for most motors.
-      --  Map: "1024" => TMC_Types.TMC2240.Freq_1024
-      --       "683"  => TMC_Types.TMC2240.Freq_683
-      --       "512"  => TMC_Types.TMC2240.Freq_512
-      --       "410"  => TMC_Types.TMC2240.Freq_410
+      --  Map: "1024" => Freq_1024
+      --       "683"  => Freq_683
+      --       "512"  => Freq_512
+      --       "410"  => Freq_410
 
       PWM_AUTOSCALE : Boolean := True;
       --  Key: PWM_AUTOSCALE
@@ -923,15 +925,15 @@ private
       --               enabled, as disabling it cause current limits to not be correctly applied, potentially resulting
       --               in destruction of the motor.
 
-      FREEWHEEL : TMC_Types.TMC2240.Freewheel_Type := TMC_Types.TMC2240.Normal;
+      FREEWHEEL : TMC_Types.TMC2240.Freewheel_Type := Normal;
       --  Key: FREEWHEEL
       --  Description: This setting determines the behavior of the motor coils when the motor is at a standstill and
       --               the hold current (IHOLD) is set to 0. Refer to the TMC2240 datasheet for a detailed explanation
       --               of the different freewheeling options. This setting is not relevant for most users.
-      --  Map: "NORMAL"       => TMC_Types.TMC2240.Normal
-      --       "FREEWHEEL"    => TMC_Types.TMC2240.Freewheel
-      --       "SHORT_VIA_LS" => TMC_Types.TMC2240.Short_Via_LS
-      --       "SHORT_VIA_HS" => TMC_Types.TMC2240.Short_Via_HS
+      --  Map: "NORMAL"       => Normal
+      --       "FREEWHEEL"    => Freewheel
+      --       "SHORT_VIA_LS" => Short_Via_LS
+      --       "SHORT_VIA_HS" => Short_Via_HS
 
       PWM_MEAS_SD_ENABLE : Boolean := False;
       --  Key: PWM_MEAS_SD_ENABLE
@@ -1097,45 +1099,45 @@ private
       --  Min: 0.0
       --  Max: 1.0E100
 
-      SLOPE_CONTROL : TMC_Types.TMC2240.Slope_Control_Type := TMC_Types.TMC2240.Slope_400V_Per_us;
+      SLOPE_CONTROL : TMC_Types.TMC2240.Slope_Control_Type := Slope_400V_Per_us;
       --  Key: SLOPE_CONTROL
       --  Description: This setting controls the slew rate of the driver's output. A higher slew rate can reduce power
       --               dissipation, but may also increase electromagnetic interference (EMI). 400V/us is usually a good
       --               setting.
-      --  Map: "SLOPE_100V_PER_US" => TMC_Types.TMC2240.Slope_100V_Per_us
-      --       "SLOPE_200V_PER_US" => TMC_Types.TMC2240.Slope_200V_Per_us
-      --       "SLOPE_400V_PER_US" => TMC_Types.TMC2240.Slope_400V_Per_us
-      --       "SLOPE_800V_PER_US" => TMC_Types.TMC2240.Slope_800V_Per_us
+      --  Map: "SLOPE_100V_PER_US" => Slope_100V_Per_us
+      --       "SLOPE_200V_PER_US" => Slope_200V_Per_us
+      --       "SLOPE_400V_PER_US" => Slope_400V_Per_us
+      --       "SLOPE_800V_PER_US" => Slope_800V_Per_us
 
-      TOFF : TMC_Types.TMC2240.TOFF_Type := TMC_Types.TMC2240.Off_120;
+      TOFF : TMC_Types.TMC2240.TOFF_Type := Off_120;
       --  Key: TOFF
       --  Description: This setting determines the duration of the slow decay (off-time) phase of the chopper cycle,
       --               measured in TMC clock cycles (typically 80ns). A value of 120, combined with a TBL setting of
       --               36, is a good starting point that results in a theoretical maximum chopper frequency of around
       --               40kHz.
-      --  Map: "56"  => TMC_Types.TMC2240.Off_56
-      --       "88"  => TMC_Types.TMC2240.Off_88
-      --       "120" => TMC_Types.TMC2240.Off_120
-      --       "152" => TMC_Types.TMC2240.Off_152
-      --       "184" => TMC_Types.TMC2240.Off_184
-      --       "216" => TMC_Types.TMC2240.Off_216
-      --       "248" => TMC_Types.TMC2240.Off_248
-      --       "280" => TMC_Types.TMC2240.Off_280
-      --       "312" => TMC_Types.TMC2240.Off_312
-      --       "344" => TMC_Types.TMC2240.Off_344
-      --       "376" => TMC_Types.TMC2240.Off_376
-      --       "408" => TMC_Types.TMC2240.Off_408
-      --       "440" => TMC_Types.TMC2240.Off_440
-      --       "472" => TMC_Types.TMC2240.Off_472
-      --       "504" => TMC_Types.TMC2240.Off_504
+      --  Map: "56"  => Off_56
+      --       "88"  => Off_88
+      --       "120" => Off_120
+      --       "152" => Off_152
+      --       "184" => Off_184
+      --       "216" => Off_216
+      --       "248" => Off_248
+      --       "280" => Off_280
+      --       "312" => Off_312
+      --       "344" => Off_344
+      --       "376" => Off_376
+      --       "408" => Off_408
+      --       "440" => Off_440
+      --       "472" => Off_472
+      --       "504" => Off_504
 
-      TBL : TMC_Types.TMC2240.TBL_Type := TMC_Types.TMC2240.Blank_36;
+      TBL : TMC_Types.TMC2240.TBL_Type := Blank_36;
       --  Key: TBL
       --  Description: This setting determines the blanking time for the current sense comparators, measured in TMC
       --               clock cycles (typically 80ns).
-      --  Map: "24" => TMC_Types.TMC2240.Blank_24
-      --       "36" => TMC_Types.TMC2240.Blank_36
-      --       "54" => TMC_Types.TMC2240.Blank_54
+      --  Map: "24" => Blank_24
+      --       "36" => Blank_36
+      --       "54" => Blank_54
 
       VHIGHFS : Boolean := False;
       --  Key: VHIGHFS
@@ -1155,22 +1157,22 @@ private
       --  Min: 0
       --  Max: 15
 
-      MRES : TMC_Types.TMC2240.Microstep_Resolution_Type := TMC_Types.TMC2240.MS_256;
+      MRES : TMC_Types.TMC2240.Microstep_Resolution_Type := MS_256;
       --  Key: MRES
       --  Description: This setting determines the microstep resolution for the driver. Higher microstep resolutions
       --               result in smoother and quieter motor operation, but can limit the maximum achievable speed. 256
       --               microsteps is the highest resolution available and is generally recommended as Prunt will slow
       --               down and emit a warning when the maximum step rate would be exceeded by a G-code command rather
       --               than halting.
-      --  Map: "MS_256"       => TMC_Types.TMC2240.MS_256
-      --       "MS_128"       => TMC_Types.TMC2240.MS_128
-      --       "MS_64"        => TMC_Types.TMC2240.MS_64
-      --       "MS_32"        => TMC_Types.TMC2240.MS_32
-      --       "MS_16"        => TMC_Types.TMC2240.MS_16
-      --       "MS_8"         => TMC_Types.TMC2240.MS_8
-      --       "MS_4"         => TMC_Types.TMC2240.MS_4
-      --       "MS_2"         => TMC_Types.TMC2240.MS_2
-      --       "MS_FULL_STEPS" => TMC_Types.TMC2240.MS_Full_Steps
+      --  Map: "MS_256"        => MS_256
+      --       "MS_128"        => MS_128
+      --       "MS_64"         => MS_64
+      --       "MS_32"         => MS_32
+      --       "MS_16"         => MS_16
+      --       "MS_8"          => MS_8
+      --       "MS_4"          => MS_4
+      --       "MS_2"          => MS_2
+      --       "MS_FULL_STEPS" => MS_Full_Steps
 
       FAST_STANDSTILL : Boolean := False;
       --  Key: FAST_STANDSTILL
@@ -2258,22 +2260,22 @@ private
    type User_Config_G_Code_Assignments is record
       --  Description: Assign heaters, fans, and lasers to their corresponding G-code commands.
 
-      Hotend_Heater : Heater_Name;
+      Hotend_Heater : Heater_Name'Base := Heater_Name'Base'First;
       --  Key: Hotend heater
       --  Description: Heater to use for the hotend.
       --  Include_If: Has_Heaters
 
-      Bed_Heater : Heater_Name;
+      Bed_Heater : Heater_Name'Base := Heater_Name'Base'First;
       --  Key: Bed heater
       --  Description: Heater to use for the bed.
       --  Include_If: Has_Heaters
 
-      Default_Fan : Fan_Name;
+      Default_Fan : Fan_Name'Base := Fan_Name'Base'First;
       --  Key: Default fan
       --  Description: Fan to control when no P parameter is used for M106/M107.
       --  Include_If: Has_Fans
 
-      Default_Laser : Laser_Name;
+      Default_Laser : Laser_Name'Base := Laser_Name'Base'First;
       --  Key: Default laser
       --  Description: Laser to control when no P parameter is used for M3/M5.
       --  Include_If: Has_Lasers
@@ -2294,7 +2296,7 @@ private
 
       Steppers : User_Config_Stepper_Array := (others => <>);
       --  Key: Steppers
-      --  Fixed_Kind: Stepper_Hardware (Stepper_Name'Value(Index)).Kind
+      --  Fixed_Kind: Stepper_Hardware (Stepper_Name'Value(Index_???)).Kind
       --  Description: This section contains the configuration for all stepper motor drivers.
       --  Tabbed: True
 
@@ -2332,7 +2334,7 @@ private
       Fans : User_Config_Fan_Array := (others => <>);
       --  Key: Fans
       --  Include_If: Has_Fans
-      --  Fixed_Kind: Fan_Hardware (Fan_Name'Value(Index)).Kind
+      --  Fixed_Kind: Fan_Hardware (Fan_Name'Value(Index_???)).Kind
       --  Description: This section contains the configuration for all fans.
       --  Tabbed: True
 

@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any, Union
 from collections import OrderedDict
 import os
 
-# I know this is messy, but it gets the job done.
+# I know this is messy, but it gets the job done. I wish you good luck if you ever need to modify this.
 
 @dataclass
 class EnumValue:
@@ -249,80 +249,127 @@ def parse_config_ads(content: str) -> Dict[str, Union[Record, Enum, Array]]:
 
     return extracted_data
 
-output_string = ""
+property_map_output_string = ""
 
-def emit(text):
-    global output_string
-    output_string += str(text) + "\n"
+def emit_for_pmap(text, level):
+    global property_map_output_string
+    property_map_output_string += "   " * level + str(text) + "\n"
 
-def emit_property_map(field: Union[Record, Enum, Array], outer: Field):
+reader_output_string = ""
+
+def emit_for_reader(text, level):
+    global reader_output_string
+    reader_output_string += "   " * level + str(text) + "\n"
+
+def handle_item(field: Union[Record, Enum, Array], outer: Field, path: str, level: int):
     if type(field) is Record and field.variant is not None and field.variant.discriminant == "Fixed_Kind":
         first = True
         for name in field.fields:
-            emit(f'{"(" if first else "els"}if {outer.fixed_kind} = {field.fields[name].key} then ')
-            emit_property_map(data[field.fields[name].type], outer)
+            emit_for_pmap(f'{"(" if first else "els"}if {outer.fixed_kind.replace("???", str(level - 1))} = {field.fields[name].key} then ', level)
+            emit_for_reader(f'{"(" if first else "els"}if {outer.fixed_kind.replace("???", str(level - 1) + "\'Image")} = {field.fields[name].key} then (Fixed_Kind => {field.fields[name].key}, {name} => (', level)
+            handle_item(data[field.fields[name].type], outer, path, level + 1)
+            emit_for_reader("))", level)
             first = False
-        emit("else raise Constraint_Error)")
+        emit_for_pmap("else raise Constraint_Error)", level)
+        emit_for_reader("else raise Constraint_Error)", level)
     elif type(field) is Record:
         if field.variant is not None and field.variant.discriminant == "Kind":
-            emit("Variant (")
+            emit_for_pmap("Variant (", level)
         else:
-            emit("Sequence (")
-        emit(f'"{field.description}",')
+            emit_for_pmap("Sequence (", level)
+        emit_for_reader("(", level)
+        emit_for_pmap(f'"{field.description}",', level)
         if field.variant is not None and field.variant.discriminant == "Kind":
-            emit('"' + data[field.variant.type].values[field.variant.default].key + '",')
+            emit_for_pmap('"' + data[field.variant.type].values[field.variant.default].key + '",', level)
         first = True
         if len(field.fields) == 0:
-            emit("[]")
+            emit_for_pmap("[]", level)
+            emit_for_reader("null record", level)
         for name in field.fields:
             if not first:
-                emit("+")
-            first = False
+                emit_for_pmap("+", level)
             if field.fields[name].include_if:
-                emit(f"(if {field.fields[name].include_if} then [")
+                emit_for_pmap(f"(if {field.fields[name].include_if} then [", level)
             else:
-                emit("[")
+                emit_for_pmap("[", level)
             if field.variant is not None and field.variant.discriminant == "Kind":
-                emit(f'"{data[field.variant.type].values[field.fields[name].key].key}" =>')
+                emit_for_pmap(f'"{data[field.variant.type].values[field.fields[name].key].key}" =>', level)
+                emit_for_reader(f"{"" if first else "els"}if Get (Data, \"{path}\") = \"{data[field.variant.type].values[field.fields[name].key].key}\" then (Kind => {data[field.variant.type].values[field.fields[name].key].name}, {data[field.variant.type].values[field.fields[name].key].name} =>", level)
             else:
-                emit(f'"{field.fields[name].key}" =>')
-
+                emit_for_pmap(f'"{field.fields[name].key}" =>', level)
+                if not first:
+                    emit_for_reader(",", level)
+                emit_for_reader(f'{field.fields[name].name} =>', level)
+                if field.fields[name].include_if:
+                    emit_for_reader(f"(if {field.fields[name].include_if} then ", level)
             if field.fields[name].type in data:
-                emit_property_map(data[field.fields[name].type], field.fields[name])
-            elif field.fields[name].type == "Boolean":
-                emit(f'Boolean ("{field.fields[name].description}", Default => {field.fields[name].default})')
-            elif field.fields[name].type in ("Velocity", "Acceleration", "Jerk", "Snap", "Crackle", "Time", "Length", "Dimensionless", "Current", "Voltage", "Inductance", "Resistance", "Temperature", "Frequency", "PWM_Scale"):
-                emit(f'Float ("{field.fields[name].description}", Default => {field.fields[name].default}, Min => {field.fields[name].min}, Max => {field.fields[name].max}, Unit => "{field.fields[name].units or ""}")')
-            elif field.fields[name].type in ("Heater_Name", "Fan_Name", "Laser_Name", "Thermistor_Name", "Input_Switch_Name", "Stepper_Name"):
-                if field.fields[name].override_string_set:
-                    emit(f'Discrete ("{field.fields[name].description}", Default => {field.fields[name].override_string_set}.First_Element, Options => {field.fields[name].override_string_set})')
+                if field.variant is not None and field.variant.discriminant == "Kind":
+                    handle_item(data[field.fields[name].type], field.fields[name], path + "$" + data[field.variant.type].values[field.fields[name].key].key, level + 1)
                 else:
-                    emit(f'Discrete ("{field.fields[name].description}", Default => {field.fields[name].type}_Strings.First_Element, Options => {field.fields[name].type}_Strings)')
+                    handle_item(data[field.fields[name].type], field.fields[name], path + "$" + field.fields[name].key, level + 1)
+            elif field.fields[name].type == "Boolean":
+                emit_for_pmap(f'Boolean ("{field.fields[name].description}", Default => {field.fields[name].default})', level)
+                emit_for_reader(f'Boolean\'(Get (Data, "{path + "$" + field.fields[name].key}"))', level)
+            elif field.fields[name].type in ("Velocity", "Acceleration", "Jerk", "Snap", "Crackle", "Time", "Length", "Dimensionless", "Current", "Voltage", "Inductance", "Resistance", "Temperature", "Frequency", "PWM_Scale"):
+                emit_for_pmap(f'Float ("{field.fields[name].description}", Default => {field.fields[name].default}, Min => {field.fields[name].min}, Max => {field.fields[name].max}, Unit => "{field.fields[name].units or ""}")', level)
+                emit_for_reader(f'Get (Data, "{path + "$" + field.fields[name].key}") {(" * " + field.fields[name].units) if field.fields[name].units is not None else ""}', level)
+            elif field.fields[name].type.replace("'Base", "") in ("Heater_Name", "Fan_Name", "Laser_Name", "Thermistor_Name", "Input_Switch_Name", "Stepper_Name"):
+                if field.fields[name].override_string_set:
+                    emit_for_pmap(f'Discrete ("{field.fields[name].description}", Default => {field.fields[name].override_string_set}.First_Element, Options => {field.fields[name].override_string_set})', level)
+                else:
+                    emit_for_pmap(f'Discrete ("{field.fields[name].description}", Default => {field.fields[name].type.replace("'Base", "")}_Strings.First_Element, Options => {field.fields[name].type.replace("'Base", "")}_Strings)', level)
+                emit_for_reader(f'{field.fields[name].type.replace("\'Base", "")}\'Value (Get (Data, "{path + "$" + field.fields[name].key}"))', level)
             elif field.fields[name].type == "Dimensionless_Ratio":
                 assert field.fields[name].default == "(1.0, 1.0)"
-                emit(f'Float_Ratio ("{field.fields[name].description}", Default_Numerator => 1.0, Default_Denominator => 1.0, Min => {field.fields[name].min}, Max => {field.fields[name].max})')
+                emit_for_pmap(f'Float_Ratio ("{field.fields[name].description}", Default_Numerator => 1.0, Default_Denominator => 1.0, Min => {field.fields[name].min}, Max => {field.fields[name].max})', level)
+                emit_for_reader(f'(Get (Data, "{path + "$" + field.fields[name].key}$Numerator"), Get (Data, "{path + "$" + field.fields[name].key}$Denominator"))', level)
             elif field.fields[name].type.startswith("TMC_Types.Unsigned_") or field.fields[name].type == "Integer":
-                emit(f'Integer ("{field.fields[name].description}", Default => {field.fields[name].default}, Min => {field.fields[name].min}, Max => {field.fields[name].max}, Unit => "{field.fields[name].units or ""}")')
+                emit_for_pmap(f'Integer ("{field.fields[name].description}", Default => {field.fields[name].default}, Min => {field.fields[name].min}, Max => {field.fields[name].max}, Unit => "{field.fields[name].units or ""}")', level)
+                emit_for_reader(f'Get (Data, "{path + "$" + field.fields[name].key}")', level)
             elif field.fields[name].map is not None:
-                emit(f'Discrete ("{field.fields[name].description}", Default => "{field.fields[name].map[field.fields[name].default]}", Options => [{", ".join(['"' + field.fields[name].map[x] + '"' for x in field.fields[name].map])}])')
+                emit_for_pmap(f'Discrete ("{field.fields[name].description}", Default => "{field.fields[name].map[field.fields[name].default]}", Options => [{", ".join(['"' + field.fields[name].map[x] + '"' for x in field.fields[name].map])}])', level)
+                emit_for_reader(f'(', level)
+                first_in_map = True
+                for name_in_map in field.fields[name].map:
+                    emit_for_reader(f'{"" if first_in_map else "els"}if UTF8_String\'(Get (Data, "{path + "$" + field.fields[name].key}")) = "{field.fields[name].map[name_in_map]}" then {name_in_map}', level)
+                    first_in_map = False
+                emit_for_reader(f'else raise Constraint_Error)', level)
             else:
-                emit(field.fields[name])
+                emit_for_pmap(field.fields[name], level)
                 raise Exception("Type not implemented: " + str(field.fields[name].type))
-
+            if field.variant is not None and field.variant.discriminant == "Kind":
+                emit_for_reader(f')', level)
             if field.fields[name].include_if:
-                emit("] else [])")
+                emit_for_pmap("] else [])", level)
             else:
-                emit("]")
-        emit(")")
+                emit_for_pmap("]", level)
+            if field.fields[name].include_if and (field.variant is None or field.variant.discriminant != "Kind"):
+                emit_for_reader(f"else {field.fields[name].default})", level)
+            first = False
+        if field.variant is not None and field.variant.discriminant == "Kind":
+            emit_for_reader("else raise Constraint_Error)", level)
+        else:
+            emit_for_reader(")", level)
+        emit_for_pmap(")", level)
     elif type(field) is Array:
         if field.element_type in data and type(data[field.element_type]) == Enum:
-            emit(f'{"Tabbed_" if outer.tabbed else ""}Sequence ("{outer.description}", [for Index of {field.index_type}_Strings => Discrete ("", Default => "{data[field.element_type].values[outer.default].key}", Options => [{", ".join(['"' + data[field.element_type].values[x].key + '"' for x in data[field.element_type].values])}])])')
+            emit_for_pmap(f'{"Tabbed_" if outer.tabbed else ""}Sequence ("{outer.description}", [for Index of {field.index_type}_Strings => Discrete ("", Default => "{data[field.element_type].values[outer.default].key}", Options => [{", ".join(['"' + data[field.element_type].values[x].key + '"' for x in data[field.element_type].values])}])])', level)
+            emit_for_reader(f'[for Index_{str(level)} in {field.index_type} =>', level)
+            emit_for_reader(f'(', level)
+            first_in_map = True
+            for value in data[field.element_type].values:
+                emit_for_reader(f'{"" if first_in_map else "els"}if UTF8_String\'(Get (Data, "{path}$" & Index_{str(level)}\'Image)) = "{data[field.element_type].values[value].key}" then {value}', level)
+                first_in_map = False
+            emit_for_reader(f'else raise Constraint_Error)]', level)
         elif field.element_type in ("Velocity", "Acceleration", "Jerk", "Snap", "Crackle", "Time", "Length", "Dimensionless", "Current", "Voltage", "Inductance", "Resistance", "Temperature", "Frequency", "PWM_Scale"):
-            emit(f'{"Tabbed_" if outer.tabbed else ""}Sequence ("{outer.description}", [for Index of {field.index_type}_Strings => Float ("", Default => {outer.default}, Min => {outer.min}, Max => {outer.max}, Unit => "{outer.units or ""}")])')
+            emit_for_pmap(f'{"Tabbed_" if outer.tabbed else ""}Sequence ("{outer.description}", [for Index of {field.index_type}_Strings => Float ("", Default => {outer.default}, Min => {outer.min}, Max => {outer.max}, Unit => "{outer.units or ""}")])', level)
+            emit_for_reader(f'[for Index_{str(level)} in {field.index_type} => Get (Data, "{path}$" & Index_{str(level)}\'Image) {(" * " + outer.units) if outer.units is not None else ""}]', level)
         elif type(data[field.element_type]) == Record:
-            emit(f'{"Tabbed_" if outer.tabbed else ""}Sequence ("{outer.description}", [for Index of {field.index_type}_Strings =>')
-            emit_property_map(data[field.element_type], outer)
-            emit("])")
+            emit_for_pmap(f'{"Tabbed_" if outer.tabbed else ""}Sequence ("{outer.description}", [for Index_{str(level)} of {field.index_type}_Strings =>', level)
+            emit_for_reader(f'[for Index_{str(level)} in {field.index_type} =>', level)
+            handle_item(data[field.element_type], outer, path + "$" + f'" & Index_{str(level)}\'Image & "', level + 1)
+            emit_for_pmap("])", level)
+            emit_for_reader("]", level)
         else:
             raise Exception("Type not implemented: " + str(field.element_type))
     else:
@@ -343,18 +390,22 @@ assert type(data["User_Config"]) is Record
 first = True
 for name in data["User_Config"].fields:
     if not first:
-        emit("+")
+        emit_for_pmap("+", 0)
+        emit_for_reader(",", 0)
     first = False
+    emit_for_reader(f'{name} =>', 0)
     if data["User_Config"].fields[name].include_if:
-        emit(f"(if {data["User_Config"].fields[name].include_if} then [")
+        emit_for_pmap(f"(if {data["User_Config"].fields[name].include_if} then [", 0)
+        emit_for_reader(f"(if {data["User_Config"].fields[name].include_if} then", 0)
     else:
-        emit("[")
-    emit(f'"{data["User_Config"].fields[name].key}" =>')
-    emit_property_map(data[data["User_Config"].fields[name].type], data["User_Config"].fields[name])
+        emit_for_pmap("[", 0)
+    emit_for_pmap(f'"{data["User_Config"].fields[name].key}" =>', 0)
+    handle_item(data[data["User_Config"].fields[name].type], data["User_Config"].fields[name], data["User_Config"].fields[name].key, 1)
     if data["User_Config"].fields[name].include_if:
-        emit("] else [])")
+        emit_for_pmap("] else [])", 0)
+        emit_for_reader(f" else {data["User_Config"].fields[name].default})", 0)
     else:
-        emit("]")
+        emit_for_pmap("]", 0)
 
 with open("src/prunt-config-build_schema.adb", "w") as f:
     f.write("--  This file is automatically generated based on the contents of prunt-config.ads.\n")
@@ -363,6 +414,7 @@ with open("src/prunt-config-build_schema.adb", "w") as f:
     f.write("\n")
     f.write("separate (Prunt.Config)\n")
     f.write("function Build_Schema return Property_Maps.Map is\n")
+    f.write("   pragma Unsuppress (All_Checks);\n")
     f.write("   use type Property_Maps.Map;\n")
     f.write("\n")
     f.write("   function Boolean (Description : String; Default : Boolean) return Property_Parameters_Access is\n")
@@ -471,7 +523,98 @@ with open("src/prunt-config-build_schema.adb", "w") as f:
     f.write("   Axis_Name_Strings                : constant Discrete_String_Sets.Set := [for A in Axis_Name => A'Image];\n")
     f.write("begin\n")
     f.write("   return\n")
-    f.write(re.sub(r"\]\s*\+\s*\[", ", ", output_string))
+    f.write(re.sub(r"\]\s*\+\s*\[", ", ", property_map_output_string))
     f.write(";\n")
     f.write("end Build_Schema;\n")
+    f.write("pragma Style_Checks (On);\n")
+
+with open("src/prunt-config-json_to_user_config.adb", "w") as f:
+    f.write("--  This file is automatically generated based on the contents of prunt-config.ads.\n")
+    f.write("--  Run config_codegen.py to regenerate this file.\n")
+    f.write("pragma Style_Checks (Off);\n")
+    f.write("with GNATCOLL;\n")
+    f.write("with GNATCOLL.JSON;\n")
+    f.write("with Prunt.TMC_Types;\n")
+    f.write("with Prunt.TMC_Types.TMC2240;\n")
+    f.write("--  I don't know why we need all this here, but it's the only thing that seems to make GNAT happy.\n")
+    f.write("\n")
+    f.write("separate (Prunt.Config)\n")
+    f.write("function JSON_To_User_Config (Data : JSON_Value) return User_Config is\n")
+    f.write("   pragma Unsuppress (All_Checks);\n")
+    f.write("   use GNATCOLL;\n");
+    f.write("   use GNATCOLL.JSON;\n");
+    f.write("   use Prunt;\n")
+    f.write("   use Prunt.TMC_Types;\n")
+    f.write("   use Prunt.TMC_Types.TMC2240;\n")
+    f.write("   function My_Get_Long_Float (Val : JSON_Value) return Long_Float is\n")
+    f.write("   begin\n")
+    f.write("      if Kind (Val) = JSON_Float_Type then\n")
+    f.write("         return Get_Long_Float (Val);\n")
+    f.write("      elsif Kind (Val) = JSON_Int_Type then\n")
+    f.write("         return Long_Float (Long_Long_Integer'(Get (Val)));\n")
+    f.write("      else\n")
+    f.write("         raise Constraint_Error with \"Not a number.\";\n")
+    f.write("      end if;\n")
+    f.write("   end My_Get_Long_Float;\n")
+    f.write("\n")
+    f.write("   function My_Get_Long_Float (Val : JSON_Value; Field : UTF8_String) return Long_Float is\n")
+    f.write("   begin\n")
+    f.write("      return My_Get_Long_Float (Get (Val, Field));\n")
+    f.write("   end My_Get_Long_Float;\n")
+    f.write("\n")
+    f.write("   generic\n");
+    f.write("      type T is range <>;\n");
+    f.write("   function Get_JSON_Integer (Val : JSON_Value; Field : UTF8_String) return T;\n");
+    f.write("\n")
+    f.write("   function Get_JSON_Integer (Val : JSON_Value; Field : UTF8_String) return T is\n")
+    f.write("   begin\n")
+    f.write("      return T (Long_Long_Integer'(Get (Get (Val, Field))));\n")
+    f.write("   end Get_JSON_Integer;\n")
+    f.write("\n")
+    f.write("   pragma Warnings (Off, \"function \"\"Get\"\" is not referenced\");\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_1);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_2);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_3);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_4);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_5);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_6);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_7);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_8);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_9);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_10);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_11);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_12);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_13);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_14);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_15);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_16);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_17);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_18);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_19);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_20);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_21);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_22);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_23);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_24);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_25);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_26);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_27);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_28);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_29);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_30);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_31);\n")
+    f.write("   function Get is new Get_JSON_Integer (Prunt.TMC_Types.Unsigned_32);\n")
+    f.write("   function Get is new Get_JSON_Integer (Integer);\n")
+    f.write("   pragma Warnings (On, \"function \"\"Get\"\" is not referenced\");\n")
+    f.write("\n")
+    f.write("   function Get (Val : JSON_Value; Field : UTF8_String) return Dimensionless is\n")
+    f.write("   begin\n")
+    f.write("      return Dimensionless (My_Get_Long_Float (Val, Field));\n")
+    f.write("   end Get;\n")
+    f.write("\n")
+    f.write("begin\n")
+    f.write("   return (\n")
+    f.write(reader_output_string)
+    f.write(");\n")
+    f.write("end JSON_To_User_Config;\n")
     f.write("pragma Style_Checks (On);\n")

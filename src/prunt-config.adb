@@ -24,6 +24,10 @@ with Ada.Text_IO;
 with Ada.Strings;
 with Ada.Strings.Fixed;
 with Ada.Text_IO.Unbounded_IO;
+with GNATCOLL;
+with GNATCOLL.JSON;
+with Prunt.TMC_Types;
+with Prunt.TMC_Types.TMC2240;
 
 package body Prunt.Config is
 
@@ -42,6 +46,8 @@ package body Prunt.Config is
      not (for all S in Stepper_Name => Stepper_Hardware (S).Kind not in TMC2240_UART_Kind);
 
    function Build_Schema return Property_Maps.Map is separate;
+
+   function JSON_To_User_Config (Data : JSON_Value) return User_Config is separate;
 
    use type TMC_Types.TMC2240.CHM_Type;
 
@@ -107,11 +113,6 @@ package body Prunt.Config is
    function Get (Val : JSON_Value; Field : UTF8_String) return Dimensionless is
    begin
       return Dimensionless (My_Get_Long_Float (Val, Field));
-   end Get;
-
-   function Get (Val : JSON_Value; Field : UTF8_String) return TMC_Boolean is
-   begin
-      return TMC_Types.TMC_Boolean (Boolean'(Get (Val, Field)));
    end Get;
 
    function Trim (S : String) return String is
@@ -1056,6 +1057,13 @@ package body Prunt.Config is
       end Read;
 
       function JSON_To_Config (Data : JSON_Value) return Full_Config is
+         function Get (Val : JSON_Value; Field : UTF8_String) return TMC_Boolean;
+
+         function Get (Val : JSON_Value; Field : UTF8_String) return TMC_Boolean is
+         begin
+            return TMC_Types.TMC_Boolean (Boolean'(Get (Val, Field)));
+         end Get;
+
          Config : Full_Config;
 
          function Get_Distance_Per_Step (S : Stepper_Name) return Length is
