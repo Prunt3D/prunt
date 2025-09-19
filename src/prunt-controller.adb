@@ -676,7 +676,9 @@ package body Prunt.Controller is
                      null;
 
                   when TMC2240_UART_Kind =>
-                     if Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing then
+                     if Stepper_Params.Enabled
+                       and then Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing
+                     then
                         Message :=
                           (Bytes_Mode => False,
                            Content    =>
@@ -751,7 +753,9 @@ package body Prunt.Controller is
                      null;
 
                   when TMC2240_UART_Kind =>
-                     if Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing then
+                     if Stepper_Params.Enabled
+                       and then Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing
+                     then
                         Message :=
                           (Bytes_Mode => False,
                            Content    =>
