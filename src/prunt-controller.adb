@@ -1227,7 +1227,8 @@ package body Prunt.Controller is
       entry Report (Index : Command_Index; Cycles : Dimensionless) when not Report_Ready is
       begin
          if Offset_Ready and then Stored_Index /= Index then
-            raise Constraint_Error with "Loop move index reported by implementation does not match index reported by step generator.";
+            raise Constraint_Error
+              with "Loop move index reported by implementation does not match index reported by step generator.";
          end if;
          Stored_Index := Index;
          Stored_Cycles := Cycles;
@@ -1237,7 +1238,8 @@ package body Prunt.Controller is
       entry Report_Offset (Index : Command_Index; Offset : Position_Offset) when not Offset_Ready is
       begin
          if Report_Ready and then Stored_Index /= Index then
-            raise Constraint_Error with "Loop move index reported by implementation does not match index reported by step generator.";
+            raise Constraint_Error
+              with "Loop move index reported by implementation does not match index reported by step generator.";
          end if;
          Stored_Index := Index;
          Stored_Offset := Offset;
