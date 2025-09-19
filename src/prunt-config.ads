@@ -510,8 +510,8 @@ private
       procedure Reset;
    private
       procedure Error_If_Initial_Config_Invalid;
-      procedure Validate_Config (Config : JSON_Value; Report : access procedure (Key, Message : String));
-      function JSON_To_Config (Data : JSON_Value) return Full_Config;
+      procedure Validate_Config (Config : User_Config; Report : access procedure (Key, Message : String));
+      function User_Config_To_Config (Data : User_Config) return Full_Config;
       procedure Validate_Config_To_Schema (Config : JSON_Value; Report : access procedure (Key, Message : String));
       procedure Maybe_Do_Init;
       procedure Write_File;
@@ -1394,7 +1394,7 @@ private
       --  Key: Kinematics kind
    end record;
 
-   type User_Config_Input_Switch is record
+   type User_Config_Input_Switch_Visible is record
       --  Description: This section contains the configuration for a single input switch.
 
       Enabled : Boolean := False;
@@ -1406,6 +1406,28 @@ private
       --  Description: This setting determines the logic level that triggers the switch. If your switch is normally
       --               open (NO) you likely want this setting disabled. If your switch is normally closed (NC) then you
       --               likely want to enable this setting.
+   end record;
+
+   type User_Config_Input_Switch_Not_Visible is record
+      --  This record will never be visible to the user as we filter out non-visible input switches from
+      --  Input_Switch_Name_Strings.
+      null;
+   end record;
+
+   type User_Config_Input_Switch_Kind is (Visible, Not_Visible);
+
+   type User_Config_Input_Switch (Fixed_Kind : User_Config_Input_Switch_Kind := Visible) is record
+      --  Description: This section contains the configuration for a single input switch.
+
+      case Fixed_Kind is
+         when Visible =>
+            Visible : User_Config_Input_Switch_Visible;
+            --  Key: Visible
+
+         when Not_Visible =>
+            Not_Visible : User_Config_Input_Switch_Not_Visible;
+            --  Key: Not_Visible
+      end case;
    end record;
 
    type User_Config_Thermistors_Disabled is record
@@ -1987,7 +2009,7 @@ private
          when Use_Input_Switch =>
             Use_Input_Switch : User_Config_Homing_Use_Input_Switch;
             --  Key: Use_Input_Switch
-            --  Delete_If: not Has_Input_Switches
+            --  Include_If: Has_Input_Switches
 
          when Use_StallGuard2 =>
             Use_StallGuard2 : User_Config_Homing_Use_StallGuard2;
@@ -2305,6 +2327,8 @@ private
 
       Input_Switches : User_Config_Input_Switch_Array := (others => <>);
       --  Key: Input switches
+      --  Include_If: Has_Input_Switches
+      --  Fixed_Kind: (if Input_Switch_Visible_To_User (Input_Switch_Name'Value(Index_???)) then Visible else Not_Visible)
       --  Description: This section contains the configuration for all input switches.
       --  Tabbed: True
 
