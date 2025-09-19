@@ -482,6 +482,8 @@ private
    type User_Config;
 
    function JSON_To_User_Config (Data : JSON_Value) return User_Config;
+   procedure Validate_Config (Config : User_Config; Report : access procedure (Key, Message : String));
+   function User_Config_To_Config (Data : User_Config) return Full_Config;
 
    protected Config_File is
       procedure Disable_Prunt;
@@ -510,8 +512,6 @@ private
       procedure Reset;
    private
       procedure Error_If_Initial_Config_Invalid;
-      procedure Validate_Config (Config : User_Config; Report : access procedure (Key, Message : String));
-      function User_Config_To_Config (Data : User_Config) return Full_Config;
       procedure Validate_Config_To_Schema (Config : JSON_Value; Report : access procedure (Key, Message : String));
       procedure Maybe_Do_Init;
       procedure Write_File;
