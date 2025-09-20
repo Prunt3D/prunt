@@ -26,7 +26,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    function Element (Position : Cursor) return Element_Type is
    begin
-      return Inner_Maps.Element (Position.Map.Map, Key (Position));
+      return Inner_Maps.Element (Position.Map.Map, Key_Vectors.Element (Position.Cursor));
    end Element;
 
    function Constant_Reference (Container : aliased Map; Key : Key_Type) return Constant_Reference_Type is
@@ -200,17 +200,18 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
    end Previous;
 
    function "+" (Left, Right : Map) return Map is
-      Result : Map := Empty;
    begin
-      for I in Left.Iterate loop
-         Result.Insert (Key (I), Element (I));
-      end loop;
+      return Result : Map do
+         for I of Left.Insertions loop
+            Result.Map.Insert (I, Left.Map.Element (I));
+            Result.Insertions.Append (I);
+         end loop;
 
-      for I in Right.Iterate loop
-         Result.Insert (Key (I), Element (I));
-      end loop;
-
-      return Result;
+         for I of Right.Insertions loop
+            Result.Map.Insert (I, Right.Map.Element (I));
+            Result.Insertions.Append (I);
+         end loop;
+      end return;
    end "+";
 
 end Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;

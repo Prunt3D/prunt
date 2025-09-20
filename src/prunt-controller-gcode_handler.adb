@@ -892,8 +892,12 @@ package body Prunt.Controller.Gcode_Handler is
                    Flush_Resetting_Data => (others => <>)));
 
             when Set_Laser_Power_Kind =>
-               --  Laser powers are not allowed to be buffered, so we do not flush here as we do with heaters and fans.
+               pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
+               --  This command can never be emitted if the machine does not have lasers, which is what triggers this
+               --  warning.
                Corner_Data.Lasers (Command.Laser_To_Set) := Command.Laser_Power;
+               --  Laser powers are not allowed to be buffered, so we do not flush here as we do with heaters and fans.
+               pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
 
             when Set_Chamber_Temperature_Kind | Wait_Chamber_Temperature_Kind =>
                raise Constraint_Error with "Command not implemented.";

@@ -712,6 +712,9 @@ package body Prunt.Controller is
       Safe_Stop_After : Boolean;
       Vel_Ratio       : Dimensionless) is
    begin
+      pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
+      --  TODO: This is obviously a GCC bug as we are iterating over Laser_Name, meaning that it is impossible for the
+      --  value to not be in range, but it's difficult to isolate the bug here.
       Enqueue_Command
         ((Index           => Index,
           Pos             => Stepper_Pos,
@@ -726,6 +729,7 @@ package body Prunt.Controller is
                     (1.0, Dimensionless (Data.Lasers (L)) * (if Data.Modulate_Lasers (L) then Vel_Ratio else 1.0)))),
           Safe_Stop_After => Safe_Stop_After,
           Loop_Until_Hit  => Loop_Until_Hit));
+      pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
       Last_Position := (for A in Axis_Name => Pos (A));
       Last_Heater_Targets := (for H in Heater_Name => Data.Heaters (H));
       Last_Line := Data.Current_Line;

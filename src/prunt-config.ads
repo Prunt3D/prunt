@@ -631,7 +631,8 @@ private
 
       Circumference : Length := 1.0E100 * mm;
       --  Key: Circumference
-      --  Description: This is the circumference of the pulley that drives the belt attached to the linearly moving part.
+      --  Description: This is the circumference of the pulley that drives the belt attached to the linearly moving
+      --               part.
       --  Min: -1.0E100
       --  Max: 1.0E100
 
@@ -1752,7 +1753,7 @@ private
    type User_Config_Heater is record
       --  Description: This section contains the configuration for a single heater.
 
-      Thermistor : Thermistor_Name;
+      Thermistor : Thermistor_Name'Base := Thermistor_Name'Base'First;
       --  Key: Thermistor
       --  Description: Select the thermistor that is used to measure the temperature of this heater.
 
@@ -1823,7 +1824,7 @@ private
       --               of the axis. The homing procedure consists of a fast move towards the switch, a back-off move,
       --               and then a slower move to accurately record the switch position.
 
-      Switch : Input_Switch_Name;
+      Switch : Input_Switch_Name'Base := Input_Switch_Name'Base'First;
       --  Key: Switch
       --  Description: Select the input switch to be used for homing this axis.
 
@@ -1878,7 +1879,7 @@ private
    type User_Config_Homing_Use_StallGuard2 is record
       --  Description: This homing method uses Trinamic's StallGuard2 feature for sensorless homing.
 
-      Motor : Stepper_Name;
+      Motor : Stepper_Name'Base := Stepper_Name'Base'First;
       --  Key: Motor
       --  Description: Select the motor that will be used for stall detection. Must be attached to the given axis, or
       --               the A/B axis for X/Y in Core XY.
@@ -1931,7 +1932,7 @@ private
    type User_Config_Homing_Use_StallGuard4 is record
       --  Description: This homing method uses Trinamic's StallGuard4 feature for sensorless homing.
 
-      Motor : Stepper_Name;
+      Motor : Stepper_Name'Base := Stepper_Name'Base'First;
       --  Key: Motor
       --  Description: Select the motor that will be used for stall detection.
       --  Override_String_Set: StallGuard4_Stepper_Name_Strings
@@ -2318,7 +2319,7 @@ private
 
       Steppers : User_Config_Stepper_Array := (others => <>);
       --  Key: Steppers
-      --  Fixed_Kind: Stepper_Hardware (Stepper_Name'Value(Index_???)).Kind
+      --  Fixed_Kind: Stepper_Hardware (Stepper_Name'Value (Index_???)).Kind
       --  Description: This section contains the configuration for all stepper motor drivers.
       --  Tabbed: True
 
@@ -2328,7 +2329,7 @@ private
       Input_Switches : User_Config_Input_Switch_Array := (others => <>);
       --  Key: Input switches
       --  Include_If: Has_Input_Switches
-      --  Fixed_Kind: (if Input_Switch_Visible_To_User (Input_Switch_Name'Value(Index_???)) then Visible else Not_Visible)
+      --  Fixed_Kind: (if Input_Switch_Visible_To_User (Input_Switch_Name'Value (Index_???)) then Visible else Not_Visible)
       --  Description: This section contains the configuration for all input switches.
       --  Tabbed: True
 
@@ -2340,7 +2341,7 @@ private
 
       Heaters : User_Config_Heater_Array := (others => <>);
       --  Key: Heaters
-      --  Include_If: Has_Heaters
+      --  Include_If: (Has_Heaters and Has_Thermistors)
       --  Description: This section contains the configuration for all heaters.
       --  Tabbed: True
 
@@ -2358,7 +2359,7 @@ private
       Fans : User_Config_Fan_Array := (others => <>);
       --  Key: Fans
       --  Include_If: Has_Fans
-      --  Fixed_Kind: Fan_Hardware (Fan_Name'Value(Index_???)).Kind
+      --  Fixed_Kind: Fan_Hardware (Fan_Name'Value (Index_???)).Kind
       --  Description: This section contains the configuration for all fans.
       --  Tabbed: True
 

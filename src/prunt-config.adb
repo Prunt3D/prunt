@@ -751,12 +751,16 @@ package body Prunt.Config is
          Data := Initial_Config.Shapers (Axis);
       end Read;
 
+      pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
+      --  TODO: This is obviously a GCC bug as the parameter is of the type in question, but it is difficult to isolate
+      --  this bug.
       procedure Read (Data : out Laser_Parameters; Laser : Laser_Name) is
       begin
          Maybe_Do_Init;
          Error_If_Initial_Config_Invalid;
          Data := Initial_Config.Lasers (Laser);
       end Read;
+      pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
 
       procedure Validate_Config_To_Schema (Config : JSON_Value; Report : access procedure (Key, Message : String)) is
          procedure Check_Field (Name : UTF8_String; Value : JSON_Value) is
@@ -997,12 +1001,16 @@ package body Prunt.Config is
       return Data;
    end Read;
 
+   pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
+   --  TODO: This is obviously a GCC bug as the parameter is of the type in question, but it is difficult to isolate
+   --  this bug.
    function Read (Laser : Laser_Name) return Laser_Parameters is
       Data : Laser_Parameters;
    begin
       Config_File.Read (Data, Laser);
       return Data;
    end Read;
+   pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
 
    procedure Patch
      (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String)) is
