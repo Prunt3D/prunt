@@ -1046,7 +1046,7 @@ package body Prunt.Controller.Gcode_Handler is
                declare
                   Line : constant String := Gcode_Queue.Get_Command;
                begin
-                  Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
+                  Parse_Line (Parser_Context, Line, Run_Command'Access);
                   My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
                exception
                   when E : Command_Constraint_Error =>
@@ -1092,10 +1092,9 @@ package body Prunt.Controller.Gcode_Handler is
                            Line : constant String := Get_Line (File);
                         begin
                            if Line'Length >= 1 and then Line (Line'Last) = Ada.Characters.Latin_1.CR then
-                              Parse_Line
-                                (Parser_Context, Line (Line'First .. Line'Last - 1), Run_Command'Unrestricted_Access);
+                              Parse_Line (Parser_Context, Line (Line'First .. Line'Last - 1), Run_Command'Access);
                            else
-                              Parse_Line (Parser_Context, Line, Run_Command'Unrestricted_Access);
+                              Parse_Line (Parser_Context, Line, Run_Command'Access);
                            end if;
                         exception
                            when E : Command_Constraint_Error =>
