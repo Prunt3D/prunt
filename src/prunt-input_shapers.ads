@@ -30,7 +30,7 @@ package Prunt.Input_Shapers is
    type Extra_Insensitive_Humps_Count is range 1 .. 3;
    type Modified_Zero_Vibration_Impulses_Count is range 2 .. 3;
 
-   type Shaper_Kind is (No_Shaper, Zero_Vibration, Extra_Insensitive);
+   type Shaper_Kind is (No_Shaper, Zero_Vibration, Extra_Insensitive, Pressure_Advance);
 
    type Shaper_Parameters (Kind : Shaper_Kind := No_Shaper) is record
       case Kind is
@@ -47,6 +47,10 @@ package Prunt.Input_Shapers is
             Extra_Insensitive_Damping_Ratio      : Shaper_Damping_Ratio;
             Extra_Insensitive_Humps              : Extra_Insensitive_Humps_Count;
             Extra_Insensitive_Residual_Vibration : Residual_Vibration_Level;
+
+         when Pressure_Advance =>
+            Pressure_Advance_Time           : Time;
+            Pressure_Advance_Smoothing_Time : Time;
       end case;
    end record;
 
