@@ -32,6 +32,7 @@ use type Prunt.TMC_Types.TMC2240.UART_CRC;
 package body Prunt.Controller.Gcode_Handler is
 
    use type My_Config.Fan_Kind;
+   use type Input_Shapers.Shaper_Kind;
 
    package My_Gcode_Parser is new
      Prunt.Gcode_Parser
@@ -276,7 +277,6 @@ package body Prunt.Controller.Gcode_Handler is
                 Shift_Blended_Corners   => False,
                 Tangential_Velocity_Max => Axial_Homing_Params (Axis).Velocity_Limit,
                 Axial_Velocity_Maxes    => [others => Axial_Homing_Params (Axis).Velocity_Limit],
-                Pressure_Advance_Time   => 0.0 * s,
                 Acceleration_Max        => Axial_Homing_Params (Axis).Acceleration_Limit,
                 Jerk_Max                => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E2 / s**1,
                 Snap_Max                => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E5 / s**2,
@@ -881,7 +881,13 @@ package body Prunt.Controller.Gcode_Handler is
                      Kinematics_Params.Planner_Parameters.Chord_Error_Max := Command.Chord_Error_Max;
 
                   when Set_Pressure_Advance_Time_Kind =>
-                     Kinematics_Params.Planner_Parameters.Pressure_Advance_Time := Command.Pressure_Advance_Time;
+                     if Persistent_Data.Shaper_Parameters (E_Axis).Kind = Input_Shapers.Pressure_Advance then
+                        Persistent_Data.Shaper_Parameters (E_Axis).Pressure_Advance_Time :=
+                          Command.Pressure_Advance_Time;
+                     else
+                        raise Command_Constraint_Error
+                          with "The pressure advance shaper is not enabled on the E axis.";
+                     end if;
 
                   when others =>
                      raise Constraint_Error with "Unreachable.";

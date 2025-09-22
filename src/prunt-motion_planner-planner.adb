@@ -199,45 +199,20 @@ package body Prunt.Motion_Planner.Planner is
               Point_At_Distance
                 (Block.Beziers (Finishing_Corner - 1),
                  Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
-            Tangent :=
-              Tangent_At_Distance
-                (Block.Beziers (Finishing_Corner - 1),
-                 Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
          elsif Distance < Start_Curve_Half_Distance + Mid_Distance or End_Curve_Half_Distance = 0.0 * mm then
             if Mid_Distance = 0.0 * mm then
                Pos := Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
-               Tangent :=
-                 Tangent_At_Distance
-                   (Block.Beziers (Finishing_Corner - 1), Distance_At_T (Block.Beziers (Finishing_Corner - 1), 1.0));
             else
                Pos :=
                  Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0)
                  + (Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
                     - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0))
                    * ((Distance - Start_Curve_Half_Distance) / Mid_Distance);
-               Tangent :=
-                 Point_At_T (Block.Beziers (Finishing_Corner), 0.0)
-                 - Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
             end if;
          else
             Pos :=
               Point_At_Distance
                 (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
-            Tangent :=
-              Tangent_At_Distance
-                (Block.Beziers (Finishing_Corner), Distance - Start_Curve_Half_Distance - Mid_Distance);
-         end if;
-
-         if abs Tangent /= 0.0 * mm then
-            Scaled_Velocity_Tangent :=
-              (Tangent / abs Tangent)
-              * Velocity_At_Time
-                  (Block.Feedrate_Profiles (Finishing_Corner),
-                   Time_Into_Segment,
-                   Block.Params.Crackle_Max,
-                   Block.Corner_Velocity_Limits (Finishing_Corner - 1));
-
-            Pos (E_Axis) := Pos (E_Axis) + Block.Params.Pressure_Advance_Time * Scaled_Velocity_Tangent (E_Axis);
          end if;
 
          return Position (Pos * Block.Params.Axial_Scaler);

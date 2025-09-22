@@ -20,6 +20,7 @@
 -----------------------------------------------------------------------------
 
 with Prunt.Input_Shapers.Basic_Shapers;
+with Prunt.Input_Shapers.Pressure_Advance_Shapers;
 
 package body Prunt.Input_Shapers.Shapers is
 
@@ -37,6 +38,10 @@ package body Prunt.Input_Shapers.Shapers is
             when No_Shaper | Zero_Vibration | Extra_Insensitive =>
                Result.Shapers.Insert
                  (A, Basic_Shapers.Create (Parameters (A), Interpolation_Time, Initial_Position (A)));
+
+            when Pressure_Advance =>
+               Result.Shapers.Insert
+                 (A, Pressure_Advance_Shapers.Create (Parameters (A), Interpolation_Time, Initial_Position (A)));
          end case;
       end loop;
 

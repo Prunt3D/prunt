@@ -1321,16 +1321,6 @@ private
       --  Min: 0.000001
       --  Max: 1.0E100
 
-      Pressure_Advance_Time : Time := 0.0 * s;
-      --  Key: Pressure advance time
-      --  Description: The E axis velocity is multiplied by this value and then added to the E axis position. This
-      --               means that the maximum E axis velocity is the set maximum plus the pressure advance time
-      --               multiplied by the set maximum acceleration. The same applies to jerk etc.. There is currently no
-      --               option for smoothing of this value, so anything beyond a very small value may cause the velocity
-      --               to be lowered significantly to avoid exceeding the maximum step rate of the stepper drivers.
-      --  Min: -1.0E100
-      --  Max: 1.0E100
-
       Maximum_Chord_Error : Length := 0.1 * mm;
       --  Key: Maximum chord error
       --  Description: This setting controls how far a path is allowed to deviate from the path specified in G-code.
@@ -2253,13 +2243,37 @@ private
       --  Max: 3
    end record;
 
+   type User_Config_Input_Shaping_Pressure_Advance is record
+      --  Description: Pressure advance shaper with optional smoothing.
+
+      Pressure_Advance_Time : Time := 0.0 * s;
+      --  Key: Pressure advance time
+      --  Description: The E axis velocity is multiplied by this value and then added to the axis position.
+      --  Min: -1.0E100
+      --  Max: 1.0E100
+
+      Pressure_Advance_Smooth_Time : Time := 0.0 * s;
+      --  Key: Pressure advance smooth time
+      --  Description: This applies a triangular smoothing window of the specified length, either to the added part or
+      --               to the entire output, as set by 'Apply smoothing to added part only'.
+      --  Min: 0.0
+      --  Max: 0.2
+
+      Smooth_Added_Part_Only : Boolean := False;
+      --  Key: Apply smoothing to added part only
+      --  Description: If set, apply smoothing to only the part added by pressure advance, otherwise smoothing the
+      --               entire output.
+   end record;
+
    type User_Config_Input_Shaping_Method_Kind is
      (No_Shaper,
       --  Key: No shaper
       ZV,
       --  Key: Zero vibration (ZV/ZVD/ZVDD/etc.)
-      EI
+      EI,
       --  Key: Extra insensitive (EI/2HEI/3HEI)
+      Pressure_Advance
+      --  Key: Pressure advance
      );
 
    type User_Config_Input_Shaping (Kind : User_Config_Input_Shaping_Method_Kind := No_Shaper) is record
@@ -2277,6 +2291,10 @@ private
          when EI =>
             EI : User_Config_Input_Shaping_EI;
             --  Key: EI
+
+         when Pressure_Advance =>
+            Pressure_Advance : User_Config_Input_Shaping_Pressure_Advance;
+            --  Key: Pressure_Advance
       end case;
    end record;
 

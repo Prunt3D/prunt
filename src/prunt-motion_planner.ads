@@ -43,7 +43,6 @@ package Prunt.Motion_Planner is
 
       Tangential_Velocity_Max : Velocity := 0.0 * mm / s;
       Axial_Velocity_Maxes    : Axial_Velocities := [others => 0.0 * mm / s];
-      Pressure_Advance_Time   : Time := 0.0 * s;
       Acceleration_Max        : Acceleration := 0.0 * mm / s**2;
       Jerk_Max                : Jerk := 0.0 * mm / s**3;
       Snap_Max                : Snap := 0.0 * mm / s**4;

@@ -582,7 +582,25 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(11));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(11) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(11) then
+            --  Version 12 moves pressure advance to a shaper.
+            if My_Get_Long_Float (Get (Current_Properties, "Properties"), "Kinematics$Pressure advance time") /= 0.0
+            then
+               Set_Field
+                 (Get (Current_Properties, "Properties"),
+                  "Input shaping$" & Axis_Name'Image (E_Axis),
+                  "Pressure advance");
+               Set_Field_Long_Float
+                 (Get (Current_Properties, "Properties"),
+                  "Input shaping$" & Axis_Name'Image (E_Axis) & "$Pressure advance$Pressure advance time",
+                  My_Get_Long_Float (Get (Current_Properties, "Properties"), "Kinematics$Pressure advance time"));
+            end if;
+            Unset_Field (Get (Current_Properties, "Properties"), "Kinematics$Pressure advance time");
+
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(12));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(12) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -1576,7 +1594,6 @@ package body Prunt.Config is
          Shift_Blended_Corners   => Data.Kinematics.Shift_Blended_Corners,
          Tangential_Velocity_Max => Data.Kinematics.Maximum_Tangential_Velocity,
          Axial_Velocity_Maxes    => (for A in Axis_Name => Data.Kinematics.Axial_Velocity_Limits (A)),
-         Pressure_Advance_Time   => Data.Kinematics.Pressure_Advance_Time,
          Acceleration_Max        => Data.Kinematics.Maximum_Acceleration,
          Jerk_Max                => Data.Kinematics.Maximum_Jerk,
          Snap_Max                => Data.Kinematics.Maximum_Snap,
@@ -2189,6 +2206,16 @@ package body Prunt.Config is
                     Residual_Vibration_Level (Data.Input_Shaping (A).EI.Residual_Vibration_Level),
                   Extra_Insensitive_Humps              =>
                     Extra_Insensitive_Humps_Count (Data.Input_Shaping (A).EI.Number_Of_Humps));
+
+            when Pressure_Advance =>
+               Config.Shapers (A) :=
+                 (Kind                                    => Pressure_Advance,
+                  Pressure_Advance_Time                   =>
+                    Data.Input_Shaping (A).Pressure_Advance.Pressure_Advance_Time,
+                  Pressure_Advance_Smooth_Time            =>
+                    Data.Input_Shaping (A).Pressure_Advance.Pressure_Advance_Smooth_Time,
+                  Pressure_Advance_Smooth_Added_Part_Only =>
+                    Data.Input_Shaping (A).Pressure_Advance.Smooth_Added_Part_Only);
          end case;
       end loop;
 
