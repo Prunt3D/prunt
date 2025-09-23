@@ -56,7 +56,7 @@ package Prunt.Input_Shapers.Shapers is
 
    -----------
 
-   --  Each shaper should implement a function similar to function similar to:
+   --  Each shaper should implement a function similar to:
    --
    --  Create
    --  (Parameters : Shaper_Parameters; Interpolation_Time : Time; Initial_Position : Length) return Shaper'Class;
