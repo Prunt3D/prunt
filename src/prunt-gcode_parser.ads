@@ -244,7 +244,8 @@ private
    --  Perform a retraction move with the values specified by the last M207 command. Multiple G10 commands without a
    --  G11 command between them are ignored.
    --
-   --  No parameters. This differs from Marlin where an optional `S` parameter may be used to specify a different retraction length for tool swaps.
+   --  No parameters. This differs from Marlin where an optional `S` parameter may be used to specify a different
+   --  retraction length for tool swaps.
 
    procedure G11_Recover
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command));

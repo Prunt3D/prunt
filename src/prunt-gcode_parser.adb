@@ -93,7 +93,9 @@ package body Prunt.Gcode_Parser is
                   G21_Millimetre_Units (Ctx_Copy, Args, Buffered_Runner'Access);
 
                when 28 =>
-                  G28_Auto_Home (Ctx_Copy, Args, Buffered_Runner'Access);
+                  G28_Auto_Home (Ctx, Args, Runner);
+                  --  TODO: This is a hack until the calls to reset_position are reworked.
+                  Ctx_Copy := Ctx;
 
                when 90 =>
                   G90_Absolute_Positioning (Ctx_Copy, Args, Buffered_Runner'Access);
