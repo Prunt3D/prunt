@@ -391,7 +391,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(11));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(12));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
