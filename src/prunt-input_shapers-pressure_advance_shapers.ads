@@ -19,57 +19,20 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
---  How the rolling pressure advance smoothing algorithm works:
---
---  We begin with the smoothing function from Klipper:
---
---  smooth_pa_position(t) =
---    ∫[t - smooth_time/2, t + smooth_time/2](pa_position(x) * (smooth_time/2 - abs(t - x)))
---    / (smooth_time/2)^2
---
---  If we used this directly it would be very expensive as we would have to recalculate the integral at the step
---  command output rate by summing a large number of values. Since we use fixed time steps in Prunt, what we are
---  looking for here is a simple recurrence relationship on fixed steps of t. We find that relationship as follows:
---
---  Let w = smooth_time / 2
---
---  Let p = pa_position
---
---  S(t) = ∫[t-w, t+w](p(x) * (w - abs(t - x)))
---
---  S(t) =   ∫[t-w, t](p(x) * (w - t - x))
---         + ∫[t, t+w](p(x) * (w + t - x))
---
---  S'(t) =   ∫[t-w, t](-p(x))
---          - ∫[t, t+w]( p(x))
---
---  S''(t) =   (p(t+w) - p(t))
---           - (p(t) - p(t-w))
---
---  S''(t) = p(t+w) + p(t-w) - 2p(t)
---
---  In the discrete world, the second order difference is equivalent to the second derivative, meaning that:
---
---  S(t+1) - 2S(t) + S(t-1) = S''(t)
---
---  S(t+1) - 2S(t) + S(t-1) = p(t+w) + p(t-w) - 2p(t)
---
---  We can rearrange this to find:
---
---  S(t+1) = p(t+w) + p(t-w) - 2p(t) + 2S(t) - S(t-1)
---
---  Offsetting by 1:
---
---  S(t) = p(t+w-1) + p(t-w-1) - 2p(t-1) + 2S(t-1) - S(t-2)
+--  An alternative approach to smoothing may be found in commit 9b197ac428bb1eb52f9a0c6163cb2cabf1cf3e2a. The approach
+--  used here appears to produce results with less error.
 
 with Prunt.Input_Shapers.Shapers;
+with Prunt.Moving_Averages;
 
 package Prunt.Input_Shapers.Pressure_Advance_Shapers is
 
    type Pressure_Advance_Shaper
-     (Input_Offset   : Cycle_Count;
-      Extra_End_Time : Cycle_Count;
-      Buffer_Size    : Cycle_Count)
+     (Input_Offset           : Cycle_Count;
+      Extra_End_Time         : Cycle_Count;
+      Filter_N_Levels        : Positive;
+      Filter_Width_Per_Level : Natural;
+      Buffer_Size            : Cycle_Count)
    is new Shapers.Shaper with private;
 
    function Create
@@ -82,30 +45,28 @@ package Prunt.Input_Shapers.Pressure_Advance_Shapers is
 
 private
 
-   type Buffer_Member is record
-      Pos     : Length;
-      PA_Part : Length;
-   end record;
+   package Length_Moving_Averages is new Moving_Averages (Length);
 
-   type Buffer_Array is array (Cycle_Count range <>) of Buffer_Member;
-
-   type Previous_Outputs_Array is array (-2 .. -1) of Length;
+   type Buffer_Array is array (Cycle_Count range <>) of Length;
 
    type Pressure_Advance_Shaper
-     (Input_Offset   : Cycle_Count;
-      Extra_End_Time : Cycle_Count;
-      Buffer_Size    : Cycle_Count)
+     (Input_Offset           : Cycle_Count;
+      Extra_End_Time         : Cycle_Count;
+      Filter_N_Levels        : Positive;
+      Filter_Width_Per_Level : Natural;
+      Buffer_Size            : Cycle_Count)
    is new Shapers.Shaper (Input_Offset => Input_Offset, Extra_End_Time => Extra_End_Time) with record
-      Buffer                 : Buffer_Array (0 .. Buffer_Size);
-      --  These buffers are technically 1 larger than Buffer_Size, but that does not matter. Starting at 0 makes the
-      --  implementation simpler. We can not subtract from a value that comes from a discriminant to get the correct
-      --  size while starting at 0.
-      Current_Buffer_Index   : Cycle_Count;
-      Previous_Outputs       : Previous_Outputs_Array;
-      Previous_Input         : Length;
       Pressure_Advance_Time  : Time;
       Interpolation_Time     : Time;
       Smooth_Added_Part_Only : Boolean;
+      Previous_Input         : Length;
+      Current_Buffer_Index   : Cycle_Count;
+      --  Unused when `Smooth_Added_Part_Only` is False.
+      Buffer                 : Buffer_Array (1 .. Buffer_Size);
+      --  Unused when `Smooth_Added_Part_Only` is False.
+      Filter                 :
+        Length_Moving_Averages.Cascading_Moving_Average
+          (N_Levels => Filter_N_Levels, Width_Per_Level => Filter_Width_Per_Level);
    end record;
 
 end Prunt.Input_Shapers.Pressure_Advance_Shapers;

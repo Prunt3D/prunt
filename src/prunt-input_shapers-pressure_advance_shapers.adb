@@ -25,58 +25,45 @@ package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
      (Parameters : Shaper_Parameters; Interpolation_Time : Time; Start_Position : Length)
       return Pressure_Advance_Shaper
    is
-      Half_Smooth_Time : constant Cycle_Count :=
-        Cycle_Count (Dimensionless'Floor (0.5 * Parameters.Pressure_Advance_Smooth_Time / Interpolation_Time));
+      CMA         : constant Length_Moving_Averages.Cascading_Moving_Average :=
+        Length_Moving_Averages.Create
+          (N_Levels        => Parameters.Pressure_Advance_Smooth_Levels,
+           Max_Total_Width => Natural (Parameters.Pressure_Advance_Smooth_Time / Interpolation_Time),
+           Initial_Value   =>
+             (if Parameters.Pressure_Advance_Smooth_Added_Part_Only then 0.0 * mm else Start_Position));
+      Total_Delay : constant Cycle_Count := Cycle_Count (Length_Moving_Averages.Total_Delay (CMA));
    begin
       return
-        (Input_Offset           => -Half_Smooth_Time - (if Half_Smooth_Time = 0 then 0 else 1),
-         Extra_End_Time         => Half_Smooth_Time * 2 + (if Half_Smooth_Time = 0 then 0 else 1),
-         Buffer_Size            => Half_Smooth_Time * 2 + 1,
-         Buffer                 => (others => (Pos => Start_Position, PA_Part => 0.0 * mm)),
-         Current_Buffer_Index   => 0,
-         Previous_Outputs       =>
-           (others =>
-              (if Parameters.Pressure_Advance_Smooth_Added_Part_Only
-               then 0.0 * mm
-               else Start_Position * Dimensionless (Half_Smooth_Time)**2)),
-         Previous_Input         => Start_Position,
+        (Input_Offset           => -Total_Delay,
+         Extra_End_Time         => Cycle_Count (Parameters.Pressure_Advance_Smooth_Time / Interpolation_Time),
+         Filter_N_Levels        => CMA.N_Levels,
+         Filter_Width_Per_Level => CMA.Width_Per_Level,
+         Buffer_Size            => (if Parameters.Pressure_Advance_Smooth_Added_Part_Only then Total_Delay else 0),
          Pressure_Advance_Time  => Parameters.Pressure_Advance_Time,
          Interpolation_Time     => Interpolation_Time,
-         Smooth_Added_Part_Only => Parameters.Pressure_Advance_Smooth_Added_Part_Only);
+         Smooth_Added_Part_Only => Parameters.Pressure_Advance_Smooth_Added_Part_Only,
+         Previous_Input         => Start_Position,
+         Current_Buffer_Index   => 1,
+         Buffer                 => (others => Start_Position),
+         Filter                 => CMA);
    end Create;
 
    overriding
    function Do_Step (This : in out Pressure_Advance_Shaper; Step : Length) return Length is
-      Half_Smooth_Time : constant Cycle_Count := This.Buffer_Size / 2;
-      Vel              : constant Velocity := abs ((Step - This.Previous_Input) / This.Interpolation_Time);
-      Left             : constant Cycle_Count := (This.Current_Buffer_Index - Half_Smooth_Time) mod This.Buffer_Size;
-      Mid              : constant Cycle_Count := This.Current_Buffer_Index;
-      Right            : constant Cycle_Count := (This.Current_Buffer_Index + Half_Smooth_Time) mod This.Buffer_Size;
+      Vel : constant Velocity := abs ((Step - This.Previous_Input) / This.Interpolation_Time);
    begin
       This.Previous_Input := Step;
-
-      if Half_Smooth_Time = 0 then
-         return Step + This.Pressure_Advance_Time * Vel;
-      else
-         This.Buffer (Right) := (Pos => Step, PA_Part => This.Pressure_Advance_Time * Vel);
-         This.Current_Buffer_Index := (@ + 1) mod This.Buffer_Size;
-         declare
+      if This.Smooth_Added_Part_Only then
+         return
             Result : constant Length :=
-              (if This.Smooth_Added_Part_Only
-               then 0.0 * mm
-               else This.Buffer (Left).Pos + This.Buffer (Right).Pos - 2.0 * This.Buffer (Mid).Pos)
-              + (This.Buffer (Left).PA_Part
-                 + This.Buffer (Right).PA_Part
-                 - 2.0 * This.Buffer (Mid).PA_Part
-                 + 2.0 * This.Previous_Outputs (-1)
-                 - This.Previous_Outputs (-2));
-         begin
-            This.Previous_Outputs (-2) := This.Previous_Outputs (-1);
-            This.Previous_Outputs (-1) := Result;
-            return
-              (if This.Smooth_Added_Part_Only then This.Buffer (Mid).Pos else 0.0 * mm)
-              + (Result / Dimensionless (Half_Smooth_Time)**2);
-         end;
+              This.Buffer (This.Current_Buffer_Index)
+              + Length_Moving_Averages.Do_Step (This.Filter, Vel * This.Pressure_Advance_Time)
+         do
+            This.Current_Buffer_Index := @ mod This.Buffer_Size + 1;
+            This.Buffer (This.Current_Buffer_Index) := Step;
+         end return;
+      else
+         return Length_Moving_Averages.Do_Step (This.Filter, Step + Vel * This.Pressure_Advance_Time);
       end if;
    end Do_Step;
 

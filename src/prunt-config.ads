@@ -2263,6 +2263,12 @@ private
       --  Key: Apply smoothing to added part only
       --  Description: If set, apply smoothing to only the part added by pressure advance, otherwise smoothing the
       --               entire output.
+
+      Smoothing_Levels : Integer := 2;
+      --  Key: Smoothing levels
+      --  Description: Number of cascaded moving average levels to apply. 2 is equivalent to Klipper's smoothing.
+      --  Min: 1
+      --  Max: 10
    end record;
 
    type User_Config_Input_Shaping_Method_Kind is

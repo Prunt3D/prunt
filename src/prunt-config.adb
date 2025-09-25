@@ -391,7 +391,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(12));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(13));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
@@ -600,7 +600,12 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(12));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(12) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(12) then
+            --  Version 13 adds customisable smoothing levels to pressure advance smoothing.
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(13));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(13) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -2215,7 +2220,9 @@ package body Prunt.Config is
                   Pressure_Advance_Smooth_Time            =>
                     Data.Input_Shaping (A).Pressure_Advance.Pressure_Advance_Smooth_Time,
                   Pressure_Advance_Smooth_Added_Part_Only =>
-                    Data.Input_Shaping (A).Pressure_Advance.Smooth_Added_Part_Only);
+                    Data.Input_Shaping (A).Pressure_Advance.Smooth_Added_Part_Only,
+                  Pressure_Advance_Smooth_Levels          =>
+                    Positive (Data.Input_Shaping (A).Pressure_Advance.Smoothing_Levels));
          end case;
       end loop;
 

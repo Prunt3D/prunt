@@ -52,6 +52,7 @@ package Prunt.Input_Shapers is
             Pressure_Advance_Time                   : Time;
             Pressure_Advance_Smooth_Time            : Time;
             Pressure_Advance_Smooth_Added_Part_Only : Boolean;
+            Pressure_Advance_Smooth_Levels          : Positive;
       end case;
    end record;
 
