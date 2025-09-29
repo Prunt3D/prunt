@@ -208,55 +208,58 @@ package body Prunt.Gcode_Parser is
    is
       Comm : Command := (Kind => Move_Kind, Is_Rapid => True, others => <>);
    begin
-      if Ctx.Replace_G0_With_G1 then
-         G1_Linear_Move (Ctx, Args, Runner);
+      if Ctx.XYZ_Relative_Mode then
+         Comm.Pos (X_Axis) := Ctx.Pos (X_Axis) + Consume_Float_Or_Default (Args, 'X', 0.0) * mm;
+         Comm.Pos (Y_Axis) := Ctx.Pos (Y_Axis) + Consume_Float_Or_Default (Args, 'Y', 0.0) * mm;
+         Comm.Pos (Z_Axis) := Ctx.Pos (Z_Axis) + Consume_Float_Or_Default (Args, 'Z', 0.0) * mm;
       else
-         if Ctx.XYZ_Relative_Mode then
-            Comm.Pos (X_Axis) := Ctx.Pos (X_Axis) + Consume_Float_Or_Default (Args, 'X', 0.0) * mm;
-            Comm.Pos (Y_Axis) := Ctx.Pos (Y_Axis) + Consume_Float_Or_Default (Args, 'Y', 0.0) * mm;
-            Comm.Pos (Z_Axis) := Ctx.Pos (Z_Axis) + Consume_Float_Or_Default (Args, 'Z', 0.0) * mm;
-         else
-            Comm.Pos (X_Axis) :=
-              Consume_Float_Or_Default
-                (Args, 'X', (Ctx.Pos (X_Axis) - Ctx.Current_Retraction_Offset (X_Axis) - Ctx.G92_Offset (X_Axis)) / mm)
-              * mm
-              + Ctx.G92_Offset (X_Axis)
-              + Ctx.Current_Retraction_Offset (X_Axis);
-            Comm.Pos (Y_Axis) :=
-              Consume_Float_Or_Default
-                (Args, 'Y', (Ctx.Pos (Y_Axis) - Ctx.Current_Retraction_Offset (Y_Axis) - Ctx.G92_Offset (Y_Axis)) / mm)
-              * mm
-              + Ctx.G92_Offset (Y_Axis)
-              + Ctx.Current_Retraction_Offset (Y_Axis);
-            Comm.Pos (Z_Axis) :=
-              Consume_Float_Or_Default
-                (Args, 'Z', (Ctx.Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis) - Ctx.G92_Offset (Z_Axis)) / mm)
-              * mm
-              + Ctx.G92_Offset (Z_Axis)
-              + Ctx.Current_Retraction_Offset (Z_Axis);
-         end if;
+         Comm.Pos (X_Axis) :=
+           Consume_Float_Or_Default
+             (Args, 'X', (Ctx.Pos (X_Axis) - Ctx.Current_Retraction_Offset (X_Axis) - Ctx.G92_Offset (X_Axis)) / mm)
+           * mm
+           + Ctx.G92_Offset (X_Axis)
+           + Ctx.Current_Retraction_Offset (X_Axis);
+         Comm.Pos (Y_Axis) :=
+           Consume_Float_Or_Default
+             (Args, 'Y', (Ctx.Pos (Y_Axis) - Ctx.Current_Retraction_Offset (Y_Axis) - Ctx.G92_Offset (Y_Axis)) / mm)
+           * mm
+           + Ctx.G92_Offset (Y_Axis)
+           + Ctx.Current_Retraction_Offset (Y_Axis);
+         Comm.Pos (Z_Axis) :=
+           Consume_Float_Or_Default
+             (Args, 'Z', (Ctx.Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis) - Ctx.G92_Offset (Z_Axis)) / mm)
+           * mm
+           + Ctx.G92_Offset (Z_Axis)
+           + Ctx.Current_Retraction_Offset (Z_Axis);
+      end if;
 
-         if Ctx.E_Relative_Mode then
-            Comm.Pos (E_Axis) := Ctx.Pos (E_Axis) + Consume_Float_Or_Default (Args, 'E', 0.0) * mm;
-         else
-            Comm.Pos (E_Axis) :=
-              Consume_Float_Or_Default
-                (Args, 'E', (Ctx.Pos (E_Axis) - Ctx.Current_Retraction_Offset (E_Axis) - Ctx.G92_Offset (E_Axis)) / mm)
-              * mm
-              + Ctx.G92_Offset (E_Axis)
-              + Ctx.Current_Retraction_Offset (E_Axis);
-         end if;
+      if Ctx.E_Relative_Mode then
+         Comm.Pos (E_Axis) := Ctx.Pos (E_Axis) + Consume_Float_Or_Default (Args, 'E', 0.0) * mm;
+      else
+         Comm.Pos (E_Axis) :=
+           Consume_Float_Or_Default
+             (Args, 'E', (Ctx.Pos (E_Axis) - Ctx.Current_Retraction_Offset (E_Axis) - Ctx.G92_Offset (E_Axis)) / mm)
+           * mm
+           + Ctx.G92_Offset (E_Axis)
+           + Ctx.Current_Retraction_Offset (E_Axis);
+      end if;
 
+      if Ctx.Replace_G0_With_G1 then
+         --  We avoid just calling G1 here as Is_Rapid needs to be set to turn off lasers during G0 moves even when
+         --  replacement is enabled.
+         Comm.Feedrate := Consume_Float_Or_Default (Args, 'F', Ctx.Feedrate / (mm / min)) * mm / min;
+         Ctx.Feedrate := Comm.Feedrate;
+      else
          Comm.Feedrate := Consume_Float_Or_Default (Args, 'F', 299_792_458_000.1 * 60.0) * mm / min;
+      end if;
 
-         if Kind (Args, 'X') /= Non_Existant_Kind
-           or Kind (Args, 'Y') /= Non_Existant_Kind
-           or Kind (Args, 'Z') /= Non_Existant_Kind
-           or Kind (Args, 'E') /= Non_Existant_Kind
-         then
-            Runner (Comm);
-            Ctx.Pos := Comm.Pos;
-         end if;
+      if Kind (Args, 'X') /= Non_Existant_Kind
+        or Kind (Args, 'Y') /= Non_Existant_Kind
+        or Kind (Args, 'Z') /= Non_Existant_Kind
+        or Kind (Args, 'E') /= Non_Existant_Kind
+      then
+         Runner (Comm);
+         Ctx.Pos := Comm.Pos;
       end if;
    end G0_Rapid_Linear_Move;
 
