@@ -249,8 +249,6 @@ package body Prunt.Gcode_Parser is
 
          Comm.Feedrate := Consume_Float_Or_Default (Args, 'F', 299_792_458_000.1 * 60.0) * mm / min;
 
-         Comm.Old_Pos := Ctx.Pos;
-
          if Kind (Args, 'X') /= Non_Existant_Kind
            or Kind (Args, 'Y') /= Non_Existant_Kind
            or Kind (Args, 'Z') /= Non_Existant_Kind
@@ -305,7 +303,6 @@ package body Prunt.Gcode_Parser is
 
       Comm.Feedrate := Consume_Float_Or_Default (Args, 'F', Ctx.Feedrate / (mm / min)) * mm / min;
       Ctx.Feedrate := Comm.Feedrate;
-      Comm.Old_Pos := Ctx.Pos;
 
       if Kind (Args, 'X') /= Non_Existant_Kind
         or Kind (Args, 'Y') /= Non_Existant_Kind
@@ -321,9 +318,9 @@ package body Prunt.Gcode_Parser is
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
       if Kind (Args, 'S') /= Non_Existant_Kind then
-         Runner ((Kind => Dwell_Kind, Dwell_Time => Consume_Float (Args, 'S') * s, Pos => Ctx.Pos));
+         Runner ((Kind => Dwell_Kind, Dwell_Time => Consume_Float (Args, 'S') * s));
       else
-         Runner ((Kind => Dwell_Kind, Dwell_Time => Consume_Float (Args, 'P') * ms, Pos => Ctx.Pos));
+         Runner ((Kind => Dwell_Kind, Dwell_Time => Consume_Float (Args, 'P') * ms));
       end if;
    end G4_Dwell;
 
@@ -336,12 +333,7 @@ package body Prunt.Gcode_Parser is
          begin
             if Ctx.M207_Offset (E_Axis) /= Length (0.0) then
                New_Pos (E_Axis) := New_Pos (E_Axis) - Ctx.M207_Offset (E_Axis);
-               Runner
-                 ((Kind     => Move_Kind,
-                   Pos      => New_Pos,
-                   Old_Pos  => Ctx.Pos,
-                   Feedrate => Ctx.M207_Feedrate,
-                   Is_Rapid => False));
+               Runner ((Kind => Move_Kind, Pos => New_Pos, Feedrate => Ctx.M207_Feedrate, Is_Rapid => False));
                Ctx.Pos := New_Pos;
                Ctx.Current_Retraction_Offset (E_Axis) :=
                  Ctx.Current_Retraction_Offset (E_Axis) - Ctx.M207_Offset (E_Axis);
@@ -351,12 +343,7 @@ package body Prunt.Gcode_Parser is
 
             if Ctx.M207_Offset (Z_Axis) /= Length (0.0) then
                New_Pos (Z_Axis) := New_Pos (Z_Axis) + Ctx.M207_Offset (Z_Axis);
-               Runner
-                 ((Kind     => Move_Kind,
-                   Pos      => New_Pos,
-                   Old_Pos  => Ctx.Pos,
-                   Feedrate => Velocity'Last,
-                   Is_Rapid => False));
+               Runner ((Kind => Move_Kind, Pos => New_Pos, Feedrate => Velocity'Last, Is_Rapid => False));
                Ctx.Pos := New_Pos;
                Ctx.Current_Retraction_Offset (Z_Axis) := Ctx.M207_Offset (Z_Axis);
             end if;
@@ -373,12 +360,7 @@ package body Prunt.Gcode_Parser is
          begin
             if Ctx.Current_Retraction_Offset (Z_Axis) /= Length (0.0) then
                New_Pos (Z_Axis) := New_Pos (Z_Axis) - Ctx.Current_Retraction_Offset (Z_Axis);
-               Runner
-                 ((Kind     => Move_Kind,
-                   Pos      => New_Pos,
-                   Old_Pos  => Ctx.Pos,
-                   Feedrate => Velocity'Last,
-                   Is_Rapid => False));
+               Runner ((Kind => Move_Kind, Pos => New_Pos, Feedrate => Velocity'Last, Is_Rapid => False));
                Ctx.Pos := New_Pos;
                Ctx.Current_Retraction_Offset (Z_Axis) := Length (0.0);
             end if;
@@ -388,7 +370,6 @@ package body Prunt.Gcode_Parser is
                Runner
                  ((Kind     => Move_Kind,
                    Pos      => New_Pos,
-                   Old_Pos  => Ctx.Pos,
                    Feedrate => Ctx.M207_Feedrate + Ctx.M208_Feedrate,
                    Is_Rapid => False));
                Ctx.Pos := New_Pos;
@@ -415,17 +396,15 @@ package body Prunt.Gcode_Parser is
         and Kind (Args, 'Y') = Non_Existant_Kind
         and Kind (Args, 'Z') = Non_Existant_Kind
       then
-         Runner ((Kind => Home_Kind, Axes => (others => True), Pos_Before => Ctx.Pos, Pos => Ctx.Pos));
+         Runner ((Kind => Home_Kind, Axes => (others => True)));
       else
          Runner
-           ((Kind       => Home_Kind,
-             Axes       =>
+           ((Kind => Home_Kind,
+             Axes =>
                (E_Axis => Consume_No_Value_Or_False (Args, 'E'),
                 X_Axis => Consume_No_Value_Or_False (Args, 'X'),
                 Y_Axis => Consume_No_Value_Or_False (Args, 'Y'),
-                Z_Axis => Consume_No_Value_Or_False (Args, 'Z')),
-             Pos_Before => Ctx.Pos,
-             Pos        => Ctx.Pos));
+                Z_Axis => Consume_No_Value_Or_False (Args, 'Z'))));
       end if;
    end G28_Auto_Home;
 
@@ -463,7 +442,7 @@ package body Prunt.Gcode_Parser is
    procedure M0_M1_Pause
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
-      Runner ((Kind => Pause_Kind, Pos => Ctx.Pos));
+      Runner ((Kind => Pause_Kind));
    end M0_M1_Pause;
 
    procedure M3_Set_Laser_Power
@@ -478,8 +457,7 @@ package body Prunt.Gcode_Parser is
       Comm :=
         (Kind         => Set_Laser_Power_Kind,
          Laser_Power  => Dimensionless'Min (1.0, Dimensionless'Max (0.0, Consume_Float (Args, 'S') / 255.0)),
-         Laser_To_Set => Ctx.Default_Laser.Name,
-         Pos          => Ctx.Pos);
+         Laser_To_Set => Ctx.Default_Laser.Name);
 
       if Kind (Args, 'P') /= Non_Existant_Kind then
          if Kind (Args, 'P') = Integer_Kind then
@@ -515,8 +493,7 @@ package body Prunt.Gcode_Parser is
          raise Bad_Line with "This board does not support lasers. Laser commands can not be used.";
       end if;
 
-      Comm :=
-        (Kind => Set_Laser_Power_Kind, Laser_Power => 0.0, Laser_To_Set => Ctx.Default_Laser.Name, Pos => Ctx.Pos);
+      Comm := (Kind => Set_Laser_Power_Kind, Laser_Power => 0.0, Laser_To_Set => Ctx.Default_Laser.Name);
 
       if Kind (Args, 'P') /= Non_Existant_Kind then
          if Kind (Args, 'P') = Integer_Kind then
@@ -551,7 +528,7 @@ package body Prunt.Gcode_Parser is
         and Kind (Args, 'Y') = Non_Existant_Kind
         and Kind (Args, 'Z') = Non_Existant_Kind
       then
-         Runner ((Kind => Enable_Steppers_Kind, Axes => (others => True), Pos => Ctx.Pos));
+         Runner ((Kind => Enable_Steppers_Kind, Axes => (others => True)));
       else
          Runner
            ((Kind => Enable_Steppers_Kind,
@@ -559,8 +536,7 @@ package body Prunt.Gcode_Parser is
                (E_Axis => Consume_No_Value_Or_False (Args, 'E'),
                 X_Axis => Consume_No_Value_Or_False (Args, 'X'),
                 Y_Axis => Consume_No_Value_Or_False (Args, 'Y'),
-                Z_Axis => Consume_No_Value_Or_False (Args, 'Z')),
-             Pos  => Ctx.Pos));
+                Z_Axis => Consume_No_Value_Or_False (Args, 'Z'))));
       end if;
    end M17_Enable_Motors;
 
@@ -572,7 +548,7 @@ package body Prunt.Gcode_Parser is
         and Kind (Args, 'Y') = Non_Existant_Kind
         and Kind (Args, 'Z') = Non_Existant_Kind
       then
-         Runner ((Kind => Disable_Steppers_Kind, Axes => (others => True), Pos => Ctx.Pos));
+         Runner ((Kind => Disable_Steppers_Kind, Axes => (others => True)));
       else
          Runner
            ((Kind => Disable_Steppers_Kind,
@@ -580,8 +556,7 @@ package body Prunt.Gcode_Parser is
                (E_Axis => Consume_No_Value_Or_False (Args, 'E'),
                 X_Axis => Consume_No_Value_Or_False (Args, 'X'),
                 Y_Axis => Consume_No_Value_Or_False (Args, 'Y'),
-                Z_Axis => Consume_No_Value_Or_False (Args, 'Z')),
-             Pos  => Ctx.Pos));
+                Z_Axis => Consume_No_Value_Or_False (Args, 'Z'))));
       end if;
    end M18_M84_Disable_Motors;
 
@@ -606,10 +581,7 @@ package body Prunt.Gcode_Parser is
       declare
          Ignored : Argument_Integer := Consume_Integer_Or_Default (Args, 'T', 0);
       begin
-         Runner
-           ((Kind               => Set_Hotend_Temperature_Kind,
-             Target_Temperature => Consume_Float (Args, 'S') * celsius,
-             Pos                => Ctx.Pos));
+         Runner ((Kind => Set_Hotend_Temperature_Kind, Target_Temperature => Consume_Float (Args, 'S') * celsius));
       end;
    end M104_Set_Hotend_Temperature;
 
@@ -626,8 +598,7 @@ package body Prunt.Gcode_Parser is
         (Kind       => Set_Fan_Speed_Kind,
          Fan_Speed  =>
            Dimensionless'Min (1.0, Dimensionless'Max (0.0, Consume_Float_Or_Default (Args, 'S', 255.0) / 255.0)),
-         Fan_To_Set => Ctx.Default_Fan.Name,
-         Pos        => Ctx.Pos);
+         Fan_To_Set => Ctx.Default_Fan.Name);
 
       if Kind (Args, 'P') /= Non_Existant_Kind then
          if Kind (Args, 'P') = Integer_Kind then
@@ -663,7 +634,7 @@ package body Prunt.Gcode_Parser is
          raise Bad_Line with "This board does not support fans. Fan commands can not be used.";
       end if;
 
-      Comm := (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Ctx.Default_Fan.Name, Pos => Ctx.Pos);
+      Comm := (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Ctx.Default_Fan.Name);
 
       if Kind (Args, 'P') /= Non_Existant_Kind then
          if Kind (Args, 'P') = Integer_Kind then
@@ -697,16 +668,13 @@ package body Prunt.Gcode_Parser is
          raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
       end if;
 
-      Runner
-        ((Kind               => Wait_Hotend_Temperature_Kind,
-          Target_Temperature => Consume_Float (Args, 'S') * celsius,
-          Pos                => Ctx.Pos));
+      Runner ((Kind => Wait_Hotend_Temperature_Kind, Target_Temperature => Consume_Float (Args, 'S') * celsius));
    end M109_Wait_For_Hotend_Temperature;
 
    procedure M122_TMC_Register_Dump
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
-      Runner ((Kind => TMC_Dump_Kind, Pos => Ctx.Pos));
+      Runner ((Kind => TMC_Dump_Kind));
    end M122_TMC_Register_Dump;
 
    procedure M140_Set_Bed_Temperature
@@ -716,10 +684,7 @@ package body Prunt.Gcode_Parser is
          raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
       end if;
 
-      Runner
-        ((Kind               => Set_Bed_Temperature_Kind,
-          Target_Temperature => Consume_Float (Args, 'S') * celsius,
-          Pos                => Ctx.Pos));
+      Runner ((Kind => Set_Bed_Temperature_Kind, Target_Temperature => Consume_Float (Args, 'S') * celsius));
    end M140_Set_Bed_Temperature;
 
    procedure M141_Set_Chamber_Temperature
@@ -729,10 +694,7 @@ package body Prunt.Gcode_Parser is
          raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
       end if;
 
-      Runner
-        ((Kind               => Set_Chamber_Temperature_Kind,
-          Target_Temperature => Consume_Float (Args, 'S') * celsius,
-          Pos                => Ctx.Pos));
+      Runner ((Kind => Set_Chamber_Temperature_Kind, Target_Temperature => Consume_Float (Args, 'S') * celsius));
    end M141_Set_Chamber_Temperature;
 
    procedure M190_Wait_For_Bed_Temperature
@@ -742,10 +704,7 @@ package body Prunt.Gcode_Parser is
          raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
       end if;
 
-      Runner
-        ((Kind               => Wait_Bed_Temperature_Kind,
-          Target_Temperature => Consume_Float (Args, 'S') * celsius,
-          Pos                => Ctx.Pos));
+      Runner ((Kind => Wait_Bed_Temperature_Kind, Target_Temperature => Consume_Float (Args, 'S') * celsius));
    end M190_Wait_For_Bed_Temperature;
 
    procedure M191_Wait_For_Chamber_Temperature
@@ -755,10 +714,7 @@ package body Prunt.Gcode_Parser is
          raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
       end if;
 
-      Runner
-        ((Kind               => Wait_Chamber_Temperature_Kind,
-          Target_Temperature => Consume_Float (Args, 'S') * celsius,
-          Pos                => Ctx.Pos));
+      Runner ((Kind => Wait_Chamber_Temperature_Kind, Target_Temperature => Consume_Float (Args, 'S') * celsius));
    end M191_Wait_For_Chamber_Temperature;
 
    procedure M205_Set_Dynamic_Kinematic_Limits
@@ -770,24 +726,17 @@ package body Prunt.Gcode_Parser is
       end if;
 
       if Kind (Args, 'A') /= Non_Existant_Kind then
-         Runner
-           ((Kind             => Set_Acceleration_Max_Kind,
-             Pos              => Ctx.Pos,
-             Acceleration_Max => Consume_Float (Args, 'A') * mm / s**2));
+         Runner ((Kind => Set_Acceleration_Max_Kind, Acceleration_Max => Consume_Float (Args, 'A') * mm / s**2));
       elsif Kind (Args, 'J') /= Non_Existant_Kind then
-         Runner ((Kind => Set_Jerk_Max_Kind, Pos => Ctx.Pos, Jerk_Max => Consume_Float (Args, 'J') * mm / s**3));
+         Runner ((Kind => Set_Jerk_Max_Kind, Jerk_Max => Consume_Float (Args, 'J') * mm / s**3));
       elsif Kind (Args, 'S') /= Non_Existant_Kind then
-         Runner ((Kind => Set_Snap_Max_Kind, Pos => Ctx.Pos, Snap_Max => Consume_Float (Args, 'S') * mm / s**4));
+         Runner ((Kind => Set_Snap_Max_Kind, Snap_Max => Consume_Float (Args, 'S') * mm / s**4));
       elsif Kind (Args, 'C') /= Non_Existant_Kind then
-         Runner ((Kind => Set_Crackle_Max_Kind, Pos => Ctx.Pos, Crackle_Max => Consume_Float (Args, 'C') * mm / s**5));
+         Runner ((Kind => Set_Crackle_Max_Kind, Crackle_Max => Consume_Float (Args, 'C') * mm / s**5));
       elsif Kind (Args, 'D') /= Non_Existant_Kind then
-         Runner
-           ((Kind => Set_Chord_Error_Max_Kind, Pos => Ctx.Pos, Chord_Error_Max => Consume_Float (Args, 'D') * mm));
+         Runner ((Kind => Set_Chord_Error_Max_Kind, Chord_Error_Max => Consume_Float (Args, 'D') * mm));
       elsif Kind (Args, 'L') /= Non_Existant_Kind then
-         Runner
-           ((Kind                  => Set_Pressure_Advance_Time_Kind,
-             Pos                   => Ctx.Pos,
-             Pressure_Advance_Time => Consume_Float (Args, 'L') * s));
+         Runner ((Kind => Set_Pressure_Advance_Time_Kind, Pressure_Advance_Time => Consume_Float (Args, 'L') * s));
       end if;
    end M205_Set_Dynamic_Kinematic_Limits;
 
@@ -813,8 +762,7 @@ package body Prunt.Gcode_Parser is
         (Kind               => Heater_Autotune_Kind,
          Tuning_Temperature => Consume_Float (Args, 'S') * celsius,
          Heater_To_Tune     => <>,
-         Max_Cycles         => <>,
-         Pos                => Ctx.Pos);
+         Max_Cycles         => <>);
    begin
       if not Has_Heaters then
          raise Bad_Line with "This board does not support heaters. Heater commands can not be used.";
