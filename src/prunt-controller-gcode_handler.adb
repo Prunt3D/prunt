@@ -87,8 +87,6 @@ package body Prunt.Controller.Gcode_Handler is
       Zero_Pos_Offset : constant Position_Offset :=
         [X_Axis => 0.0 * mm, Y_Axis => 0.0 * mm, Z_Axis => 0.0 * mm, E_Axis => 0.0 * mm];
 
-      Current_Pos : Position := Zero_Pos;
-
       Parser_Context : My_Gcode_Parser.Context;
 
       Is_Homed : array (Axis_Name) of Boolean := [others => False];
@@ -107,7 +105,7 @@ package body Prunt.Controller.Gcode_Handler is
 
       Command_Constraint_Error : exception;
 
-      procedure Double_Tap_Home_Axis (Axis : Axis_Name) is
+      procedure Double_Tap_Home_Axis (Axis : Axis_Name; Current_Pos : in out Position) is
          Switch          : constant Generic_Types.Input_Switch_Name := Axial_Homing_Params (Axis).Switch;
          Hit_State       : constant Pin_State :=
            (if Switchwise_Switch_Params (Axial_Homing_Params (Axis).Switch).Hit_On_High
@@ -243,7 +241,7 @@ package body Prunt.Controller.Gcode_Handler is
          My_Gcode_Parser.Reset_Position (Parser_Context, Current_Pos);
       end Double_Tap_Home_Axis;
 
-      procedure StallGuard_Home_Axis (Axis : Axis_Name) is
+      procedure StallGuard_Home_Axis (Axis : Axis_Name; Current_Pos : in out Position) is
          use type My_Config.Homing_Kind;
          use type TMC_Types.TMC2240.CHM_Type;
 
@@ -559,44 +557,38 @@ package body Prunt.Controller.Gcode_Handler is
                  ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (Pause_After => True, others => <>)));
 
             when Move_Kind =>
-               if Command.Pos /= Current_Pos then
-                  if Command.Feedrate <= 0.0 * mm / s then
-                     raise Command_Constraint_Error with "Feedrate must be positive.";
-                  end if;
-
-                  for I in Axis_Name loop
-                     if not Is_Homed (I) then
-                        raise Command_Constraint_Error
-                          with "Must home all axes before moving. Axis " & I'Image & " is not homed.";
-                     end if;
-                  end loop;
-
-                  My_Planner.Enqueue
-                    ((Kind              => My_Planner.Move_Kind,
-                      Pos               => Command.Pos,
-                      Feedrate          => Command.Feedrate,
-                      Dwell_After       => 0.0 * s,
-                      Corner_Extra_Data =>
-                        (if Command.Is_Rapid
-                         then (Corner_Data with delta Lasers => (others => 0.0))
-                         else Corner_Data)));
-
-                  Current_Pos := Command.Pos;
+               if Command.Feedrate <= 0.0 * mm / s then
+                  raise Command_Constraint_Error with "Feedrate must be positive.";
                end if;
+
+               for I in Axis_Name loop
+                  if not Is_Homed (I) then
+                     raise Command_Constraint_Error
+                       with "Must home all axes before moving. Axis " & I'Image & " is not homed.";
+                  end if;
+               end loop;
+
+               My_Planner.Enqueue
+                 ((Kind              => My_Planner.Move_Kind,
+                   Pos               => Command.Pos,
+                   Feedrate          => Command.Feedrate,
+                   Dwell_After       => 0.0 * s,
+                   Corner_Extra_Data =>
+                     (if Command.Is_Rapid then (Corner_Data with delta Lasers => (others => 0.0)) else Corner_Data)));
 
             when Dwell_Kind =>
                if Command.Dwell_Time < 0.0 * s then
                   raise Command_Constraint_Error with "Negative dwell times are not allowed.";
                end if;
                My_Planner.Enqueue
-                 ((Kind              => My_Planner.Move_Kind,
-                   Pos               => Current_Pos,
-                   Feedrate          => 0.000_1 * mm / s,
+                 ((Kind              => My_Planner.Dummy_Corner_Kind,
                    Dwell_After       => Command.Dwell_Time,
                    Corner_Extra_Data => Corner_Data));
 
             when Home_Kind =>
                declare
+                  Current_Pos : Position := COmmand.Pos_Before_Homing;
+
                   Homing_Order : constant array (Axis_Name) of Axis_Name := [E_Axis, Z_Axis, X_Axis, Y_Axis];
 
                   --  Loops in axis homing prerequisites are prevented by the config validator.
@@ -644,10 +636,10 @@ package body Prunt.Controller.Gcode_Handler is
                            My_Gcode_Parser.Reset_Position (Parser_Context, Current_Pos);
 
                         when My_Config.Double_Tap_Kind =>
-                           Double_Tap_Home_Axis (Axis);
+                           Double_Tap_Home_Axis (Axis, Current_Pos);
 
                         when My_Config.StallGuard2_Kind | My_Config.StallGuard4_Kind =>
-                           StallGuard_Home_Axis (Axis);
+                           StallGuard_Home_Axis (Axis, Current_Pos);
 
                      end case;
                      Is_Homed (Axis) := True;
@@ -746,9 +738,7 @@ package body Prunt.Controller.Gcode_Handler is
             when Set_Hotend_Temperature_Kind =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Hotend_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
-                 ((Kind              => My_Planner.Move_Kind,
-                   Pos               => Current_Pos,
-                   Feedrate          => 0.000_1 * mm / s,
+                 ((Kind              => My_Planner.Dummy_Corner_Kind,
                    Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
@@ -756,9 +746,7 @@ package body Prunt.Controller.Gcode_Handler is
             when Wait_Hotend_Temperature_Kind =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Hotend_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
-                 ((Kind              => My_Planner.Move_Kind,
-                   Pos               => Current_Pos,
-                   Feedrate          => 0.000_1 * mm / s,
+                 ((Kind              => My_Planner.Dummy_Corner_Kind,
                    Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue
@@ -771,9 +759,7 @@ package body Prunt.Controller.Gcode_Handler is
             when Set_Bed_Temperature_Kind =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
-                 ((Kind              => My_Planner.Move_Kind,
-                   Pos               => Current_Pos,
-                   Feedrate          => 0.000_1 * mm / s,
+                 ((Kind              => My_Planner.Dummy_Corner_Kind,
                    Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
@@ -781,9 +767,7 @@ package body Prunt.Controller.Gcode_Handler is
             when Wait_Bed_Temperature_Kind =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
-                 ((Kind              => My_Planner.Move_Kind,
-                   Pos               => Current_Pos,
-                   Feedrate          => 0.000_1 * mm / s,
+                 ((Kind              => My_Planner.Dummy_Corner_Kind,
                    Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue
@@ -812,9 +796,7 @@ package body Prunt.Controller.Gcode_Handler is
                   end;
                end if;
                My_Planner.Enqueue
-                 ((Kind              => My_Planner.Move_Kind,
-                   Pos               => Current_Pos,
-                   Feedrate          => 0.000_1 * mm / s,
+                 ((Kind              => My_Planner.Dummy_Corner_Kind,
                    Dwell_After       => 0.0 * s,
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
@@ -971,11 +953,9 @@ package body Prunt.Controller.Gcode_Handler is
                Axial_Homing_Params (I) := My_Config.Read (I);
             end loop;
 
-            Current_Pos := Zero_Pos;
-
             Parser_Context :=
               Make_Context
-                (Initial_Position   => Current_Pos,
+                (Initial_Position   => Zero_Pos,
                  Initial_Feedrate   => 100.0 * mm / s,
                  Replace_G0_With_G1 => Prunt_Params.Replace_G0_With_G1,
                  Default_Fan        => Get_Default_Fan,
@@ -1030,17 +1010,17 @@ package body Prunt.Controller.Gcode_Handler is
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Resetting_Data => (others => <>),
-             Reset_Pos            => Current_Pos));
+             Reset_Pos            => Zero_Pos));
          My_Planner.Enqueue
            ((Kind              => My_Planner.Move_Kind,
-             Pos               => Current_Pos,
+             Pos               => Zero_Pos,
              Feedrate          => Velocity'Last,
              Dwell_After       => 0.0 * s,
              Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
          My_Planner.Enqueue
            ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
              Flush_Resetting_Data => (others => <>),
-             Reset_Pos            => Current_Pos));
+             Reset_Pos            => Zero_Pos));
 
          Main :
          loop

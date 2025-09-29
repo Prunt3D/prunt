@@ -93,7 +93,6 @@ generic
    --  The minimum time that should be used for the coasting phase of a move where `Is_Homing_Move` returns True. This
    --  can be used to have a section that can be repeated in a loop until a switch is hit.
 
-
    with function Is_Homing_Move (Data : Flush_Resetting_Data_Type) return Boolean;
    --  Indicates whether a move is a homing move for the purposes of applying `Home_Move_Minimum_Coast_Time`. Currently
    --  a block containing a homing move must have exactly 2 corners, however this is trivial to change if required as
@@ -113,7 +112,7 @@ generic
 
    with
      function Get_Axial_Shaper_Parameters
-     (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
+       (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
    --  Retrieve the shaper parameters for a given block. These are used during step rate limiting as shapers can change
    --  the number of steps within an interpolation period.
 
@@ -154,6 +153,7 @@ package Prunt.Motion_Planner.Planner is
 
    type Command_Kind is
      (Move_Kind,
+      Dummy_Corner_Kind,
       Flush_Kind,
       Flush_And_Reset_Position_Kind,
       Flush_And_Change_Parameters_Kind,
@@ -174,11 +174,17 @@ package Prunt.Motion_Planner.Planner is
                   null;
             end case;
 
-         when Move_Kind =>
-            Pos               : Position;
-            Feedrate          : Velocity;
+         when Move_Kind | Dummy_Corner_Kind =>
             Corner_Extra_Data : Corner_Extra_Data_Type;
             Dwell_After       : Time := 0.0 * s;
+            case Kind is
+               when Move_Kind =>
+                  Pos      : Position;
+                  Feedrate : Velocity;
+
+               when others =>
+                  null;
+            end case;
 
          when Flush_And_Update_Persistent_Data_Kind =>
             New_Persistent_Data : Block_Persistent_Data_Type;

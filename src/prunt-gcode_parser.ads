@@ -96,6 +96,13 @@ package Prunt.Gcode_Parser is
 
          when Home_Kind | Enable_Steppers_Kind | Disable_Steppers_Kind =>
             Axes : Axes_Set;
+            case Kind is
+               when Home_Kind =>
+                  Pos_Before_Homing : Position;
+
+               when others =>
+                  null;
+            end case;
 
          when Set_Hotend_Temperature_Kind
             | Wait_Hotend_Temperature_Kind

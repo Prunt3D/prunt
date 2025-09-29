@@ -50,7 +50,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
             when Flush_And_Change_Parameters_Kind =>
                Current_Params := Comm.New_Params;
-               --  TODO: Check that scaler will not cause max step rate to be exceeded.
 
             when Move_Kind =>
                if not Ignore_Bounds then
@@ -64,6 +63,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                if Comm.Feedrate <= 0.0 * mm / s then
                   raise Constraint_Error with "Feedrate must be positive.";
                end if;
+
+            when Dummy_Corner_Kind =>
+               if Comm.Dwell_After < 0.0 * s then
+                  raise Constraint_Error with "Negative dwell times are not allowed.";
+               end if;
+
          end case;
          --  Checking happens here so we can provide instant feedback to the user when g-code is typed in manually.
 
@@ -185,31 +190,23 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      Next_Params := Limit_Higher_Order_Params (Next_Command.New_Params);
                      exit;
 
-                  when Move_Kind =>
-                     --  if abs (Last_Pos - Next_Command.Pos) >= Preprocessor_Minimum_Move_Distance then
-                     N_Corners := N_Corners + 1;
-                     Corners (N_Corners) := Next_Command.Pos / Current_Params.Axial_Scaler;
-                     Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
-                     Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
-                     Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
+                  when Move_Kind | Dummy_Corner_Kind =>
+                     declare
+                        Pos      : constant Position :=
+                          (if Next_Command.Kind = Dummy_Corner_Kind then Last_Pos else Next_Command.Pos);
+                        Feedrate : constant Velocity :=
+                          (if Next_Command.Kind = Dummy_Corner_Kind then 0.000_1 * mm / s else Next_Command.Feedrate);
+                     begin
+                        N_Corners := N_Corners + 1;
+                        Corners (N_Corners) := Pos / Current_Params.Axial_Scaler;
+                        Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
+                        Segment_Feedrates (N_Corners) := Feedrate;
+                        Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
 
-                     if N_Corners > 2
-                       and then abs (Corners (N_Corners) - Corners (N_Corners - 1)) = 0.0 * mm
-                       and then abs (Corners (N_Corners - 1) - Corners (N_Corners - 2)) = 0.0 * mm
-                     then
-                        Corner_Dwell_Times (N_Corners - 1) :=
-                          Corner_Dwell_Times (N_Corners - 1) + Corner_Dwell_Times (N_Corners);
-                        Corners (N_Corners - 1) := Corners (N_Corners);
-                        --  Keep first feedrate.
-                        Corners_Extra_Data (N_Corners - 1) := Corners_Extra_Data (N_Corners);
-                        --  Remove repeated zero-length segments.
-                        N_Corners := N_Corners - 1;
-                     end if;
+                        Last_Pos := Pos;
 
-                     Last_Pos := Next_Command.Pos;
-
-                     exit when N_Corners = Corners_Index'Last;
-                     --  end if;
+                        exit when N_Corners = Corners_Index'Last;
+                     end;
 
                   when Flush_And_Update_Persistent_Data_Kind =>
                      Block_Persistent_Data := Next_Command.New_Persistent_Data;

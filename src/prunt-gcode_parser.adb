@@ -45,7 +45,7 @@ package body Prunt.Gcode_Parser is
          Is_Retracted              => False,
          Current_Retraction_Offset => (others => Length (0.0)),
          M207_Offset               => (others => Length (0.0)),
-         M207_Feedrate             => Velocity'Last,
+         M207_Feedrate             => 299_792_458_000.1 * mm / s,
          M208_Offset               => (others => Length (0.0)),
          M208_Feedrate             => 0.0 * mm / s,
          Replace_G0_With_G1        => Replace_G0_With_G1,
@@ -248,9 +248,15 @@ package body Prunt.Gcode_Parser is
          --  We avoid just calling G1 here as Is_Rapid needs to be set to turn off lasers during G0 moves even when
          --  replacement is enabled.
          Comm.Feedrate := Consume_Float_Or_Default (Args, 'F', Ctx.Feedrate / (mm / min)) * mm / min;
+         if Comm.Feedrate <= 0.0 * mm / s then
+            raise Bad_Line with "Feedrate must be positive.";
+         end if;
          Ctx.Feedrate := Comm.Feedrate;
       else
          Comm.Feedrate := Consume_Float_Or_Default (Args, 'F', 299_792_458_000.1 * 60.0) * mm / min;
+         if Comm.Feedrate <= 0.0 * mm / s then
+            raise Bad_Line with "Feedrate must be positive.";
+         end if;
       end if;
 
       if Kind (Args, 'X') /= Non_Existant_Kind
@@ -258,8 +264,10 @@ package body Prunt.Gcode_Parser is
         or Kind (Args, 'Z') /= Non_Existant_Kind
         or Kind (Args, 'E') /= Non_Existant_Kind
       then
-         Runner (Comm);
-         Ctx.Pos := Comm.Pos;
+         if Ctx.Pos /= Comm.Pos then
+            Runner (Comm);
+            Ctx.Pos := Comm.Pos;
+         end if;
       end if;
    end G0_Rapid_Linear_Move;
 
@@ -305,6 +313,9 @@ package body Prunt.Gcode_Parser is
       end if;
 
       Comm.Feedrate := Consume_Float_Or_Default (Args, 'F', Ctx.Feedrate / (mm / min)) * mm / min;
+      if Comm.Feedrate <= 0.0 * mm / s then
+         raise Bad_Line with "Feedrate must be positive.";
+      end if;
       Ctx.Feedrate := Comm.Feedrate;
 
       if Kind (Args, 'X') /= Non_Existant_Kind
@@ -312,8 +323,10 @@ package body Prunt.Gcode_Parser is
         or Kind (Args, 'Z') /= Non_Existant_Kind
         or Kind (Args, 'E') /= Non_Existant_Kind
       then
-         Runner (Comm);
-         Ctx.Pos := Comm.Pos;
+         if Ctx.Pos /= Comm.Pos then
+            Runner (Comm);
+            Ctx.Pos := Comm.Pos;
+         end if;
       end if;
    end G1_Linear_Move;
 
@@ -399,15 +412,16 @@ package body Prunt.Gcode_Parser is
         and Kind (Args, 'Y') = Non_Existant_Kind
         and Kind (Args, 'Z') = Non_Existant_Kind
       then
-         Runner ((Kind => Home_Kind, Axes => (others => True)));
+         Runner ((Kind => Home_Kind, Axes => (others => True), Pos_Before_Homing => Ctx.Pos));
       else
          Runner
-           ((Kind => Home_Kind,
-             Axes =>
+           ((Kind              => Home_Kind,
+             Axes              =>
                (E_Axis => Consume_No_Value_Or_False (Args, 'E'),
                 X_Axis => Consume_No_Value_Or_False (Args, 'X'),
                 Y_Axis => Consume_No_Value_Or_False (Args, 'Y'),
-                Z_Axis => Consume_No_Value_Or_False (Args, 'Z'))));
+                Z_Axis => Consume_No_Value_Or_False (Args, 'Z')),
+             Pos_Before_Homing => Ctx.Pos));
       end if;
    end G28_Auto_Home;
 
