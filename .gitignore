@@ -6,3 +6,5 @@
 /html/dist/bundle.js
 /html/dist/bundle.js.map
 /.dir-locals.el
+/src/prunt-config-build_schema.adb
+/src/prunt-config-json_to_user_config.adb
