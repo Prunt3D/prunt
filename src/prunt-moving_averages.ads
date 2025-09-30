@@ -34,7 +34,7 @@ package Prunt.Moving_Averages is
    --  it must be split evenly between `N_Levels` levels.
 
    function Total_Delay (CMA : Cascading_Moving_Average) return Natural
-   is ((CMA.N_Levels * (CMA.Width_Per_Level - 1)) / 2);
+   is (if CMA.Width_Per_Level > 1 then (CMA.N_Levels * (CMA.Width_Per_Level - 1)) / 2 else 0);
    --  Returns the number of cycles from when a signal enters the filter to when the effect of the signal on the output
    --  is maximised. This may not be equal to `Max_Total_Width` / 2 as provided to `Create` as that value may be
    --  reduced to suit the number of layers specified.
