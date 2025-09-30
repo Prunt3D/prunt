@@ -248,9 +248,11 @@ package Prunt.Motion_Planner.Planner is
 
    procedure Reset;
 
-   procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean);
+   procedure Dequeue
+     (Block : out Execution_Block; Timed_Out : out Boolean; Waiting_For_Step_Rate_Limiter : out Boolean);
    --  Pop a block from the queue of processed blocks. If a block is not ready then Timed_Out will be set to True,
-   --  otherwise it will be set to False and Block will be set.
+   --  otherwise it will be set to False and Block will be set. If Waiting_For_Step_Rate_Limiter is set to True then
+   --  the reason for time time out is the step rate limiting step.
 
    Out_Of_Bounds_Error : exception;
 
@@ -266,6 +268,9 @@ package Prunt.Motion_Planner.Planner is
    end Runner;
 
 private
+
+   In_Step_Rate_Limiter : Boolean := False
+   with Atomic, Volatile;
 
    use Prunt.Motion_Planner.PH_Beziers;
 

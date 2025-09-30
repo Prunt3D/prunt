@@ -117,10 +117,18 @@ package body Prunt.Step_Generator.Generator is
          Main :
          loop
             declare
-               Timed_Out : Boolean;
+               Timed_Out                     : Boolean;
+               Waiting_For_Step_Rate_Limiter : Boolean;
             begin
                loop
-                  Dequeue (Block, Timed_Out);
+                  Dequeue (Block, Timed_Out, Waiting_For_Step_Rate_Limiter);
+
+                  if Timed_Out and then Waiting_For_Step_Rate_Limiter then
+                     Log
+                       ("The step command generator is waiting for the step rate limiter to complete. This can take "
+                        & "a long time if the G-code contains multiple very long moves. In a future version a button "
+                        & "will be added to skip this step.");
+                  end if;
 
                   select
                      accept Reset;

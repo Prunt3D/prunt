@@ -53,16 +53,19 @@ package body Prunt.Motion_Planner.Planner is
       My_Preprocessor.Enqueue (Comm, Ignore_Bounds);
    end Enqueue;
 
-   procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean) is
+   procedure Dequeue
+     (Block : out Execution_Block; Timed_Out : out Boolean; Waiting_For_Step_Rate_Limiter : out Boolean) is
    begin
       select
          Runner.Dequeue_Do_Not_Call_From_Other_Packages (Block);
          Timed_Out := False;
+         Waiting_For_Step_Rate_Limiter := False;
          return;
       then abort
          delay 1.0;
       end select;
       Timed_Out := True;
+      Waiting_For_Step_Rate_Limiter := In_Step_Rate_Limiter;
    end Dequeue;
 
    task body Runner is

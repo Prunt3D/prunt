@@ -95,6 +95,8 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
             Last_Stepper_Position := Stepper_Pos;
          end Check_Step;
       begin
+         In_Step_Rate_Limiter := True;
+
          Needs_New_Profiles := False;
 
          if not Setup_Done then
@@ -179,6 +181,8 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                end if;
             end if;
          end loop;
+
+         In_Step_Rate_Limiter := False;
       end Run;
    end Runner;
 
