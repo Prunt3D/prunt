@@ -243,6 +243,9 @@ package Prunt.Motion_Planner.Planner is
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
    --  Send a new command to the planner queue. May be called before Setup, but will block once the queue if full.
 
+   function Is_Input_Shaping_Disabled (Block : Execution_Block) return Boolean;
+   --  Returns True if input shaping should be forced off for this block.
+
    procedure Reset;
 
    procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean);
@@ -289,6 +292,8 @@ private
 
       --  Having so many discriminated types here may seem like it will cause performance issues, but in practice it is
       --  faster than the same code without discriminated types (refer to the no-discriminated-records branch).
+
+      Disable_Input_Shaping : Boolean;
 
       --  Preprocessor
       Flush_Resetting_Data       : Flush_Resetting_Data_Type;

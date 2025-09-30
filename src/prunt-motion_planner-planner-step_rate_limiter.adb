@@ -101,7 +101,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
             raise Constraint_Error with "Setup not done.";
          end if;
 
-         if Is_Homing_Move (Flush_Resetting_Data (Block)) then
+         if Is_Homing_Move (Flush_Resetting_Data (Block)) or else Block.Disable_Input_Shaping then
             --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
             Current_Shapers :=
               Input_Shapers.Shapers.Create
@@ -139,6 +139,8 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                         end;
                      else
                         Check_Step (To_Stepper_Position (Shaped_Pos, Pos_Map), I);
+                        --  Short-circuit if we're just going to disable shapers.
+                        exit when (not Block.Disable_Input_Shaping) and Maximum_Overspeed (I) > 1.0;
                      end if;
                   end;
                end if;
@@ -163,9 +165,18 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
          for I in 2 .. Block.N_Corners loop
             if Maximum_Overspeed (I) > 1.0 then
                Needs_New_Profiles := True;
-               --  TODO: Take the pressure advance value in to account to set the 1.1 constant in a better way.
-               Block.Limited_Segment_Feedrates (I) :=
-                 Block.Limited_Segment_Feedrates (I) / (Maximum_Overspeed (I) * 1.1);
+               if Block.Disable_Input_Shaping then
+                  Block.Limited_Segment_Feedrates (I) :=
+                    Block.Limited_Segment_Feedrates (I) / (Maximum_Overspeed (I) * 1.1);
+                  Log
+                    ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by a "
+                     & "high velocity limit combined with a high microstepping ratio.");
+               else
+                  Block.Disable_Input_Shaping := True;
+                  Log
+                    ("All input shaping has been turned off for the next block of moves due to the step rate being "
+                     & "too high. This can be caused by a high pressure advance value without smoothing.");
+               end if;
             end if;
          end loop;
       end Run;

@@ -158,11 +158,14 @@ package body Prunt.Step_Generator.Generator is
                end if;
                Homing_Move_When := This_Block_Kind;
 
+               --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
                Current_Shapers :=
                  Input_Shapers.Shapers.Create
                    ((others => (Kind => Input_Shapers.No_Shaper)), Interpolation_Time, Block_Start_Pos (Block));
-               --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
-
+            elsif Is_Input_Shaping_Disabled (Block) then
+               Current_Shapers :=
+                 Input_Shapers.Shapers.Create
+                   ((others => (Kind => Input_Shapers.No_Shaper)), Interpolation_Time, Block_Start_Pos (Block));
             else
                Current_Shapers :=
                  Input_Shapers.Shapers.Create
@@ -300,9 +303,9 @@ package body Prunt.Step_Generator.Generator is
 
                   if I = Block.N_Corners and Current_Time > Segment_Time (Block, I) then
                      Current_Time := Segment_Time (Block, I);
-                     --  Ensure that the last corner is always enqueued from at least once and we always finish on
-                     --  the exact final position. Having the wrong interpolation time here is fine because the
-                     --  final bit of an execution block has very low velocity.
+                  --  Ensure that the last corner is always enqueued from at least once and we always finish on
+                  --  the exact final position. Having the wrong interpolation time here is fine because the
+                  --  final bit of an execution block has very low velocity.
 
                   else
                      exit when Current_Time >= Segment_Time (Block, I);

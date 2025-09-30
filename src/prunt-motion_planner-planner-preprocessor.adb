@@ -228,6 +228,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Params := Current_Params;
          Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
          Block.Block_Persistent_Data := Block_Persistent_Data;
+         Block.Disable_Input_Shaping := False;
 
          Reset_Called := False;
 

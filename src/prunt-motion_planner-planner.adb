@@ -43,6 +43,11 @@ package body Prunt.Motion_Planner.Planner is
       Runner.Reset_Do_Not_Call_From_Other_Packages;
    end Reset;
 
+   function Is_Input_Shaping_Disabled (Block : Execution_Block) return Boolean is
+   begin
+      return Block.Disable_Input_Shaping;
+   end Is_Input_Shaping_Disabled;
+
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
    begin
       My_Preprocessor.Enqueue (Comm, Ignore_Bounds);
@@ -113,10 +118,6 @@ package body Prunt.Motion_Planner.Planner is
                begin
                   My_Step_Rate_Limiter.Run (Block, Needs_New_Profiles);
                   exit when not Needs_New_Profiles;
-                  Log
-                    ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by "
-                     & "a high velocity limit combined with a high microstepping ratio or a high pressure "
-                     & "advance value.");
                end;
             end loop;
 
