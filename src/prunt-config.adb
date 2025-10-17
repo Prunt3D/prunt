@@ -1346,6 +1346,20 @@ package body Prunt.Config is
          begin
             case Config.Homing (A).Homing_Method.Kind is
                when Use_Input_Switch =>
+                  pragma
+                    Assert
+                      (Config.Input_Switches (Config.Homing (A).Homing_Method.Use_Input_Switch.Switch).Fixed_Kind
+                         = Visible);
+
+                  if not Config.Input_Switches (Config.Homing (A).Homing_Method.Use_Input_Switch.Switch)
+                           .Visible
+                           .Enabled
+                  then
+                     Report
+                       ("Homing$" & A'Image & "$Homing method$Use input switch$Switch",
+                        "This input switch has not been enabled.");
+                  end if;
+
                   Position := Config.Homing (A).Homing_Method.Use_Input_Switch.Move_To_After;
                   if Position < Lower_Limit or Position > Upper_Limit then
                      Report
