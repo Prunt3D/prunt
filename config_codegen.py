@@ -380,7 +380,8 @@ with open("src/prunt-config.ads", "r") as f:
 
 data = parse_config_ads(content)
 data["Position"] = Array(name="Position", index_type="Axis_Name", element_type="Length")
-data["Position_Scale"] = Array(name="Position", index_type="Axis_Name", element_type="Dimensionless")
+data["Position_Scale"] = Array(name="Position_Scale", index_type="Axis_Name", element_type="Dimensionless")
+data["Position_Offset"] = Array(name="Position_Offset", index_type="Axis_Name", element_type="Length")
 
 # pp = pprint.PrettyPrinter(width=120)
 # pp.pprint(data)

@@ -391,7 +391,7 @@ package body Prunt.Config is
             end;
          else
             Current_Properties := Create_Object;
-            Set_Field (Current_Properties, "Schema version", Long_Integer'(13));
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(14));
             Set_Field (Current_Properties, "Properties", Create_Object);
          end if;
 
@@ -605,7 +605,12 @@ package body Prunt.Config is
             Set_Field (Current_Properties, "Schema version", Long_Integer'(13));
          end if;
 
-         if Get (Current_Properties, "Schema version") /= Long_Integer'(13) then
+         if Get (Current_Properties, "Schema version") = Long_Integer'(13) then
+            --  Version 14 adds bed levelling.
+            Set_Field (Current_Properties, "Schema version", Long_Integer'(14));
+         end if;
+
+         if Get (Current_Properties, "Schema version") /= Long_Integer'(14) then
             raise Config_File_Format_Error with "This config file is for a newer Prunt version.";
          end if;
 
@@ -784,6 +789,13 @@ package body Prunt.Config is
          Data := Initial_Config.Lasers (Laser);
       end Read;
       pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
+
+      procedure Read (Data : out Bed_Levelling_Parameters) is
+      begin
+         Maybe_Do_Init;
+         Error_If_Initial_Config_Invalid;
+         Data := Initial_Config.Bed_Levelling;
+      end Read;
 
       procedure Validate_Config_To_Schema (Config : JSON_Value; Report : access procedure (Key, Message : String)) is
          procedure Check_Field (Name : UTF8_String; Value : JSON_Value) is
@@ -1034,6 +1046,13 @@ package body Prunt.Config is
       return Data;
    end Read;
    pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
+
+   function Read return Bed_Levelling_Parameters is
+      Data : Bed_Levelling_Parameters;
+   begin
+      Config_File.Read (Data);
+      return Data;
+   end Read;
 
    procedure Patch
      (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String)) is
@@ -1455,6 +1474,98 @@ package body Prunt.Config is
             end if;
          end;
       end loop;
+
+      case Config.Bed_Levelling.Probing_Method.Kind is
+         when Disabled         =>
+            null;
+
+         when Use_Input_Switch =>
+            if Config.Bed_Levelling.Fade_Height > Config.Kinematics.Upper_Position_Limit (Z_Axis) then
+               Report
+                 ("Bed levelling$Fade height", "Fade height must not be greater than Z axis upper position limit.");
+            end if;
+
+            if Config.Kinematics.Lower_Position_Limit (Z_Axis) /= 0.0 * mm then
+               Report
+                 ("Kinematics$Lower position limit$Z_AXIS",
+                  "Bed levelling is only supported when lower Z limit is zero. Contact us if you have a use case for "
+                  & "this so we can figure out how the printer should behave under these conditions.");
+            end if;
+
+            pragma
+              Assert
+                (Config.Input_Switches (Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch).Fixed_Kind
+                   = Visible);
+
+            if not Config.Input_Switches (Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch).Visible.Enabled
+            then
+               Report
+                 ("Bed levelling$Probing method$Use input switch$Switch", "This input switch has not been enabled.");
+            end if;
+
+            if Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (Z_Axis) > 0.0 * mm then
+               Report
+                 ("Bed levelling$Probing method$Use input switch$Switch position$Z_AXIS",
+                  "Switch trigger point places the toolhead past the Z axis lower limit when the switch is "
+                  & "triggered.");
+            end if;
+
+            if Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (Z_Axis)
+              + Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Move_Distance
+              > 0.0 * mm
+            then
+               Report
+                 ("Bed levelling$Probing method$Use input switch$Move distance",
+                  "Probing move would crash the toolhead into the bed.");
+            end if;
+
+            if Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Probe_Z_Height
+              - Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (Z_Axis)
+              > Config.Kinematics.Upper_Position_Limit (Z_Axis)
+            then
+               Report
+                 ("Bed levelling$Probing method$Use input switch$Probe Z height",
+                  "Start of probing move is above Z axis upper limit.");
+            end if;
+
+            if Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (E_Axis) /= 0.0 * mm then
+               Report
+                 ("Bed levelling$Probing method$Use input switch$Switch position$E_AXIS",
+                  "E axis probe offsets are not supported.");
+            end if;
+
+            if Length'Max
+                 (Config.Kinematics.Lower_Position_Limit (X_Axis),
+                  Config.Kinematics.Lower_Position_Limit (X_Axis)
+                  + Config.Bed_Levelling.Border_Margin
+                  - Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (X_Axis))
+              >= Length'Min
+                   (Config.Kinematics.Upper_Position_Limit (X_Axis),
+                    Config.Kinematics.Upper_Position_Limit (X_Axis)
+                    - Config.Bed_Levelling.Border_Margin
+                    - Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (X_Axis))
+            then
+               Report
+                 ("Bed levelling$Probing method$Use input switch$Switch position$X_AXIS",
+                  "Combination of border margin and probe offset leaves no aread for probing in the X axis");
+            end if;
+
+            if Length'Max
+                 (Config.Kinematics.Lower_Position_Limit (Y_Axis),
+                  Config.Kinematics.Lower_Position_Limit (Y_Axis)
+                  + Config.Bed_Levelling.Border_Margin
+                  - Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (Y_Axis))
+              >= Length'Min
+                   (Config.Kinematics.Upper_Position_Limit (Y_Axis),
+                    Config.Kinematics.Upper_Position_Limit (Y_Axis)
+                    - Config.Bed_Levelling.Border_Margin
+                    - Config.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset (Y_Axis))
+            then
+               Report
+                 ("Bed levelling$Probing method$Use input switch$Switch position$Y_AXIS",
+                  "Combination of border margin and probe offset leaves no aread for probing in the Y axis");
+            end if;
+      end case;
    end Validate_Config;
 
    function User_Config_To_Config (Data : User_Config) return Full_Config is
@@ -2243,6 +2354,31 @@ package body Prunt.Config is
       for L in Laser_Name loop
          Config.Lasers (L) := (Modulate_With_Velocity => Data.Lasers (L).Modulate_With_Velocity);
       end loop;
+
+      case Data.Bed_Levelling.Probing_Method.Kind is
+         when Disabled         =>
+            Config.Bed_Levelling :=
+              (Kind                => Disabled_Kind,
+               Border_Margin       => Data.Bed_Levelling.Border_Margin,
+               Probe_Points_X      => Data.Bed_Levelling.Probe_Points_X,
+               Probe_Points_Y      => Data.Bed_Levelling.Probe_Points_Y,
+               Maximum_Z_Deviation => Data.Bed_Levelling.Maximum_Z_Deviation,
+               Fade_Height         => Data.Bed_Levelling.Fade_Height);
+
+         when Use_Input_Switch =>
+            Config.Bed_Levelling :=
+              (Kind                => Input_Switch_Kind,
+               Border_Margin       => Data.Bed_Levelling.Border_Margin,
+               Probe_Points_X      => Data.Bed_Levelling.Probe_Points_X,
+               Probe_Points_Y      => Data.Bed_Levelling.Probe_Points_Y,
+               Maximum_Z_Deviation => Data.Bed_Levelling.Maximum_Z_Deviation,
+               Fade_Height         => Data.Bed_Levelling.Fade_Height,
+               Switch              => Data.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch,
+               Move_Distance       => Data.Bed_Levelling.Probing_Method.Use_Input_Switch.Move_Distance,
+               Probe_Z_Height      => Data.Bed_Levelling.Probing_Method.Use_Input_Switch.Probe_Z_Height,
+               Switch_Offset       => Data.Bed_Levelling.Probing_Method.Use_Input_Switch.Switch_Offset,
+               Velocity_Limit      => Data.Bed_Levelling.Probing_Method.Use_Input_Switch.Velocity_Limit);
+      end case;
 
       return Config;
    end User_Config_To_Config;

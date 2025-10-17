@@ -217,6 +217,28 @@ package Prunt.Config is
       Modulate_With_Velocity : Boolean;
    end record;
 
+   type Bed_Levelling_Kind is (Disabled_Kind, Input_Switch_Kind);
+
+   type Bed_Levelling_Parameters (Kind : Bed_Levelling_Kind := Disabled_Kind) is record
+      Border_Margin       : Length := 0.0 * mm;
+      Probe_Points_X      : Integer := 10;
+      Probe_Points_Y      : Integer := 10;
+      Maximum_Z_Deviation : Length := 1.0 * mm;
+      Fade_Height         : Length := 10.0 * mm;
+
+      case Kind is
+         when Disabled_Kind =>
+            null;
+
+         when Input_Switch_Kind =>
+            Switch         : Input_Switch_Name'Base := Input_Switch_Name'Base'First;
+            Move_Distance  : Length := 0.1 * mm;
+            Probe_Z_Height : Length := 10.0 * mm;
+            Switch_Offset  : Position_Offset := (others => 0.0 * mm);
+            Velocity_Limit : Velocity := 1.0E100 * mm / s;
+      end case;
+   end record;
+
    procedure Disable_Prunt;
    --  Modifies the configuration file to cause Prunt_Parameters.Enabled to be set to False. This does not take effect
    --  until the next startup.
@@ -266,6 +288,7 @@ package Prunt.Config is
        and Read'Result.Has_Lasers = (Laser_Name'Pos (Laser_Name'Last) >= Laser_Name'Pos (Laser_Name'First));
    function Read (Axis : Axis_Name) return Shaper_Parameters;
    function Read (Laser : Laser_Name) return Laser_Parameters;
+   function Read return Bed_Levelling_Parameters;
    --  The above functions read the initial configuration values, not configurations values that have been changed
    --  after the first read.
 
@@ -477,6 +500,7 @@ private
       Fans               : Fan_Parameters_Array;
       Shapers            : Shaper_Parameters_Array;
       Lasers             : Laser_Parameters_Array;
+      Bed_Levelling      : Bed_Levelling_Parameters;
    end record;
 
    type User_Config;
@@ -500,6 +524,7 @@ private
       procedure Read (Data : out G_Code_Assignment_Parameters);
       procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
       procedure Read (Data : out Laser_Parameters; Laser : Laser_Name);
+      procedure Read (Data : out Bed_Levelling_Parameters);
       procedure Patch
         (Data : in out Ada.Strings.Unbounded.Unbounded_String; Report : access procedure (Key, Message : String));
       procedure Validate_Initial_Config (Report : access procedure (Key, Message : String));
@@ -1383,6 +1408,110 @@ private
 
       Kinematics_Kind : User_Config_Kinematics_Variant := (others => <>);
       --  Key: Kinematics kind
+   end record;
+
+   type User_Config_Bed_Levelling_Disabled is record
+      --  Description: Bed levelling is disabled. Bed levelling commands will be ignored until an option is selected
+      --               and configured.
+      null;
+   end record;
+
+   type User_Config_Bed_Levelling_Use_Input_Switch is record
+      --  Description: Use a physical switch attached to the toolhead.
+
+      Switch : Input_Switch_Name'Base := Input_Switch_Name'Base'First;
+      --  Key: Switch
+      --  Description: Select the input switch to be used for homing this axis.
+
+      Move_Distance : Length := 0.1 * mm;
+      --  Key: Move distance
+      --  Description: This is the distance the axis is allowed to travel past the switch trigger point.
+      --  Min: 0.000001
+      --  Max: 1.0E100
+
+      Probe_Z_Height : Length := 10.0 * mm;
+      --  Key: Probe Z height
+      --  Description: Distance above Z = 0 to begin the probing move. This is the distance from the switch trigger
+      --               point, not the distance from the nozzle.
+      --  Min: 0.0
+      --  Max: 1.0E100
+
+      Switch_Offset : Position_Offset := (others => 0.0 * mm);
+      --  Key: Switch position
+      --  Description: This is the offset of the switch trigger position from the nozzle. If the nozzle is at
+      --               position zero and you execute a G0 command with the position specified here then the nozzle
+      --               should move to what was previously the switch trigger position.
+      --  Min: -1.0E100
+      --  Max: 1.0E100
+
+      Velocity_Limit : Velocity := 1.0E100 * mm / s;
+      --  Key: Velocity limit
+      --  Description: This sets a velocity limit specifically for probing. This does not allow the movement to exceed
+      --               any regular velocity limits.
+      --  Min: 0.000001
+      --  Max: 1.0E100
+   end record;
+
+   type User_Config_Bed_Levelling_Method_Kind is
+     (Disabled,
+      --  Key: Disabled
+      Use_Input_Switch
+      --  Key: Use input switch
+     );
+
+   type User_Config_Bed_Levelling_Method (Kind : User_Config_Bed_Levelling_Method_Kind := Disabled) is record
+      --  Description: This section allows you to select the method used to measure the height of the bed at the bed
+      --               levelling points.
+
+      case Kind is
+         when Disabled =>
+            Disabled : User_Config_Bed_Levelling_Disabled;
+            --  Key: Disabled
+
+         when Use_Input_Switch =>
+            Use_Input_Switch : User_Config_Bed_Levelling_Use_Input_Switch;
+            --  Key: Use_Input_Switch
+            --  Include_If: Has_Input_Switches
+      end case;
+   end record;
+
+   type User_Config_Bed_Levelling is record
+      --  Description: This section allows you to configure bed offset compensation, also known as bed levelling.
+
+      Border_Margin : Length := 0.0 * mm;
+      --  Key: Border margin
+      --  Description: Distance to stay away from the edge of the axis limits in X and Y when probing the bed. This
+      --               position is measured from the probe, not the nozzle. Additional margins will be added when
+      --               required to keep the toolhead within the defined axis limits.
+      --  Min: 0.0
+      --  Max: 1.0E100
+
+      Probe_Points_X : Integer := 10;
+      --  Key: X axis probe points
+      --  Description: Number of points to probe on the X axis.
+      --  Min: 2
+      --  Max: 100
+
+      Probe_Points_Y : Integer := 10;
+      --  Key: Y axis probe points
+      --  Description: Number of points to probe on the Y axis.
+      --  Min: 2
+      --  Max: 100
+
+      Maximum_Z_Deviation : Length := 1.0 * mm;
+      --  Key: Maximum Z deviation
+      --  Description: Maximum allowed absolute distance between a probe point and the Z = 0 position from homing.
+      --  Min: 0.0
+      --  Max: 1.0E100
+
+      Fade_Height : Length := 10.0 * mm;
+      --  Key: Fade height
+      --  Description: Distance above Z = 0 from homing where the bed levelling compensation will fade to 0%.
+      --  Min: 0.0
+      --  Max: 1.0E100
+
+      Probing_Method : User_Config_Bed_Levelling_Method := (others => <>);
+      --  Key: Probing method
    end record;
 
    type User_Config_Input_Switch_Visible is record
@@ -2349,6 +2478,9 @@ private
 
       Kinematics : User_Config_Kinematics := (others => <>);
       --  Key: Kinematics
+
+      Bed_Levelling : User_Config_Bed_Levelling := (others => <>);
+      --  Key: Bed levelling
 
       Input_Switches : User_Config_Input_Switch_Array := (others => <>);
       --  Key: Input switches
