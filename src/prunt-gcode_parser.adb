@@ -65,11 +65,11 @@ package body Prunt.Gcode_Parser is
          Runner_Buffer.Append (Comm);
       end Buffered_Runner;
    begin
-      if Kind (Args, 'G') /= Non_Existant_Kind and Kind (Args, 'M') /= Non_Existant_Kind then
+      if Kind (Args, 'G') /= Non_Existent_Kind and Kind (Args, 'M') /= Non_Existent_Kind then
          raise Bad_Line with "Only one G or M parameter allowed per line.";
       end if;
 
-      if Kind (Args, 'G') /= Non_Existant_Kind then
+      if Kind (Args, 'G') /= Non_Existent_Kind then
          declare
             G_Code : constant Argument_Integer := Consume_Integer (Args, 'G');
          begin
@@ -110,7 +110,7 @@ package body Prunt.Gcode_Parser is
                   raise Bad_Line with "Unknown G code: " & G_Code'Image;
             end case;
          end;
-      elsif Kind (Args, 'M') /= Non_Existant_Kind then
+      elsif Kind (Args, 'M') /= Non_Existent_Kind then
          declare
             M_Code : constant Argument_Integer := Consume_Integer (Args, 'M');
          begin
@@ -259,10 +259,10 @@ package body Prunt.Gcode_Parser is
          end if;
       end if;
 
-      if Kind (Args, 'X') /= Non_Existant_Kind
-        or Kind (Args, 'Y') /= Non_Existant_Kind
-        or Kind (Args, 'Z') /= Non_Existant_Kind
-        or Kind (Args, 'E') /= Non_Existant_Kind
+      if Kind (Args, 'X') /= Non_Existent_Kind
+        or Kind (Args, 'Y') /= Non_Existent_Kind
+        or Kind (Args, 'Z') /= Non_Existent_Kind
+        or Kind (Args, 'E') /= Non_Existent_Kind
       then
          if Ctx.Pos /= Comm.Pos then
             Runner (Comm);
@@ -318,10 +318,10 @@ package body Prunt.Gcode_Parser is
       end if;
       Ctx.Feedrate := Comm.Feedrate;
 
-      if Kind (Args, 'X') /= Non_Existant_Kind
-        or Kind (Args, 'Y') /= Non_Existant_Kind
-        or Kind (Args, 'Z') /= Non_Existant_Kind
-        or Kind (Args, 'E') /= Non_Existant_Kind
+      if Kind (Args, 'X') /= Non_Existent_Kind
+        or Kind (Args, 'Y') /= Non_Existent_Kind
+        or Kind (Args, 'Z') /= Non_Existent_Kind
+        or Kind (Args, 'E') /= Non_Existent_Kind
       then
          if Ctx.Pos /= Comm.Pos then
             Runner (Comm);
@@ -333,7 +333,7 @@ package body Prunt.Gcode_Parser is
    procedure G4_Dwell
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
-      if Kind (Args, 'S') /= Non_Existant_Kind then
+      if Kind (Args, 'S') /= Non_Existent_Kind then
          Runner ((Kind => Dwell_Kind, Dwell_Time => Consume_Float (Args, 'S') * s));
       else
          Runner ((Kind => Dwell_Kind, Dwell_Time => Consume_Float (Args, 'P') * ms));
@@ -407,10 +407,10 @@ package body Prunt.Gcode_Parser is
    procedure G28_Auto_Home
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
-      if Kind (Args, 'E') = Non_Existant_Kind
-        and Kind (Args, 'X') = Non_Existant_Kind
-        and Kind (Args, 'Y') = Non_Existant_Kind
-        and Kind (Args, 'Z') = Non_Existant_Kind
+      if Kind (Args, 'E') = Non_Existent_Kind
+        and Kind (Args, 'X') = Non_Existent_Kind
+        and Kind (Args, 'Y') = Non_Existent_Kind
+        and Kind (Args, 'Z') = Non_Existent_Kind
       then
          Runner ((Kind => Home_Kind, Axes => (others => True), Pos_Before_Homing => Ctx.Pos));
       else
@@ -442,16 +442,16 @@ package body Prunt.Gcode_Parser is
    procedure G92_Set_Virtual_Position
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
-      if Kind (Args, 'E') /= Non_Existant_Kind then
+      if Kind (Args, 'E') /= Non_Existent_Kind then
          Ctx.G92_Offset (E_Axis) := Ctx.Pos (E_Axis) - Consume_Float (Args, 'E') * mm;
       end if;
-      if Kind (Args, 'X') /= Non_Existant_Kind then
+      if Kind (Args, 'X') /= Non_Existent_Kind then
          Ctx.G92_Offset (X_Axis) := Ctx.Pos (X_Axis) - Consume_Float (Args, 'X') * mm;
       end if;
-      if Kind (Args, 'Y') /= Non_Existant_Kind then
+      if Kind (Args, 'Y') /= Non_Existent_Kind then
          Ctx.G92_Offset (Y_Axis) := Ctx.Pos (Y_Axis) - Consume_Float (Args, 'Y') * mm;
       end if;
-      if Kind (Args, 'Z') /= Non_Existant_Kind then
+      if Kind (Args, 'Z') /= Non_Existent_Kind then
          Ctx.G92_Offset (Z_Axis) := Ctx.Pos (Z_Axis) - Consume_Float (Args, 'Z') * mm;
       end if;
    end G92_Set_Virtual_Position;
@@ -476,7 +476,7 @@ package body Prunt.Gcode_Parser is
          Laser_Power  => Dimensionless'Min (1.0, Dimensionless'Max (0.0, Consume_Float (Args, 'S') / 255.0)),
          Laser_To_Set => Ctx.Default_Laser.Name);
 
-      if Kind (Args, 'P') /= Non_Existant_Kind then
+      if Kind (Args, 'P') /= Non_Existent_Kind then
          if Kind (Args, 'P') = Integer_Kind then
             declare
                Index : constant Argument_Integer := Consume_Integer (Args, 'P');
@@ -512,7 +512,7 @@ package body Prunt.Gcode_Parser is
 
       Comm := (Kind => Set_Laser_Power_Kind, Laser_Power => 0.0, Laser_To_Set => Ctx.Default_Laser.Name);
 
-      if Kind (Args, 'P') /= Non_Existant_Kind then
+      if Kind (Args, 'P') /= Non_Existent_Kind then
          if Kind (Args, 'P') = Integer_Kind then
             declare
                Index : constant Argument_Integer := Consume_Integer (Args, 'P');
@@ -540,10 +540,10 @@ package body Prunt.Gcode_Parser is
    procedure M17_Enable_Motors
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
-      if Kind (Args, 'E') = Non_Existant_Kind
-        and Kind (Args, 'X') = Non_Existant_Kind
-        and Kind (Args, 'Y') = Non_Existant_Kind
-        and Kind (Args, 'Z') = Non_Existant_Kind
+      if Kind (Args, 'E') = Non_Existent_Kind
+        and Kind (Args, 'X') = Non_Existent_Kind
+        and Kind (Args, 'Y') = Non_Existent_Kind
+        and Kind (Args, 'Z') = Non_Existent_Kind
       then
          Runner ((Kind => Enable_Steppers_Kind, Axes => (others => True)));
       else
@@ -560,10 +560,10 @@ package body Prunt.Gcode_Parser is
    procedure M18_M84_Disable_Motors
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
    begin
-      if Kind (Args, 'E') = Non_Existant_Kind
-        and Kind (Args, 'X') = Non_Existant_Kind
-        and Kind (Args, 'Y') = Non_Existant_Kind
-        and Kind (Args, 'Z') = Non_Existant_Kind
+      if Kind (Args, 'E') = Non_Existent_Kind
+        and Kind (Args, 'X') = Non_Existent_Kind
+        and Kind (Args, 'Y') = Non_Existent_Kind
+        and Kind (Args, 'Z') = Non_Existent_Kind
       then
          Runner ((Kind => Disable_Steppers_Kind, Axes => (others => True)));
       else
@@ -617,7 +617,7 @@ package body Prunt.Gcode_Parser is
            Dimensionless'Min (1.0, Dimensionless'Max (0.0, Consume_Float_Or_Default (Args, 'S', 255.0) / 255.0)),
          Fan_To_Set => Ctx.Default_Fan.Name);
 
-      if Kind (Args, 'P') /= Non_Existant_Kind then
+      if Kind (Args, 'P') /= Non_Existent_Kind then
          if Kind (Args, 'P') = Integer_Kind then
             declare
                Index : constant Argument_Integer := Consume_Integer (Args, 'P');
@@ -653,7 +653,7 @@ package body Prunt.Gcode_Parser is
 
       Comm := (Kind => Set_Fan_Speed_Kind, Fan_Speed => 0.0, Fan_To_Set => Ctx.Default_Fan.Name);
 
-      if Kind (Args, 'P') /= Non_Existant_Kind then
+      if Kind (Args, 'P') /= Non_Existent_Kind then
          if Kind (Args, 'P') = Integer_Kind then
             declare
                Index : constant Argument_Integer := Consume_Integer (Args, 'P');
@@ -742,17 +742,17 @@ package body Prunt.Gcode_Parser is
            with "M205 requires P parameter with no value on Prunt to prevent conflicts with Marlin g-code.";
       end if;
 
-      if Kind (Args, 'A') /= Non_Existant_Kind then
+      if Kind (Args, 'A') /= Non_Existent_Kind then
          Runner ((Kind => Set_Acceleration_Max_Kind, Acceleration_Max => Consume_Float (Args, 'A') * mm / s**2));
-      elsif Kind (Args, 'J') /= Non_Existant_Kind then
+      elsif Kind (Args, 'J') /= Non_Existent_Kind then
          Runner ((Kind => Set_Jerk_Max_Kind, Jerk_Max => Consume_Float (Args, 'J') * mm / s**3));
-      elsif Kind (Args, 'S') /= Non_Existant_Kind then
+      elsif Kind (Args, 'S') /= Non_Existent_Kind then
          Runner ((Kind => Set_Snap_Max_Kind, Snap_Max => Consume_Float (Args, 'S') * mm / s**4));
-      elsif Kind (Args, 'C') /= Non_Existant_Kind then
+      elsif Kind (Args, 'C') /= Non_Existent_Kind then
          Runner ((Kind => Set_Crackle_Max_Kind, Crackle_Max => Consume_Float (Args, 'C') * mm / s**5));
-      elsif Kind (Args, 'D') /= Non_Existant_Kind then
+      elsif Kind (Args, 'D') /= Non_Existent_Kind then
          Runner ((Kind => Set_Chord_Error_Max_Kind, Chord_Error_Max => Consume_Float (Args, 'D') * mm));
-      elsif Kind (Args, 'L') /= Non_Existant_Kind then
+      elsif Kind (Args, 'L') /= Non_Existent_Kind then
          Runner ((Kind => Set_Pressure_Advance_Time_Kind, Pressure_Advance_Time => Consume_Float (Args, 'L') * s));
       end if;
    end M205_Set_Dynamic_Kinematic_Limits;

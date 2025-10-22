@@ -25,7 +25,7 @@ package Prunt.Gcode_Arguments is
 
    type Arguments_Index is new Character range 'A' .. 'Z';
 
-   type Argument_Kind is (Non_Existant_Kind, No_Value_Kind, Integer_Kind, Float_Kind, String_Kind);
+   type Argument_Kind is (Non_Existent_Kind, No_Value_Kind, Integer_Kind, Float_Kind, String_Kind);
 
    type Argument_Integer is range 0 .. 999;
    --  Changing the range of this type will not change the range of values reported as integers.
@@ -128,10 +128,10 @@ package Prunt.Gcode_Arguments is
 
 private
 
-   type Argument (Kind : Argument_Kind := Non_Existant_Kind) is record
+   type Argument (Kind : Argument_Kind := Non_Existent_Kind) is record
       Consumed : Boolean;
       case Kind is
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind =>
             null;
 
          when No_Value_Kind =>

@@ -26,7 +26,7 @@ package body Prunt.Gcode_Arguments is
    function Parse_Arguments (Line : String) return Arguments is
       I : Positive := Line'First;
 
-      Args : Arguments_Array := [others => (Kind => Non_Existant_Kind, Consumed => False)];
+      Args : Arguments_Array := [others => (Kind => Non_Existent_Kind, Consumed => False)];
 
       procedure Parse_Number (Index : Arguments_Index) is
          In_Decimal_Part : Boolean := False;
@@ -125,7 +125,7 @@ package body Prunt.Gcode_Arguments is
                      else
                         raise Parse_Error with "Expected parameter letter, got '" & Line (I) & "'.";
                      end if;
-                  elsif Args (Arguments_Index (Char)).Kind /= Non_Existant_Kind then
+                  elsif Args (Arguments_Index (Char)).Kind /= Non_Existent_Kind then
                      raise Parse_Error with "Parameter letter '" & Char & "' encountered more than once on line.";
                   else
                      I := I + 1;
@@ -155,20 +155,20 @@ package body Prunt.Gcode_Arguments is
       Args.Arguments (Index).Consumed := True;
 
       case Args.Arguments (Index).Kind is
-         when No_Value_Kind =>
+         when No_Value_Kind     =>
             raise Parse_Error
               with "Parameter '" & Character (Index) & "' has no value in command requiring number or omission.";
 
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind =>
             return Default;
 
-         when Integer_Kind =>
+         when Integer_Kind      =>
             return Dimensionless (Args.Arguments (Index).Integer_Value);
 
-         when Float_Kind =>
+         when Float_Kind        =>
             return Args.Arguments (Index).Float_Value;
 
-         when String_Kind =>
+         when String_Kind       =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' is string where number was expected.";
       end case;
    end Consume_Float_Or_Default;
@@ -181,19 +181,19 @@ package body Prunt.Gcode_Arguments is
       Args.Arguments (Index).Consumed := True;
 
       case Args.Arguments (Index).Kind is
-         when No_Value_Kind =>
+         when No_Value_Kind     =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' has no value in command requiring number.";
 
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' missing in command requiring number.";
 
-         when Integer_Kind =>
+         when Integer_Kind      =>
             return Dimensionless (Args.Arguments (Index).Integer_Value);
 
-         when Float_Kind =>
+         when Float_Kind        =>
             return Args.Arguments (Index).Float_Value;
 
-         when String_Kind =>
+         when String_Kind       =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' is string where number was expected.";
       end case;
    end Consume_Float;
@@ -207,14 +207,14 @@ package body Prunt.Gcode_Arguments is
       Args.Arguments (Index).Consumed := True;
 
       case Args.Arguments (Index).Kind is
-         when No_Value_Kind =>
+         when No_Value_Kind            =>
             raise Parse_Error
               with "Parameter '" & Character (Index) & "' has no value in command requiring integer or omission.";
 
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind        =>
             return Default;
 
-         when Integer_Kind =>
+         when Integer_Kind             =>
             return Args.Arguments (Index).Integer_Value;
 
          when Float_Kind | String_Kind =>
@@ -230,13 +230,13 @@ package body Prunt.Gcode_Arguments is
       Args.Arguments (Index).Consumed := True;
 
       case Args.Arguments (Index).Kind is
-         when No_Value_Kind =>
+         when No_Value_Kind            =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' has no value in command requiring value.";
 
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind        =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' missing in command requiring value.";
 
-         when Integer_Kind =>
+         when Integer_Kind             =>
             return Args.Arguments (Index).Integer_Value;
 
          when Float_Kind | String_Kind =>
@@ -253,16 +253,16 @@ package body Prunt.Gcode_Arguments is
       Args.Arguments (Index).Consumed := True;
 
       case Args.Arguments (Index).Kind is
-         when No_Value_Kind =>
+         when No_Value_Kind             =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' has no value in command requiring string.";
 
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind         =>
             return Default;
 
          when Integer_Kind | Float_Kind =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' should be a string surrounded by "".";
 
-         when String_Kind =>
+         when String_Kind               =>
             return Args.Line (Args.Arguments (Index).Begin_Quote + 1 .. Args.Arguments (Index).End_Quote - 1);
       end case;
    end Consume_String_Or_Default;
@@ -275,16 +275,16 @@ package body Prunt.Gcode_Arguments is
       Args.Arguments (Index).Consumed := True;
 
       case Args.Arguments (Index).Kind is
-         when No_Value_Kind =>
+         when No_Value_Kind             =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' has no value in command requiring string.";
 
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind         =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' missing in command requiring string.";
 
          when Integer_Kind | Float_Kind =>
             raise Parse_Error with "Parameter '" & Character (Index) & "' should be a string surrounded by "".";
 
-         when String_Kind =>
+         when String_Kind               =>
             return Args.Line (Args.Arguments (Index).Begin_Quote + 1 .. Args.Arguments (Index).End_Quote - 1);
       end case;
    end Consume_String;
@@ -297,10 +297,10 @@ package body Prunt.Gcode_Arguments is
       Args.Arguments (Index).Consumed := True;
 
       case Args.Arguments (Index).Kind is
-         when No_Value_Kind =>
+         when No_Value_Kind                           =>
             return True;
 
-         when Non_Existant_Kind =>
+         when Non_Existent_Kind                       =>
             return False;
 
          when Integer_Kind | Float_Kind | String_Kind =>
@@ -311,7 +311,7 @@ package body Prunt.Gcode_Arguments is
    procedure Validate_All_Consumed (Args : Arguments) is
    begin
       for I in Args.Arguments'Range loop
-         if not Args.Arguments (I).Consumed and Args.Arguments (I).Kind /= Non_Existant_Kind then
+         if not Args.Arguments (I).Consumed and Args.Arguments (I).Kind /= Non_Existent_Kind then
             raise Parse_Error with "Parameter '" & Character (I) & "' not valid for command on line.";
          end if;
       end loop;
