@@ -706,33 +706,41 @@ package body Prunt.Controller is
    procedure Enqueue_Command_Internal
      (Pos             : Position;
       Stepper_Pos     : Stepper_Position;
-      Data            : Corner_Extra_Data;
+      Data            : My_Planner.Corner_Extra_Data_Array;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
-      Vel_Ratio       : Dimensionless) is
+      Vel_Ratio       : Dimensionless)
+   is
+      use type My_Planner.Corner_Extra_Data_Array_Index;
    begin
+      pragma Assert (Data'Length = 1);
+      pragma Assert (Data'First = 1);
+      --  TODO: Remove once module system is implemented.
+
       pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
       --  TODO: This is obviously a GCC bug as we are iterating over Laser_Name, meaning that it is impossible for the
       --  value to not be in range, but it's difficult to isolate the bug here.
       Enqueue_Command
         ((Index           => Index,
           Pos             => Stepper_Pos,
-          Fans            => Data.Fans,
-          Heaters         => Data.Heaters,
+          Fans            => Data (1).Fans,
+          Heaters         => Data (1).Heaters,
           Lasers          =>
             (for L in Laser_Name =>
                (if Safe_Stop_After
                 then 0.0
                 else
                   Dimensionless'Min
-                    (1.0, Dimensionless (Data.Lasers (L)) * (if Data.Modulate_Lasers (L) then Vel_Ratio else 1.0)))),
+                    (1.0,
+                     Dimensionless (Data (1).Lasers (L))
+                     * (if Data (1).Modulate_Lasers (L) then Vel_Ratio else 1.0)))),
           Safe_Stop_After => Safe_Stop_After,
           Loop_Until_Hit  => Loop_Until_Hit));
       pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
       Last_Position := (for A in Axis_Name => Pos (A));
-      Last_Heater_Targets := (for H in Heater_Name => Data.Heaters (H));
-      Last_Line := Data.Current_Line;
+      Last_Heater_Targets := (for H in Heater_Name => Data (1).Heaters (H));
+      Last_Line := Data (1).Current_Line;
    end Enqueue_Command_Internal;
 
    procedure Finish_Planner_Block

@@ -149,17 +149,21 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       end Setup;
 
       procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean) is
-         Flush_Resetting_Data : Flush_Resetting_Data_Type := Flush_Resetting_Data_Default;
-         N_Corners            : Corners_Index := 1;
-         Block_N_Corners      : Corners_Index
+         Flush_Resetting_Data   : Flush_Resetting_Data_Type := Flush_Resetting_Data_Default;
+         N_Corners              : Corners_Index := 1;
+         Block_N_Corners        : Corners_Index
          with Address => Block.N_Corners'Address;
-         Next_Params          : Kinematic_Parameters;
+         Next_Params            : Kinematic_Parameters;
+         Extra_Data_This_Corner : Max_Corners_Extra_Data_Type'Base := 0;
+         Next_Extra_Data        : Corners_Extra_Data_Index := Corners_Extra_Data_Index'First;
       begin
          Reset_Called := False;
 
          if not Setup_Done then
             raise Constraint_Error with "Setup not done.";
          end if;
+
+         Corners_Extra_Data.all := (others => <>);
 
          Next_Params := Current_Params;
 
@@ -199,13 +203,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      begin
                         N_Corners := N_Corners + 1;
                         Corners (N_Corners) := Pos / Current_Params.Axial_Scaler;
-                        Corners_Extra_Data (N_Corners) := Next_Command.Corner_Extra_Data;
+                        Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data_End_Index (Next_Extra_Data);
+                        Corners_Extra_Data (Next_Extra_Data) := Next_Command.Corner_Extra_Data;
                         Segment_Feedrates (N_Corners) := Feedrate;
                         Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
 
                         Last_Pos := Pos;
 
                         exit when N_Corners = Corners_Index'Last;
+                        exit when Next_Extra_Data = Corners_Extra_Data_Index'Last;
+                        Next_Extra_Data := @ + 1;
                      end;
 
                   when Flush_And_Update_Persistent_Data_Kind =>
@@ -220,7 +227,8 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          --  GCC insists on creating a whole Execution_Block on the stack.
 
          Block.Corners := Corners (1 .. N_Corners);
-         Block.Corners_Extra_Data := Corners_Extra_Data (2 .. N_Corners);
+         Block.Corners_Extra_Data := Corners_Extra_Data.all;
+         Block.Corners_Extra_Data_End_Indices := Corners_Extra_Data_End_Indices (1 .. N_Corners);
          Block.Original_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
          Block.Limited_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
          Block.Corner_Dwell_Times := Corner_Dwell_Times (2 .. N_Corners);

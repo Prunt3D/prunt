@@ -120,8 +120,9 @@ generic
    --  of the planner. Memory is allocated for the maximum block size during initialisation, memory is not allocated
    --  per-block.
 
-   --  Preprocessor_Minimum_Move_Distance : Length := 0.001 * mm;
-   --  Unused. Can be uncommented in the preprocessor package if required.
+   Max_Corners_Extra_Data : Max_Corners_Extra_Data_Type := 1_000;
+
+   Max_Corners_Extra_Data_Per_Corner : Max_Corners_Extra_Data_Type := 10;
 
    Corner_Blender_Max_Computational_Error : Length := 0.001 * mm;
    --  The maximum allowed distance between a corner and a blended corner's Bézier curve midpoint when shifting of
@@ -185,6 +186,9 @@ package Prunt.Motion_Planner.Planner is
    end record;
 
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
+   type Corner_Extra_Data_Array_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data;
+
+   type Corner_Extra_Data_Array is array (Corner_Extra_Data_Array_Index range <>) of Corner_Extra_Data_Type;
 
    type Execution_Block (N_Corners : Corners_Index := 1) is private;
    --  N_Corners may be 1, in which case there are no segments.
@@ -230,7 +234,7 @@ package Prunt.Motion_Planner.Planner is
    function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
    --  Returns the length of the acceleration part of a segment.
 
-   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Type;
+   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array;
    --  Returns the extra data for a corner. It is illegal to call this function with Corner = 1.
 
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
@@ -261,6 +265,9 @@ package Prunt.Motion_Planner.Planner is
 
 private
 
+   type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data;
+   type Corners_Extra_Data_End_Index is new Max_Corners_Extra_Data_Type'Base range 0 .. Max_Corners_Extra_Data;
+
    In_Step_Rate_Limiter : Boolean := False
    with Atomic, Volatile;
 
@@ -269,7 +276,8 @@ private
    --  Preprocessor
    type Block_Plain_Corners is array (Corners_Index range <>) of Scaled_Position;
    type Block_Segment_Feedrates is array (Corners_Index range <>) of Velocity;
-   type Block_Corners_Extra_Data is array (Corners_Index range <>) of Corner_Extra_Data_Type;
+   type Block_Corners_Extra_Data is array (Corners_Extra_Data_Index) of Corner_Extra_Data_Type;
+   type Block_Corners_Extra_Data_End_Indices is array (Corners_Index range <>) of Corners_Extra_Data_End_Index;
    type Block_Corner_Dwell_Times is array (Corners_Index range <>) of Time;
 
    --  Corner_Blender
@@ -290,20 +298,19 @@ private
       --  Having so many discriminated types here may seem like it will cause performance issues, but in practice it is
       --  faster than the same code without discriminated types (refer to the no-discriminated-records branch).
 
-      Disable_Input_Shaping : Boolean;
-
       --  Preprocessor
-      Flush_Resetting_Data       : Flush_Resetting_Data_Type;
-      Block_Persistent_Data      : Block_Persistent_Data_Type;
-      Next_Block_Pos             : Scaled_Position;
-      Params                     : Kinematic_Parameters;
-      Corners                    : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
-      Original_Segment_Feedrates : Block_Segment_Feedrates (2 .. N_Corners);
+      Flush_Resetting_Data           : Flush_Resetting_Data_Type;
+      Block_Persistent_Data          : Block_Persistent_Data_Type;
+      Next_Block_Pos                 : Scaled_Position;
+      Params                         : Kinematic_Parameters;
+      Corners_Extra_Data             : Block_Corners_Extra_Data;
+      Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices (1 .. N_Corners);
+      Corners                        : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
+      Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
       --  Adjusted with scaler in Kinematic_Limiter.
-      Limited_Segment_Feedrates  : Block_Segment_Feedrates (2 .. N_Corners);
+      Limited_Segment_Feedrates      : Block_Segment_Feedrates (2 .. N_Corners);
       --  Adjusted with scaler in Kinematic_Limiter and limited by maximum velocity and step rate.
-      Corners_Extra_Data         : Block_Corners_Extra_Data (2 .. N_Corners);
-      Corner_Dwell_Times         : Block_Corner_Dwell_Times (2 .. N_Corners);
+      Corner_Dwell_Times             : Block_Corner_Dwell_Times (2 .. N_Corners);
 
       --  Corner_Blender
       Beziers : Block_Beziers (1 .. N_Corners);

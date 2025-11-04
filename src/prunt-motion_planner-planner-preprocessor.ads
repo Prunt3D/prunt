@@ -68,22 +68,26 @@ private
    type Block_Corner_Dwell_Times_Access is access Block_Corner_Dwell_Times with Storage_Pool => Pool;
    type Block_Segment_Feedrates_Access is access Block_Segment_Feedrates with Storage_Pool => Pool;
    type Block_Corners_Extra_Data_Access is access Block_Corners_Extra_Data with Storage_Pool => Pool;
+   type Block_Corners_Extra_Data_End_Indices_Access is access Block_Corners_Extra_Data_End_Indices
+   with Storage_Pool => Pool;
 
    protected Runner is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
       procedure Reset;
    private
-      Setup_Done            : Boolean := False;
-      Last_Pos              : Position := Initial_Position;
-      Current_Params        : Kinematic_Parameters;
-      Block_Persistent_Data : Block_Persistent_Data_Type := Block_Persistent_Data_Default;
-      Corners               : Block_Plain_Corners_Access := new Block_Plain_Corners (1 .. Corners_Index'Last);
-      Corner_Dwell_Times    : Block_Corner_Dwell_Times_Access :=
+      Setup_Done                     : Boolean := False;
+      Last_Pos                       : Position := Initial_Position;
+      Current_Params                 : Kinematic_Parameters;
+      Block_Persistent_Data          : Block_Persistent_Data_Type := Block_Persistent_Data_Default;
+      Corners                        : Block_Plain_Corners_Access := new Block_Plain_Corners (1 .. Corners_Index'Last);
+      Corner_Dwell_Times             : Block_Corner_Dwell_Times_Access :=
         new Block_Corner_Dwell_Times (1 .. Corners_Index'Last);
-      Segment_Feedrates     : Block_Segment_Feedrates_Access := new Block_Segment_Feedrates (2 .. Corners_Index'Last);
-      Corners_Extra_Data    : Block_Corners_Extra_Data_Access :=
-        new Block_Corners_Extra_Data (2 .. Corners_Index'Last);
+      Segment_Feedrates              : Block_Segment_Feedrates_Access :=
+        new Block_Segment_Feedrates (2 .. Corners_Index'Last);
+      Corners_Extra_Data             : Block_Corners_Extra_Data_Access := new Block_Corners_Extra_Data;
+      Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices_Access :=
+        new Block_Corners_Extra_Data_End_Indices (1 .. Corners_Index'Last);
    end Runner;
 
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters);

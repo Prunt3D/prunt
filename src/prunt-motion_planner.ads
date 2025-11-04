@@ -56,6 +56,8 @@ package Prunt.Motion_Planner is
 
    type Max_Corners_Type is range 2 .. 2**63 - 1;
 
+   type Max_Corners_Extra_Data_Type is range 2 .. 2**63 - 1;
+
    type Feedrate_Profile_Times_Index is range 1 .. 4;
    type Feedrate_Profile_Times is array (Feedrate_Profile_Times_Index) of Time;
    --  Represents the timings for segments in a 15-phase motion profile. Note that some times are used for multiple segments.

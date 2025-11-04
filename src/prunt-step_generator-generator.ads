@@ -39,7 +39,7 @@ generic
      procedure Enqueue_Command
        (Pos             : Position;
         Stepper_Pos     : Stepper_Position;
-        Data            : Planner.Corner_Extra_Data_Type;
+        Data            : Planner.Corner_Extra_Data_Array;
         Index           : Command_Index;
         Loop_Until_Hit  : Boolean;
         Safe_Stop_After : Boolean;
