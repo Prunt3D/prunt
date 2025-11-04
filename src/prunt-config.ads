@@ -264,13 +264,13 @@ package Prunt.Config is
        (for all A in Axis_Name =>
           (case Read'Result.Prerequisites (A).Kind is
              when No_Requirement_Kind | Must_Be_Homed_Kind => True,
-             when Must_Be_At_Position_Kind =>
+             when Must_Be_At_Position_Kind                 =>
                Read'Result.Prerequisites (A).Position
                <= Kinematics_Parameters'(Read).Planner_Parameters.Upper_Pos_Limit (A)
                and Read'Result.Prerequisites (A).Position
                    >= Kinematics_Parameters'(Read).Planner_Parameters.Lower_Pos_Limit (A)))
        and (case Read'Result.Kind is
-              when Disabled_Kind | Set_To_Value_Kind => True,
+              when Disabled_Kind | Set_To_Value_Kind                     => True,
               when Double_Tap_Kind | StallGuard2_Kind | StallGuard4_Kind =>
                 Read'Result.Velocity_Limit > 0.0 * mm / s
                 and Read'Result.Move_To_After <= Kinematics_Parameters'(Read).Planner_Parameters.Upper_Pos_Limit (Axis)

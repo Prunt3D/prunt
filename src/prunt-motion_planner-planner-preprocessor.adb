@@ -43,15 +43,15 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             when Flush_Kind | Flush_And_Update_Persistent_Data_Kind =>
                null;
 
-            when Flush_And_Reset_Position_Kind =>
+            when Flush_And_Reset_Position_Kind                      =>
                if not Ignore_Bounds then
                   Check_Bounds (Comm.Reset_Pos, Current_Params);
                end if;
 
-            when Flush_And_Change_Parameters_Kind =>
+            when Flush_And_Change_Parameters_Kind                   =>
                Current_Params := Comm.New_Params;
 
-            when Move_Kind =>
+            when Move_Kind                                          =>
                if not Ignore_Bounds then
                   Check_Bounds (Comm.Pos, Current_Params);
                end if;
@@ -64,7 +64,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   raise Constraint_Error with "Feedrate must be positive.";
                end if;
 
-            when Dummy_Corner_Kind =>
+            when Dummy_Corner_Kind                                  =>
                if Comm.Dwell_After < 0.0 * s then
                   raise Constraint_Error with "Negative dwell times are not allowed.";
                end if;
@@ -176,21 +176,21 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                end if;
 
                case Next_Command.Kind is
-                  when Flush_Kind =>
+                  when Flush_Kind                            =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      exit;
 
-                  when Flush_And_Reset_Position_Kind =>
+                  when Flush_And_Reset_Position_Kind         =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      Last_Pos := Next_Command.Reset_Pos;
                      exit;
 
-                  when Flush_And_Change_Parameters_Kind =>
+                  when Flush_And_Change_Parameters_Kind      =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      Next_Params := Limit_Higher_Order_Params (Next_Command.New_Params);
                      exit;
 
-                  when Move_Kind | Dummy_Corner_Kind =>
+                  when Move_Kind | Dummy_Corner_Kind         =>
                      declare
                         Pos      : constant Position :=
                           (if Next_Command.Kind = Dummy_Corner_Kind then Last_Pos else Next_Command.Pos);

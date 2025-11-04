@@ -76,36 +76,36 @@ package body Prunt.Gcode_Parser is
             G_Code : constant Argument_Integer := Consume_Integer (Args, 'G');
          begin
             case G_Code is
-               when 0 =>
+               when 0      =>
                   G0_Rapid_Linear_Move (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 1 =>
+               when 1      =>
                   G1_Linear_Move (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 4 =>
+               when 4      =>
                   G4_Dwell (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 10 =>
+               when 10     =>
                   G10_Retract (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 11 =>
+               when 11     =>
                   G11_Recover (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 21 =>
+               when 21     =>
                   G21_Millimetre_Units (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 28 =>
+               when 28     =>
                   G28_Auto_Home (Ctx, Args, Runner);
                   --  TODO: This is a hack until the calls to reset_position are reworked.
                   Ctx_Copy := Ctx;
 
-               when 90 =>
+               when 90     =>
                   G90_Absolute_Positioning (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 91 =>
+               when 91     =>
                   G91_Relative_Positioning (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 92 =>
+               when 92     =>
                   G92_Set_Virtual_Position (Ctx_Copy, Args, Buffered_Runner'Access);
 
                when others =>
@@ -117,70 +117,70 @@ package body Prunt.Gcode_Parser is
             M_Code : constant Argument_Integer := Consume_Integer (Args, 'M');
          begin
             case M_Code is
-               when 0 | 1 =>
+               when 0 | 1          =>
                   M0_M1_Pause (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 3 =>
+               when 3              =>
                   M3_Set_Laser_Power (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 5 =>
+               when 5              =>
                   M5_Laser_Off (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 17 =>
+               when 17             =>
                   M17_Enable_Motors (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 18 | 84 =>
+               when 18 | 84        =>
                   M18_M84_Disable_Motors (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 82 =>
+               when 82             =>
                   M82_E_Axis_Absolute (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 83 =>
+               when 83             =>
                   M83_E_Axis_Relative (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 104 =>
+               when 104            =>
                   M104_Set_Hotend_Temperature (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 106 =>
+               when 106            =>
                   M106_Set_Fan_Speed (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 107 =>
+               when 107            =>
                   M107_Fan_Off (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 109 =>
+               when 109            =>
                   M109_Wait_For_Hotend_Temperature (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 122 =>
+               when 122            =>
                   M122_TMC_Register_Dump (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 140 =>
+               when 140            =>
                   M140_Set_Bed_Temperature (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 141 =>
+               when 141            =>
                   M141_Set_Chamber_Temperature (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 190 =>
+               when 190            =>
                   M190_Wait_For_Bed_Temperature (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 191 =>
+               when 191            =>
                   M191_Wait_For_Chamber_Temperature (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 205 =>
+               when 205            =>
                   M205_Set_Dynamic_Kinematic_Limits (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 207 =>
+               when 207            =>
                   M207_Retraction_Settings (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 208 =>
+               when 208            =>
                   M208_Recovery_Settings (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when 303 =>
+               when 303            =>
                   M303_PID_Autotune (Ctx_Copy, Args, Buffered_Runner'Access);
 
                when 73 | 204 | 486 =>
                   M73_M204_M486_Ignored (Ctx_Copy, Args, Buffered_Runner'Access);
 
-               when others =>
+               when others         =>
                   raise Bad_Line with "Unknown M code: " & M_Code'Image;
             end case;
          end;

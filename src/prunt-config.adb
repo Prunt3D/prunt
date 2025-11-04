@@ -149,10 +149,10 @@ package body Prunt.Config is
             Append (Result, """,");
 
             case Element (I).Kind is
-               when Boolean_Kind =>
+               when Boolean_Kind     =>
                   Append (Result, """Kind"":""Boolean""}");
 
-               when Discrete_Kind =>
+               when Discrete_Kind    =>
                   Append (Result, """Kind"":""Discrete"",""Options"":[");
                   declare
                      Options : constant Discrete_String_Sets.Set := Element (I).Discrete_Options;
@@ -166,7 +166,7 @@ package body Prunt.Config is
                   end;
                   Append (Result, "]}");
 
-               when Integer_Kind =>
+               when Integer_Kind     =>
                   Append
                     (Result,
                      """Kind"":""Integer"""
@@ -178,7 +178,7 @@ package body Prunt.Config is
                      & Element (I).Integer_Unit'Image
                      & "}");
 
-               when Float_Kind =>
+               when Float_Kind       =>
                   Append
                     (Result,
                      """Kind"":""Float"""
@@ -200,7 +200,7 @@ package body Prunt.Config is
                      & Trim (Element (I).Float_Ratio_Max'Image)
                      & "}");
 
-               when Sequence_Kind =>
+               when Sequence_Kind    =>
                   if Element (I).Sequence_Tabbed then
                      Append (Result, """Kind"":""Tabbed_Sequence"",""Children"":");
                   else
@@ -209,7 +209,7 @@ package body Prunt.Config is
                   DFS (Element (I).Sequence_Children, Path & (if Path = "" then "" else "$") & Key (I));
                   Append (Result, "}");
 
-               when Variant_Kind =>
+               when Variant_Kind     =>
                   Append (Result, """Kind"":""Variant"",""Children"":");
                   DFS (Element (I).Variant_Children, Path & (if Path = "" then "" else "$") & Key (I));
                   Append (Result, "}");
@@ -241,14 +241,14 @@ package body Prunt.Config is
                   when Boolean_Kind | Discrete_Kind | Integer_Kind | Float_Kind =>
                      Insert (Result, New_Path, Element (I));
 
-                  when Float_Ratio_Kind =>
+                  when Float_Ratio_Kind                                         =>
                      Insert (Result, New_Path & "$Numerator", Element (I));
                      Insert (Result, New_Path & "$Denominator", Element (I));
 
-                  when Sequence_Kind =>
+                  when Sequence_Kind                                            =>
                      DFS (Element (I).Sequence_Children, New_Path);
 
-                  when Variant_Kind =>
+                  when Variant_Kind                                             =>
                      declare
                         Children : constant Property_Maps.Map := Element (I).Variant_Children;
                         Options  : Discrete_String_Sets.Set;
@@ -617,19 +617,19 @@ package body Prunt.Config is
          for X in Flat_Schema.Iterate loop
             if not Has_Field (Get (Current_Properties, "Properties"), Key (X)) then
                case Element (X).Kind is
-                  when Boolean_Kind =>
+                  when Boolean_Kind                 =>
                      Set_Field (Get (Current_Properties, "Properties"), Key (X), Element (X).Boolean_Default);
 
-                  when Discrete_Kind =>
+                  when Discrete_Kind                =>
                      Set_Field (Get (Current_Properties, "Properties"), Key (X), Element (X).Discrete_Default);
 
-                  when Integer_Kind =>
+                  when Integer_Kind                 =>
                      Set_Field (Get (Current_Properties, "Properties"), Key (X), Create (Element (X).Integer_Default));
 
-                  when Float_Kind =>
+                  when Float_Kind                   =>
                      Set_Field_Long_Float (Get (Current_Properties, "Properties"), Key (X), Element (X).Float_Default);
 
-                  when Float_Ratio_Kind =>
+                  when Float_Ratio_Kind             =>
                      if Key (X) (Key (X)'Last - String'("$Numerator")'Length + 1 .. Key (X)'Last) = "$Numerator" then
                         Set_Field_Long_Float
                           (Get (Current_Properties, "Properties"), Key (X), Element (X).Float_Ratio_Default_Numerator);
@@ -772,13 +772,6 @@ package body Prunt.Config is
          Data := Initial_Config.G_Code_Assignments;
       end Read;
 
-      procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name) is
-      begin
-         Maybe_Do_Init;
-         Error_If_Initial_Config_Invalid;
-         Data := Initial_Config.Shapers (Axis);
-      end Read;
-
       pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
       --  TODO: This is obviously a GCC bug as the parameter is of the type in question, but it is difficult to isolate
       --  this bug.
@@ -807,12 +800,12 @@ package body Prunt.Config is
             end if;
 
             case Element (Flat_Schema, Name).Kind is
-               when Boolean_Kind =>
+               when Boolean_Kind                 =>
                   if Kind (Value) /= JSON_Boolean_Type then
                      Report (Name, "Element must be boolean.");
                   end if;
 
-               when Discrete_Kind =>
+               when Discrete_Kind                =>
                   if Kind (Value) /= JSON_String_Type then
                      Report (Name, "Element must be string.");
                   elsif not Discrete_String_Sets.Contains (Element (Flat_Schema, Name).Discrete_Options, Get (Value))
@@ -820,7 +813,7 @@ package body Prunt.Config is
                      Report (Name, "Element must be one of: " & Element (Flat_Schema, Name).Discrete_Options'Image);
                   end if;
 
-               when Integer_Kind =>
+               when Integer_Kind                 =>
                   if Kind (Value) = JSON_Float_Type then
                      Report (Name, "Element must be integer, floats are not allowed even if they are whole numbers.");
                   elsif Kind (Value) /= JSON_Int_Type then
@@ -834,7 +827,7 @@ package body Prunt.Config is
                         "Element must not be greater than " & Trim (Element (Flat_Schema, Name).Integer_Max'Image));
                   end if;
 
-               when Float_Kind =>
+               when Float_Kind                   =>
                   if Kind (Value) not in JSON_Float_Type | JSON_Int_Type then
                      Report (Name, "Element must be float or integer (automatically upcast).");
                   elsif My_Get_Long_Float (Value) < Element (Flat_Schema, Name).Float_Min then
@@ -846,7 +839,7 @@ package body Prunt.Config is
                         "Element must not be greater than " & Trim (Element (Flat_Schema, Name).Float_Max'Image));
                   end if;
 
-               when Float_Ratio_Kind =>
+               when Float_Ratio_Kind             =>
                   declare
                      function Get_Split_Point return Positive is
                      begin
@@ -1111,7 +1104,7 @@ package body Prunt.Config is
             Stepper_Enabled : Boolean;
          begin
             case Stepper_Hardware (S).Kind is
-               when Basic_Kind =>
+               when Basic_Kind        =>
                   Stepper_Enabled := Config.Steppers (S).Basic_Kind.Enabled;
 
                when TMC2240_UART_Kind =>
@@ -1129,7 +1122,7 @@ package body Prunt.Config is
                            & " but stepper is not enabled.");
                      end if;
 
-                  when Core_XY =>
+                  when Core_XY   =>
                      if Config.Kinematics.Kinematics_Kind.Core_XY (S) /= None then
                         Report
                           ("Steppers$" & S'Image & "$Enabled",
@@ -1144,7 +1137,7 @@ package body Prunt.Config is
 
       for S in Stepper_Name loop
          case Stepper_Hardware (S).Kind is
-            when Basic_Kind =>
+            when Basic_Kind        =>
                null;
 
             when TMC2240_UART_Kind =>
@@ -1249,7 +1242,7 @@ package body Prunt.Config is
 
       for F in Fan_Name loop
          case Fan_Hardware (F).Kind is
-            when Fixed_Switching_Kind =>
+            when Fixed_Switching_Kind            =>
                if Config.Fans (F).Fixed_Switching.PWM_Frequency > Fan_Hardware (F).Maximum_PWM_Frequency then
                   Report
                     ("Fans$" & F'Image & "$PWM frequency",
@@ -1383,7 +1376,7 @@ package body Prunt.Config is
                         & " mm).");
                   end if;
 
-               when Use_StallGuard2 =>
+               when Use_StallGuard2  =>
                   Position := Config.Homing (A).Homing_Method.Use_StallGuard2.Move_To_After;
                   if Position < Lower_Limit or Position > Upper_Limit then
                      Report
@@ -1395,7 +1388,7 @@ package body Prunt.Config is
                         & " mm).");
                   end if;
 
-               when Use_StallGuard4 =>
+               when Use_StallGuard4  =>
                   Position := Config.Homing (A).Homing_Method.Use_StallGuard4.Move_To_After;
                   if Position < Lower_Limit or Position > Upper_Limit then
                      Report
@@ -1407,7 +1400,7 @@ package body Prunt.Config is
                         & " mm).");
                   end if;
 
-               when others =>
+               when others           =>
                   null;
             end case;
          end;
@@ -1431,7 +1424,7 @@ package body Prunt.Config is
                   Motor := Config.Homing (A).Homing_Method.Use_StallGuard4.Motor;
                   Do_Check := True;
 
-               when others =>
+               when others          =>
                   null;
             end case;
 
@@ -1449,7 +1442,7 @@ package body Prunt.Config is
                         end if;
                      end;
 
-                  when Core_XY =>
+                  when Core_XY   =>
                      declare
                         Motor_Axis : constant User_Config_Core_XY_Axis_Name :=
                           Config.Kinematics.Kinematics_Kind.Core_XY (Motor);
@@ -1592,7 +1585,7 @@ package body Prunt.Config is
             else raise Constraint_Error);
       begin
          case Distance_Config.Kind is
-            when Direct_Entry =>
+            when Direct_Entry                    =>
                declare
                   Direction_Multiplier : constant Dimensionless :=
                     (if Distance_Config.Direct_Entry.Reverse_Direction then -1.0 else 1.0);
@@ -1601,7 +1594,7 @@ package body Prunt.Config is
                   return Direction_Multiplier * Distance / Microsteps;
                end;
 
-            when Lead_Screw =>
+            when Lead_Screw                      =>
                declare
                   Direction_Multiplier : constant Dimensionless :=
                     (if Distance_Config.Lead_Screw.Reverse_Direction then -1.0 else 1.0);
@@ -1613,7 +1606,7 @@ package body Prunt.Config is
                   return Direction_Multiplier * Lead / (Full_Steps * Microsteps * Numerator / Denominator);
                end;
 
-            when Gear_With_Circumference =>
+            when Gear_With_Circumference         =>
                declare
                   Direction_Multiplier : constant Dimensionless :=
                     (if Distance_Config.Gear_With_Circumference.Reverse_Direction then -1.0 else 1.0);
@@ -1677,12 +1670,12 @@ package body Prunt.Config is
                   when Y_Axis =>
                      Config.Kinematics.Y_Steppers (S) := True;
 
-                  when None =>
+                  when None   =>
                      null;
                end case;
             end loop;
 
-         when Core_XY =>
+         when Core_XY   =>
             Config.Kinematics :=
               (Kind               => Core_XY_Kind,
                Planner_Parameters => <>,
@@ -1704,7 +1697,7 @@ package body Prunt.Config is
                   when B_Axis =>
                      Config.Kinematics.B_Steppers (S) := True;
 
-                  when None =>
+                  when None   =>
                      null;
                end case;
             end loop;
@@ -1743,7 +1736,7 @@ package body Prunt.Config is
 
       for S in Stepper_Name loop
          case Stepper_Hardware (S).Kind is
-            when Basic_Kind =>
+            when Basic_Kind        =>
                Config.Steppers (S) :=
                  (Kind        => Basic_Kind,
                   Enabled     => Data.Steppers (S).Basic_Kind.Enabled,
@@ -2013,7 +2006,7 @@ package body Prunt.Config is
 
       for A in Axis_Name loop
          case Data.Homing (A).Homing_Method.Kind is
-            when Disabled =>
+            when Disabled         =>
                Config.Homing (A) := (Kind => Disabled_Kind, Prerequisites => (others => <>));
 
             when Use_Input_Switch =>
@@ -2039,13 +2032,13 @@ package body Prunt.Config is
                   end if;
                end;
 
-            when Set_To_Value =>
+            when Set_To_Value     =>
                Config.Homing (A) :=
                  (Kind          => Set_To_Value_Kind,
                   Value         => Data.Homing (A).Homing_Method.Set_To_Value.Position,
                   Prerequisites => (others => <>));
 
-            when Use_StallGuard2 =>
+            when Use_StallGuard2  =>
                declare
                   Homing_Data : constant User_Config_Homing_Use_StallGuard2 :=
                     Data.Homing (A).Homing_Method.Use_StallGuard2;
@@ -2063,7 +2056,7 @@ package body Prunt.Config is
                      Prerequisites      => (others => <>));
                end;
 
-            when Use_StallGuard4 =>
+            when Use_StallGuard4  =>
                declare
                   Homing_Data : constant User_Config_Homing_Use_StallGuard4 :=
                     Data.Homing (A).Homing_Method.Use_StallGuard4;
@@ -2084,10 +2077,10 @@ package body Prunt.Config is
 
          for B in Axis_Name loop
             case Data.Homing (A).Prerequisites (B).Kind is
-               when No_Requirement =>
+               when No_Requirement      =>
                   Config.Homing (A).Prerequisites (B) := (Kind => No_Requirement_Kind);
 
-               when Must_Be_Homed =>
+               when Must_Be_Homed       =>
                   Config.Homing (A).Prerequisites (B) := (Kind => Must_Be_Homed_Kind);
 
                when Must_Be_At_Position =>
@@ -2100,10 +2093,10 @@ package body Prunt.Config is
 
       for T in Thermistor_Name loop
          case Data.Thermistors (T).Thermistor_Kind.Kind is
-            when Disabled =>
+            when Disabled                         =>
                Config.Thermistors (T) := (Kind => Disabled_Kind, Minimum_Temperature => <>, Maximum_Temperature => <>);
 
-            when Custom_Steinhart_Hart_Model =>
+            when Custom_Steinhart_Hart_Model      =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => Data.Thermistors (T).Thermistor_Kind.Custom_Steinhart_Hart_Model.A,
@@ -2121,7 +2114,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when ATC_Semitec_104GT_2 =>
+            when ATC_Semitec_104GT_2              =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 8.0965E-4,
@@ -2130,7 +2123,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when ATC_Semitec_104NT_4_R025H42G =>
+            when ATC_Semitec_104NT_4_R025H42G     =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 7.9582E-4,
@@ -2139,7 +2132,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when EPCOS_100K_B57560G104F =>
+            when EPCOS_100K_B57560G104F           =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 7.2213E-4,
@@ -2148,7 +2141,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when Generic_3950 =>
+            when Generic_3950                     =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 7.9347E-4,
@@ -2157,7 +2150,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when SliceEngineering_450 =>
+            when SliceEngineering_450             =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 3.0553E-4,
@@ -2166,7 +2159,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when TDK_NTCG104LH104JT1 =>
+            when TDK_NTCG104LH104JT1              =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 9.7639E-4,
@@ -2175,7 +2168,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when Honeywell_100K_135_104LAG_J01 =>
+            when Honeywell_100K_135_104LAG_J01    =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 4.5695E-4,
@@ -2184,7 +2177,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when NTC_100K_MGB18_104F39050L32 =>
+            when NTC_100K_MGB18_104F39050L32      =>
                Config.Thermistors (T) :=
                  (Kind                => Steinhart_Hart_Kind,
                   SH_A                => 5.4598E-4,
@@ -2193,7 +2186,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when PT_1000_PT_385 =>
+            when PT_1000_PT_385                   =>
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
                   CVD_R0              => 1_000.0 * ohm,
@@ -2202,7 +2195,7 @@ package body Prunt.Config is
                   Minimum_Temperature => <>,
                   Maximum_Temperature => <>);
 
-            when PT_1000_PT_392 =>
+            when PT_1000_PT_392                   =>
                Config.Thermistors (T) :=
                  (Kind                => Callendar_Van_Dusen_Kind,
                   CVD_R0              => 1_000.0 * ohm,
@@ -2218,7 +2211,7 @@ package body Prunt.Config is
 
       for H in Heater_Name loop
          case Data.Heaters (H).Control_Method.Kind is
-            when Disabled =>
+            when Disabled  =>
                Config.Heaters (H).Params :=
                  (Kind                       => Disabled_Kind,
                   Check_Max_Cumulative_Error => <>,
@@ -2226,7 +2219,7 @@ package body Prunt.Config is
                   Check_Minimum_Gain         => <>,
                   Check_Hysteresis           => <>);
 
-            when PID =>
+            when PID       =>
                Config.Heaters (H).Params :=
                  (Kind                       => PID_Kind,
                   Proportional_Scale         => Data.Heaters (H).Control_Method.PID.Proportional_Scale,
@@ -2256,9 +2249,9 @@ package body Prunt.Config is
 
       for F in Fan_Name loop
          case Fan_Hardware (F).Kind is
-            when Fixed_Switching_Kind =>
+            when Fixed_Switching_Kind            =>
                case Data.Fans (F).Fixed_Switching.Control_Method.Kind is
-                  when Always_On =>
+                  when Always_On          =>
                      Config.Fans (F) :=
                        (Kind                    => Always_On_Kind,
                         Invert_Output           => Data.Fans (F).Fixed_Switching.Invert_PWM_Output,
@@ -2280,7 +2273,7 @@ package body Prunt.Config is
 
             when Low_Or_High_Side_Switching_Kind =>
                case Data.Fans (F).Low_Or_High_Side_Switching.Control_Method.Kind is
-                  when Always_On =>
+                  when Always_On          =>
                      Config.Fans (F) :=
                        (Kind                    => Always_On_Kind,
                         Invert_Output           => Data.Fans (F).Low_Or_High_Side_Switching.Invert_PWM_Output,

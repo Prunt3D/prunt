@@ -328,7 +328,7 @@ package body Prunt.Controller.Gcode_Handler is
                when My_Config.Disabled_Kind | My_Config.Double_Tap_Kind | My_Config.Set_To_Value_Kind =>
                   raise Constraint_Error;
 
-               when My_Config.StallGuard2_Kind =>
+               when My_Config.StallGuard2_Kind                                                        =>
                   declare
                      --  TODO: When COOLCONF support is added we need to avoid clobbering the register here.
                      Message : TMC_Types.TMC2240.UART_Data_Message :=
@@ -376,7 +376,7 @@ package body Prunt.Controller.Gcode_Handler is
                      end;
                   end if;
 
-               when My_Config.StallGuard4_Kind =>
+               when My_Config.StallGuard4_Kind                                                        =>
                   declare
                      Message : TMC_Types.TMC2240.UART_Data_Message :=
                        (Bytes_Mode => False,
@@ -550,14 +550,14 @@ package body Prunt.Controller.Gcode_Handler is
       procedure Run_Command (Command : My_Gcode_Parser.Command) is
       begin
          case Command.Kind is
-            when None_Kind =>
+            when None_Kind                      =>
                null;
 
-            when Pause_Kind =>
+            when Pause_Kind                     =>
                My_Planner.Enqueue
                  ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (Pause_After => True, others => <>)));
 
-            when Move_Kind =>
+            when Move_Kind                      =>
                if Command.Feedrate <= 0.0 * mm / s then
                   raise Command_Constraint_Error with "Feedrate must be positive.";
                end if;
@@ -577,7 +577,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Corner_Extra_Data =>
                      (if Command.Is_Rapid then (Corner_Data with delta Lasers => (others => 0.0)) else Corner_Data)));
 
-            when Dwell_Kind =>
+            when Dwell_Kind                     =>
                if Command.Dwell_Time < 0.0 * s then
                   raise Command_Constraint_Error with "Negative dwell times are not allowed.";
                end if;
@@ -586,7 +586,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Dwell_After       => Command.Dwell_Time,
                    Corner_Extra_Data => Corner_Data));
 
-            when Home_Kind =>
+            when Home_Kind                      =>
                declare
                   Current_Pos : Position := COmmand.Pos_Before_Homing;
 
@@ -597,10 +597,10 @@ package body Prunt.Controller.Gcode_Handler is
                   begin
                      for B in Axis_Name loop
                         case Axial_Homing_Params (Axis).Prerequisites (B).Kind is
-                           when My_Config.No_Requirement_Kind =>
+                           when My_Config.No_Requirement_Kind      =>
                               null;
 
-                           when My_Config.Must_Be_Homed_Kind =>
+                           when My_Config.Must_Be_Homed_Kind       =>
                               if not Is_Homed (B) then
                                  Home_Axis (B);
                               end if;
@@ -625,10 +625,10 @@ package body Prunt.Controller.Gcode_Handler is
                      end loop;
 
                      case Axial_Homing_Params (Axis).Kind is
-                        when My_Config.Disabled_Kind =>
+                        when My_Config.Disabled_Kind                                 =>
                            raise Command_Constraint_Error with "Homing is not configured for axis " & Axis'Image & ".";
 
-                        when My_Config.Set_To_Value_Kind =>
+                        when My_Config.Set_To_Value_Kind                             =>
                            Current_Pos (Axis) := Axial_Homing_Params (Axis).Value;
                            My_Planner.Enqueue
                              ((Kind                 => My_Planner.Flush_And_Reset_Position_Kind,
@@ -636,7 +636,7 @@ package body Prunt.Controller.Gcode_Handler is
                                Flush_Resetting_Data => (others => <>)));
                            My_Gcode_Parser.Reset_Position (Parser_Context, Current_Pos);
 
-                        when My_Config.Double_Tap_Kind =>
+                        when My_Config.Double_Tap_Kind                               =>
                            Double_Tap_Home_Axis (Axis, Current_Pos);
 
                         when My_Config.StallGuard2_Kind | My_Config.StallGuard4_Kind =>
@@ -658,10 +658,10 @@ package body Prunt.Controller.Gcode_Handler is
                      raise;
                end;
 
-            when Enable_Steppers_Kind =>
+            when Enable_Steppers_Kind           =>
                for S in Generic_Types.Stepper_Name loop
                   case Kinematics_Params.Kind is
-                     when My_Config.Core_XY_Kind =>
+                     when My_Config.Core_XY_Kind   =>
                         if (Command.Axes (X_Axis)
                             or Command.Axes (Y_Axis)
                             or Command.Axes = Axes_Set'(others => False))
@@ -694,10 +694,10 @@ package body Prunt.Controller.Gcode_Handler is
                   end if;
                end loop;
 
-            when Disable_Steppers_Kind =>
+            when Disable_Steppers_Kind          =>
                for S in Generic_Types.Stepper_Name loop
                   case Kinematics_Params.Kind is
-                     when My_Config.Core_XY_Kind =>
+                     when My_Config.Core_XY_Kind   =>
                         if (Command.Axes (X_Axis)
                             or Command.Axes (Y_Axis)
                             or Command.Axes = Axes_Set'(others => False))
@@ -736,7 +736,7 @@ package body Prunt.Controller.Gcode_Handler is
                   end if;
                end loop;
 
-            when Set_Hotend_Temperature_Kind =>
+            when Set_Hotend_Temperature_Kind    =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Hotend_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
                  ((Kind              => My_Planner.Dummy_Corner_Kind,
@@ -744,7 +744,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
-            when Wait_Hotend_Temperature_Kind =>
+            when Wait_Hotend_Temperature_Kind   =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Hotend_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
                  ((Kind              => My_Planner.Dummy_Corner_Kind,
@@ -757,7 +757,7 @@ package body Prunt.Controller.Gcode_Handler is
                       Wait_For_Heater_Name => G_Code_Assignment_Params.Hotend_Heater,
                       others               => <>)));
 
-            when Set_Bed_Temperature_Kind =>
+            when Set_Bed_Temperature_Kind       =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
                  ((Kind              => My_Planner.Dummy_Corner_Kind,
@@ -765,7 +765,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
-            when Wait_Bed_Temperature_Kind =>
+            when Wait_Bed_Temperature_Kind      =>
                Corner_Data.Heaters (G_Code_Assignment_Params.Bed_Heater) := Command.Target_Temperature;
                My_Planner.Enqueue
                  ((Kind              => My_Planner.Dummy_Corner_Kind,
@@ -778,7 +778,7 @@ package body Prunt.Controller.Gcode_Handler is
                       Wait_For_Heater_Name => G_Code_Assignment_Params.Bed_Heater,
                       others               => <>)));
 
-            when Set_Fan_Speed_Kind =>
+            when Set_Fan_Speed_Kind             =>
                if Fanwise_Fan_Params (Command.Fan_To_Set).Kind /= My_Config.Dynamic_PWM_Kind then
                   raise Command_Constraint_Error
                     with "Fan " & Command.Fan_To_Set'Image & " is not set to dynamic PWM kind.";
@@ -802,7 +802,7 @@ package body Prunt.Controller.Gcode_Handler is
                    Corner_Extra_Data => (Corner_Data with delta Lasers => (others => 0.0))));
                My_Planner.Enqueue ((Kind => My_Planner.Flush_Kind, Flush_Resetting_Data => (others => <>)));
 
-            when TMC_Dump_Kind =>
+            when TMC_Dump_Kind                  =>
                for S in Generic_Types.Stepper_Name loop
                   if Stepper_Hardware (S).Kind = TMC2240_UART_Kind then
                      My_Logger.Log ("TMC dump for " & S'Image & ":");
@@ -830,7 +830,7 @@ package body Prunt.Controller.Gcode_Handler is
                   end if;
                end loop;
 
-            when Heater_Autotune_Kind =>
+            when Heater_Autotune_Kind           =>
                Autotune_Heater
                  (Command.Heater_To_Tune,
                   (Kind                       => PID_Autotune_Kind,
@@ -848,22 +848,21 @@ package body Prunt.Controller.Gcode_Handler is
                | Set_Snap_Max_Kind
                | Set_Crackle_Max_Kind
                | Set_Chord_Error_Max_Kind
-               | Set_Pressure_Advance_Time_Kind
-            =>
+               | Set_Pressure_Advance_Time_Kind =>
                case Command.Kind is
-                  when Set_Acceleration_Max_Kind =>
+                  when Set_Acceleration_Max_Kind      =>
                      Kinematics_Params.Planner_Parameters.Acceleration_Max := Command.Acceleration_Max;
 
-                  when Set_Jerk_Max_Kind =>
+                  when Set_Jerk_Max_Kind              =>
                      Kinematics_Params.Planner_Parameters.Jerk_Max := Command.Jerk_Max;
 
-                  when Set_Snap_Max_Kind =>
+                  when Set_Snap_Max_Kind              =>
                      Kinematics_Params.Planner_Parameters.Snap_Max := Command.Snap_Max;
 
-                  when Set_Crackle_Max_Kind =>
+                  when Set_Crackle_Max_Kind           =>
                      Kinematics_Params.Planner_Parameters.Crackle_Max := Command.Crackle_Max;
 
-                  when Set_Chord_Error_Max_Kind =>
+                  when Set_Chord_Error_Max_Kind       =>
                      Kinematics_Params.Planner_Parameters.Chord_Error_Max := Command.Chord_Error_Max;
 
                   when Set_Pressure_Advance_Time_Kind =>
@@ -877,7 +876,7 @@ package body Prunt.Controller.Gcode_Handler is
                           with "The pressure advance shaper is not enabled on the E axis.";
                      end if;
 
-                  when others =>
+                  when others                         =>
                      raise Constraint_Error with "Unreachable.";
                end case;
                My_Planner.Enqueue
@@ -885,7 +884,7 @@ package body Prunt.Controller.Gcode_Handler is
                    New_Params           => Kinematics_Params.Planner_Parameters,
                    Flush_Resetting_Data => (others => <>)));
 
-            when Set_Laser_Power_Kind =>
+            when Set_Laser_Power_Kind           =>
                pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
                --  This command can never be emitted if the machine does not have lasers, which is what triggers this
                --  warning.
@@ -922,7 +921,7 @@ package body Prunt.Controller.Gcode_Handler is
                            Corner_Data.Fans (F) := 0.0;
                         end if;
 
-                     when My_Config.Always_On_Kind =>
+                     when My_Config.Always_On_Kind   =>
                         if Fan_Params.Invert_Output then
                            Corner_Data.Fans (F) := 1.0 - Fan_Params.Always_On_PWM;
                         else
@@ -981,7 +980,7 @@ package body Prunt.Controller.Gcode_Handler is
                               Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
                            end if;
 
-                        when My_Config.Core_XY_Kind =>
+                        when My_Config.Core_XY_Kind   =>
                            if Kinematics_Params.A_Steppers (S) then
                               Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
                               Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;

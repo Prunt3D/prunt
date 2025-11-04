@@ -187,19 +187,19 @@ package body Prunt.Step_Generator.Generator is
                   Current_Command_Index := Current_Command_Index + 1;
 
                   case Pausing_State is
-                     when Running_Kind =>
+                     when Running_Kind  =>
                         if Do_Pause and then Homing_Move_When = Not_Pending_Kind then
                            Pausing_State := Pausing_Kind;
                         end if;
 
-                     when Pausing_Kind =>
+                     when Pausing_Kind  =>
                         if Pause_Slew = Pause_Slew_Index'Last then
                            Pausing_State := Paused_Kind;
                         else
                            Pause_Slew := @ + 1;
                         end if;
 
-                     when Paused_Kind =>
+                     when Paused_Kind   =>
                         Paused := True;
                         loop
                            select
@@ -280,7 +280,7 @@ package body Prunt.Step_Generator.Generator is
                         Previous_Position := Shaped_Pos;
 
                         case Homing_Move_When is
-                           when This_Block_Kind =>
+                           when This_Block_Kind  =>
                               if Is_Past_Accel_Part then
                                  Homing_Move_When := This_Move_Kind; --  Next loop iteration, not this one.
 
@@ -289,7 +289,7 @@ package body Prunt.Step_Generator.Generator is
                            when Not_Pending_Kind =>
                               null;
 
-                           when This_Move_Kind =>
+                           when This_Move_Kind   =>
                               Homing_Move_When := Not_Pending_Kind;
                         end case;
                      end;

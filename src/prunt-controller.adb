@@ -245,7 +245,7 @@ package body Prunt.Controller is
          loop
             for S in Stepper_Name loop
                case Stepper_Hardware (S).Kind is
-                  when Basic_Kind =>
+                  when Basic_Kind        =>
                      null;
 
                   when TMC2240_UART_Kind =>
@@ -491,7 +491,7 @@ package body Prunt.Controller is
                   Fan_Params : constant My_Config.Fan_Parameters := My_Config.Read (F);
                begin
                   case Fan_Hardware (F).Kind is
-                     when Fixed_Switching_Kind =>
+                     when Fixed_Switching_Kind            =>
                         Fan_Hardware (F).Reconfigure_Fixed_Switching_Fan (F, Fan_Params.PWM_Frequency);
 
                      when Low_Or_High_Side_Switching_Kind =>
@@ -672,7 +672,7 @@ package body Prunt.Controller is
                Message        : TMC_Types.TMC2240.UART_Data_Message;
             begin
                case Stepper_Hardware (S).Kind is
-                  when Basic_Kind =>
+                  when Basic_Kind        =>
                      null;
 
                   when TMC2240_UART_Kind =>
@@ -753,7 +753,7 @@ package body Prunt.Controller is
                Message        : TMC_Types.TMC2240.UART_Data_Message;
             begin
                case Stepper_Hardware (S).Kind is
-                  when Basic_Kind =>
+                  when Basic_Kind        =>
                      null;
 
                   when TMC2240_UART_Kind =>
@@ -891,7 +891,7 @@ package body Prunt.Controller is
 
    begin
       case Stepper_Hardware (Stepper).Kind is
-         when Basic_Kind =>
+         when Basic_Kind        =>
             null;
 
          when TMC2240_UART_Kind =>
@@ -1104,7 +1104,7 @@ package body Prunt.Controller is
                      Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
                   end if;
 
-               when My_Config.Core_XY_Kind =>
+               when My_Config.Core_XY_Kind   =>
                   if Kinematics_Params.A_Steppers (S) then
                      Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
                      Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
@@ -1167,7 +1167,7 @@ package body Prunt.Controller is
    procedure Enable_Stepper (Stepper : Stepper_Name) is
    begin
       case Stepper_Hardware (Stepper).Kind is
-         when Basic_Kind =>
+         when Basic_Kind        =>
             Stepper_Hardware (Stepper).Enable_Stepper (Stepper);
 
          when TMC2240_UART_Kind =>
@@ -1191,7 +1191,7 @@ package body Prunt.Controller is
    procedure Disable_Stepper (Stepper : Stepper_Name) is
    begin
       case Stepper_Hardware (Stepper).Kind is
-         when Basic_Kind =>
+         when Basic_Kind        =>
             Stepper_Hardware (Stepper).Disable_Stepper (Stepper);
 
          when TMC2240_UART_Kind =>

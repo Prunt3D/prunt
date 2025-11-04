@@ -26,8 +26,8 @@ private generic
 package Prunt.Motion_Planner.Planner.Preprocessor is
 
    procedure Setup (Initial_Parameters : Kinematic_Parameters);
-   --  Initialize the preprocessor with the initial kinematic parameters. This must be called before any other
-   --  operations and establishes the baseline motion limits for the planning system.
+   --  Initialise the preprocessor with the initial kinematic parameters. This must be called before any other
+   --  operations.
 
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
    --  Add a new command to the processing queue. Commands are processed in FIFO order. If `Ignore_Bounds` is True,
