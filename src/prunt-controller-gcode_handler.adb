@@ -893,7 +893,10 @@ package body Prunt.Controller.Gcode_Handler is
                --  Laser powers are not allowed to be buffered, so we do not flush here as we do with heaters and fans.
                pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
 
-            when Set_Chamber_Temperature_Kind | Wait_Chamber_Temperature_Kind =>
+            when Set_Chamber_Temperature_Kind
+               | Wait_Chamber_Temperature_Kind
+               | Single_Z_Probe_Kind
+               | Bed_Levelling_Kind             =>
                raise Constraint_Error with "Command not implemented.";
          end case;
       end Run_Command;
@@ -959,8 +962,8 @@ package body Prunt.Controller.Gcode_Handler is
                  Initial_Feedrate   => 100.0 * mm / s,
                  Replace_G0_With_G1 => Prunt_Params.Replace_G0_With_G1,
                  Default_Fan        => Get_Default_Fan,
-                 Default_Laser      => Get_Default_Laser);
-
+                 Default_Laser      => Get_Default_Laser,
+                 Probe_Offset       => Zero_Pos_Offset);
             declare
                Map : My_Planner.Stepper_Pos_Map := [others => [others => Length'Last]];
             begin

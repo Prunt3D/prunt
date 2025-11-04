@@ -34,7 +34,8 @@ package body Prunt.Gcode_Parser is
       Initial_Feedrate   : Velocity;
       Replace_G0_With_G1 : Boolean;
       Default_Fan        : Optional_Fan;
-      Default_Laser      : Optional_Laser) return Context is
+      Default_Laser      : Optional_Laser;
+      Probe_Offset       : Position_Offset) return Context is
    begin
       return
         (XYZ_Relative_Mode         => False,
@@ -50,7 +51,8 @@ package body Prunt.Gcode_Parser is
          M208_Feedrate             => 0.0 * mm / s,
          Replace_G0_With_G1        => Replace_G0_With_G1,
          Default_Fan               => Default_Fan,
-         Default_Laser             => Default_Laser);
+         Default_Laser             => Default_Laser,
+         Probe_Offset              => Probe_Offset);
    end Make_Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : not null access procedure (Comm : Command)) is
@@ -424,6 +426,24 @@ package body Prunt.Gcode_Parser is
              Pos_Before_Homing => Ctx.Pos));
       end if;
    end G28_Auto_Home;
+
+   procedure G29_Bed_Levelling
+     (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
+   begin
+      Runner ((Kind => Bed_Levelling_Kind));
+   end G29_Bed_Levelling;
+
+   procedure G30_Single_Z_Probe
+     (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is
+   begin
+      Runner
+        ((Kind           => Single_Z_Probe_Kind,
+          Probe_Position =>
+            (E_Axis => Ctx.Pos (E_Axis),
+             Z_Axis => Ctx.Pos (Z_Axis),
+             X_Axis => Consume_Float_Or_Default (Args, 'X', Ctx.Pos (X_Axis) / mm) * mm - Ctx.Probe_Offset (X_Axis),
+             Y_Axis => Consume_Float_Or_Default (Args, 'Y', Ctx.Pos (Y_Axis) / mm) * mm - Ctx.Probe_Offset (Y_Axis))));
+   end G30_Single_Z_Probe;
 
    procedure G90_Absolute_Positioning
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command)) is

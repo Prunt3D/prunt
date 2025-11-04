@@ -77,13 +77,15 @@ package Prunt.Gcode_Parser is
       Set_Crackle_Max_Kind,
       Set_Chord_Error_Max_Kind,
       Set_Pressure_Advance_Time_Kind,
-      Set_Laser_Power_Kind);
+      Set_Laser_Power_Kind,
+      Single_Z_Probe_Kind,
+      Bed_Levelling_Kind);
 
    type Axes_Set is array (Axis_Name) of Boolean;
 
    type Command (Kind : Command_Kind := None_Kind) is record
       case Kind is
-         when None_Kind | Pause_Kind | TMC_Dump_Kind =>
+         when None_Kind | Pause_Kind | TMC_Dump_Kind | Bed_Levelling_Kind =>
             null;
 
          when Move_Kind =>
@@ -143,6 +145,11 @@ package Prunt.Gcode_Parser is
          when Set_Laser_Power_Kind =>
             Laser_To_Set : Laser_Name;
             Laser_Power  : PWM_Scale;
+
+         when Single_Z_Probe_Kind =>
+            --  Toolhead position to probe at, not probe position. May be outside of allowed volume, in which case an
+            --  error should be emitted.
+            Probe_Position : Position;
       end case;
    end record;
 
@@ -153,7 +160,8 @@ package Prunt.Gcode_Parser is
       Initial_Feedrate   : Velocity;
       Replace_G0_With_G1 : Boolean;
       Default_Fan        : Optional_Fan;
-      Default_Laser      : Optional_Laser) return Context;
+      Default_Laser      : Optional_Laser;
+      Probe_Offset       : Position_Offset) return Context;
 
    procedure Parse_Line (Ctx : in out Context; Line : String; Runner : not null access procedure (Comm : Command));
    --  `Runner` must not call `Parse_Line` with the same context as the context is not updated until after `Runner`
@@ -182,6 +190,7 @@ private
       Replace_G0_With_G1        : Boolean;
       Default_Fan               : Optional_Fan;
       Default_Laser             : Optional_Laser;
+      Probe_Offset              : Position_Offset;
    end record;
 
    procedure G0_Rapid_Linear_Move
@@ -275,6 +284,25 @@ private
    --  - [Y] (None): If included then the Y axis will be homed.
    --  - [Z] (None): If included then the Z axis will be homed.
    --  - [E] (None): If included then the E axis will be homed.
+
+   procedure G29_Bed_Levelling
+     (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command));
+   --  Perform bed levelling. All configuration is performed via the GUI.
+   --
+   --  No parameters.
+
+   procedure G30_Single_Z_Probe
+     (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command));
+   --  Perform a single Z probe at the specified position and log the result. Position parameters here are different
+   --  to those that you may provide to a G0/G1 command as they specify the probe position, not the toolhead position.
+   --
+   --  The probe move will not include a Z lift.
+   --
+   --  The `CE` parameters are not present in Prunt. These parameters are present in Marlin.
+   --
+   --  Parameters:
+   --  - [X] (Real): If included then move the probe to the specified X position before probing.
+   --  - [Y] (Real): If included then move the probe to the specified Y position before probing.
 
    procedure G90_Absolute_Positioning
      (Ctx : in out Context; Args : in out Arguments; Runner : not null access procedure (Comm : Command));
