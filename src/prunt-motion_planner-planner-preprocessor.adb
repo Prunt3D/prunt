@@ -228,7 +228,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Params := Current_Params;
          Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
          Block.Block_Persistent_Data := Block_Persistent_Data;
-         Block.Disable_Input_Shaping := False;
+
+         if Is_Homing_Move (Flush_Resetting_Data) then
+            Block.Params.Axial_Shapers := (others => (Kind => Input_Shapers.No_Shaper));
+         end if;
 
          Reset_Called := False;
 

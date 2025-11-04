@@ -55,10 +55,6 @@ generic
    --  determine the position after a homing move as the loop move starts as soon as possible after the acceleration
    --  part.
 
-   with
-     function Get_Axial_Shaper_Parameters
-       (Data : Planner.Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
-
    with procedure Report_Loop_Move_Offset (Index : Command_Index; Distance_Delta : Position_Offset);
 
    Interpolation_Time : Time;

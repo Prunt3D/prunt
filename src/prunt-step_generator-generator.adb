@@ -23,6 +23,7 @@ with Ada.Numerics.Generic_Elementary_Functions;
 with System.Pool_Local;
 with Prunt.Input_Shapers.Shapers;
 use type Prunt.Input_Shapers.Cycle_Count;
+use type Prunt.Input_Shapers.Axial_Shaper_Parameters;
 
 package body Prunt.Step_Generator.Generator is
 
@@ -167,20 +168,17 @@ package body Prunt.Step_Generator.Generator is
                Homing_Move_When := This_Block_Kind;
 
                --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
-               Current_Shapers :=
-                 Input_Shapers.Shapers.Create
-                   ((others => (Kind => Input_Shapers.No_Shaper)), Interpolation_Time, Block_Start_Pos (Block));
-            elsif Is_Input_Shaping_Disabled (Block) then
-               Current_Shapers :=
-                 Input_Shapers.Shapers.Create
-                   ((others => (Kind => Input_Shapers.No_Shaper)), Interpolation_Time, Block_Start_Pos (Block));
-            else
-               Current_Shapers :=
-                 Input_Shapers.Shapers.Create
-                   (Get_Axial_Shaper_Parameters (Block_Persistent_Data (Block)),
-                    Interpolation_Time,
-                    Block_Start_Pos (Block));
+               pragma
+                 Assert
+                   (Planner.Block_Kinematic_Parameters (Block).Axial_Shapers
+                      = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper)));
             end if;
+
+            Current_Shapers :=
+              Input_Shapers.Shapers.Create
+                (Planner.Block_Kinematic_Parameters (Block).Axial_Shapers,
+                 Interpolation_Time,
+                 Block_Start_Pos (Block));
 
             Start_Planner_Block (Flush_Resetting_Data (Block), Block_Persistent_Data (Block), Current_Command_Index);
 

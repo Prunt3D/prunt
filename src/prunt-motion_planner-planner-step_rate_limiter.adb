@@ -21,6 +21,7 @@
 
 with Ada.Text_IO;
 with Prunt.Input_Shapers.Shapers;
+use type Prunt.Input_Shapers.Axial_Shaper_Parameters;
 
 package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
 
@@ -103,17 +104,15 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
             raise Constraint_Error with "Setup not done.";
          end if;
 
-         if Is_Homing_Move (Flush_Resetting_Data (Block)) or else Block.Disable_Input_Shaping then
+         if Is_Homing_Move (Flush_Resetting_Data (Block)) then
             --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
-            Current_Shapers :=
-              Input_Shapers.Shapers.Create
-                ((others => (Kind => Input_Shapers.No_Shaper)), Interpolation_Time, Block_Start_Pos (Block));
+            pragma
+              Assert
+                (Block.Params.Axial_Shapers
+                   = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper)));
          else
             Current_Shapers :=
-              Input_Shapers.Shapers.Create
-                (Get_Axial_Shaper_Parameters (Block_Persistent_Data (Block)),
-                 Interpolation_Time,
-                 Block_Start_Pos (Block));
+              Input_Shapers.Shapers.Create (Block.Params.Axial_Shapers, Interpolation_Time, Block_Start_Pos (Block));
          end if;
 
          for I in 2 .. Block.N_Corners loop
@@ -142,7 +141,10 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                      else
                         Check_Step (To_Stepper_Position (Shaped_Pos, Pos_Map), I);
                         --  Short-circuit if we're just going to disable shapers.
-                        exit when (not Block.Disable_Input_Shaping) and Maximum_Overspeed (I) > 1.0;
+                        exit when
+                          Block.Params.Axial_Shapers
+                          /= Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper))
+                          and Maximum_Overspeed (I) > 1.0;
                      end if;
                   end;
                end if;
@@ -167,14 +169,16 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
          for I in 2 .. Block.N_Corners loop
             if Maximum_Overspeed (I) > 1.0 then
                Needs_New_Profiles := True;
-               if Block.Disable_Input_Shaping then
+               if Block.Params.Axial_Shapers
+                 = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper))
+               then
                   Block.Limited_Segment_Feedrates (I) :=
                     Block.Limited_Segment_Feedrates (I) / (Maximum_Overspeed (I) * 1.1);
                   Log
                     ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by a "
                      & "high velocity limit combined with a high microstepping ratio.");
                else
-                  Block.Disable_Input_Shaping := True;
+                  Block.Params.Axial_Shapers := (others => (Kind => Input_Shapers.No_Shaper));
                   Log
                     ("All input shaping has been turned off for the next block of moves due to the step rate being "
                      & "too high. This can be caused by a high pressure advance value without smoothing.");

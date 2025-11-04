@@ -43,11 +43,6 @@ package body Prunt.Motion_Planner.Planner is
       Runner.Reset_Do_Not_Call_From_Other_Packages;
    end Reset;
 
-   function Is_Input_Shaping_Disabled (Block : Execution_Block) return Boolean is
-   begin
-      return Block.Disable_Input_Shaping;
-   end Is_Input_Shaping_Disabled;
-
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
    begin
       My_Preprocessor.Enqueue (Comm, Ignore_Bounds);
@@ -276,5 +271,10 @@ package body Prunt.Motion_Planner.Planner is
    begin
       return Block.Corners_Extra_Data (Corner);
    end Corner_Extra_Data;
+
+   function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters is
+   begin
+      return Block.Params;
+   end Block_Kinematic_Parameters;
 
 end Prunt.Motion_Planner.Planner;

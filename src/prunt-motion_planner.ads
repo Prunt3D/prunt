@@ -22,6 +22,8 @@
 --  This package provides the framework for the 5th-order (bounded crackle) motion planner implemented in the `Planner`
 --  child package. Functions to find motion profiles and to find points at given times are implemented in this package.
 
+with Prunt.Input_Shapers;
+
 package Prunt.Motion_Planner is
 
    type Kinematic_Parameters is record
@@ -49,6 +51,7 @@ package Prunt.Motion_Planner is
       Crackle_Max             : Crackle := 0.0 * mm / s**5;
       Chord_Error_Max         : Length := 0.0 * mm;
       Axial_Scaler            : Position_Scale := [others => 1.0];
+      Axial_Shapers           : Input_Shapers.Axial_Shaper_Parameters;
    end record;
 
    type Max_Corners_Type is range 2 .. 2**63 - 1;

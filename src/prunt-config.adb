@@ -1029,13 +1029,6 @@ package body Prunt.Config is
       return Data;
    end Read;
 
-   function Read (Axis : Axis_Name) return Shaper_Parameters is
-      Data : Shaper_Parameters;
-   begin
-      Config_File.Read (Data, Axis);
-      return Data;
-   end Read;
-
    pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
    --  TODO: This is obviously a GCC bug as the parameter is of the type in question, but it is difficult to isolate
    --  this bug.
@@ -1729,7 +1722,8 @@ package body Prunt.Config is
          Snap_Max                => Data.Kinematics.Maximum_Snap,
          Crackle_Max             => Data.Kinematics.Maximum_Crackle,
          Chord_Error_Max         => Data.Kinematics.Maximum_Chord_Error,
-         Axial_Scaler            => Data.Kinematics.Axial_Scaler);
+         Axial_Scaler            => Data.Kinematics.Axial_Scaler,
+         Axial_Shapers           => <>); --  Set later.
 
       Config.G_Code_Assignments :=
         (Has_Heaters => Has_Heaters, Has_Fans => Has_Fans, Has_Lasers => Has_Lasers, others => <>);
@@ -2315,19 +2309,19 @@ package body Prunt.Config is
 
       for A in Axis_Name loop
          case Data.Input_Shaping (A).Kind is
-            when No_Shaper =>
-               Config.Shapers (A) := (Kind => No_Shaper);
+            when No_Shaper        =>
+               Config.Kinematics.Planner_Parameters.Axial_Shapers (A) := (Kind => No_Shaper);
 
-            when ZV =>
-               Config.Shapers (A) :=
+            when ZV               =>
+               Config.Kinematics.Planner_Parameters.Axial_Shapers (A) :=
                  (Kind                         => Zero_Vibration,
                   Zero_Vibration_Frequency     => Data.Input_Shaping (A).ZV.Freq,
                   Zero_Vibration_Damping_Ratio => Shaper_Damping_Ratio (Data.Input_Shaping (A).ZV.Damping_Ratio),
                   Zero_Vibration_Deriviatives  =>
                     Zero_Vibration_Deriviatives_Count (Data.Input_Shaping (A).ZV.Number_Of_Derivatives));
 
-            when EI =>
-               Config.Shapers (A) :=
+            when EI               =>
+               Config.Kinematics.Planner_Parameters.Axial_Shapers (A) :=
                  (Kind                                 => Extra_Insensitive,
                   Extra_Insensitive_Frequency          => Data.Input_Shaping (A).EI.Freq,
                   Extra_Insensitive_Damping_Ratio      =>
@@ -2338,7 +2332,7 @@ package body Prunt.Config is
                     Extra_Insensitive_Humps_Count (Data.Input_Shaping (A).EI.Number_Of_Humps));
 
             when Pressure_Advance =>
-               Config.Shapers (A) :=
+               Config.Kinematics.Planner_Parameters.Axial_Shapers (A) :=
                  (Kind                                    => Pressure_Advance,
                   Pressure_Advance_Time                   =>
                     Data.Input_Shaping (A).Pressure_Advance.Pressure_Advance_Time,

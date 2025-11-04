@@ -97,7 +97,7 @@ package body Prunt.Controller.Gcode_Handler is
       Fanwise_Fan_Params       : array (Generic_Types.Fan_Name) of My_Config.Fan_Parameters;
 
       Persistent_Data : Block_Persistent_Data :=
-        (Shaper_Parameters => <>, Current_File => Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE>"));
+        (Current_File => Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE>"));
 
       G_Code_Assignment_Params : My_Config.G_Code_Assignment_Parameters;
 
@@ -282,7 +282,8 @@ package body Prunt.Controller.Gcode_Handler is
                 Snap_Max                => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E5 / s**2,
                 Crackle_Max             => Axial_Homing_Params (Axis).Acceleration_Limit * 1.0E9 / s**3,
                 Chord_Error_Max         => 0.0 * mm,
-                Axial_Scaler            => [others => 1.0]),
+                Axial_Scaler            => [others => 1.0],
+                Axial_Shapers           => (others => (Kind => Input_Shapers.No_Shaper))),
              Flush_Resetting_Data => (others => <>)),
             Ignore_Bounds => True);
 
@@ -866,8 +867,10 @@ package body Prunt.Controller.Gcode_Handler is
                      Kinematics_Params.Planner_Parameters.Chord_Error_Max := Command.Chord_Error_Max;
 
                   when Set_Pressure_Advance_Time_Kind =>
-                     if Persistent_Data.Shaper_Parameters (E_Axis).Kind = Input_Shapers.Pressure_Advance then
-                        Persistent_Data.Shaper_Parameters (E_Axis).Pressure_Advance_Time :=
+                     if Kinematics_Params.Planner_Parameters.Axial_Shapers (E_Axis).Kind
+                       = Input_Shapers.Pressure_Advance
+                     then
+                        Kinematics_Params.Planner_Parameters.Axial_Shapers (E_Axis).Pressure_Advance_Time :=
                           Command.Pressure_Advance_Time;
                      else
                         raise Command_Constraint_Error
@@ -937,9 +940,6 @@ package body Prunt.Controller.Gcode_Handler is
             Prunt_Params := My_Config.Read;
             Kinematics_Params := My_Config.Read;
             G_Code_Assignment_Params := My_Config.Read;
-            for A in Axis_Name loop
-               Persistent_Data.Shaper_Parameters (A) := My_Config.Read (A);
-            end loop;
 
             for I in Generic_Types.Input_Switch_Name loop
                Switchwise_Switch_Params (I) := My_Config.Read (I);

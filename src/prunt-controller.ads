@@ -217,8 +217,7 @@ private
    end record;
 
    type Block_Persistent_Data is record
-      Shaper_Parameters : Input_Shapers.Axial_Shaper_Parameters := (others => (Kind => Input_Shapers.No_Shaper));
-      Current_File      : Ada.Strings.Unbounded.Unbounded_String;
+      Current_File : Ada.Strings.Unbounded.Unbounded_String;
    end record;
 
    type Modulate_Lasers_Map is array (Laser_Name) of Boolean;
@@ -239,8 +238,6 @@ private
    package My_Logger is new Logger;
    pragma Warnings (On, "cannot call * before body seen");
 
-   function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters;
-
    Maximum_Stepper_Delta : constant Stepper_Position :=
      (for S in Stepper_Name => Stepper_Hardware (S).Maximum_Delta_Per_Command);
 
@@ -259,7 +256,6 @@ private
         Stepper_Name                  => Stepper_Name,
         Stepper_Position              => Stepper_Position,
         Maximum_Stepper_Delta         => Maximum_Stepper_Delta,
-        Get_Axial_Shaper_Parameters   => Get_Axial_Shaper_Parameters,
         Log                           => Log,
         Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
 
@@ -285,17 +281,16 @@ private
 
    package My_Step_Generator is new
      Step_Generator.Generator
-       (Planner                     => My_Planner,
-        Stepper_Name                => Stepper_Name,
-        Stepper_Position            => Stepper_Position,
-        Start_Planner_Block         => Start_Planner_Block,
-        Enqueue_Command             => Enqueue_Command_Internal,
-        Finish_Planner_Block        => Finish_Planner_Block,
-        Get_Axial_Shaper_Parameters => Get_Axial_Shaper_Parameters,
-        Report_Loop_Move_Offset     => Report_Loop_Move_Offset,
-        Interpolation_Time          => Interpolation_Time,
-        Loop_Interpolation_Time     => Loop_Interpolation_Time,
-        Runner_CPU                  => Command_Line_Arguments.Step_Generator_CPU);
+       (Planner                 => My_Planner,
+        Stepper_Name            => Stepper_Name,
+        Stepper_Position        => Stepper_Position,
+        Start_Planner_Block     => Start_Planner_Block,
+        Enqueue_Command         => Enqueue_Command_Internal,
+        Finish_Planner_Block    => Finish_Planner_Block,
+        Report_Loop_Move_Offset => Report_Loop_Move_Offset,
+        Interpolation_Time      => Interpolation_Time,
+        Loop_Interpolation_Time => Loop_Interpolation_Time,
+        Runner_CPU              => Command_Line_Arguments.Step_Generator_CPU);
 
    package My_Config is new
      Config

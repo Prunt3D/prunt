@@ -286,7 +286,6 @@ package Prunt.Config is
        Read'Result.Has_Heaters = (Heater_Name'Pos (Heater_Name'Last) >= Heater_Name'Pos (Heater_Name'First))
        and Read'Result.Has_Fans = (Fan_Name'Pos (Fan_Name'Last) >= Fan_Name'Pos (Fan_Name'First))
        and Read'Result.Has_Lasers = (Laser_Name'Pos (Laser_Name'Last) >= Laser_Name'Pos (Laser_Name'First));
-   function Read (Axis : Axis_Name) return Shaper_Parameters;
    function Read (Laser : Laser_Name) return Laser_Parameters;
    function Read return Bed_Levelling_Parameters;
    --  The above functions read the initial configuration values, not configurations values that have been changed
@@ -484,8 +483,6 @@ private
 
    type Fan_Parameters_Array is array (Fan_Name) of Fan_Parameters;
 
-   type Shaper_Parameters_Array is array (Axis_Name) of Shaper_Parameters;
-
    type Laser_Parameters_Array is array (Laser_Name) of Laser_Parameters;
 
    type Full_Config is record
@@ -498,7 +495,6 @@ private
       Thermistors        : Thermistor_Parameters_Array;
       Heaters            : Heater_Full_Parameters_Array;
       Fans               : Fan_Parameters_Array;
-      Shapers            : Shaper_Parameters_Array;
       Lasers             : Laser_Parameters_Array;
       Bed_Levelling      : Bed_Levelling_Parameters;
    end record;
@@ -522,7 +518,6 @@ private
       with Post => Data.Params.Kind not in PID_Autotune_Kind;
       procedure Read (Data : out Fan_Parameters; Fan : Fan_Name);
       procedure Read (Data : out G_Code_Assignment_Parameters);
-      procedure Read (Data : out Shaper_Parameters; Axis : Axis_Name);
       procedure Read (Data : out Laser_Parameters; Laser : Laser_Name);
       procedure Read (Data : out Bed_Levelling_Parameters);
       procedure Patch

@@ -1134,11 +1134,6 @@ package body Prunt.Controller is
       My_Logger.Log (Message);
    end Log;
 
-   function Get_Axial_Shaper_Parameters (Data : Block_Persistent_Data) return Input_Shapers.Axial_Shaper_Parameters is
-   begin
-      return Data.Shaper_Parameters;
-   end Get_Axial_Shaper_Parameters;
-
    protected body Reload_Signal is
       entry Wait when Reload_Requested is
       begin

@@ -77,8 +77,7 @@ generic
    --  Default value for the resetting data included in each block if no value is specified.
 
    type Block_Persistent_Data_Type is private;
-   --  Data to be included in each `Execution_Block` which is not reset between blocks. Can be used for holding shaper
-   --  parameters or the name of the currently executing file.
+   --  Data to be included in each `Execution_Block` which is not reset between blocks.
    --
    --  TODO: This should be passed around everywhere when a block finishes like Flush_Resetting_Data_Type is.
 
@@ -109,12 +108,6 @@ generic
    Maximum_Stepper_Delta : Stepper_Position;
    --  The maximum change in position for each axis within a single interpolation period. Step generation will be
    --  simulated and any moves that result in these limits being exceeded will be slowed down.
-
-   with
-     function Get_Axial_Shaper_Parameters
-       (Data : Block_Persistent_Data_Type) return Input_Shapers.Axial_Shaper_Parameters;
-   --  Retrieve the shaper parameters for a given block. These are used during step rate limiting as shapers can change
-   --  the number of steps within an interpolation period.
 
    with procedure Log (Message : String);
    --  Used to warn the user if the step rate is limited.
@@ -243,8 +236,7 @@ package Prunt.Motion_Planner.Planner is
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
    --  Send a new command to the planner queue. May be called before Setup, but will block once the queue if full.
 
-   function Is_Input_Shaping_Disabled (Block : Execution_Block) return Boolean;
-   --  Returns True if input shaping should be forced off for this block.
+   function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters;
 
    procedure Reset;
 
