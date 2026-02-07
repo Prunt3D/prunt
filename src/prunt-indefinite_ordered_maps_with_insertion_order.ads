@@ -1,7 +1,29 @@
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
+
+pragma Extensions_Allowed (On);
+
+with Ada.Containers;
 with Ada.Iterator_Interfaces;
-private with Ada.Containers;
-private with Ada.Containers.Indefinite_Vectors;
+
 private with Ada.Containers.Indefinite_Ordered_Maps;
+private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Finalization;
 
 generic
@@ -41,14 +63,21 @@ is
 
    function Element (Position : Cursor) return Element_Type;
 
-   type Constant_Reference_Type (Element : not null access constant Element_Type) is private
+   type Constant_Reference_Type (Element : not null access constant Element_Type) is limited private
    with Implicit_Dereference => Element;
+   --  This is a limited type for compatibility with GCC 16, which will implement AI22-0082.
 
-   type Reference_Type (Element : not null access Element_Type) is private with Implicit_Dereference => Element;
+   type Reference_Type (Element : not null access Element_Type) is limited private
+   with Implicit_Dereference => Element;
+   --  This is a limited type for compatibility with GCC 16, which will implement AI22-0082.
 
    function Constant_Reference (Container : aliased Map; Key : Key_Type) return Constant_Reference_Type;
 
    function Reference (Container : aliased in out Map; Key : Key_Type) return Reference_Type;
+
+   function Constant_Reference (Container : aliased Map; Position : Cursor) return Constant_Reference_Type;
+
+   function Reference (Container : aliased in out Map; Position : Cursor) return Reference_Type;
 
    procedure Insert (Container : in out Map; Key : Key_Type; New_Item : Element_Type);
 
@@ -82,7 +111,20 @@ is
 
    function Iterate (Container : Map; Start : Cursor) return Map_Iterator_Interfaces.Reversible_Iterator'Class;
 
-   function "+" (Left, Right : Map) return Map;
+   function Length (Container : Map) return Ada.Containers.Count_Type;
+
+   procedure Delete (Container : in out Map; Key : Key_Type);
+
+   procedure Include (Container : in out Map; Key : Key_Type; New_Item : Element_Type);
+
+   procedure Exclude (Container : in out Map; Key : Key_Type);
+
+   function Is_Empty (Container : Map) return Boolean;
+
+   procedure Reverse_Clear (Container : in out Map);
+   --  Delete all elements starting with the most recently inserted.
+
+   function "&" (Left, Right : Map) return Map;
 
 private
 

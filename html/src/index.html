@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="ui.app.title">Prunt User Interface</title>
+    <!-- Main Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">Prunt</div>
+        <div class="global-controls">
+            <button id="btn-pause" class="btn btn-warning" data-i18n="ui.global.pause">Pause</button>
+            <button id="btn-resume" class="btn btn-success" data-i18n="ui.global.resume">Resume</button>
+            <span id="connection-status" class="status-indicator disconnected" data-i18n="ui.connection.disconnected">Disconnected</span>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <nav class="sidebar">
+            <ul class="nav-links">
+                <li class="nav-item active" data-target="status-view" data-i18n="ui.nav.status">Status Dashboard</li>
+                <li class="nav-item config-nav-item" data-target="config-view">
+                    <span data-i18n="ui.nav.config">Configuration</span>
+                    <span class="nav-error-icon" title="Configuration contains errors" data-i18n-title="ui.nav.configErrors"></span>
+                </li>
+                <li class="nav-item" data-target="control-view" data-i18n="ui.nav.control">Machine Control</li>
+                <li class="nav-item" data-target="gcode-entry-view" data-i18n="ui.nav.gcodeEntry">G-Code Entry</li>
+                <li class="nav-item" data-target="gcode-explorer-view" data-i18n="ui.nav.gcode">G-Code Explorer</li>
+            </ul>
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-title" data-i18n="ui.sidebar.theme">Theme</div>
+                <select id="theme-select" class="theme-select">
+                    <option value="auto" data-i18n="ui.theme.auto">System Auto</option>
+                    <option value="light" data-i18n="ui.theme.light">Light Mode</option>
+                    <option value="dark" data-i18n="ui.theme.dark">Dark Mode</option>
+                </select>
+            </div>
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-title" data-i18n="ui.sidebar.language">Language</div>
+                <select id="locale-select" class="theme-select"></select>
+            </div>
+        </nav>
+
+        <main class="content-area">
+            <section id="status-view" class="view active">
+                <div class="view-header">
+                    <h2 data-i18n="ui.status.title">Status Dashboard</h2>
+                    <div class="header-actions-sm">
+                        <button id="btn-reset-widgets" class="btn btn-secondary btn-sm" data-i18n="ui.status.resetDefaults">Reset Defaults</button>
+                        <button id="btn-add-header" class="btn btn-secondary btn-sm" data-i18n="ui.status.addHeader">+ Add Header</button>
+                        <button id="btn-add-widget" class="btn btn-primary btn-sm" data-i18n="ui.status.addWidget">+ Add Widget</button>
+                    </div>
+                </div>
+                <div id="dashboard-grid" class="dashboard-grid">
+                    <!-- Dashboard widgets will be injected here -->
+                </div>
+            </section>
+
+            <section id="config-view" class="view">
+                <div class="view-header">
+                    <h2 data-i18n="ui.config.title">Configuration</h2>
+                    <div class="header-actions">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="config-group-toggle">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label" data-i18n="ui.config.groupByModule">Group by Module</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="config-dev-mode-toggle">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label" data-i18n="ui.config.devMode">Dev Mode</span>
+                        <button id="btn-save-config" class="btn btn-primary" data-i18n="ui.config.saveChanges">Save Changes</button>
+                    </div>
+                </div>
+                <!-- Schema errors holder -->
+                <div id="config-global-errors" class="global-errors"></div>
+                
+                <div class="config-view-container">
+                    <div id="config-form" class="config-form">
+                        <!-- Config fields will be injected here -->
+                    </div>
+                </div>
+            </section>
+
+            <section id="control-view" class="view">
+                <div class="view-header">
+                    <h2 data-i18n="ui.control.title">Machine Control & Files</h2>
+                </div>
+                
+                <div class="control-cards">
+                    <div class="card file-upload-card">
+                        <h3 data-i18n="ui.control.fileUpload">File Upload</h3>
+                        <div class="drop-zone" id="drop-zone">
+                            <p data-i18n="ui.control.dropZone">Drag & Drop G-Code file here or click to select</p>
+                            <input type="file" id="file-input" hidden>
+                        </div>
+                    </div>
+
+                    <div class="card files-card">
+                        <h3 data-i18n="ui.control.uploadedFiles">Uploaded Files</h3>
+                        <ul id="file-list" class="file-list">
+                            <!-- Files injected here -->
+                        </ul>
+                    </div>
+
+                    <div class="card system-card">
+                        <h3 data-i18n="ui.control.systemActions">System Actions</h3>
+                        <button id="btn-restart-server" class="btn btn-danger" data-i18n="ui.control.restartServer">Restart Server</button>
+                        <button id="btn-firmware-update" class="btn btn-secondary" data-i18n="ui.control.allowFirmwareUpdate">Allow Firmware Update</button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="gcode-entry-view" class="view">
+                <div class="view-header">
+                    <h2 data-i18n="ui.gcodeEntry.title">G-Code Entry</h2>
+                </div>
+
+                <div class="gcode-entry-layout">
+                    <div class="card gcode-entry-card">
+                        <div id="gcode-entry-history" class="gcode-entry-history" aria-live="polite"></div>
+                        <p id="gcode-entry-status" class="gcode-entry-status text-muted" data-i18n="ui.gcodeEntry.loading">
+                            Loading G-Code schema...
+                        </p>
+                        <div class="gcode-entry-input-shell">
+                            <div id="gcode-entry-popup" class="gcode-entry-popup" aria-live="polite"></div>
+                            <div class="command-input-group gcode-entry-input-group">
+                                <input
+                                    type="text"
+                                    id="gcode-entry-input"
+                                    placeholder="e.g. G28 X"
+                                    data-i18n-placeholder="ui.gcodeEntry.placeholder"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                                <button id="btn-send-gcode" class="btn btn-primary" data-i18n="ui.control.send">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="gcode-explorer-view" class="view">
+                <div class="view-header">
+                    <h2 data-i18n="ui.gcode.title">G-Code Explorer</h2>
+                    <div class="header-actions">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="gcode-group-toggle">
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label" data-i18n="ui.gcode.groupByModule">Group by Module</span>
+                    </div>
+                </div>
+                <div id="gcode-explorer-content" class="gcode-explorer-content">
+                    <!-- Content injected by TS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Add Widget Modal -->
+    <dialog id="add-widget-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="ui.status.addWidgetsTitle">Add Widgets</h3>
+                <button id="btn-close-modal" class="btn btn-sm btn-secondary">x</button>
+            </div>
+            <div id="widget-selection-list" class="widget-selection-list">
+                 <!-- Checkboxes injected here -->
+            </div>
+            <div class="modal-footer">
+                <button id="btn-apply-widgets" class="btn btn-primary" data-i18n="ui.status.applyWidgets">Apply</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Main Script -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>

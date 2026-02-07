@@ -1,68 +1,85 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
 --  This package provides a 5th-order (bounded crackle) motion planner with adjustable velocity, acceleration, jerk,
 --  snap, and crackle limits. Blending of corners is also provided to limit axial acceleration through crackle.
 --
 --  The package works by collecting a series of corners before processing them as a single batch, called an
---  `Execution_Block` which starts and ends at zero velocity. Corners are collected until a flush command is received
+--  Execution_Block which starts and ends at zero velocity. Corners are collected until a flush command is received
 --  or the block is full. Once a block is filled, it passes through a multi-stage planning pipeline, each of which is
 --  implemented in a child package of this one:
 --
---  1. Corner_Blender: Sharp corners are replaced with C⁴ continuous Pythagorean-Hodograph (PH) Bézier
---     curves. The maximal deviation of these curves from the original path is determined by the `Chord_Error_Max`
---     parameter. Corners may optionally be shifted so that the midpoint of the curve is equal to the original corner,
---     this can produce paths which more closely match original CAD files before conversion to triangulated surface
---     formats such as STL files.
+--  1. Preprocessor:
 --
---  2. Early_Kinematic_Limiter: The programmed feed-rate is adjusted if `Ignore_E_In_XYZE` is set so that it is equal
---     to the desired feedrate when the E axis movement is included. After this the total time of each move is adjusted
---     such that no move will be less than `Interpolation_Time`, This ensures that the step generator will not have to
---     skip over many segments in a row, which could cause the command queue to run dry.. Finally the axial limits
---     defined in `Axial_Velocity_Maxes` are applied.
+--     The preprocessor is responsible for taking the incoming commands and converting them in to a series of corners
+--     that can be used by the later stages.
 --
---  3. Kinematic_Limiter: A forward and backward pass are performed to generate corner velocities that confirm to the
---    specified kinematic limits. The forward pass starts from zero velocity and generates a series of time-optimal
---    profiles for each segment to find the maximum reachable corner velocity, these are also clamped based on the
---    curvature of the corner to maintain axial kinematic limits. The backward pass sets a velocity of zero on the
---    final corner and then goes back one corner at a time, limiting the corner velocities such that the next corner
---    can be reached without violating the kinematic limits.
+--  2. Corner_Blender:
 --
---  4. Feedrate_Profile_Generator: Using the corner velocities, an optimal velocity profile is generated for each
---     segment.
+--     Sharp corners are replaced with C4 continuous Pythagorean-Hodograph (PH) Bézier curves. The maximal deviation of
+--     these curves from the original path is determined by the Chord_Error_Max parameter. Corners may optionally be
+--     shifted so that the midpoint of the curve is equal to the original corner, this can produce paths which more
+--     closely match original CAD files before conversion to triangulated surface formats such as STL files.
 --
---  5. Homing move limits: If the move is a homing sequence, an inner loop first checks if the generated profile has a
---     sufficiently long constant-velocity (coast) phase, as defined by `Home_Move_Minimum_Coast_Time`. If the coast
---     time is too short, the segment's maximum velocity is reduced before going back to stage 3 (Kinematic_Limiter).
+--  3. Early_Kinematic_Limiter:
 --
---  6. Step_Rate_Limiter: The planner simulates the complete motion of the block, including input shaping. It
---     calculates the required steps for each motor at each interpolation interval. If any motor's maximum step rate is
---     exceeded, the planner reduces the velocity of the corresponding segment. If any segments are reduced then the
---     planner goes back to stage 3 (Kinematic_Limiter).
+--     The programmed feed-rate is adjusted if Ignore_E_In_XYZE is set so that it is equal to the desired feedrate
+--     when the E axis movement is included. After this the total time of each move is adjusted such that no move will
+--     be less than Interpolation_Time, This ensures that the step generator will not have to skip over many segments
+--     in a row, which could cause the command queue to run dry. Finally the axial limits defined in
+--     Axial_Velocity_Maxes are applied.
 --
---  The fully processed `Execution_Block` is then made available via the `Dequeue` procedure.
+--  4. Kinematic_Limiter:
+--
+--     A forward and backward pass are performed to generate corner velocities that conform to the specified kinematic
+--     limits. The forward pass starts from zero velocity and generates a series of time-optimal profiles for each
+--     segment to find the maximum reachable corner velocity. These are also clamped based on the curvature of the
+--     corner to maintain axial kinematic limits. The backward pass sets a velocity of zero on the final corner and
+--     then goes back one corner at a time, limiting the corner velocities such that the next corner can be reached
+--     without violating the kinematic limits.
+--
+--  5. Feedrate_Profile_Generator:
+--
+--     Using the corner velocities, an optimal velocity profile is generated for each segment.
+--
+--  6. Homing move limits:
+--
+--     If the move is a homing sequence, an inner loop first checks if the generated profile has a sufficiently long
+--     constant-velocity (coast) phase, as defined by Home_Move_Minimum_Coast_Time. If the coast time is too short,
+--     the segment's maximum velocity is reduced before going back to stage 4 (Kinematic_Limiter).
+--
+--  7. Step_Rate_Limiter:
+--
+--     The planner simulates the complete motion of the block, including input shaping. It calculates the required
+--     steps for each motor at each interpolation interval. If any motor's maximum step rate is exceeded, the planner
+--     reduces the velocity of the corresponding segment. If any segments are reduced then the planner goes back to
+--     stage 4 (Kinematic_Limiter).
+--
+--  The fully processed Execution_Block is then made available via the Dequeue procedure.
 
-with System.Multiprocessors;
+pragma Extensions_Allowed (On);
+
 with Ada.Containers;
-with Prunt.Input_Shapers;
+with System.Multiprocessors;
+with System.Storage_Elements;
+
+private with Prunt.Bounded_Indefinite_Vectors;
 private with Prunt.Motion_Planner.PH_Beziers;
 
 pragma Warnings (Off, "formal object * is not referenced");
@@ -70,47 +87,34 @@ pragma Warnings (Off, "formal object * is not referenced");
 
 generic
    type Flush_Resetting_Data_Type is private;
-   --  Data to be included in each `Execution_Block` which is reset to a default value at the start of each block. Can
+   --  Data to be included in each Execution_Block which is reset to a default value at the start of each block. Can
    --  be used to indicate if a move is a homing move or if the machine should pause after completion.
 
-   Flush_Resetting_Data_Default : Flush_Resetting_Data_Type;
-   --  Default value for the resetting data included in each block if no value is specified.
+   Flush_Resetting_Data_Type_Default : Flush_Resetting_Data_Type;
 
-   type Block_Persistent_Data_Type is private;
-   --  Data to be included in each `Execution_Block` which is not reset between blocks.
-   --
-   --  TODO: This should be passed around everywhere when a block finishes like Flush_Resetting_Data_Type is.
-
-   Block_Persistent_Data_Default : Block_Persistent_Data_Type;
-   --  Default value for persistent data to be included in the first block and all subsequent blocks until a new value
-   --  is provided.
-
-   type Corner_Extra_Data_Type is private;
+   type Corner_Extra_Data_Type (<>) is private;
    --  Data to be included with each corner such as heater targets or the current file line number.
 
    Home_Move_Minimum_Coast_Time : Time;
-   --  The minimum time that should be used for the coasting phase of a move where `Is_Homing_Move` returns True. This
+   --  The minimum time that should be used for the coasting phase of a move where Is_Homing_Move returns True. This
    --  can be used to have a section that can be repeated in a loop until a switch is hit.
-
-   with function Is_Homing_Move (Data : Flush_Resetting_Data_Type) return Boolean;
-   --  Indicates whether a move is a homing move for the purposes of applying `Home_Move_Minimum_Coast_Time`. Currently
-   --  a block containing a homing move must have exactly 2 corners, however this is trivial to change if required as
-   --  the planner does not do anything with homing moves beyond setting the minimum coast time.
 
    Interpolation_Time : Time;
    --  The length of each interpolation period to be used by the step rate checker. This also determines the minimum
    --  time of a segment.
 
-   type Stepper_Name is (<>);
+   type Motor_Name is (<>);
 
-   type Stepper_Position is array (Stepper_Name) of Dimensionless;
+   type Motor_Position is array (Motor_Name) of Dimensionless;
 
-   Maximum_Stepper_Delta : Stepper_Position;
+   Maximum_Motor_Delta : Motor_Position;
    --  The maximum change in position for each axis within a single interpolation period. Step generation will be
    --  simulated and any moves that result in these limits being exceeded will be slowed down.
 
-   with procedure Log (Message : String);
+   pragma Warnings (Off, "procedure ""Log"" is not referenced");
+   with procedure Log (Message : Virtual_String);
    --  Used to warn the user if the step rate is limited.
+   pragma Warnings (On, "procedure ""Log"" is not referenced");
 
    Runner_CPU : System.Multiprocessors.CPU_Range := System.Multiprocessors.Not_A_Specific_CPU;
    --  CPU to run all motion planning on.
@@ -120,7 +124,13 @@ generic
    --  of the planner. Memory is allocated for the maximum block size during initialisation, memory is not allocated
    --  per-block.
 
-   Max_Corners_Extra_Data : Max_Corners_Extra_Data_Type := 1_000;
+   Max_Corners_Extra_Data_Count : Max_Corners_Extra_Data_Type := 1_000;
+
+   Max_Corners_Extra_Data_Storage : System.Storage_Elements.Storage_Count := 1_000_000;
+   --  The maximum amount of data in storage elements that the vector of Corner_Extra_Data_Type for a block may use
+   --  for its backing storage. If a Corner_Extra_Data_Type does not fit in a corner then it will be forced to the
+   --  next block, along with the relevant corner. If a Corner_Extra_Data_Type does not fit in an empty block then an
+   --  error will be raised.
 
    Max_Corners_Extra_Data_Per_Corner : Max_Corners_Extra_Data_Type := 10;
 
@@ -142,53 +152,11 @@ generic
    Initial_Position : Position := [others => 0.0 * mm];
 package Prunt.Motion_Planner.Planner is
 
-   type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
+   type Motor_Pos_Map is array (Axis_Name, Motor_Name) of Length;
    --  Defines how each axis moves in response to a step from a given motor. This is used during step simulation.
 
-   type Command_Kind is
-     (Move_Kind,
-      Dummy_Corner_Kind,
-      Flush_Kind,
-      Flush_And_Reset_Position_Kind,
-      Flush_And_Change_Parameters_Kind,
-      Flush_And_Update_Persistent_Data_Kind);
-
-   type Command (Kind : Command_Kind := Move_Kind) is record
-      case Kind is
-         when Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
-            Flush_Resetting_Data : Flush_Resetting_Data_Type;
-            case Kind is
-               when Flush_And_Reset_Position_Kind =>
-                  Reset_Pos : Position;
-
-               when Flush_And_Change_Parameters_Kind =>
-                  New_Params : Kinematic_Parameters;
-
-               when others =>
-                  null;
-            end case;
-
-         when Move_Kind | Dummy_Corner_Kind =>
-            Corner_Extra_Data : Corner_Extra_Data_Type;
-            Dwell_After       : Time := 0.0 * s;
-            case Kind is
-               when Move_Kind =>
-                  Pos      : Position;
-                  Feedrate : Velocity;
-
-               when others =>
-                  null;
-            end case;
-
-         when Flush_And_Update_Persistent_Data_Kind =>
-            New_Persistent_Data : Block_Persistent_Data_Type;
-      end case;
-   end record;
-
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
-   type Corner_Extra_Data_Array_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data;
-
-   type Corner_Extra_Data_Array is array (Corner_Extra_Data_Array_Index range <>) of Corner_Extra_Data_Type;
+   subtype Finishing_Corners_Index is Corners_Index range 2 .. Corners_Index'Last;
 
    type Execution_Block (N_Corners : Corners_Index := 1) is private;
    --  N_Corners may be 1, in which case there are no segments.
@@ -203,16 +171,25 @@ package Prunt.Motion_Planner.Planner is
 
    function Segment_Pos_At_Time
      (Block              : Execution_Block;
-      Finishing_Corner   : Corners_Index;
+      Finishing_Corner   : Finishing_Corners_Index;
       Time_Into_Segment  : Time;
       Is_Past_Accel_Part : out Boolean) return Position
-   with Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and Time_Into_Segment >= 0.0 * s;
+   with
+     Pre =>
+       Finishing_Corner <= Block.N_Corners
+       and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
+       and then Time_Into_Segment >= 0.0 * s;
    --  Returns the position at a given time in to a segment. Is_Past_Accel_Part indicates if the given time is past the
    --  acceleration part of the segment.
 
    function Segment_Vel_Ratio_At_Time
-     (Block : Execution_Block; Finishing_Corner : Corners_Index; Time_Into_Segment : Time) return Dimensionless
-   with Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and Time_Into_Segment >= 0.0 * s;
+     (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time)
+      return Dimensionless
+   with
+     Pre =>
+       Finishing_Corner <= Block.N_Corners
+       and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
+       and then Time_Into_Segment >= 0.0 * s;
    --  Returns the velocity at the given time in to a segment divided by the target velocity for the given segment.
    --  Always returns 1.0 inside dwell parts.
 
@@ -224,23 +201,41 @@ package Prunt.Motion_Planner.Planner is
    --  Returns the start position of this block.
 
    function Flush_Resetting_Data (Block : Execution_Block) return Flush_Resetting_Data_Type;
-   --  Return the data passed to the Enqueue procedure, or Flush_Resetting_Data_Default if the block was filled before
-   --  receiving a flush command. This data resets for each block.
+   --  Return the data passed to the Enqueue procedure. This data resets for each block.
 
-   function Block_Persistent_Data (Block : Execution_Block) return Block_Persistent_Data_Type;
-   --  Return the latest data passed to the Enqueue procedure, or Block_Persistent_Data_Default if the no data has been
-   --  received. This data persists between blocks.
-
-   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
+   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
+   with Pre => Finishing_Corner <= Block.N_Corners;
    --  Returns the length of the acceleration part of a segment.
 
-   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array;
-   --  Returns the extra data for a corner. It is illegal to call this function with Corner = 1.
-
-   procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
-   --  Send a new command to the planner queue. May be called before Setup, but will block once the queue if full.
+   procedure Corner_Extra_Data
+     (Block   : Execution_Block;
+      Corner  : Corners_Index;
+      Process : access procedure (Data : in out Corner_Extra_Data_Type))
+   with Pre => Corner <= Block.N_Corners;
+   --  Allows the caller to process the extra data for a corner.
 
    function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters;
+   --  Returns the kinematic parameters used for the given block.
+
+   function Is_Homing_Move (Block : Execution_Block) return Boolean;
+   --  Returns True if the block contains a homing move a specified by the relevant flush command.
+
+   procedure Enqueue_Move
+     (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False);
+
+   procedure Enqueue_Corner_Extra_Data (Data : Corner_Extra_Data_Type);
+   --  This could be pushed to the next block if there is no space for the data.
+
+   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False);
+
+   procedure Enqueue_Flush_And_Reset_Position
+     (Data           : Flush_Resetting_Data_Type;
+      Pos            : Position;
+      Is_Homing_Move : Boolean := False;
+      Ignore_Bounds  : Boolean := False);
+
+   procedure Enqueue_Flush_And_Change_Kinematic_Parameters
+     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters; Is_Homing_Move : Boolean := False);
 
    procedure Reset;
 
@@ -255,7 +250,7 @@ package Prunt.Motion_Planner.Planner is
    task Runner
      with CPU => Runner_CPU, Storage_Size => 32 * 1024 * 1024 is
       --  Large Storage_Size to allow for large shapers in the step rate limiter.
-      entry Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map);
+      entry Setup (In_Params : Kinematic_Parameters; In_Map : Motor_Pos_Map);
       entry Reset_Do_Not_Call_From_Other_Packages;
       --  Call the Reset procedure rather than this entry to avoid blocking and reset the preprocessor.
       --  TODO: There must be some way to hide this while still exposing the task.
@@ -265,19 +260,58 @@ package Prunt.Motion_Planner.Planner is
 
 private
 
-   type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data;
-   type Corners_Extra_Data_End_Index is new Max_Corners_Extra_Data_Type'Base range 0 .. Max_Corners_Extra_Data;
-
    In_Step_Rate_Limiter : Boolean := False
    with Atomic, Volatile;
+
+   type Command_Kind is
+     (Move_Kind, Corner_Extra_Data_Kind, Flush_Kind, Flush_And_Reset_Position_Kind, Flush_And_Change_Parameters_Kind);
+
+   type Command (Kind : Command_Kind := Move_Kind) is record
+      case Kind is
+         when Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
+            Flush_Resetting_Data : Flush_Resetting_Data_Type;
+            Is_Homing_Move       : Boolean := False;
+            --  Indicates whether a move is a homing move for the purposes of applying Home_Move_Minimum_Coast_Time.
+            --  Currently a block containing a homing move must have exactly 2 corners, however this is trivial to
+            --  change if required as the planner does not do anything with homing moves beyond setting the minimum
+            --  coast time.
+            case Kind is
+               when Flush_And_Reset_Position_Kind =>
+                  Reset_Pos : Position;
+
+               when Flush_And_Change_Parameters_Kind =>
+                  New_Params : Kinematic_Parameters;
+
+               when others =>
+                  null;
+            end case;
+
+         when Move_Kind =>
+            Dwell_After : Time := 0.0 * s;
+            Pos         : Position;
+            Feedrate    : Velocity;
+
+         when Corner_Extra_Data_Kind =>
+            --  We have to transfer the extra data into the queue separately to avoid requiring Unchecked_Access as it
+            --  is an indefinite type which we can not store in the record. We use this variant as a flag.
+            null;
+      end case;
+   end record;
 
    use Prunt.Motion_Planner.PH_Beziers;
 
    --  Preprocessor
+   type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data_Count;
+   package Corner_Extra_Data_Vectors is new
+     Bounded_Indefinite_Vectors
+       (Element_Type => Corner_Extra_Data_Type,
+        Index_Type   => Corners_Extra_Data_Index,
+        Storage_Size => Max_Corners_Extra_Data_Storage);
+
    type Block_Plain_Corners is array (Corners_Index range <>) of Scaled_Position;
    type Block_Segment_Feedrates is array (Corners_Index range <>) of Velocity;
-   type Block_Corners_Extra_Data is array (Corners_Extra_Data_Index) of Corner_Extra_Data_Type;
-   type Block_Corners_Extra_Data_End_Indices is array (Corners_Index range <>) of Corners_Extra_Data_End_Index;
+   type Block_Corners_Extra_Data_End_Indices is
+     array (Corners_Index range <>) of Corner_Extra_Data_Vectors.Extended_Index;
    type Block_Corner_Dwell_Times is array (Corners_Index range <>) of Time;
 
    --  Corner_Blender
@@ -290,6 +324,9 @@ private
    type Block_Corner_Velocity_Limits is array (Corners_Index range <>) of Velocity;
 
    type Execution_Block (N_Corners : Corners_Index := 1) is record
+      --  This record contains all the data for a single execution block. It is passed through the planning pipeline,
+      --  with each stage adding more data to it.
+
       --  TODO: Having all these fields accessible before the relevant stage is called is not ideal, but using a
       --  discriminated type with a discriminant to indicate the stage causes a stack overflow when trying to change
       --  the discriminant without making a copy as GCC tries to copy the whole thing to the stack. In the future we
@@ -300,13 +337,13 @@ private
 
       --  Preprocessor
       Flush_Resetting_Data           : Flush_Resetting_Data_Type;
-      Block_Persistent_Data          : Block_Persistent_Data_Type;
       Next_Block_Pos                 : Scaled_Position;
       Params                         : Kinematic_Parameters;
-      Corners_Extra_Data             : Block_Corners_Extra_Data;
+      Corners_Extra_Data             : Corner_Extra_Data_Vectors.Vector;
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices (1 .. N_Corners);
       Corners                        : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
       Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
+      Is_Homing_Move                 : Boolean;
       --  Adjusted with scaler in Kinematic_Limiter.
       Limited_Segment_Feedrates      : Block_Segment_Feedrates (2 .. N_Corners);
       --  Adjusted with scaler in Kinematic_Limiter and limited by maximum velocity and step rate.
@@ -323,3 +360,5 @@ private
    end record;
 
 end Prunt.Motion_Planner.Planner;
+
+pragma Warnings (On, "formal object * is not referenced");

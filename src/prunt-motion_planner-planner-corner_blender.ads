@@ -1,23 +1,23 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 private with System.Pool_Local;
 
@@ -25,14 +25,14 @@ private generic
 package Prunt.Motion_Planner.Planner.Corner_Blender is
 
    procedure Run (Block : in out Execution_Block);
-   --  Fills `Block.Beziers` based on the block parameters.
+   --  Replaces sharp corners in Block.Corners with C4 continuous PH Bézier curves, storing them in Block.Beziers.
    --
-   --  Deviation of the curve path is limited by `Chord_Error_Max`.
+   --  The maximum deviation of these curves from the original path is limited by Chord_Error_Max.
    --
-   --  If `Shift_Blended_Corners` is True then corners that are not within `Chord_Error_Max` of the work area
+   --  If Shift_Blended_Corners is True then corners that are not within Chord_Error_Max of the work area
    --  boundaries and are not outside of the work area will be shifted so that the midpoint of the curve is where the
-   --  original corner was. `Block.Corners` will not be modified when the generated curves are shifted. The accuracy
-   --  for this shifting is controlled by the generic parameter `Corner_Blender_Max_Computational_Error`.
+   --  original corner was. Block.Corners will not be modified when the generated curves are shifted. The accuracy
+   --  for this shifting is controlled by the generic parameter Corner_Blender_Max_Computational_Error.
    --
    --  This procedure uses a number of large allocated arrays and will only allow one call to run at a time while other
    --  calls block. This package may be instantiated multiple times if concurrency is required.
@@ -66,8 +66,8 @@ private
    --  1.0 is returned in the case of any two of the points being equal.
 
    function Unit_Bisector (Start, Corner, Finish : Scaled_Position) return Position_Scale;
-   --  Computes the unit vector that bisects the angle formed by the segments (`Start` -> `Corner`) and (`Corner` ->
-   --  `Finish`). The input vectors do not need to be normalised by the caller.
+   --  Computes the unit vector that bisects the angle formed by the segments (Start -> Corner) and (Corner ->
+   --  Finish). The input vectors do not need to be normalised by the caller.
    --
    --  All elements in the return value are set to zero if either segment has zero length.
 

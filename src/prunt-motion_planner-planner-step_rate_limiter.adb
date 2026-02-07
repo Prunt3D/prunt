@@ -1,31 +1,31 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
-with Ada.Text_IO;
 with Prunt.Input_Shapers.Shapers;
+
 use type Prunt.Input_Shapers.Axial_Shaper_Parameters;
 
 package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
 
-   procedure Setup (In_Map : Stepper_Pos_Map) is
+   pragma Extensions_Allowed (On);
+
+   procedure Setup (In_Map : Motor_Pos_Map) is
    begin
       Runner.Setup (In_Map);
    end Setup;
@@ -40,23 +40,23 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
       Runner.Run (Block, Needs_New_Profiles);
    end Run;
 
-   function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position is
-      Ret : Stepper_Position := [others => 0.0];
+   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position is
+      Ret : Motor_Position := [others => 0.0];
    begin
-      for S in Stepper_Name loop
+      for M in Motor_Name loop
          for A in Axis_Name loop
             --  TODO: Use multiplication for the map instead of division so we don't need this check.
-            if Map (A, S) /= Length'Last then
-               Ret (S) := Ret (S) + Pos (A) / Map (A, S);
+            if Map (A, M) /= Length'Last then
+               Ret (M) := Ret (M) + Pos (A) / Map (A, M);
             end if;
          end loop;
       end loop;
 
       return Ret;
-   end To_Stepper_Position;
+   end To_Motor_Position;
 
    protected body Runner is
-      procedure Setup (In_Map : Stepper_Pos_Map) is
+      procedure Setup (In_Map : Motor_Pos_Map) is
       begin
          if Setup_Done then
             raise Constraint_Error with "Setup already done.";
@@ -75,25 +75,27 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
       procedure Run (Block : in out Execution_Block; Needs_New_Profiles : out Boolean) is
          Current_Time          : Time := 0.0 * s;
          Current_Shapers       : Input_Shapers.Shapers.Axial_Shapers;
-         Last_Stepper_Position : Stepper_Position;
+         Last_Motor_Position : Motor_Position;
          First_Check           : Boolean := True;
 
-         procedure Check_Step (Stepper_Pos : Stepper_Position; I : Corners_Index) is
+         procedure Check_Step (Motor_Pos : Motor_Position; I : Corners_Index);
+
+         procedure Check_Step (Motor_Pos : Motor_Position; I : Corners_Index) is
          begin
             if First_Check then
-               Last_Stepper_Position := Stepper_Pos;
+               Last_Motor_Position := Motor_Pos;
                First_Check := False;
             end if;
 
-            for S in Stepper_Name loop
+            for S in Motor_Name loop
                declare
-                  Change : constant Dimensionless := abs (Last_Stepper_Position (S) - Stepper_Pos (S));
+                  Change : constant Dimensionless := abs (Last_Motor_Position (S) - Motor_Pos (S));
                begin
-                  Maximum_Overspeed (I) := Dimensionless'Max (@, Change * 1.01 / Maximum_Stepper_Delta (S));
+                  Maximum_Overspeed (I) := Dimensionless'Max (@, Change * 1.01 / Maximum_Motor_Delta (S));
                end;
             end loop;
 
-            Last_Stepper_Position := Stepper_Pos;
+            Last_Motor_Position := Motor_Pos;
          end Check_Step;
       begin
          In_Step_Rate_Limiter := True;
@@ -104,12 +106,12 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
             raise Constraint_Error with "Setup not done.";
          end if;
 
-         if Is_Homing_Move (Flush_Resetting_Data (Block)) then
+         if Block.Is_Homing_Move then
             --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
             pragma
               Assert
                 (Block.Params.Axial_Shapers
-                   = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper)));
+                 = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper)));
          else
             Current_Shapers :=
               Input_Shapers.Shapers.Create (Block.Params.Axial_Shapers, Interpolation_Time, Block_Start_Pos (Block));
@@ -126,25 +128,25 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                        Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
                      Shaped_Pos         : Position := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
                   begin
-                     if I = Block.N_Corners and Current_Time >= Segment_Time (Block, I) then
+                     if I = Block.N_Corners and then Current_Time >= Segment_Time (Block, I) then
                         declare
                            Extra_Loops_Required : constant Input_Shapers.Cycle_Count :=
                              Input_Shapers.Cycle_Count'Max
                                (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers));
                         begin
                            for J in 0 .. Extra_Loops_Required loop
-                              Check_Step (To_Stepper_Position (Shaped_Pos, Pos_Map), I);
+                              Check_Step (To_Motor_Position (Shaped_Pos, Pos_Map), I);
 
                               Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
                            end loop;
                         end;
                      else
-                        Check_Step (To_Stepper_Position (Shaped_Pos, Pos_Map), I);
+                        Check_Step (To_Motor_Position (Shaped_Pos, Pos_Map), I);
                         --  Short-circuit if we're just going to disable shapers.
                         exit when
                           Block.Params.Axial_Shapers
                           /= Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper))
-                          and Maximum_Overspeed (I) > 1.0;
+                          and then Maximum_Overspeed (I) > 1.0;
                      end if;
                   end;
                end if;
@@ -153,7 +155,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                   Current_Time := Current_Time + Interpolation_Time;
                end if;
 
-               if I = Block.N_Corners and Current_Time > Segment_Time (Block, I) then
+               if I = Block.N_Corners and then Current_Time > Segment_Time (Block, I) then
                   --  Ensure that the last corner is always enqueued from at least once and we always finish on
                   --  the exact final position. Having the wrong interpolation time here is fine because the
                   --  final bit of an execution block has very low velocity.
@@ -178,7 +180,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                     ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by a "
                      & "high velocity limit combined with a high microstepping ratio.");
                else
-                  Block.Params.Axial_Shapers := (others => (Kind => Input_Shapers.No_Shaper));
+                  Block.Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];
                   Log
                     ("All input shaping has been turned off for the next block of moves due to the step rate being "
                      & "too high. This can be caused by a high pressure advance value without smoothing.");

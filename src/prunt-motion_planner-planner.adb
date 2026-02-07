@@ -1,34 +1,33 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
-with Ada.Text_IO;
-with System.Pool_Local;
-with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
-with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
+with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
+with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Step_Rate_Limiter;
+with System.Pool_Local;
 
 package body Prunt.Motion_Planner.Planner is
+
+   pragma Extensions_Allowed (On);
 
    package My_Preprocessor is new Preprocessor;
    package My_Corner_Blender is new Corner_Blender;
@@ -43,10 +42,48 @@ package body Prunt.Motion_Planner.Planner is
       Runner.Reset_Do_Not_Call_From_Other_Packages;
    end Reset;
 
-   procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
+   procedure Enqueue_Move
+     (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False) is
    begin
-      My_Preprocessor.Enqueue (Comm, Ignore_Bounds);
-   end Enqueue;
+      My_Preprocessor.Enqueue
+        ((Kind => Move_Kind, Dwell_After => Dwell_After, Pos => Pos, Feedrate => Feedrate), Ignore_Bounds);
+   end Enqueue_Move;
+
+   procedure Enqueue_Corner_Extra_Data (Data : Corner_Extra_Data_Type) is
+      Data_Copy : aliased Corner_Extra_Data_Type := Data;
+   begin
+      My_Preprocessor.Enqueue
+        (Comm => (Kind => Corner_Extra_Data_Kind), Ignore_Bounds => False, Extra => Data_Copy'Access);
+   end Enqueue_Corner_Extra_Data;
+
+   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False) is
+   begin
+      My_Preprocessor.Enqueue ((Kind => Flush_Kind, Flush_Resetting_Data => Data, Is_Homing_Move => Is_Homing_Move));
+   end Enqueue_Flush;
+
+   procedure Enqueue_Flush_And_Reset_Position
+     (Data           : Flush_Resetting_Data_Type;
+      Pos            : Position;
+      Is_Homing_Move : Boolean := False;
+      Ignore_Bounds  : Boolean := False) is
+   begin
+      My_Preprocessor.Enqueue
+        ((Kind                 => Flush_And_Reset_Position_Kind,
+          Flush_Resetting_Data => Data,
+          Is_Homing_Move       => Is_Homing_Move,
+          Reset_Pos            => Pos),
+         Ignore_Bounds);
+   end Enqueue_Flush_And_Reset_Position;
+
+   procedure Enqueue_Flush_And_Change_Kinematic_Parameters
+     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters; Is_Homing_Move : Boolean := False) is
+   begin
+      My_Preprocessor.Enqueue
+        ((Kind                 => Flush_And_Change_Parameters_Kind,
+          Flush_Resetting_Data => Data,
+          Is_Homing_Move       => Is_Homing_Move,
+          New_Params           => New_Params));
+   end Enqueue_Flush_And_Change_Kinematic_Parameters;
 
    procedure Dequeue
      (Block : out Execution_Block; Timed_Out : out Boolean; Waiting_For_Step_Rate_Limiter : out Boolean) is
@@ -73,12 +110,12 @@ package body Prunt.Motion_Planner.Planner is
       type Block_Wrapper_Access is access Block_Wrapper with Storage_Pool => Pool;
 
       Working_Block_Wrapper : constant Block_Wrapper_Access := new Block_Wrapper;
-      Block renames Working_Block_Wrapper.Block;
+      Block                 : Execution_Block renames Working_Block_Wrapper.Block;
 
       Reset_Called : Boolean := False;
    begin
       loop
-         accept Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map) do
+         accept Setup (In_Params : Kinematic_Parameters; In_Map : Motor_Pos_Map) do
             My_Preprocessor.Setup (In_Params);
             My_Step_Rate_Limiter.Setup (In_Map);
          end Setup;
@@ -92,7 +129,7 @@ package body Prunt.Motion_Planner.Planner is
                exit;
             end if;
 
-            if Is_Homing_Move (Block.Flush_Resetting_Data) and Block.N_Corners /= 2 then
+            if Block.Is_Homing_Move and then Block.N_Corners /= 2 then
                raise Constraint_Error with "Homing move must have exactly 2 corners.";
             end if;
 
@@ -105,7 +142,7 @@ package body Prunt.Motion_Planner.Planner is
                   My_Feedrate_Profile_Generator.Run (Block);
 
                   exit when
-                    (not Is_Homing_Move (Block.Flush_Resetting_Data))
+                    (not Block.Is_Homing_Move)
                     or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
 
                   Block.Limited_Segment_Feedrates (2) := Block.Limited_Segment_Feedrates (2) * 0.9;
@@ -140,14 +177,13 @@ package body Prunt.Motion_Planner.Planner is
    function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
    begin
       return
-        abs (Block.Corners (Finishing_Corner)
-             * Block.Params.Axial_Scaler
+        abs (Block.Corners (Finishing_Corner) * Block.Params.Axial_Scaler
              - Block.Corners (Finishing_Corner - 1) * Block.Params.Axial_Scaler);
    end Segment_Corner_Distance;
 
    function Segment_Pos_At_Time
      (Block              : Execution_Block;
-      Finishing_Corner   : Corners_Index;
+      Finishing_Corner   : Finishing_Corners_Index;
       Time_Into_Segment  : Time;
       Is_Past_Accel_Part : out Boolean) return Position
    is
@@ -167,12 +203,10 @@ package body Prunt.Motion_Planner.Planner is
            Block.Corner_Velocity_Limits (Finishing_Corner - 1),
            Is_Past_Accel_Part);
 
-      Pos                     : Scaled_Position;
-      Tangent                 : Scaled_Position_Offset;
-      Scaled_Velocity_Tangent : Axial_Velocities;
+      Pos : Scaled_Position;
    begin
       if Time_Into_Segment >= Total_Time (Block.Feedrate_Profiles (Finishing_Corner))
-        and (Finishing_Corner = Block.N_Corners or Block.Corner_Dwell_Times (Finishing_Corner) /= 0.0 * s)
+        and then (Finishing_Corner = Block.N_Corners or else Block.Corner_Dwell_Times (Finishing_Corner) /= 0.0 * s)
       then
          --  Ensure the return value will be at the exact position.
          Pos := Point_At_Distance (Block.Beziers (Finishing_Corner), 0.0 * mm);
@@ -184,7 +218,7 @@ package body Prunt.Motion_Planner.Planner is
                  Total_Time (Block.Feedrate_Profiles (Finishing_Corner)),
                  Block.Params.Crackle_Max,
                  Block.Corner_Velocity_Limits (Finishing_Corner - 1))
-                < 0.000_1 * mm / s);
+              < 0.000_1 * mm / s);
          --  In theory the velocity should be zero but in practice there are some floating point errors here. In
          --  testing the error was always within 1E-14 of zero but there is no reason to check for that level of
          --  precision here.
@@ -198,7 +232,7 @@ package body Prunt.Motion_Planner.Planner is
               Point_At_Distance
                 (Block.Beziers (Finishing_Corner - 1),
                  Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
-         elsif Distance < Start_Curve_Half_Distance + Mid_Distance or End_Curve_Half_Distance = 0.0 * mm then
+         elsif Distance < Start_Curve_Half_Distance + Mid_Distance or else End_Curve_Half_Distance = 0.0 * mm then
             if Mid_Distance = 0.0 * mm then
                Pos := Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
             else
@@ -219,7 +253,8 @@ package body Prunt.Motion_Planner.Planner is
    end Segment_Pos_At_Time;
 
    function Segment_Vel_Ratio_At_Time
-     (Block : Execution_Block; Finishing_Corner : Corners_Index; Time_Into_Segment : Time) return Dimensionless is
+     (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time)
+      return Dimensionless is
    begin
       if Time_Into_Segment > Total_Time (Block.Feedrate_Profiles (Finishing_Corner)) then
          --  Return 1.0 inside dwell parts so the laser can be set to the programmed power level.
@@ -252,12 +287,8 @@ package body Prunt.Motion_Planner.Planner is
       return Block.Flush_Resetting_Data;
    end Flush_Resetting_Data;
 
-   function Block_Persistent_Data (Block : Execution_Block) return Block_Persistent_Data_Type is
-   begin
-      return Block.Block_Persistent_Data;
-   end Block_Persistent_Data;
-
-   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
+   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
+   is
    begin
       return
         Distance_At_Time
@@ -267,25 +298,27 @@ package body Prunt.Motion_Planner.Planner is
            Start_Vel   => Block.Corner_Velocity_Limits (Finishing_Corner - 1));
    end Segment_Accel_Distance;
 
-   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array is
-      Start  : constant Corners_Extra_Data_End_Index :=
-        (if Corner = 0 then 1 else Block.Corners_Extra_Data_End_Indices (Corner - 1) + 1);
-      Finish : constant Corners_Extra_Data_End_Index := Block.Corners_Extra_Data_End_Indices (Corner);
-      Result :
-        Corner_Extra_Data_Array
-          (1 .. Corner_Extra_Data_Array_Index'Base (Finish) - Corner_Extra_Data_Array_Index'Base (Start) + 1);
+   procedure Corner_Extra_Data
+     (Block   : Execution_Block;
+      Corner  : Corners_Index;
+      Process : access procedure (Data : in out Corner_Extra_Data_Type)) is
    begin
-      for I in Start .. Finish loop
-         Result (Corner_Extra_Data_Array_Index'Base (I) - Corner_Extra_Data_Array_Index'Base (Start) + 1) :=
-           Block.Corners_Extra_Data (Corners_Extra_Data_Index (I));
-      end loop;
-
-      return Result;
+      Block.Corners_Extra_Data.Process_Range
+        ((if Corner = Corners_Index'First
+          then Corners_Extra_Data_Index'First
+          else Corners_Extra_Data_Index (Block.Corners_Extra_Data_End_Indices (Corner - 1) + 1)),
+         Block.Corners_Extra_Data_End_Indices (Corner),
+         Process);
    end Corner_Extra_Data;
 
    function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters is
    begin
       return Block.Params;
    end Block_Kinematic_Parameters;
+
+   function Is_Homing_Move (Block : Execution_Block) return Boolean is
+   begin
+      return Block.Is_Homing_Move;
+   end Is_Homing_Move;
 
 end Prunt.Motion_Planner.Planner;

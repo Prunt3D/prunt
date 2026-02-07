@@ -3,7 +3,7 @@
   <resource name='Prunt.Web_Server_Resources' format='binary'>
     <install mode='copy'>
       <fileset dir=".">
-        <include name="*"/>
+        <include name="**/*"/>
       </fileset>
     </install>
   </resource>

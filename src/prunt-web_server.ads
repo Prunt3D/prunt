@@ -1,68 +1,57 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
-with Prunt.Logger;
-with Prunt.Config;
-with Prunt.TMC_Types;
-with Prunt.Update_Checker;
-with Ada.Strings.Bounded;
-with Ada.Task_Termination;
+pragma Extensions_Allowed (On);
+
 with Ada.Directories;
-with Ada.Real_Time;
-with Prunt.Web_Server_Resources;
 with Ada.Exceptions;                                    use Ada.Exceptions;
+with Ada.Real_Time;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
-with Ada.Strings.Unbounded;                             use Ada.Strings.Unbounded;
+with Ada.Strings.Bounded;
+with Ada.Task_Termination;
 with GNAT.Sockets;                                      use GNAT.Sockets;
-with GNAT.Sockets.Server;                               use GNAT.Sockets.Server;
 with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connection_State_Machine.HTTP_Server;
+with GNAT.Sockets.Server;                               use GNAT.Sockets.Server;
+with Prunt.Config;
+with Prunt.Exception_Occurrence_Holders;
+with Prunt.Logger;
+with Prunt.Update_Checker;
 
 generic
-   with package My_Logger is new Prunt.Logger (<>);
-   with package My_Config is new Prunt.Config (<>);
-   with package My_Update_Checker is new Prunt.Update_Checker (<>);
-   with function Get_Position return Prunt.Position;
    with
-     function Get_Thermistor_Temperature
-       (Thermistor : My_Config.Generic_Types.Thermistor_Name) return Prunt.Temperature;
-   with function Get_Stepper_Temperature (Thermistor : My_Config.Generic_Types.Stepper_Name) return Prunt.Temperature;
-   type Board_Temperature_Probe_Name is (<>);
-   with function Get_Board_Temperature (Thermistor : Board_Temperature_Probe_Name) return Prunt.Temperature;
-   with function Get_Heater_Power (Heater : My_Config.Generic_Types.Heater_Name) return Prunt.PWM_Scale;
-   with function Get_Heater_Current (Heater : My_Config.Generic_Types.Heater_Name) return Current;
-   with function Get_Input_Switch_State (Switch : My_Config.Generic_Types.Input_Switch_Name) return Prunt.Pin_State;
-   with function Get_Tachometer_Frequency (Fan : My_Config.Generic_Types.Fan_Name) return Frequency;
-   with function Get_StallGuard_2_Value (Heater : My_Config.Generic_Types.Stepper_Name) return TMC_Types.Unsigned_10;
-   with function Get_StallGuard_4_Value (Heater : My_Config.Generic_Types.Stepper_Name) return TMC_Types.Unsigned_10;
-   with function Get_File_Name return String;
-   with function Get_Line return File_Line_Count;
-   with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
-   with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
-   with function Is_Stepgen_Paused return Boolean;
+     procedure Apply_Config_Patch
+       (Value : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
+   with package My_Logger is new Prunt.Logger (<>);
+   with package My_Update_Checker is new Prunt.Update_Checker (<>);
+   with procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean);
+   with procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
    with procedure Reload_Server;
-   with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
-   Exception_Occurrence_Holder : in out Exception_Occurrence_Holder_Type;
+   with
+     function Get_Extra_HTTP_Content (Name : Virtual_String) return access constant Ada.Streams.Stream_Element_Array;
+   Exception_Occurrence_Holder : in out Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type;
+   Config_Schema_String : Virtual_String;
+   Status_Schema_String : Virtual_String;
+   Gcode_JSON_String : Virtual_String;
+   with function Get_Status_Values_String return Virtual_String;
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 
@@ -72,6 +61,10 @@ package Prunt.Web_Server is
    procedure Reset;
 
 private
+
+   function Trim (S : String) return String;
+   function Ends_With (Source, Pattern : String) return Boolean;
+   function Starts_With (Source, Pattern : String) return Boolean;
 
    protected Startup_Manager is
       entry Wait_For_Update_Allowed;
@@ -103,15 +96,16 @@ private
    overriding
    procedure Put (Destination : in out Post_Body_Destination; Data : String);
 
-   type Unbounded_String_Source is new Content_Source with record
-      Content    : Unbounded_String;
-      Next_Start : Positive := 1;
-      --  Using the Slice function to replace the Unbounded_String would be a bit cleaner here, but the GCC Slice
-      --  implementation copies the entire string in to a new allocation, so we do this instead to avoid some copies.
+   type Virtual_String_Source is new Content_Source with record
+      Content    : Virtual_String;
+      Next_Start : Positive := Positive'Last;
+      --  Next_Start needs to be set manually when we use it, but we can't use a raise expression here as we need to
+      --  default initialise this when it's not used, so instead we use a large value where it will be obvious that we
+      --  forgot to set it.
    end record;
 
    overriding
-   function Get (Source : access Unbounded_String_Source) return String;
+   function Get (Source : access Virtual_String_Source) return String;
 
    type Array_Stream_Type is new Root_Stream_Type with record
       Content  : access constant Ada.Streams.Stream_Element_Array;
@@ -164,8 +158,8 @@ private
       Self_Access               : Prunt_Client_Access := null;
       --  Embedded file GET requests:
       Array_Stream              : aliased Array_Stream_Type;
-      --  Unbounded_String GET requests:
-      Big_String_Content        : aliased Unbounded_String_Source;
+      --  Virtual_String GET requests:
+      Big_String_Content        : aliased Virtual_String_Source;
       --  POST requests:
       Post_Content              : aliased Post_Body_Destination;
       --  File GET and PUT requests:
@@ -179,7 +173,7 @@ private
    procedure Write (Stream : access Root_Stream_Type'Class; Item : Extra_Client_Content);
    for Extra_Client_Content'Write use Write;
 
-   type WebSocket_Message_Index_Type is mod 2**32;
+   type WebSocket_Message_Index_Type is mod 2 ** 32;
 
    type Prunt_Client
      (Listener       : access Connections_Server'Class;
@@ -201,7 +195,7 @@ private
    task Server is
       entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
-      entry Log_To_WebSocket_Receivers (Message : String);
+      entry Log_To_WebSocket_Receivers (Message : Virtual_String);
       entry Reset_Server_Start_Time;
    end Server;
 
@@ -210,26 +204,18 @@ private
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
    --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
    --  does whereas the original does not.
-   --
-   --  TODO: Take an Unbounded_String here to avoid some copies.
 
    overriding
    procedure Reply_Text
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
    --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
    --  does whereas the original does not.
-   --
-   --  TODO: Take an Unbounded_String here to avoid some copies.
 
    procedure Reply_JSON
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
 
    procedure Reply_JSON
-     (Client  : in out Prunt_Client;
-      Code    : Positive;
-      Reason  : String;
-      Message : Unbounded_String;
-      Get     : Boolean := True);
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : Virtual_String; Get : Boolean := True);
 
    overriding
    procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class);
@@ -266,8 +252,5 @@ private
    procedure WebSocket_Initialize (Client : in out Prunt_Client);
    overriding
    procedure WebSocket_Finalize (Client : in out Prunt_Client);
-
-   function Build_Status_Schema return Unbounded_String;
-   function Build_Status_Values return Unbounded_String;
 
 end Prunt.Web_Server;

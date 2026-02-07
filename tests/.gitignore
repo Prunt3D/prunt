@@ -1,0 +1,6 @@
+/obj/
+/bin/
+/alire/
+/config/
+/.dir-locals.el
+/gnatcov_out/

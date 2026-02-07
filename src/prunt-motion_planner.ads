@@ -1,25 +1,25 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
---  This package provides the framework for the 5th-order (bounded crackle) motion planner implemented in the `Planner`
+pragma Extensions_Allowed (On);
+
+--  This package provides the framework for the 5th-order (bounded crackle) motion planner implemented in the Planner
 --  child package. Functions to find motion profiles and to find points at given times are implemented in this package.
 
 with Prunt.Input_Shapers;
@@ -36,7 +36,8 @@ package Prunt.Motion_Planner is
       --  related component of this array then the position is considered to be out of bounds.
 
       Ignore_E_In_XYZE : Boolean := True;
-      --  When True, tangential velocity limits are based only on the XYZ axes.
+      --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
+      --  planners do.
 
       Shift_Blended_Corners : Boolean := False;
       --  When True, the corner blending algorithm will attempt to shift the virtual corner points so that the midpoint
@@ -60,9 +61,10 @@ package Prunt.Motion_Planner is
 
    type Feedrate_Profile_Times_Index is range 1 .. 4;
    type Feedrate_Profile_Times is array (Feedrate_Profile_Times_Index) of Time;
-   --  Represents the timings for segments in a 15-phase motion profile. Note that some times are used for multiple segments.
+   --  Represents the timings for segments in a 15-phase motion profile. Note that some times are used for multiple
+   --  segments. Refer to Crackle_At_Time to see where each of these times is used.
 
-   type Feedrate_Profile is tagged record
+   type Feedrate_Profile is record
       --  Represents the timings for segments in a 31-phase motion profile.
 
       Accel : Feedrate_Profile_Times;
@@ -72,26 +74,26 @@ package Prunt.Motion_Planner is
 
    function Fast_Distance_At_Max_Time
      (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Length;
-   --  Calculates the total distance covered during an acceleration or deceleration phase defined by `Profile` with a
+   --  Calculates the total distance covered during an acceleration or deceleration phase defined by Profile with a
    --  given starting velocity and maximum crackle.
    --
-   --  For an acceleration phase `Max_Crackle` should be positive and for a deceleration phase `Max_Crackle` should be
+   --  For an acceleration phase Max_Crackle should be positive and for a deceleration phase Max_Crackle should be
    --  negative.
    --
-   --  This function is an optimised version of `Distance_At_Time` where `T` is equal to `Total_Time (Profile)`. While
-   --  this function is symbolically identical, it may not be numerically identical to `Distance_At_Time`, but this
+   --  This function is an optimised version of Distance_At_Time where T is equal to Total_Time (Profile). While
+   --  this function is symbolically identical, it may not be numerically identical to Distance_At_Time, but this
    --  does not cause issues with the current design of the motion planner.
 
    function Fast_Velocity_At_Max_Time
      (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Velocity;
-   --  Calculates the final velocity after an acceleration or deceleration phase defined by `Profile` with a given
+   --  Calculates the final velocity after an acceleration or deceleration phase defined by Profile with a given
    --  starting velocity and maximum crackle.
    --
-   --  For an acceleration phase `Max_Crackle` should be positive and for a deceleration phase `Max_Crackle` should be
+   --  For an acceleration phase Max_Crackle should be positive and for a deceleration phase Max_Crackle should be
    --  negative.
    --
-   --  This function is an optimised version of `Velocity_At_Time` where `T` is equal to `Total_Time (Profile)`. While
-   --  this function is symbolically identical, it may not be numerically identical to `Velocity_At_Time`, but this
+   --  This function is an optimised version of Velocity_At_Time where T is equal to Total_Time (Profile). While
+   --  this function is symbolically identical, it may not be numerically identical to Velocity_At_Time, but this
    --  does not cause issues with the current design of the motion planner.
 
    function Total_Time (Times : Feedrate_Profile_Times) return Time;
@@ -99,44 +101,44 @@ package Prunt.Motion_Planner is
    --  of components as some components are used multiple times.
 
    function Crackle_At_Time (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Crackle;
-   --  Returns the crackle at a specific time `T` within a single acceleration or deceleration phase. The crackle will
-   --  be either `+Max_Crackle`, `-Max_Crackle`, or zero. For an acceleration phase `Max_Crackle` should be positive
-   --  and for a deceleration phase `Max_Crackle` should be negative.
+   --  Returns the crackle at a specific time T within a single acceleration or deceleration phase. The crackle will
+   --  be either +Max_Crackle, -Max_Crackle, or zero. For an acceleration phase Max_Crackle should be positive
+   --  and for a deceleration phase Max_Crackle should be negative.
    --
    --  The return value may be negative.
 
    function Snap_At_Time (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Snap;
-   --  Returns the snap at a specific time `T` within a single acceleration or deceleration phase. For an acceleration
-   --  phase `Max_Crackle` should be positive and for a deceleration phase `Max_Crackle` should be negative.
+   --  Returns the snap at a specific time T within a single acceleration or deceleration phase. For an acceleration
+   --  phase Max_Crackle should be positive and for a deceleration phase Max_Crackle should be negative.
    --
    --  The return value may be negative.
 
    function Jerk_At_Time (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Jerk;
-   --  Returns the jerk at a specific time `T` within a single acceleration or deceleration phase. For an acceleration
-   --  phase `Max_Crackle` should be positive and for a deceleration phase `Max_Crackle` should be negative.
+   --  Returns the jerk at a specific time T within a single acceleration or deceleration phase. For an acceleration
+   --  phase Max_Crackle should be positive and for a deceleration phase Max_Crackle should be negative.
    --
    --  The return value may be negative.
 
    function Acceleration_At_Time
      (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle) return Acceleration;
-   --  Returns the acceleration at a specific time `T` within a single acceleration or deceleration phase. For an
-   --  acceleration phase `Max_Crackle` should be positive and for a deceleration phase `Max_Crackle` should be
+   --  Returns the acceleration at a specific time T within a single acceleration or deceleration phase. For an
+   --  acceleration phase Max_Crackle should be positive and for a deceleration phase Max_Crackle should be
    --  negative.
    --
    --  The return value may be negative.
 
    function Velocity_At_Time
      (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Velocity;
-   --  Returns the velocity at a specific time `T` within a single acceleration or deceleration phase. For an
-   --  acceleration phase `Max_Crackle` should be positive and for a deceleration phase `Max_Crackle` should be
+   --  Returns the velocity at a specific time T within a single acceleration or deceleration phase. For an
+   --  acceleration phase Max_Crackle should be positive and for a deceleration phase Max_Crackle should be
    --  negative.
    --
    --  The return value may be negative.
 
    function Distance_At_Time
      (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length;
-   --  Returns the distance from the start point at a specific time `T` within a single acceleration or deceleration
-   --  phase. For an acceleration phase `Max_Crackle` should be positive and for a deceleration phase `Max_Crackle`
+   --  Returns the distance from the start point at a specific time T within a single acceleration or deceleration
+   --  phase. For an acceleration phase Max_Crackle should be positive and for a deceleration phase Max_Crackle
    --  should be negative.
    --
    --  The return value may be negative.
@@ -146,27 +148,27 @@ package Prunt.Motion_Planner is
    --  some components are used multiple times.
 
    function Crackle_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Crackle;
-   --  Returns the crackle at a specific time `T` within a feedrate profile. The crackle will be either `+Max_Crackle`,
-   --  `-Max_Crackle`, or zero.
+   --  Returns the crackle at a specific time T within a feedrate profile. The crackle will be either +Max_Crackle,
+   --  -Max_Crackle, or zero.
    --
    --  The return value may be negative.
 
    function Snap_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Snap;
-   --  Returns the snap at a specific time `T` within a feedrate profile. The return value may be negative.
+   --  Returns the snap at a specific time T within a feedrate profile. The return value may be negative.
 
    function Jerk_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Jerk;
-   --  Returns the jerk at a specific time `T` within a feedrate profile. The return value may be negative.
+   --  Returns the jerk at a specific time T within a feedrate profile. The return value may be negative.
 
    function Acceleration_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Acceleration;
-   --  Returns the acceleration at a specific time `T` within a feedrate profile. The return value may be negative.
+   --  Returns the acceleration at a specific time T within a feedrate profile. The return value may be negative.
 
    function Velocity_At_Time
      (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Velocity;
-   --  Returns the velocity at a specific time `T` within a feedrate profile. The return value may be negative.
+   --  Returns the velocity at a specific time T within a feedrate profile. The return value may be negative.
 
    function Distance_At_Time
      (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length;
-   --  Returns the distance from the start point at a specific time `T` within a feedrate profile. The return value may
+   --  Returns the distance from the start point at a specific time T within a feedrate profile. The return value may
    --  be negative.
 
    function Distance_At_Time
@@ -175,10 +177,11 @@ package Prunt.Motion_Planner is
       Max_Crackle        : Crackle;
       Start_Vel          : Velocity;
       Is_Past_Accel_Part : out Boolean) return Length;
-   --  Returns the distance from the start point at a specific time `T` within a feedrate profile. The return value may
+   --  Returns the distance from the start point at a specific time T within a feedrate profile. The return value may
    --  be negative.
    --
-   --  `Is_Past_Accel_Part` is set to True if `T` is in the coasting or deceleration part, otherwise it is set to False.
+   --  Is_Past_Accel_Part is set to True if T is in the coasting or deceleration part, otherwise it is set to
+   --  False.
 
    function Optimal_Profile_For_Distance
      (Start_Vel        : Velocity;
@@ -206,8 +209,30 @@ package Prunt.Motion_Planner is
       Snap_Max         : Snap;
       Crackle_Max      : Crackle) return Feedrate_Profile;
    --  Compute the feedrate profile with the minimal time without violating the given constraints. Raises
-   --  `Constraint_Error` if there is no legal feedrate profile which can meet the given constraints, specifically
-   --  regarding `End_Vel` being reachable. Also raises `Constraint_Error` if `Start_Vel` or `End_Vel` are higher than
-   --  `Max_Vel`.
+   --  Constraint_Error if there is no legal feedrate profile which can meet the given constraints, specifically
+   --  regarding End_Vel being reachable. Also raises Constraint_Error if Start_Vel or End_Vel are higher than
+   --  Max_Vel.
+
+private
+
+   type Constraint_Region is (Region_1, Region_2, Region_3, Region_4, Region_5);
+
+   type Internal_Profile_Result is record
+      Profile : Feedrate_Profile_Times;
+      Region  : Constraint_Region;
+      Index   : Integer;
+   end record;
+
+   function Optimal_Profile_For_Distance_Internal
+     (Start_Vel        : Velocity;
+      Distance         : Length;
+      Acceleration_Max : Acceleration;
+      Jerk_Max         : Jerk;
+      Snap_Max         : Snap;
+      Crackle_Max      : Crackle) return Internal_Profile_Result;
+
+   function Optimal_Profile_For_Delta_V_Internal
+     (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
+      return Internal_Profile_Result;
 
 end Prunt.Motion_Planner;

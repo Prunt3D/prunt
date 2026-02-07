@@ -1,25 +1,25 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
 package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
+
+   pragma Extensions_Allowed (On);
 
    function Create
      (Parameters : Shaper_Parameters; Interpolation_Time : Time; Start_Position : Length)
@@ -44,7 +44,7 @@ package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
          Smooth_Added_Part_Only => Parameters.Pressure_Advance_Smooth_Added_Part_Only,
          Previous_Input         => Start_Position,
          Current_Buffer_Index   => 1,
-         Buffer                 => (others => Start_Position),
+         Buffer                 => [others => Start_Position],
          Filter                 => CMA);
    end Create;
 
@@ -56,11 +56,13 @@ package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
       if This.Smooth_Added_Part_Only then
          return
             Result : constant Length :=
-              This.Buffer (This.Current_Buffer_Index)
+              (if This.Buffer_Size > 0 then This.Buffer (This.Current_Buffer_Index) else Step)
               + Length_Moving_Averages.Do_Step (This.Filter, Vel * This.Pressure_Advance_Time)
          do
-            This.Current_Buffer_Index := @ mod This.Buffer_Size + 1;
-            This.Buffer (This.Current_Buffer_Index) := Step;
+            if This.Buffer_Size > 0 then
+               This.Current_Buffer_Index := @ mod This.Buffer_Size + 1;
+               This.Buffer (This.Current_Buffer_Index) := Step;
+            end if;
          end return;
       else
          return Length_Moving_Averages.Do_Step (This.Filter, Step + Vel * This.Pressure_Advance_Time);

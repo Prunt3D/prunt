@@ -1,0 +1,6 @@
+[submodule "html/uplot"]
+	path = html/uplot
+	url = https://github.com/leeoniya/uPlot.git
+[submodule "gnatcoll_modifications_src"]
+	path = gnatcoll_modifications_src
+	url = https://github.com/Prunt3D/prunt_gnatcoll_modifications.git

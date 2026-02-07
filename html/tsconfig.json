@@ -2,11 +2,19 @@
   "compilerOptions": {
     "outDir": "./dist/",
     "noImplicitAny": true,
+    "strict": true,
     "removeComments": true,
     "preserveConstEnums": true,
     "sourceMap": true,
+    "sourceRoot": "/",
     "downlevelIteration": true,
-    "esModuleInterop": true,
-    "moduleResolution": "node"
-  }
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "bundler",
+    "module": "ES2022",
+    "target": "ES2022",
+    "lib": ["DOM", "ES2022"]
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
 }

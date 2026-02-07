@@ -2,9 +2,11 @@
 /lib/
 /alire/
 /config/
-/html/node_modules/
-/html/dist/bundle.js
-/html/dist/bundle.js.map
+/html/dist/
 /.dir-locals.el
-/src/prunt-config-build_schema.adb
-/src/prunt-config-json_to_user_config.adb
+/.config_codegen_stamp
+/tests/*.srctrace
+/prebuild
+/b~prebuild*
+/prebuild.ali
+/prebuild.o

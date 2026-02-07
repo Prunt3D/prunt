@@ -1,27 +1,27 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
 with Ada.Numerics.Generic_Elementary_Functions;
 
 package body Prunt.Motion_Planner.Planner.Corner_Blender is
+
+   pragma Extensions_Allowed (On);
 
    package Angle_Elementary_Functions is new Ada.Numerics.Generic_Elementary_Functions (Angle);
 
@@ -37,7 +37,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          --  iterative corner shifting process.
 
          function Allow_Corner_Shift (I : Corners_Index) return Boolean;
-         --  Determines if the given corner should be shifted. This checks both the `Shift_Blended_Corners` parameter
+         --  Determines if the given corner should be shifted. This checks both the Shift_Blended_Corners parameter
          --  and whether the corner is sufficiently far from the work area boundaries as to ensure that no shift will
          --  place the new path outside of the work area boundaries. This is based on the original corner and not the
          --  new virtual corner.
@@ -51,7 +51,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
 
             for A in Axis_Name loop
                if Unscaled_Corner (A) - Block.Params.Chord_Error_Max < Block.Params.Lower_Pos_Limit (A)
-                 or Unscaled_Corner (A) + Block.Params.Chord_Error_Max > Block.Params.Upper_Pos_Limit (A)
+                 or else Unscaled_Corner (A) + Block.Params.Chord_Error_Max > Block.Params.Upper_Pos_Limit (A)
                then
                   return False;
                end if;
@@ -89,35 +89,40 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
               Deviation_Limit => 0.0 * mm);
 
          loop
-            --  For all other corners we:
+            --  This loop iteratively adjusts the positions of virtual corners to meet the Shift_Blended_Corners
+            --  goal, where the midpoint of the blended curve aligns with the original corner.
             --
-            --  1. Generate the Bézier curves based on the shifted virtual corners (initially equal to the original
-            --     corners) with the allowed deviation value. We skip corners that are too sharp as defined by
-            --     `Corner_Blender_Min_Corner_Angle_To_Blend` and corners that have a dwell time.
+            --  1. Generate Bézier curves for each corner. This is based on the current Shifted_Corners (which are
+            --     initially the original corners) and the allowed Shifted_Corner_Error_Limits. Corners with dwell
+            --     times or angles below Corner_Blender_Min_Corner_Angle_To_Blend are not blended and result in a
+            --     zero-length curve (a sharp corner).
             --
-            --  2. Find the maximum distance between any given original corner and the midpoint of the generated
-            --     curves. This is skipped for any corners that are too close to the position limits and is skipped
-            --     entirely is corner shifting is turned off.
+            --  2. Calculate the maximum error. For each corner where shifting is enabled, we find the distance
+            --     between the original corner and the midpoint of the newly generated Bézier curve. The largest of
+            --     these distances is stored in Last_Comp_Error. This is skipped for any corners that are too close
+            --     to the position limits and is skipped entirely is corner shifting is turned off.
             --
-            --  3. Exit the loop if this distance is less than or equal to the allowed computational error specified by
-            --     the generic parameter `Corner_Blender_Max_Computational_Error`.
+            --  3. Check for convergence. If Last_Comp_Error is within the Corner_Blender_Max_Computational_Error,
+            --     the process has converged, and we exit the loop.
             --
-            --  4. Translate the virtual corners such that the midpoints of the generated curves intersect with the
-            --     corners. Again this is skipped for any corners that are too close to the position limits and is
-            --     skipped entirely is corner shifting is turned off.
+            --  4. Shift the virtual corners. For each corner, the corresponding virtual corner in Shifted_Corners is
+            --     translated by the vector from the curve's midpoint to the original corner. This moves the curve
+            --     closer to the desired position for the next iteration. Again this is skipped for any corners that
+            --     are too close to the position limits and is skipped entirely is corner shifting is turned off.
             --
-            --  5. Adjust the maximum allowed error for each corner to account for translations in later iterations
-            --     where the shifted corner may not intersect the bisector of the original corner. This occurs due to
-            --     the fact that all virtual corners are shifting in different directions.
+            --  5. Update deviation limits. Adjust the maximum allowed deviation for the next iteration is
+            --     recalculated. This is necessary because as the virtual corners shift, the geometry changes, and the
+            --     deviation limit must be adjusted to ensure the constraints are still met.
             --
-            --  6. Repeat from step 1 until the exit condition in step 3 is met.
+            --  6. Repeat. The loop continues until the exit condition in step 3 is met.
 
             Last_Comp_Error := 0.0 * mm;
 
             for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
                if Block.Corner_Dwell_Times (I) /= 0.0 * s
-                 or else Angle_Elementary_Functions.Sin (90.0 * deg - 0.5 * Corner_Blender_Min_Corner_Angle_To_Blend)
-                         < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
+                 or else
+                   Angle_Elementary_Functions.Sin (90.0 * deg - 0.5 * Corner_Blender_Min_Corner_Angle_To_Blend)
+                   < Sine_Secondary_Angle (Block.Corners (I - 1), Block.Corners (I), Block.Corners (I + 1))
                then
                   Block.Beziers (I) :=
                     Create_Bezier (Block.Corners (I), Block.Corners (I), Block.Corners (I), 0.0 * mm);
@@ -169,10 +174,10 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          return 1.0;
       elsif 0.5 + A / B < 0.0 then
          return 0.0;
-      elsif (0.5 + A / B)**(1 / 2) > 1.0 then
+      elsif (0.5 + A / B) ** (1 / 2) > 1.0 then
          return 1.0;
       else
-         return (0.5 + A / B)**(1 / 2);
+         return (0.5 + A / B) ** (1 / 2);
       end if;
    end Sine_Secondary_Angle;
 
@@ -180,7 +185,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       A        : constant Scaled_Position_Offset := Start - Corner;
       B        : constant Scaled_Position_Offset := Finish - Corner;
       Bisector : constant Position_Scale :=
-        (if abs A = 0.0 or abs B = 0.0 then (others => 0.0) else A / abs A + B / abs B);
+        (if abs A = 0.0 or else abs B = 0.0 then [others => 0.0] else A / abs A + B / abs B);
    begin
       if abs Bisector = 0.0 then
          return Bisector;

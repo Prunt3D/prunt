@@ -1,1 +1,1 @@
-pragma Warnings (Off, "array aggregate using () is an obsolescent syntax, use [] instead");
+pragma Warnings (Off, "potentially blocking operation in protected operation");

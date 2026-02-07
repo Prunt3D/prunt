@@ -1,0 +1,37 @@
+with "config/config_codegen_config.gpr";
+project Config_Codegen is
+
+   for Source_Dirs use ("src/", "config/");
+   for Object_Dir use "obj/" & Config_Codegen_Config.Build_Profile;
+   for Create_Missing_Dirs use "True";
+   for Exec_Dir use "bin";
+   for Main use ("config_codegen.adb");
+
+   package Compiler is
+            for Default_Switches ("Ada") use Config_Codegen_Config.Ada_Compiler_Switches &
+              ("-gnatyM119",
+               "-gnat2022",
+               "-gnaty-B",
+               "-gnatW8");
+   end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-Es"); --  Symbolic traceback
+   end Binder;
+
+   package Install is
+      for Artifacts (".") use ("share");
+   end Install;
+
+   package Pretty_Printer is
+      for Default_Switches ("ada") use
+        ("--max-line-length=119",
+         "--no-compact");
+   end Pretty_Printer;
+
+   package Format is
+      for Width ("Ada") use "119";
+      for Charset ("Ada") use "utf-8";
+   end Format;
+
+end Config_Codegen;

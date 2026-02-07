@@ -1,87 +1,73 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
-with Prunt.Motion_Planner;
-with Prunt.Config;
-with Prunt.Motion_Planner.Planner;
-with Prunt.Web_Server;
-with Prunt.Controller_Generic_Types;
+pragma Extensions_Allowed (On);
+
 with Ada.Exceptions;
-with System.Multiprocessors;
-with Prunt.Step_Generator.Generator;
-with Prunt.Input_Shapers;
-with Prunt.TMC_Types;
-with Prunt.TMC_Types.TMC2240;
-with Prunt.Logger;
-with Prunt.Command_Line_Arguments;
-with Prunt.Update_Checker;
 with Ada.Streams;
-with Prunt.TMC_Readings_Updater_Blocker;
+with Prunt.Config;
+with Prunt.Controller_Generic_Types;
+with Prunt.Exception_Occurrence_Holders;
+
+private with Ada.Containers.Indefinite_Holders;
+private with Prunt.Command_Line_Arguments;
+private with Prunt.Controller_Helpers;
+private with Prunt.Default_Modules;
+private with Prunt.Default_Modules.Basic_Motor_Drivers;
+private with Prunt.Default_Modules.Basic_Config;
+private with Prunt.Default_Modules.Config_Saving;
+private with Prunt.Default_Modules.Blocking_Tracker;
+private with Prunt.Default_Modules.Dwell;
+private with Prunt.Default_Modules.Fans;
+private with Prunt.Default_Modules.Heaters;
+private with Prunt.Default_Modules.Homing;
+private with Prunt.Default_Modules.Idle_Emitter;
+private with Prunt.Default_Modules.Input_Shapers;
+private with Prunt.Default_Modules.Input_Switches;
+private with Prunt.Default_Modules.Internal_Status_Reporter;
+private with Prunt.Default_Modules.Kinematics;
+private with Prunt.Default_Modules.Machine_Idle_Timeout;
+private with Prunt.Default_Modules.Machine_Name;
+private with Prunt.Default_Modules.Motion;
+private with Prunt.Default_Modules.Motor_Drivers;
+private with Prunt.Default_Modules.Power_Control;
+private with Prunt.Default_Modules.Tachometers;
+private with Prunt.Default_Modules.TMC2240_Drivers;
+private with Prunt.Default_Modules.Thermistors;
+private with Prunt.Gcode_Queues;
+private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
+private with Prunt.Logger;
+private with Prunt.Module_Types;
+private with Prunt.Motion_Planner.Planner;
+private with Prunt.Status_Manager;
+private with Prunt.Step_Generator;
+private with Prunt.Update_Checker;
+private with Prunt.Web_Server;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
    use Generic_Types;
 
-   Stepper_Hardware : Generic_Types.Stepper_Hardware_Parameters_Array_Type;
-   --  The parameters of the stepper drivers installed on the hardware that the implementation is designed for.
-
-   Fan_Hardware : Generic_Types.Fan_Hardware_Parameters_Array_Type;
-   --  The parameters of the fan drivers installed on the hardware that the implementation is designed for.
+   Hardware : Generic_Types.Hardware_Parameters;
 
    Interpolation_Time : Time;
-   --  The time delta for all moves except loop moves.
-
-   Loop_Interpolation_Time : Time;
-   --  The time delta for loop moves. This currently needs to be an integer multiple of Interpolation_Time for the
-   --  step rate limit to be correctly enforced under all conditions.
-
-   with procedure Setup (Heater_Thermistors : Heater_Thermistor_Map; Thermistors : Thermistor_Parameters_Array_Type);
-   --  Run any required setup and store parameters for later use. This procedure will only be called once and will be
-   --  called before any other procedures. Should configure all heaters as disabled until Reconfigure_Heater is called.
-
-   with
-     procedure Reconfigure_Heater (Heater : Heater_Name; Params : Heater_Parameters)
-     with Pre => Params.Kind not in (PID_Autotune_Kind);
-   --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from any
-   --  task.
-
-   with
-     procedure Autotune_Heater (Heater : Heater_Name; Params : Heater_Parameters)
-     with Pre => Params.Kind in (PID_Autotune_Kind);
-   --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
-   --
-   --  TODO: Save the results to the config file.
-
-   with procedure Setup_For_Loop_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
-   --  Setup the step generator for an upcoming loop move. A loop move should stop looping when the state of Switch =
-   --  Hit_State. This procedure will always be called before any loop moves are called, but may be called zero, one,
-   --  or many times for each loop move. The last parameters of this call before an Enqueue_Move call containing a loop
-   --  move should always be the values used for the given loop move. This procedure will not be called if the last
-   --  call to Enqueue_Move had the Safe_Stop_After parameter set to False. This procedure may be called before any
-   --  moves are queued. Wait_Until_Idle will always be called before this procedure.
-
-   with procedure Setup_For_Conditional_Move (Switch : Input_Switch_Name; Hit_State : Pin_State);
-   --  Ignore all commands until after the next command where Safe_Stop_After = True if the Switch is currently in
-   --  Hit_State. This procedure will not be called if the last call to Enqueue_Command had the Safe_Stop_After
-   --  parameter set to False. Wait_Until_Idle will always be called before this procedure.
+   --  The time delta for all moves.
 
    with procedure Enqueue_Command (Command : Queued_Command);
    --  Enqueue a command to be executed.
@@ -90,55 +76,59 @@ generic
    --  Loop_Interpolation_Time.
    --
    --  If Loop_Until_Hit = True then the move should be repeated indefinitely until the condition set by
-   --  Setup_For_Loop_Move is met. If the condition is met before the loop move is reached then Report_External_Error
-   --  should be called. After the loop move is completed, Report_Loop_Cycles must be called.
+   --  Setup_For_Loop_Move is met. If the condition is met before the loop move is reached then
+   --  Report_External_Error should be called. After the loop move is completed, Report_Loop_Cycles must be called.
    --
-   --  If the queue runs dry on a move where Safe_Stop_After = False then Report_External_Error should be called and
-   --  all heaters and motors should be disabled. Keep in mind that the motors may still be moving when the queue runs
-   --  dry, so a delay may be required before disabling the motors.
-   --
-   --  Index starts at 1 and will increase by 1 for each call.
-   --
-   --  The implementation is allowed to buffer fan and heater targets and only send the latest value every n commands
-   --  where n is sufficiently small to prevent any practical difference from being updated with every command.
-   --
-   --  Laser targets should not be buffered.
+   --  If the queue runs dry on a move where Safe_Stop_After = False then Report_External_Error should be called
+   --  and all heaters and motors should be disabled. Keep in mind that the motors may still be moving when the queue
+   --  runs dry, so a delay may be required before disabling the motors.
 
-   with procedure Reset_Position (Pos : Stepper_Position);
-   --  Reset the position of all steppers to the given position. This procedure should not cause the steppers to move,
-   --  it just informs the steppers of their position. This procedure will always be called before Enqueue_Command is
+   with procedure Reset_Position (Pos : Motor_Position);
+   --  Reset the position of all motors to the given position. This procedure should not cause the motors to move, it
+   --  just informs the motors of their position. This procedure will always be called before Enqueue_Command is
    --  first called. This procedure will not be called if the last call to Enqueue_Command had the Safe_Stop_After
    --  parameter set to False.
 
-   with procedure Wait_Until_Idle (Last_Command : Command_Index);
+   with procedure Wait_Until_Idle (Last_Command_Index : Command_Index);
    --  Block until all queued commands are completed. This procedure will not be called if the last call to
-   --  Enqueue_Command had the Safe_Stop_After parameter set to False. This procedure should not wait for heaters to
-   --  reach targets. Last_Command indicates the last command index that was enqueued. May be called from any task.
+   --  Enqueue_Command had the Safe_Stop_After parameter set to False. Will only be called from the same task as
+   --  Enqueue_Command.
 
-   with procedure Reset;
+   with procedure Reset_Hardware;
    --  Reset the device to power-on state.
 
    Config_Path : String;
    --  Path of the printer configuration file.
 
-   with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
+   with
+     function Get_Extra_HTTP_Content (Name : Virtual_String) return access constant Ada.Streams.Stream_Element_Array;
    --  Get a file to be exposed via the built in web server under the extras/ path. This is intended to be used for
-   --  images for board-specific documentation.
+   --  images for board-specific documentation but can also be used for other files such as firmware binaries.
 
-   with function Get_Board_Specific_Documentation (Key : String) return String;
+   with function Get_Board_Specific_Documentation (Key : Virtual_String) return Virtual_String;
    --  Get the board specific documentation HTML to be appended to the documentation for a given configuration option.
-   --  Keys can be displayed in the web interface by running the server with `--enable-documentation-dev-mode=true`.
+   --  Keys can be displayed in the web interface by running the server with --enable-documentation-dev-mode=true.
 
    Update_Check : Update_Check_Details := (Method => None);
    --  Method to be used for update checking. When an update is available it will be displayed via the web interface.
 
-   Input_Switch_Visible_To_User : Input_Switch_Visible_To_User_Type := (others => True);
-   --  Controls whether input switches are presented to the user in the configuration interface. This is primarily
-   --  intended for hiding of DIAG0 pins on TMC drivers which are required for StallGuard homing but should not be
-   --  directly selectable by the user.
+   Executed_Command_Position_Ring_Capacity : Positive;
+   --  Capacity of the ring buffer used to transfer queued execution positions from the step generator path to
+   --  execution reporting. This sets an upper bound on how many commands may be queued before new commands stop being
+   --  emitted.
 
-package Prunt.Controller
-is
+   Disable_Default_Modules : Boolean := False;
+
+   Extra_Modules : Module_Maps.Map := [];
+package Prunt.Controller is
+
+   pragma Extensions_Allowed (On);
+   --  TODO: We need to repeat this here or we get errors, but it's unclear why. Does the pragma above the generic not
+   --  carry through to the instantiation?
+
+   pragma Unreferenced (Get_Board_Specific_Documentation);
+
+   pragma Assert (Executed_Command_Position_Ring_Capacity >= 2);
 
    procedure Prompt_For_Update;
    --  Prompts the user to click a button to allow a firmware update in the GUI and returns when the user clicks the
@@ -151,34 +141,11 @@ is
    procedure Run;
    --  Start the controller. Does not return while the controller is running.
 
-   procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature);
-   --  Report the current thermistor output. There are no restrictions on how often this procedure needs to be called
-   --  but some g-code commands will block until it is called after the start of command execution.
-
-   procedure Report_Temperature (Temperature_Probe : Board_Temperature_Probe_Name; Temp : Temperature);
-   --  Report the current board temperature probe output. There are no restrictions on how often this procedure needs
-   --  to be called.
-
-   procedure Report_Heater_Power (Heater : Heater_Name; Power : PWM_Scale);
-   --  Report the current power setting of a heater. There are no restrictions on how often this procedure needs to be
-   --  called.
-
-   procedure Report_Input_Switch_State (Switch : Input_Switch_Name; State : Pin_State);
-   --  Report the current state of an input switch. There are no restrictions on how often this procedure needs to be
-   --  called.
-
-   procedure Report_Tachometer_Frequency (Fan : Fan_Name; Freq : Frequency);
-   --  Report the current frequency of a tachometer input.
-
-   procedure Report_Heater_Current (Heater : Heater_Name; Curr : Current);
-   --  Report the current current draw of a heater.
-
    procedure Report_Last_Command_Executed (Index : Command_Index);
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
 
-   procedure Report_Loop_Cycles (Index : Command_Index; Cycles : Dimensionless);
-   --  Report the number of loops executed for a given loop move.
+   procedure Report_Loop_Move_Cycles (Index : Command_Index; Cycles : Dimensionless);
 
    procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
    --  Report an error to Prunt and cause the printer to halt.
@@ -189,154 +156,351 @@ is
    procedure Log (Message : String);
    --  Log a message for the user.
 
+   procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean);
+   --  Queue a single G-code command for execution.
+
+   procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
+   --  Queue a G-code file for execution.
+
 private
 
+   use Prunt.Module_Types;
+
+   package My_Logger is new Prunt.Logger;
+
+   package My_Controller_Helpers is new Prunt.Controller_Helpers (Generic_Types);
+   use My_Controller_Helpers;
+
+   package My_Default_Modules is new Default_Modules (My_Modules, My_Logger);
+
+   function Get_Current_Position return Position;
+
+   function Get_Current_File_Name return Virtual_String;
+
+   function Get_Current_File_Line return File_Line_Count;
+
+   function Stepgen_Paused return Boolean;
+
+   package My_Default_Modules_Children is
+      package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
+      --  TODO: Idle emitter needs to be connected to controller idle interface.
+      package Basic_Config is new My_Default_Modules.Basic_Config;
+      package Blocking_Tracker is new My_Default_Modules.Blocking_Tracker;
+      package Config_Saving is new My_Default_Modules.Config_Saving;
+      package Machine_Name is new My_Default_Modules.Machine_Name (Config_Saving_Module => Config_Saving);
+      package Machine_Idle_Timeout is new My_Default_Modules.Machine_Idle_Timeout;
+      package Power_Control is new My_Default_Modules.Power_Control;
+      package Dwell is new My_Default_Modules.Dwell;
+      package Input_Switches is new
+        My_Default_Modules.Input_Switches
+          (My_Controller_Generic_Types => Generic_Types,
+           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware);
+      package Homing is new
+        My_Default_Modules.Homing
+          (My_Controller_Generic_Types => Generic_Types,
+           Motor_Hardware              => Hardware.Motor_Hardware,
+           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware,
+           Input_Switches_Module       => Input_Switches);
+      package Internal_Status_Reporter is new
+        My_Default_Modules.Internal_Status_Reporter
+          (Get_Position   => Get_Current_Position,
+           Get_File_Name  => Get_Current_File_Name,
+           Get_Line       => Get_Current_File_Line,
+           Stepgen_Paused => Stepgen_Paused);
+      package Motion is new My_Default_Modules.Motion;
+      package Input_Shapers is new My_Default_Modules.Input_Shapers (Config_Saving_Module => Config_Saving);
+      package Fans is new
+        My_Default_Modules.Fans (My_Controller_Generic_Types => Generic_Types, Fan_Hardware => Hardware.Fan_Hardware);
+      package Tachometers is new
+        My_Default_Modules.Tachometers
+          (My_Controller_Generic_Types => Generic_Types,
+           Tachometer_Hardware         => Hardware.Tachometer_Hardware);
+      package Motor_Drivers is new My_Default_Modules.Motor_Drivers (My_Controller_Generic_Types => Generic_Types);
+      package Basic_Motor_Drivers is new
+        My_Default_Modules.Basic_Motor_Drivers
+          (My_Controller_Generic_Types => Generic_Types,
+           Motor_Hardware              => Hardware.Motor_Hardware,
+           Motor_Drivers_Module        => Motor_Drivers);
+      package TMC2240_Drivers is new
+        My_Default_Modules.TMC2240_Drivers
+          (My_Controller_Generic_Types => Generic_Types,
+           Motor_Hardware              => Hardware.Motor_Hardware,
+           Motor_Drivers_Module        => Motor_Drivers);
+      package Kinematics is new
+        My_Default_Modules.Kinematics
+          (My_Controller_Generic_Types => Generic_Types,
+           Config_Saving_Module        => Config_Saving,
+           Motor_Drivers_Module        => Motor_Drivers,
+           Input_Shapers_Module        => Input_Shapers);
+      package Thermistors is new
+        My_Default_Modules.Thermistors
+          (My_Controller_Generic_Types => Generic_Types,
+           Thermistor_Hardware         => Hardware.Thermistor_Hardware);
+      package Heaters is new
+        My_Default_Modules.Heaters
+          (My_Controller_Generic_Types => Generic_Types,
+           Heater_Hardware             => Hardware.Heater_Hardware,
+           Thermistors_Module          => Thermistors,
+           Blocking_Tracker_Module     => Blocking_Tracker);
+   end My_Default_Modules_Children;
+
+   type Executed_Command_Position is record
+      Index : Command_Index;
+      Pos   : Position;
+   end record;
+
+   package Last_Command_Executed is
+      --  We use a package here rather than a protected object as this needs to be lock free to be used in the realtime
+      --  path. In practice, a lock here would probably be fine, but it is still better to avoid it if we can.
+
+      procedure Reset (Pos : Position);
+
+      procedure Record_Queued_Position (Index : Command_Index; Pos : Position);
+
+      procedure Report (Index : Command_Index);
+
+      function Get return Command_Index;
+
+      function Get_Current_Position return Position;
+      --  Note that this function may return parts from different position reports. This is really only intended for
+      --  retrieval of a value for status reporting purposes.
+
+   private
+      type Atomic_Command_Index is new Command_Index with Atomic, Volatile;
+      type Atomic_Length is new Length with Atomic, Volatile;
+
+      type Pending_Position_Ring_Index is new Positive range 1 .. Executed_Command_Position_Ring_Capacity
+      with Atomic, Volatile;
+
+      type Atomic_Position_Array is array (Axis_Name) of Atomic_Length;
+
+      type Pending_Position_Slot is record
+         Index : Atomic_Command_Index := 0;
+         --  Command index associated with this queued position.
+
+         Pos : Atomic_Position_Array;
+         --  Queued cartesian position for this command.
+      end record;
+
+      type Pending_Position_Slots is array (Pending_Position_Ring_Index) of Pending_Position_Slot;
+
+      function Next_Slot (Slot : Pending_Position_Ring_Index) return Pending_Position_Ring_Index;
+
+      function Previous_Slot (Slot : Pending_Position_Ring_Index) return Pending_Position_Ring_Index;
+
+      function Advance_Slot (Slot : Pending_Position_Ring_Index; Count : Natural) return Pending_Position_Ring_Index;
+
+      function Slot_Distance (From_Slot, To_Slot : Pending_Position_Ring_Index) return Natural;
+
+      procedure Write_Position (Target : out Atomic_Position_Array; Pos : Position);
+
+      function Read_Position (Source : Atomic_Position_Array) return Position;
+
+      Pending_Position_Write_Slot : Pending_Position_Ring_Index := Pending_Position_Ring_Index'First;
+      --  Next ring slot the producer will try to publish into. One slot is always left empty, so the ring is full when
+      --  advancing this slot would collide with Pending_Position_Read_Slot.
+
+      Pending_Position_Read_Slot : Pending_Position_Ring_Index := Pending_Position_Ring_Index'First;
+      --  Next ring slot the consumer will examine when advancing executed position state. The ring is empty when this
+      --  matches Pending_Position_Write_Slot.
+
+      Pending_Positions : Pending_Position_Slots := [others => <>];
+      --  Fixed-capacity SPSC ring carrying queued positions from step generation to execution reporting.
+
+      Last_Command_Executed_Index : Atomic_Command_Index := 0;
+      --  Highest command index reported as fully executed.
+
+      Current_Position_Data : Atomic_Position_Array := [others => Atomic_Length (0.0 * mm)];
+      --  Last committed executed cartesian position.
+   end Last_Command_Executed;
+
+   use type Module_Maps.Map;
+
    pragma Warnings (Off, "use of an anonymous access type allocator");
-   Exception_Occurrence_Holder : constant access Exception_Occurrence_Holder_Type :=
-     new Exception_Occurrence_Holder_Type;
-   --  The only reason that this is an allocation is so that we can safely call 'Access on the Set procedure to be
-   --  passed to Ada.Task_Termination.Set_Specific_Handler. 'Unrestricted_Access works if we replace this with just a
-   --  plain variable but that is a GNAT extension and of course introduces the risk of dangling pointers.
+   Exception_Occurrence_Holder : constant access Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type :=
+     new Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type;
+   --  This needs to be an allocation is so that we can safely call 'Access on the Set procedure to be passed to
+   --  Ada.Task_Termination.Set_Specific_Handler. This of course leaks memory, but no one should be instantiating this
+   --  package thousands of times, which is the only time a leak will matter.
    pragma Warnings (On, "use of an anonymous access type allocator");
 
-   procedure Helper_Lock_Memory
-   with Import => True, Convention => C, External_Name => "prunt_controller_helper_lock_memory";
+   function Get_Modules_For_Hardware return Module_Maps.Map
+   is ["Basic Config"             =>
+         My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
+       "Config Saving"            =>
+         My_Default_Modules_Children.Config_Saving.Module'(My_Modules.Module with null record),
+       "Blocking Tracker"         =>
+         My_Default_Modules_Children.Blocking_Tracker.Module'(My_Modules.Module with null record),
+       "Dwell"                    => My_Default_Modules_Children.Dwell.Module'(My_Modules.Module with null record),
+       "Fans"                     => My_Default_Modules_Children.Fans.Module'(My_Modules.Module with null record),
+       "Heaters"                  => My_Default_Modules_Children.Heaters.Module'(My_Modules.Module with null record),
+       "Homing"                   => My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record),
+       "Idle Emitter"             =>
+         My_Default_Modules_Children.Idle_Emitter.Module'(My_Modules.Module with null record),
+       "Input Shapers"            =>
+         My_Default_Modules_Children.Input_Shapers.Module'(My_Modules.Module with null record),
+       "Input Switches"           =>
+         My_Default_Modules_Children.Input_Switches.Module'(My_Modules.Module with null record),
+       "Internal Status Reporter" =>
+         My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record),
+       "Machine Idle Timeout"     =>
+         My_Default_Modules_Children.Machine_Idle_Timeout.Module'(My_Modules.Module with null record),
+       "Machine Name"             =>
+         My_Default_Modules_Children.Machine_Name.Module'(My_Modules.Module with null record),
+       "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
+       "Motor Drivers"            =>
+         My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
+       "Basic Motor Drivers"      =>
+         My_Default_Modules_Children.Basic_Motor_Drivers.Module'(My_Modules.Module with null record),
+       "TMC2240 Drivers"          =>
+         My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record),
+       "Kinematics"               =>
+         My_Default_Modules_Children.Kinematics.Module'(My_Modules.Module with null record),
+       "Power Control"            =>
+         My_Default_Modules_Children.Power_Control.Module'(My_Modules.Module with null record),
+       "Tachometers"              =>
+         My_Default_Modules_Children.Tachometers.Module'(My_Modules.Module with null record),
+       "Thermistors"              =>
+         My_Default_Modules_Children.Thermistors.Module'(My_Modules.Module with null record)];
 
-   --  TODO: This should be a variant record.
-   type Flush_Resetting_Data is record
-      Is_Homing_Move              : Boolean := False;
-      Home_Switch                 : Input_Switch_Name := Input_Switch_Name'First;
-      Home_Hit_On_State           : Pin_State := High_State;
-      Is_Conditional_Move         : Boolean := False;
-      Conditional_Switch          : Input_Switch_Name := Input_Switch_Name'First;
-      Conditional_Hit_On_State    : Pin_State := High_State;
-      Wait_For_Heater             : Boolean := False;
-      Wait_For_Heater_Name        : Heater_Name := Heater_Name'First;
-      Pause_After                 : Boolean := False;
-      Check_Conditional_Hit_After : Boolean := False;
-   end record;
+   Active_Modules : constant Module_Maps.Map :=
+     ((if Disable_Default_Modules then Module_Maps.Map'[] else Get_Modules_For_Hardware) & Extra_Modules);
 
-   type Block_Persistent_Data is record
-      Current_File : Ada.Strings.Unbounded.Unbounded_String;
-   end record;
+   Active_Module_Config_Schemas : constant Config.Config_Schema_Maps.Map :=
+     [for C in Active_Modules.Iterate use Module_Maps.Key (C) => Module_Maps.Element (C).Config_Schema];
 
-   type Modulate_Lasers_Map is array (Laser_Name) of Boolean;
+   Active_Module_Status_Schemas : constant Status_Manager.Status_Module_Maps.Map :=
+     [for C in Active_Modules.Iterate use Module_Maps.Key (C) => Module_Maps.Element (C).Status_Schema];
 
-   type Corner_Extra_Data is record
-      Fans            : Fan_PWMs;
-      Heaters         : Heater_Targets;
-      Lasers          : Laser_PWMs;
-      Modulate_Lasers : Modulate_Lasers_Map;
-      --  TODO: Modulate_Lasers does not need to be attached to every corner, but it's the easiest way to do things
-      --  right now.
-      Current_Line    : File_Line_Count;
-   end record;
+   My_Status_Data : constant Status_Manager.Status_Data_Collection :=
+     Status_Manager.Build_Collection (Active_Module_Status_Schemas);
 
-   function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean;
+   package Module_Instance_Maps is new
+     Prunt.Indefinite_Ordered_Maps_With_Insertion_Order
+       (Virtual_String,
+        My_Modules.Module_Instance_Shared_Pointers.Ref,
+        "=" => My_Modules.Module_Instance_Shared_Pointers."=");
+   --  We need the insertion order here so we an start instances in the same order that they are initialised. This
+   --  allows for all of an instances dependencies to start before it.
 
-   pragma Warnings (Off, "cannot call * before body seen");
-   package My_Logger is new Logger;
-   pragma Warnings (On, "cannot call * before body seen");
+   Maximum_Motor_Delta : constant Motor_Position :=
+     [for S in Motor_Name => Hardware.Motor_Hardware (S).Maximum_Delta_Per_Command];
 
-   Maximum_Stepper_Delta : constant Stepper_Position :=
-     (for S in Stepper_Name => Stepper_Hardware (S).Maximum_Delta_Per_Command);
+   Active_Config_File : constant Config.Config_File := Config.Create (Config_Path, Active_Module_Config_Schemas);
 
-   package My_Planner is new
+   package My_Update_Checker is new Update_Checker (My_Logger, Update_Check);
+
+   package Extra_Block_Resetting_Data_Holders is new
+     Ada.Containers.Indefinite_Holders (Module_Types.Extra_Block_Resetting_Data'Class, Module_Types."=");
+
+   package My_Motion_Planner is new
      Motion_Planner.Planner
-       (Flush_Resetting_Data_Type     => Flush_Resetting_Data,
-        Flush_Resetting_Data_Default  => (others => <>),
-        Block_Persistent_Data_Type    => Block_Persistent_Data,
-        Block_Persistent_Data_Default => (others => <>),
-        Corner_Extra_Data_Type        => Corner_Extra_Data,
-        Initial_Position              => [others => 0.0 * mm],
-        Max_Corners                   => Command_Line_Arguments.Max_Planner_Block_Corners,
-        Home_Move_Minimum_Coast_Time  => 4.0 * Interpolation_Time + Loop_Interpolation_Time,
-        Is_Homing_Move                => Is_Homing_Move,
-        Interpolation_Time            => Interpolation_Time,
-        Stepper_Name                  => Stepper_Name,
-        Stepper_Position              => Stepper_Position,
-        Maximum_Stepper_Delta         => Maximum_Stepper_Delta,
-        Log                           => Log,
-        Runner_CPU                    => Command_Line_Arguments.Motion_Planner_CPU);
+       (Flush_Resetting_Data_Type         => Extra_Block_Resetting_Data_Holders.Holder,
+        Flush_Resetting_Data_Type_Default =>
+          Extra_Block_Resetting_Data_Holders.To_Holder (Module_Types.Extra_Block_Resetting_Data'(null record)),
+        Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
+        Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
+        Interpolation_Time                => Interpolation_Time,
+        Motor_Name                        => Motor_Name,
+        Motor_Position                    => Motor_Position,
+        Maximum_Motor_Delta               => Maximum_Motor_Delta,
+        Log                               => My_Logger.Log,
+        Runner_CPU                        => Command_Line_Arguments.Motion_Planner_CPU);
 
    procedure Start_Planner_Block
-     (Resetting_Data     : Flush_Resetting_Data;
-      Persistent_Data    : Block_Persistent_Data;
-      Last_Command_Index : Command_Index);
+     (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index);
+
    procedure Enqueue_Command_Internal
      (Pos             : Position;
-      Stepper_Pos     : Stepper_Position;
-      Data            : My_Planner.Corner_Extra_Data_Array;
+      Motor_Pos       : Motor_Position;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
       Vel_Ratio       : Dimensionless);
+
+   procedure Start_Corner (Last_Command_Index : Command_Index; Data : Module_Types.Extra_Corner_Data'Class);
+
    procedure Finish_Planner_Block
-     (Resetting_Data       : Flush_Resetting_Data;
-      Persistent_Data      : Block_Persistent_Data;
-      Next_Block_Pos       : Stepper_Position;
+     (Resetting_Data       : Extra_Block_Resetting_Data_Holders.Holder;
+      Next_Block_Pos       : Motor_Position;
       First_Accel_Distance : Length;
-      Next_Command_Index   : Command_Index);
-   procedure Report_Loop_Move_Offset (Index : Command_Index; Offset : Position_Offset);
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset);
+
+   protected Loop_Move_Cycles is new Loop_Cycle_Reporter_Interface with
+      procedure Report (Index : Command_Index; Cycles : Dimensionless);
+      --  Report the number of loops executed for a given loop move.
+
+      overriding
+      entry Wait (Index : Command_Index; Cycles : out Dimensionless);
+      --  Wait for loop move cycles to be reported.
+
+      --  TODO: Reset procedure for when controller is reset.
+   private
+      Current_Index  : Command_Index := 0;
+      Current_Cycles : Dimensionless := 0.0;
+      Has_Data       : Boolean := False;
+   end Loop_Move_Cycles;
 
    package My_Step_Generator is new
-     Step_Generator.Generator
-       (Planner                 => My_Planner,
-        Stepper_Name            => Stepper_Name,
-        Stepper_Position        => Stepper_Position,
-        Start_Planner_Block     => Start_Planner_Block,
-        Enqueue_Command         => Enqueue_Command_Internal,
-        Finish_Planner_Block    => Finish_Planner_Block,
-        Report_Loop_Move_Offset => Report_Loop_Move_Offset,
-        Interpolation_Time      => Interpolation_Time,
-        Loop_Interpolation_Time => Loop_Interpolation_Time,
-        Runner_CPU              => Command_Line_Arguments.Step_Generator_CPU);
+     Step_Generator
+       (Planner              => My_Motion_Planner,
+        Motor_Name           => Motor_Name,
+        Motor_Position       => Motor_Position,
+        Start_Planner_Block  => Start_Planner_Block,
+        Enqueue_Command      => Enqueue_Command_Internal,
+        Start_Corner         => Start_Corner,
+        Finish_Planner_Block => Finish_Planner_Block,
+        Loop_Cycle_Reporter  => Loop_Move_Cycles'Access,
+        Interpolation_Time   => Interpolation_Time,
+        Runner_CPU           => Command_Line_Arguments.Step_Generator_CPU);
 
-   package My_Config is new
-     Config
-       (Generic_Types                    => Generic_Types,
-        Stepper_Hardware                 => Stepper_Hardware,
-        Fan_Hardware                     => Fan_Hardware,
-        Get_Board_Specific_Documentation => Get_Board_Specific_Documentation,
-        Config_Path                      => Config_Path,
-        Enable_Documentation_Dev_Mode    => Command_Line_Arguments.Enable_Documentation_Dev_Mode,
-        Input_Switch_Visible_To_User     => Input_Switch_Visible_To_User);
+   My_Gcode_Queue : Gcode_Queues.Queue;
 
-   procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length);
+   procedure Apply_Untrusted_Config_Patch
+     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
 
-   function Get_Position return Position;
+   procedure Reload_Server;
 
-   function Get_Temperature (Thermistor : Thermistor_Name) return Temperature;
+   function Get_Status_Values_String return Virtual_String
+   is (My_Status_Data.JSON_Data);
 
-   function Get_Temperature (Stepper : Stepper_Name) return Temperature;
+   Active_Module_Gcode_Dispatch_Map : constant Gcode_Dispatch_Maps.Map := Build_Gcode_Dispatch_Map (Active_Modules);
 
-   function Get_Temperature (Temperature_Probe : Board_Temperature_Probe_Name) return Temperature;
+   Active_Module_Gcode_JSON_String : constant Virtual_String := Build_Gcode_JSON (Active_Modules).Write;
 
-   function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale;
+   package My_Web_Server is new
+     Web_Server
+       (Apply_Config_Patch          => Apply_Untrusted_Config_Patch,
+        My_Logger                   => My_Logger,
+        My_Update_Checker           => My_Update_Checker,
+        Submit_Gcode_Command        => Submit_Gcode_Command,
+        Submit_Gcode_File           => Submit_Gcode_File,
+        Pause_Stepgen               => My_Step_Generator.Pause,
+        Resume_Stepgen              => My_Step_Generator.Resume,
+        Reload_Server               => Reload_Server,
+        Get_Extra_HTTP_Content      => Get_Extra_HTTP_Content,
+        Exception_Occurrence_Holder => Exception_Occurrence_Holder.all,
+        Config_Schema_String        => Active_Config_File.Get_Schema_String,
+        Status_Schema_String        => My_Status_Data.JSON_Schema,
+        Gcode_JSON_String           => Active_Module_Gcode_JSON_String,
+        Get_Status_Values_String    => Get_Status_Values_String,
+        Port                        => Command_Line_Arguments.Web_Server_Port);
 
-   function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State;
+   function Recursive_Module_Initialization
+     (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      My_Config_File      : Config.Config_File;
+      Log_Dependency_Tree : Boolean := False) return Module_Instance_Maps.Map;
 
-   function Get_Tachometer_Frequency (Fan : Fan_Name) return Frequency;
-
-   function Get_Heater_Current (Heater : Heater_Name) return Current;
-
-   function Get_StallGuard_2_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10;
-
-   function Get_StallGuard_4_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10;
-
-   function Get_Line return File_Line_Count;
-
-   procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
-   procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
-
-   package My_Update_Checker is new Update_Checker (My_Logger => My_Logger, Details => Update_Check);
-
-   protected Current_File_Name is
-      function Get_File_Name return String;
-      procedure Set_File_Name (Name : String);
+   protected Patch_Processor is
+      procedure Apply
+        (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
    private
-      File : Ada.Strings.Unbounded.Unbounded_String := Ada.Strings.Unbounded.To_Unbounded_String ("<NO FILE>");
-   end Current_File_Name;
+      Cached_Result       : Virtual_String;
+      Cached_Errors       : Config.Config_Error_Vectors.Vector;
+      Cached_Save_Counter : Config.Save_Counter;
+      Has_Cache           : Boolean := False;
+   end Patch_Processor;
 
    protected Reload_Signal is
       entry Wait;
@@ -349,62 +513,86 @@ private
 
    procedure Signal_Reload;
 
-   pragma Warnings (Off, "cannot call * before body seen");
-   package My_Web_Server is new
-     Web_Server
-       (My_Logger                    => My_Logger,
-        My_Config                    => My_Config,
-        My_Update_Checker            => My_Update_Checker,
-        Get_Position                 => Get_Position,
-        Get_Thermistor_Temperature   => Get_Temperature,
-        Get_Stepper_Temperature      => Get_Temperature,
-        Board_Temperature_Probe_Name => Board_Temperature_Probe_Name,
-        Get_Board_Temperature        => Get_Temperature,
-        Get_Heater_Power             => Get_Heater_Power,
-        Get_Heater_Current           => Get_Heater_Current,
-        Get_Input_Switch_State       => Get_Input_Switch_State,
-        Get_Tachometer_Frequency     => Get_Tachometer_Frequency,
-        Get_StallGuard_2_Value       => Get_StallGuard_2_Value,
-        Get_StallGuard_4_Value       => Get_StallGuard_4_Value,
-        Get_File_Name                => Current_File_Name.Get_File_Name,
-        Get_Line                     => Get_Line,
-        Submit_Gcode_Command         => Submit_Gcode_Command,
-        Submit_Gcode_File            => Submit_Gcode_File,
-        Is_Stepgen_Paused            => My_Step_Generator.Is_Paused,
-        Pause_Stepgen                => My_Step_Generator.Pause,
-        Resume_Stepgen               => My_Step_Generator.Resume,
-        Reload_Server                => Signal_Reload,
-        Get_Extra_HTTP_Content       => Get_Extra_HTTP_Content,
-        Exception_Occurrence_Holder  => Exception_Occurrence_Holder.all,
-        Port                         => Command_Line_Arguments.Web_Server_Port);
-   pragma Warnings (On, "cannot call * before body seen");
+   Startup_Position : constant Position := [others => 0.0 * mm];
 
-   package My_TMC_Readings_Updater_Blocker is new Prunt.TMC_Readings_Updater_Blocker;
-
-   procedure TMC2240_UART_Write_And_Validate
-     (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Generic_Types.Stepper_Name);
-   procedure Setup_Thermistors_And_Heater_Assignments;
-   procedure Setup_Stepper (Stepper : Generic_Types.Stepper_Name);
-   procedure Setup_Step_Generator;
-
-   task TMC_Readings_Updater is
-      entry Start;
-      entry Reset;
-   end TMC_Readings_Updater;
-
-   procedure Enable_Stepper (Stepper : Generic_Types.Stepper_Name);
-   procedure Disable_Stepper (Stepper : Generic_Types.Stepper_Name);
-
-   protected Loop_Move_Recorder is
-      entry Report (Index : Command_Index; Cycles : Dimensionless);
-      entry Report_Offset (Index : Command_Index; Offset : Position_Offset);
-      entry Retrieve (Cycles : out Dimensionless; Offset : out Position_Offset);
+   protected Planner_State is
+      procedure Reset;
+      function Get_Last_Position return Position;
+      function Get_Last_Kinematic_Parameters return Motion_Planner.Kinematic_Parameters;
+      procedure Set_Last_Position (Pos : Position);
+      procedure Set_Last_Kinematic_Parameters (Params : Motion_Planner.Kinematic_Parameters);
    private
-      Report_Ready  : Boolean := False;
-      Offset_Ready  : Boolean := False;
-      Stored_Index  : Command_Index;
-      Stored_Cycles : Dimensionless;
-      Stored_Offset : Position_Offset;
-   end Loop_Move_Recorder;
+      Last_Position             : Position := [others => 0.0 * mm];
+      Last_Kinematic_Parameters : Motion_Planner.Kinematic_Parameters := (others => <>);
+   end Planner_State;
+
+   type Planner_Wrapper is new Planner_Interface with record
+      Startup_Mode : Boolean := False;
+   end record;
+
+   type Planner_Block_End_Context is limited new Module_Types.Block_End_Context with record
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset;
+   end record;
+
+   overriding
+   function Get_Last_Position (This : Planner_Wrapper) return Position;
+
+   overriding
+   function Get_Last_Kinematic_Parameters (This : Planner_Wrapper) return Motion_Planner.Kinematic_Parameters;
+
+   overriding
+   procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name);
+
+   overriding
+   procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name);
+
+   overriding
+   function Axis_Is_Homed (This : Planner_Wrapper; Axis : Axis_Name) return Boolean;
+
+   overriding
+   function Get_First_Accel_Distance (This : Planner_Block_End_Context) return Length;
+
+   overriding
+   function Get_Last_Command_Index (This : Planner_Block_End_Context) return Command_Index;
+
+   overriding
+   function Get_Loop_Move_Offset (This : Planner_Block_End_Context) return Position_Offset;
+
+   overriding
+   procedure Wait_For_Idle (This : Planner_Block_End_Context);
+
+   overriding
+   procedure Add_Corner
+     (This          : Planner_Wrapper;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True;
+      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record));
+
+   overriding
+   procedure Add_Corner_Data (This : Planner_Wrapper; Corner_Data : Extra_Corner_Data'Class);
+
+   overriding
+   procedure Flush
+     (This           : Planner_Wrapper;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False);
+
+   overriding
+   procedure Flush_And_Change_Kinematic_Parameters
+     (This           : Planner_Wrapper;
+      Params         : Motion_Planner.Kinematic_Parameters;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False);
+
+   overriding
+   procedure Flush_And_Reset_Position
+     (This           : Planner_Wrapper;
+      New_Position   : Position;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False);
 
 end Prunt.Controller;

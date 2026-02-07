@@ -1,43 +1,44 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
 with Ada.Characters.Latin_1;
 with Ada.Exceptions;
-with Util.Http.Clients;
-with Util.Http.Clients.Curl;
-with GNATCOLL.JSON; use GNATCOLL.JSON;
 with Ada.Real_Time; use Ada.Real_Time;
+with GNATCOLL.JSON; use GNATCOLL.JSON;
+with Util.Http.Clients.Curl;
+with Util.Http.Clients;
+with VSS.Strings.Conversions;
 
 package body Prunt.Update_Checker is
+
+   pragma Extensions_Allowed (On);
 
    task body Checker is
    begin
       Util.Http.Clients.Curl.Register;
 
       case Details.Method is
-         when None =>
+         when None   =>
             loop
-               accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Unbounded_String) do
+               accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Virtual_String) do
                   Update_Available := False;
-                  Update_URL := To_Unbounded_String ("");
+                  Update_URL := "";
                end Get_Update_URL;
             end loop;
 
@@ -50,7 +51,10 @@ package body Prunt.Update_Checker is
                begin
                   Client.Add_Header ("User-Agent", "Prunt3D-Update-Checker");
                   Client.Get
-                    (To_String ("https://api.github.com/repos/" & Details.Repository & "/releases/latest"), Response);
+                    ("https://api.github.com/repos/"
+                     & Conversions.To_UTF_8_String (Details.Repository)
+                     & "/releases/latest",
+                     Response);
 
                   declare
                      Response_Body       : constant String := Response.Get_Body;
@@ -60,9 +64,10 @@ package body Prunt.Update_Checker is
                   begin
                      while Clock < Next_Check_Time loop
                         select
-                           accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Unbounded_String) do
-                              Update_Available := Details.Expected_Tag /= Current_Release_Tag;
-                              Update_URL := To_Unbounded_String (Current_Release_URL);
+                           accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Virtual_String) do
+                              Update_Available :=
+                                Conversions.To_UTF_8_String (Details.Expected_Tag) /= Current_Release_Tag;
+                              Update_URL := Conversions.To_Virtual_String (Current_Release_URL);
                            end Get_Update_URL;
                         or
                            delay until Next_Check_Time;
@@ -72,10 +77,11 @@ package body Prunt.Update_Checker is
                exception
                   when E : others =>
                      My_Logger.Log
-                       ("Exception in update checker, retrying in 60 minutes:"
-                        & Ada.Characters.Latin_1.CR
-                        & Ada.Characters.Latin_1.LF
-                        & Ada.Exceptions.Exception_Information (E));
+                       (Conversions.To_Virtual_String
+                          ("Exception in update checker, retrying in 60 minutes:"
+                           & Ada.Characters.Latin_1.CR
+                           & Ada.Characters.Latin_1.LF
+                           & Ada.Exceptions.Exception_Information (E)));
                      delay 3600.0;
                end;
             end loop;

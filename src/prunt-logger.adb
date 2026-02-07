@@ -1,37 +1,38 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
-with Ada.Text_IO;
 with Ada.Exceptions;
+with Ada.Text_IO;
+with VSS.Strings.Conversions;
 
 package body Prunt.Logger is
+
+   pragma Extensions_Allowed (On);
 
    procedure Set_Receiver (Log_Handle : in out Handle; Log_Receiver : Receiver) is
    begin
       List_Handler.Set_Receiver (Log_Handle, Log_Receiver);
    end Set_Receiver;
 
-   procedure Log (Message : String) is
+   procedure Log (Message : Virtual_String) is
    begin
-      Message_Queue.Enqueue (To_Unbounded_String (Message));
+      Message_Queue.Enqueue (Message);
    end Log;
 
    overriding
@@ -80,28 +81,24 @@ package body Prunt.Logger is
    end List_Handler;
 
    task body Log_Pusher is
-      Message   : Unbounded_String;
+      Message   : Virtual_String;
       Receivers : Receiver_Lists.List;
    begin
       loop
          Message_Queue.Dequeue (Message);
          List_Handler.Update_If_Required (Receivers);
-         declare
-            Message_String : constant String := To_String (Message);
-         begin
-            Ada.Text_IO.Put_Line (Message_String);
-            for R of Receivers loop
-               if R /= null then
-                  begin
-                     R (Message_String);
-                  exception
-                     when E : others =>
-                        Ada.Text_IO.Put_Line ("Exception in log pusher:");
-                        Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (E));
-                  end;
-               end if;
-            end loop;
-         end;
+         Ada.Text_IO.Put_Line (Conversions.To_UTF_8_String (Message));
+         for R of Receivers loop
+            if R /= null then
+               begin
+                  R (Message);
+               exception
+                  when E : others =>
+                     Ada.Text_IO.Put_Line ("Exception in log pusher:");
+                     Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (E));
+               end;
+            end if;
+         end loop;
       end loop;
    end Log_Pusher;
 

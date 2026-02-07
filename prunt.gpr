@@ -1,10 +1,11 @@
 with "config/prunt_config.gpr";
 project Prunt is
 
-   for Library_Name use "Prunt";
+   for Library_Name use "prunt";
    for Library_Version use Project'Library_Name & ".so." & Prunt_Config.Crate_Version;
 
-   for Source_Dirs use ("src/", "config/", "generated_src_html/");
+   for Source_Dirs use ("src/", "config/", "generated_src_html/", "generated_src_modules/", "gnatcoll_modifications_src/");
+
    for Object_Dir use "obj/" & Prunt_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
    for Library_Dir use "lib";
@@ -14,12 +15,95 @@ project Prunt is
      external ("PRUNT_LIBRARY_TYPE", external ("LIBRARY_TYPE", "static"));
    for Library_Kind use Library_Type;
 
+   case Prunt_Config.Enable_Test_Mocks is
+      when "False" =>
+         for Source_Dirs use Project'Source_Dirs & ("src/mockable_passthrough");
+      when "True" =>
+         for Source_Dirs use Project'Source_Dirs & ("src/mockable_mocked");
+   end case;
+
+   Prunt_Extra_Ada_Compiler_Switches := ();
+   case Prunt_Config.Build_Profile is
+      when "release" =>
+         Prunt_Extra_Ada_Compiler_Switches :=
+           (--  TODO: Benchmark with -gnatp (disable all runtime checks)
+            "-flto=auto",
+            "-fuse-linker-plugin",
+            "-ffat-lto-objects",
+            "-gnatn", --  Enable inlining
+            "-O2");   --  TODO: Benchmark with O2 vs O3
+
+      when "validation" =>
+         Prunt_Extra_Ada_Compiler_Switches :=
+           ("-O0",
+            "-g",
+            "-fstack-check", --  Enable stack overflow checks
+            "-gnateF",       --  Check for all floating point overflow
+            "-gnata",        --  Enable assertions and contracts
+            "-gnatVa",       --  Enable all validity checks
+            "-gnateV",       --  Enable validity checks of default parameters
+            "-gnato11",      --  Strict overflow checking
+            "-gnatwe");      --  Warnings as errors
+
+      when "development" =>
+         Prunt_Extra_Ada_Compiler_Switches :=
+           ("-O0",
+            "-g",
+            -- "-fsanitize=address,alignment,float-cast-overflow,signed-integer-overflow",
+            "-fstack-check", --  Enable stack overflow checks
+            "-gnateF",       --  Check for all floating point overflow
+            "-gnata",        --  Enable assertions and contracts
+            "-gnatVa",       --  Enable all validity checks
+            "-gnateV",       --  Enable validity checks of default parameters
+            "-gnato11");     --  Strict overflow checking
+   end case;
+
    package Compiler is
-      for Default_Switches ("Ada") use Prunt_Config.Ada_Compiler_Switches &
-        ("-gnatyM119",
-         "-gnat2022",
-         "-gnaty-B",
-         "-gnatW8");
+      for Default_Switches ("Ada") use
+        Prunt_Config.Ada_Compiler_Switches
+        & Prunt_Extra_Ada_Compiler_Switches
+        & ("-fdata-sections",
+           "-ffunction-sections",
+           "-fno-omit-frame-pointer",
+           "-gnatW8",    --  UTF-8 encoding
+           "-gnatX",     --  GNAT core extensions
+           "-gnateE",    --  Extra exception info in messages
+           "-gnaty3",    --  Check indentation level
+           "-gnatya",    --  Check attribute casing
+           "-gnatyA",    --  Check array index number usage
+           "-gnatyb",    --  No trailing spaces/tabs
+           "-gnatyB",    --  Enforce or else/and then
+           "-gnatyc",    --  Check comment style
+           "-gnatyd",    --  Disallow CRLF line ends
+           "-gnatye",    --  Make optional end labels mandatory
+           "-gnatyf",    --  No form feed/vertical tabs
+           "-gnatyh",    --  No horizontal tabs
+           "-gnatyi",    --  Check if-then layout
+           "-gnatyI",    --  Disallow in keyword on in parameters
+           "-gnatyk",    --  Enforce lowercase keywords
+           "-gnatyl",    --  General layout checks
+           "-gnatyM119", --  Maximum line length
+           "-gnatyn",    --  Check casing for entities of Standard
+           "-gnatyO",    --  Make overriding keyword mandatory
+           "-gnatyp",    --  Enforce mixed case pragma names
+           "-gnatyr",    --  Enforce consistent identifier casing
+           "-gnatys",    --  Require separate specs for all subprograms
+           "-gnatyS",    --  No statements on same line as if-then/else
+           "-gnatyt",    --  Check spaces around tokens
+           "-gnatyu",    --  No double blank lines
+           "-gnatyx",    --  No C-style parentheses for if conditions etc.
+           "-gnatwa",    --  Enable most optional warnings
+           "-gnatw.k",   --  No redefinitions of names in standard
+           "-gnatwl",    --  Detect possible elaboration issues
+           "-gnatwo",    --  Disallow address clauses which cause variables to overlap
+           "-gnatw.o",   --  Require out parameters to be read
+           "-gnatw.q",   --  Disallow inefficient default record layouts
+           "-gnatw_q",   --  Disallow ignored equality operators
+           "-gnatw.s",   --  Disallow conflicting size clauses
+           "-gnatwt",    --  Detect dead code in conditionals
+           "-gnatw.u",   --  Treat enumerations as unordered without ordered clause
+           "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
+           "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
    end Compiler;
 
    package Builder is
@@ -27,12 +111,67 @@ project Prunt is
    end Builder;
 
    package Binder is
-      for Switches ("Ada") use ("-Es"); --  Symbolic traceback
+      --  TODO: Do these propagate out or are they useless here?
+      case Prunt_Config.Build_Profile is
+         when "release" =>
+            for Switches ("Ada") use
+              ("-Es"); --  Symbolic traceback
+         when "validation" =>
+            for Switches ("Ada") use
+              ("-we",  --  Treat warnings as errors
+               "-Es"); --  Symbolic traceback
+         when "development" =>
+            for Switches ("Ada") use
+              ("-Es"); --  Symbolic traceback
+      end case;
    end Binder;
+
+   -- package Linker is
+   --    case Prunt_Config.Build_Profile is
+   --    when "release" =>
+   --       for Switches ("Ada") use
+   --         ("-flto=auto", --  Link time optimization
+   --          "-Wl,--gc-sections"); --  Delete unreferenced sections
+   --    when "validation" =>
+   --       null;
+   --    when "development" =>
+   --       null;
+   --    end case;
+   -- end Linker;
+   -- Copy to server implementation.
 
    package Install is
       for Artifacts (".") use ("share");
    end Install;
+
+   package Coverage is
+      for Excluded_Units use
+        ("Prunt.Web_Server_Resources",
+         "Prunt.Controller_Generic_Types",
+         "Prunt.Default_Modules",
+         "Prunt.Default_Modules.*",
+         "Prunt.Input_Shapers",
+         "Prunt.Input_Shapers.*",
+         "Prunt.Limited_Shared_Pointers",
+         "Prunt.Modules",
+         "Prunt.Motion_Planner.Planner",
+         "Prunt.Motion_Planner.Planner.*",
+         "Prunt.Motion_Planner.PH_Beziers",
+         "Prunt.TMC_Types",
+         "Prunt.TMC_Types.TMC2240",
+         "Prunt.Mockable",
+         "Prunt.Mockable.*",
+         "Prunt.Controller",
+         "Prunt.Command_Line_Arguments",
+         "Prunt.JSON",
+         "Prunt.Logger",
+         "Prunt.Module_Types",
+         "Prunt.Status_Manager",
+         "Prunt.Step_Generator",
+         "Prunt.Update_Checker",
+         "Prunt.Web_Server",
+         "Prunt");
+   end Coverage;
 
    package Pretty_Printer is
       for Default_Switches ("ada") use

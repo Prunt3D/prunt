@@ -1,34 +1,36 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
-private with Ada.Finalization;
+pragma Extensions_Allowed (On);
+
 private with Ada.Containers.Doubly_Linked_Lists;
 private with Ada.Containers.Synchronized_Queue_Interfaces;
 private with Ada.Containers.Unbounded_Synchronized_Queues;
-private with Ada.Strings.Unbounded;
+private with Ada.Finalization;
+
+--  TODO: This doesn't really need to be a generic. It would probably be better to pass around some kind of handle type
+--  to log message emitters instead of the whole package.
 
 generic
 package Prunt.Logger is
 
-   type Receiver is access procedure (Message : String);
+   type Receiver is access procedure (Message : Virtual_String);
 
    type Handle is tagged limited private;
 
@@ -36,12 +38,11 @@ package Prunt.Logger is
    --  Set a receiver for log messages. Log_Receiver may be null. Messages will stop being sent after Log_Handle is
    --  finalized. Updates and finalization may not apply instantly.
 
-   procedure Log (Message : String);
+   procedure Log (Message : Virtual_String);
    --  Call all log receivers with the given message as the parameter. Message is placed in a queue so this procedure
    --  is unlikely to block for a long period of time, but logging may not occur instantly.
 
 private
-   use Ada.Strings.Unbounded;
 
    package Receiver_Lists is new Ada.Containers.Doubly_Linked_Lists (Receiver);
 
@@ -64,13 +65,13 @@ private
       Receivers_Has_Update : Boolean := True;
    end List_Handler;
 
-   package Unbounded_String_Queue_Interfaces is new
-     Ada.Containers.Synchronized_Queue_Interfaces (Element_Type => Unbounded_String);
+   package Virtual_String_Queue_Interfaces is new
+     Ada.Containers.Synchronized_Queue_Interfaces (Element_Type => Virtual_String);
 
-   package Unbounded_String_Queues is new
-     Ada.Containers.Unbounded_Synchronized_Queues (Queue_Interfaces => Unbounded_String_Queue_Interfaces);
+   package Virtual_String_Queues is new
+     Ada.Containers.Unbounded_Synchronized_Queues (Queue_Interfaces => Virtual_String_Queue_Interfaces);
 
-   Message_Queue : Unbounded_String_Queues.Queue;
+   Message_Queue : Virtual_String_Queues.Queue;
 
    task Log_Pusher;
 

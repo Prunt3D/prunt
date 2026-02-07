@@ -1,1146 +1,1108 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
 
-with Ada.Directories;
-with Ada.Text_IO;
-with Prunt.Controller.Gcode_Handler;
-with Ada.Task_Termination;
+with Ada.Containers.Ordered_Sets;
+with Ada.Containers.Vectors;
+with Ada.Tags;
 with Ada.Task_Identification;
-with Prunt.TMC_Types.TMC2240;
-with Prunt.TMC_Types;
-with Ada.Real_Time;
-
-use type Prunt.TMC_Types.TMC2240.UART_CRC;
-use type Prunt.TMC_Types.TMC2240.UART_Node_Address;
-use type Prunt.TMC_Types.TMC2240.UART_Register_Address;
-use type Prunt.TMC_Types.Unsigned_1;
-use type Prunt.TMC_Types.Unsigned_2;
-use type Prunt.TMC_Types.Unsigned_3;
-use type Prunt.TMC_Types.Unsigned_4;
-use type Prunt.TMC_Types.Unsigned_5;
-use type Prunt.TMC_Types.Unsigned_6;
-use type Prunt.TMC_Types.Unsigned_7;
-use type Prunt.TMC_Types.Unsigned_8;
-use type Prunt.TMC_Types.Unsigned_9;
-use type Prunt.TMC_Types.Unsigned_10;
-use type Prunt.TMC_Types.Unsigned_11;
-use type Prunt.TMC_Types.Unsigned_12;
-use type Prunt.TMC_Types.Unsigned_13;
-use type Prunt.TMC_Types.Unsigned_14;
-use type Prunt.TMC_Types.Unsigned_15;
-use type Prunt.TMC_Types.Unsigned_16;
-use type Prunt.TMC_Types.Unsigned_17;
-use type Prunt.TMC_Types.Unsigned_18;
-use type Prunt.TMC_Types.Unsigned_19;
-use type Prunt.TMC_Types.Unsigned_20;
-use type Prunt.TMC_Types.Unsigned_21;
-use type Prunt.TMC_Types.Unsigned_22;
-use type Prunt.TMC_Types.Unsigned_23;
-use type Prunt.TMC_Types.Unsigned_24;
-use type Prunt.TMC_Types.Unsigned_25;
-use type Prunt.TMC_Types.Unsigned_26;
-use type Prunt.TMC_Types.Unsigned_27;
-use type Prunt.TMC_Types.Unsigned_28;
-use type Prunt.TMC_Types.Unsigned_29;
-use type Prunt.TMC_Types.Unsigned_30;
-use type Prunt.TMC_Types.Unsigned_31;
-use type Prunt.TMC_Types.Unsigned_32;
+with Ada.Task_Termination;
+with Prunt.Gcode_Arguments;
+with VSS.Strings.Conversions;
 
 package body Prunt.Controller is
 
-   --  Atomics are used rather than protected objects here to avoid any potential blocking in the stepgen task.
-   type Atomic_Volatile_Position is new Position with Atomic_Components, Volatile_Components;
-   Last_Position : Atomic_Volatile_Position := (others => Length (0.0));
-   --  Note that each element here is updated atomically, not the entire position. This value is only meant to be used
-   --  for displaying a value in the GUI, so it is not an issue if elements are out of sync.
+   pragma Extensions_Allowed (On);
 
-   type Atomic_Volatile_Heater_Targets is new Heater_Targets with Atomic_Components, Volatile_Components;
-   Last_Heater_Targets : Atomic_Volatile_Heater_Targets := (others => Temperature (0.0));
+   protected body Planner_State is
+      procedure Reset is
+      begin
+         Last_Position := [others => 0.0 * mm];
+         Last_Kinematic_Parameters := (others => <>);
+      end Reset;
 
-   Last_Thermistor_Temperatures : array (Thermistor_Name) of Temperature := (others => Temperature (0.0))
-   with Atomic_Components, Volatile_Components;
+      function Get_Last_Position return Position is
+      begin
+         return Last_Position;
+      end Get_Last_Position;
 
-   Last_Stepper_Temperatures : array (Stepper_Name) of Temperature := (others => Temperature (0.0))
-   with Atomic_Components, Volatile_Components;
+      function Get_Last_Kinematic_Parameters return Motion_Planner.Kinematic_Parameters is
+      begin
+         return Last_Kinematic_Parameters;
+      end Get_Last_Kinematic_Parameters;
 
-   Last_Stepper_SG4_Results : array (Stepper_Name) of Prunt.TMC_Types.Unsigned_10 := (others => 0)
-   with Atomic_Components, Volatile_Components;
+      procedure Set_Last_Position (Pos : Position) is
+      begin
+         Last_Position := Pos;
+      end Set_Last_Position;
 
-   Last_Stepper_SG2_Results : array (Stepper_Name) of Prunt.TMC_Types.Unsigned_10 := (others => 0)
-   with Atomic_Components, Volatile_Components;
+      procedure Set_Last_Kinematic_Parameters (Params : Motion_Planner.Kinematic_Parameters) is
+      begin
+         Last_Kinematic_Parameters := Params;
+      end Set_Last_Kinematic_Parameters;
+   end Planner_State;
 
-   Last_Board_Temperatures : array (Board_Temperature_Probe_Name) of Temperature := (others => Temperature (0.0))
-   with Atomic_Components, Volatile_Components;
-
-   Last_Input_Switch_States : array (Input_Switch_Name) of Pin_State := (others => Low_State)
-   with Atomic_Components, Volatile_Components;
-
-   Last_Heater_Powers : array (Heater_Name) of PWM_Scale := (others => PWM_Scale (0.0))
-   with Atomic_Components, Volatile_Components;
-
-   Last_Tachometer_Frequencies : array (Fan_Name) of Frequency := (others => Frequency (0.0))
-   with Atomic_Components, Volatile_Components;
-
-   Last_Heater_Currents : array (Heater_Name) of Current := (others => Current (0.0))
-   with Atomic_Components, Volatile_Components;
-
-   type Atomic_Volatile_Heater_Thermistor_Map is new Heater_Thermistor_Map with Atomic_Components, Volatile_Components;
-   Stored_Heater_Thermistors : Atomic_Volatile_Heater_Thermistor_Map;
-
-   type Report_Counter is mod 2**32;
-
-   Last_Thermistor_Temperatures_Counters : array (Thermistor_Name) of Report_Counter := (others => 0)
-   with Atomic_Components, Volatile_Components;
-
-   Last_Input_Switch_State_Counters : array (Input_Switch_Name) of Report_Counter := (others => 0)
-   with Atomic_Components, Volatile_Components;
-
-   Last_Line : File_Line_Count := 0
-   with Atomic, Volatile;
-
-   procedure Reset_Last_Values is
+   overriding
+   function Get_Last_Position (This : Planner_Wrapper) return Position is
+      pragma Unreferenced (This);
    begin
-      Last_Position := (others => Length (0.0));
-      Last_Heater_Targets := (others => Temperature (0.0));
-      Last_Thermistor_Temperatures := (others => Temperature (0.0));
-      Last_Stepper_Temperatures := (others => Temperature (0.0));
-      Last_Board_Temperatures := (others => Temperature (0.0));
-      Last_Input_Switch_States := (others => Low_State);
-      Last_Heater_Powers := (others => PWM_Scale (0.0));
-      Last_Tachometer_Frequencies := (others => Frequency (0.0));
-      Last_Heater_Currents := (others => Current (0.0));
-      Last_Thermistor_Temperatures_Counters := (others => 0);
-      Last_Input_Switch_State_Counters := (others => 0);
-      Last_Line := 0;
-   end Reset_Last_Values;
+      return Planner_State.Get_Last_Position;
+   end Get_Last_Position;
 
-   package My_Gcode_Handler is new Gcode_Handler;
-
-   function Is_Homing_Move (Data : Flush_Resetting_Data) return Boolean is
+   overriding
+   function Get_Last_Kinematic_Parameters (This : Planner_Wrapper) return Motion_Planner.Kinematic_Parameters is
+      pragma Unreferenced (This);
    begin
-      return Data.Is_Homing_Move;
-   end Is_Homing_Move;
+      return Planner_State.Get_Last_Kinematic_Parameters;
+   end Get_Last_Kinematic_Parameters;
 
-   procedure Finished_Block (Data : Flush_Resetting_Data; First_Segment_Accel_Distance : Length) is
+   overriding
+   procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name) is
    begin
-      My_Gcode_Handler.Finished_Block (Data, First_Segment_Accel_Distance);
-   end Finished_Block;
+      pragma Unreferenced (This, Axis); --  TODO
+      null;
+   end Mark_Axis_Homed;
 
-   function Get_Position return Position is
+   overriding
+   function Get_First_Accel_Distance (This : Planner_Block_End_Context) return Length is
    begin
-      return (for A in Axis_Name => Last_Position (A));
-   end Get_Position;
+      return This.First_Accel_Distance;
+   end Get_First_Accel_Distance;
 
-   function Get_Temperature (Thermistor : Thermistor_Name) return Temperature is
+   overriding
+   function Get_Last_Command_Index (This : Planner_Block_End_Context) return Command_Index is
    begin
-      return Last_Thermistor_Temperatures (Thermistor);
-   end Get_Temperature;
+      return This.Last_Command_Index;
+   end Get_Last_Command_Index;
 
-   function Get_Temperature (Stepper : Stepper_Name) return Temperature is
+   overriding
+   function Get_Loop_Move_Offset (This : Planner_Block_End_Context) return Position_Offset is
    begin
-      return Last_Stepper_Temperatures (Stepper);
-   end Get_Temperature;
+      return This.Loop_Move_Offset;
+   end Get_Loop_Move_Offset;
 
-   function Get_Temperature (Temperature_Probe : Board_Temperature_Probe_Name) return Temperature is
+   overriding
+   procedure Wait_For_Idle (This : Planner_Block_End_Context) is
    begin
-      if Board_Temperature_Probe_Name'First > Board_Temperature_Probe_Name'Last then
-         --  This is here to keep GCC happy.
-         return 0.0 * celsius;
-      else
-         return Last_Board_Temperatures (Temperature_Probe);
+      Wait_Until_Idle (This.Last_Command_Index);
+   end Wait_For_Idle;
+
+   overriding
+   procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name) is
+   begin
+      pragma Unreferenced (This, Axis); --  TODO
+      null;
+   end Mark_Axis_Unhomed;
+
+   overriding
+   function Axis_Is_Homed (This : Planner_Wrapper; Axis : Axis_Name) return Boolean is
+   begin
+      --  TODO
+      return False;
+   end Axis_Is_Homed;
+
+   overriding
+   procedure Add_Corner
+     (This          : Planner_Wrapper;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True;
+      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
+   is
+      pragma Unreferenced (Require_Homed);
+   begin
+      if This.Startup_Mode and then Pos /= Planner_State.Get_Last_Position then
+         raise Constraint_Error with "Motion not allowed during startup.";
       end if;
-   end Get_Temperature;
 
-   function Get_Heater_Power (Heater : Heater_Name) return PWM_Scale is
+      Planner_State.Set_Last_Position (Pos);
+
+      My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
+
+      if Corner_Data not in Extra_Corner_Data then
+         My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+      end if;
+   end Add_Corner;
+
+   overriding
+   procedure Add_Corner_Data (This : Planner_Wrapper; Corner_Data : Extra_Corner_Data'Class) is
    begin
-      return Last_Heater_Powers (Heater);
-   end Get_Heater_Power;
+      if Corner_Data not in Extra_Corner_Data then
+         My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+      end if;
+   end Add_Corner_Data;
 
-   function Get_Input_Switch_State (Switch : Input_Switch_Name) return Pin_State is
+   overriding
+   procedure Flush
+     (This           : Planner_Wrapper;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
+   is
+      pragma Unreferenced (This);
    begin
-      return Last_Input_Switch_States (Switch);
-   end Get_Input_Switch_State;
+      My_Motion_Planner.Enqueue_Flush
+        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Is_Homing_Move => Is_Homing_Move);
+   end Flush;
 
-   function Get_Tachometer_Frequency (Fan : Fan_Name) return Frequency is
+   overriding
+   procedure Flush_And_Change_Kinematic_Parameters
+     (This           : Planner_Wrapper;
+      Params         : Motion_Planner.Kinematic_Parameters;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
+   is
+      pragma Unreferenced (This);
    begin
-      return Last_Tachometer_Frequencies (Fan);
-   end Get_Tachometer_Frequency;
+      Planner_State.Set_Last_Kinematic_Parameters (Params);
 
-   function Get_Heater_Current (Heater : Heater_Name) return Current is
+      My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
+        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+   end Flush_And_Change_Kinematic_Parameters;
+
+   overriding
+   procedure Flush_And_Reset_Position
+     (This           : Planner_Wrapper;
+      New_Position   : Position;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
+   is
+      pragma Unreferenced (This);
    begin
-      return Last_Heater_Currents (Heater);
-   end Get_Heater_Current;
+      Planner_State.Set_Last_Position (New_Position);
 
-   function Get_StallGuard_2_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10 is
-   begin
-      return Last_Stepper_SG2_Results (Stepper);
-   end Get_StallGuard_2_Value;
-
-   function Get_StallGuard_4_Value (Stepper : Stepper_Name) return TMC_Types.Unsigned_10 is
-   begin
-      return Last_Stepper_SG4_Results (Stepper);
-   end Get_StallGuard_4_Value;
-
-   protected body Current_File_Name is
-      function Get_File_Name return String is
-      begin
-         return Ada.Strings.Unbounded.To_String (File);
-      end Get_File_Name;
-
-      procedure Set_File_Name (Name : String) is
-      begin
-         File := Ada.Strings.Unbounded.To_Unbounded_String (Name);
-      end Set_File_Name;
-   end Current_File_Name;
-
-   function Get_Line return File_Line_Count is
-   begin
-      return Last_Line;
-   end Get_Line;
-
-   procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean) is
-   begin
-      My_Gcode_Handler.Try_Queue_Command (Command, Succeeded);
-   end Submit_Gcode_Command;
-
-   procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean) is
-   begin
-      My_Gcode_Handler.Try_Set_File (Path, Succeeded);
-   end Submit_Gcode_File;
-
-   task body TMC_Readings_Updater is
-      use Ada.Real_Time;
-
-      TMC_Status_Error : exception;
-   begin
-      loop
-         loop
-            select
-               accept Start;
-               exit;
-            or
-               accept Reset;
-            end select;
-         end loop;
-
-         Inner :
-         loop
-            for S in Stepper_Name loop
-               case Stepper_Hardware (S).Kind is
-                  when Basic_Kind        =>
-                     null;
-
-                  when TMC2240_UART_Kind =>
-                     declare
-                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
-                          (Bytes_Mode => False,
-                           Content    =>
-                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
-                              Register => TMC_Types.TMC2240.ADC_TEMP_Address,
-                              others   => <>));
-                        Receive_Failed : Boolean;
-                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
-                     begin
-                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
-                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
-
-                        if Receive_Failed then
-                           null;
-                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-                           null;
-                        elsif Reply.Content.Node /= 255 then
-                           null;
-                        elsif Reply.Content.Register /= Query.Content.Register then
-                           null;
-                        else
-                           Last_Stepper_Temperatures (S) :=
-                             Temperature (Reply.Content.ADC_TEMP_Data.ADC_Temp) - 264.675 * celsius;
-                        end if;
-                     end;
-
-                     declare
-                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
-                          (Bytes_Mode => False,
-                           Content    =>
-                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
-                              Register => TMC_Types.TMC2240.SG4_RESULT_Address,
-                              others   => <>));
-                        Receive_Failed : Boolean;
-                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
-                     begin
-                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
-                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
-
-                        if Receive_Failed then
-                           null;
-                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-                           null;
-                        elsif Reply.Content.Node /= 255 then
-                           null;
-                        elsif Reply.Content.Register /= Query.Content.Register then
-                           null;
-                        else
-                           Last_Stepper_SG4_Results (S) := Reply.Content.SG4_Result_Data.SG4_Result;
-                        end if;
-                     end;
-
-                     declare
-                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
-                          (Bytes_Mode => False,
-                           Content    =>
-                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
-                              Register => TMC_Types.TMC2240.DRV_STATUS_Address,
-                              others   => <>));
-                        Receive_Failed : Boolean;
-                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
-                     begin
-                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
-                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
-
-                        if Receive_Failed then
-                           null;
-                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-                           null;
-                        elsif Reply.Content.Node /= 255 then
-                           null;
-                        elsif Reply.Content.Register /= Query.Content.Register then
-                           null;
-                        else
-                           Last_Stepper_SG2_Results (S) := Reply.Content.DRV_STATUS_Data.SG_Result;
-
-                           if Reply.Content.DRV_STATUS_Data.S2VSA then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports short to 24V on phase A.";
-                           end if;
-                           if Reply.Content.DRV_STATUS_Data.S2VSB then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports short to 24V on phase B.";
-                           end if;
-                           if Reply.Content.DRV_STATUS_Data.S2GA then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports short to ground on phase A.";
-                           end if;
-                           if Reply.Content.DRV_STATUS_Data.S2GB then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports short to ground on phase B.";
-                           end if;
-                           if Reply.Content.DRV_STATUS_Data.OT then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " has reached its temperature limit.";
-                           end if;
-                        end if;
-                     exception
-                        when E : TMC_Status_Error =>
-                           Exception_Occurrence_Holder.Set_Recoverable
-                             (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-                           exit Inner;
-                     end;
-
-                     declare
-                        Query          : TMC_Types.TMC2240.UART_Query_Message :=
-                          (Bytes_Mode => False,
-                           Content    =>
-                             (Node     => Stepper_Hardware (S).TMC2240_UART_Address,
-                              Register => TMC_Types.TMC2240.GSTAT_Address,
-                              others   => <>));
-                        Receive_Failed : Boolean;
-                        Reply          : TMC_Types.TMC2240.UART_Data_Message;
-                     begin
-                        Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-                        My_TMC_Readings_Updater_Blocker.Wait_Until_Unpaused;
-                        Stepper_Hardware (S).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
-
-                        if Receive_Failed then
-                           null;
-                        elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-                           null;
-                        elsif Reply.Content.Node /= 255 then
-                           null;
-                        elsif Reply.Content.Register /= Query.Content.Register then
-                           null;
-                        else
-                           if Reply.Content.GSTAT_Data.VM_UVLO then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports undervoltage on 24V rail.";
-                           end if;
-                           if Reply.Content.GSTAT_Data.UV_CP then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports undervoltage on charge pump.";
-                           end if;
-                           if Reply.Content.GSTAT_Data.Register_Reset then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports an unexpected register reset.";
-                           end if;
-                           if Reply.Content.GSTAT_Data.Reset then
-                              raise TMC_Status_Error
-                                with "The TMC2240 driver for " & S'Image & " reports an unexpected reset.";
-                           end if;
-                        end if;
-                     exception
-                        when E : TMC_Status_Error =>
-                           Exception_Occurrence_Holder.Set_Recoverable
-                             (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-                           exit Inner;
-                     end;
-               end case;
-            end loop;
-
-            select
-               accept Reset;
-               exit Inner;
-            or
-               delay 0.2;
-            end select;
-         end loop Inner;
-      end loop;
-   end TMC_Readings_Updater;
+      My_Motion_Planner.Enqueue_Flush_And_Reset_Position
+        (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
+         Pos            => New_Position,
+         Is_Homing_Move => Is_Homing_Move);
+   end Flush_And_Reset_Position;
 
    procedure Prompt_For_Update is
    begin
-      My_Web_Server.Wait_For_User_To_Allow_Update;
+      null; --  TODO
    end Prompt_For_Update;
 
    procedure Run is
-   begin
-      Ada.Task_Termination.Set_Specific_Handler
-        (My_Planner.Runner'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
-      Ada.Task_Termination.Set_Specific_Handler
-        (My_Gcode_Handler.Runner'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
-      Ada.Task_Termination.Set_Specific_Handler
-        (My_Step_Generator.Runner'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
-      Ada.Task_Termination.Set_Specific_Handler
-        (TMC_Readings_Updater'Identity, Exception_Occurrence_Holder.all.Set_Fatal'Access);
-      My_Web_Server.Task_Termination_Set_Specific_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
+      Active_Module_Instances : Module_Instance_Maps.Map := [];
+      Pipeline_Is_Set_Up      : Boolean := False;
 
-      Reload_Signal.Mark_Startup_Done;
-      --  Mark_Startup_Done must be called before we do anything as the config may be reset by the protected object
-      --  before that.
+      procedure Reset_Runtime_State;
+      --  Reset runtime queues, planner state, and execution tracking for a fresh controller run.
 
-      <<Restart_Main>>
-      Main :
-      loop
-         declare
-            Is_Config_Valid : Boolean := True;
+      procedure Setup_Runtime_Pipeline;
+      --  Configure the motion planner and step generator using the active kinematics module.
 
-            procedure Log_Config_Error (Key, Message : String) is
-            begin
-               Is_Config_Valid := False;
-               My_Logger.Log ("Config error: " & Key & ": " & Message);
-            end Log_Config_Error;
-         begin
-            --  Configuration validation and initial setup
-            My_Config.Validate_Initial_Config (Log_Config_Error'Access);
+      procedure Attempt_Start (Started : out Boolean);
+      --  Initialize configured modules and start them if no configuration errors are reported.
 
-            if My_Config.Prunt_Is_Enabled and not Is_Config_Valid then
-               My_Logger.Log ("Prunt disabled due to invalid config.");
-               My_Config.Disable_Prunt;
-               My_Config.Reset;
-               My_Web_Server.Reset;
-               goto Restart_Main;
-            end if;
-         end;
+      procedure Clear_Active_Modules;
+      --  Stop and release all active module instances in reverse startup order.
 
-         if not My_Config.Prunt_Is_Enabled then
-            My_Logger.Log ("Prunt is disabled. Enable in config editor after setting other settings.");
+      procedure Process_Gcode_Queue;
+      --  Process queued G-code items until the surrounding task is aborted.
 
-            select
-               Reload_Signal.Wait;
-               My_Logger.Log ("Reload requested. Resetting...");
-               Exception_Occurrence_Holder.Reset;
-               My_Config.Reset;
-               Reset;
-               Reset_Last_Values;
-               My_Web_Server.Reset;
-               goto Restart_Main;
-            then abort
-               Exception_Occurrence_Holder.Enter_When_Fatal_Set;
-               exit Main;
-            end select;
+      procedure Handle_Reload_Request (Modules_Started : Boolean);
+      --  Reset runtime and configuration state after a reload request.
+
+      procedure Handle_Fatal_Error (Modules_Started : Boolean);
+      --  Wait for a fatal error, then tear runtime state down for shutdown.
+
+      procedure Wait_For_Reload_Or_Fatal (Modules_Started : Boolean; Exit_Main : out Boolean);
+      --  Wait for either a reload request or a fatal error.
+
+      procedure Wait_For_Run_End (Started : Boolean; Exit_Main : out Boolean);
+      --  Wait for the current controller run to end, starting the G-code processor when needed.
+
+      procedure Reset_Runtime_State is
+      begin
+         if Pipeline_Is_Set_Up then
+            My_Motion_Planner.Reset;
+            My_Step_Generator.Runner.Reset;
+            Pipeline_Is_Set_Up := False;
          end if;
 
-         declare
-            Prunt_Params : constant My_Config.Prunt_Parameters := My_Config.Read;
+         Planner_State.Reset;
+         Last_Command_Executed.Reset (Startup_Position);
+         My_Gcode_Queue.Cancel_File;
+         My_Gcode_Queue.Cancel_Command;
+      end Reset_Runtime_State;
+
+      procedure Setup_Runtime_Pipeline is
+         Kinematics_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+           Active_Module_Instances ("Kinematics");
+         Kinematics_Instance     : My_Default_Modules_Children.Kinematics.Module_Instance_Interface'Class renames
+           My_Default_Modules_Children.Kinematics.Module_Instance_Interface'Class
+             (Kinematics_Instance_Ref.Get.Element.all);
+         Startup_Configuration   : constant My_Default_Modules_Children.Kinematics.Motion_Planner_Configuration :=
+           Kinematics_Instance.Get_Default_Motion_Planner_Configuration;
+      begin
+         My_Motion_Planner.Runner.Setup
+           (Startup_Configuration.Parameters,
+            My_Motion_Planner.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
+         My_Step_Generator.Runner.Setup (My_Step_Generator.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
+
+         Planner_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
+         Planner_State.Set_Last_Position (Startup_Position);
+         Last_Command_Executed.Reset (Startup_Position);
+         Reset_Position ([others => 0.0]);
+         Pipeline_Is_Set_Up := True;
+      end Setup_Runtime_Pipeline;
+
+      procedure Attempt_Start (Started : out Boolean) is
+         Had_Error : Boolean := False;
+
+         procedure Report_Config_Error (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+         --  Log a startup configuration error and mark the current start attempt as failed.
+
+         procedure Report_Config_Error (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String) is
          begin
-            My_Logger.Log ("Running setup.");
+            My_Logger.Log ("Startup error: " & Conversions.To_Virtual_String (Path'Image) & ": " & Message);
+            Had_Error := True;
+         end Report_Config_Error;
 
-            Setup_Thermistors_And_Heater_Assignments;
+         Startup_Planner : constant Planner_Wrapper := (Startup_Mode => True);
+      begin
+         Active_Module_Instances :=
+           Recursive_Module_Initialization
+             (Report_Config_Error'Access, Active_Config_File, Log_Dependency_Tree => True);
 
-            for F in Fan_Name loop
-               declare
-                  Fan_Params : constant My_Config.Fan_Parameters := My_Config.Read (F);
-               begin
-                  case Fan_Hardware (F).Kind is
-                     when Fixed_Switching_Kind            =>
-                        Fan_Hardware (F).Reconfigure_Fixed_Switching_Fan (F, Fan_Params.PWM_Frequency);
+         if Had_Error then
+            My_Logger.Log ("Prunt could not start due to configuration errors.");
+            Clear_Active_Modules;
+            Started := False;
+         else
+            Setup_Runtime_Pipeline;
 
-                     when Low_Or_High_Side_Switching_Kind =>
-                        Fan_Hardware (F).Reconfigure_Low_Or_High_Side_Switching_Fan
-                          (F, Fan_Params.PWM_Frequency, Fan_Params.Use_High_Side_Switching);
-                  end case;
-               end;
+            for M of Active_Module_Instances loop
+               My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
             end loop;
 
-            for S in Stepper_Name loop
-               begin
-                  Setup_Stepper (S);
-               exception
-                  when E : TMC_UART_Error =>
-                     Exception_Occurrence_Holder.Set_Recoverable
-                       (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-                     Reset;
-                     My_Config.Disable_Prunt;
-                     Reload_Signal.Wait;
-                     My_Logger.Log ("Reload requested. Resetting...");
-                     Reset_Last_Values;
-                     Exception_Occurrence_Holder.Reset;
-                     My_Config.Reset;
-                     My_Web_Server.Reset;
-                     goto Restart_Main;
-               end;
+            Started := True;
+         end if;
+      exception
+         when others =>
+            Reset_Runtime_State;
+            Clear_Active_Modules;
+            raise;
+      end Attempt_Start;
+
+      procedure Clear_Active_Modules is
+      begin
+         Active_Module_Instances.Reverse_Clear;
+      end Clear_Active_Modules;
+
+      procedure Process_Gcode_Queue is
+         use type Gcode_Arguments.Argument_Kind;
+
+         Active_Planner : constant Planner_Wrapper := (Startup_Mode => False);
+
+         function Line_Is_Empty (Args : Gcode_Arguments.Arguments) return Boolean;
+
+         function Extract_Integer_Command_Identifier
+           (Args : in out Gcode_Arguments.Arguments; Argument : Gcode_Identifier_Argument_Index)
+            return Gcode_Command_Identifier;
+
+         function Extract_Command_Identifier (Args : in out Gcode_Arguments.Arguments) return Gcode_Command_Identifier;
+
+         procedure Dispatch_Gcode_Command (Args : in out Gcode_Arguments.Arguments);
+
+         procedure Process_Gcode_Line (Line : Virtual_String);
+
+         procedure Process_Next_Gcode_Item (Stopped : out Boolean);
+
+         function Line_Is_Empty (Args : Gcode_Arguments.Arguments) return Boolean is
+         begin
+            for Index in Gcode_Arguments.Arguments_Index loop
+               if Gcode_Arguments.Kind (Args, Index) /= Gcode_Arguments.Non_Existent_Kind then
+                  return False;
+               end if;
             end loop;
 
-            for H in Heater_Name loop
-               declare
-                  Heater_Params : constant My_Config.Heater_Full_Parameters := My_Config.Read (H);
-               begin
-                  Reconfigure_Heater (H, Heater_Params.Params);
-               end;
-            end loop;
-         end;
+            return True;
+         end Line_Is_Empty;
 
-         TMC_Readings_Updater.Start;
+         function Extract_Integer_Command_Identifier
+           (Args : in out Gcode_Arguments.Arguments; Argument : Gcode_Identifier_Argument_Index)
+            return Gcode_Command_Identifier is
+         begin
+            if Gcode_Arguments.Kind (Args, Argument) /= Gcode_Arguments.Integer_Kind then
+               if Argument = 'G' then
+                  raise Gcode_Arguments.Parse_Error with "G-code G identifier must be an integer.";
+               end if;
 
-         My_Gcode_Handler.Runner.Start;
-         Setup_Step_Generator;
+               raise Gcode_Arguments.Parse_Error with "G-code M identifier must be an integer.";
+            end if;
 
-         My_Logger.Log ("Setup done.");
+            return (Argument => Argument, Number => Gcode_Arguments.Consume_Integer (Args, Argument));
+         end Extract_Integer_Command_Identifier;
 
-         My_Web_Server.Notify_Startup_Done;
+         function Extract_Command_Identifier (Args : in out Gcode_Arguments.Arguments) return Gcode_Command_Identifier
+         is
+            G_Present : constant Boolean := Gcode_Arguments.Kind (Args, 'G') /= Gcode_Arguments.Non_Existent_Kind;
+            M_Present : constant Boolean := Gcode_Arguments.Kind (Args, 'M') /= Gcode_Arguments.Non_Existent_Kind;
+         begin
+            if G_Present = M_Present then
+               raise Gcode_Arguments.Parse_Error
+                 with "Each G-code line must contain exactly one G or M command identifier.";
+            end if;
 
-         select
-            Reload_Signal.Wait;
-         then abort
-            Exception_Occurrence_Holder.Enter_When_Fatal_Set;
-            exit Main;
-         end select;
+            if G_Present then
+               return Extract_Integer_Command_Identifier (Args, 'G');
+            end if;
 
+            return Extract_Integer_Command_Identifier (Args, 'M');
+         end Extract_Command_Identifier;
+
+         procedure Dispatch_Gcode_Command (Args : in out Gcode_Arguments.Arguments) is
+            Command_Identifier : constant Gcode_Command_Identifier := Extract_Command_Identifier (Args);
+            Module_Name        : constant Virtual_String :=
+              Find_Module_Name (Active_Module_Gcode_Dispatch_Map, Command_Identifier, Args);
+         begin
+            if Module_Name.Is_Empty then
+               raise Constraint_Error with "No active module can handle the requested G-code command.";
+            end if;
+
+            My_Modules.Module_Instance'Class (Active_Module_Instances (Module_Name).Get.Element.all).Gcode_Dispatch
+              (Self_Ref           => Active_Module_Instances (Module_Name),
+               Args               => Args,
+               Planner            => Active_Planner,
+               Command_Identifier => Command_Identifier);
+
+            Gcode_Arguments.Validate_All_Consumed (Args);
+         end Dispatch_Gcode_Command;
+
+         procedure Process_Gcode_Line (Line : Virtual_String) is
+            Args : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments (Line);
+         begin
+            if Line_Is_Empty (Args) then
+               return;
+            end if;
+
+            Dispatch_Gcode_Command (Args);
+         end Process_Gcode_Line;
+
+         procedure Process_Next_Gcode_Item (Stopped : out Boolean) is
+            Line          : Virtual_String;
+            Item_Kind     : Gcode_Queues.Queue_Item_Kind;
+            End_Of_Item   : Boolean;
+            Queue_Stopped : Boolean;
+         begin
+            My_Gcode_Queue.Get_Next_Line (Line, Item_Kind, End_Of_Item, Queue_Stopped);
+            pragma Unreferenced (Item_Kind);
+
+            if Queue_Stopped then
+               Stopped := True;
+               return;
+            end if;
+
+            Process_Gcode_Line (Line);
+
+            if End_Of_Item then
+               Active_Planner.Flush;
+            end if;
+            Stopped := False;
+         end Process_Next_Gcode_Item;
+      begin
+         loop
+            declare
+               Stopped : Boolean;
+            begin
+               Process_Next_Gcode_Item (Stopped);
+               exit when Stopped;
+            end;
+         end loop;
+      end Process_Gcode_Queue;
+
+      procedure Handle_Reload_Request (Modules_Started : Boolean) is
+      begin
          My_Logger.Log ("Reload requested. Resetting...");
 
-         loop
-            My_Step_Generator.Pause;
-            select
-               My_Step_Generator.Runner.Reset;
-               exit;
-            or
-               delay 1.0;
-               --  Rather than making sure the user can't click resume we instead just call Pause repeatedly until the
-               --  Reset entry call is accepted.
-            end select;
-         end loop;
+         if Modules_Started then
+            My_Gcode_Queue.Stop_Waiting;
+         end if;
+
+         if Modules_Started then
+            Clear_Active_Modules;
+         end if;
+
          Exception_Occurrence_Holder.Reset;
-         My_Planner.Reset;
-         My_Gcode_Handler.Runner.Reset;
-         TMC_Readings_Updater.Reset;
-         My_Config.Reset;
-         Reset;
-         Reset_Last_Values;
+         Active_Config_File.Reset_Live_To_Stored;
+         Reset_Runtime_State;
+         Reset_Hardware;
          My_Web_Server.Reset;
+      end Handle_Reload_Request;
+
+      procedure Handle_Fatal_Error (Modules_Started : Boolean) is
+      begin
+         Exception_Occurrence_Holder.Enter_When_Fatal_Set;
+
+         if Modules_Started then
+            My_Gcode_Queue.Stop_Waiting;
+         end if;
+
+         if Modules_Started then
+            Clear_Active_Modules;
+         end if;
+
+         Reset_Runtime_State;
+      end Handle_Fatal_Error;
+
+      procedure Wait_For_Reload_Or_Fatal (Modules_Started : Boolean; Exit_Main : out Boolean) is
+      begin
+         select
+            Reload_Signal.Wait;
+            Handle_Reload_Request (Modules_Started);
+            Exit_Main := False;
+         then abort
+            Handle_Fatal_Error (Modules_Started);
+            Exit_Main := True;
+         end select;
+      end Wait_For_Reload_Or_Fatal;
+
+      procedure Wait_For_Run_End (Started : Boolean; Exit_Main : out Boolean) is
+      begin
+         if Started then
+            declare
+               task Gcode_Processor;
+
+               task body Gcode_Processor is
+               begin
+                  Process_Gcode_Queue;
+               exception
+                  when E : others =>
+                     Exception_Occurrence_Holder.all.Set_Fatal
+                       (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+               end Gcode_Processor;
+            begin
+               Wait_For_Reload_Or_Fatal (Modules_Started => True, Exit_Main => Exit_Main);
+            end;
+         else
+            Wait_For_Reload_Or_Fatal (Modules_Started => False, Exit_Main => Exit_Main);
+         end if;
+      end Wait_For_Run_End;
+
+   begin
+      Reset_Runtime_State;
+      Reload_Signal.Mark_Startup_Done;
+
+      Main : loop
+         declare
+            Started   : Boolean;
+            Exit_Main : Boolean;
+         begin
+            Attempt_Start (Started);
+            Wait_For_Run_End (Started, Exit_Main);
+            exit Main when Exit_Main;
+         end;
       end loop Main;
-
-      --  Currently we only exit the above loop if there is an exception in a different task.
-
-      raise Constraint_Error with "Error in other task.";
-   exception
-      when E : others =>
-         Exception_Occurrence_Holder.all.Set_Fatal
-           (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-
-         for I in 1 .. 100 loop
-            My_Step_Generator.Pause;
-            delay 0.1;
-            --  Make sure the step generator stays paused even if the user is sending resume requests.
-         end loop;
-
-         Reset;
-
-         raise;
    end Run;
 
-   procedure Report_Input_Switch_State (Switch : Input_Switch_Name; State : Pin_State) is
-   begin
-      Last_Input_Switch_States (Switch) := State;
-      Last_Input_Switch_State_Counters (Switch) := @ + 1;
-   end Report_Input_Switch_State;
-
-   procedure Report_Temperature (Thermistor : Thermistor_Name; Temp : Temperature) is
-   begin
-      Last_Thermistor_Temperatures (Thermistor) := Temp;
-      Last_Thermistor_Temperatures_Counters (Thermistor) := @ + 1;
-   end Report_Temperature;
-
-   procedure Report_Temperature (Temperature_Probe : Board_Temperature_Probe_Name; Temp : Temperature) is
-   begin
-      Last_Board_Temperatures (Temperature_Probe) := Temp;
-   end Report_Temperature;
-
-   procedure Report_Heater_Power (Heater : Heater_Name; Power : PWM_Scale) is
-   begin
-      Last_Heater_Powers (Heater) := Power;
-   end Report_Heater_Power;
-
-   procedure Report_Tachometer_Frequency (Fan : Fan_Name; Freq : Frequency) is
-   begin
-      Last_Tachometer_Frequencies (Fan) := Freq;
-   end Report_Tachometer_Frequency;
-
-   procedure Report_Heater_Current (Heater : Heater_Name; Curr : Current) is
-   begin
-      Last_Heater_Currents (Heater) := Curr;
-   end Report_Heater_Current;
-
-   --  TODO
-   procedure Report_Last_Command_Executed (Index : Command_Index) is null;
-
    procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True) is
-      External_Error : exception;
    begin
-      My_Config.Disable_Prunt;
-      raise External_Error with Message;
-   exception
-      when E : External_Error =>
-         if Is_Fatal then
-            Exception_Occurrence_Holder.Set_Fatal
-              (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-         else
-            Exception_Occurrence_Holder.Set_Recoverable
-              (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-         end if;
+      begin
+         raise Program_Error with Message;
+      exception
+         when E : others =>
+            Report_External_Error (E, Is_Fatal);
+      end;
    end Report_External_Error;
 
    procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True) is
+      use type Ada.Task_Termination.Cause_Of_Termination;
    begin
-      My_Config.Disable_Prunt;
       if Is_Fatal then
-         Exception_Occurrence_Holder.Set_Fatal
+         Exception_Occurrence_Holder.all.Set_Fatal
            (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
       else
-         Exception_Occurrence_Holder.Set_Recoverable
+         Exception_Occurrence_Holder.all.Set_Recoverable
            (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
       end if;
    end Report_External_Error;
 
-   First_Block : Boolean := True;
+   procedure Log (Message : String) is
+   begin
+      My_Logger.Log (+Message);
+   end Log;
+
+   function Recursive_Module_Initialization
+     (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      My_Config_File      : Config.Config_File;
+      Log_Dependency_Tree : Boolean := False) return Module_Instance_Maps.Map
+   is
+      use Module_Maps;
+      use Module_Instance_Maps;
+      use type Ada.Tags.Tag;
+      use type My_Modules.Module_Instance_Shared_Pointers.Ref;
+
+      type Dependency_Request is record
+         Requester     : Virtual_String;
+         Requested_Tag : Ada.Tags.Tag;
+      end record;
+
+      package Dependency_Request_Vectors is new Ada.Containers.Vectors (Positive, Dependency_Request);
+      package String_Sets is new Ada.Containers.Ordered_Sets (Virtual_String);
+      package String_Vectors is new Ada.Containers.Vectors (Positive, Virtual_String);
+
+      Result               : Module_Instance_Maps.Map := [];
+      Initializing         : String_Sets.Set := [];
+      Initialization_Stack : String_Vectors.Vector := [];
+      Dependency_Requests  : Dependency_Request_Vectors.Vector := [];
+
+      function Find_Existing_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref;
+      --  Return the initialized module instance with Tag, or Null_Ref if none has been initialized.
+
+      function Find_Existing_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref is
+      begin
+         for I of Result loop
+            if I.Get.Element'Tag = Tag then
+               return I;
+            end if;
+         end loop;
+
+         return My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+      end Find_Existing_Instance;
+
+      function Find_Module_By_Tag (Tag : Ada.Tags.Tag) return Virtual_String;
+      --  Return the configured module name for an initialized instance tag.
+
+      function Find_Module_By_Tag (Tag : Ada.Tags.Tag) return Virtual_String is
+      begin
+         for I in Result.Iterate loop
+            if Element (I).Get.Element'Tag = Tag then
+               return Key (I);
+            end if;
+         end loop;
+
+         raise Constraint_Error;
+      end Find_Module_By_Tag;
+
+      procedure Record_Dependency_Request (Requester : Virtual_String; Requested_Tag : Ada.Tags.Tag);
+      --  Record a dependency request unless the same requester and requested tag have already been recorded.
+
+      procedure Record_Dependency_Request (Requester : Virtual_String; Requested_Tag : Ada.Tags.Tag) is
+      begin
+         for Request of Dependency_Requests loop
+            if Request.Requester = Requester and then Request.Requested_Tag = Requested_Tag then
+               return;
+            end if;
+         end loop;
+
+         Dependency_Requests.Append (Dependency_Request'(Requester => Requester, Requested_Tag => Requested_Tag));
+      end Record_Dependency_Request;
+
+      function Direct_Dependencies (Module_Name : Virtual_String) return String_Vectors.Vector;
+      --  Return the unique module names directly requested by Module_Name during initialization.
+
+      function Direct_Dependencies (Module_Name : Virtual_String) return String_Vectors.Vector is
+         Dependencies : String_Vectors.Vector := [];
+         Seen         : String_Sets.Set := [];
+      begin
+         for Request of Dependency_Requests loop
+            if Request.Requester = Module_Name then
+               declare
+                  Dependency_Name : constant Virtual_String := Find_Module_By_Tag (Request.Requested_Tag);
+               begin
+                  if not Seen.Contains (Dependency_Name) then
+                     Dependencies.Append (Dependency_Name);
+                     Seen.Insert (Dependency_Name);
+                  end if;
+               end;
+            end if;
+         end loop;
+
+         return Dependencies;
+      end Direct_Dependencies;
+
+      function Has_Incoming_Dependency (Module_Name : Virtual_String) return Boolean;
+      --  Return True when another active module directly depends on Module_Name.
+
+      function Has_Incoming_Dependency (Module_Name : Virtual_String) return Boolean is
+      begin
+         for C in Active_Modules.Iterate loop
+            for Dependency_Name of Direct_Dependencies (Key (C)) loop
+               if Dependency_Name = Module_Name then
+                  return True;
+               end if;
+            end loop;
+         end loop;
+
+         return False;
+      end Has_Incoming_Dependency;
+
+      procedure Log_Module_Dependency_Tree;
+      --  Log the module dependency tree using the dependency requests recorded during initialization.
+
+      procedure Log_Module_Dependency_Tree is
+         Expanded : Config.Discrete_String_Sets.Set := [];
+         Path     : Config.Discrete_String_Sets.Set := [];
+
+         procedure Log_Subtree (Module_Name : Virtual_String; Prefix : Virtual_String);
+
+         procedure Log_Subtree (Module_Name : Virtual_String; Prefix : Virtual_String) is
+         begin
+            if Path.Contains (Module_Name) then
+               My_Logger.Log (Prefix & Module_Name & " (cycle)");
+               return;
+            end if;
+
+            if Expanded.Contains (Module_Name) then
+               My_Logger.Log (Prefix & Module_Name & " (already shown)");
+               return;
+            end if;
+
+            My_Logger.Log (Prefix & Module_Name);
+            Expanded.Insert (Module_Name);
+            Path.Insert (Module_Name);
+
+            for Dependency_Name of Direct_Dependencies (Module_Name) loop
+               Log_Subtree (Dependency_Name, "  " & Prefix);
+            end loop;
+
+            Path.Delete (Module_Name);
+         end Log_Subtree;
+      begin
+         My_Logger.Log ("Module dependency tree:");
+
+         for C in Active_Modules.Iterate loop
+            if not Has_Incoming_Dependency (Key (C)) then
+               Log_Subtree (Key (C), "- ");
+            end if;
+         end loop;
+
+         for C in Active_Modules.Iterate loop
+            if not Expanded.Contains (Key (C)) then
+               Log_Subtree (Key (C), "- ");
+            end if;
+         end loop;
+      end Log_Module_Dependency_Tree;
+
+      function Recurse return Natural;
+      --  Initialize all currently unblocked modules and return the number initialized in this pass.
+
+      function Recurse return Natural is
+         function Get_Other_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref;
+         --  Resolve a requested module dependency, recursively initializing modules if needed.
+
+         function Get_Other_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref is
+            Requester : constant Virtual_String := Initialization_Stack.Last_Element;
+            Existing  : My_Modules.Module_Instance_Shared_Pointers.Ref :=
+              My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+         begin
+            Record_Dependency_Request (Requester, Tag);
+
+            loop
+               Existing := Find_Existing_Instance (Tag);
+               exit when Existing /= My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+               exit when Recurse = 0;
+            end loop;
+
+            if Existing = My_Modules.Module_Instance_Shared_Pointers.Null_Ref then
+               My_Logger.Log
+                 ("Module dependency could not be resolved: "
+                  & (+Ada.Tags.Expanded_Name (Tag))
+                  & " requested by "
+                  & Requester
+                  & ". Attempted initialization chain: "
+                  & (+Initialization_Stack'Image)
+                  & ". If this tag belongs to one of these modules then there is a dependency loop, otherwise no "
+                  & "module with the requested tag is in the initialization set.");
+
+               raise Program_Error with "Module dependency resolution error, refer to log.";
+            end if;
+
+            return Existing;
+         end Get_Other_Instance;
+
+         Modules_Initialized : Natural := 0;
+      begin
+         for C in Active_Modules.Iterate loop
+            if not Result.Contains (Key (C)) and then not Initializing.Contains (Key (C)) then
+               declare
+                  Module_Name : constant Virtual_String := Key (C);
+
+                  function Get_Data return My_Modules.Module_Instance_Parent'Class
+                  with Post => Get_Data'Result in My_Modules.Module_Instance'Class;
+                  --  Initialize the module selected by the current cursor and return its instance data.
+
+                  procedure Report_Config_Error_With_Module
+                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+                  --  Prefix a configuration error path with the module location before reporting it.
+
+                  procedure Report_Config_Error_With_Module
+                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String)
+                  is
+                     use type Config.Config_Data_Paths.Vector;
+                  begin
+                     Report_Config_Error (["Config", Module_Name, "Config"] & Path, Message);
+                  end Report_Config_Error_With_Module;
+
+                  function Get_Data return My_Modules.Module_Instance_Parent'Class is
+                     Config_Data : constant Config.Config_Data := My_Config_File.Get_Data (Module_Name);
+                  begin
+                     return
+                       Element (C).Initialize
+                         (Config_Data,
+                          Report_Config_Error_With_Module'Access,
+                          Status_Manager.Get_Emitter (My_Status_Data, Module_Name),
+                          Get_Other_Instance'Access);
+                  end Get_Data;
+
+                  Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=
+                    My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+               begin
+                  Initializing.Insert (Module_Name);
+                  Initialization_Stack.Append (Module_Name);
+
+                  begin
+                     Ref.Set (Get_Data'Access);
+                  exception
+                     when others =>
+                        Initialization_Stack.Delete_Last;
+                        Initializing.Delete (Module_Name);
+                        raise;
+                  end;
+
+                  Initialization_Stack.Delete_Last;
+                  Initializing.Delete (Module_Name);
+
+                  Result.Insert (Module_Name, Ref);
+
+                  for Other in Result.Iterate loop
+                     if Key (Other) /= Module_Name
+                       and then Element (Other).Get.Element'Tag = Result (Module_Name).Get.Element'Tag
+                     then
+                        raise Program_Error
+                          with "Duplicate module tag: " & Module_Name'Image & " and " & Key (Other)'Image;
+                     end if;
+                  end loop;
+
+                  Modules_Initialized := @ + 1;
+               end;
+            end if;
+         end loop;
+
+         return Modules_Initialized;
+      end Recurse;
+
+      Ignored : Natural := Recurse;
+   begin
+      if Log_Dependency_Tree then
+         Log_Module_Dependency_Tree;
+      end if;
+
+      return Result;
+   end Recursive_Module_Initialization;
+
+   protected body Patch_Processor is
+      procedure Apply
+        (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector)
+      is
+         use type Config.Save_Counter;
+
+         procedure Report_Config_Error (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+
+         procedure Report_Config_Error (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String) is
+         begin
+            Errors.Append (Config.Config_Error'(Path, Message));
+         end Report_Config_Error;
+      begin
+         if Has_Cache and then Patch.Is_Empty and then Cached_Save_Counter = Active_Config_File.Last_Save then
+            Result := Cached_Result;
+            Errors := Cached_Errors;
+         else
+            Active_Config_File.Apply_Untrusted_Patch (Patch, Result, Errors);
+            --  We apply the patch to the active config file so it will be used by the next reset and won't be
+            --  overwritten by modules but have the temporary modules use a new config file since we want them to
+            --  check the new values.
+            if Errors.Is_Empty then
+               declare
+                  --  There is no point trying to load the modules if there are errors when testing against the schema
+                  --  as no patch is applied in that case.
+                  My_Config_File             : constant Config.Config_File :=
+                    Config.Create (Config_Path, Active_Module_Config_Schemas);
+                  Temporary_Module_Instances : Module_Instance_Maps.Map :=
+                    Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File);
+               begin
+                  Temporary_Module_Instances.Reverse_Clear;
+               end;
+            end if;
+
+            Cached_Result := Result;
+            Cached_Errors := Errors;
+            Cached_Save_Counter := Active_Config_File.Last_Save;
+            Has_Cache := True;
+         end if;
+      end Apply;
+   end Patch_Processor;
+
+   procedure Apply_Untrusted_Config_Patch
+     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector) is
+   begin
+      Patch_Processor.Apply (Patch, Result, Errors);
+   end Apply_Untrusted_Config_Patch;
+
+   procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean) is
+   begin
+      My_Gcode_Queue.Try_Set_Command (Command, Succeeded);
+   end Submit_Gcode_Command;
+
+   procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean) is
+   begin
+      My_Gcode_Queue.Try_Set_File (Path, Succeeded);
+   end Submit_Gcode_File;
+
+   procedure Reload_Server is
+   begin
+      null; --  TODO
+   end Reload_Server;
 
    procedure Start_Planner_Block
-     (Resetting_Data     : Flush_Resetting_Data;
-      Persistent_Data    : Block_Persistent_Data;
-      Last_Command_Index : Command_Index) is
+     (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index) is
    begin
-      if First_Block then
-         Reset_Position ([others => 0.0]);
-         First_Block := False;
-      end if;
-
-      if Resetting_Data.Is_Homing_Move then
-         Wait_Until_Idle (Last_Command_Index);
-         Setup_For_Loop_Move (Resetting_Data.Home_Switch, Resetting_Data.Home_Hit_On_State);
-
-         for S in Stepper_Name loop
-            declare
-               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (S);
-               Message        : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               case Stepper_Hardware (S).Kind is
-                  when Basic_Kind        =>
-                     null;
-
-                  when TMC2240_UART_Kind =>
-                     if Stepper_Params.Enabled
-                       and then Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing
-                     then
-                        Message :=
-                          (Bytes_Mode => False,
-                           Content    =>
-                             (Node            => Stepper_Hardware (S).TMC2240_UART_Address,
-                              Register        => TMC_Types.TMC2240.IHOLD_IRUN_Address,
-                              IHOLD_IRUN_Data =>
-                                (Stepper_Params.IHOLD_IRUN with delta I_Run => Stepper_Params.IRUN_During_Homing),
-                              others          => <>));
-                        Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-                        TMC2240_UART_Write_And_Validate (Message, S);
-                     end if;
-               end case;
-            end;
-         end loop;
-      end if;
-
-      if Resetting_Data.Is_Conditional_Move then
-         Wait_Until_Idle (Last_Command_Index);
-         Setup_For_Conditional_Move (Resetting_Data.Conditional_Switch, Resetting_Data.Conditional_Hit_On_State);
-      end if;
-
-      Current_File_Name.Set_File_Name (Ada.Strings.Unbounded.To_String (Persistent_Data.Current_File));
+      null;
+      --  if not Resetting_Data.Is_Empty then
+      --     Resetting_Data.Element.Process_Before_Block (Last_Command_Index);
+      --  end if;
    end Start_Planner_Block;
 
    procedure Enqueue_Command_Internal
      (Pos             : Position;
-      Stepper_Pos     : Stepper_Position;
-      Data            : My_Planner.Corner_Extra_Data_Array;
+      Motor_Pos       : Motor_Position;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
       Vel_Ratio       : Dimensionless)
    is
-      use type My_Planner.Corner_Extra_Data_Array_Index;
+      pragma Unreferenced (Vel_Ratio);
+      --  TODO: Vel_Ratio is for the laser module so we can modulate the output power based of the actual speed over
+      --  the target speed.
    begin
-      pragma Assert (Data'Length = 1);
-      pragma Assert (Data'First = 1);
-      --  TODO: Remove once module system is implemented.
-
-      pragma Warnings (Off, "value not in range of type ""Laser_Name"" *");
-      --  TODO: This is obviously a GCC bug as we are iterating over Laser_Name, meaning that it is impossible for the
-      --  value to not be in range, but it's difficult to isolate the bug here.
+      Last_Command_Executed.Record_Queued_Position (Index, Pos);
       Enqueue_Command
-        ((Index           => Index,
-          Pos             => Stepper_Pos,
-          Fans            => Data (1).Fans,
-          Heaters         => Data (1).Heaters,
-          Lasers          =>
-            (for L in Laser_Name =>
-               (if Safe_Stop_After
-                then 0.0
-                else
-                  Dimensionless'Min
-                    (1.0,
-                     Dimensionless (Data (1).Lasers (L))
-                     * (if Data (1).Modulate_Lasers (L) then Vel_Ratio else 1.0)))),
-          Safe_Stop_After => Safe_Stop_After,
-          Loop_Until_Hit  => Loop_Until_Hit));
-      pragma Warnings (On, "value not in range of type ""Laser_Name"" *");
-      Last_Position := (for A in Axis_Name => Pos (A));
-      Last_Heater_Targets := (for H in Heater_Name => Data (1).Heaters (H));
-      Last_Line := Data (1).Current_Line;
+        ((Index => Index, Pos => Motor_Pos, Safe_Stop_After => Safe_Stop_After, Loop_Until_Hit => Loop_Until_Hit));
    end Enqueue_Command_Internal;
 
-   procedure Finish_Planner_Block
-     (Resetting_Data       : Flush_Resetting_Data;
-      Persistent_Data      : Block_Persistent_Data;
-      Next_Block_Pos       : Stepper_Position;
-      First_Accel_Distance : Length;
-      Next_Command_Index   : Command_Index) is
+   procedure Start_Corner (Last_Command_Index : Command_Index; Data : Module_Types.Extra_Corner_Data'Class) is
    begin
-      if Resetting_Data.Is_Conditional_Move or Resetting_Data.Is_Homing_Move then
-         Wait_Until_Idle (Next_Command_Index - 1);
+      Data.Process (Last_Command_Index);
+   end Start_Corner;
+
+   procedure Finish_Planner_Block
+     (Resetting_Data       : Extra_Block_Resetting_Data_Holders.Holder;
+      Next_Block_Pos       : Motor_Position;
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset)
+   is
+      Context : constant Planner_Block_End_Context :=
+        (First_Accel_Distance => First_Accel_Distance,
+         Last_Command_Index   => Last_Command_Index,
+         Loop_Move_Offset     => Loop_Move_Offset);
+   begin
+      if not Resetting_Data.Is_Empty then
+         Resetting_Data.Element.Process_After_Block (Context);
+         Reset_Position (Next_Block_Pos);
       end if;
-
-      if Resetting_Data.Is_Homing_Move then
-         for S in Stepper_Name loop
-            declare
-               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (S);
-               Message        : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               case Stepper_Hardware (S).Kind is
-                  when Basic_Kind        =>
-                     null;
-
-                  when TMC2240_UART_Kind =>
-                     if Stepper_Params.Enabled
-                       and then Stepper_Params.IHOLD_IRUN.I_Run /= Stepper_Params.IRUN_During_Homing
-                     then
-                        Message :=
-                          (Bytes_Mode => False,
-                           Content    =>
-                             (Node            => Stepper_Hardware (S).TMC2240_UART_Address,
-                              Register        => TMC_Types.TMC2240.IHOLD_IRUN_Address,
-                              IHOLD_IRUN_Data => Stepper_Params.IHOLD_IRUN,
-                              others          => <>));
-                        Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-                        TMC2240_UART_Write_And_Validate (Message, S);
-                     end if;
-               end case;
-            end;
-         end loop;
-      end if;
-
-      if Resetting_Data.Pause_After then
-         My_Step_Generator.Pause;
-      end if;
-
-      if Resetting_Data.Wait_For_Heater then
-         declare
-            Start_Counter : constant Report_Counter :=
-              Last_Thermistor_Temperatures_Counters (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name));
-         begin
-            loop
-               delay 0.1;
-               exit when
-                 Last_Thermistor_Temperatures_Counters
-                   (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name))
-                 /= Start_Counter;
-            end loop;
-         end;
-         loop
-            delay 0.1;
-            exit when
-              Last_Thermistor_Temperatures (Stored_Heater_Thermistors (Resetting_Data.Wait_For_Heater_Name))
-              >= Last_Heater_Targets (Resetting_Data.Wait_For_Heater_Name);
-         end loop;
-      end if;
-
-      if Resetting_Data.Check_Conditional_Hit_After then
-         Wait_Until_Idle (Next_Command_Index - 1);
-
-         declare
-            Start_Counter : constant Report_Counter :=
-              Last_Input_Switch_State_Counters (Resetting_Data.Conditional_Switch);
-         begin
-            loop
-               --  TODO: Looks like there's a GCC bug that generates an infinite loop when the below delay is omitted.
-               delay 0.1;
-               exit when Last_Input_Switch_State_Counters (Resetting_Data.Conditional_Switch) /= Start_Counter;
-            end loop;
-
-            if Last_Input_Switch_States (Resetting_Data.Conditional_Switch) /= Resetting_Data.Conditional_Hit_On_State
-            then
-               declare
-                  Homing_Back_Off_Error : exception;
-               begin
-                  raise Homing_Back_Off_Error
-                    with "Switch " & Resetting_Data.Conditional_Switch'Image & " is still hit after back off move.";
-               exception
-                  when E : Homing_Back_Off_Error =>
-                     Exception_Occurrence_Holder.Set_Recoverable
-                       (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
-               end;
-            end if;
-         end;
-      end if;
-
-      My_Gcode_Handler.Finished_Block (Resetting_Data, First_Accel_Distance);
-      Reset_Position (Next_Block_Pos);
    end Finish_Planner_Block;
 
-   procedure Setup_Thermistors_And_Heater_Assignments is
-      Thermistor_Params_Array : Thermistor_Parameters_Array_Type;
-      Heater_Thermistors      : Heater_Thermistor_Map;
+   procedure Report_Last_Command_Executed (Index : Command_Index) is
    begin
-      for H in Heater_Name loop
-         declare
-            Heater_Params : constant My_Config.Heater_Full_Parameters := My_Config.Read (H);
-         begin
-            Heater_Thermistors (H) := Heater_Params.Thermistor;
-            Stored_Heater_Thermistors (H) := Heater_Params.Thermistor;
-         end;
-      end loop;
+      Last_Command_Executed.Report (Index);
+   end Report_Last_Command_Executed;
 
-      for T in Thermistor_Name loop
-         Thermistor_Params_Array (T) := My_Config.Read (T);
-      end loop;
-
-      Setup (Heater_Thermistors, Thermistor_Params_Array);
-   end Setup_Thermistors_And_Heater_Assignments;
-
-   procedure TMC2240_UART_Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Stepper : Stepper_Name) is
-      Query          : TMC_Types.TMC2240.UART_Query_Message :=
-        (Bytes_Mode => False,
-         Content    => (Node => Message.Content.Node, Register => Message.Content.Register, others => <>));
-      Reply          : TMC_Types.TMC2240.UART_Data_Message;
-      Receive_Failed : Boolean;
-
-      use type TMC_Types.TMC2240.UART_Data_Message_Inner;
+   procedure Report_Loop_Move_Cycles (Index : Command_Index; Cycles : Dimensionless) is
    begin
-      Stepper_Hardware (Stepper).TMC2240_UART_Write (Message.Bytes);
+      Loop_Move_Cycles.Report (Index, Cycles);
+   end Report_Loop_Move_Cycles;
 
-      Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-      Stepper_Hardware (Stepper).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
-      if Receive_Failed then
-         raise TMC_UART_Error with "No response from stepper " & Stepper'Image;
-      elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-         raise TMC_UART_Error with "Bad CRC from stepper " & Stepper'Image;
-      elsif Reply.Content.Node /= 255 then
-         raise TMC_UART_Error with "Bad node address from stepper " & Stepper'Image;
-      elsif Query.Content.Register /= TMC_Types.TMC2240.GSTAT_Address
-        and then (Reply.Content with delta CRC => 0, Node => 0)
-                 /= (Message.Content with delta CRC => 0, Node => 0, Is_Write => TMC_Types.False)
-      then
-         raise TMC_UART_Error with "Data read from TMC stepper does not match sent data for stepper " & Stepper'Image;
-      end if;
-   exception
-      when TMC_UART_Error =>
-         My_Logger.Log ("Data from TMC2240_UART_Write_And_Validate after error:");
-         My_Logger.Log ("Sent: " & Message.Content'Image);
-         My_Logger.Log ("Received: " & Reply.Content'Image);
-         raise;
-   end TMC2240_UART_Write_And_Validate;
+   package body Last_Command_Executed is
+      function Next_Slot (Slot : Pending_Position_Ring_Index) return Pending_Position_Ring_Index is
+      begin
+         if Slot = Pending_Position_Ring_Index'Last then
+            return Pending_Position_Ring_Index'First;
+         else
+            return Slot + 1;
+         end if;
+      end Next_Slot;
 
-   procedure Setup_Stepper (Stepper : Stepper_Name) is
-      Stepper_Params : My_Config.Stepper_Parameters := My_Config.Read (Stepper);
+      function Previous_Slot (Slot : Pending_Position_Ring_Index) return Pending_Position_Ring_Index is
+      begin
+         if Slot = Pending_Position_Ring_Index'First then
+            return Pending_Position_Ring_Index'Last;
+         else
+            return Slot - 1;
+         end if;
+      end Previous_Slot;
 
-   begin
-      case Stepper_Hardware (Stepper).Kind is
-         when Basic_Kind        =>
-            null;
+      function Advance_Slot (Slot : Pending_Position_Ring_Index; Count : Natural) return Pending_Position_Ring_Index is
+         First_Pos : constant Natural := Pending_Position_Ring_Index'Pos (Pending_Position_Ring_Index'First);
+         Span      : constant Natural :=
+           Pending_Position_Ring_Index'Pos (Pending_Position_Ring_Index'Last) - First_Pos + 1;
+      begin
+         return
+           Pending_Position_Ring_Index'Val
+             (First_Pos + (Pending_Position_Ring_Index'Pos (Slot) - First_Pos + Count) mod Span);
+      end Advance_Slot;
 
-         when TMC2240_UART_Kind =>
+      function Slot_Distance (From_Slot, To_Slot : Pending_Position_Ring_Index) return Natural is
+         First_Pos : constant Natural := Pending_Position_Ring_Index'Pos (Pending_Position_Ring_Index'First);
+         Span      : constant Natural :=
+           Pending_Position_Ring_Index'Pos (Pending_Position_Ring_Index'Last) - First_Pos + 1;
+         From_Pos  : constant Natural := Pending_Position_Ring_Index'Pos (From_Slot) - First_Pos;
+         To_Pos    : constant Natural := Pending_Position_Ring_Index'Pos (To_Slot) - First_Pos;
+      begin
+         if To_Pos >= From_Pos then
+            return To_Pos - From_Pos;
+         else
+            return Span - (From_Pos - To_Pos);
+         end if;
+      end Slot_Distance;
+
+      procedure Write_Position (Target : out Atomic_Position_Array; Pos : Position) is
+      begin
+         for A in Axis_Name loop
+            Target (A) := Atomic_Length (Pos (A));
+         end loop;
+      end Write_Position;
+
+      function Read_Position (Source : Atomic_Position_Array) return Position is
+      begin
+         return Pos : Position do
+            for A in Axis_Name loop
+               Pos (A) := Length (Source (A));
+            end loop;
+         end return;
+      end Read_Position;
+
+      procedure Reset (Pos : Position) is
+      begin
+         if Executed_Command_Position_Ring_Capacity < 2 then
+            raise Constraint_Error with "Executed_Command_Position_Ring_Capacity must be at least 2.";
+         end if;
+
+         Pending_Position_Write_Slot := Pending_Position_Ring_Index'First;
+         Pending_Position_Read_Slot := Pending_Position_Ring_Index'First;
+
+         Last_Command_Executed_Index := 0;
+         Write_Position (Current_Position_Data, Pos);
+      end Reset;
+
+      procedure Record_Queued_Position (Index : Command_Index; Pos : Position) is
+         Write_Slot      : constant Pending_Position_Ring_Index := Pending_Position_Write_Slot;
+         Next_Write_Slot : constant Pending_Position_Ring_Index := Next_Slot (Write_Slot);
+         Slot            : Pending_Position_Slot renames Pending_Positions (Write_Slot);
+      begin
+         while Next_Write_Slot = Pending_Position_Read_Slot loop
+            --  We can delay here since the implementation should have a very full queue at this point.
+            delay 0.01;
+         end loop;
+
+         Slot.Index := Atomic_Command_Index (Index);
+         Write_Position (Slot.Pos, Pos);
+         Pending_Position_Write_Slot := Next_Write_Slot;
+      end Record_Queued_Position;
+
+      procedure Report (Index : Command_Index) is
+         Current_Report_Index : constant Command_Index := Command_Index (Last_Command_Executed_Index);
+         Write_Slot_Snapshot  : constant Pending_Position_Ring_Index := Pending_Position_Write_Slot;
+      begin
+         if Index < Current_Report_Index then
+            raise Constraint_Error with "Executed command index moved backwards.";
+         end if;
+
+         if Index = Current_Report_Index then
+            return;
+         end if;
+
+         if Pending_Position_Read_Slot /= Write_Slot_Snapshot then
+            --  Perform an optimistic jump to the expected position of the target indext and then move backwards or
+            --  forwards for there as required.
             declare
-               Query          : TMC_Types.TMC2240.UART_Query_Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node     => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register => TMC_Types.TMC2240.IOIN_Address,
-                     others   => <>));
-               Reply          : TMC_Types.TMC2240.UART_Data_Message;
-               Receive_Failed : Boolean;
+               Initial_Read_Slot       : constant Pending_Position_Ring_Index := Pending_Position_Read_Slot;
+               Pending_Count           : constant Natural := Slot_Distance (Initial_Read_Slot, Write_Slot_Snapshot);
+               Expected_Consumed_Count : constant Natural :=
+                 (if Index - Current_Report_Index >= Command_Index (Pending_Count)
+                  then Pending_Count
+                  else Natural (Index - Current_Report_Index));
+               Search_Read_Slot        : Pending_Position_Ring_Index :=
+                 Advance_Slot (Initial_Read_Slot, Expected_Consumed_Count);
             begin
-               Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
-               Stepper_Hardware (Stepper).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
-               if Receive_Failed then
-                  raise TMC_UART_Error with "No response from stepper " & Stepper'Image;
-               elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
-                  raise TMC_UART_Error with "Bad CRC from stepper " & Stepper'Image;
-               elsif Reply.Content.Register /= TMC_Types.TMC2240.IOIN_Address then
-                  raise TMC_UART_Error with "Wrong register from stepper " & Stepper'Image;
-               elsif Reply.Content.IOIN_Data.Version /= 16#40# then
-                  raise TMC_UART_Error
-                    with
-                      "Unexpected version from " & Stepper'Image & " (" & Reply.Content.IOIN_Data.Version'Image & ")";
+               while Search_Read_Slot /= Initial_Read_Slot
+                 and then Command_Index (Pending_Positions (Previous_Slot (Search_Read_Slot)).Index) > Index
+               loop
+                  Search_Read_Slot := Previous_Slot (Search_Read_Slot);
+               end loop;
+
+               while Search_Read_Slot /= Write_Slot_Snapshot
+                 and then Command_Index (Pending_Positions (Search_Read_Slot).Index) <= Index
+               loop
+                  Search_Read_Slot := Next_Slot (Search_Read_Slot);
+               end loop;
+
+               if Search_Read_Slot /= Initial_Read_Slot then
+                  Current_Position_Data := Pending_Positions (Previous_Slot (Search_Read_Slot)).Pos;
                end if;
+
+               Pending_Position_Read_Slot := Search_Read_Slot;
             end;
+         end if;
 
-            declare
-               Message : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               --  We set TOFF correctly later. Using it to disable the driver before setting other registers ensures
-               --  that a half-configured driver will be in a safe state.
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
-                     CHOPCONF_Data => (Stepper_Params.CHOPCONF with delta TOFF => TMC_Types.TMC2240.Disable_Driver),
-                     others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
+         Last_Command_Executed_Index := Atomic_Command_Index (Index);
+      end Report;
 
-               --  A delay greater than 8 bit times is required with multiple nodes or else nodes other than the
-               --  addressed node may detect transmission errors during reads. Technically we should have a delay
-               --  after reads until this is set for all nodes, but it's not currently an issue in any firmware
-               --  implementations.
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register      => TMC_Types.TMC2240.NODECONF_Address,
-                     NODECONF_Data => (Node_Addr => 0, Send_Delay => TMC_Types.TMC2240.Delay_3x8, Reserved => 0),
-                     others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
+      function Get return Command_Index is
+      begin
+         return Command_Index (Last_Command_Executed_Index);
+      end Get;
 
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register   => TMC_Types.TMC2240.GCONF_Address,
-                     GCONF_Data =>
-                       (Stepper_Params.GCONF
-                        with delta
-                          Diag0_Error      => TMC_Types.False,
-                          Diag0_OTPW       => TMC_Types.False,
-                          Diag0_Stall      => TMC_Types.False,
-                          Diag1_Stall      => TMC_Types.False,
-                          Diag1_Index      => TMC_Types.False,
-                          Diag1_On_State   => TMC_Types.False,
-                          Diag_0_Push_Pull => TMC_Types.False,
-                          Diag_1_Push_Pull => TMC_Types.False,
-                          Stop_Enable      => TMC_Types.False,
-                          Direct_Mode      => TMC_Types.False),
-                     others     => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
+      function Get_Current_Position return Position is
+      begin
+         return Read_Position (Current_Position_Data);
+      end Get_Current_Position;
+   end Last_Command_Executed;
 
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register      => TMC_Types.TMC2240.DRV_CONF_Address,
-                     DRV_CONF_Data => Stepper_Params.DRV_CONF,
-                     others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
+   protected body Loop_Move_Cycles is
+      procedure Report (Index : Command_Index; Cycles : Dimensionless) is
+      begin
+         if Has_Data then
+            raise Constraint_Error with "Attempted to report loop move cycles while result is already pending.";
+         end if;
 
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node               => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register           => TMC_Types.TMC2240.GLOBAL_SCALER_Address,
-                     GLOBAL_SCALER_Data => Stepper_Params.GLOBAL_SCALER,
-                     others             => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
+         Current_Index := Index;
+         Current_Cycles := Cycles;
+         Has_Data := True;
+      end Report;
 
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node            => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register        => TMC_Types.TMC2240.IHOLD_IRUN_Address,
-                     IHOLD_IRUN_Data => Stepper_Params.IHOLD_IRUN,
-                     others          => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
+      entry Wait (Index : Command_Index; Cycles : out Dimensionless) when Has_Data is
+      begin
+         if Current_Index /= Index then
+            raise Constraint_Error
+              with
+                "Reported loop move cycles index mismatch. Expected "
+                & Index'Image
+                & " but got "
+                & Current_Index'Image;
+         end if;
 
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node            => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register        => TMC_Types.TMC2240.TPOWERDOWN_Address,
-                     TPOWERDOWN_Data => Stepper_Params.TPOWERDOWN,
-                     others          => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register      => TMC_Types.TMC2240.TPWMTHRS_Address,
-                     TPWMTHRS_Data => Stepper_Params.TPWMTHRS,
-                     others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node           => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register       => TMC_Types.TMC2240.TCOOLTHRS_Address,
-                     TCOOLTHRS_Data => Stepper_Params.TCOOLTHRS,
-                     others         => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register   => TMC_Types.TMC2240.THIGH_Address,
-                     THIGH_Data => Stepper_Params.THIGH,
-                     others     => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node         => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register     => TMC_Types.TMC2240.PWMCONF_Address,
-                     PWMCONF_Data => Stepper_Params.PWMCONF,
-                     others       => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
-                     CHOPCONF_Data => Stepper_Params.CHOPCONF,
-                     others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node       => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register   => TMC_Types.TMC2240.GSTAT_Address,
-                     GSTAT_Data =>
-                       (Reset          => TMC_Types.True,
-                        Drv_Err        => TMC_Types.True,
-                        UV_CP          => TMC_Types.True,
-                        Register_Reset => TMC_Types.True,
-                        VM_UVLO        => TMC_Types.True,
-                        Reserved       => 0),
-                     others     => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-            end;
-      end case;
-
-      if Stepper_Params.Enabled then
-         Enable_Stepper (Stepper);
-      else
-         Disable_Stepper (Stepper);
-      end if;
-   end Setup_Stepper;
-
-   procedure Setup_Step_Generator is
-      Map               : My_Step_Generator.Stepper_Pos_Map := [others => [others => Length'Last]];
-      Kinematics_Params : constant My_Config.Kinematics_Parameters := My_Config.Read;
-   begin
-      for S in Stepper_Name loop
-         declare
-            Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (S);
-         begin
-            case Kinematics_Params.Kind is
-               when My_Config.Cartesian_Kind =>
-                  if Kinematics_Params.X_Steppers (S) then
-                     Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
-                  end if;
-
-                  if Kinematics_Params.Y_Steppers (S) then
-                     Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
-                  end if;
-
-               when My_Config.Core_XY_Kind   =>
-                  if Kinematics_Params.A_Steppers (S) then
-                     Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
-                     Map (Y_Axis, S) := Stepper_Params.Mm_Per_Step;
-                  end if;
-
-                  if Kinematics_Params.B_Steppers (S) then
-                     Map (X_Axis, S) := Stepper_Params.Mm_Per_Step;
-                     Map (Y_Axis, S) := -Stepper_Params.Mm_Per_Step;
-                  end if;
-            end case;
-
-            if Kinematics_Params.Z_Steppers (S) then
-               Map (Z_Axis, S) := Stepper_Params.Mm_Per_Step;
-            end if;
-
-            if Kinematics_Params.E_Steppers (S) then
-               Map (E_Axis, S) := Stepper_Params.Mm_Per_Step;
-            end if;
-         end;
-      end loop;
-
-      My_Step_Generator.Runner.Setup (Map);
-   end Setup_Step_Generator;
-
-   procedure Log (Message : String) is
-   begin
-      My_Logger.Log (Message);
-   end Log;
+         Cycles := Current_Cycles;
+         Has_Data := False;
+      end Wait;
+   end Loop_Move_Cycles;
 
    protected body Reload_Signal is
       entry Wait when Reload_Requested is
@@ -1154,16 +1116,16 @@ package body Prunt.Controller is
             Reload_Requested := True;
          else
             --  Nothing has actually started yet, so there's nothing to restart. We reload the web server anyway to
-            --  prevent any confusion when the reload button does nothing. We also reload the config in case the user
-            --  has changed any settings.
-            My_Config.Reset;
+            --  prevent any confusion when the reload button does nothing.
             My_Web_Server.Reset;
+            null;
          end if;
       end Signal;
 
       procedure Mark_Startup_Done is
       begin
          Startup_Done := True;
+         My_Web_Server.Notify_Startup_Done;
       end Mark_Startup_Done;
    end Reload_Signal;
 
@@ -1172,94 +1134,26 @@ package body Prunt.Controller is
       Reload_Signal.Signal;
    end Signal_Reload;
 
-   procedure Enable_Stepper (Stepper : Stepper_Name) is
+   function Get_Current_Position return Position is
    begin
-      case Stepper_Hardware (Stepper).Kind is
-         when Basic_Kind        =>
-            Stepper_Hardware (Stepper).Enable_Stepper (Stepper);
+      return Last_Command_Executed.Get_Current_Position;
+   end Get_Current_Position;
 
-         when TMC2240_UART_Kind =>
-            declare
-               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (Stepper);
-               Message        : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
-                     CHOPCONF_Data => Stepper_Params.CHOPCONF,
-                     others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-            end;
-      end case;
-   end Enable_Stepper;
-
-   procedure Disable_Stepper (Stepper : Stepper_Name) is
+   function Get_Current_File_Name return Virtual_String is
    begin
-      case Stepper_Hardware (Stepper).Kind is
-         when Basic_Kind        =>
-            Stepper_Hardware (Stepper).Disable_Stepper (Stepper);
+      return My_Gcode_Queue.Get_Current_File;
+   end Get_Current_File_Name;
 
-         when TMC2240_UART_Kind =>
-            declare
-               Stepper_Params : constant My_Config.Stepper_Parameters := My_Config.Read (Stepper);
-               Message        : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               Message :=
-                 (Bytes_Mode => False,
-                  Content    =>
-                    (Node          => Stepper_Hardware (Stepper).TMC2240_UART_Address,
-                     Register      => TMC_Types.TMC2240.CHOPCONF_Address,
-                     CHOPCONF_Data => (Stepper_Params.CHOPCONF with delta TOFF => TMC_Types.TMC2240.Disable_Driver),
-                     others        => <>));
-               Message.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Message);
-               TMC2240_UART_Write_And_Validate (Message, Stepper);
-            end;
-      end case;
-   end Disable_Stepper;
-
-   procedure Report_Loop_Move_Offset (Index : Command_Index; Offset : Position_Offset) is
+   function Get_Current_File_Line return File_Line_Count is
    begin
-      Loop_Move_Recorder.Report_Offset (Index, Offset);
-   end Report_Loop_Move_Offset;
+      return My_Gcode_Queue.Get_Current_Line_Number;
+   end Get_Current_File_Line;
 
-   procedure Report_Loop_Cycles (Index : Command_Index; Cycles : Dimensionless) is
+   function Stepgen_Paused return Boolean is
    begin
-      Loop_Move_Recorder.Report (Index, Cycles);
-   end Report_Loop_Cycles;
+      return My_Step_Generator.Is_Paused;
+   end Stepgen_Paused;
 
-   protected body Loop_Move_Recorder is
-      entry Report (Index : Command_Index; Cycles : Dimensionless) when not Report_Ready is
-      begin
-         if Offset_Ready and then Stored_Index /= Index then
-            raise Constraint_Error
-              with "Loop move index reported by implementation does not match index reported by step generator.";
-         end if;
-         Stored_Index := Index;
-         Stored_Cycles := Cycles;
-         Report_Ready := True;
-      end Report;
-
-      entry Report_Offset (Index : Command_Index; Offset : Position_Offset) when not Offset_Ready is
-      begin
-         if Report_Ready and then Stored_Index /= Index then
-            raise Constraint_Error
-              with "Loop move index reported by implementation does not match index reported by step generator.";
-         end if;
-         Stored_Index := Index;
-         Stored_Offset := Offset;
-         Offset_Ready := True;
-      end Report_Offset;
-
-      entry Retrieve (Cycles : out Dimensionless; Offset : out Position_Offset) when Report_Ready and Offset_Ready is
-      begin
-         Cycles := Stored_Cycles;
-         Offset := Stored_Offset;
-         Report_Ready := False;
-         Offset_Ready := False;
-      end Retrieve;
-   end Loop_Move_Recorder;
-
+begin
+   Ada.Task_Termination.Set_Dependents_Fallback_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
 end Prunt.Controller;

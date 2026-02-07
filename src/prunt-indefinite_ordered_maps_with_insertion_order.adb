@@ -1,6 +1,27 @@
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
+--------------------------------------------------
+
 with Ada.Unchecked_Deallocation;
 
 package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
+
+   pragma Extensions_Allowed (On);
 
    use type Key_Vectors.Cursor;
 
@@ -40,6 +61,16 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
    begin
       --  TODO: Is this correct?
       return (Container.Map.Reference (Key).Element.all'Unchecked_Access, Container.Map.Reference (Key));
+   end Reference;
+
+   function Constant_Reference (Container : aliased Map; Position : Cursor) return Constant_Reference_Type is
+   begin
+      return Constant_Reference (Container, Key (Position));
+   end Constant_Reference;
+
+   function Reference (Container : aliased in out Map; Position : Cursor) return Reference_Type is
+   begin
+      return Reference (Container, Key (Position));
    end Reference;
 
    procedure Insert (Container : in out Map; Key : Key_Type; New_Item : Element_Type) is
@@ -157,6 +188,25 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
              Map      => Container'Unrestricted_Access);
    end Iterate;
 
+   function Length (Container : Map) return Ada.Containers.Count_Type is
+   begin
+      return Container.Insertions.Length;
+   end Length;
+
+   procedure Delete (Container : in out Map; Key : Key_Type) is
+   begin
+      Container.Map.Delete (Key);
+      Container.Insertions.Delete (Container.Insertions.Find_Index (Key));
+   end Delete;
+
+   procedure Reverse_Clear (Container : in out Map) is
+   begin
+      while not Container.Insertions.Is_Empty loop
+         Container.Map.Delete (Container.Insertions.Last_Element);
+         Container.Insertions.Delete_Last;
+      end loop;
+   end Reverse_Clear;
+
    overriding
    procedure Finalize (Object : in out Iterator) is
    begin
@@ -199,7 +249,28 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
       return Previous (Position);
    end Previous;
 
-   function "+" (Left, Right : Map) return Map is
+   procedure Include (Container : in out Map; Key : Key_Type; New_Item : Element_Type) is
+   begin
+      if Container.Find (Key) = No_Element then
+         Container.Insert (Key, New_Item);
+      else
+         Container.Map.Include (Key, New_Item);
+      end if;
+   end Include;
+
+   procedure Exclude (Container : in out Map; Key : Key_Type) is
+   begin
+      if Container.Find (Key) /= No_Element then
+         Container.Delete (Key);
+      end if;
+   end Exclude;
+
+   function Is_Empty (Container : Map) return Boolean is
+   begin
+      return Container.Map.Is_Empty;
+   end Is_Empty;
+
+   function "&" (Left, Right : Map) return Map is
    begin
       return Result : Map do
          for I of Left.Insertions loop
@@ -212,6 +283,6 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
             Result.Insertions.Append (I);
          end loop;
       end return;
-   end "+";
+   end "&";
 
 end Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
