@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,9 +19,14 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+pragma Extensions_Allowed (On);
+
 with GNAT.Sockets;
-with System.Multiprocessors;
 with Prunt.Motion_Planner;
+with System.Multiprocessors;
+
+--  TODO: We should get these from the implementation instead of getting them directly as a given implementation might
+--  have multiple `Prunt.Controller` instances.
 
 package Prunt.Command_Line_Arguments is
 

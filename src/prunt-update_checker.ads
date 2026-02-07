@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,8 +19,9 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+pragma Extensions_Allowed (On);
+
 with Prunt.Logger;
-with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 
 generic
    with package My_Logger is new Prunt.Logger (<>);
@@ -28,7 +29,7 @@ generic
 package Prunt.Update_Checker is
 
    task Checker is
-      entry Get_Update_URL (Update_Available : out Boolean; Update_URL : out Unbounded_String);
+      entry Get_Update_URL (Update_Available : out Boolean; Update_URL : out VSS.Strings.Virtual_String);
    end Checker;
 
 end Prunt.Update_Checker;

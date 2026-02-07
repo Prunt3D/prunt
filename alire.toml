@@ -1,6 +1,6 @@
 name = "prunt"
 description = ""
-version = "0.1.0-dev"
+version = "1.0.0"
 
 authors = ["Liam Powell"]
 maintainers = ["Liam Powell <liam@liampll.com>"]
@@ -10,32 +10,38 @@ website = ""
 tags = []
 
 [build-switches]
-release.optimization = ["-O3", "-gnatn", "-fdata-sections", "-ffunction-sections", "-flto=auto", "-fuse-linker-plugin", "-ffat-lto-objects"]
-development.contracts = "Yes"
+# Configured in GPR file.
+"*".optimization = []
+"*".debug_info = []
+"*".runtime_checks = []
+"*".compile_checks = []
+"*".contracts = []
+"*".style_checks = []
+"*".ada_version = []
+"*".source_encoding = []
 
 [[depends-on]]
-gnat_native = "^15.2.0"
+gnat_external = "^15.2.0"
+# Use system GNAT to avoid this bug: https://github.com/alire-project/GNAT-FSF-builds/issues/102
 
 [[depends-on]]
-gnatcoll = "^23.0.0"
+gnatcoll = "^25.0.0"
 
 [[actions]]
 type = "pre-build"
-command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (cd html && npm install webpack-cli && npx webpack)"]
+# command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (cd html && npm install webpack-cli && npx webpack)"]
+command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (cd html && npx webpack)"]
 
 [[actions]]
 type = "pre-build"
-command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || are --lang=Ada -o ./generated_src_html --content-only --name-access --rule=./html/package.xml ./html/dist"]
+command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (are --lang=Ada -o ./generated_src_html --content-only --name-access --rule=./html/package.xml ./html/dist && sed -i '1s/^/pragma Warnings (Off, \\\"array aggregate using () is an obsolescent syntax, use [] instead\\\");\\npragma Warnings (Off, \\\"subprogram body \\\"\\\"Get_Content\\\"\\\" not in alphabetical order\\\");\\n/' ./generated_src_html/prunt-web_server_resources.adb)"]
 
 [[actions]]
 type = "pre-build"
-command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || python3 config_codegen.py"]
+command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (VSS_EXTRA_ALIRE_PREFIX=\"\" VSS_TEXT_ALIRE_PREFIX=\"\" alr --chdir=config_codegen build --development && ./config_codegen/bin/config_codegen -P prunt.gpr)"]
 
 [[depends-on]]
 simple_components = "^4.68.0"
-
-[[depends-on]]
-are = "^1.5.1"
 
 [[depends-on]]
 utilada = "^2.8.0"
@@ -45,3 +51,12 @@ utilada_curl = "^2.8.0"
 
 [[pins]]
 simple_components = { url = "https://github.com/Prunt3D/dak_simple_components.git" }
+
+[configuration.variables]
+Enable_Test_Mocks = {type = "Boolean", default = false}
+
+[[depends-on]]
+vss_text = "^26.0.0"
+
+[[depends-on]]
+vss_extra = "^26.0.0"

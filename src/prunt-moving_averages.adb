@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -21,25 +21,27 @@
 
 package body Prunt.Moving_Averages is
 
-   function Create (N_Levels : Positive; Max_Total_Width : Natural; Initial_Value : T) return Cascading_Moving_Average
-   is
+   pragma Extensions_Allowed (On);
+
+   function Create
+     (N_Levels : Positive; Max_Total_Width : Natural; Initial_Value : Number) return Cascading_Moving_Average is
    begin
       return
         (N_Levels        => N_Levels,
          Width_Per_Level => Max_Total_Width / N_Levels,
          Current_Index   => 1,
-         Sums            => (others => Initial_Value * T'Base (Max_Total_Width / N_Levels)),
-         Buffers         => (others => (others => Initial_Value)));
+         Sums            => [others => Initial_Value * Number'Base (Max_Total_Width / N_Levels)],
+         Buffers         => [others => [others => Initial_Value]]);
    end Create;
 
-   function Do_Step (CMA : in out Cascading_Moving_Average; Input : T) return T is
-      Result : T := Input;
+   function Do_Step (CMA : in out Cascading_Moving_Average; Input : Number) return Number is
+      Result : Number := Input;
    begin
       if CMA.Width_Per_Level > 1 then
          for Level in CMA.Buffers'Range (2) loop
             CMA.Sums (Level) := @ - CMA.Buffers (CMA.Current_Index, Level) + Result;
             CMA.Buffers (CMA.Current_Index, Level) := Result;
-            Result := T (CMA.Sums (Level) / T'Base (CMA.Width_Per_Level));
+            Result := Number (CMA.Sums (Level) / Number'Base (CMA.Width_Per_Level));
          end loop;
 
          CMA.Current_Index := @ mod CMA.Width_Per_Level + 1;

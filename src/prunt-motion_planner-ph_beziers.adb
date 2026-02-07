@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,21 +19,29 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Ada.Unchecked_Conversion;
 with Ada.Containers.Generic_Constrained_Array_Sort;
+with Ada.Unchecked_Conversion;
 
 package body Prunt.Motion_Planner.PH_Beziers is
 
+   pragma Extensions_Allowed (On);
+
    function Distance_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length is
       --  Note that this assumes symmetrical curves as it makes the computation significantly faster.
-
+      --
       --  The details of this implementation are here:
       --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
+      --
+      --  The distance along the curve is the integral of the curve's parametric speed function. This integral is a
+      --  high-degree polynomial. To improve numerical stability when dealing with floating-point numbers, the terms of
+      --  the polynomial are sorted by magnitude before being summed.
       L : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
       B : constant Length := abs (Bez.Control_Points (4) - Bez.Control_Points (5));
 
       type Sum_Terms_Type_Index is range 1 .. 12;
       type Sum_Terms_Type is array (Sum_Terms_Type_Index) of Area;
+
+      function Abs_Less_Then (Left, Right : Area) return Boolean;
 
       function Abs_Less_Then (Left, Right : Area) return Boolean is
       begin
@@ -44,7 +52,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
         Ada.Containers.Generic_Constrained_Array_Sort (Sum_Terms_Type_Index, Area, Sum_Terms_Type, Abs_Less_Then);
 
       Sum_Terms : Sum_Terms_Type :=
-        (23_940.0 * L**2,
+        [23_940.0 * L**2,
          9_815_520.0 * T**14 * (-B**2 + L**2),
          73_616_400.0 * T**13 * (B**2 - L**2),
          233_873_640.0 * T**12 * (-B**2 + L**2),
@@ -55,7 +63,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
          920_205.0 * T**7 * (-B**2 + L**2),
          3_680_820.0 * T**6 * (B**2 - L**2),
          5_153_148.0 * T**5 * (-B**2 + L**2),
-         2_576_574.0 * T**4 * (B**2 - L**2));
+         2_576_574.0 * T**4 * (B**2 - L**2)];
    begin
       if L = 0.0 then
          return 0.0 * mm;
@@ -96,7 +104,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
          Result :=
            Cast_Curve_Parameter
              (Cast_Curve_Parameter (Lower) + (Cast_Curve_Parameter (Upper) - Cast_Curve_Parameter (Lower)) / 2);
-         exit when Lower = Result or Upper = Result;
+         exit when Lower = Result or else Upper = Result;
          if Distance_At_T (Bez, Result) <= Distance then
             Lower := Result;
          else
@@ -150,12 +158,6 @@ package body Prunt.Motion_Planner.PH_Beziers is
    end Tangent_At_T;
 
    function Point_At_T_V2 (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position is
-      --  This method is slower than Point_At_T on most CPUs, but may be useful if this code is ported to a GPU or
-      --  FPGA. It may also be faster for cases where T is known at compile time, but I am not aware of any methods to
-      --  detect that with GCC.
-
-      --  The details of this implementation are here:
-      --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
    begin
       return
         Bez.Control_Points (0)
@@ -188,7 +190,13 @@ package body Prunt.Motion_Planner.PH_Beziers is
    end Tangent_At_Distance;
 
    function Create_Bezier (Start, Corner, Finish : Scaled_Position; Deviation_Limit : Length) return PH_Bezier is
+      function Real_Create_Bezier return PH_Bezier;
+
       function Real_Create_Bezier return PH_Bezier is
+         function Sine_Secondary_Angle return Dimensionless;
+         function Cosine_Secondary_Angle return Dimensionless;
+         function Base_Length return Length;
+
          function Sine_Secondary_Angle return Dimensionless is
             V1 : constant Scaled_Position_Offset := Start - Corner;
             V2 : constant Scaled_Position_Offset := Finish - Corner;
@@ -274,7 +282,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
 
          --  TODO: Do we need a small error margin here?
          if Sine_Secondary_Angle = 0.0 then
-            --  Collinear points.
+            --  Collinear points. The curvature is zero, so we return the largest possible inverse curvature value.
             return (Control_Points => Points, Inverse_Curvature => Length'Last);
          else
             return
@@ -284,7 +292,9 @@ package body Prunt.Motion_Planner.PH_Beziers is
          end if;
       end Real_Create_Bezier;
    begin
-      if Start = Corner or Finish = Corner then
+      if Start = Corner or else Finish = Corner then
+         --  If the start or finish points are the same as the corner, then we have a zero-length segment, so we can't
+         --  create a curve. Return a zero-length curve reresenting a sharp corner.
          return (Control_Points => [others => Corner], Inverse_Curvature => 0.0 * mm);
       else
          return Real_Create_Bezier;

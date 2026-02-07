@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -24,6 +24,8 @@ with Ada.Numerics; use Ada.Numerics;
 
 package body Prunt.Input_Shapers.Basic_Shapers is
 
+   pragma Extensions_Allowed (On);
+
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
    use Dimensionless_Math;
 
@@ -38,7 +40,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
          Impulse_Count        => Impulses'Length,
          Buffer_Size          => Impulses (Impulses'Last).Output_Delay + 1,
          Impulses             => Impulses,
-         Buffer               => (others => Start_Position),
+         Buffer               => [others => Start_Position],
          Current_Buffer_Index => 0);
    end Create;
 
@@ -60,10 +62,10 @@ package body Prunt.Input_Shapers.Basic_Shapers is
    function Compute_Impulses (Parameters : Shaper_Parameters; Interpolation_Time : Time) return Impulses_Array is
    begin
       case Parameters.Kind is
-         when No_Shaper =>
-            return (1 => (Output_Delay => 0, Output_Ratio => 1.0));
+         when No_Shaper         =>
+            return [1 => (Output_Delay => 0, Output_Ratio => 1.0)];
 
-         when Zero_Vibration =>
+         when Zero_Vibration    =>
             --  https://doi.org/10.1115/1.2894142
             declare
                K  : constant Dimensionless :=
@@ -81,8 +83,8 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                case Parameters.Zero_Vibration_Deriviatives is
                   when 0 =>
                      return
-                       ((Output_Delay => 0, Output_Ratio => 1.0 / (1.0 + K)),
-                        (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => K / (1.0 + K)));
+                       [(Output_Delay => 0, Output_Ratio => 1.0 / (1.0 + K)),
+                        (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => K / (1.0 + K))];
 
                   when 1 =>
                      declare
@@ -92,9 +94,9 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                         Output_Sum : constant Dimensionless := A1 + A2 + A3;
                      begin
                         return
-                          ((Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
+                          [(Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
-                           (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum));
+                           (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum)];
                      end;
 
                   when 2 =>
@@ -106,10 +108,10 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                         Output_Sum : constant Dimensionless := A1 + A2 + A3 + A4;
                      begin
                         return
-                          ((Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
+                          [(Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum),
-                           (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum));
+                           (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum)];
                      end;
 
                   when 3 =>
@@ -122,11 +124,11 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                         Output_Sum : constant Dimensionless := A1 + A2 + A3 + A4 + A5;
                      begin
                         return
-                          ((Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
+                          [(Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum),
                            (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum),
-                           (Output_Delay => Cycle_Count (2.0 * TD), Output_Ratio => A5 / Output_Sum));
+                           (Output_Delay => Cycle_Count (2.0 * TD), Output_Ratio => A5 / Output_Sum)];
                      end;
                end case;
             end;
@@ -157,9 +159,9 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                         Output_Sum : constant Dimensionless := A1 + A2 + A3;
                      begin
                         return
-                          ((Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
+                          [(Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
-                           (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum));
+                           (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum)];
                      end;
 
                   when 2 =>
@@ -172,15 +174,16 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                         Output_Sum : constant Dimensionless := A1 + A2 + A3 + A4;
                      begin
                         return
-                          ((Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
+                          [(Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum),
-                           (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum));
+                           (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum)];
                      end;
 
                   when 3 =>
                      declare
-                        A1         : constant Dimensionless := (1.0 + 3.0 * V + 2.0 * (2.0 * (V**2 + V))**(1 / 2));
+                        A1         : constant Dimensionless :=
+                          (1.0 + 3.0 * V + 2.0 * (2.0 * (V**2 + V))**(1 / 2)) / 16.0;
                         A2         : constant Dimensionless := K * (1.0 - V) / 4.0;
                         A3         : constant Dimensionless := K**2 * (1.0 - 2.0 * (A1 + (1.0 - V) / 4.0));
                         A4         : constant Dimensionless := K**3 * (1.0 - V) / 4.0;
@@ -188,16 +191,16 @@ package body Prunt.Input_Shapers.Basic_Shapers is
                         Output_Sum : constant Dimensionless := A1 + A2 + A3 + A4 + A5;
                      begin
                         return
-                          ((Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
+                          [(Output_Delay => 0, Output_Ratio => A1 / Output_Sum),
                            (Output_Delay => Cycle_Count (0.5 * TD), Output_Ratio => A2 / Output_Sum),
                            (Output_Delay => Cycle_Count (TD), Output_Ratio => A3 / Output_Sum),
                            (Output_Delay => Cycle_Count (1.5 * TD), Output_Ratio => A4 / Output_Sum),
-                           (Output_Delay => Cycle_Count (2.0 * TD), Output_Ratio => A5 / Output_Sum));
+                           (Output_Delay => Cycle_Count (2.0 * TD), Output_Ratio => A5 / Output_Sum)];
                      end;
                end case;
             end;
 
-         when others =>
+         when others            =>
             raise Constraint_Error with "Wrong Create function called for given shaper parameters.";
       end case;
    end Compute_Impulses;

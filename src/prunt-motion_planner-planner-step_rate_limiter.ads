@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 private with System.Pool_Local;
 
@@ -35,6 +37,8 @@ package Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
    --  is set to False.
 
 private
+
+   function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position;
 
    Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
 

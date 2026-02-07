@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 with System; use System;
 
@@ -124,7 +126,7 @@ package Prunt.TMC_Types.TMC2240 is
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type Global_Scaler_Type is range 0 .. 255
-   with Size => 8, Static_Predicate => Global_Scaler_Type = 0 or Global_Scaler_Type > 31;
+   with Size => 8, Static_Predicate => Global_Scaler_Type = 0 or else Global_Scaler_Type > 31;
 
    type GLOBAL_SCALER is record
       Global_Scaler : Global_Scaler_Type;

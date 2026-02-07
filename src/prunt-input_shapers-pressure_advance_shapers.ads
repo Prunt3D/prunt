@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 --  An alternative approach to smoothing may be found in commit 9b197ac428bb1eb52f9a0c6163cb2cabf1cf3e2a. The approach
 --  used here appears to produce results with less error.

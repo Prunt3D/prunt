@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -21,12 +21,17 @@
 
 package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
+   pragma Extensions_Allowed (On);
+
    procedure Run (Block : in out Execution_Block) is
    begin
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
 
       for I in Block.Original_Segment_Feedrates'Range loop
+         --  Clamp the feedrate to the speed of light in a vacuum. This is a safety measure to prevent overflows and
+         --  other issues with very large feedrates. If your printer is capable of exceeding the speed of light then
+         --  please file a bug report.
          Block.Original_Segment_Feedrates (I) :=
            Velocity'Min (Block.Original_Segment_Feedrates (I), 299_792_458_000.1 * mm / s);
 
@@ -38,9 +43,9 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
             Feedrate : Velocity :=
               Velocity'Min (Block.Original_Segment_Feedrates (I), Block.Params.Tangential_Velocity_Max);
          begin
-            if Block.Params.Ignore_E_In_XYZE and Has_XYZ then
+            if Block.Params.Ignore_E_In_XYZE and then Has_XYZ then
                Feedrate := Feedrate * (abs Offset / abs [Offset with delta E_Axis => 0.0 * mm]);
-               if abs [Offset with delta E_Axis => 0.0 * mm] > 0.0 * mm and Feedrate /= Velocity'Last then
+               if abs [Offset with delta E_Axis => 0.0 * mm] > 0.0 * mm and then Feedrate /= Velocity'Last then
                   Feedrate :=
                     Feedrate
                     * abs ([Offset with delta E_Axis => 0.0 * mm] / Block.Params.Axial_Scaler)
@@ -60,10 +65,13 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                end if;
             end if;
 
+            --  Enforce a minimum segment time to prevent any possible issues in the step generator.
             if abs Offset > 0.0 * mm then
                Feedrate := Velocity'Min (Feedrate, abs Offset / Interpolation_Time);
             end if;
 
+            --  Apply axial velocity limits. The feedrate is scaled down if any single axis exceeds its maximum allowed
+            --  velocity.
             for A in Axis_Name loop
                if abs Offset (A) > 0.0 * mm then
                   Feedrate :=

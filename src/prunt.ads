@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,17 +19,22 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+pragma Extensions_Allowed (On);
+
+with Ada.Exceptions;
 with Ada.Numerics;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
-with Ada.Exceptions;
-with Ada.Strings.Unbounded;
+with VSS.Strings; use VSS.Strings;
+with VSS.Strings.Conversions;
 
 package Prunt is
 
+   subtype Empty_Enumeration is Boolean range True .. False;
+
    type Stepper_Hardware_Kind is (Basic_Kind, TMC2240_UART_Kind);
 
-   type Command_Index is range 0 .. 2**63 - 2;
+   type Command_Index is range 0 .. 2 ** 63 - 2;
 
    type Pin_State is (High_State, Low_State);
 
@@ -75,17 +80,19 @@ package Prunt is
         (Unit_Name => Second, Unit_Symbol => "s", Dim_Symbol => "Time"),
         (Unit_Name => Celsius, Unit_Symbol => "°C", Dim_Symbol => "Temperature"),
         (Unit_Name => Amp, Unit_Symbol => "A", Dim_Symbol => "Current"),
-        (Unit_Name => Gram, Unit_Symbol => "g", Dim_Symbol => "Mass"));
+        (Unit_Name => Gram, Unit_Symbol => "g", Dim_Symbol => "Mass")),
+     Annotate         => (Prunt_Config, User_Config);
 
-   subtype Length is Dimensioned_Float with Dimension => (Symbol => "mm", Millimeter => 1, others => 0);
+   subtype Length is Dimensioned_Float
+   with Dimension => (Symbol => "mm", Millimeter => 1, others => 0), Annotate => (Prunt_Config, Unit, "mm");
 
    subtype Time is Dimensioned_Float with Dimension => (Symbol => "s", Second => 1, others => 0);
 
-   subtype Temperature is Dimensioned_Float with Dimension => (Symbol => "°C", Celsius => 1, others => 0);
+   subtype Temperature is Dimensioned_Float with Dimension => (Symbol => "degC", Celsius => 1, others => 0);
 
    subtype Angle is Dimensioned_Float with Dimension => (Symbol => "rad", others => 0);
 
-   subtype Dimensionless is Dimensioned_Float with Dimension => (Symbol => "×", others => 0);
+   subtype Dimensionless is Dimensioned_Float with Dimension => (Symbol => "x", others => 0);
 
    subtype Voltage is Dimensioned_Float
    with Dimension => (Symbol => "nV", Gram => 1, Millimeter => 2, Second => -3, Amp => -1, others => 0);
@@ -95,7 +102,7 @@ package Prunt is
    subtype Mass is Dimensioned_Float with Dimension => (Symbol => "g", Gram => 1, others => 0);
 
    subtype Resistance is Dimensioned_Float
-   with Dimension => (Symbol => "nΩ", Gram => 1, Millimeter => 2, Second => -3, Amp => -2, others => 0);
+   with Dimension => (Symbol => "nohm", Gram => 1, Millimeter => 2, Second => -3, Amp => -2, others => 0);
 
    subtype Power is Dimensioned_Float
    with Dimension => (Symbol => "nW", Gram => 1, Millimeter => 2, Second => -3, others => 0);
@@ -111,6 +118,10 @@ package Prunt is
    subtype PWM_Scale is Dimensionless range 0.0 .. 1.0;
 
    subtype Cruise_Ratio is Dimensionless range 0.03 .. 0.97;
+
+   type Dimensionless_Ratio is record
+      Numerator, Denominator : Dimensionless;
+   end record;
 
    pragma Warnings (Off, "assumed to be");
    mm        : constant Length := 1.0;
@@ -142,40 +153,44 @@ package Prunt is
    subtype Velocity is Dimensioned_Float
    with Dimension => (Symbol => "mm/s", Millimeter => 1, Second => -1, others => 0);
    subtype Acceleration is Dimensioned_Float
-   with Dimension => (Symbol => "mm/s²", Millimeter => 1, Second => -2, others => 0);
-   subtype Jerk is Dimensioned_Float with Dimension => (Symbol => "mm/s³", Millimeter => 1, Second => -3, others => 0);
-   subtype Snap is Dimensioned_Float with Dimension => (Symbol => "mm/s⁴", Millimeter => 1, Second => -4, others => 0);
+   with Dimension => (Symbol => "mm/s**2", Millimeter => 1, Second => -2, others => 0);
+   subtype Jerk is Dimensioned_Float
+   with Dimension => (Symbol => "mm/s**3", Millimeter => 1, Second => -3, others => 0);
+   subtype Snap is Dimensioned_Float
+   with Dimension => (Symbol => "mm/s**4", Millimeter => 1, Second => -4, others => 0);
    subtype Crackle is Dimensioned_Float
-   with Dimension => (Symbol => "mm/s⁵", Millimeter => 1, Second => -5, others => 0);
+   with Dimension => (Symbol => "mm/s**5", Millimeter => 1, Second => -5, others => 0);
 
-   subtype Area is Dimensioned_Float with Dimension => (Symbol => "mm²", Millimeter => 2, others => 0);
-   subtype Volume is Dimensioned_Float with Dimension => (Symbol => "mm³", Millimeter => 3, others => 0);
-   subtype Hypervolume is Dimensioned_Float with Dimension => (Symbol => "mm⁴", Millimeter => 4, others => 0);
+   subtype Area is Dimensioned_Float with Dimension => (Symbol => "mm**2", Millimeter => 2, others => 0);
+   subtype Volume is Dimensioned_Float with Dimension => (Symbol => "mm**3", Millimeter => 3, others => 0);
+   subtype Hypervolume is Dimensioned_Float with Dimension => (Symbol => "mm**4", Millimeter => 4, others => 0);
 
-   subtype Curvature is Dimensioned_Float with Dimension => (Symbol => "mm⁻¹", Millimeter => -1, others => 0);
-   subtype Curvature_To_2 is Dimensioned_Float with Dimension => (Symbol => "mm⁻²", Millimeter => -2, others => 0);
-   subtype Curvature_To_3 is Dimensioned_Float with Dimension => (Symbol => "mm⁻³", Millimeter => -3, others => 0);
-   subtype Curvature_To_4 is Dimensioned_Float with Dimension => (Symbol => "mm⁻⁴", Millimeter => -4, others => 0);
+   subtype Curvature is Dimensioned_Float with Dimension => (Symbol => "mm**(-1)", Millimeter => -1, others => 0);
+   subtype Curvature_To_2 is Dimensioned_Float with Dimension => (Symbol => "mm**(-2)", Millimeter => -2, others => 0);
+   subtype Curvature_To_3 is Dimensioned_Float with Dimension => (Symbol => "mm**(-3)", Millimeter => -3, others => 0);
+   subtype Curvature_To_4 is Dimensioned_Float with Dimension => (Symbol => "mm**(-4)", Millimeter => -4, others => 0);
 
-   subtype Heat_Flux is Dimensioned_Float with Dimension => (Symbol => "mW/mm²", Gram => 1, Second => -3, others => 0);
+   subtype Heat_Flux is Dimensioned_Float
+   with Dimension => (Symbol => "mW/mm**2", Gram => 1, Second => -3, others => 0);
 
    subtype Heat_Transfer_Coefficient is Dimensioned_Float
-   with Dimension => (Symbol => "mW/(m²°C)", Gram => 1, Second => -3, Celsius => -1, others => 0);
+   with Dimension => (Symbol => "mW/(m**2 degC)", Gram => 1, Second => -3, Celsius => -1, others => 0);
 
    subtype Thermal_Conductance is Dimensioned_Float
-   with Dimension => (Symbol => "nW/°C", Gram => 1, Millimeter => 2, Second => -3, Celsius => -1, others => 0);
+   with Dimension => (Symbol => "nW/degC", Gram => 1, Millimeter => 2, Second => -3, Celsius => -1, others => 0);
 
    subtype Heat_Capacity is Dimensioned_Float
-   with Dimension => (Symbol => "nJ/°C", Gram => 1, Millimeter => 2, Second => -2, Celsius => -1, others => 0);
+   with Dimension => (Symbol => "nJ/degC", Gram => 1, Millimeter => 2, Second => -2, Celsius => -1, others => 0);
 
    subtype Specific_Heat_Capacity is Dimensioned_Float
-   with Dimension => (Symbol => "nJ/(g°C)", Millimeter => 2, Second => -2, Celsius => -1, others => 0);
+   with Dimension => (Symbol => "nJ/(g*degC)", Millimeter => 2, Second => -2, Celsius => -1, others => 0);
 
-   subtype Inverse_Temperature is Dimensioned_Float with Dimension => (Symbol => "°C⁻¹", Celsius => -1, others => 0);
+   subtype Inverse_Temperature is Dimensioned_Float
+   with Dimension => (Symbol => "degC**(-1)", Celsius => -1, others => 0);
    subtype Time_Over_Temperature is Dimensioned_Float
-   with Dimension => (Symbol => "s/°C", Second => 1, Celsius => -1, others => 0);
+   with Dimension => (Symbol => "s/degC", Second => 1, Celsius => -1, others => 0);
    subtype Frequency_Over_Temperature is Dimensioned_Float
-   with Dimension => (Symbol => "Hz/°C", Second => -1, Celsius => -1, others => 0);
+   with Dimension => (Symbol => "Hz/degC", Second => -1, Celsius => -1, others => 0);
 
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis);
 
@@ -223,9 +238,6 @@ package Prunt is
 
    TMC_UART_Error : exception;
 
-   function JSON_Escape (S : String) return String;
-   function JSON_Escape (S : Ada.Strings.Unbounded.Unbounded_String) return Ada.Strings.Unbounded.Unbounded_String;
-
    type Update_Check_Method is (None, Github);
 
    type Update_Check_Details (Method : Update_Check_Method := None) is record
@@ -234,12 +246,12 @@ package Prunt is
             null;
 
          when Github =>
-            Repository   : Ada.Strings.Unbounded.Unbounded_String;
-            Expected_Tag : Ada.Strings.Unbounded.Unbounded_String;
+            Repository   : Virtual_String;
+            Expected_Tag : Virtual_String;
       end case;
    end record;
 
-   type File_Line_Count is range 0 .. 2**63 - 1;
+   type File_Line_Count is range 0 .. 2 ** 63 - 1;
 
    type PID_Autotune_Cycle_Count is range 2 .. 1_000;
 
@@ -271,5 +283,7 @@ package Prunt is
    end record;
 
    type Fan_Hardware_Kind is (Fixed_Switching_Kind, Low_Or_High_Side_Switching_Kind);
+
+   function "+" (Left : String) return Virtual_String renames Conversions.To_Virtual_String;
 
 end Prunt;

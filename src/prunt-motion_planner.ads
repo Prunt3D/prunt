@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 --  This package provides the framework for the 5th-order (bounded crackle) motion planner implemented in the `Planner`
 --  child package. Functions to find motion profiles and to find points at given times are implemented in this package.
@@ -36,7 +38,8 @@ package Prunt.Motion_Planner is
       --  related component of this array then the position is considered to be out of bounds.
 
       Ignore_E_In_XYZE : Boolean := True;
-      --  When True, tangential velocity limits are based only on the XYZ axes.
+      --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
+      --  planners do.
 
       Shift_Blended_Corners : Boolean := False;
       --  When True, the corner blending algorithm will attempt to shift the virtual corner points so that the midpoint
@@ -60,9 +63,10 @@ package Prunt.Motion_Planner is
 
    type Feedrate_Profile_Times_Index is range 1 .. 4;
    type Feedrate_Profile_Times is array (Feedrate_Profile_Times_Index) of Time;
-   --  Represents the timings for segments in a 15-phase motion profile. Note that some times are used for multiple segments.
+   --  Represents the timings for segments in a 15-phase motion profile. Note that some times are used for multiple
+   --  segments. Refer to `Crackle_At_Time` to see where each of these times is used.
 
-   type Feedrate_Profile is tagged record
+   type Feedrate_Profile is record
       --  Represents the timings for segments in a 31-phase motion profile.
 
       Accel : Feedrate_Profile_Times;
@@ -178,7 +182,8 @@ package Prunt.Motion_Planner is
    --  Returns the distance from the start point at a specific time `T` within a feedrate profile. The return value may
    --  be negative.
    --
-   --  `Is_Past_Accel_Part` is set to True if `T` is in the coasting or deceleration part, otherwise it is set to False.
+   --  `Is_Past_Accel_Part` is set to True if `T` is in the coasting or deceleration part, otherwise it is set to
+   --  False.
 
    function Optimal_Profile_For_Distance
      (Start_Vel        : Velocity;
@@ -209,5 +214,27 @@ package Prunt.Motion_Planner is
    --  `Constraint_Error` if there is no legal feedrate profile which can meet the given constraints, specifically
    --  regarding `End_Vel` being reachable. Also raises `Constraint_Error` if `Start_Vel` or `End_Vel` are higher than
    --  `Max_Vel`.
+
+private
+
+   type Constraint_Region is (Region_1, Region_2, Region_3, Region_4, Region_5);
+
+   type Internal_Profile_Result is record
+      Profile : Feedrate_Profile_Times;
+      Region  : Constraint_Region;
+      Index   : Integer;
+   end record;
+
+   function Optimal_Profile_For_Distance_Internal
+     (Start_Vel        : Velocity;
+      Distance         : Length;
+      Acceleration_Max : Acceleration;
+      Jerk_Max         : Jerk;
+      Snap_Max         : Snap;
+      Crackle_Max      : Crackle) return Internal_Profile_Result;
+
+   function Optimal_Profile_For_Delta_V_Internal
+     (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
+      return Internal_Profile_Result;
 
 end Prunt.Motion_Planner;

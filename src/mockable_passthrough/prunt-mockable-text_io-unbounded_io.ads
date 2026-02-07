@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,45 +19,14 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.TMC_Readings_Updater_Blocker is
+pragma Extensions_Allowed (On);
 
-   protected body Pause_Counter is
-      procedure Pause_Readings_Updater is
-      begin
-         Pause_Count := Pause_Count + 1;
-      end Pause_Readings_Updater;
+with Ada.Strings.Unbounded;
+with Ada.Text_IO.Unbounded_IO;
 
-      procedure Resume_Readings_Updater is
-      begin
-         if Pause_Count = 0 then
-            raise Constraint_Error with "Too many Resume_Readings_Updater calls.";
-         end if;
-         Pause_Count := Pause_Count - 1;
-      end Resume_Readings_Updater;
+package Prunt.Mockable.Text_IO.Unbounded_IO is
 
-      entry Wait_Until_Unpaused when Pause_Count = 0 is
-      begin
-         null;
-      end Wait_Until_Unpaused;
-   end Pause_Counter;
+   function Get_Line (File : File_Type) return Ada.Strings.Unbounded.Unbounded_String
+   renames Ada.Text_IO.Unbounded_IO.Get_Line;
 
-   overriding
-   procedure Initialize (My_Blocker : in out Blocker) is
-      pragma Unreferenced (My_Blocker);
-   begin
-      Pause_Counter.Pause_Readings_Updater;
-   end Initialize;
-
-   overriding
-   procedure Finalize (My_Blocker : in out Blocker) is
-      pragma Unreferenced (My_Blocker);
-   begin
-      Pause_Counter.Resume_Readings_Updater;
-   end Finalize;
-
-   procedure Wait_Until_Unpaused is
-   begin
-      Pause_Counter.Wait_Until_Unpaused;
-   end Wait_Until_Unpaused;
-
-end Prunt.TMC_Readings_Updater_Blocker;
+end Prunt.Mockable.Text_IO.Unbounded_IO;

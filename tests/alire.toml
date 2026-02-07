@@ -1,0 +1,46 @@
+name = "tests"
+description = ""
+version = "0.1.0-dev"
+
+authors = ["Liam Powell"]
+maintainers = ["Liam Powell <liam@liampll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "GPL-3.0-or-later"
+website = ""
+tags = []
+
+executables = ["tests"]
+
+[build-switches]
+# Configured in GPR file.
+"*".optimization = []
+"*".debug_info = []
+"*".runtime_checks = []
+"*".compile_checks = []
+"*".contracts = []
+"*".style_checks = []
+"*".ada_version = []
+"*".source_encoding = []
+
+[[depends-on]]
+aunit = "^25.0.0"
+# gnatcov = "^22.0.1"
+prunt = "~0.0.0"
+
+[[pins]]
+prunt = { path='..' }
+
+[build-profiles]
+prunt = "development"
+
+[[depends-on]]
+trendy_test = "~0.0.4"
+
+[[pins]]
+trendy_test = { path='../../trendy_test' }
+
+[configuration.values]
+prunt.enable_test_mocks = true
+
+[environment]
+GPR_PROJECT_PATH.append = "/usr/local/gnat/share/gpr:/usr/local/gnat/share/gnatcoverage/gnatcov_rts"

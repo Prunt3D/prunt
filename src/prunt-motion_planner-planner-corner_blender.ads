@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,15 +19,17 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+pragma Extensions_Allowed (On);
+
 private with System.Pool_Local;
 
 private generic
 package Prunt.Motion_Planner.Planner.Corner_Blender is
 
    procedure Run (Block : in out Execution_Block);
-   --  Fills `Block.Beziers` based on the block parameters.
+   --  Replaces sharp corners in `Block.Corners` with C4 continuous PH Bézier curves, storing them in `Block.Beziers`.
    --
-   --  Deviation of the curve path is limited by `Chord_Error_Max`.
+   --  The maximum deviation of these curves from the original path is limited by `Chord_Error_Max`.
    --
    --  If `Shift_Blended_Corners` is True then corners that are not within `Chord_Error_Max` of the work area
    --  boundaries and are not outside of the work area will be shifted so that the midpoint of the curve is where the

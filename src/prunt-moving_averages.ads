@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,8 +19,10 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+pragma Extensions_Allowed (On);
+
 generic
-   type T is digits <>;
+   type Number is digits <>;
 package Prunt.Moving_Averages is
 
    type Cascading_Moving_Average
@@ -29,7 +31,8 @@ package Prunt.Moving_Averages is
    is
      private;
 
-   function Create (N_Levels : Positive; Max_Total_Width : Natural; Initial_Value : T) return Cascading_Moving_Average;
+   function Create
+     (N_Levels : Positive; Max_Total_Width : Natural; Initial_Value : Number) return Cascading_Moving_Average;
    --  Creates a new filter with the requested parameters. `Max_Total_Width` is a maximum rather than an exact value as
    --  it must be split evenly between `N_Levels` levels.
 
@@ -39,15 +42,15 @@ package Prunt.Moving_Averages is
    --  is maximised. This may not be equal to `Max_Total_Width` / 2 as provided to `Create` as that value may be
    --  reduced to suit the number of layers specified.
 
-   function Do_Step (CMA : in out Cascading_Moving_Average; Input : T) return T;
+   function Do_Step (CMA : in out Cascading_Moving_Average; Input : Number) return Number;
 
 private
 
    subtype N_Levels_Type is Positive;
    subtype Width_Per_Level_Type is Natural;
 
-   type Single_Moving_Average_Sums is array (N_Levels_Type range <>) of T;
-   type Single_Moving_Average_Buffers is array (N_Levels_Type range <>, Width_Per_Level_Type range <>) of T;
+   type Single_Moving_Average_Sums is array (N_Levels_Type range <>) of Number;
+   type Single_Moving_Average_Buffers is array (N_Levels_Type range <>, Width_Per_Level_Type range <>) of Number;
 
    type Cascading_Moving_Average
      (N_Levels        : Positive;

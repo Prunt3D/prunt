@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,27 +19,16 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Ada.Finalization;
+pragma Extensions_Allowed (On);
 
-generic
-package Prunt.TMC_Readings_Updater_Blocker is
+with Ada.Directories;
 
-   type Blocker is new Ada.Finalization.Controlled with null record;
-   overriding
-   procedure Initialize (My_Blocker : in out Blocker);
-   overriding
-   procedure Finalize (My_Blocker : in out Blocker);
+package Prunt.Mockable.Directories is
 
-   procedure Wait_Until_Unpaused;
+   function Exists (Name : String) return Boolean renames Ada.Directories.Exists;
 
-private
+   procedure Delete_File (Name : String) renames Ada.Directories.Delete_File;
 
-   protected Pause_Counter is
-      procedure Pause_Readings_Updater;
-      procedure Resume_Readings_Updater;
-      entry Wait_Until_Unpaused;
-   private
-      Pause_Count : Natural := 0;
-   end Pause_Counter;
+   procedure Rename (Old_Name, New_Name : String) renames Ada.Directories.Rename;
 
-end Prunt.TMC_Readings_Updater_Blocker;
+end Prunt.Mockable.Directories;

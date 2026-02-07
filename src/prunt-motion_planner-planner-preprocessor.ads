@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,7 +19,10 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+pragma Extensions_Allowed (On);
+
 with Ada.Containers; use Ada.Containers;
+
 private with System.Pool_Local;
 
 private generic
@@ -31,12 +34,12 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
 
    procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
    --  Add a new command to the processing queue. Commands are processed in FIFO order. If `Ignore_Bounds` is True,
-   --  position bounds checking is bypassed for this command (useful for homing operations).  May block if the queue is
+   --  position bounds checking is bypassed for this command (useful for homing operations). May block if the queue is
    --  full.
 
    procedure Reset;
-   --  Cause Run to immediately return with `Reset_Called` set to True and resets the planner back to its initial state.
-   --  This clears the command queue and resets position tracking to the initial values.
+   --  Cause Run to immediately return with `Reset_Called` set to True and resets the planner back to its initial
+   --  state. This clears the command queue and resets position tracking to the initial values.
 
    procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
    --  Process queued commands and assemble them into an execution block. This procedure blocks until either a complete
@@ -79,7 +82,6 @@ private
       Setup_Done                     : Boolean := False;
       Last_Pos                       : Position := Initial_Position;
       Current_Params                 : Kinematic_Parameters;
-      Block_Persistent_Data          : Block_Persistent_Data_Type := Block_Persistent_Data_Default;
       Corners                        : Block_Plain_Corners_Access := new Block_Plain_Corners (1 .. Corners_Index'Last);
       Corner_Dwell_Times             : Block_Corner_Dwell_Times_Access :=
         new Block_Corner_Dwell_Times (1 .. Corners_Index'Last);

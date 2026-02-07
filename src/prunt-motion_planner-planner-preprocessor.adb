@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -20,6 +20,8 @@
 -----------------------------------------------------------------------------
 
 package body Prunt.Motion_Planner.Planner.Preprocessor is
+
+   pragma Extensions_Allowed (On);
 
    protected body Command_Queue is
       procedure Setup (Initial_Parameters : Kinematic_Parameters) is
@@ -40,18 +42,21 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
 
          case Comm.Kind is
-            when Flush_Kind | Flush_And_Update_Persistent_Data_Kind =>
+            when Flush_Kind                       =>
                null;
 
-            when Flush_And_Reset_Position_Kind                      =>
+            when Corner_Extra_Data_Kind           =>
+               null;
+
+            when Flush_And_Reset_Position_Kind    =>
                if not Ignore_Bounds then
                   Check_Bounds (Comm.Reset_Pos, Current_Params);
                end if;
 
-            when Flush_And_Change_Parameters_Kind                   =>
+            when Flush_And_Change_Parameters_Kind =>
                Current_Params := Comm.New_Params;
 
-            when Move_Kind                                          =>
+            when Move_Kind                        =>
                if not Ignore_Bounds then
                   Check_Bounds (Comm.Pos, Current_Params);
                end if;
@@ -62,11 +67,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                if Comm.Feedrate <= 0.0 * mm / s then
                   raise Constraint_Error with "Feedrate must be positive.";
-               end if;
-
-            when Dummy_Corner_Kind                                  =>
-               if Comm.Dwell_After < 0.0 * s then
-                  raise Constraint_Error with "Negative dwell times are not allowed.";
                end if;
 
          end case;
@@ -86,7 +86,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       end Enqueue;
 
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean)
-        when Is_Full or Next_Read /= Next_Write or not Setup_Done
+        when Is_Full or else Next_Read /= Next_Write or else not Setup_Done
       is
       begin
          Reset_Called := not Setup_Done;
@@ -149,21 +149,20 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       end Setup;
 
       procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean) is
-         Flush_Resetting_Data   : Flush_Resetting_Data_Type := Flush_Resetting_Data_Default;
+         Flush_Resetting_Data   : Flush_Resetting_Data_Type := Flush_Resetting_Data_Type_Default;
          N_Corners              : Corners_Index := 1;
          Block_N_Corners        : Corners_Index
          with Address => Block.N_Corners'Address;
          Next_Params            : Kinematic_Parameters;
          Extra_Data_This_Corner : Max_Corners_Extra_Data_Type'Base := 0;
          Next_Extra_Data        : Corners_Extra_Data_Index := Corners_Extra_Data_Index'First;
+         Is_Homing_Move         : Boolean := False;
       begin
          Reset_Called := False;
 
          if not Setup_Done then
             raise Constraint_Error with "Setup not done.";
          end if;
-
-         Corners_Extra_Data.all := (others => <>);
 
          Next_Params := Current_Params;
 
@@ -173,51 +172,51 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             declare
                Next_Command : Command;
             begin
+               pragma Warnings (Off, "potentially blocking operation in protected operation");
                Command_Queue.Dequeue (Next_Command, Reset_Called);
+               pragma Warnings (On, "potentially blocking operation in protected operation");
 
                if Reset_Called then
                   return;
                end if;
 
                case Next_Command.Kind is
-                  when Flush_Kind                            =>
+                  when Flush_Kind                       =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
+                     Is_Homing_Move := Next_Command.Is_Homing_Move;
                      exit;
 
-                  when Flush_And_Reset_Position_Kind         =>
+                  when Flush_And_Reset_Position_Kind    =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      Last_Pos := Next_Command.Reset_Pos;
+                     Is_Homing_Move := Next_Command.Is_Homing_Move;
                      exit;
 
-                  when Flush_And_Change_Parameters_Kind      =>
+                  when Flush_And_Change_Parameters_Kind =>
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      Next_Params := Limit_Higher_Order_Params (Next_Command.New_Params);
+                     Is_Homing_Move := Next_Command.Is_Homing_Move;
                      exit;
 
-                  when Move_Kind | Dummy_Corner_Kind         =>
-                     declare
-                        Pos      : constant Position :=
-                          (if Next_Command.Kind = Dummy_Corner_Kind then Last_Pos else Next_Command.Pos);
-                        Feedrate : constant Velocity :=
-                          (if Next_Command.Kind = Dummy_Corner_Kind then 0.000_1 * mm / s else Next_Command.Feedrate);
-                     begin
-                        N_Corners := N_Corners + 1;
-                        Corners (N_Corners) := Pos / Current_Params.Axial_Scaler;
-                        Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data_End_Index (Next_Extra_Data);
-                        Corners_Extra_Data (Next_Extra_Data) := Next_Command.Corner_Extra_Data;
-                        Segment_Feedrates (N_Corners) := Feedrate;
-                        Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
+                  when Corner_Extra_Data_Kind           =>
+                     Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data_End_Index (Next_Extra_Data);
+                     Corners_Extra_Data (Next_Extra_Data) := Next_Command.Corner_Extra_Data;
+                     exit when
+                       Extra_Data_This_Corner = Max_Corners_Extra_Data_Type'Base (Max_Corners_Extra_Data_Per_Corner);
+                     Extra_Data_This_Corner := @ + 1;
+                     exit when Next_Extra_Data = Corners_Extra_Data_Index'Last;
+                     Next_Extra_Data := @ + 1;
 
-                        Last_Pos := Pos;
+                  when Move_Kind                        =>
+                     Extra_Data_This_Corner := 0;
+                     N_Corners := N_Corners + 1;
+                     Corners (N_Corners) := Next_Command.Pos / Current_Params.Axial_Scaler;
+                     Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
+                     Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
 
-                        exit when N_Corners = Corners_Index'Last;
-                        exit when Next_Extra_Data = Corners_Extra_Data_Index'Last;
-                        Next_Extra_Data := @ + 1;
-                     end;
+                     Last_Pos := Next_Command.Pos;
 
-                  when Flush_And_Update_Persistent_Data_Kind =>
-                     Block_Persistent_Data := Next_Command.New_Persistent_Data;
-                     exit;
+                     exit when N_Corners = Corners_Index'Last;
                end case;
             end;
          end loop;
@@ -235,10 +234,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Flush_Resetting_Data := Flush_Resetting_Data;
          Block.Params := Current_Params;
          Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
-         Block.Block_Persistent_Data := Block_Persistent_Data;
+         Block.Is_Homing_Move := Is_Homing_Move;
 
-         if Is_Homing_Move (Flush_Resetting_Data) then
-            Block.Params.Axial_Shapers := (others => (Kind => Input_Shapers.No_Shaper));
+         if Is_Homing_Move then
+            Block.Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];
          end if;
 
          Reset_Called := False;
@@ -250,7 +249,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       begin
          Setup_Done := False;
          Last_Pos := Initial_Position;
-         Block_Persistent_Data := Block_Persistent_Data_Default;
       end Reset;
 
    end Runner;
@@ -258,7 +256,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters) is
    begin
       for I in Axis_Name loop
-         if Pos (I) < Params.Lower_Pos_Limit (I) or Pos (I) > Params.Upper_Pos_Limit (I) then
+         if Pos (I) < Params.Lower_Pos_Limit (I) or else Pos (I) > Params.Upper_Pos_Limit (I) then
             raise Out_Of_Bounds_Error with "Position is out of bounds (" & I'Image & " = " & Pos (I)'Image & ").";
          end if;
       end loop;

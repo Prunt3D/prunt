@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,50 +19,39 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Prunt.Logger;
-with Prunt.Config;
-with Prunt.TMC_Types;
-with Prunt.Update_Checker;
-with Ada.Strings.Bounded;
-with Ada.Task_Termination;
+pragma Extensions_Allowed (On);
+
 with Ada.Directories;
-with Ada.Real_Time;
-with Prunt.Web_Server_Resources;
 with Ada.Exceptions;                                    use Ada.Exceptions;
+with Ada.Real_Time;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
+with Ada.Strings.Bounded;
 with Ada.Strings.Unbounded;                             use Ada.Strings.Unbounded;
+with Ada.Task_Termination;
 with GNAT.Sockets;                                      use GNAT.Sockets;
-with GNAT.Sockets.Server;                               use GNAT.Sockets.Server;
 with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connection_State_Machine.HTTP_Server;
+with GNAT.Sockets.Server;                               use GNAT.Sockets.Server;
+with Prunt.Config;
+with Prunt.Logger;
+with Prunt.Update_Checker;
 
 generic
-   with package My_Logger is new Prunt.Logger (<>);
-   with package My_Config is new Prunt.Config (<>);
-   with package My_Update_Checker is new Prunt.Update_Checker (<>);
-   with function Get_Position return Prunt.Position;
    with
-     function Get_Thermistor_Temperature
-       (Thermistor : My_Config.Generic_Types.Thermistor_Name) return Prunt.Temperature;
-   with function Get_Stepper_Temperature (Thermistor : My_Config.Generic_Types.Stepper_Name) return Prunt.Temperature;
-   type Board_Temperature_Probe_Name is (<>);
-   with function Get_Board_Temperature (Thermistor : Board_Temperature_Probe_Name) return Prunt.Temperature;
-   with function Get_Heater_Power (Heater : My_Config.Generic_Types.Heater_Name) return Prunt.PWM_Scale;
-   with function Get_Heater_Current (Heater : My_Config.Generic_Types.Heater_Name) return Current;
-   with function Get_Input_Switch_State (Switch : My_Config.Generic_Types.Input_Switch_Name) return Prunt.Pin_State;
-   with function Get_Tachometer_Frequency (Fan : My_Config.Generic_Types.Fan_Name) return Frequency;
-   with function Get_StallGuard_2_Value (Heater : My_Config.Generic_Types.Stepper_Name) return TMC_Types.Unsigned_10;
-   with function Get_StallGuard_4_Value (Heater : My_Config.Generic_Types.Stepper_Name) return TMC_Types.Unsigned_10;
-   with function Get_File_Name return String;
-   with function Get_Line return File_Line_Count;
+     procedure Apply_Config_Patch
+       (Value  : Virtual_String;
+        Result : out Virtual_String;
+        Report : access procedure (Path : Config.Config_Data_Paths.Vector; Message : String));
+   with package My_Logger is new Prunt.Logger (<>);
+   with package My_Update_Checker is new Prunt.Update_Checker (<>);
    with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
    with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
-   with function Is_Stepgen_Paused return Boolean;
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
    with procedure Reload_Server;
    with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
    Exception_Occurrence_Holder : in out Exception_Occurrence_Holder_Type;
+   Config_Schema_String : Virtual_String;
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 
@@ -72,6 +61,10 @@ package Prunt.Web_Server is
    procedure Reset;
 
 private
+
+   function Trim (S : String) return String;
+   function Ends_With (Source, Pattern : String) return Boolean;
+   function Starts_With (Source, Pattern : String) return Boolean;
 
    protected Startup_Manager is
       entry Wait_For_Update_Allowed;
@@ -179,7 +172,7 @@ private
    procedure Write (Stream : access Root_Stream_Type'Class; Item : Extra_Client_Content);
    for Extra_Client_Content'Write use Write;
 
-   type WebSocket_Message_Index_Type is mod 2**32;
+   type WebSocket_Message_Index_Type is mod 2 ** 32;
 
    type Prunt_Client
      (Listener       : access Connections_Server'Class;
@@ -201,7 +194,7 @@ private
    task Server is
       entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
-      entry Log_To_WebSocket_Receivers (Message : String);
+      entry Log_To_WebSocket_Receivers (Message : Virtual_String);
       entry Reset_Server_Start_Time;
    end Server;
 
@@ -266,8 +259,5 @@ private
    procedure WebSocket_Initialize (Client : in out Prunt_Client);
    overriding
    procedure WebSocket_Finalize (Client : in out Prunt_Client);
-
-   function Build_Status_Schema return Unbounded_String;
-   function Build_Status_Values return Unbounded_String;
 
 end Prunt.Web_Server;

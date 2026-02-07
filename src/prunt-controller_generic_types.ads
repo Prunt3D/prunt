@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,8 +19,12 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Prunt.Thermistors;
+pragma Extensions_Allowed (On);
+
+with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 with Prunt.TMC_Types.TMC2240;
+with Prunt.Thermistors;
+with Prunt.Modules;
 
 generic
    --  'Image of each value of these types will be shown in the GUI. The names should correspond to names on the board.
@@ -30,40 +34,36 @@ generic
    type Board_Temperature_Probe_Name is (<>);
    type Fan_Name is (<>);
    type Input_Switch_Name is (<>);
-   type Laser_Name is (<>);
 package Prunt.Controller_Generic_Types is
 
    type Stepper_Position is array (Stepper_Name) of Dimensionless;
    --  Position multiplied by mm/step values provided by the user. This array is using floating point types and the
    --  numbers are not rounded. An implementation is allowed to round these values if the decimal part is not useful.
 
-   type Fan_PWMs is array (Fan_Name) of PWM_Scale;
-   type Heater_Targets is array (Heater_Name) of Temperature;
-   type Laser_PWMs is array (Laser_Name) of PWM_Scale;
-
    type Queued_Command is record
       Index           : Command_Index;
       --  Monotonically increasing identifier.
       Pos             : Stepper_Position;
       --  Position to move to.
-      Fans            : Fan_PWMs;
-      --  Fan PWMs to set.
-      Heaters         : Heater_Targets;
-      --  Temperatures for heaters to target. In the case that a value is too low, it should be clipped. In the case
-      --  that a value is too high, an exception should be raised.
-      --
-      --  TODO: We should accept a maximum value here and raise the exception within Prunt.
-      Lasers          : Laser_PWMs;
-      --  Laser PWMs to set.
       Safe_Stop_After : Boolean;
       --  If True then the machine can stop after executing this move without violating kinematic constraints. If the
-      --  implementation runs out of moves to execute before receiving a Safe_Stop_After move then an exception should
-      --  be raised. It is recommended that an implementation buffers moves until a Safe_Stop_After move is received,
-      --  at which point it should begin executing the buffer, if a buffer becomes full then execution should of course
-      --  be started at that point instead.
+      --  implementation runs out of moves to execute before receiving a `Safe_Stop_After` move then an exception
+      --  should be raised. It is recommended that an implementation buffers moves until a `Safe_Stop_After` move is
+      --  received, at which point it should begin executing the buffer, if a buffer becomes full then execution should
+      --  of course be started at that point instead.
       Loop_Until_Hit  : Boolean;
-      --  If True then this move should be looped until the condition set in Setup_For_Loop_Move is met.
+      --  If True then this move should be looped until the condition set in `Setup_For_Loop_Move` is met.
    end record;
+
+   package My_Modules is new Prunt.Modules;
+
+   function Return_False (Left, Right : My_Modules.Module'Class with Unreferenced) return Boolean
+   is (False);
+
+   package Module_Maps is new
+     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, My_Modules.Module'Class, "=" => Return_False);
+   --  We do not care about the insertion order here, but we do need the `&` function, which this type includes.
+   --  Reusing this type is easier than adding an extra function.
 
    --  Vendor defined parameters:
 
@@ -72,8 +72,8 @@ package Prunt.Controller_Generic_Types is
 
       case Kind is
          when Basic_Kind =>
-            Enable_Stepper  : access procedure (Stepper : Stepper_Name);
-            Disable_Stepper : access procedure (Stepper : Stepper_Name);
+            Enable  : access procedure (Stepper : Stepper_Name);
+            Disable : access procedure (Stepper : Stepper_Name);
 
          when TMC2240_UART_Kind =>
             --  The Enable_Stepper and Disable_Stepper procedures are not used for TMC2240 steppers as the TOFF
@@ -120,11 +120,55 @@ package Prunt.Controller_Generic_Types is
 
    type Fan_Hardware_Parameters_Array_Type is array (Fan_Name) of Fan_Hardware_Parameters;
 
-   type Input_Switch_Visible_To_User_Type is array (Input_Switch_Name) of Boolean;
+   type Input_Switch_Hardware_Parameters is record
+      Visible_To_User : Boolean;
+      --  Controls whether the input switch is presented to the user in the configuration interface. This is primarily
+      --  intended for hiding of DIAG0 pins on TMC drivers which are required for StallGuard homing but should not be
+      --  directly selectable by the user.
+   end record;
 
-   --  User defined parameters:
+   type Input_Switch_Hardware_Parameters_Array_Type is array (Input_Switch_Name) of Input_Switch_Hardware_Parameters;
 
-   type Heater_Thermistor_Map is array (Heater_Name) of Thermistor_Name;
-   type Thermistor_Parameters_Array_Type is array (Thermistor_Name) of Thermistors.Thermistor_Parameters;
+   type Heater_Hardware_Parameters is record
+      Reconfigure :
+        access procedure (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
+      --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from
+      --  any task. `Params.Kind` will not be equal to `PID_Autotune_Kind`.
+      Autotune    :
+        access procedure (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
+      --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
+      --  `Params.Kind` will always be `PID_Autotune_Kind`.
+      --
+      --  TODO: Save the results to the config file.
+   end record;
+
+   type Heater_Hardware_Parameters_Array_Type is array (Heater_Name) of Heater_Hardware_Parameters;
+
+   type Thermistor_Hardware_Parameters is record
+      Reconfigure     : access procedure (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters);
+      Get_Temperature : access function (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;
+   end record;
+
+   type Thermistor_Hardware_Parameters_Array_Type is array (Thermistor_Name) of Thermistor_Hardware_Parameters;
+
+   type Board_Temperature_Probe_Hardware_Parameters is record
+      Get_Temperature :
+        access function (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature;
+   end record;
+
+   type Board_Temperature_Probe_Hardware_Parameters_Array_Type is
+     array (Board_Temperature_Probe_Name) of Board_Temperature_Probe_Hardware_Parameters;
+
+   type Hardware_Parameters is record
+      pragma Warnings (Off, "null array aggregate indexed by an enumeration type");
+      --  We want this to raise an error if the user tries to default-initialize any of these fields.
+      Stepper_Hardware                 : Stepper_Hardware_Parameters_Array_Type := [];
+      Fan_Hardware                     : Fan_Hardware_Parameters_Array_Type := [];
+      Input_Switch_Hardware            : Input_Switch_Hardware_Parameters_Array_Type := [];
+      Heater_Hardware                  : Heater_Hardware_Parameters_Array_Type := [];
+      Thermistor_Hardware              : Thermistor_Hardware_Parameters_Array_Type := [];
+      Board_Temperature_Probe_Hardware : Board_Temperature_Probe_Hardware_Parameters_Array_Type := [];
+      pragma Warnings (On, "null array aggregate indexed by an enumeration type");
+   end record;
 
 end Prunt.Controller_Generic_Types;

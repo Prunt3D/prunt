@@ -1,0 +1,144 @@
+with "config/tests_config.gpr";
+project Tests is
+
+   for Source_Dirs use ("src/", "config/");
+   for Object_Dir use "obj/" & Tests_Config.Build_Profile;
+   for Create_Missing_Dirs use "True";
+   for Exec_Dir use "bin";
+   for Main use ("tests.adb");
+
+   Tests_Extra_Ada_Compiler_Switches := ();
+   case Tests_Config.Build_Profile is
+      when "release" =>
+         Tests_Extra_Ada_Compiler_Switches :=
+           (--  TODO: Benchmark with -gnatp (disable all runtime checks)
+            "-flto=auto",
+            "-fuse-linker-plugin",
+            "-ffat-lto-objects",
+            "-gnatn", --  Enable inlining
+            "-O2");   --  TODO: Benchmark with O2 vs O3
+
+      when "validation" =>
+         Tests_Extra_Ada_Compiler_Switches :=
+           ("-O0",
+            "-g",
+            "-fstack-check", --  Enable stack overflow checks
+            "-gnateF",       --  Check for all floating point overflow
+            "-gnata",        --  Enable assertions and contracts
+            "-gnatVa",       --  Enable all validity checks
+            "-gnateV",       --  Enable validity checks of default parameters
+            "-gnato11",      --  Strict overflow checking
+            "-gnatwe");      --  Warnings as errors
+
+      when "development" =>
+         Tests_Extra_Ada_Compiler_Switches :=
+           ("-O0",
+            "-g",
+            "-fstack-check", --  Enable stack overflow checks
+            "-gnateF",       --  Check for all floating point overflow
+            "-gnata",        --  Enable assertions and contracts
+            "-gnatVa",       --  Enable all validity checks
+            "-gnateV",       --  Enable validity checks of default parameters
+            "-gnato11");     --  Strict overflow checking
+   end case;
+
+   package Compiler is
+      for Default_Switches ("Ada") use
+        Tests_Config.Ada_Compiler_Switches
+        & Tests_Extra_Ada_Compiler_Switches
+        & ("-fdata-sections",
+           "-ffunction-sections",
+           "-fno-omit-frame-pointer",
+           "-gnatW8",    --  UTF-8 encoding
+           "-gnatX",     --  GNAT core extensions
+           "-gnateE",    --  Extra exception info in messages
+           "-gnaty3",    --  Check indentation level
+           "-gnatya",    --  Check attribute casing
+           "-gnatyA",    --  Check array index number usage
+           "-gnatyb",    --  No trailing spaces/tabs
+           "-gnatyB",    --  Enforce or else/and then
+           "-gnatyc",    --  Check comment style
+           "-gnatyd",    --  Disallow CRLF line ends
+           "-gnatye",    --  Make optional end labels mandatory
+           "-gnatyf",    --  No form feed/vertical tabs
+           "-gnatyh",    --  No horizontal tabs
+           "-gnatyi",    --  Check if-then layout
+           "-gnatyI",    --  Disallow in keyword on in parameters
+           "-gnatyk",    --  Enforce lowercase keywords
+           "-gnatyl",    --  General layout checks
+           "-gnatyM119", --  Maximum line length
+           "-gnatyn",    --  Check casing for entities of Standard
+           "-gnatyO",    --  Make overriding keyword mandatory
+           "-gnatyo",    --  Subprograms in alphabetical order
+           "-gnatyp",    --  Enforce mixed case pragma names
+           "-gnatyr",    --  Enforce consistent identifier casing
+           "-gnatyS",    --  No statements on same line as if-then/else
+           "-gnatyt",    --  Check spaces around tokens
+           "-gnatyu",    --  No double blank lines
+           "-gnatyx",    --  No C-style parentheses for if conditions etc.
+           "-gnatwa",    --  Enable most optional warnings
+           "-gnatw.k",   --  No redefinitions of names in standard
+           "-gnatwl",    --  Detect possible elaboration issues
+           "-gnatwo",    --  Disallow address clauses which cause variables to overlap
+           "-gnatw.o",   --  Require out parameters to be read
+           "-gnatw.q",   --  Disallow inefficient default record layouts
+           "-gnatw_q",   --  Disallow ignored equality operators
+           "-gnatw.s",   --  Disallow conflicting size clauses
+           "-gnatwt",    --  Detect dead code in conditionals
+           "-gnatw.u",   --  Treat enumerations as unordered without ordered clause
+           "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
+           "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
+   end Compiler;
+
+   package Builder is
+      for Global_Configuration_Pragmas use "gnat.adc";
+   end Builder;
+
+   package Binder is
+      --  TODO: Do these propagate out or are they useless here?
+      case Tests_Config.Build_Profile is
+      when "release" =>
+         for Switches ("Ada") use
+           ("-r",   --  List restrictions that could be applied
+            "-Es"); --  Symbolic traceback
+      when "validation" =>
+         for Switches ("Ada") use
+           ("-r",   --  List restrictions that could be applied
+            "-we",  --  Treat warnings as errors
+            "-Es"); --  Symbolic traceback
+      when "development" =>
+         for Switches ("Ada") use
+           ("-r",   --  List restrictions that could be applied
+            "-Es"); --  Symbolic traceback
+      end case;
+   end Binder;
+
+   package Linker is
+      case Tests_Config.Build_Profile is
+      when "release" =>
+         for Switches ("Ada") use
+           ("-flto=auto", --  Link time optimization
+            "-Wl,--gc-sections", "--gc-sections"); --  Delete unreferenced sections
+      when "validation" =>
+         null;
+      when "development" =>
+         null;
+      end case;
+   end Linker;
+
+   package Install is
+      for Artifacts (".") use ("share");
+   end Install;
+
+   package Pretty_Printer is
+      for Default_Switches ("ada") use
+        ("--max-line-length=119",
+         "--no-compact");
+   end Pretty_Printer;
+
+   package Format is
+      for Width ("Ada") use "119";
+      for Charset ("Ada") use "utf-8";
+   end Format;
+
+end Tests;

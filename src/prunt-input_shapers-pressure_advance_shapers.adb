@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -20,6 +20,8 @@
 -----------------------------------------------------------------------------
 
 package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
+
+   pragma Extensions_Allowed (On);
 
    function Create
      (Parameters : Shaper_Parameters; Interpolation_Time : Time; Start_Position : Length)
@@ -44,7 +46,7 @@ package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
          Smooth_Added_Part_Only => Parameters.Pressure_Advance_Smooth_Added_Part_Only,
          Previous_Input         => Start_Position,
          Current_Buffer_Index   => 1,
-         Buffer                 => (others => Start_Position),
+         Buffer                 => [others => Start_Position],
          Filter                 => CMA);
    end Create;
 
@@ -56,11 +58,13 @@ package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
       if This.Smooth_Added_Part_Only then
          return
             Result : constant Length :=
-              This.Buffer (This.Current_Buffer_Index)
+              (if This.Buffer_Size > 0 then This.Buffer (This.Current_Buffer_Index) else Step)
               + Length_Moving_Averages.Do_Step (This.Filter, Vel * This.Pressure_Advance_Time)
          do
-            This.Current_Buffer_Index := @ mod This.Buffer_Size + 1;
-            This.Buffer (This.Current_Buffer_Index) := Step;
+            if This.Buffer_Size > 0 then
+               This.Current_Buffer_Index := @ mod This.Buffer_Size + 1;
+               This.Buffer (This.Current_Buffer_Index) := Step;
+            end if;
          end return;
       else
          return Length_Moving_Averages.Do_Step (This.Filter, Step + Vel * This.Pressure_Advance_Time);

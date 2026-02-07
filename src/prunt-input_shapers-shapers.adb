@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -24,6 +24,8 @@ with Prunt.Input_Shapers.Pressure_Advance_Shapers;
 
 package body Prunt.Input_Shapers.Shapers is
 
+   pragma Extensions_Allowed (On);
+
    function Create
      (Parameters : Axial_Shaper_Parameters; Interpolation_Time : Time; Initial_Position : Position)
       return Axial_Shapers
@@ -39,7 +41,7 @@ package body Prunt.Input_Shapers.Shapers is
                Result.Shapers.Insert
                  (A, Basic_Shapers.Create (Parameters (A), Interpolation_Time, Initial_Position (A)));
 
-            when Pressure_Advance =>
+            when Pressure_Advance                               =>
                Result.Shapers.Insert
                  (A, Pressure_Advance_Shapers.Create (Parameters (A), Interpolation_Time, Initial_Position (A)));
          end case;
@@ -60,7 +62,7 @@ package body Prunt.Input_Shapers.Shapers is
             Result.Buffers.Insert
               (A,
                (Length        => Result.Shapers (A).Input_Offset - Minimum_Input_Offset,
-                Buffer        => (others => Initial_Position (A)),
+                Buffer        => [others => Initial_Position (A)],
                 Current_Index => 0));
          end loop;
 
@@ -75,7 +77,7 @@ package body Prunt.Input_Shapers.Shapers is
    begin
       for A in Axis_Name loop
          declare
-            Buffer : access Input_Buffer := Shapers.Buffers.Reference (A).Element;
+            Buffer : constant access Input_Buffer := Shapers.Buffers.Reference (A).Element;
          begin
             Buffer.Buffer (Buffer.Current_Index) := Step (A);
             Buffer.Current_Index := (Buffer.Current_Index + 1) mod (Buffer.Length + 1);

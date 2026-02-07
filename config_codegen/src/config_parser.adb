@@ -1,0 +1,897 @@
+-----------------------------------------------------------------------------
+--                                                                         --
+--                   Part of the Prunt Motion Controller                   --
+--                                                                         --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
+--                                                                         --
+--  This program is free software: you can redistribute it and/or modify   --
+--  it under the terms of the GNU General Public License as published by   --
+--  the Free Software Foundation, either version 3 of the License, or      --
+--  (at your option) any later version.                                    --
+--                                                                         --
+--  This program is distributed in the hope that it will be useful,        --
+--  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
+--  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
+--  GNU General Public License for more details.                           --
+--                                                                         --
+--  You should have received a copy of the GNU General Public License      --
+--  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
+--                                                                         --
+-----------------------------------------------------------------------------
+
+with Ada.Strings;                 use Ada.Strings;
+with Ada.Strings.Wide_Wide_Fixed; use Ada.Strings.Wide_Wide_Fixed;
+with Ada.Strings.Fixed;           use Ada.Strings.Fixed;
+with Ada.Directories;             use Ada.Directories;
+with Langkit_Support.Text;        use Langkit_Support.Text;
+with VSS.Strings.Conversions;
+
+package body Config_Parser is
+
+   pragma Extensions_Allowed (On);
+
+   procedure Raise_Error (Node : Ada_Node'Class; Message : String) is
+   begin
+      if Node.Is_Null then
+         raise Constraint_Error with "Error at unknown location: " & Message;
+      else
+         raise Constraint_Error with "Error at " & Node.Image & ": " & Message;
+      end if;
+   end Raise_Error;
+
+   function Has_Prunt_Config_Aspect (Decl : Base_Type_Decl; Recursive : Boolean := True) return Boolean is
+   begin
+      if Decl.P_Fully_Qualified_Name = "Standard.Long_Float" or else Decl.P_Fully_Qualified_Name = "Standard.Boolean"
+      then
+         return True;
+      elsif not Decl.F_Aspects.Is_Null then
+         for Assoc of Decl.F_Aspects.F_Aspect_Assocs loop
+            if Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate then
+               declare
+                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+               begin
+                  if Assocs.Child (Assocs.First_Child_Index).As_Aggregate_Assoc.F_R_Expr.Text = "Prunt_Config" then
+                     if not Recursive or else Decl.Kind in Ada_Type_Decl then
+                        return True;
+                     elsif Decl.Kind in Ada_Subtype_Decl then
+                        --  TODO: Need an error check on As_Base_Type_Decl.
+                        return
+                          Has_Prunt_Config_Aspect
+                            (Decl.As_Subtype_Decl.F_Subtype.F_Name.P_Referenced_Decl.As_Base_Type_Decl, True);
+                     end if;
+                  end if;
+               end;
+            end if;
+         end loop;
+      end if;
+
+      return False;
+   end Has_Prunt_Config_Aspect;
+
+   function Get_Comments_Starting_After (Start_Token : Token_Reference) return Virtual_String is
+      Token       : Token_Reference := Start_Token;
+      Result      : Virtual_String := "";
+      Last_Was_LF : Boolean := False;
+   begin
+      Token := Next (Token);
+
+      while Token not in No_Token and then Kind (Data (Token)) in Ada_Whitespace loop
+         Token := Next (Token);
+      end loop;
+
+      while Token not in No_Token and then Kind (Data (Token)) in Ada_Comment loop
+         declare
+            Raw_Text : constant Wide_Wide_String := Text (Token);
+            Trimmed  : constant Wide_Wide_String := Trim (Raw_Text (Raw_Text'First + 2 .. Raw_Text'Last), Both);
+         begin
+            if Trimmed = "" then
+               Result.Append ("\n");
+               Last_Was_LF := True;
+            elsif Result /= "" and not Last_Was_LF then
+               Result.Append (" ");
+            else
+               Last_Was_LF := False;
+            end if;
+
+            for C of Trimmed loop
+               if C in '"' | '\' then
+                  Result.Append (To_Virtual_String ("" & C));
+               end if;
+               Result.Append (To_Virtual_String ("" & C));
+            end loop;
+
+         end;
+         Token := Next (Token);
+
+         while Token not in No_Token and then Kind (Data (Token)) in Ada_Whitespace loop
+            Token := Next (Token);
+         end loop;
+      end loop;
+
+      return Result;
+   end Get_Comments_Starting_After;
+
+   function Get_Range (Decl : Base_Type_Decl) return Range_Spec is
+      function Recurse (Inner_Decl : Base_Type_Decl) return Range_Spec is
+      begin
+         if Inner_Decl.Kind in Ada_Type_Decl then
+            if Inner_Decl.As_Type_Decl.F_Type_Def.Kind in Ada_Signed_Int_Type_Def then
+               return Inner_Decl.As_Type_Decl.F_Type_Def.As_Signed_Int_Type_Def.F_Range;
+            elsif Inner_Decl.As_Type_Decl.F_Type_Def.Kind in Ada_Floating_Point_Def then
+               return Inner_Decl.As_Type_Decl.F_Type_Def.As_Floating_Point_Def.F_Range;
+            else
+               return No_Range_Spec;
+            end if;
+         elsif Inner_Decl.Kind in Ada_Subtype_Decl then
+            declare
+               Indication : constant Subtype_Indication := Inner_Decl.As_Subtype_Decl.F_Subtype;
+               Constr     : constant Constraint := Indication.F_Constraint;
+            begin
+               if not Constr.Is_Null and then Constr.Kind in Ada_Range_Constraint then
+                  return Constr.As_Range_Constraint.F_Range;
+               end if;
+
+               declare
+                  Parent_Basic : constant Basic_Decl := Indication.F_Name.P_Referenced_Decl;
+               begin
+                  if Parent_Basic.Is_Null then
+                     Raise_Error
+                       (Inner_Decl, "Parent of type could not be resolved. Resolution triggered from " & Decl.Image);
+                  elsif Parent_Basic.Kind not in Ada_Base_Type_Decl then
+                     Raise_Error
+                       (Inner_Decl,
+                        "Type does not resolve to a plain type declaration. Resolution triggered from " & Decl.Image);
+                  else
+                     return Get_Range (Parent_Basic.As_Base_Type_Decl);
+                  end if;
+               end;
+            end;
+         else
+            Raise_Error
+              (Inner_Decl,
+               "Type does not resolve to a plain type declaration. Resolution triggered from " & Decl.Image);
+         end if;
+
+         raise Constraint_Error with "Should be unreachable.";
+      end Recurse;
+   begin
+      return Recurse (Decl);
+   end Get_Range;
+
+   function Get_Base_Def (Decl : Base_Type_Decl) return Type_Def is
+      function Recurse (Inner_Decl : Base_Type_Decl) return Type_Def is
+      begin
+         if Inner_Decl.Kind in Ada_Type_Decl then
+            declare
+               Def : constant Type_Def := Inner_Decl.As_Type_Decl.F_Type_Def;
+            begin
+               if Def.Kind in Ada_Derived_Type_Def then
+                  declare
+                     Ref : constant Basic_Decl :=
+                       Def.As_Derived_Type_Def.F_Subtype_Indication.F_Name.P_Referenced_Decl;
+                  begin
+                     if Ref.Is_Null then
+                        Raise_Error
+                          (Inner_Decl,
+                           "Parent of type could not be resolved. Resolution triggered from " & Decl.Image);
+                     elsif Ref.Kind in Ada_Base_Type_Decl then
+                        return Recurse (Ref.As_Base_Type_Decl);
+                     else
+                        Raise_Error
+                          (Inner_Decl,
+                           "Type does not resolve to a plain type declaration. Resolution triggered from "
+                           & Decl.Image);
+                     end if;
+                  end;
+               else
+                  return Def;
+               end if;
+            end;
+         elsif Inner_Decl.Kind in Ada_Subtype_Decl then
+            declare
+               Ref : constant Basic_Decl := Inner_Decl.As_Subtype_Decl.F_Subtype.F_Name.P_Referenced_Decl;
+            begin
+               if Ref.Is_Null then
+                  Raise_Error
+                    (Inner_Decl, "Parent of type could not be resolved. Resolution triggered from " & Decl.Image);
+               elsif Ref.Kind in Ada_Base_Type_Decl then
+                  return Recurse (Ref.As_Base_Type_Decl);
+               else
+                  Raise_Error
+                    (Inner_Decl,
+                     "Type does not resolve to a plain type declaration. Resolution triggered from " & Decl.Image);
+               end if;
+            end;
+         else
+            Raise_Error
+              (Inner_Decl,
+               "Type does not resolve to a plain type declaration. Resolution triggered from " & Decl.Image);
+         end if;
+
+         raise Constraint_Error with "Should be unreachable.";
+      end Recurse;
+   begin
+      return Recurse (Decl);
+   end Get_Base_Def;
+
+   function Is_Numeric_Base (Decl : Base_Type_Decl) return Boolean is
+   begin
+      return Get_Base_Def (Decl).Kind in Ada_Signed_Int_Type_Def | Ada_Floating_Point_Def;
+   end Is_Numeric_Base;
+
+   function Parse_Record (Decl : Base_Type_Decl) return Config_Type is
+      function Parse_Component_Items (Items : Ada_Node_List) return Component_Data_Maps.Map is
+         Components : Component_Data_Maps.Map;
+      begin
+         for Item of Items when Item.Kind in Ada_Component_Decl loop
+            --  Skip null component declarations, aspects, and pragmas.
+            declare
+               Comp_Decl : constant Component_Decl := Item.As_Component_Decl;
+               T_Expr    : constant Type_Expr := Comp_Decl.F_Component_Def.F_Type_Expr;
+            begin
+               if T_Expr.Kind not in Ada_Subtype_Indication then
+                  Raise_Error (T_Expr, "Anonymous types are not supported.");
+               end if;
+
+               declare
+                  Component : Component_Data;
+                  Desig     : constant Base_Type_Decl := T_Expr.P_Designated_Type_Decl;
+               begin
+                  if Desig.Is_Null then
+                     Raise_Error (T_Expr, "Could not resolve type.");
+                  end if;
+
+                  Component :=
+                    (Type_Name   => To_Virtual_String (Desig.P_Fully_Qualified_Name),
+                     Default     =>
+                       (if Comp_Decl.F_Default_Expr.Is_Null
+                        then ""
+                        else To_Virtual_String (Comp_Decl.F_Default_Expr.Text)),
+                     Description => Get_Comments_Starting_After (Item.Token_End),
+                     Min         => "",
+                     Max         => "",
+                     Fixed_Kind  => "",
+                     Unit        => "");
+                  begin
+                     if not Comp_Decl.F_Aspects.Is_Null then
+                        for Assoc of
+                          Comp_Decl.F_Aspects.F_Aspect_Assocs
+                          when Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate
+                        loop
+                           declare
+                              function Argument (Index : Positive) return Text_Type is
+                                 Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+                              begin
+                                 return
+                                   Assocs.Child (Assocs.First_Child_Index + Index - 1)
+                                     .As_Aggregate_Assoc
+                                     .F_R_Expr
+                                     .Text;
+                              end Argument;
+
+                              function Strip (Str : Text_Type) return Virtual_String is
+                              begin
+                                 if Str (Str'First) = '"' then
+                                    return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
+                                 else
+                                    return To_Virtual_String (Str);
+                                 end if;
+                              end Strip;
+                           begin
+
+                              if Argument (1) = "Prunt_Config" then
+                                 if Argument (2) = "Unit" then
+                                    Component.Unit := Strip (Argument (3));
+                                 elsif Argument (2) = "Fixed_Kind" then
+                                    Component.Fixed_Kind := Strip (Argument (3));
+                                 elsif Argument (2) = "Min" then
+                                    Component.Min := Strip (Argument (3));
+                                 elsif Argument (2) = "Max" then
+                                    Component.Max := Strip (Argument (3));
+                                 else
+                                    Raise_Error (Assoc, "Unhandled Prunt_Config key (" & Argument (2)'Image & ").");
+                                 end if;
+                              end if;
+                           end;
+                        end loop;
+                     end if;
+
+                     if Desig.P_Fully_Qualified_Name /= "Standard.Boolean"
+                       and then Desig.P_Fully_Qualified_Name /= "Prunt.Dimensionless_Ratio"
+                       and then not Has_Prunt_Config_Aspect (Desig)
+                     then
+                        Raise_Error
+                          (Item,
+                           "Type must have Prunt_Config annotation aspect to be used in config record. Declared at "
+                           & Desig.Image);
+                     end if;
+
+                     if (Component.Min.Is_Empty and then not Component.Max.Is_Empty)
+                       or else (Component.Max.Is_Empty and then not Component.Min.Is_Empty)
+                     then
+                        Raise_Error (Item, "Both min and max aspect must be specified if either is specified.");
+                     end if;
+
+                     if Component.Min.Is_Empty and then Is_Numeric_Base (Desig) then
+                        if Comp_Decl.F_Component_Def.F_Type_Expr.Kind in Ada_Subtype_Indication then
+                           declare
+                              Constr : constant Constraint :=
+                                Comp_Decl.F_Component_Def.F_Type_Expr.As_Subtype_Indication.F_Constraint;
+                           begin
+                              if not Constr.Is_Null then
+                                 if Constr.Kind in Ada_Range_Constraint
+                                   and then Constr.As_Range_Constraint.F_Range.F_Range.Kind in Ada_Bin_Op
+                                 then
+                                    Component.Min :=
+                                      To_Virtual_String
+                                        (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Left.Text);
+                                    Component.Max :=
+                                      To_Virtual_String
+                                        (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Right.Text);
+                                 else
+                                    Raise_Error
+                                      (Constr, "Only basic range constraints are supported. " & Constr.Text'Image);
+                                 end if;
+                              end if;
+                           end;
+                        end if;
+                     end if;
+
+
+                     if Component.Min.Is_Empty and then Is_Numeric_Base (Desig) then
+                        if Get_Range (Desig).Is_Null then
+                           Raise_Error (Item, "Component or underlying type requires a range constraint.");
+                        end if;
+
+                        if Get_Range (Desig).F_Range.Kind in Ada_Bin_Op then
+                           Component.Min := To_Virtual_String (Get_Range (Desig).F_Range.As_Bin_Op.F_Left.Text);
+                           Component.Max := To_Virtual_String (Get_Range (Desig).F_Range.As_Bin_Op.F_Right.Text);
+                        else
+                           Raise_Error (Get_Range (Desig), "Only basic range constraints are supported.");
+                        end if;
+                     end if;
+
+                     for Id of Comp_Decl.F_Ids loop
+                        Components.Insert (To_Virtual_String (Id.Text), Component);
+                     end loop;
+                  end;
+               end;
+            end;
+         end loop;
+
+         return Components;
+      end Parse_Component_Items;
+
+      Def : constant Record_Type_Def := Decl.As_Type_Decl.F_Type_Def.As_Record_Type_Def;
+
+      Data : Record_Data :=
+        (Has_Variant => False,
+         Components  => Parse_Component_Items (Def.F_Record_Def.F_Components.F_Components),
+         Description => Get_Comments_Starting_After (Def.F_Record_Def.Token_Start),
+         Tabbed      => False);
+      --  Comment is first comment inside `record ... end record`.
+      --  TODO: Add better support for `null record` here. Currently this will look for a comment after `null`.
+   begin
+      if not Decl.F_Aspects.Is_Null then
+         for Assoc of
+           Decl.F_Aspects.F_Aspect_Assocs
+           when Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate
+         loop
+            declare
+               function Argument (Index : Positive) return Text_Type is
+                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+               begin
+                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
+               end Argument;
+            begin
+               if Argument (1) = "Prunt_Config" then
+                  if Argument (2) = "Tabbed" then
+                     Data.Tabbed := True;
+                  elsif Argument (2) = "User_Config" or Argument (2) = "Root_User_Config" then
+                     null;
+                  else
+                     Raise_Error (Assoc, "Unhandled Prunt_Config key. " & Argument (2)'Image);
+                  end if;
+               end if;
+            end;
+         end loop;
+      end if;
+
+      if not Def.F_Record_Def.F_Components.F_Variant_Part.Is_Null then
+         Data :=
+           (Has_Variant          => True,
+            Components           => @.Components,
+            Description          => @.Description,
+            Tabbed               => @.Tabbed,
+            Discriminant_Type    => "",
+            Discriminant         => To_Virtual_String (Def.F_Record_Def.F_Components.F_Variant_Part.F_Discr_Name.Text),
+            Discriminant_Default => "",
+            Variants             => []);
+
+         for Spec of Decl.As_Type_Decl.F_Discriminants.As_Known_Discriminant_Part.F_Discr_Specs loop
+            for D_Id of Spec.F_Ids loop
+               if D_Id.Text = Def.F_Record_Def.F_Components.F_Variant_Part.F_Discr_Name.Text then
+                  Data.Discriminant_Type :=
+                    To_Virtual_String (Spec.F_Type_Expr.P_Designated_Type_Decl.P_Fully_Qualified_Name);
+                  Data.Discriminant_Default := To_Virtual_String (Spec.F_Default_Expr.Text);
+               else
+                  Raise_Error (Spec, "Multiple discriminants not supported.");
+               end if;
+            end loop;
+         end loop;
+
+         for Variant of Def.F_Record_Def.F_Components.F_Variant_Part.F_Variant loop
+            if Variant.F_Choices.First_Child_Index /= Variant.F_Choices.Last_Child_Index
+              or else Variant.F_Choices.First_Child.Kind not in Ada_Identifier
+            then
+               Raise_Error (Variant.F_Choices, "Variant choices must be singular plain identifiers.");
+            end if;
+
+            declare
+               Tok : Token_Reference := Variant.F_Choices.Token_End;
+            begin
+               while Tok not in No_Token and then Kind (Libadalang.Common.Data (Tok)) not in Ada_Arrow loop
+                  Tok := Next (Tok);
+               end loop;
+
+               Data.Variants.Insert
+                 (To_Virtual_String (Variant.F_Choices.First_Child.As_Identifier.Text),
+                  (Components  => Parse_Component_Items (Variant.F_Components.F_Components),
+                   Description => Get_Comments_Starting_After (Tok)));
+            end;
+         end loop;
+      end if;
+
+      return (Record_Kind, Data);
+   end Parse_Record;
+
+   function Parse_Array (Decl : Base_Type_Decl) return Config_Type is
+      Def       : constant Array_Type_Def := Decl.As_Type_Decl.F_Type_Def.As_Array_Type_Def;
+      Is_Tabbed : Boolean := False;
+      Min, Max  : Virtual_String := "";
+   begin
+      --  TODO: We need to handle index types with range constraints here.
+      --  TODO: We need to handle ratio element types with range constraints here.
+      if not Decl.F_Aspects.Is_Null then
+         for Assoc of
+           Decl.F_Aspects.F_Aspect_Assocs
+           when Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate
+         loop
+            declare
+               function Argument (Index : Positive) return Text_Type is
+                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+               begin
+                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
+               end Argument;
+            begin
+               if Argument (1) = "Prunt_Config" then
+                  if Argument (2) = "Tabbed" then
+                     Is_Tabbed := True;
+                  elsif Argument (2) = "User_Config" then
+                     null;
+                  else
+                     Raise_Error (Assoc, "Unhandled Prunt_Config key.");
+                  end if;
+               end if;
+            end;
+         end loop;
+      end if;
+
+      declare
+         Index_Decl : constant Basic_Decl :=
+           Def.F_Indices.Child (1).As_Constraint_List.Child (1).As_Subtype_Indication.F_Name.P_Referenced_Decl;
+         Elem_Decl  : constant Base_Type_Decl := Def.F_Component_Type.F_Type_Expr.P_Designated_Type_Decl;
+      begin
+         if Index_Decl.Is_Null then
+            Raise_Error (Def, "Could not resolve index type.");
+         end if;
+
+         if Index_Decl.Kind not in Ada_Base_Type_Decl then
+            Raise_Error (Def, "Index must resolve to Base_Type_Decl.");
+         end if;
+
+         if Elem_Decl.Is_Null then
+            Raise_Error (Def, "Could not resolve element type.");
+         end if;
+
+         if not Has_Prunt_Config_Aspect (Index_Decl.As_Base_Type_Decl) then
+            Raise_Error
+              (Decl,
+               "Index type must have Prunt_Config annotation aspect to be used in config record. Declared at "
+               & Index_Decl.Image);
+         end if;
+
+         if not Has_Prunt_Config_Aspect (Elem_Decl) then
+            Raise_Error
+              (Decl,
+               "Element type must have Prunt_Config annotation aspect to be used in config record. Declared at "
+               & Elem_Decl.Image);
+         end if;
+
+         if Is_Numeric_Base (Elem_Decl) then
+            if Def.F_Component_Type.F_Type_Expr.Kind in Ada_Subtype_Indication then
+               declare
+                  Constr : constant Constraint := Def.F_Component_Type.F_Type_Expr.As_Subtype_Indication.F_Constraint;
+               begin
+                  if not Constr.Is_Null then
+                     if Constr.Kind in Ada_Range_Constraint
+                       and then Constr.As_Range_Constraint.F_Range.F_Range.Kind in Ada_Bin_Op
+                     then
+                        Min := To_Virtual_String (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Left.Text);
+                        Max := To_Virtual_String (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Right.Text);
+                     else
+                        Raise_Error (Constr, "Only basic range constraints are supported. " & Constr.Text'Image);
+                     end if;
+                  end if;
+               end;
+            end if;
+
+            if Min.Is_Empty then
+               if Get_Range (Elem_Decl).Is_Null then
+                  Raise_Error (Decl, "Array element or underlying type requires a range constraint.");
+               end if;
+
+               if Get_Range (Elem_Decl).F_Range.Kind in Ada_Bin_Op then
+                  Min := To_Virtual_String (Get_Range (Elem_Decl).F_Range.As_Bin_Op.F_Left.Text);
+                  Max := To_Virtual_String (Get_Range (Elem_Decl).F_Range.As_Bin_Op.F_Right.Text);
+               else
+                  Raise_Error (Get_Range (Elem_Decl), "Only basic range constraints are supported.");
+               end if;
+            end if;
+         end if;
+
+         return
+           (Array_Kind,
+            (Index_Type   => To_Virtual_String (Index_Decl.P_Fully_Qualified_Name),
+             Element_Type => To_Virtual_String (Elem_Decl.P_Fully_Qualified_Name),
+             Tabbed       => Is_Tabbed,
+             Min          => Min,
+             Max          => Max));
+      end;
+   end Parse_Array;
+
+   function Parse_Enum (Decl : Base_Type_Decl) return Config_Type is
+      pragma Unreferenced (Decl);
+   begin
+      return (Enum_Kind, (null record));
+   end Parse_Enum;
+
+   function Parse_Integer (Decl : Base_Type_Decl) return Config_Type is
+   begin
+      if not Decl.F_Aspects.Is_Null then
+         for Assoc of
+           Decl.F_Aspects.F_Aspect_Assocs
+           when Assoc.F_Id.Text = "Annotate"
+           and then Assoc.F_Expr.Kind in Ada_Aggregate
+           and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
+         loop
+            declare
+               function Argument (Index : Positive) return Text_Type is
+                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+               begin
+                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
+               end Argument;
+
+               function Strip (Str : Text_Type) return Virtual_String is
+               begin
+                  if Str (Str'First) = '"' then
+                     return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
+                  else
+                     return To_Virtual_String (Str);
+                  end if;
+               end Strip;
+            begin
+               if Argument (1) = "Prunt_Config" and then Argument (2) = "Unit" then
+                  return (Integer_Kind, (Unit => Strip (Argument (3))));
+               end if;
+            end;
+         end loop;
+      end if;
+
+      return (Integer_Kind, (Unit => ""));
+   end Parse_Integer;
+
+   function Parse_Float (Decl : Base_Type_Decl) return Config_Type is
+   begin
+      if not Decl.F_Aspects.Is_Null then
+         for Assoc of
+           Decl.F_Aspects.F_Aspect_Assocs
+           when Assoc.F_Id.Text = "Annotate"
+           and then Assoc.F_Expr.Kind in Ada_Aggregate
+           and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
+         loop
+            declare
+               function Argument (Index : Positive) return Text_Type is
+                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+               begin
+                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
+               end Argument;
+
+               function Strip (Str : Text_Type) return Virtual_String is
+               begin
+                  if Str (Str'First) = '"' then
+                     return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
+                  else
+                     return To_Virtual_String (Str);
+                  end if;
+               end Strip;
+            begin
+               if Argument (1) = "Prunt_Config" and then Argument (2) = "Unit" then
+                  return (Float_Kind, (Unit => Strip (Argument (3))));
+               end if;
+            end;
+         end loop;
+      end if;
+
+      return (Float_Kind, (Unit => ""));
+   end Parse_Float;
+
+   function Parse_Gcode_Command (Decl : Subp_Decl) return Gcode_Command_Data is
+      function Parse_Argument_Kinds
+        (Arg_Type_Name : Virtual_String; Default_Value : Virtual_String) return Gcode_Argument_Kind_Set
+      is
+         Res  : Gcode_Argument_Kind_Set := (others => False);
+         Name : constant String := Conversions.To_UTF_8_String (Arg_Type_Name);
+      begin
+         if Index (Name, "Integer") > 0 then
+            Res (Integer_Kind) := True;
+         end if;
+         if Index (Name, "Float") > 0 or Index (Name, "Dimensionless") > 0 then
+            Res (Integer_Kind) := True;
+            Res (Float_Kind) := True;
+         end if;
+         if Index (Name, "String") > 0 then
+            Res (String_Kind) := True;
+         end if;
+         if Index (Name, "No_Value") > 0 then
+            Res (No_Value_Kind) := True;
+         end if;
+         if Index (Name, "Optional") > 0 or Default_Value /= "" then
+            Res (Not_Present_Kind) := True;
+         end if;
+         return Res;
+      end Parse_Argument_Kinds;
+
+      Command : Gcode_Command_Data :=
+        (Name        => To_Virtual_String (Decl.F_Subp_Spec.F_Subp_Name.Text),
+         Arguments   => [],
+         Description => Get_Comments_Starting_After (Decl.Token_End));
+   begin
+
+      for Param_Spec of Decl.F_Subp_Spec.F_Subp_Params.F_Params loop
+         for Id of Param_Spec.F_Ids loop
+            if Id.Text /= "This" and then Id.Text /= "Planner" then
+               declare
+                  Type_Name : constant Virtual_String := To_Virtual_String (Param_Spec.F_Type_Expr.Text);
+                  Default   : constant Virtual_String :=
+                    (if Param_Spec.F_Default_Expr.Is_Null
+                     then ""
+                     else To_Virtual_String (Param_Spec.F_Default_Expr.Text));
+
+                  Arg_Data : constant Gcode_Argument_Data :=
+                    (Type_Name   => Type_Name,
+                     Default     => Default,
+                     Description =>
+                       Get_Comments_Starting_After
+                         ((if Kind (Data (Next (Param_Spec.Token_End))) = Ada_Semicolon
+                           then Next (Next (Param_Spec.Token_End))
+                           else Param_Spec.Token_End)),
+                     Arg_Kinds   => Parse_Argument_Kinds (Type_Name, Default));
+               begin
+                  Command.Arguments.Insert (To_Virtual_String (Id.Text), Arg_Data);
+               end;
+            end if;
+         end loop;
+      end loop;
+
+      return Command;
+   end Parse_Gcode_Command;
+
+   function Parse (Context : Libadalang.Analysis.Analysis_Context; Filename : String) return Module_Data is
+      Result : Module_Data := (Name => "", Filename => "", Root_Type => "", others => <>);
+
+      function Visit (N : Ada_Node'Class) return Visit_Status is
+      begin
+         if N.Kind in Ada_Base_Type_Decl and then not N.As_Base_Type_Decl.F_Aspects.Is_Null then
+            declare
+               Decl : constant Base_Type_Decl := N.As_Base_Type_Decl;
+               Name : constant Virtual_String := To_Virtual_String (Decl.P_Fully_Qualified_Name);
+            begin
+               for Assoc of Decl.F_Aspects.F_Aspect_Assocs loop
+                  if Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate then
+                     declare
+                        Args : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+                     begin
+                        if Args.Child (Args.First_Child_Index + 0).As_Aggregate_Assoc.F_R_Expr.Text = "Prunt_Config"
+                        then
+                           if Args.Child (Args.First_Child_Index + 1).As_Aggregate_Assoc.F_R_Expr.Text
+                             = "Root_User_Config"
+                           then
+                              if Result.Root_Type /= "" then
+                                 Raise_Error (Decl, "Multiple Root_User_Config types found in module.");
+                              end if;
+                              Result.Root_Type := Name;
+                           end if;
+
+                           if Decl.Kind in Ada_Type_Decl then
+                              declare
+                                 Def : constant Type_Def := Decl.As_Type_Decl.F_Type_Def;
+                              begin
+                                 if Def.Kind = Ada_Record_Type_Def then
+                                    Result.Config.Insert (Name, Parse_Record (Decl));
+                                 elsif Def.Kind = Ada_Array_Type_Def then
+                                    Result.Config.Insert (Name, Parse_Array (Decl));
+                                 elsif Def.Kind in Ada_Signed_Int_Type_Def then
+                                    Result.Config.Insert (Name, Parse_Integer (Decl));
+                                 elsif Def.Kind in Ada_Floating_Point_Def then
+                                    Result.Config.Insert (Name, Parse_Float (Decl));
+                                 elsif Def.Kind in Ada_Enum_Type_Def | Ada_Formal_Discrete_Type_Def then
+                                    Result.Config.Insert (Name, Parse_Enum (Decl));
+                                 elsif Def.Kind in Ada_Derived_Type_Def then
+                                    if Get_Base_Def (Decl).Kind in Ada_Floating_Point_Def then
+                                       Result.Config.Insert (Name, Parse_Float (Decl));
+                                    elsif Get_Base_Def (Decl).Kind in Ada_Signed_Int_Type_Def then
+                                       Result.Config.Insert (Name, Parse_Integer (Decl));
+                                    else
+                                       raise Constraint_Error; --  TODO
+                                    end if;
+                                 else
+                                    Decl.Print;
+                                    raise Constraint_Error; --  TODO
+                                 end if;
+                              end;
+                           elsif Decl.Kind in Ada_Subtype_Decl then
+                              if Get_Base_Def (Decl).Kind in Ada_Floating_Point_Def then
+                                 Result.Config.Insert (Name, Parse_Float (Decl));
+                              elsif Get_Base_Def (Decl).Kind in Ada_Signed_Int_Type_Def then
+                                 Result.Config.Insert (Name, Parse_Integer (Decl));
+                              else
+                                 raise Constraint_Error; --  TODO
+                              end if;
+                           else
+                              raise Constraint_Error; --  TODO
+                           end if;
+
+                           return Over;
+                        end if;
+                     end;
+                  end if;
+               end loop;
+            end;
+         elsif N.Kind in Ada_Subp_Decl and then not N.As_Subp_Decl.F_Aspects.Is_Null then
+            declare
+               Decl : constant Subp_Decl := N.As_Subp_Decl;
+            begin
+               for Assoc of Decl.F_Aspects.F_Aspect_Assocs loop
+                  if Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate then
+                     declare
+                        Args : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+                     begin
+                        if Args.Child (Args.First_Child_Index + 0).As_Aggregate_Assoc.F_R_Expr.Text = "Prunt_Config"
+                          and then Args.Child (Args.First_Child_Index + 1).As_Aggregate_Assoc.F_R_Expr.Text
+                                   = "Gcode_Command"
+                        then
+                           declare
+                              Raw_Id : constant Wide_Wide_String :=
+                                Args.Child (Args.First_Child_Index + 2).As_Aggregate_Assoc.F_R_Expr.Text;
+                              Key    : Gcode_Key;
+                           begin
+                              if Raw_Id (Raw_Id'First + 1) = 'M' or Raw_Id (Raw_Id'First + 1) = 'G' then
+                                 Key.Letter := To_Virtual_String (Raw_Id (Raw_Id'First + 1 .. Raw_Id'First + 1));
+                                 Key.Number :=
+                                   Integer'Value
+                                     (VSS.Strings.Conversions.To_UTF_8_String
+                                        (To_Virtual_String (Raw_Id (Raw_Id'First + 2 .. Raw_Id'Last - 1))));
+                              else
+                                 Raise_Error (Assoc, "Invalid Gcode command identifier.");
+                              end if;
+
+                              declare
+                                 New_Cmd : constant Gcode_Command_Data := Parse_Gcode_Command (Decl);
+                                 use Gcode_Command_Maps;
+                                 use Gcode_Command_Vectors;
+
+                                 function Check_Overlap (C1, C2 : Gcode_Command_Data) return Boolean is
+                                    function Are_Kinds_Disjoint (K1, K2 : Gcode_Argument_Kind_Set) return Boolean is
+                                    begin
+                                       for K in Gcode_Argument_Kind loop
+                                          if K1 (K) and K2 (K) then
+                                             return False;
+                                          end if;
+                                       end loop;
+                                       return True;
+                                    end Are_Kinds_Disjoint;
+                                 begin
+                                    for C in C1.Arguments.Iterate loop
+                                       if C2.Arguments.Contains (Gcode_Argument_Maps.Key (C)) then
+                                          if not Are_Kinds_Disjoint
+                                                   (Gcode_Argument_Maps.Element (C).Arg_Kinds,
+                                                    C2.Arguments.Element (Gcode_Argument_Maps.Key (C)).Arg_Kinds)
+                                          then
+                                             return False;
+                                          end if;
+                                       elsif not Gcode_Argument_Maps.Element (C).Arg_Kinds (Not_Present_Kind) then
+                                          return False;
+                                       end if;
+                                    end loop;
+
+                                    for C in C2.Arguments.Iterate loop
+                                       if C1.Arguments.Contains (Gcode_Argument_Maps.Key (C)) then
+                                          if not Are_Kinds_Disjoint
+                                                   (Gcode_Argument_Maps.Element (C).Arg_Kinds,
+                                                    C1.Arguments.Element (Gcode_Argument_Maps.Key (C)).Arg_Kinds)
+                                          then
+                                             return False;
+                                          end if;
+                                       elsif not Gcode_Argument_Maps.Element (C).Arg_Kinds (Not_Present_Kind) then
+                                          return False;
+                                       end if;
+                                    end loop;
+
+                                    return True;
+                                 end Check_Overlap;
+                              begin
+                                 if Result.Gcode_Commands.Contains (Key) then
+                                    declare
+                                       Variants : Vector := Result.Gcode_Commands.Element (Key);
+                                    begin
+                                       for V of Variants loop
+                                          if Check_Overlap (V, New_Cmd) then
+                                             Raise_Error
+                                               (Decl,
+                                                "Gcode command overlap detected with "
+                                                & VSS.Strings.Conversions.To_UTF_8_String (V.Name)
+                                                & ".");
+                                          end if;
+                                       end loop;
+                                       Variants.Append (New_Cmd);
+                                       Result.Gcode_Commands.Replace (Key, Variants);
+                                    end;
+                                 else
+                                    declare
+                                       Variants : Vector;
+                                    begin
+                                       Variants.Append (New_Cmd);
+                                       Result.Gcode_Commands.Insert (Key, Variants);
+                                    end;
+                                 end if;
+                              end;
+
+                              return Over;
+                           end;
+                        end if;
+                     end;
+                  end if;
+               end loop;
+            end;
+         end if;
+         return Into;
+      end Visit;
+
+      Root : constant Ada_Node := Context.Get_From_File (Filename).Root;
+   begin
+      if Root.As_Compilation_Unit.F_Body.As_Library_Item.F_Item.Kind = Ada_Package_Decl then
+         Result.Name :=
+           To_Virtual_String
+             (Root.As_Compilation_Unit.F_Body.As_Library_Item.F_Item.As_Package_Decl.F_Package_Name.F_Name.Text);
+         Root.Traverse (Visit'Access);
+      elsif Root.As_Compilation_Unit.F_Body.As_Library_Item.F_Item.Kind = Ada_Generic_Package_Decl then
+         Result.Name :=
+           To_Virtual_String
+             (Root
+                .As_Compilation_Unit
+                .F_Body
+                .As_Library_Item
+                .F_Item
+                .As_Generic_Package_Decl
+                .F_Package_Decl
+                .F_Package_Name
+                .Text);
+         Root.Traverse (Visit'Access);
+      end if;
+
+      Result.Filename := Conversions.To_Virtual_String (Simple_Name (Filename));
+      return Result;
+   end Parse;
+
+end Config_Parser;

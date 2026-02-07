@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -21,23 +21,26 @@
 
 with Ada.Characters.Latin_1;
 with Ada.Exceptions;
-with Util.Http.Clients;
-with Util.Http.Clients.Curl;
-with GNATCOLL.JSON; use GNATCOLL.JSON;
 with Ada.Real_Time; use Ada.Real_Time;
+with GNATCOLL.JSON; use GNATCOLL.JSON;
+with Util.Http.Clients.Curl;
+with Util.Http.Clients;
+with VSS.Strings.Conversions;
 
 package body Prunt.Update_Checker is
+
+   pragma Extensions_Allowed (On);
 
    task body Checker is
    begin
       Util.Http.Clients.Curl.Register;
 
       case Details.Method is
-         when None =>
+         when None   =>
             loop
-               accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Unbounded_String) do
+               accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Virtual_String) do
                   Update_Available := False;
-                  Update_URL := To_Unbounded_String ("");
+                  Update_URL := "";
                end Get_Update_URL;
             end loop;
 
@@ -50,7 +53,10 @@ package body Prunt.Update_Checker is
                begin
                   Client.Add_Header ("User-Agent", "Prunt3D-Update-Checker");
                   Client.Get
-                    (To_String ("https://api.github.com/repos/" & Details.Repository & "/releases/latest"), Response);
+                    ("https://api.github.com/repos/"
+                     & Conversions.To_UTF_8_String (Details.Repository)
+                     & "/releases/latest",
+                     Response);
 
                   declare
                      Response_Body       : constant String := Response.Get_Body;
@@ -60,9 +66,10 @@ package body Prunt.Update_Checker is
                   begin
                      while Clock < Next_Check_Time loop
                         select
-                           accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Unbounded_String) do
-                              Update_Available := Details.Expected_Tag /= Current_Release_Tag;
-                              Update_URL := To_Unbounded_String (Current_Release_URL);
+                           accept Get_Update_URL (Update_Available : out Boolean; Update_URL : out Virtual_String) do
+                              Update_Available :=
+                                Conversions.To_UTF_8_String (Details.Expected_Tag) /= Current_Release_Tag;
+                              Update_URL := Conversions.To_Virtual_String (Current_Release_URL);
                            end Get_Update_URL;
                         or
                            delay until Next_Check_Time;
@@ -72,10 +79,11 @@ package body Prunt.Update_Checker is
                exception
                   when E : others =>
                      My_Logger.Log
-                       ("Exception in update checker, retrying in 60 minutes:"
-                        & Ada.Characters.Latin_1.CR
-                        & Ada.Characters.Latin_1.LF
-                        & Ada.Exceptions.Exception_Information (E));
+                       (Conversions.To_Virtual_String
+                          ("Exception in update checker, retrying in 60 minutes:"
+                           & Ada.Characters.Latin_1.CR
+                           & Ada.Characters.Latin_1.LF
+                           & Ada.Exceptions.Exception_Information (E)));
                      delay 3600.0;
                end;
             end loop;

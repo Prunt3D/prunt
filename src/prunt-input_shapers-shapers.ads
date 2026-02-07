@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 private with Ada.Containers.Indefinite_Ordered_Maps;
 
@@ -82,18 +84,21 @@ package Prunt.Input_Shapers.Shapers is
    function Create
      (Parameters : Axial_Shaper_Parameters; Interpolation_Time : Time; Initial_Position : Position)
       return Axial_Shapers;
+   --  Creates input shapers for all axes based on the provided parameters.
 
    function Do_Step (Shapers : in out Axial_Shapers; Step : Position) return Position;
+   --  Processes the given step through all axis shapers and returns the shaped position.
 
    function Extra_End_Steps_Required (Shapers : Axial_Shapers) return Cycle_Count;
+   --  Returns the number of extra steps required to flush the shapers after input motion remains constant.
 
 private
 
    type Input_Buffer_Array is array (Cycle_Count range <>) of Length;
 
    type Input_Buffer (Length : Cycle_Count) is record
-      Buffer        : Input_Buffer_Array (0 .. Length);
       Current_Index : Cycle_Count;
+      Buffer        : Input_Buffer_Array (0 .. Length);
    end record;
 
    package Axial_Shaper_Maps is new

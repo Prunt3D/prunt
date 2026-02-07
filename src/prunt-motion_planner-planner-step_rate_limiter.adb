@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,11 +19,13 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Ada.Text_IO;
 with Prunt.Input_Shapers.Shapers;
+
 use type Prunt.Input_Shapers.Axial_Shaper_Parameters;
 
 package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
+
+   pragma Extensions_Allowed (On);
 
    procedure Setup (In_Map : Stepper_Pos_Map) is
    begin
@@ -78,6 +80,8 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
          Last_Stepper_Position : Stepper_Position;
          First_Check           : Boolean := True;
 
+         procedure Check_Step (Stepper_Pos : Stepper_Position; I : Corners_Index);
+
          procedure Check_Step (Stepper_Pos : Stepper_Position; I : Corners_Index) is
          begin
             if First_Check then
@@ -104,12 +108,12 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
             raise Constraint_Error with "Setup not done.";
          end if;
 
-         if Is_Homing_Move (Flush_Resetting_Data (Block)) then
+         if Block.Is_Homing_Move then
             --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
             pragma
               Assert
                 (Block.Params.Axial_Shapers
-                   = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper)));
+                 = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper)));
          else
             Current_Shapers :=
               Input_Shapers.Shapers.Create (Block.Params.Axial_Shapers, Interpolation_Time, Block_Start_Pos (Block));
@@ -126,7 +130,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                        Segment_Pos_At_Time (Block, I, Current_Time, Is_Past_Accel_Part);
                      Shaped_Pos         : Position := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
                   begin
-                     if I = Block.N_Corners and Current_Time >= Segment_Time (Block, I) then
+                     if I = Block.N_Corners and then Current_Time >= Segment_Time (Block, I) then
                         declare
                            Extra_Loops_Required : constant Input_Shapers.Cycle_Count :=
                              Input_Shapers.Cycle_Count'Max
@@ -144,7 +148,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                         exit when
                           Block.Params.Axial_Shapers
                           /= Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper))
-                          and Maximum_Overspeed (I) > 1.0;
+                          and then Maximum_Overspeed (I) > 1.0;
                      end if;
                   end;
                end if;
@@ -153,7 +157,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                   Current_Time := Current_Time + Interpolation_Time;
                end if;
 
-               if I = Block.N_Corners and Current_Time > Segment_Time (Block, I) then
+               if I = Block.N_Corners and then Current_Time > Segment_Time (Block, I) then
                   --  Ensure that the last corner is always enqueued from at least once and we always finish on
                   --  the exact final position. Having the wrong interpolation time here is fine because the
                   --  final bit of an execution block has very low velocity.
@@ -178,7 +182,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                     ("Velocity for upcoming moves reduced due to step rate being too high. This can be caused by a "
                      & "high velocity limit combined with a high microstepping ratio.");
                else
-                  Block.Params.Axial_Shapers := (others => (Kind => Input_Shapers.No_Shaper));
+                  Block.Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];
                   Log
                     ("All input shaping has been turned off for the next block of moves due to the step rate being "
                      & "too high. This can be caused by a high pressure advance value without smoothing.");

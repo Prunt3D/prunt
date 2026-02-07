@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 private package Prunt.Motion_Planner.PH_Beziers is
 
@@ -40,11 +42,11 @@ private package Prunt.Motion_Planner.PH_Beziers is
    --  Returns the midpoint of the curve. Equivalent to Point_At_T (Bez, 0.5).
 
    function Point_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position;
-   --  Return the point on the curve at T.
+   --  Return the point on the curve at parameter `T`.
 
    function Tangent_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position_Offset;
-   --  Return a vector tangent to the curve at T. This vector is not normalised and will be zero is the curve has no
-   --  length.
+   --  Return a vector tangent to the curve at parameter `T`. This vector is not normalised and will be zero is the
+   --  curve has no length.
 
    function Point_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position;
    --  Return the point that is a given distance along the curve. Equivalent to
@@ -56,17 +58,29 @@ private package Prunt.Motion_Planner.PH_Beziers is
    --  Tangent_At_T (Bez, T_At_Distance (Bez, Distance)).
 
    function Create_Bezier (Start, Corner, Finish : Scaled_Position; Deviation_Limit : Length) return PH_Bezier;
-   --  Create a C⁴ continuous Pythagorean-hodograph curve as specified in https://doi.org/10.1007/s00170-022-09463-y.
+   --  Creates a C4 continuous Pythagorean-hodograph (PH) curve that smoothly blends a corner.
    --
-   --  The curve will always be symmetrical rather than the asymmetrical curves shown in the paper. The distance from
-   --  the midpoint to Corner is limited by Deviation_Limit. The start and end of the curve will be on the vectors
-   --  between Corner and Start/Finish and will not further away from Corner than the midpoint between Corner and
-   --  Start/Finish.
-
+   --  The curve is generated based on the method described in https://doi.org/10.1007/s00170-022-09463-y, but is
+   --  simplified to always be symmetrical.
+   --
+   --  `Start`, `Corner`, and `Finish` define the two lines that form the corner to be blended. The generated curve
+   --  will be tangent to the lines `Start - Corner` and `Finish - Corner` at its endpoints.
+   --
+   --  `Deviation_Limit` constraints how far the midpoint of the curve can be from `Corner`. The start and end points
+   --  of the curve lie on the segments between `Start` and `Corner`, and `Finish` and `Corner` respectively. They are
+   --  positioned to not go beyond the halfway point of these segments.
 private
 
    type Control_Points_Index is range 0 .. 15;
    type PH_Control_Points is array (Control_Points_Index) of Scaled_Position;
+
+   function Point_At_T_V2 (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position;
+   --  This method is slower than Point_At_T on most CPUs, but may be useful if this code is ported to a GPU or
+   --  FPGA. It may also be faster for cases where T is known at compile time, but I am not aware of any methods to
+   --  detect that with GCC.
+   --
+   --  The details of this implementation are here:
+   --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
 
    type PH_Bezier is record
       Control_Points    : PH_Control_Points;

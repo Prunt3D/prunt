@@ -1,6 +1,29 @@
+-----------------------------------------------------------------------------
+--                                                                         --
+--                   Part of the Prunt Motion Controller                   --
+--                                                                         --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
+--                                                                         --
+--  This program is free software: you can redistribute it and/or modify   --
+--  it under the terms of the GNU General Public License as published by   --
+--  the Free Software Foundation, either version 3 of the License, or      --
+--  (at your option) any later version.                                    --
+--                                                                         --
+--  This program is distributed in the hope that it will be useful,        --
+--  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
+--  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
+--  GNU General Public License for more details.                           --
+--                                                                         --
+--  You should have received a copy of the GNU General Public License      --
+--  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
+--                                                                         --
+-----------------------------------------------------------------------------
+
 with Ada.Unchecked_Deallocation;
 
 package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
+
+   pragma Extensions_Allowed (On);
 
    use type Key_Vectors.Cursor;
 
@@ -40,6 +63,16 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
    begin
       --  TODO: Is this correct?
       return (Container.Map.Reference (Key).Element.all'Unchecked_Access, Container.Map.Reference (Key));
+   end Reference;
+
+   function Constant_Reference (Container : aliased Map; Position : Cursor) return Constant_Reference_Type is
+   begin
+      return Constant_Reference (Container, Key (Position));
+   end Constant_Reference;
+
+   function Reference (Container : aliased in out Map; Position : Cursor) return Reference_Type is
+   begin
+      return Reference (Container, Key (Position));
    end Reference;
 
    procedure Insert (Container : in out Map; Key : Key_Type; New_Item : Element_Type) is
@@ -157,6 +190,25 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
              Map      => Container'Unrestricted_Access);
    end Iterate;
 
+   function Length (Container : Map) return Ada.Containers.Count_Type is
+   begin
+      return Container.Insertions.Length;
+   end Length;
+
+   procedure Delete (Container : in out Map; Key : Key_Type) is
+   begin
+      Container.Map.Delete (Key);
+      Container.Insertions.Delete (Container.Insertions.Find_Index (Key));
+   end Delete;
+
+   procedure Reverse_Clear (Container : in out Map) is
+   begin
+      while not Container.Insertions.Is_Empty loop
+         Container.Map.Delete (Container.Insertions.Last_Element);
+         Container.Insertions.Delete_Last;
+      end loop;
+   end Reverse_Clear;
+
    overriding
    procedure Finalize (Object : in out Iterator) is
    begin
@@ -199,7 +251,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
       return Previous (Position);
    end Previous;
 
-   function "+" (Left, Right : Map) return Map is
+   function "&" (Left, Right : Map) return Map is
    begin
       return Result : Map do
          for I of Left.Insertions loop
@@ -212,6 +264,6 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
             Result.Insertions.Append (I);
          end loop;
       end return;
-   end "+";
+   end "&";
 
 end Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;

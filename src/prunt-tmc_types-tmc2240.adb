@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -22,6 +22,8 @@
 with Ada.Numerics.Generic_Elementary_Functions;
 
 package body Prunt.TMC_Types.TMC2240 is
+
+   pragma Extensions_Allowed (On);
 
    function Compute_CRC (Bytes : UART_Bytes_For_CRC) return UART_CRC is
       CRC : UART_CRC := 0;

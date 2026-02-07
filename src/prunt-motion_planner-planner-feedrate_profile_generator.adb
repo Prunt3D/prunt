@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -20,6 +20,8 @@
 -----------------------------------------------------------------------------
 
 package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
+
+   pragma Extensions_Allowed (On);
 
    procedure Run (Block : in out Execution_Block) is
       function Curve_Corner_Distance (Finishing_Corner : Corners_Index) return Length;

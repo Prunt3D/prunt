@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 package Prunt.Thermistors is
 
@@ -43,6 +45,13 @@ package Prunt.Thermistors is
 
    function Temperature_To_Resistance (Params : Thermistor_Parameters; Temp : Temperature) return Resistance
    with
-     Pre => Temp >= Params.Minimum_Temperature and Temp <= Params.Maximum_Temperature and Params.Kind /= Disabled_Kind;
+     Pre =>
+       Temp >= Params.Minimum_Temperature
+       and then Temp <= Params.Maximum_Temperature
+       and then Params.Kind /= Disabled_Kind;
+
+private
+
+   function Safe_Cbrt (Val : Dimensionless) return Dimensionless;
 
 end Prunt.Thermistors;

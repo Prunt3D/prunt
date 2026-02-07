@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,16 +19,17 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-with Ada.Text_IO;
-with System.Pool_Local;
-with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
-with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
+with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
+with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Step_Rate_Limiter;
+with System.Pool_Local;
 
 package body Prunt.Motion_Planner.Planner is
+
+   pragma Extensions_Allowed (On);
 
    package My_Preprocessor is new Preprocessor;
    package My_Corner_Blender is new Corner_Blender;
@@ -73,7 +74,7 @@ package body Prunt.Motion_Planner.Planner is
       type Block_Wrapper_Access is access Block_Wrapper with Storage_Pool => Pool;
 
       Working_Block_Wrapper : constant Block_Wrapper_Access := new Block_Wrapper;
-      Block renames Working_Block_Wrapper.Block;
+      Block                 : Execution_Block renames Working_Block_Wrapper.Block;
 
       Reset_Called : Boolean := False;
    begin
@@ -92,7 +93,7 @@ package body Prunt.Motion_Planner.Planner is
                exit;
             end if;
 
-            if Is_Homing_Move (Block.Flush_Resetting_Data) and Block.N_Corners /= 2 then
+            if Block.Is_Homing_Move and then Block.N_Corners /= 2 then
                raise Constraint_Error with "Homing move must have exactly 2 corners.";
             end if;
 
@@ -105,7 +106,7 @@ package body Prunt.Motion_Planner.Planner is
                   My_Feedrate_Profile_Generator.Run (Block);
 
                   exit when
-                    (not Is_Homing_Move (Block.Flush_Resetting_Data))
+                    (not Block.Is_Homing_Move)
                     or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
 
                   Block.Limited_Segment_Feedrates (2) := Block.Limited_Segment_Feedrates (2) * 0.9;
@@ -167,12 +168,10 @@ package body Prunt.Motion_Planner.Planner is
            Block.Corner_Velocity_Limits (Finishing_Corner - 1),
            Is_Past_Accel_Part);
 
-      Pos                     : Scaled_Position;
-      Tangent                 : Scaled_Position_Offset;
-      Scaled_Velocity_Tangent : Axial_Velocities;
+      Pos : Scaled_Position;
    begin
       if Time_Into_Segment >= Total_Time (Block.Feedrate_Profiles (Finishing_Corner))
-        and (Finishing_Corner = Block.N_Corners or Block.Corner_Dwell_Times (Finishing_Corner) /= 0.0 * s)
+        and then (Finishing_Corner = Block.N_Corners or else Block.Corner_Dwell_Times (Finishing_Corner) /= 0.0 * s)
       then
          --  Ensure the return value will be at the exact position.
          Pos := Point_At_Distance (Block.Beziers (Finishing_Corner), 0.0 * mm);
@@ -198,7 +197,7 @@ package body Prunt.Motion_Planner.Planner is
               Point_At_Distance
                 (Block.Beziers (Finishing_Corner - 1),
                  Distance + Distance_At_T (Block.Beziers (Finishing_Corner - 1), 0.5));
-         elsif Distance < Start_Curve_Half_Distance + Mid_Distance or End_Curve_Half_Distance = 0.0 * mm then
+         elsif Distance < Start_Curve_Half_Distance + Mid_Distance or else End_Curve_Half_Distance = 0.0 * mm then
             if Mid_Distance = 0.0 * mm then
                Pos := Point_At_T (Block.Beziers (Finishing_Corner - 1), 1.0);
             else
@@ -252,11 +251,6 @@ package body Prunt.Motion_Planner.Planner is
       return Block.Flush_Resetting_Data;
    end Flush_Resetting_Data;
 
-   function Block_Persistent_Data (Block : Execution_Block) return Block_Persistent_Data_Type is
-   begin
-      return Block.Block_Persistent_Data;
-   end Block_Persistent_Data;
-
    function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
    begin
       return
@@ -287,5 +281,10 @@ package body Prunt.Motion_Planner.Planner is
    begin
       return Block.Params;
    end Block_Kinematic_Parameters;
+
+   function Is_Homing_Move (Block : Execution_Block) return Boolean is
+   begin
+      return Block.Is_Homing_Move;
+   end Is_Homing_Move;
 
 end Prunt.Motion_Planner.Planner;

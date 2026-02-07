@@ -1,0 +1,24 @@
+name = "config_codegen"
+description = ""
+version = "0.1.0-dev"
+
+authors = ["Liam Powell"]
+maintainers = ["Liam Powell <liam@liampll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "GPL-3.0-or-later"
+website = ""
+tags = []
+
+executables = ["config_codegen"]
+
+[[depends-on]]
+gnat_external = "^15.2.0"
+
+[[depends-on]]
+libadalang = "^25.0.0"
+
+[build-switches]
+"*".style_checks = "No"
+
+[[depends-on]]
+vss_text = "^26.0.0"

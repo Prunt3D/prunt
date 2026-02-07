@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -18,6 +18,8 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
 --                                                                         --
 -----------------------------------------------------------------------------
+
+pragma Extensions_Allowed (On);
 
 with Prunt.Input_Shapers.Shapers;
 
@@ -58,21 +60,22 @@ private
       Impulse_Count  : Impulse_Index;
       Buffer_Size    : Cycle_Count)
    is new Shapers.Shaper (Input_Offset => Input_Offset, Extra_End_Time => Extra_End_Time) with record
+      Current_Buffer_Index : Cycle_Count;
       Impulses             : Impulses_Array (1 .. Impulse_Count);
       Buffer               : Buffer_Array (0 .. Buffer_Size);
       --  These buffers are technically 1 larger than Buffer_Size, but that does not matter. Starting at 0 makes the
       --  implementation simpler. We can not subtract from a value that comes from a discriminant to get the correct
       --  size while starting at 0.
-      Current_Buffer_Index : Cycle_Count;
    end record
    with
      Dynamic_Predicate =>
-       (for all I in 1 .. Impulse_Count - 1
-        => Basic_Shaper.Impulses (I).Output_Delay <= Basic_Shaper.Impulses (I + 1).Output_Delay)
-       and Basic_Shaper.Buffer_Size = Basic_Shaper.Impulses (Basic_Shaper.Impulses'Last).Output_Delay + 1
-       and (for all I of Basic_Shaper.Impulses => I.Output_Delay >= 0)
-       and abs ([for I of Basic_Shaper.Impulses => I.Output_Ratio]'Reduce ("+", Dimensionless (1.0)) - 1.0)
-           < 0.000_000_1;
+       (for all I in 1 .. Impulse_Count - 1 =>
+          Basic_Shaper.Impulses (I).Output_Delay <= Basic_Shaper.Impulses (I + 1).Output_Delay)
+       and then Basic_Shaper.Buffer_Size = Basic_Shaper.Impulses (Basic_Shaper.Impulses'Last).Output_Delay + 1
+       and then (for all I of Basic_Shaper.Impulses => I.Output_Delay >= 0);
+   --  TODO: Gnatcov can not parse 'Reduce, rewrite this without it.
+   --  and abs ([for I of Basic_Shaper.Impulses => I.Output_Ratio]'Reduce ("+", Dimensionless (1.0)) - 1.0)
+   --      < 0.000_000_1;
 
    function Compute_Impulses (Parameters : Shaper_Parameters; Interpolation_Time : Time) return Impulses_Array;
    function Compute_Input_Offset (Impulses : Impulses_Array) return Cycle_Count;

@@ -2,7 +2,7 @@
 --                                                                         --
 --                   Part of the Prunt Motion Controller                   --
 --                                                                         --
---            Copyright (C) 2024 Liam Powell (liam@prunt3d.com)            --
+--            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
 --                                                                         --
 --  This program is free software: you can redistribute it and/or modify   --
 --  it under the terms of the GNU General Public License as published by   --
@@ -19,16 +19,19 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Containers.Ordered_Sets;
 with Ada.Directories; use Ada.Directories;
 with Ada.Real_Time;   use Ada.Real_Time;
 with Ada.Strings;
 with Ada.Strings.Fixed;
+with Prunt.JSON;
+with Prunt.Web_Server_Resources;
 with System;
-with Ada.Containers.Ordered_Sets;
-with GNAT.Sockets.Server.Pooled;
+with VSS.Strings.Conversions;
 
 package body Prunt.Web_Server is
-   use My_Config.Generic_Types;
+
+   pragma Extensions_Allowed (On);
 
    procedure Wait_For_User_To_Allow_Update is
    begin
@@ -134,7 +137,7 @@ package body Prunt.Web_Server is
       Dir : Directory_Entry_Type;
    begin
       case Source.Step is
-         when Starting =>
+         when Starting                         =>
             Source.Step := First_Entry;
             return "[";
 
@@ -143,16 +146,24 @@ package body Prunt.Web_Server is
                Get_Next_Entry (Source.Search, Dir);
                if Source.Step = First_Entry then
                   Source.Step := Continuing_Entries;
-                  return """" & JSON_Escape (Simple_Name (Dir)) & """";
+                  return
+                    """"
+                    & Conversions.To_UTF_8_String
+                        (JSON.Escape_String (Conversions.To_Virtual_String (Simple_Name (Dir))))
+                    & """";
                else
-                  return ",""" & JSON_Escape (Simple_Name (Dir)) & """";
+                  return
+                    ","""
+                    & Conversions.To_UTF_8_String
+                        (JSON.Escape_String (Conversions.To_Virtual_String (Simple_Name (Dir))))
+                    & """";
                end if;
             else
                Source.Step := Finished;
                return "]";
             end if;
 
-         when Finished =>
+         when Finished                         =>
             return "";
       end case;
    end Get;
@@ -210,18 +221,34 @@ package body Prunt.Web_Server is
 
    function Patch_Config_Values (Patch : String) return Unbounded_String is
       Errors : Unbounded_String := To_Unbounded_String ("[");
-      Values : Unbounded_String := To_Unbounded_String (Patch);
+      Result : Virtual_String;
 
-      procedure Append_Error (Key, Message : String) is
+      procedure Append_Error (Path : Config.Config_Data_Paths.Vector; Message : String) is
       begin
          if Errors /= "[" then
             Append (Errors, ",");
          end if;
-         Append (Errors, "{""Key"":""" & JSON_Escape (Key) & """,""Message"":""" & JSON_Escape (Message) & """}");
+         Append (Errors, "{""Path"":[""");
+         declare
+            First : Boolean := True;
+         begin
+            for E of Path loop
+               if not First then
+                  Append (Errors, ",");
+               end if;
+               Append (Errors, """" & Conversions.To_Unbounded_UTF_8_String (JSON.Escape_String (E)) & """");
+               First := False;
+            end loop;
+         end;
+         Append
+           (Errors,
+            """,""Message"":"""
+            & Conversions.To_UTF_8_String (JSON.Escape_String (Conversions.To_Virtual_String (Message)))
+            & """}");
       end Append_Error;
    begin
-      My_Config.Patch (Values, Append_Error'Access);
-      return "{""Values"":" & Values & ",""Errors"":" & Errors & "]}";
+      Apply_Config_Patch (Conversions.To_Virtual_String (Patch), Result, Append_Error'Access);
+      return "{""Values"":" & Conversions.To_Unbounded_UTF_8_String (Result) & ",""Errors"":" & Errors & "]}";
    end Patch_Config_Values;
 
    overriding
@@ -232,9 +259,9 @@ package body Prunt.Web_Server is
       Send_Date (Client);
       Send_Content_Type (Client, "text/html");
       Send_Connection (Client, Persistent => False);
-      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-      Send (Client, "Pragma: no-cache" & CRLF);
-      Send (Client, "Expires: 0" & CRLF);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
       Send_Body (Client, Message, Get);
    end Reply_HTML;
 
@@ -246,9 +273,9 @@ package body Prunt.Web_Server is
       Send_Date (Client);
       Send_Content_Type (Client, "text/plain");
       Send_Connection (Client, Persistent => False);
-      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-      Send (Client, "Pragma: no-cache" & CRLF);
-      Send (Client, "Expires: 0" & CRLF);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
       Send_Body (Client, Message, Get);
    end Reply_Text;
 
@@ -259,9 +286,9 @@ package body Prunt.Web_Server is
       Send_Date (Client);
       Send_Content_Type (Client, "application/json");
       Send_Connection (Client, Persistent => False);
-      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-      Send (Client, "Pragma: no-cache" & CRLF);
-      Send (Client, "Expires: 0" & CRLF);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
       Send_Body (Client, Message, Get);
    end Reply_JSON;
 
@@ -276,9 +303,9 @@ package body Prunt.Web_Server is
       Send_Date (Client);
       Send_Content_Type (Client, "application/json");
       Send_Connection (Client, Persistent => False);
-      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-      Send (Client, "Pragma: no-cache" & CRLF);
-      Send (Client, "Expires: 0" & CRLF);
+      Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+      Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
 
       Client.Content.Big_String_Content.Content := Message;
       Client.Content.Big_String_Content.Next_Start := 1;
@@ -328,9 +355,10 @@ package body Prunt.Web_Server is
          if Get_Clients_Count (Listener.all) > Positive (Float (Factory.Max_Connections) * 0.7) then
             --  TODO: Should we force the printer to pause and the heaters to cool down if the maximum is reached?
             My_Logger.Log
-              ("Warning: More than 70% of available HTTP connections used (Maximum = "
-               & Factory.Max_Connections'Image
-               & ")");
+              (Conversions.To_Virtual_String
+                 ("Warning: More than 70% of available HTTP connections used (Maximum = "
+                  & Factory.Max_Connections'Image
+                  & ")"));
          end if;
 
          Result :=
@@ -347,7 +375,8 @@ package body Prunt.Web_Server is
          return Result.all'Unrestricted_Access;
       else
          My_Logger.Log
-           ("Warning: All available HTTP connections used (Maximum = " & Factory.Max_Connections'Image & ")");
+           (Conversions.To_Virtual_String
+              ("Warning: All available HTTP connections used (Maximum = " & Factory.Max_Connections'Image & ")"));
          return null;
       end if;
    end Create;
@@ -361,17 +390,23 @@ package body Prunt.Web_Server is
       --  should we handle it as if the target was "/"?
       if Status.Kind = File then
          if Status.File = "config/schema" then
-            Reply_JSON (Client, 200, "OK", My_Config.Get_Schema, Get);
+            --  Reply_JSON (Client, 200, "OK", My_Config_File.Get_Schema_String, Get);
+            --  TODO
+            null;
          elsif Status.File = "config/values" then
             Reply_JSON (Client, 200, "OK", Patch_Config_Values ("{}"), Get);
          elsif Status.File = "status/schema" then
-            Reply_JSON (Client, 200, "OK", Build_Status_Schema, Get);
+            --  Reply_JSON (Client, 200, "OK", Build_Status_Schema, Get);
+            --  TODO
+            null;
          elsif Status.File = "status/values" then
-            Reply_JSON (Client, 200, "OK", Build_Status_Values, Get);
+            --  Reply_JSON (Client, 200, "OK", Build_Status_Values, Get);
+            --  TODO
+            null;
          elsif Status.File = "update_check" then
             declare
                Update_Available : Boolean;
-               Update_URL       : Unbounded_String;
+               Update_URL       : Virtual_String;
             begin
                select
                   My_Update_Checker.Checker.Get_Update_URL (Update_Available, Update_URL);
@@ -382,7 +417,7 @@ package body Prunt.Web_Server is
                      "{""Available"":"
                      & (if Update_Available then "true" else "false")
                      & ",""URL"":"""
-                     & JSON_Escape (Update_URL)
+                     & Conversions.To_Unbounded_UTF_8_String (JSON.Escape_String (Update_URL))
                      & """}",
                      Get);
                else
@@ -416,20 +451,24 @@ package body Prunt.Web_Server is
                Send_Content_Type (Client, "text/plain");
             end if;
             Send_Connection (Client, Persistent => False);
-            Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-            Send (Client, "Pragma: no-cache" & CRLF);
-            Send (Client, "Expires: 0" & CRLF);
+            Send
+              (Client,
+               "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
+            Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+            Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
             Client.Content.Array_Stream.Content :=
               Web_Server_Resources.Get_Content ((if Status.File = "" then "index.html" else Status.File));
             Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
             Client.Content.Array_Stream.Done := False;
             Send_Body (Client, Client.Content.Array_Stream'Access, Get);
          elsif Status.File = "prunt-is-enabled" then
-            if My_Config.Prunt_Is_Enabled then
-               Reply_JSON (Client, 200, "OK", "true", Get);
-            else
-               Reply_JSON (Client, 200, "OK", "false", Get);
-            end if;
+            --  if My_Config.Prunt_Is_Enabled then
+            --     Reply_JSON (Client, 200, "OK", "true", Get);
+            --  else
+            --     Reply_JSON (Client, 200, "OK", "false", Get);
+            --  end if;
+            --  TODO
+            null;
          elsif Status.File = "uploads" or else Status.File = "uploads/" then
             --  uploads/ is provided for users manually entering the URL.
             if Kind ("uploads") /= Directory then
@@ -446,16 +485,18 @@ package body Prunt.Web_Server is
                     (Search    => Client.Content.Uploads_Directory_Content.Search,
                      Directory => "uploads",
                      Pattern   => "*",
-                     Filter    => (Ordinary_File => True, others => False));
+                     Filter    => [Ordinary_File => True, others => False]);
 
                   Send_Status_Line (Client, 200, "OK");
                   Send_Date (Client);
                   Send_Server (Client);
                   Send_Content_Type (Client, "application/json");
                   Send_Connection (Client, Persistent => False);
-                  Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-                  Send (Client, "Pragma: no-cache" & CRLF);
-                  Send (Client, "Expires: 0" & CRLF);
+                  Send
+                    (Client,
+                     "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
+                  Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+                  Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
                   Send_Body (Client, Client.Content.Uploads_Directory_Content'Access, Get);
                exception
                   when Ada.Directories.Use_Error =>
@@ -496,9 +537,12 @@ package body Prunt.Web_Server is
                         Send_Server (Client);
                         Send_Content_Type (Client, "application/octet-stream");
                         Send_Connection (Client, Persistent => False);
-                        Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-                        Send (Client, "Pragma: no-cache" & CRLF);
-                        Send (Client, "Expires: 0" & CRLF);
+                        Send
+                          (Client,
+                           "Cache-Control: no-cache, no-store, must-revalidate"
+                           & Connection_State_Machine.HTTP_Server.CRLF);
+                        Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+                        Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
                         Send_Body
                           (Client,
                            Stream (Client.Content.File),
@@ -546,9 +590,11 @@ package body Prunt.Web_Server is
                      Send_Content_Type (Client, "application/octet-stream");
                   end if;
                   Send_Connection (Client, Persistent => False);
-                  Send (Client, "Cache-Control: no-cache, no-store, must-revalidate" & CRLF);
-                  Send (Client, "Pragma: no-cache" & CRLF);
-                  Send (Client, "Expires: 0" & CRLF);
+                  Send
+                    (Client,
+                     "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
+                  Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
+                  Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
                   Client.Content.Array_Stream.Content := Get_Extra_HTTP_Content (File_Name);
                   Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
                   Client.Content.Array_Stream.Done := False;
@@ -566,7 +612,9 @@ package body Prunt.Web_Server is
          raise;
       when E : others =>
          Reply_Text (Client, 500, "Internal Server Error", Exception_Information (E), Get);
-         My_Logger.Log ("Unhandled exception in Web_Server.Do_Get_Head: " & Exception_Information (E));
+         My_Logger.Log
+           (Conversions.To_Virtual_String
+              ("Unhandled exception in Web_Server.Do_Get_Head: " & Exception_Information (E)));
          Save_Occurrence (Client, E);
    end Do_Get_Head;
 
@@ -672,7 +720,8 @@ package body Prunt.Web_Server is
    exception
       when E : others =>
          Reply_Text (Client, 500, "Internal Server Error", Exception_Information (E), True);
-         My_Logger.Log ("Unhandled exception in Web_Server.Do_Post: " & Exception_Information (E));
+         My_Logger.Log
+           (Conversions.To_Virtual_String ("Unhandled exception in Web_Server.Do_Post: " & Exception_Information (E)));
          Save_Occurrence (Client, E);
    end Do_Post;
 
@@ -680,12 +729,12 @@ package body Prunt.Web_Server is
    procedure Do_Put (Client : in out Prunt_Client) is
    begin
       case Client.Content.Put_Fail_Reason is
-         when No_Failure_Kind =>
-            Reply_Text (Client, 204, "No Content", "", True);
+         when No_Failure_Kind           =>
             --  TODO: Currently we send a 204 when the user attempts to upload an empty file, but the file is not
             --  actually created or replaced. We should either send a reply that indicated that or write the file.
+            Reply_Text (Client, 204, "No Content", "", True);
 
-         when Uploads_Not_Dir_Kind =>
+         when Uploads_Not_Dir_Kind      =>
             Reply_Text
               (Client,
                500,
@@ -693,7 +742,7 @@ package body Prunt.Web_Server is
                """uploads"" is not a directory. Delete or rename the file named uploads and restart Prunt.",
                True);
 
-         when File_Not_Regular_Kind =>
+         when File_Not_Regular_Kind     =>
             Reply_Text
               (Client,
                500,
@@ -701,7 +750,7 @@ package body Prunt.Web_Server is
                "File exists and is not a regular file. Only regular files may be replaced.",
                True);
 
-         when File_Name_Malformed_Kind =>
+         when File_Name_Malformed_Kind  =>
             Reply_Text
               (Client,
                400,
@@ -709,13 +758,13 @@ package body Prunt.Web_Server is
                "File name is malformed. Only regular files directly in the uploads directory may be accessed.",
                True);
 
-         when Wrong_Directory_Kind =>
+         when Wrong_Directory_Kind      =>
             Reply_Text (Client, 400, "Bad Request", "Files may only be uploaded to the uploads directory.", True);
 
          when Wrong_Request_Target_Kind =>
             Reply_Text (Client, 400, "Bad Request", "Request target must be a file.", True);
 
-         when Unhandled_Exception_Kind =>
+         when Unhandled_Exception_Kind  =>
             declare
                Error : Exception_Occurrence;
             begin
@@ -726,7 +775,8 @@ package body Prunt.Web_Server is
    exception
       when E : others =>
          Reply_Text (Client, 500, "Internal Server Error", Exception_Information (E), True);
-         My_Logger.Log ("Unhandled exception in Web_Server.Do_Put: " & Exception_Information (E));
+         My_Logger.Log
+           (Conversions.To_Virtual_String ("Unhandled exception in Web_Server.Do_Put: " & Exception_Information (E)));
          Save_Occurrence (Client, E);
    end Do_Put;
 
@@ -782,219 +832,6 @@ package body Prunt.Web_Server is
       end if;
    end Do_Body;
 
-   function Build_Status_Schema return Unbounded_String is
-      Result : Unbounded_String := To_Unbounded_String ("{");
-   begin
-      Append (Result, """Position"":[");
-      for A in Axis_Name loop
-         Append (Result, """" & Trim (A'Image) & """");
-         if A /= Axis_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """Thermistor_Temperatures"":[");
-      for T in Thermistor_Name loop
-         Append (Result, """" & Trim (T'Image) & """");
-         if T /= Thermistor_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """Stepper_Temperatures"":[");
-      for S in Stepper_Name loop
-         Append (Result, """" & Trim (S'Image) & """");
-         if S /= Stepper_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """Board_Probe_Temperatures"":[");
-      for P in Board_Temperature_Probe_Name loop
-         Append (Result, """" & Trim (P'Image) & """");
-         if P /= Board_Temperature_Probe_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """Heater_Powers"":[");
-      for H in Heater_Name loop
-         Append (Result, """" & Trim (H'Image) & """");
-         if H /= Heater_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """Heater_Currents"":[");
-      for H in Heater_Name loop
-         Append (Result, """" & Trim (H'Image) & """");
-         if H /= Heater_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """Switch_Is_High_State"":[");
-      for I in Input_Switch_Name loop
-         Append (Result, """" & Trim (I'Image) & """");
-         if I /= Input_Switch_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """Tachometer_Frequencies"":[");
-      for F in Fan_Name loop
-         Append (Result, """" & Trim (F'Image) & """");
-         if F /= Fan_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "],");
-
-      Append (Result, """StallGuard_Values"":[");
-      for S in Stepper_Name loop
-         Append (Result, """" & Trim (S'Image) & " (SG2)"", """ & Trim (S'Image) & " (SG4)""");
-         if S /= Stepper_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "]");
-
-      Append (Result, "}");
-
-      return Result;
-   end Build_Status_Schema;
-
-   function Build_Status_Values return Unbounded_String is
-      Result : Unbounded_String := To_Unbounded_String ("{""Status"":{");
-      Pos    : constant Position := Get_Position;
-   begin
-      if Exception_Occurrence_Holder.Is_Set then
-         declare
-            Occurrence : Ada.Exceptions.Exception_Occurrence;
-            Is_Fatal   : Boolean;
-         begin
-            Exception_Occurrence_Holder.Get (Occurrence, Is_Fatal);
-            return
-              To_Unbounded_String ((if Is_Fatal then "{""Fatal_Error"":""" else "{""Recoverable_Error"":"""))
-              & JSON_Escape (Ada.Exceptions.Exception_Information (Occurrence))
-              & """}";
-         end;
-      end if;
-
-      Append (Result, """Time"":" & Clock'Image & ",");
-
-      Append (Result, """Position"":{");
-      for A in Axis_Name loop
-         Append (Result, """" & Trim (A'Image) & """:" & Pos (A)'Image);
-         if A /= Axis_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Thermistor_Temperatures"":{");
-      for T in Thermistor_Name loop
-         Append (Result, """" & Trim (T'Image) & """:" & Get_Thermistor_Temperature (T)'Image);
-         if T /= Thermistor_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Stepper_Temperatures"":{");
-      for S in Stepper_Name loop
-         Append (Result, """" & Trim (S'Image) & """:" & Get_Stepper_Temperature (S)'Image);
-         if S /= Stepper_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Board_Probe_Temperatures"":{");
-      for P in Board_Temperature_Probe_Name loop
-         Append (Result, """" & Trim (P'Image) & """:" & Get_Board_Temperature (P)'Image);
-         if P /= Board_Temperature_Probe_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Heater_Powers"":{");
-      for H in Heater_Name loop
-         Append (Result, """" & Trim (H'Image) & """:" & Get_Heater_Power (H)'Image);
-         if H /= Heater_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Heater_Currents"":{");
-      for H in Heater_Name loop
-         Append (Result, """" & Trim (H'Image) & """:" & Get_Heater_Current (H)'Image);
-         if H /= Heater_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Switch_Is_High_State"":{");
-      for I in Input_Switch_Name loop
-         Append
-           (Result,
-            """" & Trim (I'Image) & """:" & (if Get_Input_Switch_State (I) = High_State then "true" else "false"));
-         if I /= Input_Switch_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Tachometer_Frequencies"":{");
-      for F in Fan_Name loop
-         Append (Result, """" & Trim (F'Image) & """:" & Get_Tachometer_Frequency (F)'Image);
-         if F /= Fan_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """StallGuard_Values"":{");
-      for S in Stepper_Name loop
-         Append (Result, """" & Trim (S'Image) & " (SG2)"":" & Get_StallGuard_2_Value (S)'Image & ",");
-         Append (Result, """" & Trim (S'Image) & " (SG4)"":" & Get_StallGuard_4_Value (S)'Image);
-         if S /= Stepper_Name'Last then
-            Append (Result, ",");
-         end if;
-      end loop;
-      Append (Result, "},");
-
-      Append (Result, """Stepgen_Is_Paused"":" & (if Is_Stepgen_Paused then "true," else "false,"));
-
-      Append (Result, """Current_File_Name"":""" & JSON_Escape (Get_File_Name) & """,");
-
-      Append (Result, """Current_File_Line"":" & Get_Line'Image & ",");
-
-      if Startup_Manager.Get_Startup_Done then
-         Append (Result, """Startup"":""Done""");
-      elsif Startup_Manager.Get_Update_Allowed then
-         Append (Result, """Startup"":""Update running""");
-      elsif Startup_Manager.Get_Update_Required then
-         Append (Result, """Startup"":""Update required""");
-      else
-         Append (Result, """Startup"":""Waiting""");
-      end if;
-
-      Append (Result, "}}");
-
-      return Result;
-   end Build_Status_Values;
-
    overriding
    procedure WebSocket_Finalize (Client : in out Prunt_Client) is
    begin
@@ -1034,7 +871,7 @@ package body Prunt.Web_Server is
    overriding
    procedure WebSocket_Received (Client : in out Prunt_Client; Message : String) is
    begin
-      Client.Websocket_Speed_Divisor :=
+      Client.WebSocket_Speed_Divisor :=
         WebSocket_Message_Index_Type'Max (1, WebSocket_Message_Index_Type'Value (Message));
    exception
       when others =>
@@ -1092,9 +929,13 @@ package body Prunt.Web_Server is
 
       package WebSocket_Receiver_Sets is new Ada.Containers.Ordered_Sets (Prunt_Client_Access);
       WebSocket_Receivers : WebSocket_Receiver_Sets.Set;
-      Sockets_Server      : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port);
+      Sockets_Server      : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port)
+      with Unreferenced;
 
       WebSocket_Message_Index : WebSocket_Message_Index_Type := 0;
+
+      procedure Send_To_All_WebSocket_Receivers (Message : String; Ignore_Divisors : Boolean);
+      procedure Logger_Receiver (Message : Virtual_String);
 
       procedure Send_To_All_WebSocket_Receivers (Message : String; Ignore_Divisors : Boolean) is
       begin
@@ -1120,7 +961,7 @@ package body Prunt.Web_Server is
 
       Log_Handle : My_Logger.Handle;
 
-      procedure Logger_Receiver (Message : String) is
+      procedure Logger_Receiver (Message : Virtual_String) is
       begin
          Server.Log_To_WebSocket_Receivers (Message);
       end Logger_Receiver;
@@ -1177,9 +1018,10 @@ package body Prunt.Web_Server is
                WebSocket_Receivers.Delete (Client'Unrestricted_Access);
             end Remove_WebSocket_Receiver;
          or
-            accept Log_To_WebSocket_Receivers (Message : String) do
+            accept Log_To_WebSocket_Receivers (Message : Virtual_String) do
                Send_To_All_WebSocket_Receivers
-                 ("{""Log"":""" & JSON_Escape (Message) & """}", Ignore_Divisors => True);
+                 ("{""Log"":""" & Conversions.To_UTF_8_String (JSON.Escape_String (Message)) & """}",
+                  Ignore_Divisors => True);
             end Log_To_WebSocket_Receivers;
          or
             accept Reset_Server_Start_Time;
@@ -1189,7 +1031,7 @@ package body Prunt.Web_Server is
          or
             delay until Next_Status_Send;
 
-            Send_To_All_WebSocket_Receivers (To_String (Build_Status_Values), Ignore_Divisors => False);
+            Send_To_All_WebSocket_Receivers ("TODO (Status values)", Ignore_Divisors => False);
 
             Next_Status_Send := Next_Status_Send + Milliseconds (50);
             if Clock > Next_Status_Send then
