@@ -46,6 +46,8 @@ generic
         Vel_Ratio       : Dimensionless);
 
    with procedure Start_Corner (Data : Planner.Corner_Extra_Data_Array; Last_Command_Index : Command_Index);
+   --  Called when we start moving towards a corner.
+   --
    --  This is not included in `Enqueue_Command` as floating point inaccuracy could potentially cause a very short
    --  segment to not contain any command even though segments have a minimum length.
 
@@ -59,6 +61,9 @@ generic
    --  `First_Accel_Distance` is the distance length of the acceleration part of the first move. This is used to
    --  determine the position after a homing move as the loop move starts as soon as possible after the acceleration
    --  part.
+
+   --  with function Get_Loop_Move_Cycles (Expected_Command : Command_Index) return Dimensionless;
+   --  TODO
 
    Interpolation_Time : Time;
 

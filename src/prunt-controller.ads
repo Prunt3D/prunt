@@ -30,7 +30,6 @@ with Prunt.Default_Modules.Motion;
 
 private with Ada.Containers.Ordered_Maps;
 private with Ada.Containers.Indefinite_Holders;
-private with Bounded_Indefinite_Holders;
 private with Prunt.Command_Line_Arguments;
 private with Prunt.Gcode_Arguments;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
@@ -75,7 +74,7 @@ generic
    --  `Enqueue_Command` had the `Safe_Stop_After` parameter set to False. Will only be called from the same task as
    --  `Enqueue_Command`.
 
-   with procedure Reset;
+   with procedure Reset_Hardware;
    --  Reset the device to power-on state.
 
    Config_Path : String;
@@ -98,7 +97,37 @@ generic
    Extra_Modules : Module_Maps.Map := [];
 package Prunt.Controller is
 
-   procedure Start;
+   procedure Prompt_For_Update;
+   --  Prompts the user to click a button to allow a firmware update in the GUI and returns when the user clicks the
+   --  button. This is used to prevent a broken firmware updater from getting stuck in a loop and wearing out the flash
+   --  of the board being updated.
+   --
+   --  Should only be called before Run as it does not make sense to update the firmware after Prunt has started to
+   --  initialise the board.
+
+   procedure Run;
+   --  Start the controller. Does not return while the controller is running.
+
+   --  --  TODO
+   --  procedure Report_Last_Command_Executed (Index : Command_Index);
+   --  --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
+   --  --  needs to be called.
+
+   --  --  TODO
+   --  procedure Report_Loop_Cycles (Index : Command_Index; Cycles : Dimensionless);
+   --  --  Report the number of loops executed for a given loop move.
+
+   --  --  TODO
+   --  procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
+   --  --  Report an error to Prunt and cause the printer to halt.
+
+   --  --  TODO
+   --  procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True);
+   --  --  Report an error to Prunt and cause the printer to halt.
+
+   --  --  TODO
+   --  procedure Log (Message : String);
+   --  --  Log a message for the user.
 
    package My_Default_Modules is new Default_Modules (My_Modules);
 
@@ -110,6 +139,14 @@ package Prunt.Controller is
 private
 
    use type Module_Maps.Map;
+
+   pragma Warnings (Off, "use of an anonymous access type allocator");
+   Exception_Occurrence_Holder : constant access Exception_Occurrence_Holder_Type :=
+     new Exception_Occurrence_Holder_Type;
+   --  This needs to be an allocation is so that we can safely call 'Access on the Set procedure to be passed to
+   --  Ada.Task_Termination.Set_Specific_Handler. This of course leaks memory, but no one should be instantiating this
+   --  package thousands of times, which is the only time a leak will matter.
+   pragma Warnings (On, "use of an anonymous access type allocator");
 
    function Get_Modules_For_Hardware return Module_Maps.Map
    is ["Basic Config" => My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
@@ -140,18 +177,14 @@ private
 
    package Extra_Block_Resetting_Data_Holders is new
      Ada.Containers.Indefinite_Holders (Module_Types.Extra_Block_Resetting_Data'Class, Module_Types."=");
-   package Extra_Corner_Data_Holders is new
-     Bounded_Indefinite_Holders
-       (Module_Types.Extra_Corner_Data'Class,
-        Module_Types.Extra_Corner_Data_Max_Size,
-        Module_Types."=");
+   --  TODO: Maybe use bounded indefinite holders here once we switch to GCC 16.
 
    package My_Motion_Planner is new
      Motion_Planner.Planner
        (Flush_Resetting_Data_Type         => Extra_Block_Resetting_Data_Holders.Holder,
         Flush_Resetting_Data_Type_Default =>
           Extra_Block_Resetting_Data_Holders.To_Holder (Module_Types.Extra_Block_Resetting_Data'(null record)),
-        Corner_Extra_Data_Type            => Extra_Corner_Data_Holders.Holder,
+        Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
         Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
         Interpolation_Time                => Interpolation_Time,
         Stepper_Name                      => Stepper_Name,
@@ -223,5 +256,16 @@ private
       Cached_Save_Counter : Config.Save_Counter;
       Has_Cache           : Boolean := False;
    end Patch_Processor;
+
+   protected Reload_Signal is
+      entry Wait;
+      procedure Signal;
+      procedure Mark_Startup_Done;
+   private
+      Reload_Requested : Boolean := False;
+      Startup_Done     : Boolean := False;
+   end Reload_Signal;
+
+   procedure Signal_Reload;
 
 end Prunt.Controller;

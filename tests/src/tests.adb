@@ -20,8 +20,10 @@
 -----------------------------------------------------------------------------
 
 with Ada.Command_Line;
+with Prunt.Bounded_Indefinite_Vectors_Test;
 with Prunt.Config.Test;
 with Prunt.Gcode_Arguments.Test;
+with Prunt.Gcode_Queues.Test;
 with Prunt.Motion_Planner.Test;
 with Prunt.Moving_Averages.Test;
 with Prunt.Thermistors.Test;
@@ -39,12 +41,14 @@ procedure Tests is
       pragma Annotate (Xcov, Reset_Buffers);
    end Xcov_Dump;
 begin
-   Trendy_Test.Register (Prunt.Motion_Planner.Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Long_Float_Test.All_Tests);
-   Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
-   Trendy_Test.Register (Prunt.Gcode_Arguments.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Bounded_Indefinite_Vectors_Test.All_Tests);
    Trendy_Test.Register (Prunt.Config.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Gcode_Arguments.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Gcode_Queues.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Motion_Planner.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
 
    if Ada.Command_Line.Argument_Count = 1 and then Ada.Command_Line.Argument (1) = "xcov_dump" then
       pragma Annotate (Xcov, Dump_Buffers, "individual_test-tests.(startup)");

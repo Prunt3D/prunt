@@ -79,7 +79,10 @@ pragma Extensions_Allowed (On);
 
 with Ada.Containers;
 with System.Multiprocessors;
+with System.Storage_Elements;
 
+private with Ada.Containers.Bounded_Vectors;
+private with Prunt.Bounded_Indefinite_Vectors;
 private with Prunt.Motion_Planner.PH_Beziers;
 
 pragma Warnings (Off, "formal object * is not referenced");
@@ -92,7 +95,7 @@ generic
 
    Flush_Resetting_Data_Type_Default : Flush_Resetting_Data_Type;
 
-   type Corner_Extra_Data_Type is private;
+   type Corner_Extra_Data_Type (<>) is private;
    --  Data to be included with each corner such as heater targets or the current file line number.
 
    Home_Move_Minimum_Coast_Time : Time;
@@ -124,7 +127,13 @@ generic
    --  of the planner. Memory is allocated for the maximum block size during initialisation, memory is not allocated
    --  per-block.
 
-   Max_Corners_Extra_Data : Max_Corners_Extra_Data_Type := 1_000;
+   Max_Corners_Extra_Data_Count : Max_Corners_Extra_Data_Type := 1_000;
+
+   Max_Corners_Extra_Data_Storage : System.Storage_Elements.Storage_Count := 1_000_000;
+   --  The maximum amount of data in storage elements that the vector of `Corner_Extra_Data_Type` for a block may use
+   --  for its backing storage. If a `Corner_Extra_Data_Type` does not fit in a corner then it will be forced to the
+   --  next block, along with the relevant corner. If a `Corner_Extra_Data_Type` does not fit in an empty block then an
+   --  error will be raised.
 
    Max_Corners_Extra_Data_Per_Corner : Max_Corners_Extra_Data_Type := 10;
 
@@ -148,6 +157,117 @@ package Prunt.Motion_Planner.Planner is
 
    type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
    --  Defines how each axis moves in response to a step from a given motor. This is used during step simulation.
+
+   type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
+   subtype Finishing_Corners_Index is Corners_Index range 2 .. Corners_Index'Last;
+   type Corner_Extra_Data_Array_Index is
+     new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data_Per_Corner;
+
+   type Corner_Extra_Data_Array is array (Corner_Extra_Data_Array_Index range <>) of Corner_Extra_Data_Type;
+
+   type Execution_Block (N_Corners : Corners_Index := 1) is limited private;
+   --  N_Corners may be 1, in which case there are no segments.
+
+   --  First Finishing_Corner = 2. If N_Corners < 2 then these functions must not be called.
+
+   function Segment_Time (Block : Execution_Block; Finishing_Corner : Corners_Index) return Time;
+   --  Returns the total time for a given segment.
+
+   function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
+   --  Returns the distance between the two original corners for a given segment.
+
+   function Segment_Pos_At_Time
+     (Block              : Execution_Block;
+      Finishing_Corner   : Finishing_Corners_Index;
+      Time_Into_Segment  : Time;
+      Is_Past_Accel_Part : out Boolean) return Position
+   with
+     Pre =>
+       Finishing_Corner <= Block.N_Corners
+       and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
+       and then Time_Into_Segment >= 0.0 * s;
+   --  Returns the position at a given time in to a segment. Is_Past_Accel_Part indicates if the given time is past the
+   --  acceleration part of the segment.
+
+   function Segment_Vel_Ratio_At_Time
+     (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time)
+      return Dimensionless
+   with
+     Pre =>
+       Finishing_Corner <= Block.N_Corners
+       and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
+       and then Time_Into_Segment >= 0.0 * s;
+   --  Returns the velocity at the given time in to a segment divided by the target velocity for the given segment.
+   --  Always returns 1.0 inside dwell parts.
+
+   function Next_Block_Pos (Block : Execution_Block) return Position;
+   --  Returns the start position of the next block. At the end of a block, the motion executor should assume it is at
+   --  this position, even if is not.
+
+   function Block_Start_Pos (Block : Execution_Block) return Position;
+   --  Returns the start position of this block.
+
+   function Flush_Resetting_Data (Block : Execution_Block) return Flush_Resetting_Data_Type;
+   --  Return the data passed to the Enqueue procedure. This data resets for each block.
+
+   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
+   with Pre => Finishing_Corner <= Block.N_Corners;
+   --  Returns the length of the acceleration part of a segment.
+
+   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array
+   with Pre => Finishing_Corner <= Block.N_Corners;
+   --  Returns the extra data for a corner.
+   --
+   --  TODO: Replace with a `Process` procedure which takes a `access procedure (in out Corner_Extra_Data_Type)` so we
+   --  can avoid some copies here.
+
+   function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters;
+   --  Returns the kinematic parameters used for the given block.
+
+   function Is_Homing_Move (Block : Execution_Block) return Boolean;
+   --  Returns True if the block contains a homing move a specified by the relevant flush command.
+
+   procedure Enqueue_Move
+     (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False);
+
+   procedure Enqueue_Corner_Extra_Data (Data : aliased Corner_Extra_Data_Type);
+
+   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False);
+
+   procedure Enqueue_Flush_And_Reset_Position
+     (Data           : Flush_Resetting_Data_Type;
+      Pos            : Position;
+      Is_Homing_Move : Boolean := False;
+      Ignore_Bounds  : Boolean := False);
+
+   procedure Enqueue_Flush_And_Change_Kinematic_Parameters
+     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters; Is_Homing_Move : Boolean := False);
+
+   procedure Reset;
+
+   procedure Dequeue
+     (Block : out Execution_Block; Timed_Out : out Boolean; Waiting_For_Step_Rate_Limiter : out Boolean);
+   --  Pop a block from the queue of processed blocks. If a block is not ready then Timed_Out will be set to True,
+   --  otherwise it will be set to False and Block will be set. If Waiting_For_Step_Rate_Limiter is set to True then
+   --  the reason for time time out is the step rate limiting step.
+
+   Out_Of_Bounds_Error : exception;
+
+   task Runner
+     with CPU => Runner_CPU, Storage_Size => 32 * 1024 * 1024 is
+      --  Large Storage_Size to allow for large shapers in the step rate limiter.
+      entry Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map);
+      entry Reset_Do_Not_Call_From_Other_Packages;
+      --  Call the Reset procedure rather than this entry to avoid blocking and reset the preprocessor.
+      --  TODO: There must be some way to hide this while still exposing the task.
+      entry Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block);
+      --  Call the Dequeue procedure rather than this entry as it may be replaced with a queue in the future.
+   end Runner;
+
+private
+
+   In_Step_Rate_Limiter : Boolean := False
+   with Atomic, Volatile;
 
    type Command_Kind is
      (Move_Kind, Corner_Extra_Data_Kind, Flush_Kind, Flush_And_Reset_Position_Kind, Flush_And_Change_Parameters_Kind);
@@ -178,104 +298,27 @@ package Prunt.Motion_Planner.Planner is
             Feedrate    : Velocity;
 
          when Corner_Extra_Data_Kind =>
-            Corner_Extra_Data : Corner_Extra_Data_Type;
+            --  We have to transfer the extra data into the queue separately to avoid requiring Unchecked_Access as it
+            --  is an indefinite type which we can not store in the record. We use this variant as a flag.
+            null;
       end case;
    end record;
-
-   type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
-   type Corner_Extra_Data_Array_Index is
-     new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data_Per_Corner;
-
-   type Corner_Extra_Data_Array is array (Corner_Extra_Data_Array_Index range <>) of Corner_Extra_Data_Type;
-
-   type Execution_Block (N_Corners : Corners_Index := 1) is private;
-   --  N_Corners may be 1, in which case there are no segments.
-
-   --  First Finishing_Corner = 2. If N_Corners < 2 then these functions must not be called.
-
-   function Segment_Time (Block : Execution_Block; Finishing_Corner : Corners_Index) return Time;
-   --  Returns the total time for a given segment.
-
-   function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
-   --  Returns the distance between the two original corners for a given segment.
-
-   function Segment_Pos_At_Time
-     (Block              : Execution_Block;
-      Finishing_Corner   : Corners_Index;
-      Time_Into_Segment  : Time;
-      Is_Past_Accel_Part : out Boolean) return Position
-   with Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and then Time_Into_Segment >= 0.0 * s;
-   --  Returns the position at a given time in to a segment. Is_Past_Accel_Part indicates if the given time is past the
-   --  acceleration part of the segment.
-
-   function Segment_Vel_Ratio_At_Time
-     (Block : Execution_Block; Finishing_Corner : Corners_Index; Time_Into_Segment : Time) return Dimensionless
-   with Pre => Time_Into_Segment <= Segment_Time (Block, Finishing_Corner) and then Time_Into_Segment >= 0.0 * s;
-   --  Returns the velocity at the given time in to a segment divided by the target velocity for the given segment.
-   --  Always returns 1.0 inside dwell parts.
-
-   function Next_Block_Pos (Block : Execution_Block) return Position;
-   --  Returns the start position of the next block. At the end of a block, the motion executor should assume it is at
-   --  this position, even if is not.
-
-   function Block_Start_Pos (Block : Execution_Block) return Position;
-   --  Returns the start position of this block.
-
-   function Flush_Resetting_Data (Block : Execution_Block) return Flush_Resetting_Data_Type;
-   --  Return the data passed to the Enqueue procedure. This data resets for each block.
-
-   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
-   --  Returns the length of the acceleration part of a segment.
-
-   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array;
-   --  Returns the extra data for a corner. It is illegal to call this function with Corner = 1.
-
-   procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
-   --  Send a new command to the planner queue. May be called before Setup, but will block once the queue if full.
-
-   function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters;
-   --  Returns the kinematic parameters used for the given block.
-
-   function Is_Homing_Move (Block : Execution_Block) return Boolean;
-   --  Returns True if the block contains a homing move a specified by the relevant flush command.
-
-   procedure Reset;
-
-   procedure Dequeue
-     (Block : out Execution_Block; Timed_Out : out Boolean; Waiting_For_Step_Rate_Limiter : out Boolean);
-   --  Pop a block from the queue of processed blocks. If a block is not ready then Timed_Out will be set to True,
-   --  otherwise it will be set to False and Block will be set. If Waiting_For_Step_Rate_Limiter is set to True then
-   --  the reason for time time out is the step rate limiting step.
-
-   Out_Of_Bounds_Error : exception;
-
-   task Runner
-     with CPU => Runner_CPU, Storage_Size => 32 * 1024 * 1024 is
-      --  Large Storage_Size to allow for large shapers in the step rate limiter.
-      entry Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map);
-      entry Reset_Do_Not_Call_From_Other_Packages;
-      --  Call the Reset procedure rather than this entry to avoid blocking and reset the preprocessor.
-      --  TODO: There must be some way to hide this while still exposing the task.
-      entry Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block);
-      --  Call the Dequeue procedure rather than this entry as it may be replaced with a queue in the future.
-   end Runner;
-
-private
-
-   type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data;
-   type Corners_Extra_Data_End_Index is new Max_Corners_Extra_Data_Type'Base range 0 .. Max_Corners_Extra_Data;
-
-   In_Step_Rate_Limiter : Boolean := False
-   with Atomic, Volatile;
 
    use Prunt.Motion_Planner.PH_Beziers;
 
    --  Preprocessor
    type Block_Plain_Corners is array (Corners_Index range <>) of Scaled_Position;
    type Block_Segment_Feedrates is array (Corners_Index range <>) of Velocity;
-   type Block_Corners_Extra_Data is array (Corners_Extra_Data_Index) of Corner_Extra_Data_Type;
-   type Block_Corners_Extra_Data_End_Indices is array (Corners_Index range <>) of Corners_Extra_Data_End_Index;
+   type Block_Corners_Extra_Data_End_Indices is
+     array (Corners_Index range <>) of Corner_Extra_Data_Vectors.Extended_Index;
    type Block_Corner_Dwell_Times is array (Corners_Index range <>) of Time;
+
+   type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data;
+   package Corner_Extra_Data_Vectors is new
+     Bounded_Indefinite_Vectors
+       (Element_Type => Corner_Extra_Data_Type,
+        Index_Type   => Corners_Extra_Data_Index,
+        Storage_Size => Max_Corners_Extra_Data_Storage);
 
    --  Corner_Blender
    type Block_Beziers is array (Corners_Index range <>) of PH_Bezier;
@@ -302,7 +345,7 @@ private
       Flush_Resetting_Data           : Flush_Resetting_Data_Type;
       Next_Block_Pos                 : Scaled_Position;
       Params                         : Kinematic_Parameters;
-      Corners_Extra_Data             : Block_Corners_Extra_Data;
+      Corners_Extra_Data             : Corner_Extra_Data_Vectors.Vector;
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices (1 .. N_Corners);
       Corners                        : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
       Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);

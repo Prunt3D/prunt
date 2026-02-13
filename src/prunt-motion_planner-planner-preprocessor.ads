@@ -32,7 +32,8 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
    --  Initialise the preprocessor with the initial kinematic parameters. This must be called before any other
    --  operations.
 
-   procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
+   procedure Enqueue
+     (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null);
    --  Add a new command to the processing queue. Commands are processed in FIFO order. If `Ignore_Bounds` is True,
    --  position bounds checking is bypassed for this command (useful for homing operations). May block if the queue is
    --  full.
@@ -52,17 +53,28 @@ private
 
    protected Command_Queue is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
-      entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False);
+      entry Enqueue
+        (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
+      with Pre => (if Comm.Kind = Corner_Extra_Data_Kind then Extra /= null else Extra = null);
+      entry High_Priority_Enqueue
+        (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
+      with Pre => (if Comm.Kind = Corner_Extra_Data_Kind then Extra /= null else Extra = null);
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean);
-      --  `Reset_Called` should not be part of Dequeue, but GNAT does not seem to work correctly when using a
-      --  select-then-abort with two entries to the same object, as you would with a separate `Enter_When_Reset` entry.
+      function Dequeue_Extra_Data return Corner_Extra_Data_Type;
+      procedure Finish_Dequeue;
+      procedure Cancel_Dequeue;
       procedure Reset;
    private
+      procedure Append_To_Queue (Comm : Command);
+
       Setup_Done            : Boolean := False;
+      In_Dequeue            : Boolean := False;
       Is_Full               : Boolean := False;
       Next_Read, Next_Write : Count_Type := Command_Queue_Array_Type'First;
       Elements              : Command_Queue_Array_Type;
       Current_Params        : Kinematic_Parameters;
+      Extra_Data_Storage    : Corner_Extra_Data_Vectors.Vector;
+      Retry_High_Priority   : Boolean := True;
    end Command_Queue;
 
    Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
@@ -70,7 +82,7 @@ private
    type Block_Plain_Corners_Access is access Block_Plain_Corners with Storage_Pool => Pool;
    type Block_Corner_Dwell_Times_Access is access Block_Corner_Dwell_Times with Storage_Pool => Pool;
    type Block_Segment_Feedrates_Access is access Block_Segment_Feedrates with Storage_Pool => Pool;
-   type Block_Corners_Extra_Data_Access is access Block_Corners_Extra_Data with Storage_Pool => Pool;
+   type Block_Corners_Extra_Data_Access is access Corner_Extra_Data_Vectors.Vector with Storage_Pool => Pool;
    type Block_Corners_Extra_Data_End_Indices_Access is access Block_Corners_Extra_Data_End_Indices
    with Storage_Pool => Pool;
 
@@ -84,10 +96,10 @@ private
       Current_Params                 : Kinematic_Parameters;
       Corners                        : Block_Plain_Corners_Access := new Block_Plain_Corners (1 .. Corners_Index'Last);
       Corner_Dwell_Times             : Block_Corner_Dwell_Times_Access :=
-        new Block_Corner_Dwell_Times (1 .. Corners_Index'Last);
+        new Block_Corner_Dwell_Times (2 .. Corners_Index'Last);
       Segment_Feedrates              : Block_Segment_Feedrates_Access :=
         new Block_Segment_Feedrates (2 .. Corners_Index'Last);
-      Corners_Extra_Data             : Block_Corners_Extra_Data_Access := new Block_Corners_Extra_Data;
+      Corners_Extra_Data             : Block_Corners_Extra_Data_Access := new Corner_Extra_Data_Vectors.Vector;
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices_Access :=
         new Block_Corners_Extra_Data_End_Indices (1 .. Corners_Index'Last);
    end Runner;

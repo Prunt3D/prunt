@@ -20,13 +20,19 @@
 -----------------------------------------------------------------------------
 
 with Ada.Tags;
+with Ada.Task_Termination;
 with VSS.Strings.Conversions;
 
 package body Prunt.Controller is
 
    pragma Extensions_Allowed (On);
 
-   procedure Start is
+   procedure Prompt_For_Update is
+   begin
+      null; --  TODO
+   end Prompt_For_Update;
+
+   procedure Run is
       Active_Module_Instances : Module_Instance_Maps.Map := [];
       My_Status_Data          : Status_Manager.Status_Data_Collection;
 
@@ -44,18 +50,35 @@ package body Prunt.Controller is
 
          if Had_Error then
             My_Logger.Log ("Prunt could not start due to configuration errors.");
-
-         --  TODO: Clean up after failed start.
-
+            Active_Module_Instances.Reverse_Clear;
+         else
+            for M of Active_Module_Instances loop
+               M.Get.Start;
+            end loop;
          end if;
       end Attempt_Start;
 
    begin
-      My_Logger.Log
-        (Conversions.To_Virtual_String ("Gcode dispatch map size: " & Active_Module_Gcode_Dispatch_Map.Length'Image));
+      Ada.Task_Termination.Set_Dependents_Fallback_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
 
-      Attempt_Start; --  TODO: Clean up before each start and reset config file
-   end Start;
+      Reload_Signal.Mark_Startup_Done;
+
+      Main : loop
+         Attempt_Start;
+
+         select
+            Reload_Signal.Wait;
+            My_Logger.Log ("Reload requested. Resetting...");
+            Exception_Occurrence_Holder.Reset;
+            Active_Config_File.Reset_Live_To_Stored;
+            Reset_Hardware;
+            --  My_Web_Server.Reset; -- TODO
+         then abort
+            Exception_Occurrence_Holder.Enter_When_Fatal_Set;
+            exit Main;
+         end select;
+      end loop Main;
+   end Run;
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
@@ -145,6 +168,7 @@ package body Prunt.Controller is
       use Gcode_Arguments;
    begin
       pragma Warnings (Off, "comparison on unordered enumeration type ""Gcode_Identifier_Argument_Index""");
+      --  We do not care what the order is here, we just need something to sort with.
       if Left.Identifier.Argument /= Right.Identifier.Argument then
          return Left.Identifier.Argument < Right.Identifier.Argument;
       elsif Left.Identifier.Number /= Right.Identifier.Number then
@@ -250,6 +274,35 @@ package body Prunt.Controller is
       end if;
    end Finish_Planner_Block;
 
+   protected body Reload_Signal is
+      entry Wait when Reload_Requested is
+      begin
+         Reload_Requested := False;
+      end Wait;
+
+      procedure Signal is
+      begin
+         if Startup_Done then
+            Reload_Requested := True;
+         else
+            --  Nothing has actually started yet, so there's nothing to restart. We reload the web server anyway to
+            --  prevent any confusion when the reload button does nothing.
+            --  My_Web_Server.Reset; --  TODO
+            null;
+         end if;
+      end Signal;
+
+      procedure Mark_Startup_Done is
+      begin
+         Startup_Done := True;
+      end Mark_Startup_Done;
+   end Reload_Signal;
+
+   procedure Signal_Reload is
+   begin
+      Reload_Signal.Signal;
+   end Signal_Reload;
+
 begin
    Active_Module_Gcode_Dispatch_Map := [];
 
@@ -292,4 +345,7 @@ begin
          end;
       end loop;
    end loop;
+
+   My_Logger.Log
+     (Conversions.To_Virtual_String ("Gcode dispatch map size: " & Active_Module_Gcode_Dispatch_Map.Length'Image));
 end Prunt.Controller;

@@ -286,4 +286,13 @@ package Prunt is
 
    function "+" (Left : String) return Virtual_String renames Conversions.To_Virtual_String;
 
+   function Next_Test_Filename return String;
+   function Next_Test_Filename return Virtual_String;
+
+   protected Test_File_Name_Generator is
+      procedure Get_Next (Name : out Virtual_String);
+   private
+      Counter : Natural := 0;
+   end Test_File_Name_Generator;
+
 end Prunt;

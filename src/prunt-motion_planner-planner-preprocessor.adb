@@ -35,8 +35,32 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Setup_Done := True;
       end Setup;
 
-      entry Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) when not Is_Full is
+      procedure Append_To_Queue (Comm : Command) is
       begin
+         Elements (Next_Write) := Comm;
+
+         if Next_Write = Elements'Last then
+            Next_Write := Elements'First;
+         else
+            Next_Write := @ + 1;
+         end if;
+
+         if Next_Write = Next_Read then
+            Is_Full := True;
+         end if;
+      end Append_To_Queue;
+
+      entry Enqueue
+        (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
+        when not Is_Full and then High_Priority_Enqueue'Count = 0
+      is
+      begin
+         if High_Priority_Enqueue'Count /= 0 then
+            --  This is should never be triggered inside a protected object, but it could catch some errors if this is
+            --  converted to a task and High_Priority_Enqueue is called directly for some reason.
+            raise Constraint_Error with "High priority queue is not empty.";
+         end if;
+
          if not Setup_Done then
             return;
          end if;
@@ -46,7 +70,20 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                null;
 
             when Corner_Extra_Data_Kind           =>
-               null;
+               if not Extra_Data_Storage.Is_Empty then
+                  --  TODO: We should implement a ring buffer for this so we can store more than a single element at a
+                  --  time.
+                  requeue High_Priority_Enqueue;
+               end if;
+
+               begin
+                  Extra_Data_Storage.Append (Extra.all);
+               exception
+                  when Corner_Extra_Data_Vectors.Out_Of_Space_Error =>
+                     --  TODO: Once we implement a ring buffer for this, we can call requeue here:
+                     --  requeue High_Priority_Enqueue;
+                     raise Constraint_Error with "Extra corner data is too big.";
+               end;
 
             when Flush_And_Reset_Position_Kind    =>
                if not Ignore_Bounds then
@@ -72,18 +109,37 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end case;
          --  Checking happens here so we can provide instant feedback to the user when g-code is typed in manually.
 
-         Elements (Next_Write) := Comm;
-
-         if Next_Write = Elements'Last then
-            Next_Write := Elements'First;
-         else
-            Next_Write := @ + 1;
-         end if;
-
-         if Next_Write = Next_Read then
-            Is_Full := True;
-         end if;
+         Append_To_Queue (Comm);
       end Enqueue;
+
+      entry High_Priority_Enqueue
+        (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
+        when not Is_Full and then Retry_High_Priority and then Extra_Data_Storage.Is_Empty
+        --  TODO: Remove Is_Empty check once we have a ring buffer.
+      is
+      begin
+         if not Setup_Done then
+            return;
+         end if;
+
+         Retry_High_Priority := False;
+
+         case Comm.Kind is
+            when Corner_Extra_Data_Kind =>
+               begin
+                  Extra_Data_Storage.Append (Extra.all);
+               exception
+                  when Corner_Extra_Data_Vectors.Out_Of_Space_Error =>
+                     requeue High_Priority_Enqueue;
+               end;
+
+            when others                 =>
+               raise Program_Error with "Should be unreachable.";
+
+         end case;
+
+         Append_To_Queue (Comm);
+      end High_Priority_Enqueue;
 
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean)
         when Is_Full or else Next_Read /= Next_Write or else not Setup_Done
@@ -95,7 +151,32 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             return;
          end if;
 
+         if In_Dequeue then
+            raise Constraint_Error with "Already in dequeue transaction.";
+         end if;
+
          Comm := Elements (Next_Read);
+         In_Dequeue := True;
+      end Dequeue;
+
+      function Dequeue_Extra_Data return Corner_Extra_Data_Type is
+      begin
+         return Extra_Data_Storage.Element (Corners_Extra_Data_Index'First);
+         --  TODO: Will need to be changed for ring buffer.
+      end Dequeue_Extra_Data;
+
+      procedure Finish_Dequeue is
+         Current_Comm : Command := Elements (Next_Read);
+      begin
+         if not In_Dequeue then
+            raise Constraint_Error with "Not in dequeue transaction.";
+         end if;
+
+         if Current_Comm.Kind = Corner_Extra_Data_Kind then
+            Extra_Data_Storage.Clear;
+         --  TODO: Will need to be changed for ring buffer.
+
+         end if;
 
          if Next_Read = Elements'Last then
             Next_Read := Elements'First;
@@ -103,20 +184,34 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             Next_Read := @ + 1;
          end if;
          Is_Full := False;
-      end Dequeue;
+         In_Dequeue := False;
+         Retry_High_Priority := True;
+      end Finish_Dequeue;
+
+      procedure Cancel_Dequeue is
+      begin
+         if not In_Dequeue then
+            raise Constraint_Error with "Not in dequeue transaction.";
+         end if;
+         In_Dequeue := False;
+      end Cancel_Dequeue;
 
       procedure Reset is
       begin
          Setup_Done := False;
          Is_Full := False;
+         In_Dequeue := False;
          Next_Read := Command_Queue_Array_Type'First;
          Next_Write := Command_Queue_Array_Type'First;
+         Extra_Data_Storage.Clear;
+         Retry_High_Priority := True;
       end Reset;
    end Command_Queue;
 
-   procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
+   procedure Enqueue
+     (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null) is
    begin
-      Command_Queue.Enqueue (Comm, Ignore_Bounds);
+      Command_Queue.Enqueue (Comm, Ignore_Bounds, Extra);
    end Enqueue;
 
    procedure Reset is
@@ -164,11 +259,13 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             raise Constraint_Error with "Setup not done.";
          end if;
 
+         Corners_Extra_Data.Clear;
+
          Next_Params := Current_Params;
 
          Corners (1) := Last_Pos / Current_Params.Axial_Scaler;
 
-         loop
+         Read_In_Commands : loop
             declare
                Next_Command : Command;
             begin
@@ -182,32 +279,50 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                case Next_Command.Kind is
                   when Flush_Kind                       =>
+                     Command_Queue.Finish_Dequeue;
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      Is_Homing_Move := Next_Command.Is_Homing_Move;
-                     exit;
+                     exit Read_In_Commands;
 
                   when Flush_And_Reset_Position_Kind    =>
+                     Command_Queue.Finish_Dequeue;
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      Last_Pos := Next_Command.Reset_Pos;
                      Is_Homing_Move := Next_Command.Is_Homing_Move;
-                     exit;
+                     exit Read_In_Commands;
 
                   when Flush_And_Change_Parameters_Kind =>
+                     Command_Queue.Finish_Dequeue;
                      Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                      Next_Params := Limit_Higher_Order_Params (Next_Command.New_Params);
                      Is_Homing_Move := Next_Command.Is_Homing_Move;
-                     exit;
+                     exit Read_In_Commands;
 
                   when Corner_Extra_Data_Kind           =>
-                     Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data_End_Index (Next_Extra_Data);
-                     Corners_Extra_Data (Next_Extra_Data) := Next_Command.Corner_Extra_Data;
-                     exit when
+                     --  TODO: If a corner does not fit then put in a blank corner here and force the relevant corner
+                     --  over to the next block. If there is not extra corner data and the corner does not fit then
+                     --  raise an error.
+                     begin
+                        Corners_Extra_Data.Append (Command_Queue.Dequeue_Extra_Data);
+                     exception
+                        when Corner_Extra_Data_Vectors.Out_Of_Space_Error =>
+                           if Corners_Extra_Data.Is_Empty then
+                              raise Constraint_Error with "Extra corner data too big.";
+                           end if;
+                           Command_Queue.Cancel_Dequeue;
+                           exit Read_In_Commands;
+                     end;
+                     Command_Queue.Finish_Dequeue;
+                     Corners_Extra_Data_End_Indices (N_Corners) :=
+                       Next_Extra_Data;
+                     exit Read_In_Commands when
                        Extra_Data_This_Corner = Max_Corners_Extra_Data_Type'Base (Max_Corners_Extra_Data_Per_Corner);
                      Extra_Data_This_Corner := @ + 1;
-                     exit when Next_Extra_Data = Corners_Extra_Data_Index'Last;
+                     exit Read_In_Commands when Next_Extra_Data = Corners_Extra_Data_Index'Last;
                      Next_Extra_Data := @ + 1;
 
                   when Move_Kind                        =>
+                     Command_Queue.Finish_Dequeue;
                      Extra_Data_This_Corner := 0;
                      N_Corners := N_Corners + 1;
                      Corners (N_Corners) := Next_Command.Pos / Current_Params.Axial_Scaler;
@@ -216,17 +331,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                      Last_Pos := Next_Command.Pos;
 
-                     exit when N_Corners = Corners_Index'Last;
+                     exit Read_In_Commands when N_Corners = Corners_Index'Last;
                end case;
             end;
-         end loop;
+         end loop Read_In_Commands;
 
          Block_N_Corners := N_Corners;
          --  This is hacky and not portable, but if we try to assign to the entire record as you normally would then
          --  GCC insists on creating a whole Execution_Block on the stack.
 
          Block.Corners := Corners (1 .. N_Corners);
-         Block.Corners_Extra_Data := Corners_Extra_Data.all;
          Block.Corners_Extra_Data_End_Indices := Corners_Extra_Data_End_Indices (1 .. N_Corners);
          Block.Original_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
          Block.Limited_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
@@ -235,6 +349,20 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Params := Current_Params;
          Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
          Block.Is_Homing_Move := Is_Homing_Move;
+
+               Block.Corners_Extra_Data.Clear;
+         declare
+            procedure Append (Item : in out Corner_Extra_Data_Type);
+
+            procedure Append (Item : in out Corner_Extra_Data_Type) is
+            begin
+               Block.Corners_Extra_Data.Append (Item);
+            end Append;
+         begin
+            Corners_Extra_Data.Process_Range
+              (Corners_Extra_Data_Index'First, Corners_Extra_Data.Last_Index, Append'Access);
+         end;
+         Corners_Extra_Data.Clear;
 
          if Is_Homing_Move then
             Block.Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];

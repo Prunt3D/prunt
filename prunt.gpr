@@ -169,9 +169,11 @@ project Prunt is
          "Prunt.Logger",
          "Prunt.Module_Types",
          "Prunt.Status_Manager",
+         "Prunt.Step_Generator",
          "Prunt.Update_Checker",
          "Prunt.Web_Server",
-         "Prunt");
+         "Prunt",
+         "Bounded_Indefinite_Holders");
    end Coverage;
 
    package Pretty_Printer is

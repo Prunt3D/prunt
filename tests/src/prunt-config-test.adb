@@ -78,6 +78,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
+      File_Name : constant String := Next_Test_Filename;
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
@@ -86,7 +87,7 @@ package body Prunt.Config.Test is
                 ["i" =>
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
-      File : constant Config_File := Create ("/tmp/prunt_tests/Test_Apply_Patch_Errors.json", Schemas);
+      File : constant Config_File := Create (File_Name, Schemas);
       Errors : Config_Error_Vectors.Vector;
       Output : Virtual_String;
 
@@ -115,8 +116,7 @@ package body Prunt.Config.Test is
       T.Assert (Errors.Is_Empty, "Should not report error for valid patch");
       T.Assert (File.Get_Data ("M").Get (["i"]) = Long_Long_Integer'(0), "Patch not applied to live config");
       T.Assert
-        (Create ("/tmp/prunt_tests/Test_Apply_Patch_Errors.json", Schemas).Get_Data ("M").Get (["i"])
-         = Long_Long_Integer'(5),
+        (Create (File_Name, Schemas).Get_Data ("M").Get (["i"]) = Long_Long_Integer'(5),
          "Patch applied to stored config");
    end Test_Apply_Patch_Errors;
 
@@ -126,9 +126,9 @@ package body Prunt.Config.Test is
 
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      File    : constant Config_File := Create ("/tmp/prunt_tests/Test_Apply_Untrusted_Patch_Empty.json", Schemas);
-      Output  : Virtual_String;
-      Errors  : Config_Error_Vectors.Vector;
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
+      Output : Virtual_String;
+      Errors : Config_Error_Vectors.Vector;
 
       Apply_Untrusted_Patch (File, "{""Prunt config version"": 1, ""Config"": {}}", Output, Errors);
       T.Assert (Errors.Is_Empty, "Should not report error");
@@ -146,9 +146,8 @@ package body Prunt.Config.Test is
                 ["i" =>
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
-      Output  : Virtual_String;
-      File : constant Config_File :=
-        Create ("/tmp/prunt_tests/Test_Apply_Untrusted_Patch_Invalid_Module.json", Schemas);
+      Output : Virtual_String;
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Errors : Config_Error_Vectors.Vector;
 
       File.Apply_Untrusted_Patch ("{""Config"": {""M"": []}}", Output, Errors);
@@ -167,8 +166,7 @@ package body Prunt.Config.Test is
                 ["i" =>
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
-      File    : constant Config_File :=
-        Create ("/tmp/prunt_tests/Test_Apply_Untrusted_Patch_Invalid_Module_Structure.json", Schemas);
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Errors : Config_Error_Vectors.Vector;
       Output : Virtual_String;
 
@@ -183,7 +181,7 @@ package body Prunt.Config.Test is
 
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      File : constant Config_File := Create ("/tmp/prunt_tests/Test_Apply_Untrusted_Patch_No_Config.json", Schemas);
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Errors : Config_Error_Vectors.Vector;
       Output : Virtual_String;
 
@@ -195,7 +193,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -203,8 +201,8 @@ package body Prunt.Config.Test is
                 ["i" =>
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 100, Unit => "", Default => 0)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Backup.json";
-      File     : constant Config_File := Create (Filename, Schemas);
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Schemas);
 
       for I in 1 .. 25 loop
          Data : constant Config_Data := File.Get_Data ("M");
@@ -215,12 +213,11 @@ package body Prunt.Config.Test is
       for I in 1 .. 20 loop
          Backup_Filename : constant String :=
            Filename & "_backup_" & Ada.Strings.Fixed.Trim (I'Image, Ada.Strings.Both);
-         Backup_File     : constant Config_File := Create (Backup_Filename, Schemas);
-         Data            : constant Config_Data := Backup_File.Get_Data ("M");
-         Expected_Value  : constant Long_Long_Integer := Long_Long_Integer (25 - I);
+         Backup_File : constant Config_File := Create (Backup_Filename, Schemas);
+         Data : constant Config_Data := Backup_File.Get_Data ("M");
+         Expected_Value : constant Long_Long_Integer := Long_Long_Integer (25 - I);
 
-         T.Assert
-           (Data.Get ([1 => "i"]) = Expected_Value, "Backup " & I'Image & " has value " & Expected_Value'Image);
+         T.Assert (Data.Get ([1 => "i"]) = Expected_Value, "Backup " & I'Image & " has value " & Expected_Value'Image);
       end loop;
    end Test_Backup;
 
@@ -228,12 +225,12 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
               Top_Level_Items => ["b" => Config_Property_Parameters_Boolean'(Description => "", Default => False)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Not_Saved_Without_Call.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -256,9 +253,11 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map := ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Ref_Count.json";
-      Data     : Config_Data with Unreferenced;
+      Schemas : constant Config_Schema_Maps.Map :=
+        ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
+      Filename : constant String := Next_Test_Filename;
+      Data : Config_Data
+      with Unreferenced;
 
       declare
          File       : constant Config_File := Create (Filename, Schemas);
@@ -278,12 +277,12 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
               Top_Level_Items => ["b" => Config_Property_Parameters_Boolean'(Description => "", Default => False)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Set_Get_Boolean.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -307,7 +306,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -315,7 +314,7 @@ package body Prunt.Config.Test is
                 ["f" =>
                    Config_Property_Parameters_Float'
                      (Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 5.5)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Set_Get_Dimensionless.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -348,14 +347,14 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
               Top_Level_Items =>
                 ["d" =>
                    Config_Property_Parameters_Discrete'(Description => "", Default => "a", Options => ["a", "b"])])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Set_Get_Discrete.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -388,7 +387,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -396,7 +395,7 @@ package body Prunt.Config.Test is
                 ["f" =>
                    Config_Property_Parameters_Float'
                      (Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 5.5)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Set_Get_Float.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -429,7 +428,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -437,7 +436,7 @@ package body Prunt.Config.Test is
                 ["r" =>
                    Config_Property_Parameters_Float_Ratio'
                      (Description => "", Min => 0.0, Max => 2.0, Default => (Numerator => 1.0, Denominator => 2.0))])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Set_Get_Float_Ratio.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -475,7 +474,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -483,7 +482,7 @@ package body Prunt.Config.Test is
                 ["i" =>
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 5)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Set_Get_Integer.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -516,7 +515,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -529,7 +528,7 @@ package body Prunt.Config.Test is
                         ["a" =>
                            Config_Property_Parameters_Integer'
                              (Description => "", Min => 0, Max => 10, Unit => "", Default => 1)])])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Config_Data_Set_Get_Variant.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
@@ -554,7 +553,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schema  : constant Config_Property_Maps.Map :=
+      Schema : constant Config_Property_Maps.Map :=
         ["b"  => Config_Property_Parameters_Boolean'(Description => "", Default => True),
          "d"  => Config_Property_Parameters_Discrete'(Description => "", Default => "a", Options => ["a", "b"]),
          "i"  =>
@@ -629,8 +628,8 @@ package body Prunt.Config.Test is
                          "b" =>
                            Config_Property_Parameters_Integer'
                              (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])])];
-      File    : constant Config_File := Create ("/tmp/prunt_tests/test_deep_set_repeated.json", Schemas);
-      Data    : constant Config_Data := File.Get_Data ("M");
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
+      Data : constant Config_Data := File.Get_Data ("M");
 
       Data.Set (Config_Data_Paths.Vector'(["v", "Children", "a"]), True);
       --  Same parent, should not recreate parent.
@@ -647,7 +646,8 @@ package body Prunt.Config.Test is
    procedure Test_Finalize_Uninitialized (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
-      File : Config_File with Unreferenced;
+      File : Config_File
+      with Unreferenced;
       null;
    end Test_Finalize_Uninitialized;
 
@@ -658,9 +658,8 @@ package body Prunt.Config.Test is
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
-             (Version => 1,
-             Top_Level_Items => ["u" => Config_Property_Parameters_Unknown'(Description => "")])];
-      File : Config_File := Create ("/tmp/prunt_tests/Test_Generate_Schema_Unknown_Property.json", Schemas)
+             (Version => 1, Top_Level_Items => ["u" => Config_Property_Parameters_Unknown'(Description => "")])];
+      File : Config_File := Create (Next_Test_Filename, Schemas)
       with Unreferenced;
 
       T.Fail ("Should have raised Constraint_Error");
@@ -676,9 +675,9 @@ package body Prunt.Config.Test is
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
-             (Version => 1,
-             Top_Level_Items => ["u" => Config_Property_Parameters_Unknown'(Description => "")])];
-      S : constant Virtual_String := Generate_Schemas_String (Schemas) with Unreferenced;
+             (Version => 1, Top_Level_Items => ["u" => Config_Property_Parameters_Unknown'(Description => "")])];
+      S : constant Virtual_String := Generate_Schemas_String (Schemas)
+      with Unreferenced;
 
       T.Fail ("Should have raised Constraint_Error");
    exception
@@ -698,7 +697,7 @@ package body Prunt.Config.Test is
                 ["i" =>
                    Config_Property_Parameters_Integer'
                      (Description => "Test Integer", Min => 0, Max => 10, Unit => "", Default => 5)])];
-      File : constant Config_File := Create ("/tmp/prunt_tests/Test_Get_Data_String.json", Schemas);
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Data_JSON : constant JSON_Value := Read (File.Get_Data_String);
 
       T.Assert (Data_JSON.Has_Field ("Prunt config version"));
@@ -712,8 +711,8 @@ package body Prunt.Config.Test is
       T.Register;
 
       Val_Float : constant JSON_Value := Create (Long_Float'(1.23));
-      Val_Int   : constant JSON_Value := Create (Long_Long_Integer'(1));
-      Val_Obj   : constant JSON_Value := Create_Object;
+      Val_Int : constant JSON_Value := Create (Long_Long_Integer'(1));
+      Val_Obj : constant JSON_Value := Create_Object;
 
       Val_Obj.Set_Field ("f", Val_Float);
 
@@ -726,13 +725,14 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Get_Empty_Path.json";
-      File     : constant Config_File := Create (Filename, Schemas);
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Schemas);
 
       begin
-         Val : JSON_Value := File.Internal.Get.Get ("M", Config_Data_Paths.Empty_Vector) with Unreferenced;
+         Val : JSON_Value := File.Internal.Get.Get ("M", Config_Data_Paths.Empty_Vector)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for empty path (Get)");
       exception
          when Constraint_Error =>
@@ -753,7 +753,7 @@ package body Prunt.Config.Test is
                    Config_Property_Parameters_Integer'
                      (Description => "Test Integer", Min => 0, Max => 10, Unit => "", Default => 5)])];
 
-      File : constant Config_File := Create ("/tmp/prunt_tests/Test_Get_Schemas_String.json", Schemas);
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
 
       Schema_JSON : constant JSON_Value := Read (File.Get_Schema_String);
 
@@ -769,9 +769,9 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Initialize_Corrupt_File.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : Mockable.Text_IO.File_Type;
@@ -782,7 +782,8 @@ package body Prunt.Config.Test is
       end;
 
       begin
-         File : Config_File := Create (Filename, Schemas) with Unreferenced;
+         File : Config_File := Create (Filename, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Invalid_JSON_Stream for corrupt file");
       exception
          when Invalid_JSON_Stream =>
@@ -806,8 +807,8 @@ package body Prunt.Config.Test is
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 5)])];
 
-      Filename : constant String := "/tmp/prunt_tests/Test_Initialize_Default_Migration.json";
-      Content  : constant String :=
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
         "{"
         & """Prunt config version"": 1,"
         & """Config"": {"
@@ -850,9 +851,9 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Initialize_Extra_Modules.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : Mockable.Text_IO.File_Type;
@@ -865,11 +866,12 @@ package body Prunt.Config.Test is
       end;
 
       begin
-         File : Config_File := Create (Filename, Schemas) with Unreferenced;
+         File : Config_File := Create (Filename, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for extra module");
       exception
          when Constraint_Error =>
-         null;
+            null;
       end;
    end Test_Initialize_Extra_Modules;
 
@@ -877,9 +879,9 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Initialize_Newer_Module_Version.json";
+      Filename : constant String := Next_Test_Filename;
 
       declare
          File : Mockable.Text_IO.File_Type;
@@ -891,7 +893,8 @@ package body Prunt.Config.Test is
       end;
 
       begin
-         File : Config_File := Create (Filename, Schemas) with Unreferenced;
+         File : Config_File := Create (Filename, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for newer version");
       exception
          when Constraint_Error =>
@@ -903,8 +906,8 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Filename : constant String := "/tmp/prunt_tests/Test_Initialize_Newer_Version.json";
-      Content  : constant String :=
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
         "{"
         & """Prunt config version"": 1,"
         & """Config"": {"
@@ -914,7 +917,7 @@ package body Prunt.Config.Test is
         & "   }"
         & "}"
         & "}";
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
 
       begin
@@ -925,7 +928,8 @@ package body Prunt.Config.Test is
       end;
 
       begin
-         File : Config_File := Create (Filename, Schemas) with Unreferenced;
+         File : Config_File := Create (Filename, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for newer version");
       exception
          when Constraint_Error =>
@@ -939,7 +943,7 @@ package body Prunt.Config.Test is
 
       Schemas : constant Config_Schema_Maps.Map := [];
 
-      File_Name : constant String := "/tmp/prunt_tests/Test_Initialize_No_Config.json";
+      File_Name : constant String := Next_Test_Filename;
 
       begin
          F : Mockable.Text_IO.File_Type;
@@ -949,7 +953,8 @@ package body Prunt.Config.Test is
       end;
 
       begin
-         File : Config_File := Create (File_Name, Schemas) with Unreferenced;
+         File : Config_File := Create (File_Name, Schemas)
+         with Unreferenced;
          T.Fail ("Should raise Constraint_Error for missing Config field");
       exception
          when Constraint_Error =>
@@ -961,9 +966,9 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map := [];
-      Filename : constant String := "/tmp/prunt_tests/Test_Initialize_Unknown_Module.json";
-      Content  : constant String :=
+      Schemas : constant Config_Schema_Maps.Map := [];
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
         "{"
         & """Prunt config version"": 1,"
         & """Config"": {"
@@ -982,7 +987,8 @@ package body Prunt.Config.Test is
       end;
 
       begin
-         File : Config_File := Create (Filename, Schemas) with Unreferenced;
+         File : Config_File := Create (Filename, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for unknown module");
       exception
          when Constraint_Error =>
@@ -1003,7 +1009,7 @@ package body Prunt.Config.Test is
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
 
-      File_Name : constant String := "/tmp/prunt_tests/Test_Initialize_With_Invalid_Module_Config.json";
+      File_Name : constant String := Next_Test_Filename;
 
       if Mockable.Directories.Exists (File_Name) then
          Mockable.Directories.Delete_File (File_Name);
@@ -1017,7 +1023,8 @@ package body Prunt.Config.Test is
       end;
 
       begin
-         File : Config_File := Create (File_Name, Schemas) with Unreferenced;
+         File : Config_File := Create (File_Name, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for invalid module config type");
       exception
          when Constraint_Error =>
@@ -1029,10 +1036,10 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Invalid_Module_Calls.json";
-      File     : constant Config_File := Create (Filename, Schemas);
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Schemas);
 
       begin
          declare
@@ -1064,10 +1071,10 @@ package body Prunt.Config.Test is
            Versioned_Config_Schema'
              (Version         => 1,
               Top_Level_Items => ["b" => Config_Property_Parameters_Boolean'(Description => "", Default => True)])];
-      File    : constant Config_File := Create ("/tmp/prunt_tests/Test_Last_Save_Increment.json", Schemas);
-      Data    : constant Config_Data := File.Get_Data ("M");
-      S1      : constant Save_Counter := File.Last_Save;
-      S2      : Save_Counter;
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
+      Data : constant Config_Data := File.Get_Data ("M");
+      S1 : constant Save_Counter := File.Last_Save;
+      S2 : Save_Counter;
 
       Data.Set (Config_Data_Paths.Vector'([1 => "b"]), False);
       Data.Save;
@@ -1079,7 +1086,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M1" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -1104,9 +1111,10 @@ package body Prunt.Config.Test is
                         ["y" =>
                            Config_Property_Parameters_Integer'
                              (Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Merge_Schemas.json";
+      Filename : constant String := Next_Test_Filename;
 
-      File : Config_File := Create (Filename, Schemas) with Unreferenced;
+      File : Config_File := Create (Filename, Schemas)
+      with Unreferenced;
       null;
    end Test_Merge_Schemas;
 
@@ -1114,7 +1122,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M1" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -1126,10 +1134,11 @@ package body Prunt.Config.Test is
            Versioned_Config_Schema'
              (Version         => 1,
               Top_Level_Items => ["x" => Config_Property_Parameters_Boolean'(Description => "", Default => False)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Merge_Schemas_Conflict_Diff_Types.json";
+      Filename : constant String := Next_Test_Filename;
 
       begin
-         File : Config_File := Create (Filename, Schemas) with Unreferenced;
+         File : Config_File := Create (Filename, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for type conflict");
       exception
          when Constraint_Error =>
@@ -1141,7 +1150,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M1" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -1152,10 +1161,11 @@ package body Prunt.Config.Test is
              (Version         => 1,
               Top_Level_Items =>
                 ["v" => Config_Property_Parameters_Variant'(Description => "", Default => "b", Children => [])])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Merge_Schemas_Conflict_Variant_Diff_Default.json";
+      Filename : constant String := Next_Test_Filename;
 
       begin
-         File : Config_File := Create (Filename, Schemas) with Unreferenced;
+         File : Config_File := Create (Filename, Schemas)
+         with Unreferenced;
          T.Fail ("Should have raised Constraint_Error for variant default conflict");
       exception
          when Constraint_Error =>
@@ -1169,7 +1179,7 @@ package body Prunt.Config.Test is
 
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      File    : constant Config_File := Create ("/tmp/prunt_tests/Test_Patch_Inner_Errors.json", Schemas);
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
 
       Errors : Config_Error_Vectors.Vector;
 
@@ -1188,16 +1198,14 @@ package body Prunt.Config.Test is
 
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      File    : constant Config_File := Create ("/tmp/prunt_tests/Test_Patch_Invalid_Module.json", Schemas);
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
 
       Errors : Config_Error_Vectors.Vector;
 
       Output : Virtual_String;
 
       File.Apply_Untrusted_Patch
-        ("{""Prunt config version"": 1, ""Config"": {""INVALID"": {""Version"": 1, ""Config"": {}}}}",
-         Output,
-         Errors);
+        ("{""Prunt config version"": 1, ""Config"": {""INVALID"": {""Version"": 1, ""Config"": {}}}}", Output, Errors);
       T.Assert (not Errors.Is_Empty, "Should report error for unknown module");
    end Test_Patch_Invalid_Module;
 
@@ -1205,14 +1213,14 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
               Top_Level_Items => ["b" => Config_Property_Parameters_Boolean'(Description => "", Default => False)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Patch_Success.json";
-      File     : constant Config_File := Create (Filename, Schemas);
-      Data     : constant Config_Data := File.Get_Data ("M");
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Schemas);
+      Data : constant Config_Data := File.Get_Data ("M");
 
       Errors : Config_Error_Vectors.Vector;
 
@@ -1235,16 +1243,14 @@ package body Prunt.Config.Test is
 
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      File    : constant Config_File := Create ("/tmp/prunt_tests/Test_Patch_Wrong_Version.json", Schemas);
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
 
       Errors : Config_Error_Vectors.Vector;
 
       Output : Virtual_String;
 
       File.Internal.Get.Apply_Untrusted_Patch
-        ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 2, ""Config"": {}}}}",
-         Output,
-         Errors);
+        ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 2, ""Config"": {}}}}", Output, Errors);
       T.Assert (not Errors.Is_Empty, "Should report error for wrong version");
    end Test_Patch_Wrong_Version;
 
@@ -1274,8 +1280,8 @@ package body Prunt.Config.Test is
                            Config_Property_Parameters_Integer'
                              (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)]),
                  "leaf" => Config_Property_Parameters_Boolean'(Description => "", Default => True)])];
-      File    : constant Config_File := Create ("/tmp/prunt_tests/Test_Path_Errors.json", Schemas);
-      Data    : constant Config_Data := File.Get_Data ("M");
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
+      Data : constant Config_Data := File.Get_Data ("M");
 
       begin
          declare
@@ -1366,7 +1372,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Left  : constant JSON_Value := Create (Integer'(1));
+      Left : constant JSON_Value := Create (Integer'(1));
       Right : constant JSON_Value := Create_Object;
 
       Right.Set_Field ("a", Integer'(2));
@@ -1438,7 +1444,7 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
            Versioned_Config_Schema'
              (Version         => 1,
@@ -1446,9 +1452,9 @@ package body Prunt.Config.Test is
                 ["i" =>
                    Config_Property_Parameters_Integer'
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Save_No_Changes.json";
-      File     : constant Config_File := Create (Filename, Schemas);
-      Data     : constant Config_Data := File.Get_Data ("M");
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Schemas);
+      Data : constant Config_Data := File.Get_Data ("M");
 
       Data.Save;
    end Test_Save_No_Changes;
@@ -1473,7 +1479,7 @@ package body Prunt.Config.Test is
                    Config_Property_Parameters_Float'
                      (Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 0.0)])];
 
-      File : Config_File := Create ("/tmp/prunt_tests/Test_Schema_Conflict_Compatible_Disjoint.json", Schemas)
+      File : Config_File := Create (Next_Test_Filename, Schemas)
       with Unreferenced;
    end Test_Schema_Conflict_Compatible_Disjoint;
 
@@ -1507,7 +1513,7 @@ package body Prunt.Config.Test is
                            Config_Property_Parameters_Float'
                              (Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 0.0)])])];
 
-      File : Config_File := Create ("/tmp/prunt_tests/Test_Schema_Conflict_Compatible_Merged.json", Schemas)
+      File : Config_File := Create (Next_Test_Filename, Schemas)
       with Unreferenced;
    end Test_Schema_Conflict_Compatible_Merged;
 
@@ -1533,7 +1539,7 @@ package body Prunt.Config.Test is
 
       begin
          begin
-            File : Config_File := Create ("/tmp/prunt_tests/Test_Schema_Conflict_Type_Mismatch.json", Schemas)
+            File : Config_File := Create (Next_Test_Filename, Schemas)
             with Unreferenced;
             T.Fail ("Conflicting types should raise error.");
          exception
@@ -1560,7 +1566,7 @@ package body Prunt.Config.Test is
                 ["v" => Config_Property_Parameters_Variant'(Description => "", Default => "b", Children => [])])];
 
       begin
-         File : Config_File := Create ("/tmp/prunt_tests/Test_Schema_Conflict_Variant_Failure_Default.json", Schemas)
+         File : Config_File := Create (Next_Test_Filename, Schemas)
          with Unreferenced;
          T.Fail ("Conflicting variant defaults should raise error.");
       exception
@@ -1596,7 +1602,7 @@ package body Prunt.Config.Test is
                         ["b" => Config_Property_Parameters_Boolean'(Description => "", Default => False)])])];
 
       begin
-         File : Config_File := Create ("/tmp/prunt_tests/Test_Schema_Conflict_Variant_Mismatch_Keys.json", Schemas)
+         File : Config_File := Create (Next_Test_Filename, Schemas)
          with Unreferenced;
          T.Fail ("Conflicting variant keys should raise error.");
       exception
@@ -2082,7 +2088,7 @@ package body Prunt.Config.Test is
          T.Fail ("Should have raised Constraint_Error");
       exception
          when Constraint_Error =>
-         null;
+            null;
       end;
    end Test_Validate_Unhandled_Property;
 
@@ -2129,12 +2135,12 @@ package body Prunt.Config.Test is
    Migration_Schemas : constant Config_Schema_Maps.Map :=
      ["M" =>
         Custom_Schema'
-             (Version         => 2,
-              Top_Level_Items =>
-                ["i"              =>
-                   Config_Property_Parameters_Integer'(Description => "", Min => 0, Max => 10, Unit => "", Default => 5),
-                 "migrated_field" =>
-                   Config_Property_Parameters_Integer'
+          (Version         => 2,
+           Top_Level_Items =>
+             ["i"              =>
+                Config_Property_Parameters_Integer'(Description => "", Min => 0, Max => 10, Unit => "", Default => 5),
+              "migrated_field" =>
+                Config_Property_Parameters_Integer'
                   (Description => "", Min => 0, Max => 1000, Unit => "", Default => 0)])];
 
    Migration_Error_Schemas : constant Config_Schema_Maps.Map :=
@@ -2143,28 +2149,28 @@ package body Prunt.Config.Test is
    Migration_Accessors_Schemas : constant Config_Schema_Maps.Map :=
      ["M" =>
         Accessors_Schema'
-             (Version         => 2,
-              Top_Level_Items =>
-                ["b"   => Config_Property_Parameters_Boolean'(Description => "", Default => True),
-                 "i"   =>
-                   Config_Property_Parameters_Integer'(Description => "", Min => 0, Max => 10, Unit => "", Default => 5),
-                 "f"   =>
-                   Config_Property_Parameters_Float'
+          (Version         => 2,
+           Top_Level_Items =>
+             ["b"   => Config_Property_Parameters_Boolean'(Description => "", Default => True),
+              "i"   =>
+                Config_Property_Parameters_Integer'(Description => "", Min => 0, Max => 10, Unit => "", Default => 5),
+              "f"   =>
+                Config_Property_Parameters_Float'
                   (Description => "", Min => 0.0, Max => 100.0, Unit => "", Default => 5.0),
               "d"   => Config_Property_Parameters_Discrete'(Description => "", Default => "a", Options => ["a", "b"]),
               "dim" =>
                 Config_Property_Parameters_Float'
                   (Description => "", Min => 0.0, Max => 100.0, Unit => "", Default => 5.0),
-                 "r"   =>
-                   Config_Property_Parameters_Float_Ratio'
+              "r"   =>
+                Config_Property_Parameters_Float_Ratio'
                   (Description => "", Min => 0.0, Max => 10.0, Default => (Numerator => 1.0, Denominator => 1.0))])];
 
    procedure Test_Initialize_Real_Migration (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
 
-      Filename : constant String := "/tmp/prunt_tests/test_init_real_migration.json";
-      Content  : constant String :=
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
         "{"
         & """Prunt config version"": 1,"
         & """Config"": {"
@@ -2208,8 +2214,8 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Filename : constant String := "/tmp/prunt_tests/test_init_migration_error.json";
-      Content  : constant String :=
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
         "{"
         & """Prunt config version"": 1,"
         & """Config"": {"
@@ -2242,8 +2248,8 @@ package body Prunt.Config.Test is
 
       T.Register;
 
-      Filename : constant String := "/tmp/prunt_tests/test_migration_accessors.json";
-      Content  : constant String :=
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
         "{"
         & """Prunt config version"": 1,"
         & """Config"": {"
@@ -2282,9 +2288,8 @@ package body Prunt.Config.Test is
 
       Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      File    : constant Config_File :=
-        Create ("/tmp/prunt_tests/Test_Apply_Untrusted_Patch_Really_Empty.json", Schemas);
-      Output  : Virtual_String;
+      File : constant Config_File := Create (Next_Test_Filename, Schemas);
+      Output : Virtual_String;
 
       Errors : Config_Error_Vectors.Vector;
 
@@ -2297,9 +2302,9 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Reset_Live_To_Stored_Ref_Count.json";
+      Filename : constant String := Next_Test_Filename;
 
       File : constant Config_File := Create (Filename, Schemas);
       Data : constant Config_Data := File.Get_Data ("M");
@@ -2318,9 +2323,9 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schemas  : constant Config_Schema_Maps.Map :=
+      Schemas : constant Config_Schema_Maps.Map :=
         ["M" => Versioned_Config_Schema'(Version => 1, Top_Level_Items => [])];
-      Filename : constant String := "/tmp/prunt_tests/Test_Reset_Live_To_Stored_Success.json";
+      Filename : constant String := Next_Test_Filename;
 
       File : constant Config_File := Create (Filename, Schemas);
       File.Reset_Live_To_Stored;

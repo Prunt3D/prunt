@@ -44,10 +44,46 @@ package body Prunt.Motion_Planner.Planner is
       Runner.Reset_Do_Not_Call_From_Other_Packages;
    end Reset;
 
-   procedure Enqueue (Comm : Command; Ignore_Bounds : Boolean := False) is
+   procedure Enqueue_Move
+     (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False) is
    begin
-      My_Preprocessor.Enqueue (Comm, Ignore_Bounds);
-   end Enqueue;
+      My_Preprocessor.Enqueue
+        ((Kind => Move_Kind, Dwell_After => Dwell_After, Pos => Pos, Feedrate => Feedrate), Ignore_Bounds);
+   end Enqueue_Move;
+
+   procedure Enqueue_Corner_Extra_Data (Data : aliased Corner_Extra_Data_Type) is
+   begin
+      My_Preprocessor.Enqueue (Comm => (Kind => Corner_Extra_Data_Kind), Ignore_Bounds => False, Extra => Data'Access);
+   end Enqueue_Corner_Extra_Data;
+
+   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False) is
+   begin
+      My_Preprocessor.Enqueue ((Kind => Flush_Kind, Flush_Resetting_Data => Data, Is_Homing_Move => Is_Homing_Move));
+   end Enqueue_Flush;
+
+   procedure Enqueue_Flush_And_Reset_Position
+     (Data           : Flush_Resetting_Data_Type;
+      Pos            : Position;
+      Is_Homing_Move : Boolean := False;
+      Ignore_Bounds  : Boolean := False) is
+   begin
+      My_Preprocessor.Enqueue
+        ((Kind                 => Flush_And_Reset_Position_Kind,
+          Flush_Resetting_Data => Data,
+          Is_Homing_Move       => Is_Homing_Move,
+          Reset_Pos            => Pos),
+         Ignore_Bounds);
+   end Enqueue_Flush_And_Reset_Position;
+
+   procedure Enqueue_Flush_And_Change_Kinematic_Parameters
+     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters; Is_Homing_Move : Boolean := False) is
+   begin
+      My_Preprocessor.Enqueue
+        ((Kind                 => Flush_And_Change_Parameters_Kind,
+          Flush_Resetting_Data => Data,
+          Is_Homing_Move       => Is_Homing_Move,
+          New_Params           => New_Params));
+   end Enqueue_Flush_And_Change_Kinematic_Parameters;
 
    procedure Dequeue
      (Block : out Execution_Block; Timed_Out : out Boolean; Waiting_For_Step_Rate_Limiter : out Boolean) is
@@ -141,14 +177,13 @@ package body Prunt.Motion_Planner.Planner is
    function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
    begin
       return
-        abs (Block.Corners (Finishing_Corner)
-             * Block.Params.Axial_Scaler
+        abs (Block.Corners (Finishing_Corner) * Block.Params.Axial_Scaler
              - Block.Corners (Finishing_Corner - 1) * Block.Params.Axial_Scaler);
    end Segment_Corner_Distance;
 
    function Segment_Pos_At_Time
      (Block              : Execution_Block;
-      Finishing_Corner   : Corners_Index;
+      Finishing_Corner   : Finishing_Corners_Index;
       Time_Into_Segment  : Time;
       Is_Past_Accel_Part : out Boolean) return Position
    is
@@ -183,7 +218,7 @@ package body Prunt.Motion_Planner.Planner is
                  Total_Time (Block.Feedrate_Profiles (Finishing_Corner)),
                  Block.Params.Crackle_Max,
                  Block.Corner_Velocity_Limits (Finishing_Corner - 1))
-                < 0.000_1 * mm / s);
+              < 0.000_1 * mm / s);
          --  In theory the velocity should be zero but in practice there are some floating point errors here. In
          --  testing the error was always within 1E-14 of zero but there is no reason to check for that level of
          --  precision here.
@@ -218,7 +253,8 @@ package body Prunt.Motion_Planner.Planner is
    end Segment_Pos_At_Time;
 
    function Segment_Vel_Ratio_At_Time
-     (Block : Execution_Block; Finishing_Corner : Corners_Index; Time_Into_Segment : Time) return Dimensionless is
+     (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time)
+      return Dimensionless is
    begin
       if Time_Into_Segment > Total_Time (Block.Feedrate_Profiles (Finishing_Corner)) then
          --  Return 1.0 inside dwell parts so the laser can be set to the programmed power level.
@@ -251,7 +287,8 @@ package body Prunt.Motion_Planner.Planner is
       return Block.Flush_Resetting_Data;
    end Flush_Resetting_Data;
 
-   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
+   function Segment_Accel_Distance (Block : Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
+   is
    begin
       return
         Distance_At_Time
@@ -263,7 +300,9 @@ package body Prunt.Motion_Planner.Planner is
 
    function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array is
       Start  : constant Corners_Extra_Data_End_Index :=
-        (if Corner = 0 then 1 else Block.Corners_Extra_Data_End_Indices (Corner - 1) + 1);
+        (if Corner = Corners_Index'First
+         then Corners_Extra_Data_Index'First
+         else Block.Corners_Extra_Data_End_Indices (Corner - 1) + 1);
       Finish : constant Corners_Extra_Data_End_Index := Block.Corners_Extra_Data_End_Indices (Corner);
       Result :
         Corner_Extra_Data_Array

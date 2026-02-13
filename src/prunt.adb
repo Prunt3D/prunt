@@ -21,7 +21,9 @@
 
 with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Numerics.Generic_Elementary_Functions;
+with Ada.Strings.Fixed;
 with Ada.Text_IO;
+with VSS.Strings.Conversions;
 
 package body Prunt is
 
@@ -244,7 +246,7 @@ package body Prunt is
    end "/";
 
    function "abs" (Left : Position_Offset) return Length is
-      Square_Sum : Area := 0.0 * mm**2;
+      Square_Sum : Area := 0.0 * mm ** 2;
    begin
       for X of Left loop
          Square_Sum := Square_Sum + X * X;
@@ -264,7 +266,7 @@ package body Prunt is
    end "abs";
 
    function "abs" (Left : Scaled_Position_Offset) return Length is
-      Square_Sum : Area := 0.0 * mm**2;
+      Square_Sum : Area := 0.0 * mm ** 2;
    begin
       for X of Left loop
          Square_Sum := Square_Sum + X * X;
@@ -294,7 +296,7 @@ package body Prunt is
    end Dot;
 
    function Dot (Left, Right : Scaled_Position_Offset) return Area is
-      Sum : Area := 0.0 * mm**2;
+      Sum : Area := 0.0 * mm ** 2;
    begin
       for I in Axis_Name loop
          Sum := Sum + Left (I) * Right (I);
@@ -302,5 +304,27 @@ package body Prunt is
 
       return Sum;
    end Dot;
+
+   protected body Test_File_Name_Generator is
+      procedure Get_Next (Name : out Virtual_String) is
+      begin
+         Counter := @ + 1;
+         Name := +("/tmp/prunt_tests/test_file_" & Ada.Strings.Fixed.Trim (Counter'Image, Ada.Strings.Both));
+      end Get_Next;
+   end Test_File_Name_Generator;
+
+   function Next_Test_Filename return String is
+      Name : Virtual_String;
+   begin
+      Test_File_Name_Generator.Get_Next (Name);
+      return Conversions.To_UTF_8_String (Name);
+   end Next_Test_Filename;
+
+   function Next_Test_Filename return Virtual_String is
+      Name : Virtual_String;
+   begin
+      Test_File_Name_Generator.Get_Next (Name);
+      return Name;
+   end Next_Test_Filename;
 
 end Prunt;

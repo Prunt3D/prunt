@@ -72,7 +72,7 @@ package body Prunt.Step_Generator is
    end To_Stepper_Position;
 
    task body Runner is
-      Current_Command_Index : Command_Index;
+      Current_Command_Index : Command_Index := 0;
       Current_Time          : Time;
       Pos_Map               : Stepper_Pos_Map;
 
@@ -96,26 +96,29 @@ package body Prunt.Step_Generator is
 
       Current_Shapers : Input_Shapers.Shapers.Axial_Shapers;
 
-      Loop_Move_Offset  : Position_Offset;
-      Previous_Position : Position;
+      Loop_Move_Offset        : Position_Offset;
+      Loop_Move_Command_Index : Command_Index;
+      Previous_Position       : Position;
 
       Zero_Length : constant Length := 0.0 * mm;
    begin
       loop
-         Current_Command_Index := 0;
          Current_Time := 0.0 * s;
          Homing_Move_When := Not_Pending_Kind;
          Pausing_State := Running_Kind;
          Pause_Slew := Pause_Slew_Index'First;
          Paused := False;
          Do_Pause := False;
-         Loop_Move_Offset := [others => Zero_Length];
          Previous_Position := [others => Zero_Length];
 
          accept Setup (Map : Stepper_Pos_Map) do
             Pos_Map := Map;
          end Setup;
+
          Main : loop
+            Loop_Move_Offset := [others => Zero_Length];
+            Loop_Move_Command_Index := 0;
+
             declare
                Timed_Out                     : Boolean;
                Waiting_For_Step_Rate_Limiter : Boolean;
@@ -179,6 +182,8 @@ package body Prunt.Step_Generator is
 
             Start_Planner_Block (Block.Flush_Resetting_Data, Current_Command_Index);
 
+            Start_Corner (Block.Corner_Extra_Data (Planner.Corners_Index'First), Current_Command_Index);
+
             for I in 2 .. Block.N_Corners loop
                Start_Corner (Block.Corner_Extra_Data (I), Current_Command_Index);
 
@@ -233,7 +238,7 @@ package body Prunt.Step_Generator is
                           Block.Segment_Vel_Ratio_At_Time (I, Current_Time);
                      begin
                         if Pausing_State = Paused_Kind
-                          or else (I = Block.N_Corners and Current_Time >= Block.Segment_Time (I))
+                          or else (I = Block.N_Corners and then Current_Time >= Block.Segment_Time (I))
                         then
                            declare
                               Extra_Loops_Required : constant Input_Shapers.Cycle_Count :=
@@ -249,11 +254,11 @@ package body Prunt.Step_Generator is
                                    (Pos             => Shaped_Pos,
                                     Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
                                     Index           => Current_Command_Index,
-                                    Loop_Until_Hit  => Homing_Move_When = This_Move_Kind and J = 0,
+                                    Loop_Until_Hit  => Homing_Move_When = This_Move_Kind and then J = 0,
                                     Safe_Stop_After => J = Extra_Loops_Required,
                                     Vel_Ratio       => Vel_Ratio);
 
-                                 if Homing_Move_When = This_Move_Kind and J = 0 then
+                                 if Homing_Move_When = This_Move_Kind and then J = 0 then
                                     Loop_Move_Offset := Shaped_Pos - Previous_Position;
                                  end if;
 
@@ -263,6 +268,7 @@ package body Prunt.Step_Generator is
                         else
                            if Homing_Move_When = This_Move_Kind then
                               Loop_Move_Offset := Shaped_Pos - Previous_Position;
+                              Loop_Move_Command_Index := Current_Command_Index;
                            end if;
 
                            Enqueue_Command
@@ -292,7 +298,7 @@ package body Prunt.Step_Generator is
                      end;
                   end if;
 
-                  if Homing_Move_When /= Not_Pending_Kind and Current_Time >= Block.Segment_Time (I) then
+                  if Homing_Move_When /= Not_Pending_Kind and then Current_Time >= Block.Segment_Time (I) then
                      raise Constraint_Error with "Homing move queued but end of block reached before execution.";
                   end if;
 
@@ -304,12 +310,11 @@ package body Prunt.Step_Generator is
                      end if;
                   end if;
 
-                  if I = Block.N_Corners and Current_Time > Block.Segment_Time (I) then
+                  if I = Block.N_Corners and then Current_Time > Block.Segment_Time (I) then
+                     --  Ensure that the last corner is always enqueued from at least once and we always finish on the
+                     --  exact final position. Having the wrong interpolation time here is fine because the final bit
+                     --  of an execution block has very low velocity.
                      Current_Time := Block.Segment_Time (I);
-                  --  Ensure that the last corner is always enqueued from at least once and we always finish on
-                  --  the exact final position. Having the wrong interpolation time here is fine because the
-                  --  final bit of an execution block has very low velocity.
-
                   else
                      exit when Current_Time >= Block.Segment_Time (I);
                   end if;
@@ -318,12 +323,28 @@ package body Prunt.Step_Generator is
                Current_Time := Current_Time - Block.Segment_Time (I);
             end loop;
 
-            Finish_Planner_Block
-              (Resetting_Data       => Block.Flush_Resetting_Data,
-               Next_Block_Pos       => To_Stepper_Position (Block.Next_Block_Pos, Pos_Map),
-               First_Accel_Distance => (if Block.N_Corners < 2 then 0.0 * mm else Segment_Accel_Distance (Block, 2)),
-               Last_Command_Index   => Current_Command_Index,
-               Loop_Move_Offset     => Loop_Move_Offset);
+            declare
+               Loop_Move_Cycles : Dimensionless := 0.0;
+            begin
+               --  TODO
+               --  if Loop_Move_Command_Index /= 0 then
+               --     select
+               --        accept Reset;
+               --        exit Main;
+               --     then abort
+               --        --  TODO: Wait for loop move cycles to be reported
+               --        null;
+               --     end select;
+               --  end if;
+
+               Finish_Planner_Block
+                 (Resetting_Data       => Block.Flush_Resetting_Data,
+                  Next_Block_Pos       => To_Stepper_Position (Block.Next_Block_Pos, Pos_Map),
+                  First_Accel_Distance =>
+                    Length'(if Block.N_Corners < 2 then Zero_Length else Segment_Accel_Distance (Block, 2)),
+                  Last_Command_Index   => Current_Command_Index,
+                  Loop_Move_Offset     => [for A in Axis_Name => Loop_Move_Offset (A) * Loop_Move_Cycles]);
+            end;
          end loop Main;
       end loop;
    end Runner;
