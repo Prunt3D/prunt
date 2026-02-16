@@ -22,13 +22,14 @@
 with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Strings.Fixed;
-with Ada.Text_IO;
+--  with Ada.Text_IO;
 with VSS.Strings.Conversions;
 
 package body Prunt is
 
    pragma Extensions_Allowed (On);
 
+   --  TODO: Move this to its own package so we can use Text_IO.
    protected body Exception_Occurrence_Holder_Type is
       procedure Set_Fatal
         (Cause      : Ada.Task_Termination.Cause_Of_Termination;
@@ -53,7 +54,7 @@ package body Prunt is
             Fatal_Occurrence_Stored := True;
          end if;
 
-         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
+         --  Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
       end Set_Fatal;
 
       procedure Set_Recoverable
@@ -78,7 +79,7 @@ package body Prunt is
             Ada.Exceptions.Save_Occurrence (Data, Occurrence);
          end if;
 
-         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
+         --  Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
       end Set_Recoverable;
 
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence; Is_Fatal : out Boolean)

@@ -45,8 +45,8 @@ generic
         Safe_Stop_After : Boolean;
         Vel_Ratio       : Dimensionless);
 
-   with procedure Start_Corner (Data : Planner.Corner_Extra_Data_Array; Last_Command_Index : Command_Index);
-   --  Called when we start moving towards a corner.
+   with procedure Start_Corner (Last_Command_Index : Command_Index; Data : Planner.Corner_Extra_Data_Type);
+   --  Called when we start moving towards a corner for each extra data element.
    --
    --  This is not included in `Enqueue_Command` as floating point inaccuracy could potentially cause a very short
    --  segment to not contain any command even though segments have a minimum length.

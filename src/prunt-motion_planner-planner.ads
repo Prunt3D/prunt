@@ -81,7 +81,6 @@ with Ada.Containers;
 with System.Multiprocessors;
 with System.Storage_Elements;
 
-private with Ada.Containers.Bounded_Vectors;
 private with Prunt.Bounded_Indefinite_Vectors;
 private with Prunt.Motion_Planner.PH_Beziers;
 
@@ -160,12 +159,8 @@ package Prunt.Motion_Planner.Planner is
 
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
    subtype Finishing_Corners_Index is Corners_Index range 2 .. Corners_Index'Last;
-   type Corner_Extra_Data_Array_Index is
-     new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data_Per_Corner;
 
-   type Corner_Extra_Data_Array is array (Corner_Extra_Data_Array_Index range <>) of Corner_Extra_Data_Type;
-
-   type Execution_Block (N_Corners : Corners_Index := 1) is limited private;
+   type Execution_Block (N_Corners : Corners_Index := 1) is private;
    --  N_Corners may be 1, in which case there are no segments.
 
    --  First Finishing_Corner = 2. If N_Corners < 2 then these functions must not be called.
@@ -214,12 +209,12 @@ package Prunt.Motion_Planner.Planner is
    with Pre => Finishing_Corner <= Block.N_Corners;
    --  Returns the length of the acceleration part of a segment.
 
-   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array
-   with Pre => Finishing_Corner <= Block.N_Corners;
-   --  Returns the extra data for a corner.
-   --
-   --  TODO: Replace with a `Process` procedure which takes a `access procedure (in out Corner_Extra_Data_Type)` so we
-   --  can avoid some copies here.
+   procedure Corner_Extra_Data
+     (Block   : Execution_Block;
+      Corner  : Corners_Index;
+      Process : access procedure (Data : in out Corner_Extra_Data_Type))
+   with Pre => Corner <= Block.N_Corners;
+   --  Allows the caller to process the extra data for a corner.
 
    function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters;
    --  Returns the kinematic parameters used for the given block.
@@ -231,6 +226,7 @@ package Prunt.Motion_Planner.Planner is
      (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False);
 
    procedure Enqueue_Corner_Extra_Data (Data : aliased Corner_Extra_Data_Type);
+   --  This could be pushed to the next block if there is no space for the data.
 
    procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False);
 
@@ -307,18 +303,18 @@ private
    use Prunt.Motion_Planner.PH_Beziers;
 
    --  Preprocessor
-   type Block_Plain_Corners is array (Corners_Index range <>) of Scaled_Position;
-   type Block_Segment_Feedrates is array (Corners_Index range <>) of Velocity;
-   type Block_Corners_Extra_Data_End_Indices is
-     array (Corners_Index range <>) of Corner_Extra_Data_Vectors.Extended_Index;
-   type Block_Corner_Dwell_Times is array (Corners_Index range <>) of Time;
-
-   type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data;
+   type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data_Count;
    package Corner_Extra_Data_Vectors is new
      Bounded_Indefinite_Vectors
        (Element_Type => Corner_Extra_Data_Type,
         Index_Type   => Corners_Extra_Data_Index,
         Storage_Size => Max_Corners_Extra_Data_Storage);
+
+   type Block_Plain_Corners is array (Corners_Index range <>) of Scaled_Position;
+   type Block_Segment_Feedrates is array (Corners_Index range <>) of Velocity;
+   type Block_Corners_Extra_Data_End_Indices is
+     array (Corners_Index range <>) of Corner_Extra_Data_Vectors.Extended_Index;
+   type Block_Corner_Dwell_Times is array (Corners_Index range <>) of Time;
 
    --  Corner_Blender
    type Block_Beziers is array (Corners_Index range <>) of PH_Bezier;

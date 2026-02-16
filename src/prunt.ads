@@ -30,6 +30,8 @@ with VSS.Strings.Conversions;
 
 package Prunt is
 
+   pragma Preelaborate (Prunt);
+
    subtype Empty_Enumeration is Boolean range True .. False;
 
    type Stepper_Hardware_Kind is (Basic_Kind, TMC2240_UART_Kind);

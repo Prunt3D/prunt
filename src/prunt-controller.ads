@@ -204,7 +204,7 @@ private
       Safe_Stop_After : Boolean;
       Vel_Ratio       : Dimensionless);
 
-   procedure Start_Corner (Data : My_Motion_Planner.Corner_Extra_Data_Array; Last_Command_Index : Command_Index);
+   procedure Start_Corner (Last_Command_Index : Command_Index; Data : Module_Types.Extra_Corner_Data'Class);
 
    procedure Finish_Planner_Block
      (Resetting_Data       : Extra_Block_Resetting_Data_Holders.Holder;

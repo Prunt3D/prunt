@@ -298,22 +298,17 @@ package body Prunt.Motion_Planner.Planner is
            Start_Vel   => Block.Corner_Velocity_Limits (Finishing_Corner - 1));
    end Segment_Accel_Distance;
 
-   function Corner_Extra_Data (Block : Execution_Block; Corner : Corners_Index) return Corner_Extra_Data_Array is
-      Start  : constant Corners_Extra_Data_End_Index :=
-        (if Corner = Corners_Index'First
-         then Corners_Extra_Data_Index'First
-         else Block.Corners_Extra_Data_End_Indices (Corner - 1) + 1);
-      Finish : constant Corners_Extra_Data_End_Index := Block.Corners_Extra_Data_End_Indices (Corner);
-      Result :
-        Corner_Extra_Data_Array
-          (1 .. Corner_Extra_Data_Array_Index'Base (Finish) - Corner_Extra_Data_Array_Index'Base (Start) + 1);
+   procedure Corner_Extra_Data
+     (Block   : Execution_Block;
+      Corner  : Corners_Index;
+      Process : access procedure (Data : in out Corner_Extra_Data_Type)) is
    begin
-      for I in Start .. Finish loop
-         Result (Corner_Extra_Data_Array_Index'Base (I) - Corner_Extra_Data_Array_Index'Base (Start) + 1) :=
-           Block.Corners_Extra_Data (Corners_Extra_Data_Index (I));
-      end loop;
-
-      return Result;
+      Block.Corners_Extra_Data.Process_Range
+        ((if Corner = Corners_Index'First
+          then Corners_Extra_Data_Index'First
+          else Corners_Extra_Data_Index (Block.Corners_Extra_Data_End_Indices (Corner - 1) + 1)),
+         Block.Corners_Extra_Data_End_Indices (Corner),
+         Process);
    end Corner_Extra_Data;
 
    function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters is

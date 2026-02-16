@@ -172,8 +172,7 @@ project Prunt is
          "Prunt.Step_Generator",
          "Prunt.Update_Checker",
          "Prunt.Web_Server",
-         "Prunt",
-         "Bounded_Indefinite_Holders");
+         "Prunt");
    end Coverage;
 
    package Pretty_Printer is

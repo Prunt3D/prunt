@@ -27,16 +27,19 @@ package body Prunt.Bounded_Indefinite_Vectors is
    pragma Extensions_Allowed (On);
 
    procedure Free is new Ada.Unchecked_Deallocation (Element_Type, Element_Access);
+   procedure Free is new Ada.Unchecked_Deallocation (Vector_Elements_Subpool, Pooled_Subpool_Handle);
 
    procedure Append (This : in out Vector; New_Item : Element_Type) is
       Ptr : Element_Access;
    begin
-      if This.Last_Index = Index_Type'Last then
+      This.Maybe_Initialize;
+
+      if This.Last_Used_Index = Index_Type'Last then
          raise Constraint_Error with "Capacity exceeded";
       end if;
 
-      Ptr := new (This.Subpool'Unchecked_Access) Element_Type'(New_Item);
-      --  May raise Out_Of_Space_Error, so don't change `Last_Index` yet.
+      Ptr := new (This.Subpool.all'Access) Element_Type'(New_Item);
+      --  May raise Out_Of_Space_Error, so don't change `Last_Used_Index` yet.
 
       This.Last_Used_Index := @ + 1;
       This.Elements (This.Last_Used_Index) := Ptr;
@@ -44,7 +47,9 @@ package body Prunt.Bounded_Indefinite_Vectors is
 
    procedure Clear (This : in out Vector) is
    begin
-      for E of This.Elements (Index_Type'First .. This.Last_Index) loop
+      --  No init required. Guarded by `Last_Used_Index` check.
+
+      for E of This.Elements (Index_Type'First .. This.Last_Used_Index) loop
          Free (E);
          pragma Unreferenced (E);
          E := null;
@@ -55,35 +60,68 @@ package body Prunt.Bounded_Indefinite_Vectors is
 
    function Element (This : Vector; Index : Index_Type) return Element_Type is
    begin
-      if Index > This.Last_Index or else Index < Index_Type'First then
+      --  No init required. Guarded by `Last_Used_Index` check.
+
+      if Index > This.Last_Used_Index or else Index < Index_Type'First then
          raise Constraint_Error with "Index out of bounds";
       end if;
       return This.Elements (Index).all;
    end Element;
 
-   overriding
-   procedure Initialize (This : in out Vector) is
+   procedure Maybe_Initialize (This : in out Vector) is
    begin
-      This.Subpool.Current_Free := This.Storage'Address;
-      This.Subpool.End_Address := This.Storage'Address + This.Storage'Length;
-      Set_Pool_Of_Subpool (This.Subpool'Unchecked_Access, The_Storage_Pool);
-   end Initialize;
+      if This.Subpool = null then
+         begin
+            pragma Abort_Defer;
+
+            Vector_Subpool_Subpool_Address_Passer.Set_Next_Address (This.Subpool_Record_Storage'Address);
+            declare
+               Handle : constant Subpool_Handle := Vector_Subpool_Default_Subpool'Unchecked_Access;
+            begin
+               This.Subpool :=
+                 new (Handle) Vector_Elements_Subpool'
+                   (Root_Subpool
+                    with
+                      Current_Free => This.Storage'Address,
+                      End_Address  => This.Storage'Address + This.Storage'Length);
+               Set_Pool_Of_Subpool (This.Subpool.all'Unchecked_Access, Vector_Elements_Root_Pool);
+            end;
+         end;
+      end if;
+   end Maybe_Initialize;
+
+   overriding
+   procedure Adjust (This : in out Vector) is
+      Old_Last_Used_Index : constant Extended_Index := This.Last_Used_Index;
+   begin
+      This.Subpool := null;
+      This.Maybe_Initialize;
+
+      for E of This.Elements (Index_Type'First .. Old_Last_Used_Index) loop
+         E := new (This.Subpool.all'Access) Element_Type'(E.all);
+      end loop;
+   end Adjust;
 
    overriding
    procedure Finalize (This : in out Vector) is
-      Handle : Subpool_Handle := This.Subpool'Unchecked_Access;
    begin
-      Clear (This);
+      pragma Abort_Defer;
 
-      Ada.Unchecked_Deallocate_Subpool (Handle);
-      --  TODO: Do we need this or does it happen automatically?
-
-      pragma Unreferenced (Handle);
+      if This.Subpool /= null then
+         declare
+            Handle : Subpool_Handle := This.Subpool.all'Unchecked_Access;
+         begin
+            Clear (This);
+            Ada.Unchecked_Deallocate_Subpool (Handle);
+            Free (This.Subpool);
+            This.Subpool := null;
+         end;
+      end if;
    end Finalize;
 
    function Is_Empty (This : Vector) return Boolean is
    begin
-      return This.Last_Index < Index_Type'First;
+      return This.Last_Used_Index < Index_Type'First;
    end Is_Empty;
 
    function Last_Index (This : Vector) return Extended_Index is
@@ -97,7 +135,9 @@ package body Prunt.Bounded_Indefinite_Vectors is
       Finish : Extended_Index;
       Action : not null access procedure (Item : in out Element_Type)) is
    begin
-      if Finish > This.Last_Index or else not Start'Valid then
+      --  No init required. Guarded by `Last_Used_Index` check.
+
+      if Finish > This.Last_Used_Index or else not Start'Valid then
          raise Constraint_Error with "Index out of bounds";
       end if;
 
@@ -108,16 +148,7 @@ package body Prunt.Bounded_Indefinite_Vectors is
 
    package body Subpool_Support is
 
-      function Aligned_Address (Addr : System.Address; Alignment : Storage_Count) return System.Address;
-      --  Return Addr, rounded up to multiple of Alignment.
-
-      overriding
-      function Create_Subpool (Pool : in out Vector_Pool_Type) return not null Subpool_Handle is
-      begin
-         pragma Annotate (Xcov, Exempt_On, "Should never be called.");
-         return raise Program_Error;
-         pragma Annotate (Xcov, Exempt_Off);
-      end Create_Subpool;
+      use type System.Address;
 
       function Aligned_Address (Addr : System.Address; Alignment : Storage_Count) return System.Address is
          Initial_Align : constant Storage_Count := Addr mod Alignment;
@@ -129,17 +160,79 @@ package body Prunt.Bounded_Indefinite_Vectors is
          end if;
       end Aligned_Address;
 
+      protected body Vector_Subpool_Subpool_Address_Passer is
+         entry Set_Next_Address (Addr : System.Address) when Next = System.Null_Address is
+         begin
+            if Addr = System.Null_Address then
+               raise Constraint_Error;
+            end if;
+
+            if Pool_Of_Subpool (Vector_Subpool_Default_Subpool'Unchecked_Access) = null then
+               --  We do this here as we need it to be thread-safe.
+               Set_Pool_Of_Subpool (Vector_Subpool_Default_Subpool'Unchecked_Access, Vector_Subpool_Root_Pool);
+            end if;
+
+            Next := Addr;
+         end Set_Next_Address;
+
+         procedure Get_Next_Address (Addr : out System.Address) is
+         begin
+            if Next = System.Null_Address then
+               raise Program_Error with "Get_Next_Address must be preceded by Set_Next_Address.";
+            end if;
+            Addr := Next;
+            Next := System.Null_Address;
+         end Get_Next_Address;
+      end Vector_Subpool_Subpool_Address_Passer;
+
+      overriding
+      function Create_Subpool (Pool : in out Vector_Subpool_Root_Pool_Type) return not null Subpool_Handle is
+      begin
+         pragma Annotate (Xcov, Exempt_On, "Should never be called.");
+         return raise Program_Error with "Should never be called.";
+         pragma Annotate (Xcov, Exempt_Off);
+      end Create_Subpool;
+
       overriding
       procedure Allocate_From_Subpool
-        (Pool                     : in out Vector_Pool_Type;
+        (Pool                     : in out Vector_Subpool_Root_Pool_Type;
          Storage_Address          : out System.Address;
          Size_In_Storage_Elements : Storage_Count;
          Alignment                : Storage_Count;
          Subpool                  : not null Subpool_Handle)
       is
-         use type System.Address;
+         pragma Unreferenced (Pool, Alignment, Subpool);
+      begin
+         Vector_Subpool_Subpool_Address_Passer.Get_Next_Address (Storage_Address);
 
-         V_Subpool : constant access Vector_Subpool := Vector_Subpool (Subpool.all)'Access;
+         if Size_In_Storage_Elements > Vector_Elements_Subpool_Storage_Size then
+            raise Program_Error;
+         end if;
+      end Allocate_From_Subpool;
+
+      overriding
+      procedure Deallocate_Subpool (Pool : in out Vector_Subpool_Root_Pool_Type; Subpool : in out Subpool_Handle) is
+      begin
+         null;
+      end Deallocate_Subpool;
+
+      overriding
+      function Create_Subpool (Pool : in out Vector_Elements_Root_Pool_Type) return not null Subpool_Handle is
+      begin
+         pragma Annotate (Xcov, Exempt_On, "Should never be called.");
+         return raise Program_Error with "Should never be called.";
+         pragma Annotate (Xcov, Exempt_Off);
+      end Create_Subpool;
+
+      overriding
+      procedure Allocate_From_Subpool
+        (Pool                     : in out Vector_Elements_Root_Pool_Type;
+         Storage_Address          : out System.Address;
+         Size_In_Storage_Elements : Storage_Count;
+         Alignment                : Storage_Count;
+         Subpool                  : not null Subpool_Handle)
+      is
+         V_Subpool : constant access Vector_Elements_Subpool := Vector_Elements_Subpool (Subpool.all)'Access;
 
          Aligned : constant System.Address := Aligned_Address (V_Subpool.Current_Free, Alignment);
 
@@ -147,9 +240,10 @@ package body Prunt.Bounded_Indefinite_Vectors is
          Rounded_Size : constant Storage_Count := Size_In_Storage_Elements + Size_Padding;
       begin
          if Rounded_Size > Bounded_Indefinite_Vectors.Rounded_Storage_Size
-           or else V_Subpool.End_Address < Aligned
-           or else Aligned <= V_Subpool.Current_Free
-           or else V_Subpool.End_Address - Aligned < Rounded_Size
+           or else Aligned >= V_Subpool.End_Address
+           or else Aligned < V_Subpool.Current_Free
+           or else Aligned + Rounded_Size >= V_Subpool.End_Address
+           or else Aligned + Rounded_Size < V_Subpool.Current_Free
          then
             raise Out_Of_Space_Error with "Storage exhausted";
          end if;
@@ -159,7 +253,7 @@ package body Prunt.Bounded_Indefinite_Vectors is
       end Allocate_From_Subpool;
 
       overriding
-      procedure Deallocate_Subpool (Pool : in out Vector_Pool_Type; Subpool : in out Subpool_Handle) is
+      procedure Deallocate_Subpool (Pool : in out Vector_Elements_Root_Pool_Type; Subpool : in out Subpool_Handle) is
       begin
          null;
       end Deallocate_Subpool;

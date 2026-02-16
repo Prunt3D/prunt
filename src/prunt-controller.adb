@@ -251,11 +251,9 @@ package body Prunt.Controller is
       null; --  TODO
    end Enqueue_Command_Internal;
 
-   procedure Start_Corner (Data : My_Motion_Planner.Corner_Extra_Data_Array; Last_Command_Index : Command_Index) is
+   procedure Start_Corner (Last_Command_Index : Command_Index; Data : Module_Types.Extra_Corner_Data'Class) is
    begin
-      for D of Data loop
-         D.Element.Process (Last_Command_Index);
-      end loop;
+      Data.Process (Last_Command_Index);
    end Start_Corner;
 
    procedure Finish_Planner_Block

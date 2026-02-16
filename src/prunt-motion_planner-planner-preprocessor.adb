@@ -166,16 +166,15 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       end Dequeue_Extra_Data;
 
       procedure Finish_Dequeue is
-         Current_Comm : Command := Elements (Next_Read);
+         Current_Comm : constant Command := Elements (Next_Read);
       begin
          if not In_Dequeue then
             raise Constraint_Error with "Not in dequeue transaction.";
          end if;
 
          if Current_Comm.Kind = Corner_Extra_Data_Kind then
+            --  TODO: Will need to be changed for ring buffer.
             Extra_Data_Storage.Clear;
-         --  TODO: Will need to be changed for ring buffer.
-
          end if;
 
          if Next_Read = Elements'Last then
@@ -264,6 +263,8 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Next_Params := Current_Params;
 
          Corners (1) := Last_Pos / Current_Params.Axial_Scaler;
+         Corners_Extra_Data_End_Indices (1) := Next_Extra_Data;
+         --  All other arrays start from the second corner.
 
          Read_In_Commands : loop
             declare
@@ -299,9 +300,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                      exit Read_In_Commands;
 
                   when Corner_Extra_Data_Kind           =>
-                     --  TODO: If a corner does not fit then put in a blank corner here and force the relevant corner
-                     --  over to the next block. If there is not extra corner data and the corner does not fit then
-                     --  raise an error.
                      begin
                         Corners_Extra_Data.Append (Command_Queue.Dequeue_Extra_Data);
                      exception
@@ -310,11 +308,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                               raise Constraint_Error with "Extra corner data too big.";
                            end if;
                            Command_Queue.Cancel_Dequeue;
+                           --  This will be seen as a `Corner_Extra_Data_Kind` command by the next call to `Run` and it
+                           --  will be applied to the first corner, which is will be equal to this one.
                            exit Read_In_Commands;
                      end;
                      Command_Queue.Finish_Dequeue;
-                     Corners_Extra_Data_End_Indices (N_Corners) :=
-                       Next_Extra_Data;
+                     Corners_Extra_Data_End_Indices (N_Corners) := Next_Extra_Data;
                      exit Read_In_Commands when
                        Extra_Data_This_Corner = Max_Corners_Extra_Data_Type'Base (Max_Corners_Extra_Data_Per_Corner);
                      Extra_Data_This_Corner := @ + 1;
@@ -323,8 +322,9 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                   when Move_Kind                        =>
                      Command_Queue.Finish_Dequeue;
-                     Extra_Data_This_Corner := 0;
                      N_Corners := N_Corners + 1;
+                     Extra_Data_This_Corner := 0;
+                     Corners_Extra_Data_End_Indices (N_Corners) := Next_Extra_Data;
                      Corners (N_Corners) := Next_Command.Pos / Current_Params.Axial_Scaler;
                      Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
                      Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
@@ -340,6 +340,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          --  This is hacky and not portable, but if we try to assign to the entire record as you normally would then
          --  GCC insists on creating a whole Execution_Block on the stack.
 
+         Block.Corners_Extra_Data := Corners_Extra_Data.all;
          Block.Corners := Corners (1 .. N_Corners);
          Block.Corners_Extra_Data_End_Indices := Corners_Extra_Data_End_Indices (1 .. N_Corners);
          Block.Original_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
@@ -349,20 +350,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Params := Current_Params;
          Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
          Block.Is_Homing_Move := Is_Homing_Move;
-
-               Block.Corners_Extra_Data.Clear;
-         declare
-            procedure Append (Item : in out Corner_Extra_Data_Type);
-
-            procedure Append (Item : in out Corner_Extra_Data_Type) is
-            begin
-               Block.Corners_Extra_Data.Append (Item);
-            end Append;
-         begin
-            Corners_Extra_Data.Process_Range
-              (Corners_Extra_Data_Index'First, Corners_Extra_Data.Last_Index, Append'Access);
-         end;
-         Corners_Extra_Data.Clear;
 
          if Is_Homing_Move then
             Block.Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];

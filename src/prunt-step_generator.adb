@@ -101,6 +101,11 @@ package body Prunt.Step_Generator is
       Previous_Position       : Position;
 
       Zero_Length : constant Length := 0.0 * mm;
+
+      procedure Process_Corner_Extra_Data (Data : in out Planner.Corner_Extra_Data_Type) is
+      begin
+         Start_Corner (Current_Command_Index, Data);
+      end Process_Corner_Extra_Data;
    begin
       loop
          Current_Time := 0.0 * s;
@@ -182,10 +187,10 @@ package body Prunt.Step_Generator is
 
             Start_Planner_Block (Block.Flush_Resetting_Data, Current_Command_Index);
 
-            Start_Corner (Block.Corner_Extra_Data (Planner.Corners_Index'First), Current_Command_Index);
+            Block.Corner_Extra_Data (Planner.Corners_Index'First, Process_Corner_Extra_Data'Access);
 
             for I in 2 .. Block.N_Corners loop
-               Start_Corner (Block.Corner_Extra_Data (I), Current_Command_Index);
+               Block.Corner_Extra_Data (I, Process_Corner_Extra_Data'Access);
 
                loop
                   Current_Command_Index := @ + 1;
