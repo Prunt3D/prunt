@@ -30,19 +30,19 @@ package body Prunt.Bounded_Indefinite_Vectors is
    procedure Free is new Ada.Unchecked_Deallocation (Vector_Elements_Subpool, Pooled_Subpool_Handle);
 
    procedure Append (This : in out Vector; New_Item : Element_Type) is
-      Ptr : Element_Access;
    begin
       This.Maybe_Initialize;
 
+      pragma Annotate (Xcov, Exempt_On, "Handled by precondition.");
       if This.Last_Used_Index = Index_Type'Last then
-         raise Constraint_Error with "Capacity exceeded";
+         raise Constraint_Error with "Capacity exceeded.";
       end if;
+      pragma Annotate (Xcov, Exempt_Off);
 
-      Ptr := new (This.Subpool.all'Access) Element_Type'(New_Item);
-      --  May raise Out_Of_Space_Error, so don't change `Last_Used_Index` yet.
+      This.Elements (This.Last_Used_Index + 1) := new (This.Subpool.all'Access) Element_Type'(New_Item);
+      --  `Allocate_From_Subpool` may raise an exception, so don't change `Last_Used_Index` until after this point.
 
       This.Last_Used_Index := @ + 1;
-      This.Elements (This.Last_Used_Index) := Ptr;
    end Append;
 
    procedure Clear (This : in out Vector) is
@@ -60,33 +60,26 @@ package body Prunt.Bounded_Indefinite_Vectors is
 
    function Element (This : Vector; Index : Index_Type) return Element_Type is
    begin
-      --  No init required. Guarded by `Last_Used_Index` check.
-
-      if Index > This.Last_Used_Index or else Index < Index_Type'First then
-         raise Constraint_Error with "Index out of bounds";
-      end if;
+      --  No init required. `Elements` will just be all nulls before init.
       return This.Elements (Index).all;
    end Element;
 
    procedure Maybe_Initialize (This : in out Vector) is
    begin
       if This.Subpool = null then
-         begin
-            pragma Abort_Defer;
+         Dummy_Allocator.Next_Allocation_Address := This.Storage (Rounded_Storage_Size + 1)'Address;
+         This.Subpool :=
+           new Vector_Elements_Subpool'
+             (Root_Subpool
+              with
+                Current_Free => This.Storage'Address,
+                End_Address  =>
+                  (if Rounded_Storage_Size = 0
+                   then This.Storage'Address
+                   else This.Storage (Rounded_Storage_Size)'Address));
+         Dummy_Allocator.Next_Allocation_Address := System.Null_Address;
 
-            Vector_Subpool_Subpool_Address_Passer.Set_Next_Address (This.Subpool_Record_Storage'Address);
-            declare
-               Handle : constant Subpool_Handle := Vector_Subpool_Default_Subpool'Unchecked_Access;
-            begin
-               This.Subpool :=
-                 new (Handle) Vector_Elements_Subpool'
-                   (Root_Subpool
-                    with
-                      Current_Free => This.Storage'Address,
-                      End_Address  => This.Storage'Address + This.Storage'Length);
-               Set_Pool_Of_Subpool (This.Subpool.all'Unchecked_Access, Vector_Elements_Root_Pool);
-            end;
-         end;
+         Set_Pool_Of_Subpool (This.Subpool.all'Unchecked_Access, Vector_Elements_Root_Pool);
       end if;
    end Maybe_Initialize;
 
@@ -105,16 +98,18 @@ package body Prunt.Bounded_Indefinite_Vectors is
    overriding
    procedure Finalize (This : in out Vector) is
    begin
-      pragma Abort_Defer;
-
       if This.Subpool /= null then
          declare
             Handle : Subpool_Handle := This.Subpool.all'Unchecked_Access;
          begin
             Clear (This);
+
             Ada.Unchecked_Deallocate_Subpool (Handle);
+            --  `Free` should be all we need here, but GCC does not currently finalize subpools correctly, leading to
+            --  memory corruption as the freed subpool will still belong to the pool. Refer to
+            --  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124107
+
             Free (This.Subpool);
-            This.Subpool := null;
          end;
       end if;
    end Finalize;
@@ -135,11 +130,7 @@ package body Prunt.Bounded_Indefinite_Vectors is
       Finish : Extended_Index;
       Action : not null access procedure (Item : in out Element_Type)) is
    begin
-      --  No init required. Guarded by `Last_Used_Index` check.
-
-      if Finish > This.Last_Used_Index or else not Start'Valid then
-         raise Constraint_Error with "Index out of bounds";
-      end if;
+      --  No init required. Guarded by `Last_Used_Index` precondition and `.all` on null.
 
       for E of This.Elements (Start .. Finish) loop
          Action (E.all);
@@ -160,62 +151,6 @@ package body Prunt.Bounded_Indefinite_Vectors is
          end if;
       end Aligned_Address;
 
-      protected body Vector_Subpool_Subpool_Address_Passer is
-         entry Set_Next_Address (Addr : System.Address) when Next = System.Null_Address is
-         begin
-            if Addr = System.Null_Address then
-               raise Constraint_Error;
-            end if;
-
-            if Pool_Of_Subpool (Vector_Subpool_Default_Subpool'Unchecked_Access) = null then
-               --  We do this here as we need it to be thread-safe.
-               Set_Pool_Of_Subpool (Vector_Subpool_Default_Subpool'Unchecked_Access, Vector_Subpool_Root_Pool);
-            end if;
-
-            Next := Addr;
-         end Set_Next_Address;
-
-         procedure Get_Next_Address (Addr : out System.Address) is
-         begin
-            if Next = System.Null_Address then
-               raise Program_Error with "Get_Next_Address must be preceded by Set_Next_Address.";
-            end if;
-            Addr := Next;
-            Next := System.Null_Address;
-         end Get_Next_Address;
-      end Vector_Subpool_Subpool_Address_Passer;
-
-      overriding
-      function Create_Subpool (Pool : in out Vector_Subpool_Root_Pool_Type) return not null Subpool_Handle is
-      begin
-         pragma Annotate (Xcov, Exempt_On, "Should never be called.");
-         return raise Program_Error with "Should never be called.";
-         pragma Annotate (Xcov, Exempt_Off);
-      end Create_Subpool;
-
-      overriding
-      procedure Allocate_From_Subpool
-        (Pool                     : in out Vector_Subpool_Root_Pool_Type;
-         Storage_Address          : out System.Address;
-         Size_In_Storage_Elements : Storage_Count;
-         Alignment                : Storage_Count;
-         Subpool                  : not null Subpool_Handle)
-      is
-         pragma Unreferenced (Pool, Alignment, Subpool);
-      begin
-         Vector_Subpool_Subpool_Address_Passer.Get_Next_Address (Storage_Address);
-
-         if Size_In_Storage_Elements > Vector_Elements_Subpool_Storage_Size then
-            raise Program_Error;
-         end if;
-      end Allocate_From_Subpool;
-
-      overriding
-      procedure Deallocate_Subpool (Pool : in out Vector_Subpool_Root_Pool_Type; Subpool : in out Subpool_Handle) is
-      begin
-         null;
-      end Deallocate_Subpool;
-
       overriding
       function Create_Subpool (Pool : in out Vector_Elements_Root_Pool_Type) return not null Subpool_Handle is
       begin
@@ -232,20 +167,17 @@ package body Prunt.Bounded_Indefinite_Vectors is
          Alignment                : Storage_Count;
          Subpool                  : not null Subpool_Handle)
       is
-         V_Subpool : constant access Vector_Elements_Subpool := Vector_Elements_Subpool (Subpool.all)'Access;
-
-         Aligned : constant System.Address := Aligned_Address (V_Subpool.Current_Free, Alignment);
-
-         Size_Padding : constant Storage_Count := (Alignment - (Size_In_Storage_Elements mod Alignment)) mod Alignment;
-         Rounded_Size : constant Storage_Count := Size_In_Storage_Elements + Size_Padding;
+         V_Subpool    : constant access Vector_Elements_Subpool := Vector_Elements_Subpool (Subpool.all)'Access;
+         Aligned      : constant System.Address := Aligned_Address (V_Subpool.Current_Free, Alignment);
+         Rounded_Size : constant Storage_Count := Round_Up_Size (Size_In_Storage_Elements, Alignment);
       begin
-         if Rounded_Size > Bounded_Indefinite_Vectors.Rounded_Storage_Size
-           or else Aligned >= V_Subpool.End_Address
-           or else Aligned < V_Subpool.Current_Free
-           or else Aligned + Rounded_Size >= V_Subpool.End_Address
-           or else Aligned + Rounded_Size < V_Subpool.Current_Free
+         if Rounded_Size > Rounded_Storage_Size then
+            raise Program_Error with "Element will never fit in Vector.";
+         end if;
+
+         if Aligned > V_Subpool.End_Address or else V_Subpool.End_Address - Aligned < Storage_Offset (Rounded_Size) - 1
          then
-            raise Out_Of_Space_Error with "Storage exhausted";
+            raise Out_Of_Space_Error with "Storage exhausted.";
          end if;
 
          Storage_Address := Aligned;

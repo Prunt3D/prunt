@@ -19,43 +19,11 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.Generic_Lock is
+with Trendy_Test;
 
-   pragma Extensions_Allowed (On);
+generic
+package Prunt.Generic_Lock.Test is
 
-   function Lock return Lock_Holder is
-   begin
-      Lock_Manager.Lock;
-      return (Ada.Finalization.Limited_Controlled with Already_Finalized => False);
-   end Lock;
+   function All_Tests return Trendy_Test.Test_Group;
 
-   protected body Lock_Manager is
-      entry Lock when not Locked is
-      begin
-         Locked := True;
-      end Lock;
-
-      procedure Unlock (Holder : in out Lock_Holder) is
-      begin
-         if Holder.Already_Finalized then
-            return;
-         end if;
-
-         pragma Annotate (Xcov, Exempt_On, "Should be unreachable.");
-         if not Locked then
-            raise Program_Error with "Attempted unlock when not locked.";
-         end if;
-         pragma Annotate (Xcov, Exempt_Off);
-
-         Holder.Already_Finalized := True;
-         Locked := False;
-      end Unlock;
-   end Lock_Manager;
-
-   overriding
-   procedure Finalize (Object : in out Lock_Holder) is
-   begin
-      Lock_Manager.Unlock (Object);
-   end Finalize;
-
-end Prunt.Generic_Lock;
+end Prunt.Generic_Lock.Test;

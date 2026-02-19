@@ -70,19 +70,11 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                null;
 
             when Corner_Extra_Data_Kind           =>
-               if not Extra_Data_Storage.Is_Empty then
-                  --  TODO: We should implement a ring buffer for this so we can store more than a single element at a
-                  --  time.
-                  requeue High_Priority_Enqueue;
-               end if;
-
                begin
-                  Extra_Data_Storage.Append (Extra.all);
+                  Extra_Data_Storage.Enqueue (Extra.all);
                exception
-                  when Corner_Extra_Data_Vectors.Out_Of_Space_Error =>
-                     --  TODO: Once we implement a ring buffer for this, we can call requeue here:
-                     --  requeue High_Priority_Enqueue;
-                     raise Constraint_Error with "Extra corner data is too big.";
+                  when Corner_Extra_Data_Queues.Out_Of_Space_Error =>
+                     requeue High_Priority_Enqueue;
                end;
 
             when Flush_And_Reset_Position_Kind    =>
@@ -114,8 +106,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       entry High_Priority_Enqueue
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
-        when not Is_Full and then Retry_High_Priority and then Extra_Data_Storage.Is_Empty
-        --  TODO: Remove Is_Empty check once we have a ring buffer.
+        when not Is_Full and then Retry_High_Priority
       is
       begin
          if not Setup_Done then
@@ -127,9 +118,9 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          case Comm.Kind is
             when Corner_Extra_Data_Kind =>
                begin
-                  Extra_Data_Storage.Append (Extra.all);
+                  Extra_Data_Storage.Enqueue (Extra.all);
                exception
-                  when Corner_Extra_Data_Vectors.Out_Of_Space_Error =>
+                  when Corner_Extra_Data_Queues.Out_Of_Space_Error =>
                      requeue High_Priority_Enqueue;
                end;
 
@@ -161,8 +152,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       function Dequeue_Extra_Data return Corner_Extra_Data_Type is
       begin
-         return Extra_Data_Storage.Element (Corners_Extra_Data_Index'First);
-         --  TODO: Will need to be changed for ring buffer.
+         return Extra_Data_Storage.Peek;
       end Dequeue_Extra_Data;
 
       procedure Finish_Dequeue is
@@ -173,8 +163,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
 
          if Current_Comm.Kind = Corner_Extra_Data_Kind then
-            --  TODO: Will need to be changed for ring buffer.
-            Extra_Data_Storage.Clear;
+            Extra_Data_Storage.Dequeue;
          end if;
 
          if Next_Read = Elements'Last then

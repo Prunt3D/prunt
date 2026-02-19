@@ -19,43 +19,78 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.Generic_Lock is
+with Trendy_Test; use Trendy_Test;
+
+package body Prunt.Generic_Lock.Test is
 
    pragma Extensions_Allowed (On);
 
-   function Lock return Lock_Holder is
-   begin
-      Lock_Manager.Lock;
-      return (Ada.Finalization.Limited_Controlled with Already_Finalized => False);
-   end Lock;
+   procedure Test_Concurrency (T : in out Trendy_Test.Operation'Class) is
+      task type Worker;
 
-   protected body Lock_Manager is
-      entry Lock when not Locked is
+      task body Worker is
       begin
-         Locked := True;
-      end Lock;
-
-      procedure Unlock (Holder : in out Lock_Holder) is
-      begin
-         if Holder.Already_Finalized then
-            return;
-         end if;
-
-         pragma Annotate (Xcov, Exempt_On, "Should be unreachable.");
-         if not Locked then
-            raise Program_Error with "Attempted unlock when not locked.";
-         end if;
-         pragma Annotate (Xcov, Exempt_Off);
-
-         Holder.Already_Finalized := True;
-         Locked := False;
-      end Unlock;
-   end Lock_Manager;
-
-   overriding
-   procedure Finalize (Object : in out Lock_Holder) is
+         for I in 1 .. 1_000 loop
+            declare
+               L : Lock_Holder := Lock;
+            begin
+               null;
+            end;
+         end loop;
+      end Worker;
    begin
-      Lock_Manager.Unlock (Object);
-   end Finalize;
+      T.Register;
 
-end Prunt.Generic_Lock;
+      select
+         delay 15.0;
+         T.Fail ("Deadlock likely");
+      then abort
+         declare
+            Workers : array (1 .. 100) of Worker;
+         begin
+            null;
+         end;
+      end select;
+   end Test_Concurrency;
+
+   procedure Test_Double_Finalize (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      declare
+         L : Lock_Holder := Lock;
+      begin
+         L.Finalize;
+         L.Finalize;
+         L.Finalize;
+      end;
+
+      declare
+         L : Lock_Holder := Lock;
+      begin
+         null;
+      end;
+   end Test_Double_Finalize;
+
+   procedure Test_Lock_Unlock (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      for I in 1 .. 100_000 loop
+         declare
+            L : Lock_Holder := Lock;
+         begin
+            null;
+         end;
+      end loop;
+   end Test_Lock_Unlock;
+
+   function All_Tests return Trendy_Test.Test_Group is
+   begin
+      return
+        [Test_Concurrency'Unrestricted_Access,
+         Test_Double_Finalize'Unrestricted_Access,
+         Test_Lock_Unlock'Unrestricted_Access];
+   end All_Tests;
+
+end Prunt.Generic_Lock.Test;

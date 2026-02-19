@@ -19,20 +19,6 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-pragma Extensions_Allowed (On);
-
-with Ada.Containers.Indefinite_Ordered_Maps;
-with Ada.Containers.Ordered_Sets;
-with Ada.Containers.Ordered_Maps;
-with Ada.Containers.Vectors;
-with Prunt.Generic_Lock;
-with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
-
-private with Ada.Finalization;
-private with Prunt.JSON;
-private with Prunt.Limited_Shared_Pointers;
-private with VSS.String_Vectors;
-
 --  This package provides a schema-validated configuration system.
 --
 --  Two copies of the configuration are kept: One for the configuration stored on disk and one for the live
@@ -61,6 +47,20 @@ private with VSS.String_Vectors;
 --           ...
 --        }
 --     }
+
+pragma Extensions_Allowed (On);
+
+with Ada.Containers.Indefinite_Ordered_Maps;
+with Ada.Containers.Ordered_Sets;
+with Ada.Containers.Ordered_Maps;
+with Ada.Containers.Vectors;
+with Prunt.Generic_Lock;
+with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
+
+private with Ada.Finalization;
+private with Prunt.JSON;
+private with Prunt.Limited_Shared_Pointers;
+private with VSS.String_Vectors;
 
 package Prunt.Config is
 
@@ -365,6 +365,7 @@ private
    protected type Config_File_Internal is
       --  The file IO in here is all potentially blocking, but the global lock means it should never cause an issue as
       --  long as nothing external accesses the config files.
+
       procedure Initialize
         (File_Name_In : String;
          Schemas_In   : Config_Schema_Maps.Map;
@@ -373,13 +374,17 @@ private
              (Module : Virtual_String; Old_Version : Config_Schema_Version; Old_Config : JSON_Value) return JSON_Value;
          Lock         : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Reads the configuration file, validates it, and performs migrations if necessary.
+
       function Get (Owner : Virtual_String; Path : Config_Data_Paths.Vector) return JSON_Value;
       --  Gets a value from the live configuration. `Owner` specifies the module requesting the data.
+
       procedure Set (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Value : JSON_Value);
       --  Sets a value in the live configuration. `Owner` specifies the module setting the data.
+
       procedure Save (Owner : Virtual_String; Lock : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Saves the current live configuration to the stored configuration and to disk for the relevant module only.
       --  `Owner` specifies the module triggering the save.
+
       procedure Apply_Untrusted_Patch
         (Value  : Virtual_String;
          Result : out Virtual_String;
@@ -387,12 +392,16 @@ private
          Lock   : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Applies a JSON patch to the configuration. Checks for validation errors before applying and does not apply
       --  any changes if validation fails.
+
       function Get_Stored_Config return Virtual_String;
       --  Returns the JSON string of the stored configuration.
+
       function Get_Schemas return Virtual_String;
       --  Returns the JSON string of the schemas.
+
       function Last_Save return Save_Counter;
       --  Returns the a counter value which is incremented every time the stored configuration is changed.
+
       procedure Reset_Live_To_Stored (Check_Ref_Count : access procedure);
       --  Resets the live configuration to match the stored configuration. `Check_Ref_Count` is called immdiately upon
       --  entry and may be used to raise an exception if there are still references to the configuration file which

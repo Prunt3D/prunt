@@ -19,43 +19,59 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.Generic_Lock is
+with Trendy_Test;             use Trendy_Test;
+with Prunt.Dummy_Allocator;
+with System;
+with System.Storage_Elements; use System.Storage_Elements;
+
+package body Prunt.Dummy_Allocator.Test is
 
    pragma Extensions_Allowed (On);
 
-   function Lock return Lock_Holder is
+   use type System.Address;
+
+   procedure Test_Allocation (T : in out Trendy_Test.Operation'Class) is
    begin
-      Lock_Manager.Lock;
-      return (Ada.Finalization.Limited_Controlled with Already_Finalized => False);
-   end Lock;
+      T.Register;
 
-   protected body Lock_Manager is
-      entry Lock when not Locked is
-      begin
-         Locked := True;
-      end Lock;
+      Pool : Prunt.Dummy_Allocator.Dummy_Pool_Type;
+      Addr : System.Address;
+      Target : aliased Integer;
 
-      procedure Unlock (Holder : in out Lock_Holder) is
-      begin
-         if Holder.Already_Finalized then
-            return;
-         end if;
+      Prunt.Dummy_Allocator.Next_Allocation_Address := Target'Address;
+      Pool.Allocate (Addr, 10, 1);
+      T.Assert (Addr = Target'Address);
+   end Test_Allocation;
 
-         pragma Annotate (Xcov, Exempt_On, "Should be unreachable.");
-         if not Locked then
-            raise Program_Error with "Attempted unlock when not locked.";
-         end if;
-         pragma Annotate (Xcov, Exempt_Off);
-
-         Holder.Already_Finalized := True;
-         Locked := False;
-      end Unlock;
-   end Lock_Manager;
-
-   overriding
-   procedure Finalize (Object : in out Lock_Holder) is
+   procedure Test_Missing_Address (T : in out Trendy_Test.Operation'Class) is
+      use System.Storage_Elements;
    begin
-      Lock_Manager.Unlock (Object);
-   end Finalize;
+      T.Register;
 
-end Prunt.Generic_Lock;
+      Pool : Prunt.Dummy_Allocator.Dummy_Pool_Type;
+      Addr : System.Address;
+
+      begin
+         Pool.Allocate (Addr, 10, 1);
+         T.Assert (False, "Should have raised Program_Error");
+      exception
+         when Program_Error =>
+            null;
+      end;
+   end Test_Missing_Address;
+
+   procedure Test_Storage_Size (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Pool : Prunt.Dummy_Allocator.Dummy_Pool_Type;
+
+      T.Assert (Pool.Storage_Size = Storage_Count'Last);
+   end Test_Storage_Size;
+
+   function All_Tests return Trendy_Test.Test_Group is
+   begin
+      return [Test_Allocation'Access, Test_Missing_Address'Access, Test_Storage_Size'Access];
+   end All_Tests;
+
+end Prunt.Dummy_Allocator.Test;

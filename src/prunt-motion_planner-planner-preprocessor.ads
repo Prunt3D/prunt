@@ -24,6 +24,7 @@ pragma Extensions_Allowed (On);
 with Ada.Containers; use Ada.Containers;
 
 private with System.Pool_Local;
+private with Prunt.Bounded_Indefinite_Queues;
 
 private generic
 package Prunt.Motion_Planner.Planner.Preprocessor is
@@ -51,6 +52,11 @@ private
 
    type Command_Queue_Array_Type is array (1 .. Input_Queue_Length) of Command;
 
+   package Corner_Extra_Data_Queues is new
+     Bounded_Indefinite_Queues
+       (Element_Type => Corner_Extra_Data_Type,
+        Storage_Size => Max_Corners_Extra_Data_Storage);
+
    protected Command_Queue is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       entry Enqueue
@@ -73,7 +79,7 @@ private
       Next_Read, Next_Write : Count_Type := Command_Queue_Array_Type'First;
       Elements              : Command_Queue_Array_Type;
       Current_Params        : Kinematic_Parameters;
-      Extra_Data_Storage    : Corner_Extra_Data_Vectors.Vector;
+      Extra_Data_Storage    : Corner_Extra_Data_Queues.Queue;
       Retry_High_Priority   : Boolean := True;
    end Command_Queue;
 

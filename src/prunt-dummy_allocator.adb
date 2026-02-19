@@ -19,43 +19,42 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.Generic_Lock is
+package body Prunt.Dummy_Allocator is
 
-   pragma Extensions_Allowed (On);
-
-   function Lock return Lock_Holder is
-   begin
-      Lock_Manager.Lock;
-      return (Ada.Finalization.Limited_Controlled with Already_Finalized => False);
-   end Lock;
-
-   protected body Lock_Manager is
-      entry Lock when not Locked is
-      begin
-         Locked := True;
-      end Lock;
-
-      procedure Unlock (Holder : in out Lock_Holder) is
-      begin
-         if Holder.Already_Finalized then
-            return;
-         end if;
-
-         pragma Annotate (Xcov, Exempt_On, "Should be unreachable.");
-         if not Locked then
-            raise Program_Error with "Attempted unlock when not locked.";
-         end if;
-         pragma Annotate (Xcov, Exempt_Off);
-
-         Holder.Already_Finalized := True;
-         Locked := False;
-      end Unlock;
-   end Lock_Manager;
+   use type System.Address;
 
    overriding
-   procedure Finalize (Object : in out Lock_Holder) is
+   procedure Allocate
+     (Pool                     : in out Dummy_Pool_Type;
+      Storage_Address          : out System.Address;
+      Size_In_Storage_Elements : Storage_Count;
+      Alignment                : Storage_Count)
+   is
+      pragma Unreferenced (Pool, Alignment);
    begin
-      Lock_Manager.Unlock (Object);
-   end Finalize;
+      Storage_Address := Next_Allocation_Address;
 
-end Prunt.Generic_Lock;
+      if Storage_Address = System.Null_Address then
+         raise Program_Error with "Next_Allocation_Address must be set before allocation.";
+      end if;
+
+      Next_Allocation_Address := System.Null_Address;
+   end Allocate;
+
+   overriding
+   procedure Deallocate
+     (Pool                     : in out Dummy_Pool_Type;
+      Storage_Address          : System.Address;
+      Size_In_Storage_Elements : Storage_Count;
+      Alignment                : Storage_Count) is
+   begin
+      null;
+   end Deallocate;
+
+   overriding
+   function Storage_Size (Pool : Dummy_Pool_Type) return Storage_Count is
+   begin
+      return Storage_Count'Last;
+   end Storage_Size;
+
+end Prunt.Dummy_Allocator;

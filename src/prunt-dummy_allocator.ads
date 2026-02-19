@@ -19,43 +19,40 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.Generic_Lock is
+pragma Extensions_Allowed (On);
 
-   pragma Extensions_Allowed (On);
+with System.Storage_Elements; use System.Storage_Elements;
+with System.Storage_Pools;    use System.Storage_Pools;
 
-   function Lock return Lock_Holder is
-   begin
-      Lock_Manager.Lock;
-      return (Ada.Finalization.Limited_Controlled with Already_Finalized => False);
-   end Lock;
+package Prunt.Dummy_Allocator is
 
-   protected body Lock_Manager is
-      entry Lock when not Locked is
-      begin
-         Locked := True;
-      end Lock;
+   Next_Allocation_Address : System.Address
+   with Thread_Local_Storage;
 
-      procedure Unlock (Holder : in out Lock_Holder) is
-      begin
-         if Holder.Already_Finalized then
-            return;
-         end if;
-
-         pragma Annotate (Xcov, Exempt_On, "Should be unreachable.");
-         if not Locked then
-            raise Program_Error with "Attempted unlock when not locked.";
-         end if;
-         pragma Annotate (Xcov, Exempt_Off);
-
-         Holder.Already_Finalized := True;
-         Locked := False;
-      end Unlock;
-   end Lock_Manager;
+   type Dummy_Pool_Type is new Root_Storage_Pool with null record;
 
    overriding
-   procedure Finalize (Object : in out Lock_Holder) is
-   begin
-      Lock_Manager.Unlock (Object);
-   end Finalize;
+   procedure Allocate
+     (Pool                     : in out Dummy_Pool_Type;
+      Storage_Address          : out System.Address;
+      Size_In_Storage_Elements : Storage_Count;
+      Alignment                : Storage_Count);
+   --  Sets `Storage_Address` to `Next_Allocation_Address`. This should not be used unless you fully control the type
+   --  and can guarantee that initialization will not also use this procedure. This procedure sets
+   --  `Next_Allocation_Address` to null before returning to try and catch such an error.
+   --
+   --  If this procedure needs to be made to work more generally then every user would need to save and restore
+   --  `Next_Allocation_Address`. This could be achieved by making use of a controlled type rather than setting the
+   --  allocation address directly.
 
-end Prunt.Generic_Lock;
+   overriding
+   procedure Deallocate
+     (Pool                     : in out Dummy_Pool_Type;
+      Storage_Address          : System.Address;
+      Size_In_Storage_Elements : Storage_Count;
+      Alignment                : Storage_Count);
+
+   overriding
+   function Storage_Size (Pool : Dummy_Pool_Type) return Storage_Count;
+
+end Prunt.Dummy_Allocator;

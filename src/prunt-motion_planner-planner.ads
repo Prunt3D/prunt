@@ -19,8 +19,6 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-pragma Extensions_Allowed (On);
-
 --  This package provides a 5th-order (bounded crackle) motion planner with adjustable velocity, acceleration, jerk,
 --  snap, and crackle limits. Blending of corners is also provided to limit axial acceleration through crackle.
 --
@@ -76,6 +74,8 @@ pragma Extensions_Allowed (On);
 --     stage 4 (Kinematic_Limiter).
 --
 --  The fully processed `Execution_Block` is then made available via the `Dequeue` procedure.
+
+pragma Extensions_Allowed (On);
 
 with Ada.Containers;
 with System.Multiprocessors;

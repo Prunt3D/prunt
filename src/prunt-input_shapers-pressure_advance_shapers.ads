@@ -19,10 +19,16 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-pragma Extensions_Allowed (On);
-
+--  This package implements a pressure advance shaper.
+--
+--  Pressure advance advances the axis during acceleration by a multiple of the acceleration. This is meant to
+--  compensate for elasticity in the system. A CMA filter is applied to either the output or just the added part,
+--  depending on the provided parameters, to reduce the velocity of the output.
+--
 --  An alternative approach to smoothing may be found in commit 9b197ac428bb1eb52f9a0c6163cb2cabf1cf3e2a. The approach
 --  used here appears to produce results with less error.
+
+pragma Extensions_Allowed (On);
 
 with Prunt.Input_Shapers.Shapers;
 with Prunt.Moving_Averages;
@@ -62,10 +68,8 @@ private
       Interpolation_Time     : Time;
       Smooth_Added_Part_Only : Boolean;
       Previous_Input         : Length;
-      Current_Buffer_Index   : Cycle_Count;
-      --  Unused when `Smooth_Added_Part_Only` is False.
-      Buffer                 : Buffer_Array (1 .. Buffer_Size);
-      --  Unused when `Smooth_Added_Part_Only` is False.
+      Current_Buffer_Index   : Cycle_Count; --  Unused when `Smooth_Added_Part_Only` is False.
+      Buffer                 : Buffer_Array (1 .. Buffer_Size); --  Unused when `Smooth_Added_Part_Only` is False.
       Filter                 :
         Length_Moving_Averages.Cascading_Moving_Average
           (N_Levels => Filter_N_Levels, Width_Per_Level => Filter_Width_Per_Level);

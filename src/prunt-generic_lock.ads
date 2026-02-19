@@ -19,6 +19,10 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+--  This package defines a lock holder type that automatically acquires a lock upon creation and releases it upon
+--  finalization. This ensures that locks are always released, even in the presence of exceptions. A single lock is
+--  available for each instantiation of the generic package.
+
 pragma Extensions_Allowed (On);
 
 private with Ada.Finalization;
@@ -27,10 +31,19 @@ generic
 package Prunt.Generic_Lock is
 
    type Lock_Holder (<>) is limited private;
+   --  A type representing the ownership of the lock.
+   --
+   --  The lock is held for as long as an object of this type exists. When the object is finalized (e.g., goes out of
+   --  scope), the lock is automatically released.
 
    function Lock return Lock_Holder;
+   --  Acquires the lock and returns a `Lock_Holder` object.
+   --
+   --  This function blocks until the lock becomes available. The lock will remain held until the returned object is
+   --  finalized.
+
    --  with Nonblocking => False;
-   --  TODO: uncomment above once GNAT adds support for the Nonblocking aspect.
+   --  TODO: Uncomment above once GNAT adds support for the Nonblocking aspect.
 
 private
 

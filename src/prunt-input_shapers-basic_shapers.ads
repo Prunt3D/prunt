@@ -19,6 +19,10 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+--  This package provides implementations for basic input shapers such as Zero Vibration (ZV) and Extra Insensitive
+--  (EI) shapers. These shapers work by convolving the input signal with a sequence of impulses to cancel out system
+--  vibrations.
+
 pragma Extensions_Allowed (On);
 
 with Prunt.Input_Shapers.Shapers;
