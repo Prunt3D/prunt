@@ -114,17 +114,14 @@ project Prunt is
       case Prunt_Config.Build_Profile is
       when "release" =>
          for Switches ("Ada") use
-           ("-r",   --  List restrictions that could be applied
-            "-Es"); --  Symbolic traceback
+           ("-Es"); --  Symbolic traceback
       when "validation" =>
          for Switches ("Ada") use
-           ("-r",   --  List restrictions that could be applied
-            "-we",  --  Treat warnings as errors
+           ("-we",  --  Treat warnings as errors
             "-Es"); --  Symbolic traceback
       when "development" =>
          for Switches ("Ada") use
-           ("-r",   --  List restrictions that could be applied
-            "-Es"); --  Symbolic traceback
+           ("-Es"); --  Symbolic traceback
       end case;
    end Binder;
 
@@ -151,7 +148,6 @@ project Prunt is
          "Prunt.Controller_Generic_Types",
          "Prunt.Default_Modules",
          "Prunt.Default_Modules.*",
-         "Prunt.Indefinite_Ordered_Maps_With_Insertion_Order",
          "Prunt.Input_Shapers",
          "Prunt.Input_Shapers.*",
          "Prunt.Limited_Shared_Pointers",

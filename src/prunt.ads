@@ -21,10 +21,7 @@
 
 pragma Extensions_Allowed (On);
 
-with Ada.Exceptions;
 with Ada.Numerics;
-with Ada.Task_Identification;
-with Ada.Task_Termination;
 with VSS.Strings; use VSS.Strings;
 with VSS.Strings.Conversions;
 
@@ -39,36 +36,6 @@ package Prunt is
    type Command_Index is range 0 .. 2 ** 63 - 2;
 
    type Pin_State is (High_State, Low_State);
-
-   protected type Exception_Occurrence_Holder_Type is
-      function Is_Set return Boolean;
-      --  Check if any exceptions have been stored.
-
-      procedure Set_Fatal
-        (Cause      : Ada.Task_Termination.Cause_Of_Termination;
-         ID         : Ada.Task_Identification.Task_Id;
-         Occurrence : Ada.Exceptions.Exception_Occurrence)
-      with Post => Is_Set;
-      --  Store an exception if no fatal exception has been stored previously. Also prints all exceptions.
-
-      procedure Set_Recoverable
-        (Cause      : Ada.Task_Termination.Cause_Of_Termination;
-         ID         : Ada.Task_Identification.Task_Id;
-         Occurrence : Ada.Exceptions.Exception_Occurrence)
-      with Post => Is_Set;
-      --  Store an exception if no exception has been stored previously. Also prints all exceptions.
-
-      entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence; Is_Fatal : out Boolean);
-      --  Get the stored exception. Blocks until an exception is available.
-
-      entry Enter_When_Fatal_Set;
-
-      procedure Reset;
-   private
-      function Null_Occurrence return Ada.Exceptions.Exception_Occurrence;
-      Data                    : aliased Ada.Exceptions.Exception_Occurrence := Null_Occurrence;
-      Fatal_Occurrence_Stored : Boolean := False;
-   end Exception_Occurrence_Holder_Type;
 
    --  You may notice a lot of math similar to 5.0**(1/2) here when using the below types. This may seem like it should
    --  be evaluated as 5.0**(1/2) = 5.0**0 = 1.0, which it would be under normal circumstances, but GNAT does some

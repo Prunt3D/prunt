@@ -24,6 +24,7 @@ pragma Extensions_Allowed (On);
 with Ada.Streams;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
+with Prunt.Exception_Occurrence_Holders;
 with Prunt.Default_Modules.Basic_Config;
 with Prunt.Default_Modules.Internal_Status_Reporter;
 with Prunt.Default_Modules.Motion;
@@ -141,8 +142,8 @@ private
    use type Module_Maps.Map;
 
    pragma Warnings (Off, "use of an anonymous access type allocator");
-   Exception_Occurrence_Holder : constant access Exception_Occurrence_Holder_Type :=
-     new Exception_Occurrence_Holder_Type;
+   Exception_Occurrence_Holder : constant access Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type :=
+     new Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type;
    --  This needs to be an allocation is so that we can safely call 'Access on the Set procedure to be passed to
    --  Ada.Task_Termination.Set_Specific_Handler. This of course leaks memory, but no one should be instantiating this
    --  package thousands of times, which is the only time a leak will matter.

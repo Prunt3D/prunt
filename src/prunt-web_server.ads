@@ -33,6 +33,7 @@ with GNAT.Sockets;                                      use GNAT.Sockets;
 with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connection_State_Machine.HTTP_Server;
 with GNAT.Sockets.Server;                               use GNAT.Sockets.Server;
 with Prunt.Config;
+with Prunt.Exception_Occurrence_Holders;
 with Prunt.Logger;
 with Prunt.Update_Checker;
 
@@ -50,7 +51,7 @@ generic
    with procedure Resume_Stepgen;
    with procedure Reload_Server;
    with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
-   Exception_Occurrence_Holder : in out Exception_Occurrence_Holder_Type;
+   Exception_Occurrence_Holder : in out Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type;
    Config_Schema_String : Virtual_String;
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is

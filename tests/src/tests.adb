@@ -24,9 +24,11 @@ with Prunt.Bounded_Indefinite_Queues_Test;
 with Prunt.Bounded_Indefinite_Vectors_Test;
 with Prunt.Config.Test;
 with Prunt.Dummy_Allocator.Test;
+with Prunt.Exception_Occurrence_Holders.Test;
 with Prunt.Gcode_Arguments.Test;
 with Prunt.Gcode_Queues.Test;
 with Prunt.Generic_Lock.Test;
+with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test;
 with Prunt.Motion_Planner.Test;
 with Prunt.Moving_Averages.Test;
 with Prunt.Thermistors.Test;
@@ -54,8 +56,10 @@ begin
    Trendy_Test.Register (Prunt.Bounded_Indefinite_Vectors_Test.All_Tests);
    Trendy_Test.Register (Prunt.Config.Test.All_Tests);
    Trendy_Test.Register (Prunt.Dummy_Allocator.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Exception_Occurrence_Holders.Test.All_Tests);
    Trendy_Test.Register (Prunt.Gcode_Arguments.Test.All_Tests);
    Trendy_Test.Register (Prunt.Gcode_Queues.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Test.All_Tests);
    Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
 
