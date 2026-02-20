@@ -331,16 +331,23 @@ package body Prunt.Step_Generator is
             declare
                Loop_Move_Cycles : Dimensionless := 0.0;
             begin
-               --  TODO
-               --  if Loop_Move_Command_Index /= 0 then
-               --     select
-               --        accept Reset;
-               --        exit Main;
-               --     then abort
-               --        --  TODO: Wait for loop move cycles to be reported
-               --        null;
-               --     end select;
-               --  end if;
+               if Loop_Move_Command_Index /= 0 then
+                  loop
+                     select
+                        delay 3.0;
+                     then abort
+                        Wait_For_Loop_Cycles (Loop_Move_Command_Index, Loop_Move_Cycles);
+                        exit;
+                     end select;
+
+                     select
+                        accept Reset;
+                        exit Main;
+                     or
+                        delay 0.1;
+                     end select;
+                  end loop;
+               end if;
 
                Finish_Planner_Block
                  (Resetting_Data       => Block.Flush_Resetting_Data,

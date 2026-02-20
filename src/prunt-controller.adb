@@ -20,6 +20,7 @@
 -----------------------------------------------------------------------------
 
 with Ada.Tags;
+with Ada.Task_Identification;
 with Ada.Task_Termination;
 with VSS.Strings.Conversions;
 
@@ -79,6 +80,33 @@ package body Prunt.Controller is
          end select;
       end loop Main;
    end Run;
+
+   procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True) is
+   begin
+      begin
+         raise Program_Error with Message;
+      exception
+         when E : others =>
+            Report_External_Error (E, Is_Fatal);
+      end;
+   end Report_External_Error;
+
+   procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True) is
+      use type Ada.Task_Termination.Cause_Of_Termination;
+   begin
+      if Is_Fatal then
+         Exception_Occurrence_Holder.all.Set_Fatal
+           (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
+      else
+         Exception_Occurrence_Holder.all.Set_Recoverable
+           (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
+      end if;
+   end Report_External_Error;
+
+   procedure Log (Message : String) is
+   begin
+      My_Logger.Log (+Message);
+   end Log;
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
@@ -271,6 +299,50 @@ package body Prunt.Controller is
          Reset_Position (Next_Block_Pos);
       end if;
    end Finish_Planner_Block;
+
+   procedure Wait_For_Loop_Cycles (Index : Command_Index; Cycles : out Dimensionless) is
+      Reported_Index : Command_Index;
+   begin
+      Loop_Move_Cycles.Wait (Reported_Index, Cycles);
+      if Reported_Index /= Index then
+         raise Constraint_Error
+           with
+             "Reported loop move cycles index mismatch. Expected " & Index'Image & " but got " & Reported_Index'Image;
+      end if;
+   end Wait_For_Loop_Cycles;
+
+   procedure Report_Last_Command_Executed (Index : Command_Index) is
+   begin
+      Last_Command_Executed.Report (Index);
+   end Report_Last_Command_Executed;
+
+   protected body Last_Command_Executed is
+      procedure Report (Index : Command_Index) is
+      begin
+         Current_Index := Index;
+      end Report;
+
+      function Get return Command_Index is
+      begin
+         return Current_Index;
+      end Get;
+   end Last_Command_Executed;
+
+   protected body Loop_Move_Cycles is
+      procedure Report (Index : Command_Index; Cycles : Dimensionless) is
+      begin
+         Current_Index := Index;
+         Current_Cycles := Cycles;
+         Has_Data := True;
+      end Report;
+
+      entry Wait (Index : out Command_Index; Cycles : out Dimensionless) when Has_Data is
+      begin
+         Index := Current_Index;
+         Cycles := Current_Cycles;
+         Has_Data := False;
+      end Wait;
+   end Loop_Move_Cycles;
 
    protected body Reload_Signal is
       entry Wait when Reload_Requested is

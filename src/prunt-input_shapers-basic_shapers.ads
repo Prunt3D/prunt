@@ -77,7 +77,7 @@ private
           Basic_Shaper.Impulses (I).Output_Delay <= Basic_Shaper.Impulses (I + 1).Output_Delay)
        and then Basic_Shaper.Buffer_Size = Basic_Shaper.Impulses (Basic_Shaper.Impulses'Last).Output_Delay + 1
        and then (for all I of Basic_Shaper.Impulses => I.Output_Delay >= 0);
-   --  TODO: Gnatcov can not parse 'Reduce, rewrite this without it.
+   --  TODO: Gnatcov can not parse 'Reduce, rewrite this without it:
    --  and abs ([for I of Basic_Shaper.Impulses => I.Output_Ratio]'Reduce ("+", Dimensionless (1.0)) - 1.0)
    --      < 0.000_000_1;
 

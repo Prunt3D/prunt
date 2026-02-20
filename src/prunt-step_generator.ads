@@ -62,8 +62,7 @@ generic
    --  determine the position after a homing move as the loop move starts as soon as possible after the acceleration
    --  part.
 
-   --  with function Get_Loop_Move_Cycles (Expected_Command : Command_Index) return Dimensionless;
-   --  TODO
+   with procedure Wait_For_Loop_Cycles (Index : Command_Index; Cycles : out Dimensionless);
 
    Interpolation_Time : Time;
 

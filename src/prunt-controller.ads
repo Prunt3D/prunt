@@ -21,6 +21,7 @@
 
 pragma Extensions_Allowed (On);
 
+with Ada.Exceptions;
 with Ada.Streams;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
@@ -109,26 +110,30 @@ package Prunt.Controller is
    procedure Run;
    --  Start the controller. Does not return while the controller is running.
 
-   --  --  TODO
-   --  procedure Report_Last_Command_Executed (Index : Command_Index);
-   --  --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
-   --  --  needs to be called.
+   procedure Report_Last_Command_Executed (Index : Command_Index);
+   --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
+   --  needs to be called.
 
-   --  --  TODO
-   --  procedure Report_Loop_Cycles (Index : Command_Index; Cycles : Dimensionless);
-   --  --  Report the number of loops executed for a given loop move.
+   protected Loop_Move_Cycles is
+      procedure Report (Index : Command_Index; Cycles : Dimensionless);
+      --  Report the number of loops executed for a given loop move.
 
-   --  --  TODO
-   --  procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
-   --  --  Report an error to Prunt and cause the printer to halt.
+      entry Wait (Index : out Command_Index; Cycles : out Dimensionless);
+      --  Wait for loop move cycles to be reported.
+   private
+      Current_Index  : Command_Index := 0;
+      Current_Cycles : Dimensionless := 0.0;
+      Has_Data       : Boolean := False;
+   end Loop_Move_Cycles;
 
-   --  --  TODO
-   --  procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True);
-   --  --  Report an error to Prunt and cause the printer to halt.
+   procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
+   --  Report an error to Prunt and cause the printer to halt.
 
-   --  --  TODO
-   --  procedure Log (Message : String);
-   --  --  Log a message for the user.
+   procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True);
+   --  Report an error to Prunt and cause the printer to halt.
+
+   procedure Log (Message : String);
+   --  Log a message for the user.
 
    package My_Default_Modules is new Default_Modules (My_Modules);
 
@@ -138,6 +143,13 @@ package Prunt.Controller is
    end My_Default_Modules_Children;
 
 private
+
+   protected Last_Command_Executed with Lock_Free is
+      procedure Report (Index : Command_Index);
+      function Get return Command_Index;
+   private
+      Current_Index : Command_Index := 0;
+   end Last_Command_Executed;
 
    use type Module_Maps.Map;
 
@@ -178,7 +190,6 @@ private
 
    package Extra_Block_Resetting_Data_Holders is new
      Ada.Containers.Indefinite_Holders (Module_Types.Extra_Block_Resetting_Data'Class, Module_Types."=");
-   --  TODO: Maybe use bounded indefinite holders here once we switch to GCC 16.
 
    package My_Motion_Planner is new
      Motion_Planner.Planner
@@ -214,6 +225,8 @@ private
       Last_Command_Index   : Command_Index;
       Loop_Move_Offset     : Position_Offset);
 
+   procedure Wait_For_Loop_Cycles (Index : Command_Index; Cycles : out Dimensionless);
+
    package My_Step_Generator is new
      Step_Generator
        (Planner              => My_Motion_Planner,
@@ -223,6 +236,7 @@ private
         Enqueue_Command      => Enqueue_Command_Internal,
         Start_Corner         => Start_Corner,
         Finish_Planner_Block => Finish_Planner_Block,
+        Wait_For_Loop_Cycles => Wait_For_Loop_Cycles,
         Interpolation_Time   => Interpolation_Time,
         Runner_CPU           => Command_Line_Arguments.Step_Generator_CPU);
 

@@ -376,13 +376,9 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
 
       M : Map;
 
-      Count : Ada.Containers.Count_Type := 0;
-
       for Position in reverse M.Iterate loop
-         Count := Count + 1;
+         T.Fail ("Should be empty.");
       end loop;
-
-      T.Assert (Count = 0);
    end Test_Reverse_Iterate_Empty;
 
    function All_Tests return Trendy_Test.Test_Group is
