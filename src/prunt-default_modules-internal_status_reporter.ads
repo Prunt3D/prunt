@@ -25,6 +25,8 @@ with Ada.Tags;
 with Prunt.Config;
 with Prunt.Status_Manager;
 
+private with Prunt.Limited_Shared_Pointers;
+
 generic
    with function Get_Position return Prunt.Position;
    with function Get_File_Name return Virtual_String;
@@ -58,8 +60,10 @@ private
       entry Stop;
    end Status_Updater;
 
+   package Status_Updater_Pointers is new Limited_Shared_Pointers (Status_Updater);
+
    type Module_Instance is new My_Modules.Module_Instance with record
-      Updater : Status_Updater;
+      Updater : Status_Updater_Pointers.Ref := Status_Updater_Pointers.Null_Ref;
    end record;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

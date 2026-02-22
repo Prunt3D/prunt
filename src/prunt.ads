@@ -57,11 +57,11 @@ package Prunt is
 
    subtype Time is Dimensioned_Float with Dimension => (Symbol => "s", Second => 1, others => 0);
 
-   subtype Temperature is Dimensioned_Float with Dimension => (Symbol => "degC", Celsius => 1, others => 0);
+   subtype Temperature is Dimensioned_Float with Dimension => (Symbol => "°C", Celsius => 1, others => 0);
 
    subtype Angle is Dimensioned_Float with Dimension => (Symbol => "rad", others => 0);
 
-   subtype Dimensionless is Dimensioned_Float with Dimension => (Symbol => "x", others => 0);
+   subtype Dimensionless is Dimensioned_Float with Dimension => (Symbol => "×", others => 0);
 
    subtype Voltage is Dimensioned_Float
    with Dimension => (Symbol => "nV", Gram => 1, Millimeter => 2, Second => -3, Amp => -1, others => 0);
@@ -263,5 +263,10 @@ package Prunt is
    private
       Counter : Natural := 0;
    end Test_File_Name_Generator;
+
+   type Loop_Cycle_Reporter_Interface is limited interface;
+
+   procedure Wait (Reporter : in out Loop_Cycle_Reporter_Interface; Index : Command_Index; Cycles : out Dimensionless)
+   is abstract;
 
 end Prunt;

@@ -34,6 +34,7 @@ private with Ada.Containers.Ordered_Maps;
 private with Ada.Containers.Indefinite_Holders;
 private with Prunt.Command_Line_Arguments;
 private with Prunt.Gcode_Arguments;
+private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 private with Prunt.Logger;
 private with Prunt.Module_Types;
@@ -41,6 +42,7 @@ private with Prunt.Motion_Planner.Planner;
 private with Prunt.Status_Manager;
 private with Prunt.Step_Generator;
 private with Prunt.Update_Checker;
+private with Prunt.Web_Server;
 
 generic
    with package Generic_Types is new Controller_Generic_Types (<>);
@@ -99,6 +101,10 @@ generic
    Extra_Modules : Module_Maps.Map := [];
 package Prunt.Controller is
 
+   pragma Extensions_Allowed (On);
+   --  TODO: We need to repeat this here or we get errors, but it's unclear why. Does the pragma above the generic not
+   --  carry through to the instantiation?
+
    procedure Prompt_For_Update;
    --  Prompts the user to click a button to allow a firmware update in the GUI and returns when the user clicks the
    --  button. This is used to prevent a broken firmware updater from getting stuck in a loop and wearing out the flash
@@ -114,17 +120,7 @@ package Prunt.Controller is
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
 
-   protected Loop_Move_Cycles is
-      procedure Report (Index : Command_Index; Cycles : Dimensionless);
-      --  Report the number of loops executed for a given loop move.
-
-      entry Wait (Index : out Command_Index; Cycles : out Dimensionless);
-      --  Wait for loop move cycles to be reported.
-   private
-      Current_Index  : Command_Index := 0;
-      Current_Cycles : Dimensionless := 0.0;
-      Has_Data       : Boolean := False;
-   end Loop_Move_Cycles;
+   procedure Report_Loop_Move_Cycles (Index : Command_Index; Cycles : Dimensionless);
 
    procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
    --  Report an error to Prunt and cause the printer to halt.
@@ -135,16 +131,32 @@ package Prunt.Controller is
    procedure Log (Message : String);
    --  Log a message for the user.
 
+private
+
    package My_Default_Modules is new Default_Modules (My_Modules);
+
+   function Get_Current_Position return Position;
+
+   function Get_Current_File_Name return Virtual_String;
+
+   function Get_Current_File_Line return File_Line_Count;
+
+   function Stepgen_Paused return Boolean;
 
    package My_Default_Modules_Children is
       package Basic_Config is new My_Default_Modules.Basic_Config;
       package Motion is new My_Default_Modules.Motion;
+      package Internal_Status_Reporter is new
+        My_Default_Modules.Internal_Status_Reporter
+          (Get_Position   => Get_Current_Position,
+           Get_File_Name  => Get_Current_File_Name,
+           Get_Line       => Get_Current_File_Line,
+           Stepgen_Paused => Stepgen_Paused);
    end My_Default_Modules_Children;
 
-private
-
-   protected Last_Command_Executed with Lock_Free is
+   protected Last_Command_Executed
+     with Lock_Free
+   is
       procedure Report (Index : Command_Index);
       function Get return Command_Index;
    private
@@ -162,8 +174,11 @@ private
    pragma Warnings (On, "use of an anonymous access type allocator");
 
    function Get_Modules_For_Hardware return Module_Maps.Map
-   is ["Basic Config" => My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
-       "Motion"       => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record)];
+   is ["Basic Config"             =>
+         My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
+       "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
+       "Internal Status Reporter" =>
+         My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record)];
 
    Active_Modules : constant Module_Maps.Map :=
      ((if Disable_Default_Modules then Module_Maps.Map'[] else Get_Modules_For_Hardware) & Extra_Modules);
@@ -172,6 +187,12 @@ private
 
    Active_Module_Config_Schemas : constant Config.Config_Schema_Maps.Map :=
      [for C in Active_Modules.Iterate use Module_Maps.Key (C) => Module_Maps.Element (C).Config_Schema];
+
+   Active_Module_Status_Schemas : constant Status_Manager.Status_Module_Maps.Map :=
+     [for C in Active_Modules.Iterate use Module_Maps.Key (C) => Module_Maps.Element (C).Status_Schema];
+
+   My_Status_Data : constant Status_Manager.Status_Data_Collection :=
+     Status_Manager.Build_Collection (Active_Module_Status_Schemas);
 
    package Module_Instance_Maps is new
      Prunt.Indefinite_Ordered_Maps_With_Insertion_Order
@@ -225,7 +246,20 @@ private
       Last_Command_Index   : Command_Index;
       Loop_Move_Offset     : Position_Offset);
 
-   procedure Wait_For_Loop_Cycles (Index : Command_Index; Cycles : out Dimensionless);
+   protected Loop_Move_Cycles is new Loop_Cycle_Reporter_Interface with
+      procedure Report (Index : Command_Index; Cycles : Dimensionless);
+      --  Report the number of loops executed for a given loop move.
+
+      overriding
+      entry Wait (Index : Command_Index; Cycles : out Dimensionless);
+      --  Wait for loop move cycles to be reported.
+
+      --  TODO: Reset procedure for when controller is reset.
+   private
+      Current_Index  : Command_Index := 0;
+      Current_Cycles : Dimensionless := 0.0;
+      Has_Data       : Boolean := False;
+   end Loop_Move_Cycles;
 
    package My_Step_Generator is new
      Step_Generator
@@ -236,9 +270,40 @@ private
         Enqueue_Command      => Enqueue_Command_Internal,
         Start_Corner         => Start_Corner,
         Finish_Planner_Block => Finish_Planner_Block,
-        Wait_For_Loop_Cycles => Wait_For_Loop_Cycles,
+        Loop_Cycle_Reporter  => Loop_Move_Cycles'Access,
         Interpolation_Time   => Interpolation_Time,
         Runner_CPU           => Command_Line_Arguments.Step_Generator_CPU);
+
+   My_Gcode_Queue : Gcode_Queues.Queue;
+
+   procedure Apply_Untrusted_Config_Patch
+     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
+
+   procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean);
+
+   procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
+
+   procedure Reload_Server;
+
+   function Get_Status_Values_String return Virtual_String
+   is (My_Status_Data.JSON_Data);
+
+   package My_Web_Server is new
+     Web_Server
+       (Apply_Config_Patch          => Apply_Untrusted_Config_Patch,
+        My_Logger                   => My_Logger,
+        My_Update_Checker           => My_Update_Checker,
+        Submit_Gcode_Command        => Submit_Gcode_Command,
+        Submit_Gcode_File           => Submit_Gcode_File,
+        Pause_Stepgen               => My_Step_Generator.Pause,
+        Resume_Stepgen              => My_Step_Generator.Resume,
+        Reload_Server               => Reload_Server,
+        Get_Extra_HTTP_Content      => Get_Extra_HTTP_Content,
+        Exception_Occurrence_Holder => Exception_Occurrence_Holder.all,
+        Config_Schema_String        => Active_Config_File.Get_Schema_String,
+        Status_Schema_String        => My_Status_Data.JSON_Schema,
+        Get_Status_Values_String    => Get_Status_Values_String,
+        Port                        => Command_Line_Arguments.Web_Server_Port);
 
    type Gcode_Dispatch_Argument_Kinds is array (Gcode_Arguments.Arguments_Index) of Gcode_Arguments.Argument_Kind;
 
@@ -256,11 +321,7 @@ private
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      My_Config_File      : Config.Config_File;
-      My_Status_Data      : Status_Manager.Status_Data_Collection) return Module_Instance_Maps.Map;
-
-   procedure Apply_Untrusted_Config_Patch
-     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
+      My_Config_File      : Config.Config_File) return Module_Instance_Maps.Map;
 
    protected Patch_Processor is
       procedure Apply

@@ -44,13 +44,21 @@ package body Prunt.Status_Manager is
       This.Internal.Get.Set_Value (This.Module, Group, Key, Value);
    end Set_Value;
 
-   function Add_Module
-     (This : Status_Data_Collection; Module_Name : Virtual_String; Groups : Status_Group_Maps.Map)
-      return Status_Emitter is
+   function Build_Collection (Modules : Status_Module_Maps.Map) return Status_Data_Collection is
    begin
-      This.Internal.Get.Add_Module (Module_Name, Groups);
+      return Result : Status_Data_Collection do
+         Result.Internal.Get.Initialize (Modules);
+      end return;
+   end Build_Collection;
+
+   function Get_Emitter (This : Status_Data_Collection; Module_Name : Virtual_String) return Status_Emitter is
+   begin
+      if not This.Internal.Get.Has_Module (Module_Name) then
+         raise Constraint_Error with "Status module " & Module_Name'Image & " does not exist.";
+      end if;
+
       return Status_Emitter'(Module_Name, This.Internal);
-   end Add_Module;
+   end Get_Emitter;
 
    function JSON_Schema (This : Status_Data_Collection) return Virtual_String is
    begin
@@ -64,10 +72,10 @@ package body Prunt.Status_Manager is
 
    protected body Status_Data_Collection_Internal is
 
-      procedure Add_Module (Module_Name : Virtual_String; Groups : Status_Group_Maps.Map) is
+      procedure Initialize (Modules : Status_Module_Maps.Map) is
          Root : constant JSON_Value := Create_Object;
       begin
-         Modules.Insert (Module_Name, Groups);
+         Status_Data_Collection_Internal.Modules := Modules;
          for M in Modules.Iterate loop
             declare
                Module_Node   : constant JSON_Value := Create_Object;
@@ -108,7 +116,12 @@ package body Prunt.Status_Manager is
          end loop;
 
          Cached_Schema := Write (Root);
-      end Add_Module;
+      end Initialize;
+
+      function Has_Module (Module_Name : Virtual_String) return Boolean is
+      begin
+         return Modules.Contains (Module_Name);
+      end Has_Module;
 
       procedure Ensure_Module_And_Group_Nodes (Module : Virtual_String; Group : Virtual_String) is
          Module_Node : JSON_Value;

@@ -35,7 +35,6 @@ package body Prunt.Controller is
 
    procedure Run is
       Active_Module_Instances : Module_Instance_Maps.Map := [];
-      My_Status_Data          : Status_Manager.Status_Data_Collection;
 
       procedure Attempt_Start is
          Had_Error : Boolean := False;
@@ -46,8 +45,7 @@ package body Prunt.Controller is
             Had_Error := True;
          end Report_Config_Error;
       begin
-         Active_Module_Instances :=
-           Recursive_Module_Initialization (Report_Config_Error'Access, Active_Config_File, My_Status_Data);
+         Active_Module_Instances := Recursive_Module_Initialization (Report_Config_Error'Access, Active_Config_File);
 
          if Had_Error then
             My_Logger.Log ("Prunt could not start due to configuration errors.");
@@ -110,8 +108,7 @@ package body Prunt.Controller is
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      My_Config_File      : Config.Config_File;
-      My_Status_Data      : Status_Manager.Status_Data_Collection) return Module_Instance_Maps.Map
+      My_Config_File      : Config.Config_File) return Module_Instance_Maps.Map
    is
       use Module_Maps;
       use Module_Instance_Maps;
@@ -152,7 +149,7 @@ package body Prunt.Controller is
                      Config_Ref  : My_Modules.Config_Data_Shared_Pointers.Ref :=
                        My_Modules.Config_Data_Shared_Pointers.Null_Ref;
                   begin
-                     Emitter_Ref.Set (Status_Manager.Add_Module (My_Status_Data, Key (C), Element (C).Status_Schema));
+                     Emitter_Ref.Set (Status_Manager.Get_Emitter (My_Status_Data, Key (C)));
                      Config_Ref.Set (My_Config_File.Get_Data (Key (C)));
                      return
                        Element (C).Initialize
@@ -234,9 +231,8 @@ package body Prunt.Controller is
                   --  as no patch is applied in that case.
                   My_Config_File             : constant Config.Config_File :=
                     Config.Create (Config_Path, Active_Module_Config_Schemas);
-                  My_Status_Data             : Status_Manager.Status_Data_Collection;
                   Temporary_Module_Instances : Module_Instance_Maps.Map :=
-                    Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File, My_Status_Data);
+                    Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File);
                begin
                   Temporary_Module_Instances.Reverse_Clear;
                end;
@@ -255,6 +251,21 @@ package body Prunt.Controller is
    begin
       Patch_Processor.Apply (Patch, Result, Errors);
    end Apply_Untrusted_Config_Patch;
+
+   procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean) is
+   begin
+      My_Gcode_Queue.Try_Set_Command (Command, Succeeded);
+   end Submit_Gcode_Command;
+
+   procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean) is
+   begin
+      My_Gcode_Queue.Try_Set_File (Path, Succeeded);
+   end Submit_Gcode_File;
+
+   procedure Reload_Server is
+   begin
+      null; --  TODO
+   end Reload_Server;
 
    procedure Start_Planner_Block
      (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index) is
@@ -300,21 +311,15 @@ package body Prunt.Controller is
       end if;
    end Finish_Planner_Block;
 
-   procedure Wait_For_Loop_Cycles (Index : Command_Index; Cycles : out Dimensionless) is
-      Reported_Index : Command_Index;
-   begin
-      Loop_Move_Cycles.Wait (Reported_Index, Cycles);
-      if Reported_Index /= Index then
-         raise Constraint_Error
-           with
-             "Reported loop move cycles index mismatch. Expected " & Index'Image & " but got " & Reported_Index'Image;
-      end if;
-   end Wait_For_Loop_Cycles;
-
    procedure Report_Last_Command_Executed (Index : Command_Index) is
    begin
       Last_Command_Executed.Report (Index);
    end Report_Last_Command_Executed;
+
+   procedure Report_Loop_Move_Cycles (Index : Command_Index; Cycles : Dimensionless) is
+   begin
+      Loop_Move_Cycles.Report (Index, Cycles);
+   end Report_Loop_Move_Cycles;
 
    protected body Last_Command_Executed is
       procedure Report (Index : Command_Index) is
@@ -331,14 +336,26 @@ package body Prunt.Controller is
    protected body Loop_Move_Cycles is
       procedure Report (Index : Command_Index; Cycles : Dimensionless) is
       begin
+         if Has_Data then
+            raise Constraint_Error with "Attempted to report loop move cycles while result is already pending.";
+         end if;
+
          Current_Index := Index;
          Current_Cycles := Cycles;
          Has_Data := True;
       end Report;
 
-      entry Wait (Index : out Command_Index; Cycles : out Dimensionless) when Has_Data is
+      entry Wait (Index : Command_Index; Cycles : out Dimensionless) when Has_Data is
       begin
-         Index := Current_Index;
+         if Current_Index /= Index then
+            raise Constraint_Error
+              with
+                "Reported loop move cycles index mismatch. Expected "
+                & Index'Image
+                & " but got "
+                & Current_Index'Image;
+         end if;
+
          Cycles := Current_Cycles;
          Has_Data := False;
       end Wait;
@@ -372,6 +389,27 @@ package body Prunt.Controller is
    begin
       Reload_Signal.Signal;
    end Signal_Reload;
+
+   function Get_Current_Position return Position is
+   begin
+      --  TODO
+      return [others => 0.0 * mm];
+   end Get_Current_Position;
+
+   function Get_Current_File_Name return Virtual_String is
+   begin
+      return My_Gcode_Queue.Get_Current_File;
+   end Get_Current_File_Name;
+
+   function Get_Current_File_Line return File_Line_Count is
+   begin
+      return My_Gcode_Queue.Get_Current_Line_Number;
+   end Get_Current_File_Line;
+
+   function Stepgen_Paused return Boolean is
+   begin
+      return My_Step_Generator.Is_Paused;
+   end Stepgen_Paused;
 
 begin
    Active_Module_Gcode_Dispatch_Map := [];

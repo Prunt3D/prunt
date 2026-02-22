@@ -54,17 +54,23 @@ package Prunt.Status_Manager is
    package Status_Group_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Status_Value_Maps.Map, "=" => Return_False);
 
+   function Return_False (Left, Right : Status_Group_Maps.Map with Unreferenced) return Boolean
+   is (False);
+
+   package Status_Module_Maps is new
+     Ada.Containers.Ordered_Maps (Virtual_String, Status_Group_Maps.Map, "=" => Return_False);
+
    type Status_Data_Collection is limited private;
+
+   function Build_Collection (Modules : Status_Module_Maps.Map) return Status_Data_Collection;
+
+   function Get_Emitter (This : Status_Data_Collection; Module_Name : Virtual_String) return Status_Emitter;
 
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Dimensionless);
    procedure Set_Value
      (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Long_Long_Integer);
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Boolean);
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Virtual_String);
-
-   function Add_Module
-     (This : Status_Data_Collection; Module_Name : Virtual_String; Groups : Status_Group_Maps.Map)
-      return Status_Emitter;
 
    function JSON_Schema (This : Status_Data_Collection) return Virtual_String;
    function JSON_Data (This : Status_Data_Collection) return Virtual_String;
@@ -73,14 +79,10 @@ private
 
    use Prunt.JSON;
 
-   function Return_False (Left, Right : Status_Group_Maps.Map with Unreferenced) return Boolean
-   is (False);
-
-   package Status_Module_Maps is new
-     Ada.Containers.Ordered_Maps (Virtual_String, Status_Group_Maps.Map, "=" => Return_False);
-
    protected type Status_Data_Collection_Internal is
-      procedure Add_Module (Module_Name : Virtual_String; Groups : Status_Group_Maps.Map);
+      procedure Initialize (Modules : Status_Module_Maps.Map);
+
+      function Has_Module (Module_Name : Virtual_String) return Boolean;
 
       procedure Set_Value
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : Dimensionless);

@@ -334,10 +334,10 @@ package body Prunt.Step_Generator is
                if Loop_Move_Command_Index /= 0 then
                   loop
                      select
-                        delay 3.0;
-                     then abort
-                        Wait_For_Loop_Cycles (Loop_Move_Command_Index, Loop_Move_Cycles);
+                        Loop_Cycle_Reporter.Wait (Loop_Move_Command_Index, Loop_Move_Cycles);
                         exit;
+                     or
+                        delay 3.0;
                      end select;
 
                      select

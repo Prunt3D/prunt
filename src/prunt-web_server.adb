@@ -147,16 +147,13 @@ package body Prunt.Web_Server is
                if Source.Step = First_Entry then
                   Source.Step := Continuing_Entries;
                   return
-                    """"
-                    & Conversions.To_UTF_8_String
-                        (JSON.Escape_String (Conversions.To_Virtual_String (Simple_Name (Dir))))
-                    & """";
+                    Conversions.To_UTF_8_String
+                      (JSON.Escape_String (Conversions.To_Virtual_String (Simple_Name (Dir))));
                else
                   return
-                    ","""
+                    ","
                     & Conversions.To_UTF_8_String
-                        (JSON.Escape_String (Conversions.To_Virtual_String (Simple_Name (Dir))))
-                    & """";
+                        (JSON.Escape_String (Conversions.To_Virtual_String (Simple_Name (Dir))));
                end if;
             else
                Source.Step := Finished;
@@ -220,34 +217,34 @@ package body Prunt.Web_Server is
    end Write;
 
    function Patch_Config_Values (Patch : String) return Unbounded_String is
-      Errors : Unbounded_String := To_Unbounded_String ("[");
-      Result : Virtual_String;
+      Patch_Errors : Config.Config_Error_Vectors.Vector;
+      Result       : Virtual_String;
+      Errors       : Unbounded_String := To_Unbounded_String ("[");
+   begin
+      Apply_Config_Patch (Conversions.To_Virtual_String (Patch), Result, Patch_Errors);
 
-      procedure Append_Error (Path : Config.Config_Data_Paths.Vector; Message : String) is
-      begin
+      for Error of Patch_Errors loop
          if Errors /= "[" then
-            Append (Errors, ",");
+            Errors.Append (",");
          end if;
-         Append (Errors, "{""Path"":[""");
+
+         Errors.Append ("{""Path"":[");
          declare
             First : Boolean := True;
          begin
-            for E of Path loop
+            for E of Error.Path loop
                if not First then
-                  Append (Errors, ",");
+                  Errors.Append (",");
                end if;
-               Append (Errors, """" & Conversions.To_Unbounded_UTF_8_String (JSON.Escape_String (E)) & """");
+
+               Errors.Append (Conversions.To_Unbounded_UTF_8_String (JSON.Escape_String (E)));
                First := False;
             end loop;
          end;
-         Append
-           (Errors,
-            """,""Message"":"""
-            & Conversions.To_UTF_8_String (JSON.Escape_String (Conversions.To_Virtual_String (Message)))
-            & """}");
-      end Append_Error;
-   begin
-      Apply_Config_Patch (Conversions.To_Virtual_String (Patch), Result, Append_Error'Access);
+
+         Errors.Append ("],""Message"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Error.Message)) & "}");
+      end loop;
+
       return "{""Values"":" & Conversions.To_Unbounded_UTF_8_String (Result) & ",""Errors"":" & Errors & "]}";
    end Patch_Config_Values;
 
@@ -390,19 +387,13 @@ package body Prunt.Web_Server is
       --  should we handle it as if the target was "/"?
       if Status.Kind = File then
          if Status.File = "config/schema" then
-            --  Reply_JSON (Client, 200, "OK", My_Config_File.Get_Schema_String, Get);
-            --  TODO
-            null;
+            Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Config_Schema_String), Get);
          elsif Status.File = "config/values" then
             Reply_JSON (Client, 200, "OK", Patch_Config_Values ("{}"), Get);
          elsif Status.File = "status/schema" then
-            --  Reply_JSON (Client, 200, "OK", Build_Status_Schema, Get);
-            --  TODO
-            null;
+            Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Status_Schema_String), Get);
          elsif Status.File = "status/values" then
-            --  Reply_JSON (Client, 200, "OK", Build_Status_Values, Get);
-            --  TODO
-            null;
+            Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Get_Status_Values_String), Get);
          elsif Status.File = "update_check" then
             declare
                Update_Available : Boolean;
@@ -416,9 +407,9 @@ package body Prunt.Web_Server is
                      "OK",
                      "{""Available"":"
                      & (if Update_Available then "true" else "false")
-                     & ",""URL"":"""
+                     & ",""URL"":"
                      & Conversions.To_Unbounded_UTF_8_String (JSON.Escape_String (Update_URL))
-                     & """}",
+                     & "}",
                      Get);
                else
                   if Client.Request_Start_Time + Seconds (30) < Clock then
@@ -462,13 +453,13 @@ package body Prunt.Web_Server is
             Client.Content.Array_Stream.Done := False;
             Send_Body (Client, Client.Content.Array_Stream'Access, Get);
          elsif Status.File = "prunt-is-enabled" then
-            --  if My_Config.Prunt_Is_Enabled then
-            --     Reply_JSON (Client, 200, "OK", "true", Get);
-            --  else
-            --     Reply_JSON (Client, 200, "OK", "false", Get);
-            --  end if;
-            --  TODO
-            null;
+            Reply_JSON (Client, 200, "OK", "false", Get);
+         --  if My_Config.Prunt_Is_Enabled then
+         --     Reply_JSON (Client, 200, "OK", "true", Get);
+         --  else
+         --     Reply_JSON (Client, 200, "OK", "false", Get);
+         --  end if;
+         --  TODO
          elsif Status.File = "uploads" or else Status.File = "uploads/" then
             --  uploads/ is provided for users manually entering the URL.
             if Kind ("uploads") /= Directory then
@@ -565,7 +556,7 @@ package body Prunt.Web_Server is
                File_Name : constant String :=
                  Status.File (Status.File'First + String'("extras/")'Length .. Status.File'Last);
             begin
-               if Get_Extra_HTTP_Content (File_Name) = null then
+               if Get_Extra_HTTP_Content (+File_Name) = null then
                   Reply_Text (Client, 404, "Not Found", "File not found.", Get);
                else
                   Send_Status_Line (Client, 200, "OK");
@@ -595,7 +586,7 @@ package body Prunt.Web_Server is
                      "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
                   Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
                   Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
-                  Client.Content.Array_Stream.Content := Get_Extra_HTTP_Content (File_Name);
+                  Client.Content.Array_Stream.Content := Get_Extra_HTTP_Content (+File_Name);
                   Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
                   Client.Content.Array_Stream.Done := False;
                   Send_Body (Client, Client.Content.Array_Stream'Access, Get);
@@ -675,7 +666,7 @@ package body Prunt.Web_Server is
                   if Exists (File_Path) and then Kind (File_Path) /= Ordinary_File then
                      Reply_Text (Client, 500, "Internal Server Error", "File exists but is not a regular file.", True);
                   else
-                     Submit_Gcode_File (File_Path, Succeeded);
+                     Submit_Gcode_File (+File_Path, Succeeded);
                      if Succeeded then
                         Reply_Text (Client, 204, "No Content", "", True);
                      else
@@ -693,7 +684,7 @@ package body Prunt.Web_Server is
             declare
                Succeeded : Boolean;
             begin
-               Submit_Gcode_Command (Post_Bodies.To_String (Client.Content.Post_Content.Content), Succeeded);
+               Submit_Gcode_Command (+Post_Bodies.To_String (Client.Content.Post_Content.Content), Succeeded);
                if Succeeded then
                   Reply_Text (Client, 204, "No Content", "", True);
                else
@@ -1020,7 +1011,7 @@ package body Prunt.Web_Server is
          or
             accept Log_To_WebSocket_Receivers (Message : Virtual_String) do
                Send_To_All_WebSocket_Receivers
-                 ("{""Log"":""" & Conversions.To_UTF_8_String (JSON.Escape_String (Message)) & """}",
+                 ("{""Log"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Message)) & "}",
                   Ignore_Divisors => True);
             end Log_To_WebSocket_Receivers;
          or
@@ -1031,7 +1022,9 @@ package body Prunt.Web_Server is
          or
             delay until Next_Status_Send;
 
-            Send_To_All_WebSocket_Receivers ("TODO (Status values)", Ignore_Divisors => False);
+            Send_To_All_WebSocket_Receivers
+              ("{""Status_Values"":" & Conversions.To_UTF_8_String (Get_Status_Values_String) & "}",
+               Ignore_Divisors => False);
 
             Next_Status_Send := Next_Status_Send + Milliseconds (50);
             if Clock > Next_Status_Send then

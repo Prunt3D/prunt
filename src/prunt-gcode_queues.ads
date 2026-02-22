@@ -41,6 +41,8 @@ package Prunt.Gcode_Queues is
       function Get_Current_File return Virtual_String;
       --  Get the name of the currently running file. Returns empty string if no file is running.
 
+      function Get_Current_Line_Number return File_Line_Count;
+
       function Get_Current_Command return Virtual_String;
       --  Get the currently running command. Returns empty string if no command is running.
 
@@ -49,9 +51,10 @@ package Prunt.Gcode_Queues is
       --  Try_Set_File will succeed. Once a direct command is read then Try_Set_Command will succeed as long as there
       --  is not also a file queued.
    private
-      Current_File      : Mockable.Text_IO.File_Type;
-      Current_File_Name : Virtual_String;
-      Current_Command   : Virtual_String;
+      Current_File        : Mockable.Text_IO.File_Type;
+      Current_File_Name   : Virtual_String := "";
+      Current_Command     : Virtual_String := "";
+      Current_Line_Number : File_Line_Count := 0;
    end Queue;
 
 end Prunt.Gcode_Queues;

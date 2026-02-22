@@ -40,19 +40,20 @@ with Prunt.Update_Checker;
 generic
    with
      procedure Apply_Config_Patch
-       (Value  : Virtual_String;
-        Result : out Virtual_String;
-        Report : access procedure (Path : Config.Config_Data_Paths.Vector; Message : String));
+       (Value : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
    with package My_Logger is new Prunt.Logger (<>);
    with package My_Update_Checker is new Prunt.Update_Checker (<>);
-   with procedure Submit_Gcode_Command (Command : String; Succeeded : out Boolean);
-   with procedure Submit_Gcode_File (Path : String; Succeeded : out Boolean);
+   with procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean);
+   with procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
    with procedure Reload_Server;
-   with function Get_Extra_HTTP_Content (Name : String) return access constant Ada.Streams.Stream_Element_Array;
+   with
+     function Get_Extra_HTTP_Content (Name : Virtual_String) return access constant Ada.Streams.Stream_Element_Array;
    Exception_Occurrence_Holder : in out Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type;
    Config_Schema_String : Virtual_String;
+   Status_Schema_String : Virtual_String;
+   with function Get_Status_Values_String return Virtual_String;
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 

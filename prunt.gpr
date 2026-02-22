@@ -49,6 +49,7 @@ project Prunt is
          Prunt_Extra_Ada_Compiler_Switches :=
            ("-O0",
             "-g",
+            -- "-fsanitize=address,alignment,float-cast-overflow,signed-integer-overflow",
             "-fstack-check", --  Enable stack overflow checks
             "-gnateF",       --  Check for all floating point overflow
             "-gnata",        --  Enable assertions and contracts

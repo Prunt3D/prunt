@@ -34,6 +34,7 @@ project Tests is
          Tests_Extra_Ada_Compiler_Switches :=
            ("-O0",
             "-g",
+           -- "-fsanitize=address,alignment,float-cast-overflow,signed-integer-overflow",
             "-fstack-check", --  Enable stack overflow checks
             "-gnateF",       --  Check for all floating point overflow
             "-gnata",        --  Enable assertions and contracts
@@ -97,32 +98,33 @@ project Tests is
    package Binder is
       --  TODO: Do these propagate out or are they useless here?
       case Tests_Config.Build_Profile is
-      when "release" =>
-         for Switches ("Ada") use
-           ("-r",   --  List restrictions that could be applied
-            "-Es"); --  Symbolic traceback
-      when "validation" =>
-         for Switches ("Ada") use
-           ("-r",   --  List restrictions that could be applied
-            "-we",  --  Treat warnings as errors
-            "-Es"); --  Symbolic traceback
-      when "development" =>
-         for Switches ("Ada") use
-           ("-r",   --  List restrictions that could be applied
-            "-Es"); --  Symbolic traceback
+         when "release" =>
+            for Switches ("Ada") use
+              ("-r",   --  List restrictions that could be applied
+               "-Es"); --  Symbolic traceback
+         when "validation" =>
+            for Switches ("Ada") use
+              ("-r",   --  List restrictions that could be applied
+               "-we",  --  Treat warnings as errors
+               "-Es"); --  Symbolic traceback
+         when "development" =>
+            for Switches ("Ada") use
+              ("-r",   --  List restrictions that could be applied
+               "-Es"); --  Symbolic traceback
       end case;
    end Binder;
 
    package Linker is
       case Tests_Config.Build_Profile is
-      when "release" =>
-         for Switches ("Ada") use
-           ("-flto=auto", --  Link time optimization
-            "-Wl,--gc-sections", "--gc-sections"); --  Delete unreferenced sections
-      when "validation" =>
-         null;
-      when "development" =>
-         null;
+         when "release" =>
+            for Switches ("Ada") use
+              ("-flto=auto", --  Link time optimization
+               "-Wl,--gc-sections", "--gc-sections"); --  Delete unreferenced sections
+         when "validation" =>
+            null;
+         when "development" =>
+            -- for Switches ("Ada") use ("-lasan", "-lubsan");
+            null;
       end case;
    end Linker;
 

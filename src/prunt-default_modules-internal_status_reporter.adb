@@ -20,6 +20,7 @@
 -----------------------------------------------------------------------------
 
 with VSS.Strings.Conversions;
+use VSS.Strings;
 
 package body Prunt.Default_Modules.Internal_Status_Reporter is
 
@@ -32,23 +33,40 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class is
+      return My_Modules.Module_Instance'Class
+   is
+      function Create_Updater_Task return Status_Updater is
+      begin
+         return Result : Status_Updater;
+      end Create_Updater_Task;
    begin
-      return Result : constant Module_Instance := (My_Modules.Module_Instance with others => <>) do
-         Result.Updater.Start (Status_Emitter);
+      return Result : Module_Instance := (My_Modules.Module_Instance with others => <>) do
+         Result.Updater.Set (Create_Updater_Task'Access);
+         Result.Updater.Get.Start (Status_Emitter);
       end return;
    end Initialize;
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
+      --  Position_Map : Status_Manager.Status_Value_Maps.Map :=
+      --    [for A in Axis_Name use Conversions.To_Virtual_String (A'Image) =>
+      --       (Kind        => Status_Manager.Real_Kind,
+      --        Unit        => "mm",
+      --        Description => "Position of axis " & Conversions.To_Virtual_String (A'Image),
+      --        Condition   => "")];
+      Position_Map : Status_Manager.Status_Value_Maps.Map := [];
    begin
+      for A in Axis_Name loop
+         Position_Map.Insert
+           (+A'Image,
+            (Kind        => Status_Manager.Real_Kind,
+             Unit        => "mm",
+             Description => "Position of axis " & Conversions.To_Virtual_String (A'Image),
+             Condition   => ""));
+      end loop;
+
       return
-        ["Position"     =>
-           [for A in Axis_Name use Conversions.To_Virtual_String (A'Image) =>
-              (Kind        => Status_Manager.Real_Kind,
-               Unit        => "mm",
-               Description => "Position of axis " & Conversions.To_Virtual_String (A'Image),
-               Condition   => "")],
+        ["Position"     => Position_Map,
          "Print status" =>
            ["File name"    =>
               (Kind        => Status_Manager.String_Kind,
@@ -68,11 +86,10 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    end Status_Schema;
 
    task body Status_Updater is
-      Emitter_Ref : My_Modules.Status_Emitter_Shared_Pointers.Ref :=
-        My_Modules.Status_Emitter_Shared_Pointers.Null_Ref;
+      Status_Ref : My_Modules.Status_Emitter_Shared_Pointers.Ref;
    begin
       accept Start (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) do
-         Emitter_Ref := Status_Emitter;
+         Status_Ref := Status_Emitter;
       end Start;
 
       loop
@@ -85,12 +102,11 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
                Pos : constant Position := Get_Position;
             begin
                for A in Axis_Name loop
-                  Emitter_Ref.Get.Set_Value
-                    ("Position", Conversions.To_Virtual_String (A'Image), Pos (A) / mm);
+                  Status_Ref.Get.Set_Value ("Position", Conversions.To_Virtual_String (A'Image), Pos (A) / mm);
                end loop;
-               Emitter_Ref.Get.Set_Value ("Print status", "File name", Get_File_Name);
-               Emitter_Ref.Get.Set_Value ("Print status", "Current line", Long_Long_Integer (Get_Line));
-               Emitter_Ref.Get.Set_Value ("Print status", "Paused", Stepgen_Paused);
+               Status_Ref.Get.Set_Value ("Print status", "File name", Get_File_Name);
+               Status_Ref.Get.Set_Value ("Print status", "Current line", Long_Long_Integer (Get_Line));
+               Status_Ref.Get.Set_Value ("Print status", "Paused", Stepgen_Paused);
             end;
          end select;
       end loop;
@@ -99,7 +115,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    overriding
    procedure Finalize (Object : in out Module_Instance) is
    begin
-      Object.Updater.Stop;
+      Object.Updater.Get.Stop;
    end Finalize;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

@@ -70,6 +70,11 @@ package body Prunt.Gcode_Queues is
          return Current_File_Name;
       end Get_Current_File;
 
+      function Get_Current_Line_Number return File_Line_Count is
+      begin
+         return Current_Line_Number;
+      end Get_Current_Line_Number;
+
       function Get_Current_Command return Virtual_String is
       begin
          return Current_Command;
@@ -82,14 +87,17 @@ package body Prunt.Gcode_Queues is
                --  The file could be empty so we need to check this before returning a line.
                Current_File.Close;
                Current_File_Name := "";
+               Current_Line_Number := 0;
                requeue Get_Next_Line with abort;
             end if;
 
             Line := Conversions.To_Virtual_String (Mockable.Text_IO.Unbounded_IO.Get_Line (Current_File));
+            Current_Line_Number := @ + 1;
 
             if Current_File.End_Of_File then
                Current_File.Close;
                Current_File_Name := "";
+               Current_Line_Number := 0;
             end if;
          else
             Line := Current_Command;
