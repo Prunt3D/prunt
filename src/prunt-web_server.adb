@@ -394,7 +394,7 @@ package body Prunt.Web_Server is
             Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Status_Schema_String), Get);
          elsif Status.File = "status/values" then
             Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Get_Status_Values_String), Get);
-         elsif Status.File = "update_check" then
+         elsif Status.File = "update-check" then
             declare
                Update_Available : Boolean;
                Update_URL       : Virtual_String;
@@ -452,14 +452,6 @@ package body Prunt.Web_Server is
             Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
             Client.Content.Array_Stream.Done := False;
             Send_Body (Client, Client.Content.Array_Stream'Access, Get);
-         elsif Status.File = "prunt-is-enabled" then
-            Reply_JSON (Client, 200, "OK", "false", Get);
-         --  if My_Config.Prunt_Is_Enabled then
-         --     Reply_JSON (Client, 200, "OK", "true", Get);
-         --  else
-         --     Reply_JSON (Client, 200, "OK", "false", Get);
-         --  end if;
-         --  TODO
          elsif Status.File = "uploads" or else Status.File = "uploads/" then
             --  uploads/ is provided for users manually entering the URL.
             if Kind ("uploads") /= Directory then
@@ -1023,7 +1015,17 @@ package body Prunt.Web_Server is
             delay until Next_Status_Send;
 
             Send_To_All_WebSocket_Receivers
-              ("{""Status_Values"":" & Conversions.To_UTF_8_String (Get_Status_Values_String) & "}",
+              ("{""Status_Values"":"
+               & Conversions.To_UTF_8_String (Get_Status_Values_String)
+               & ", ""Startup"": """
+               & (if Startup_Manager.Get_Startup_Done
+                  then "Done"
+                  elsif Startup_Manager.Get_Update_Allowed
+                  then "Update_Running"
+                  elsif Startup_Manager.Get_Update_Required
+                  then "Update_Required"
+                  else "Waiting")
+               & """}",
                Ignore_Divisors => False);
 
             Next_Status_Send := Next_Status_Send + Milliseconds (50);

@@ -126,6 +126,15 @@ package body Prunt.Status_Manager is
       procedure Ensure_Module_And_Group_Nodes (Module : Virtual_String; Group : Virtual_String) is
          Module_Node : JSON_Value;
       begin
+         if not Modules.Contains (Module) then
+            raise Constraint_Error with "Status module " & Module'Image & " does not exist.";
+         end if;
+
+         if not Modules.Element (Module).Contains (Group) then
+            raise Constraint_Error
+              with "Status group " & Group'Image & " does not exist in module " & Module'Image & ".";
+         end if;
+
          if not Status.Has_Field (Module) then
             Status.Set_Field (Module, Create_Object);
          end if;
@@ -140,6 +149,18 @@ package body Prunt.Status_Manager is
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : JSON_Value) is
       begin
          Ensure_Module_And_Group_Nodes (Module, Group);
+
+         if not Modules.Element (Module).Element (Group).Contains (Key) then
+            raise Constraint_Error
+              with
+                "Status key "
+                & Key'Image
+                & " does not exist in group "
+                & Group'Image
+                & " in module "
+                & Module'Image
+                & ".";
+         end if;
          Status.Get (Module).Get (Group).Set_Field (Key, Value);
       end Set_Value_Internal;
 

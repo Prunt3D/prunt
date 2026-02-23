@@ -71,7 +71,7 @@ package body Prunt.Controller is
             Exception_Occurrence_Holder.Reset;
             Active_Config_File.Reset_Live_To_Stored;
             Reset_Hardware;
-            --  My_Web_Server.Reset; -- TODO
+            My_Web_Server.Reset;
          then abort
             Exception_Occurrence_Holder.Enter_When_Fatal_Set;
             exit Main;
@@ -143,6 +143,13 @@ package body Prunt.Controller is
                --  We insert a null reference to avoid an infinite loop when circular dependencies are present. One
                --  of the modules in the dependency loop will receive the null reference.
                declare
+                  procedure Report_Config_Error_With_Module
+                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String) is
+                     use type Config.Config_Data_Paths.Vector;
+                  begin
+                     Report_Config_Error (["Config", Key (C), "Config"] & Path, Message);
+                  end Report_Config_Error_With_Module;
+
                   function Get_Data return My_Modules.Module_Instance'Class is
                      Emitter_Ref : My_Modules.Status_Emitter_Shared_Pointers.Ref :=
                        My_Modules.Status_Emitter_Shared_Pointers.Null_Ref;
@@ -153,7 +160,7 @@ package body Prunt.Controller is
                      Config_Ref.Set (My_Config_File.Get_Data (Key (C)));
                      return
                        Element (C).Initialize
-                         (Config_Ref, Report_Config_Error, Emitter_Ref, Get_Other_Instance'Access);
+                         (Config_Ref, Report_Config_Error_With_Module'Access, Emitter_Ref, Get_Other_Instance'Access);
                   end Get_Data;
 
                   Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=
@@ -374,7 +381,7 @@ package body Prunt.Controller is
          else
             --  Nothing has actually started yet, so there's nothing to restart. We reload the web server anyway to
             --  prevent any confusion when the reload button does nothing.
-            --  My_Web_Server.Reset; --  TODO
+            My_Web_Server.Reset;
             null;
          end if;
       end Signal;
@@ -382,6 +389,7 @@ package body Prunt.Controller is
       procedure Mark_Startup_Done is
       begin
          Startup_Done := True;
+         My_Web_Server.Notify_Startup_Done;
       end Mark_Startup_Done;
    end Reload_Signal;
 

@@ -105,7 +105,8 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
                   Status_Ref.Get.Set_Value ("Position", Conversions.To_Virtual_String (A'Image), Pos (A) / mm);
                end loop;
                Status_Ref.Get.Set_Value ("Print status", "File name", Get_File_Name);
-               Status_Ref.Get.Set_Value ("Print status", "Current line", Long_Long_Integer (Get_Line));
+               Status_Ref.Get.Set_Value
+                 ("Print status", "Current line", Long_Long_Integer (File_Line_Count'(Get_Line)));
                Status_Ref.Get.Set_Value ("Print status", "Paused", Stepgen_Paused);
             end;
          end select;
