@@ -5,5 +5,8 @@
 /html/node_modules/
 /html/dist/bundle.js
 /html/dist/bundle.js.map
+/html2/node_modules/
+/html2/dist/bundle.js
+/html2/dist/bundle.js.map
 /.dir-locals.el
 /tests/*.srctrace
