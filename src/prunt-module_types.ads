@@ -19,6 +19,8 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+pragma Extensions_Allowed (On);
+
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Containers.Ordered_Maps;
 with Prunt.Gcode_Arguments;

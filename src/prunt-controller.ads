@@ -33,6 +33,7 @@ with Prunt.Default_Modules.Motion;
 private with Ada.Containers.Ordered_Maps;
 private with Ada.Containers.Indefinite_Holders;
 private with Prunt.Command_Line_Arguments;
+private with Prunt.Controller_Helpers;
 private with Prunt.Gcode_Arguments;
 private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
@@ -132,6 +133,9 @@ package Prunt.Controller is
    --  Log a message for the user.
 
 private
+
+   package My_Controller_Helpers is new Prunt.Controller_Helpers (Generic_Types);
+   use My_Controller_Helpers;
 
    package My_Default_Modules is new Default_Modules (My_Modules);
 
@@ -288,6 +292,11 @@ private
    function Get_Status_Values_String return Virtual_String
    is (My_Status_Data.JSON_Data);
 
+   Active_Module_Gcode_Dispatch_Map : constant Gcode_Dispatch_Maps.Map := Build_Gcode_Dispatch_Map (Active_Modules);
+   --  TODO: Check that this map does not get too big once all gcode commands are added.
+
+   Active_Module_Gcode_JSON_String : constant Virtual_String := Build_Gcode_JSON (Active_Modules).Write;
+
    package My_Web_Server is new
      Web_Server
        (Apply_Config_Patch          => Apply_Untrusted_Config_Patch,
@@ -302,22 +311,9 @@ private
         Exception_Occurrence_Holder => Exception_Occurrence_Holder.all,
         Config_Schema_String        => Active_Config_File.Get_Schema_String,
         Status_Schema_String        => My_Status_Data.JSON_Schema,
+        Gcode_JSON_String           => Active_Module_Gcode_JSON_String,
         Get_Status_Values_String    => Get_Status_Values_String,
         Port                        => Command_Line_Arguments.Web_Server_Port);
-
-   type Gcode_Dispatch_Argument_Kinds is array (Gcode_Arguments.Arguments_Index) of Gcode_Arguments.Argument_Kind;
-
-   type Gcode_Dispatch_Key is record
-      Identifier     : Module_Types.Gcode_Command_Identifier;
-      Argument_Kinds : Gcode_Dispatch_Argument_Kinds;
-   end record;
-
-   function "<" (Left, Right : Gcode_Dispatch_Key) return Boolean;
-
-   package Gcode_Dispatch_Maps is new Ada.Containers.Ordered_Maps (Gcode_Dispatch_Key, Virtual_String);
-
-   Active_Module_Gcode_Dispatch_Map : Gcode_Dispatch_Maps.Map;
-   --  TODO: Check that this map does not get too big once all gcode commands are added.
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);

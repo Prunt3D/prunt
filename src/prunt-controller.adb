@@ -58,8 +58,6 @@ package body Prunt.Controller is
       end Attempt_Start;
 
    begin
-      Ada.Task_Termination.Set_Dependents_Fallback_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
-
       Reload_Signal.Mark_Startup_Done;
 
       Main : loop
@@ -144,7 +142,8 @@ package body Prunt.Controller is
                --  of the modules in the dependency loop will receive the null reference.
                declare
                   procedure Report_Config_Error_With_Module
-                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String) is
+                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String)
+                  is
                      use type Config.Config_Data_Paths.Vector;
                   begin
                      Report_Config_Error (["Config", Key (C), "Config"] & Path, Message);
@@ -195,21 +194,6 @@ package body Prunt.Controller is
    begin
       return Result;
    end Recursive_Module_Initialization;
-
-   function "<" (Left, Right : Gcode_Dispatch_Key) return Boolean is
-      use Gcode_Arguments;
-   begin
-      pragma Warnings (Off, "comparison on unordered enumeration type ""Gcode_Identifier_Argument_Index""");
-      --  We do not care what the order is here, we just need something to sort with.
-      if Left.Identifier.Argument /= Right.Identifier.Argument then
-         return Left.Identifier.Argument < Right.Identifier.Argument;
-      elsif Left.Identifier.Number /= Right.Identifier.Number then
-         return Left.Identifier.Number < Right.Identifier.Number;
-      else
-         return Left.Argument_Kinds < Right.Argument_Kinds;
-      end if;
-      pragma Warnings (On, "comparison on unordered enumeration type ""Gcode_Identifier_Argument_Index""");
-   end "<";
 
    protected body Patch_Processor is
       procedure Apply
@@ -420,47 +404,7 @@ package body Prunt.Controller is
    end Stepgen_Paused;
 
 begin
-   Active_Module_Gcode_Dispatch_Map := [];
-
-   for C in Active_Modules.Iterate loop
-      for G of Module_Maps.Element (C).Gcode_Commands loop
-         declare
-            use Prunt.Gcode_Arguments;
-            use Prunt.Module_Types;
-
-            procedure Recursive_Insert (Current_Index : Arguments_Index; Current_Kinds : Gcode_Dispatch_Argument_Kinds)
-            is
-               Allowed_Kinds : Gcode_Argument_Allowed_Kinds := [others => False];
-            begin
-               if Current_Index = G.Identifier.Argument then
-                  Allowed_Kinds (Integer_Kind) := True;
-               elsif Current_Index in Gcode_Identifier_Argument_Index then
-                  Allowed_Kinds (Non_Existent_Kind) := True;
-               elsif G.Arguments.Contains (Current_Index) then
-                  Allowed_Kinds := G.Arguments (Current_Index).Allowed_Kinds;
-               else
-                  Allowed_Kinds (Non_Existent_Kind) := True;
-               end if;
-
-               for Kind in Argument_Kind loop
-                  if Allowed_Kinds (Kind) then
-                     if Current_Index = Arguments_Index'Last then
-                        Active_Module_Gcode_Dispatch_Map.Insert
-                          ((Identifier     => G.Identifier,
-                            Argument_Kinds => (Current_Kinds with delta Current_Index => Kind)),
-                           Module_Maps.Key (C));
-                     else
-                        Recursive_Insert
-                          (Arguments_Index'Succ (Current_Index), (Current_Kinds with delta Current_Index => Kind));
-                     end if;
-                  end if;
-               end loop;
-            end Recursive_Insert;
-         begin
-            Recursive_Insert (Arguments_Index'First, [others => Non_Existent_Kind]);
-         end;
-      end loop;
-   end loop;
+   Ada.Task_Termination.Set_Dependents_Fallback_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
 
    My_Logger.Log
      (Conversions.To_Virtual_String ("Gcode dispatch map size: " & Active_Module_Gcode_Dispatch_Map.Length'Image));

@@ -12,6 +12,8 @@ export function initUI() {
     initConfigView();
     initStatusView();
     initControlView();
+    
+    setupTheme();
 
     // Connect WebSocket
     wsClient.on('connected', () => {
@@ -79,6 +81,37 @@ function setupGlobalControls() {
         } catch (e) {
             console.error(e);
             alert("Failed to resume machine.");
+        }
+    });
+}
+
+function setupTheme() {
+    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement | null;
+    if (!themeSelect) return;
+
+    const savedTheme = localStorage.getItem('prunt-theme') || 'auto';
+    themeSelect.value = savedTheme;
+
+    const applyTheme = (theme: string) => {
+        if (theme === 'auto') {
+            const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+            document.documentElement.setAttribute('data-theme', prefersLight ? 'light' : 'dark');
+        } else {
+            document.documentElement.setAttribute('data-theme', theme);
+        }
+    };
+
+    applyTheme(savedTheme);
+
+    themeSelect.addEventListener('change', () => {
+        const theme = themeSelect.value;
+        localStorage.setItem('prunt-theme', theme);
+        applyTheme(theme);
+    });
+
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        if (localStorage.getItem('prunt-theme') === 'auto' || !localStorage.getItem('prunt-theme')) {
+            applyTheme('auto');
         }
     });
 }

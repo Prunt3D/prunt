@@ -27,7 +27,6 @@ with Ada.Real_Time;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
 with Ada.Strings.Bounded;
-with Ada.Strings.Unbounded;                             use Ada.Strings.Unbounded;
 with Ada.Task_Termination;
 with GNAT.Sockets;                                      use GNAT.Sockets;
 with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connection_State_Machine.HTTP_Server;
@@ -53,6 +52,7 @@ generic
    Exception_Occurrence_Holder : in out Exception_Occurrence_Holders.Exception_Occurrence_Holder_Type;
    Config_Schema_String : Virtual_String;
    Status_Schema_String : Virtual_String;
+   Gcode_JSON_String : Virtual_String;
    with function Get_Status_Values_String return Virtual_String;
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
@@ -98,15 +98,16 @@ private
    overriding
    procedure Put (Destination : in out Post_Body_Destination; Data : String);
 
-   type Unbounded_String_Source is new Content_Source with record
-      Content    : Unbounded_String;
-      Next_Start : Positive := 1;
-      --  Using the Slice function to replace the Unbounded_String would be a bit cleaner here, but the GCC Slice
-      --  implementation copies the entire string in to a new allocation, so we do this instead to avoid some copies.
+   type Virtual_String_Source is new Content_Source with record
+      Content    : Virtual_String;
+      Next_Start : Positive := Positive'Last;
+      --  `Next_Start` needs to be set manually when we use it, but we can't use a raise expression here as we need to
+      --  default initialise this when it's not used, so instead we use a large value where it will be obvious that we
+      --  forgot to set it.
    end record;
 
    overriding
-   function Get (Source : access Unbounded_String_Source) return String;
+   function Get (Source : access Virtual_String_Source) return String;
 
    type Array_Stream_Type is new Root_Stream_Type with record
       Content  : access constant Ada.Streams.Stream_Element_Array;
@@ -159,8 +160,8 @@ private
       Self_Access               : Prunt_Client_Access := null;
       --  Embedded file GET requests:
       Array_Stream              : aliased Array_Stream_Type;
-      --  Unbounded_String GET requests:
-      Big_String_Content        : aliased Unbounded_String_Source;
+      --  Virtual_String GET requests:
+      Big_String_Content        : aliased Virtual_String_Source;
       --  POST requests:
       Post_Content              : aliased Post_Body_Destination;
       --  File GET and PUT requests:
@@ -205,26 +206,18 @@ private
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
    --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
    --  does whereas the original does not.
-   --
-   --  TODO: Take an Unbounded_String here to avoid some copies.
 
    overriding
    procedure Reply_Text
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
    --  Identical to overridden procedure aside from sending the Content-Length header when Get = False. This procedure
    --  does whereas the original does not.
-   --
-   --  TODO: Take an Unbounded_String here to avoid some copies.
 
    procedure Reply_JSON
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
 
    procedure Reply_JSON
-     (Client  : in out Prunt_Client;
-      Code    : Positive;
-      Reason  : String;
-      Message : Unbounded_String;
-      Get     : Boolean := True);
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : Virtual_String; Get : Boolean := True);
 
    overriding
    procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class);

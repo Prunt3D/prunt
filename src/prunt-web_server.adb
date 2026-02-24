@@ -172,13 +172,16 @@ package body Prunt.Web_Server is
    end Finalize;
 
    overriding
-   function Get (Source : access Unbounded_String_Source) return String is
+   function Get (Source : access Virtual_String_Source) return String is
+      Old_Next_Start : constant Positive := Source.Next_Start;
       New_Next_Start : constant Positive :=
-        Positive'Min (Source.Next_Start + Buffer_Size - 100, Ada.Strings.Unbounded.Length (Source.Content) + 1);
-      Result         : constant String := Slice (Source.Content, Source.Next_Start, New_Next_Start - 1);
+        Positive'Min (Source.Next_Start + Buffer_Size - 100, Conversions.To_UTF_8_String (Source.Content)'Last + 1);
    begin
       Source.Next_Start := New_Next_Start;
-      return Result;
+
+      return Conversions.To_UTF_8_String (Source.Content) (Old_Next_Start .. New_Next_Start - 1);
+      --  TODO: Is GCC smart enough to optimise this so that only the slice ends up on the stack and not the entire
+      --  original string?
    end Get;
 
    overriding
@@ -216,10 +219,10 @@ package body Prunt.Web_Server is
       null;
    end Write;
 
-   function Patch_Config_Values (Patch : String) return Unbounded_String is
+   function Patch_Config_Values (Patch : String) return Virtual_String is
       Patch_Errors : Config.Config_Error_Vectors.Vector;
       Result       : Virtual_String;
-      Errors       : Unbounded_String := To_Unbounded_String ("[");
+      Errors       : Virtual_String := "[";
    begin
       Apply_Config_Patch (Conversions.To_Virtual_String (Patch), Result, Patch_Errors);
 
@@ -237,15 +240,15 @@ package body Prunt.Web_Server is
                   Errors.Append (",");
                end if;
 
-               Errors.Append (Conversions.To_Unbounded_UTF_8_String (JSON.Escape_String (E)));
+               Errors.Append (JSON.Escape_String (E));
                First := False;
             end loop;
          end;
 
-         Errors.Append ("],""Message"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Error.Message)) & "}");
+         Errors.Append ("],""Message"":" & JSON.Escape_String (Error.Message) & "}");
       end loop;
 
-      return "{""Values"":" & Conversions.To_Unbounded_UTF_8_String (Result) & ",""Errors"":" & Errors & "]}";
+      return "{""Values"":" & Result & ",""Errors"":" & Errors & "]}";
    end Patch_Config_Values;
 
    overriding
@@ -290,11 +293,8 @@ package body Prunt.Web_Server is
    end Reply_JSON;
 
    procedure Reply_JSON
-     (Client  : in out Prunt_Client;
-      Code    : Positive;
-      Reason  : String;
-      Message : Unbounded_String;
-      Get     : Boolean := True) is
+     (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : Virtual_String; Get : Boolean := True)
+   is
    begin
       Send_Status_Line (Client, Code, Reason);
       Send_Date (Client);
@@ -305,7 +305,7 @@ package body Prunt.Web_Server is
       Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
 
       Client.Content.Big_String_Content.Content := Message;
-      Client.Content.Big_String_Content.Next_Start := 1;
+      Client.Content.Big_String_Content.Next_Start := Conversions.To_UTF_8_String (Message)'First;
 
       Send_Body (Client, Client.Content.Big_String_Content'Access, Get);
    end Reply_JSON;
@@ -387,13 +387,15 @@ package body Prunt.Web_Server is
       --  should we handle it as if the target was "/"?
       if Status.Kind = File then
          if Status.File = "config/schema" then
-            Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Config_Schema_String), Get);
+            Reply_JSON (Client, 200, "OK", Config_Schema_String, Get);
          elsif Status.File = "config/values" then
             Reply_JSON (Client, 200, "OK", Patch_Config_Values ("{}"), Get);
          elsif Status.File = "status/schema" then
-            Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Status_Schema_String), Get);
+            Reply_JSON (Client, 200, "OK", Status_Schema_String, Get);
          elsif Status.File = "status/values" then
-            Reply_JSON (Client, 200, "OK", Conversions.To_UTF_8_String (Get_Status_Values_String), Get);
+            Reply_JSON (Client, 200, "OK", Get_Status_Values_String, Get);
+         elsif Status.File = "gcode-schema" then
+            Reply_JSON (Client, 200, "OK", Gcode_JSON_String, Get);
          elsif Status.File = "update-check" then
             declare
                Update_Available : Boolean;
@@ -405,11 +407,10 @@ package body Prunt.Web_Server is
                     (Client,
                      200,
                      "OK",
-                     "{""Available"":"
-                     & (if Update_Available then "true" else "false")
-                     & ",""URL"":"
-                     & Conversions.To_Unbounded_UTF_8_String (JSON.Escape_String (Update_URL))
-                     & "}",
+                     Virtual_String'
+                       (+("{""Available"":" & (if Update_Available then "true" else "false") & ",""URL"":")
+                        & JSON.Escape_String (Update_URL)
+                        & "}"),
                      Get);
                else
                   if Client.Request_Start_Time + Seconds (30) < Clock then
@@ -868,7 +869,7 @@ package body Prunt.Web_Server is
          Close (Client.Content.File);
       end if;
 
-      Client.Content.Big_String_Content.Content := Null_Unbounded_String;
+      Client.Content.Big_String_Content.Content := "";
       Client.Content.Post_Content.Content := Post_Bodies.Null_Bounded_String;
       End_Search (Client.Content.Uploads_Directory_Content.Search);
 
