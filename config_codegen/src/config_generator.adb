@@ -538,16 +538,18 @@ package body Config_Generator is
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Float'(Description => """
             & Outer.Description
-            & """, Default => "
+            & """, Default => ("
             & Outer.Default
-            & Virtual_String'(if Float_Val.Unit /= "" then " / " else "")
-            & Float_Val.Unit
-            & ", Min => "
+            & ")"
+            & Virtual_String'(if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
+            & ", Min => ("
             & Outer.Min
-            & (if Float_Val.Unit = "" then "" else " / " & Float_Val.Unit)
-            & ", Max => "
+            & ")"
+            & Virtual_String'(if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
+            & ", Max => ("
             & Outer.Max
-            & (if Float_Val.Unit = "" then "" else " / " & Float_Val.Unit)
+            & ")"
+            & Virtual_String'(if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
             & ", Unit => """
             & (if Float_Val.Unit /= "" then Float_Val.Unit else Outer.Unit)
             & """)");
@@ -555,13 +557,14 @@ package body Config_Generator is
            ("Data.Get(Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
             & "])"
-            & (if Float_Val.Unit /= "" then " * " & Float_Val.Unit else ""));
+            & (if Float_Val.Unit /= "" then " * (" & Float_Val.Unit & ")" else ""));
          Emit_Setter
            ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
-            & "], "
+            & "], ("
             & Ada_Expr
-            & (if Float_Val.Unit /= "" then " / " & Float_Val.Unit else "")
+            & ")"
+            & (if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
             & ");");
       end Handle_Float;
 
@@ -606,7 +609,11 @@ package body Config_Generator is
             & ", Unit => """
             & (if Integer_Val.Unit /= "" then Integer_Val.Unit else Outer.Unit)
             & """)");
-         Emit_Reader ("Data.Get(Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "])");
+         Emit_Reader
+           (Outer.Type_Name
+            & "(Long_Long_Integer'(Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
+            & Path_Str
+            & "])))");
          Emit_Setter
            ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
@@ -630,13 +637,18 @@ package body Config_Generator is
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Discrete'(Description => """
             & Outer.Description
-            & """, Default => "
+            & """, Default => +"
             & Outer.Default
-            & ", Options => [for I in "
+            & "'Image, Options => [for I in "
             & Outer.Type_Name
-            & " => I'Image])");
-         Emit_Reader (Outer.Type_Name & "'Value (Data.Get(Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "]))");
-         Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & "'Image);");
+            & " => +I'Image])");
+         Emit_Reader
+           (Outer.Type_Name
+            & "'Value (VSS.Strings.Conversions.To_UTF_8_String (Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
+            & Path_Str
+            & "])))");
+         Emit_Setter
+           ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], +(" & Ada_Expr & "'Image));");
       end Handle_Enum;
 
       procedure Handle_Array
@@ -654,9 +666,11 @@ package body Config_Generator is
             & Virtual_String'(if Array_Val.Tabbed then "True" else "False")
             & ", Children => [for "
             & Loop_Index
-            & " of "
+            & " in "
             & Array_Val.Index_Type
-            & " => ");
+            & " use +"
+            & Loop_Index
+            & "'Image => ");
 
          Emit_Reader ("[for " & Loop_Index & " in " & Array_Val.Index_Type & " => ");
          Emit_Setter ("for " & Loop_Index & " in " & Array_Val.Index_Type & " loop");
@@ -670,7 +684,7 @@ package body Config_Generator is
                Default     => Outer.Type_Name & "'" & Outer.Default & "(" & Loop_Index & ")",
                Min         => Array_Val.Min,
                Max         => Array_Val.Max),
-            Path & [""" & " & Loop_Index & "'Image & """],
+            Path & [""" & (+" & Loop_Index & "'Image) & """],
             Ada_Prefix & " (" & Loop_Index & ")");
 
          Emit_Setter ("end loop;");
@@ -713,12 +727,12 @@ package body Config_Generator is
                      end if;
                      Fixed_Desc_Suffix.Append (Fixed_Kind_Str & " = " & Variant_Case_Maps.Key (Variant_C));
                      Fixed_Desc_Suffix.Append
-                       (" then ""\n" & Variant_Case_Maps.Element (Variant_C).Description & """");
+                       (" then +""\n" & Variant_Case_Maps.Element (Variant_C).Description & """");
                      Is_First := False;
                   end loop;
 
                   if not Is_First then
-                     Fixed_Desc_Suffix.Append (" else """")");
+                     Fixed_Desc_Suffix.Append (" else +"""")");
                   else
                      Fixed_Desc_Suffix := "";
                   end if;
@@ -819,7 +833,7 @@ package body Config_Generator is
                Emit_Config_Map
                  ("Right => ["""" => Prunt.Config.Config_Property_Parameters_Variant'(Default => """
                   & Record_Val.Discriminant_Default
-                  & """, Children => [");
+                  & """, Description => """", Children => [");
                --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
                --  non-variant part. We can not simply place this code after the non-variant code generation as we use
                --  a delta aggregate to set the non-variant fields and delta aggregates can not set discriminants,

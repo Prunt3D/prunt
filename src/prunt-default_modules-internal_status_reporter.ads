@@ -48,6 +48,9 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
       return My_Modules.Module_Instance'Class;
 
    overriding
+   procedure Start (This : in out Module_Instance);
+
+   overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
 
    overriding
@@ -56,7 +59,8 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
 private
 
    task type Status_Updater is
-      entry Start (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+      entry Prepare (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+      entry Start;
       entry Stop;
    end Status_Updater;
 

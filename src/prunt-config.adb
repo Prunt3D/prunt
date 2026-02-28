@@ -592,6 +592,8 @@ package body Prunt.Config is
                               raise Constraint_Error
                                 with "Conflicting config schema keys at " & Path'Image & " (different tags).";
                            elsif Existing_Parameters in Config_Property_Parameters_Sequence then
+                              --  TODO: Check that there is only one description or that descriptions are equal.
+                              --  TODO: Check that tabbed field matches.
                               Merge_Schemas
                                 (Config_Property_Parameters_Sequence (Existing_Parameters).Children,
                                  Config_Property_Parameters_Sequence (New_Parameters).Children,

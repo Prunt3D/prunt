@@ -3,6 +3,7 @@ import { pauseMachine, resumeMachine } from './api';
 import { initConfigView } from './config_view';
 import { initStatusView } from './status_view';
 import { initControlView } from './control_view';
+import { initGcodeExplorerView } from './gcode_explorer_view';
 
 export function initUI() {
     setupNavigation();
@@ -12,6 +13,7 @@ export function initUI() {
     initConfigView();
     initStatusView();
     initControlView();
+    initGcodeExplorerView();
     
     setupTheme();
 

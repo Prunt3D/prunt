@@ -32,6 +32,13 @@ package Prunt.Module_Types is
    use type Gcode_Arguments.Arguments_Index;
    use type Gcode_Arguments.Argument_Integer;
 
+   type User_Config_Integer is range -1_000_000 .. 1_000_000 with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Empty is record
+      null;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
    type Planner_Interface is limited interface;
    --  Subprograms towards end of file.
 

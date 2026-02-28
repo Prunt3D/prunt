@@ -45,10 +45,30 @@ package body Prunt.Default_Modules.Motion is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class is
+      return My_Modules.Module_Instance'Class
+   is
+      My_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
    begin
-      return Module_Instance'(My_Modules.Module_Instance with Config => Config_Data_To_User_Config (Config_Data.Get));
+      return
+        Module_Instance'
+          (My_Modules.Module_Instance
+           with
+             Config         => My_Config,
+             Status_Emitter => Status_Emitter,
+             Feedrate       => My_Config.Motion_Gcode.Default_G1_Feedrate);
    end Initialize;
+
+   overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
+   begin
+      return
+        ["G92 offset" =>
+           [for A in Axis_Name use Conversions.To_Virtual_String (A'Image) =>
+              (Kind        => Status_Manager.Real_Kind,
+               Unit        => "mm",
+               Description => "G92 offset of axis " & Conversions.To_Virtual_String (A'Image),
+               Condition   => "")]];
+   end Status_Schema;
 
    overriding
    procedure Gcode_Dispatch
@@ -60,19 +80,41 @@ package body Prunt.Default_Modules.Motion is
    procedure Rapid_Linear_Move
      (This : in out Module_Instance; Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float) is
    begin
-      if This.Config.Prunt.Replace_G0_With_G1 then
+      --  TODO: Relative mode and handle retraction/G92 offsets.
+      if This.Config.Motion_Gcode.Replace_G0_With_G1 then
          Linear_Move (This, Planner, X => X, Y => Y, Z => Z, E => E, F => F);
       else
-         null;
-         --  TODO
+         declare
+            Last_Pos : constant Position := Planner.Get_Last_Position;
+         begin
+            Planner.Add_Corner
+              (Pos      =>
+                 [X_Axis => (if X.Present then X.Value * mm else Last_Pos (X_Axis)),
+                  Y_Axis => (if Y.Present then Y.Value * mm else Last_Pos (Y_Axis)),
+                  Z_Axis => (if Z.Present then Z.Value * mm else Last_Pos (Z_Axis)),
+                  E_Axis => (if E.Present then E.Value * mm else Last_Pos (E_Axis))],
+               Feedrate => (if F.Present then F.Value * mm / s else Velocity'Last));
+         end;
       end if;
    end Rapid_Linear_Move;
 
    procedure Linear_Move
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float) is
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float)
+   is
+      Last_Pos : constant Position := Planner.Get_Last_Position;
    begin
-      null;
-      --  TODO
+      --  TODO: Relative mode and handle retraction/G92 offsets.
+      if F.Present then
+         This.Feedrate := F.Value * mm / min;
+      end if;
+
+      Planner.Add_Corner
+        (Pos      =>
+           [X_Axis => (if X.Present then X.Value * mm else Last_Pos (X_Axis)),
+            Y_Axis => (if Y.Present then Y.Value * mm else Last_Pos (Y_Axis)),
+            Z_Axis => (if Z.Present then Z.Value * mm else Last_Pos (Z_Axis)),
+            E_Axis => (if E.Present then E.Value * mm else Last_Pos (E_Axis))],
+         Feedrate => This.Feedrate);
    end Linear_Move;
 
    procedure Retract (This : in out Module_Instance; Planner : Planner_Interface'Class) is

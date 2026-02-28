@@ -26,6 +26,7 @@
                     <span class="nav-error-icon" title="Configuration contains errors"></span>
                 </li>
                 <li class="nav-item" data-target="control-view">Machine Control</li>
+                <li class="nav-item" data-target="gcode-explorer-view">G-Code Explorer</li>
             </ul>
             <div class="sidebar-footer" style="margin-top: auto; padding: 24px;">
                 <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Theme</div>
@@ -110,6 +111,22 @@
                         <button id="btn-restart-server" class="btn btn-danger">Restart Server</button>
                         <button id="btn-firmware-update" class="btn btn-secondary">Allow Firmware Update</button>
                     </div>
+                </div>
+            </section>
+
+            <section id="gcode-explorer-view" class="view">
+                <div class="view-header">
+                    <h2>G-Code Explorer</h2>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="gcode-group-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-size: 0.9em; color: var(--text-muted);">Group by Module</span>
+                    </div>
+                </div>
+                <div id="gcode-explorer-content" class="gcode-explorer-content" style="padding: 16px;">
+                    <!-- Content injected by TS -->
                 </div>
             </section>
         </main>

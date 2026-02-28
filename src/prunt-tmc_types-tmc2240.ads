@@ -25,9 +25,9 @@ with System; use System;
 
 package Prunt.TMC_Types.TMC2240 is
 
-   type UART_Node_Address is range 0 .. 2**8 - 1 with Size => 8;
-   type UART_Sync_Nibble is range 0 .. 2**4 - 1 with Size => 4;
-   type UART_CRC is mod 2**8 with Size => 8;
+   type UART_Node_Address is range 0 .. 2 ** 8 - 1 with Size => 8;
+   type UART_Sync_Nibble is range 0 .. 2 ** 4 - 1 with Size => 4;
+   type UART_CRC is mod 2 ** 8 with Size => 8;
 
    type GCONF is record
       Reserved_1       : Unsigned_1;
@@ -110,7 +110,7 @@ package Prunt.TMC_Types.TMC2240 is
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type Slope_Control_Type is (Slope_100V_Per_us, Slope_200V_Per_us, Slope_400V_Per_us, Slope_800V_Per_us)
-   with Size => 2;
+   with Size => 2, Annotate => (Prunt_Config, User_Config);
    for Slope_Control_Type use
      (Slope_100V_Per_us => 0, Slope_200V_Per_us => 1, Slope_400V_Per_us => 2, Slope_800V_Per_us => 3);
 
@@ -220,9 +220,9 @@ package Prunt.TMC_Types.TMC2240 is
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type ADC_V_Supply_Volts_Type is delta 0.009_732 range 0.0 .. 0.009_732 * (2**13 - 1)
+   type ADC_V_Supply_Volts_Type is delta 0.009_732 range 0.0 .. 0.009_732 * (2 ** 13 - 1)
    with Size => 13, Small => 0.009_732;
-   type ADC_AIN_Volts_Type is delta 0.000_305_2 range 0.0 .. 0.000_305_2 * (2**13 - 1)
+   type ADC_AIN_Volts_Type is delta 0.000_305_2 range 0.0 .. 0.000_305_2 * (2 ** 13 - 1)
    with Size => 13, Small => 0.000_305_2;
 
    type ADC_VSUPPLY_AIN is record
@@ -233,7 +233,7 @@ package Prunt.TMC_Types.TMC2240 is
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type ADC_Temp_Almost_Kelvin_Type is delta 10.0 / 77.0 range 0.0 .. 10.0 / 77.0 * (2.0**13 - 1.0)
+   type ADC_Temp_Almost_Kelvin_Type is delta 10.0 / 77.0 range 0.0 .. 10.0 / 77.0 * (2.0 ** 13 - 1.0)
    with Size => 13, Small => 10.0 / 77.0;
    --  This range starts at −2038.0/(77.0/10.0) celsius (approx -264), but GNAT will not generate a biased
    --  representation for delta types, so we can not represent this in kelvin.
@@ -294,7 +294,7 @@ package Prunt.TMC_Types.TMC2240 is
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
    type Microstep_Resolution_Type is (MS_256, MS_128, MS_64, MS_32, MS_16, MS_8, MS_4, MS_2, MS_Full_Steps)
-   with Size => 4;
+   with Size => 4, Annotate => (Prunt_Config, User_Config);
    for Microstep_Resolution_Type use
      (MS_256        => 0,
       MS_128        => 1,
@@ -326,7 +326,7 @@ package Prunt.TMC_Types.TMC2240 is
       Off_440,
       Off_472,
       Off_504)
-   with Size => 4;
+   with Size => 4, Annotate => (Prunt_Config, User_Config);
    for TOFF_Type use
      (Disable_Driver => 0,
       Off_56         => 1,
@@ -345,7 +345,7 @@ package Prunt.TMC_Types.TMC2240 is
       Off_472        => 14,
       Off_504        => 15);
 
-   type TBL_Type is (Blank_16, Blank_24, Blank_36, Blank_54) with Size => 2;
+   type TBL_Type is (Blank_16, Blank_24, Blank_36, Blank_54) with Size => 2, Annotate => (Prunt_Config, User_Config);
    for TBL_Type use (Blank_16 => 0, Blank_24 => 1, Blank_36 => 2, Blank_54 => 3);
 
    type CHOPCONF is record
@@ -404,10 +404,12 @@ package Prunt.TMC_Types.TMC2240 is
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type Freewheel_Type is (Normal, Freewheel, Short_Via_LS, Short_Via_HS) with Size => 2;
+   type Freewheel_Type is (Normal, Freewheel, Short_Via_LS, Short_Via_HS)
+   with Size => 2, Annotate => (Prunt_Config, User_Config);
    for Freewheel_Type use (Normal => 0, Freewheel => 1, Short_Via_LS => 2, Short_Via_HS => 3);
 
-   type PWM_Freq_Type is (Freq_1024, Freq_683, Freq_512, Freq_410) with Size => 2;
+   type PWM_Freq_Type is (Freq_1024, Freq_683, Freq_512, Freq_410)
+   with Size => 2, Annotate => (Prunt_Config, User_Config);
    for PWM_Freq_Type use (Freq_1024 => 0, Freq_683 => 1, Freq_512 => 2, Freq_410 => 3);
 
    type PWMCONF is record
@@ -462,7 +464,7 @@ package Prunt.TMC_Types.TMC2240 is
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type UART_Byte is mod 2**8 with Size => 8;
+   type UART_Byte is mod 2 ** 8 with Size => 8;
    type UART_Data_Byte_Array is array (1 .. 8) of UART_Byte with Pack;
    type UART_Query_Byte_Array is array (1 .. 4) of UART_Byte with Pack;
 
@@ -698,55 +700,55 @@ package Prunt.TMC_Types.TMC2240 is
 
    for UART_Data_Message_Inner use
      record
-       Sync at 7 range 0 .. 3;
-       Reserved at 7 range 4 .. 7;
-       Node at 6 range 0 .. 7;
-       Register at 5 range 0 .. 6;
-       Is_Write at 5 range 7 .. 7;
-       CRC at 0 range 0 .. 7;
-       GCONF_Data at 1 range 0 .. 31;
-       GSTAT_Data at 1 range 0 .. 31;
-       IOIN_Data at 1 range 0 .. 31;
-       GLOBAL_SCALER_Data at 1 range 0 .. 31;
-       IHOLD_IRUN_Data at 1 range 0 .. 31;
-       IFCNT_Data at 1 range 0 .. 31;
-       NODECONF_Data at 1 range 0 .. 31;
-       DRV_CONF_Data at 1 range 0 .. 31;
-       TPOWERDOWN_Data at 1 range 0 .. 31;
-       TSTEP_Data at 1 range 0 .. 31;
-       TPWMTHRS_Data at 1 range 0 .. 31;
-       TCOOLTHRS_Data at 1 range 0 .. 31;
-       THIGH_Data at 1 range 0 .. 31;
-       DIRECT_MODE_Data at 1 range 0 .. 31;
-       ENCMODE_Data at 1 range 0 .. 31;
-       X_ENC_Data at 1 range 0 .. 31;
-       ENC_CONST_Data at 1 range 0 .. 31;
-       ENC_STATUS_Data at 1 range 0 .. 31;
-       ENC_LATCH_Data at 1 range 0 .. 31;
+       Sync                 at 7 range 0 .. 3;
+       Reserved             at 7 range 4 .. 7;
+       Node                 at 6 range 0 .. 7;
+       Register             at 5 range 0 .. 6;
+       Is_Write             at 5 range 7 .. 7;
+       CRC                  at 0 range 0 .. 7;
+       GCONF_Data           at 1 range 0 .. 31;
+       GSTAT_Data           at 1 range 0 .. 31;
+       IOIN_Data            at 1 range 0 .. 31;
+       GLOBAL_SCALER_Data   at 1 range 0 .. 31;
+       IHOLD_IRUN_Data      at 1 range 0 .. 31;
+       IFCNT_Data           at 1 range 0 .. 31;
+       NODECONF_Data        at 1 range 0 .. 31;
+       DRV_CONF_Data        at 1 range 0 .. 31;
+       TPOWERDOWN_Data      at 1 range 0 .. 31;
+       TSTEP_Data           at 1 range 0 .. 31;
+       TPWMTHRS_Data        at 1 range 0 .. 31;
+       TCOOLTHRS_Data       at 1 range 0 .. 31;
+       THIGH_Data           at 1 range 0 .. 31;
+       DIRECT_MODE_Data     at 1 range 0 .. 31;
+       ENCMODE_Data         at 1 range 0 .. 31;
+       X_ENC_Data           at 1 range 0 .. 31;
+       ENC_CONST_Data       at 1 range 0 .. 31;
+       ENC_STATUS_Data      at 1 range 0 .. 31;
+       ENC_LATCH_Data       at 1 range 0 .. 31;
        ADC_VSUPPLY_AIN_Data at 1 range 0 .. 31;
-       ADC_TEMP_Data at 1 range 0 .. 31;
-       OTW_OV_VTH_Data at 1 range 0 .. 31;
-       MSLUT0_Data at 1 range 0 .. 31;
-       MSLUT1_Data at 1 range 0 .. 31;
-       MSLUT2_Data at 1 range 0 .. 31;
-       MSLUT3_Data at 1 range 0 .. 31;
-       MSLUT4_Data at 1 range 0 .. 31;
-       MSLUT5_Data at 1 range 0 .. 31;
-       MSLUT6_Data at 1 range 0 .. 31;
-       MSLUT7_Data at 1 range 0 .. 31;
-       MSLUTSEL_Data at 1 range 0 .. 31;
-       MSLUTSTART_Data at 1 range 0 .. 31;
-       MSCNT_Data at 1 range 0 .. 31;
-       MSCURACT_Data at 1 range 0 .. 31;
-       CHOPCONF_Data at 1 range 0 .. 31;
-       COOLCONF_Data at 1 range 0 .. 31;
-       DRV_STATUS_Data at 1 range 0 .. 31;
-       PWMCONF_Data at 1 range 0 .. 31;
-       PWM_SCALE_Data at 1 range 0 .. 31;
-       PWM_AUTO_Data at 1 range 0 .. 31;
-       SG4_THRS_Data at 1 range 0 .. 31;
-       SG4_RESULT_Data at 1 range 0 .. 31;
-       SG4_IND_Data at 1 range 0 .. 31;
+       ADC_TEMP_Data        at 1 range 0 .. 31;
+       OTW_OV_VTH_Data      at 1 range 0 .. 31;
+       MSLUT0_Data          at 1 range 0 .. 31;
+       MSLUT1_Data          at 1 range 0 .. 31;
+       MSLUT2_Data          at 1 range 0 .. 31;
+       MSLUT3_Data          at 1 range 0 .. 31;
+       MSLUT4_Data          at 1 range 0 .. 31;
+       MSLUT5_Data          at 1 range 0 .. 31;
+       MSLUT6_Data          at 1 range 0 .. 31;
+       MSLUT7_Data          at 1 range 0 .. 31;
+       MSLUTSEL_Data        at 1 range 0 .. 31;
+       MSLUTSTART_Data      at 1 range 0 .. 31;
+       MSCNT_Data           at 1 range 0 .. 31;
+       MSCURACT_Data        at 1 range 0 .. 31;
+       CHOPCONF_Data        at 1 range 0 .. 31;
+       COOLCONF_Data        at 1 range 0 .. 31;
+       DRV_STATUS_Data      at 1 range 0 .. 31;
+       PWMCONF_Data         at 1 range 0 .. 31;
+       PWM_SCALE_Data       at 1 range 0 .. 31;
+       PWM_AUTO_Data        at 1 range 0 .. 31;
+       SG4_THRS_Data        at 1 range 0 .. 31;
+       SG4_RESULT_Data      at 1 range 0 .. 31;
+       SG4_IND_Data         at 1 range 0 .. 31;
      end record;
 
    type UART_Data_Message (Bytes_Mode : Boolean := False) is record
@@ -762,7 +764,7 @@ package Prunt.TMC_Types.TMC2240 is
 
    for UART_Data_Message use
      record
-       Bytes at 0 range 0 .. 63;
+       Bytes   at 0 range 0 .. 63;
        Content at 0 range 0 .. 63;
      end record;
 
@@ -778,12 +780,12 @@ package Prunt.TMC_Types.TMC2240 is
 
    for UART_Query_Message_Inner use
      record
-       Sync at 3 range 0 .. 3;
+       Sync     at 3 range 0 .. 3;
        Reserved at 3 range 4 .. 7;
-       Node at 2 range 0 .. 7;
+       Node     at 2 range 0 .. 7;
        Register at 1 range 0 .. 6;
        Is_Write at 1 range 7 .. 7;
-       CRC at 0 range 0 .. 7;
+       CRC      at 0 range 0 .. 7;
      end record;
 
    type UART_Query_Message (Bytes_Mode : Boolean := False) is record
@@ -799,7 +801,7 @@ package Prunt.TMC_Types.TMC2240 is
 
    for UART_Query_Message use
      record
-       Bytes at 0 range 0 .. 31;
+       Bytes   at 0 range 0 .. 31;
        Content at 0 range 0 .. 31;
      end record;
 

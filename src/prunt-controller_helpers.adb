@@ -87,11 +87,10 @@ package body Prunt.Controller_Helpers is
 
    function Build_Gcode_JSON (Active_Modules : Module_Maps.Map) return JSON.JSON_Value is
       use Prunt.JSON;
-      Root_Array : JSON_Array := Empty_Array;
+      Root_Object : constant JSON_Value := Create_Object;
    begin
       for C in Active_Modules.Iterate loop
          declare
-            Module_Name     : constant Virtual_String := Module_Maps.Key (C);
             Module_Commands : JSON_Array := Empty_Array;
          begin
             for G of Module_Maps.Element (C).Gcode_Commands loop
@@ -145,17 +144,11 @@ package body Prunt.Controller_Helpers is
                end;
             end loop;
 
-            declare
-               Module_Object : constant JSON_Value := Create_Object;
-            begin
-               Module_Object.Set_Field ("Module", Module_Name);
-               Module_Object.Set_Field ("Commands", Module_Commands);
-               Root_Array.Append (Module_Object);
-            end;
+            Root_Object.Set_Field (Module_Maps.Key (C), Module_Commands);
          end;
       end loop;
 
-      return Create (Root_Array);
+      return Root_Object;
    end Build_Gcode_JSON;
 
 end Prunt.Controller_Helpers;

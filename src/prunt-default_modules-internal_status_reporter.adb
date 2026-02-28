@@ -42,31 +42,26 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    begin
       return Result : Module_Instance := (My_Modules.Module_Instance with others => <>) do
          Result.Updater.Set (Create_Updater_Task'Access);
-         Result.Updater.Get.Start (Status_Emitter);
+         Result.Updater.Get.Prepare (Status_Emitter);
       end return;
    end Initialize;
 
    overriding
-   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
-      --  Position_Map : Status_Manager.Status_Value_Maps.Map :=
-      --    [for A in Axis_Name use Conversions.To_Virtual_String (A'Image) =>
-      --       (Kind        => Status_Manager.Real_Kind,
-      --        Unit        => "mm",
-      --        Description => "Position of axis " & Conversions.To_Virtual_String (A'Image),
-      --        Condition   => "")];
-      Position_Map : Status_Manager.Status_Value_Maps.Map := [];
+   procedure Start (This : in out Module_Instance) is
    begin
-      for A in Axis_Name loop
-         Position_Map.Insert
-           (+A'Image,
-            (Kind        => Status_Manager.Real_Kind,
-             Unit        => "mm",
-             Description => "Position of axis " & Conversions.To_Virtual_String (A'Image),
-             Condition   => ""));
-      end loop;
+      This.Updater.Get.Start;
+   end Start;
 
+   overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
+   begin
       return
-        ["Position"     => Position_Map,
+        ["Position"     =>
+           [for A in Axis_Name use Conversions.To_Virtual_String (A'Image) =>
+              (Kind        => Status_Manager.Real_Kind,
+               Unit        => "mm",
+               Description => "Position of axis " & Conversions.To_Virtual_String (A'Image),
+               Condition   => "")],
          "Print status" =>
            ["File name"    =>
               (Kind        => Status_Manager.String_Kind,
@@ -86,16 +81,24 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    end Status_Schema;
 
    task body Status_Updater is
-      Status_Ref : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Ref    : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Stop_Received : Boolean := False;
    begin
-      accept Start (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) do
+      accept Prepare (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) do
          Status_Ref := Status_Emitter;
-      end Start;
+      end Prepare;
 
-      loop
+      select
+         accept Stop;
+         Stop_Received := True;
+      or
+         accept Start;
+      end select;
+
+      while not Stop_Received loop
          select
             accept Stop;
-            exit;
+            Stop_Received := True;
          or
             delay 0.5;
             declare

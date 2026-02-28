@@ -55,34 +55,51 @@ package Prunt is
    subtype Length is Dimensioned_Float
    with Dimension => (Symbol => "mm", Millimeter => 1, others => 0), Annotate => (Prunt_Config, Unit, "mm");
 
-   subtype Time is Dimensioned_Float with Dimension => (Symbol => "s", Second => 1, others => 0);
+   subtype Time is Dimensioned_Float
+   with Dimension => (Symbol => "s", Second => 1, others => 0), Annotate => (Prunt_Config, Unit, "s");
 
-   subtype Temperature is Dimensioned_Float with Dimension => (Symbol => "°C", Celsius => 1, others => 0);
+   subtype Temperature is Dimensioned_Float
+   with Dimension => (Symbol => "°C", Celsius => 1, others => 0), Annotate => (Prunt_Config, Unit, "celsius");
 
-   subtype Angle is Dimensioned_Float with Dimension => (Symbol => "rad", others => 0);
+   subtype Angle is Dimensioned_Float
+   with Dimension => (Symbol => "rad", others => 0), Annotate => (Prunt_Config, Unit, "deg");
 
-   subtype Dimensionless is Dimensioned_Float with Dimension => (Symbol => "×", others => 0);
+   subtype Dimensionless is Dimensioned_Float
+   with Dimension => (Symbol => "×", others => 0), Annotate => (Prunt_Config, Unit, "");
 
    subtype Voltage is Dimensioned_Float
-   with Dimension => (Symbol => "nV", Gram => 1, Millimeter => 2, Second => -3, Amp => -1, others => 0);
+   with
+     Dimension => (Symbol => "nV", Gram => 1, Millimeter => 2, Second => -3, Amp => -1, others => 0),
+     Annotate  => (Prunt_Config, Unit, "volt");
 
-   subtype Current is Dimensioned_Float with Dimension => (Symbol => "A", Amp => 1, others => 0);
+   subtype Current is Dimensioned_Float
+   with Dimension => (Symbol => "A", Amp => 1, others => 0), Annotate => (Prunt_Config, Unit, "amp");
 
-   subtype Mass is Dimensioned_Float with Dimension => (Symbol => "g", Gram => 1, others => 0);
+   subtype Mass is Dimensioned_Float
+   with Dimension => (Symbol => "g", Gram => 1, others => 0), Annotate => (Prunt_Config, Unit, "gram");
 
    subtype Resistance is Dimensioned_Float
-   with Dimension => (Symbol => "nohm", Gram => 1, Millimeter => 2, Second => -3, Amp => -2, others => 0);
+   with
+     Dimension => (Symbol => "nohm", Gram => 1, Millimeter => 2, Second => -3, Amp => -2, others => 0),
+     Annotate  => (Prunt_Config, Unit, "ohm");
 
    subtype Power is Dimensioned_Float
-   with Dimension => (Symbol => "nW", Gram => 1, Millimeter => 2, Second => -3, others => 0);
+   with
+     Dimension => (Symbol => "nW", Gram => 1, Millimeter => 2, Second => -3, others => 0),
+     Annotate  => (Prunt_Config, Unit, "watt");
 
-   subtype Frequency is Dimensioned_Float with Dimension => (Symbol => "Hz", Second => -1, others => 0);
+   subtype Frequency is Dimensioned_Float
+   with Dimension => (Symbol => "Hz", Second => -1, others => 0), Annotate => (Prunt_Config, Unit, "hertz");
 
    subtype Energy is Dimensioned_Float
-   with Dimension => (Symbol => "nJ", Gram => 1, Millimeter => 2, Second => -2, others => 0);
+   with
+     Dimension => (Symbol => "nJ", Gram => 1, Millimeter => 2, Second => -2, others => 0),
+     Annotate  => (Prunt_Config, Unit, "joule");
 
    subtype Inductance is Dimensioned_Float
-   with Dimension => (Symbol => "nH", Gram => 1, Millimeter => 2, Second => -2, Amp => -2, others => 0);
+   with
+     Dimension => (Symbol => "nH", Gram => 1, Millimeter => 2, Second => -2, Amp => -2, others => 0),
+     Annotate  => (Prunt_Config, Unit, "millihenry");
 
    subtype PWM_Scale is Dimensionless range 0.0 .. 1.0;
 
@@ -120,19 +137,29 @@ package Prunt is
    subtype Fan_PWM_Frequency is Frequency range 1.0 * hertz .. 50_000.0 * hertz;
 
    subtype Velocity is Dimensioned_Float
-   with Dimension => (Symbol => "mm/s", Millimeter => 1, Second => -1, others => 0);
+   with
+     Dimension => (Symbol => "mm/s", Millimeter => 1, Second => -1, others => 0),
+     Annotate  => (Prunt_Config, Unit, "mm/s");
    subtype Acceleration is Dimensioned_Float
-   with Dimension => (Symbol => "mm/s**2", Millimeter => 1, Second => -2, others => 0);
+   with
+     Dimension => (Symbol => "mm/s²", Millimeter => 1, Second => -2, others => 0),
+     Annotate  => (Prunt_Config, Unit, "mm/s**2");
    subtype Jerk is Dimensioned_Float
-   with Dimension => (Symbol => "mm/s**3", Millimeter => 1, Second => -3, others => 0);
+   with
+     Dimension => (Symbol => "mm/s³", Millimeter => 1, Second => -3, others => 0),
+     Annotate  => (Prunt_Config, Unit, "mm/s**3");
    subtype Snap is Dimensioned_Float
-   with Dimension => (Symbol => "mm/s**4", Millimeter => 1, Second => -4, others => 0);
+   with
+     Dimension => (Symbol => "mm/s⁴", Millimeter => 1, Second => -4, others => 0),
+     Annotate  => (Prunt_Config, Unit, "mm/s**4");
    subtype Crackle is Dimensioned_Float
-   with Dimension => (Symbol => "mm/s**5", Millimeter => 1, Second => -5, others => 0);
+   with
+     Dimension => (Symbol => "mm/s⁵", Millimeter => 1, Second => -5, others => 0),
+     Annotate  => (Prunt_Config, Unit, "mm/s**5");
 
-   subtype Area is Dimensioned_Float with Dimension => (Symbol => "mm**2", Millimeter => 2, others => 0);
-   subtype Volume is Dimensioned_Float with Dimension => (Symbol => "mm**3", Millimeter => 3, others => 0);
-   subtype Hypervolume is Dimensioned_Float with Dimension => (Symbol => "mm**4", Millimeter => 4, others => 0);
+   subtype Area is Dimensioned_Float with Dimension => (Symbol => "mm²", Millimeter => 2, others => 0);
+   subtype Volume is Dimensioned_Float with Dimension => (Symbol => "mm³", Millimeter => 3, others => 0);
+   subtype Hypervolume is Dimensioned_Float with Dimension => (Symbol => "mm⁴", Millimeter => 4, others => 0);
 
    subtype Curvature is Dimensioned_Float with Dimension => (Symbol => "mm**(-1)", Millimeter => -1, others => 0);
    subtype Curvature_To_2 is Dimensioned_Float with Dimension => (Symbol => "mm**(-2)", Millimeter => -2, others => 0);

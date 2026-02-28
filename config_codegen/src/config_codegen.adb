@@ -32,8 +32,9 @@ procedure Config_Codegen is
    pragma Extensions_Allowed (On);
 
    Modules : Module_Data_Vectors.Vector := [];
-   Config  : Config_Maps.Map :=
-     ["Standard.Boolean" => (Boolean_Kind, (null record)), "Prunt.Dimensionless_Ratio" => (Ratio_Kind, (Unit => ""))];
+   Config : Config_Maps.Map :=
+     ["Standard.Boolean"          => (Boolean_Kind, (null record)),
+      "Prunt.Dimensionless_Ratio" => (Ratio_Kind, (Unit => ""))];
 
    procedure Process_Unit (Context : Libadalang.Helpers.App_Job_Context; Unit : Analysis_Unit) is
       pragma Unreferenced (Context);

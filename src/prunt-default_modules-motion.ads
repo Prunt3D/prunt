@@ -25,6 +25,7 @@ with Ada.Tags;
 with Prunt.Config;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
+with Prunt.Status_Manager;
 
 generic
 package Prunt.Default_Modules.Motion is
@@ -49,6 +50,9 @@ package Prunt.Default_Modules.Motion is
       return My_Modules.Module_Instance'Class;
 
    overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+
+   overriding
    procedure Gcode_Dispatch
      (This               : in out Module_Instance;
       Args               : in out Gcode_Arguments.Arguments;
@@ -57,22 +61,29 @@ package Prunt.Default_Modules.Motion is
 
 private
 
-   type User_Config_Prunt is record
-      --  This section contains general settings for Prunt.
+   type User_Config_Motion_Gcode is record
+      --  This section contains settings which impact G-code commands contained within the motion module.
 
       Replace_G0_With_G1 : Boolean := False;
-      --  In G-code, G0 and G1 are both commands for linear movement. Technically, G0 is for rapid, non-printing moves,
-      --  while G1 is for controlled, printing moves. Some 3D printer firmwares treat G0 and G1 identically, using the
-      --  same feedrate for both. Other firmwares, including Prunt by default, use the maximum possible speed for G0
-      --  moves. If your slicer generates G-code that assumes G0 moves will be performed at the same speed as G1 moves,
-      --  you should enable this setting. It will make Prunt treat all G0 commands as G1 commands, ensuring that the
-      --  specified feedrate is used. Note that this setting only affects the movement speed; laser-based tools will
-      --  always be disabled during G0 moves regardless of this setting.
+      --  If set, replace all G0 commands with G1 during execution.
+      --
+      --  G0 and G1 are both commands for linear movement. Technically, G0 is for rapid, non-printing moves, while G1
+      --  is for controlled, printing moves. Some 3D printer firmwares treat G0 and G1 identically, using the same
+      --  feedrate for both. Other firmwares, including Prunt by default, use the maximum possible speed for G0 moves.
+      --
+      --  If your slicer generates G-code that assumes G0 moves will be performed at the same speed as G1 moves, you
+      --  should enable this setting.
+      --
+      --  Note that this setting only affects the movement speed. Laser-based tools will always be disabled during G0
+      --  moves regardless of this setting.
+
+      Default_G1_Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 0.1 * mm / s;
+      --  Sets the default feedrate to use for G1 before a G1 command is executed with an F parameter.
    end record
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Prunt : User_Config_Prunt := (others => <>);
+      Motion_Gcode : User_Config_Motion_Gcode := (others => <>);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 
@@ -208,7 +219,9 @@ private
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config);
 
    type Module_Instance is new My_Modules.Module_Instance with record
-      Config : User_Config;
+      Config         : User_Config;
+      Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Feedrate       : Velocity;
    end record;
 
 end Prunt.Default_Modules.Motion;

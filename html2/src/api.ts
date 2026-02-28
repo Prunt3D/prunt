@@ -12,6 +12,12 @@ export async function fetchConfigValues() {
     return await res.json();
 }
 
+export async function fetchGcodeSchema() {
+    const res = await fetch(`${API_BASE}/gcode-schema`);
+    if (!res.ok) throw new Error("Failed to fetch gcode schema");
+    return await res.json();
+}
+
 export async function patchConfigValues(values: any) {
     const res = await fetch(`${API_BASE}/config/values`, {
         method: "POST",

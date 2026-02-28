@@ -494,12 +494,15 @@ package body Config_Parser is
             Raise_Error (Def, "Could not resolve element type.");
          end if;
 
-         if not Has_Prunt_Config_Aspect (Index_Decl.As_Base_Type_Decl) then
-            Raise_Error
-              (Decl,
-               "Index type must have Prunt_Config annotation aspect to be used in config record. Declared at "
-               & Index_Decl.Image);
-         end if;
+         --  TODO: We don't perform the below check because we use some enumerations that come from generics. We should
+         --  have a special case for these.
+
+         --  if not Has_Prunt_Config_Aspect (Index_Decl.As_Base_Type_Decl) then
+         --     Raise_Error
+         --       (Decl,
+         --        "Index type must have Prunt_Config annotation aspect to be used in config record. Declared at "
+         --        & Index_Decl.Image);
+         --  end if;
 
          if not Has_Prunt_Config_Aspect (Elem_Decl) then
             Raise_Error
