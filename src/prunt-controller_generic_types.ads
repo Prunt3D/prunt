@@ -28,7 +28,7 @@ with Prunt.Modules;
 
 generic
    --  'Image of each value of these types will be shown in the GUI. The names should correspond to names on the board.
-   type Stepper_Name is (<>);
+   type Motor_Name is (<>);
    type Heater_Name is (<>);
    type Thermistor_Name is (<>);
    type Board_Temperature_Probe_Name is (<>);
@@ -36,14 +36,14 @@ generic
    type Input_Switch_Name is (<>);
 package Prunt.Controller_Generic_Types is
 
-   type Stepper_Position is array (Stepper_Name) of Dimensionless;
+   type Motor_Position is array (Motor_Name) of Dimensionless;
    --  Position multiplied by mm/step values provided by the user. This array is using floating point types and the
    --  numbers are not rounded. An implementation is allowed to round these values if the decimal part is not useful.
 
    type Queued_Command is record
       Index           : Command_Index;
       --  Monotonically increasing identifier.
-      Pos             : Stepper_Position;
+      Pos             : Motor_Position;
       --  Position to move to.
       Safe_Stop_After : Boolean;
       --  If True then the machine can stop after executing this move without violating kinematic constraints. If the
@@ -67,19 +67,18 @@ package Prunt.Controller_Generic_Types is
 
    --  Vendor defined parameters:
 
-   type Stepper_Hardware_Parameters (Kind : Stepper_Hardware_Kind := Basic_Kind) is record
+   type Motor_Hardware_Parameters (Kind : Motor_Hardware_Kind := Basic_Stepper_Kind) is record
       Maximum_Delta_Per_Command : Dimensionless;
 
       case Kind is
-         when Basic_Kind =>
-            Enable  : access procedure (Stepper : Stepper_Name);
-            Disable : access procedure (Stepper : Stepper_Name);
+         when Basic_Stepper_Kind | Basic_Motor_Kind =>
+            Enable  : access procedure (Motor : Motor_Name);
+            Disable : access procedure (Motor : Motor_Name);
 
          when TMC2240_UART_Kind =>
-            --  The Enable_Stepper and Disable_Stepper procedures are not used for TMC2240 steppers as the TOFF
-            --  register is used instead. If the enable pin is connected to a toggleable pin then it should be driven
-            --  low at all times. It is also generally a good idea to reset TOFF as part of your startup and reset
-            --  procedures.
+            --  The `Enable` and `Disable` procedures are not used for TMC2240 motors as the TOFF register is used
+            --  instead. If the enable pin is connected to a toggleable pin then it should be driven low at all times.
+            --  It is also generally a good idea to reset TOFF as part of your startup and reset procedures.
 
             Double_Edge_Stepping : Boolean;
             TMC2240_UART_Address : TMC_Types.TMC2240.UART_Node_Address;
@@ -101,7 +100,7 @@ package Prunt.Controller_Generic_Types is
       end case;
    end record;
 
-   type Stepper_Hardware_Parameters_Array_Type is array (Stepper_Name) of Stepper_Hardware_Parameters;
+   type Motor_Hardware_Parameters_Array_Type is array (Motor_Name) of Motor_Hardware_Parameters;
 
    type Fan_Hardware_Parameters (Kind : Fan_Hardware_Kind := Fixed_Switching_Kind) is record
       case Kind is
@@ -162,7 +161,7 @@ package Prunt.Controller_Generic_Types is
    type Hardware_Parameters is record
       pragma Warnings (Off, "null array aggregate indexed by an enumeration type");
       --  We want this to raise an error if the user tries to default-initialize any of these fields.
-      Stepper_Hardware                 : Stepper_Hardware_Parameters_Array_Type := [];
+      Motor_Hardware                   : Motor_Hardware_Parameters_Array_Type := [];
       Fan_Hardware                     : Fan_Hardware_Parameters_Array_Type := [];
       Input_Switch_Hardware            : Input_Switch_Hardware_Parameters_Array_Type := [];
       Heater_Hardware                  : Heater_Hardware_Parameters_Array_Type := [];

@@ -27,7 +27,7 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
 
    pragma Extensions_Allowed (On);
 
-   procedure Setup (In_Map : Stepper_Pos_Map) is
+   procedure Setup (In_Map : Motor_Pos_Map) is
    begin
       Runner.Setup (In_Map);
    end Setup;
@@ -42,23 +42,23 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
       Runner.Run (Block, Needs_New_Profiles);
    end Run;
 
-   function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position is
-      Ret : Stepper_Position := [others => 0.0];
+   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position is
+      Ret : Motor_Position := [others => 0.0];
    begin
-      for S in Stepper_Name loop
+      for M in Motor_Name loop
          for A in Axis_Name loop
             --  TODO: Use multiplication for the map instead of division so we don't need this check.
-            if Map (A, S) /= Length'Last then
-               Ret (S) := Ret (S) + Pos (A) / Map (A, S);
+            if Map (A, M) /= Length'Last then
+               Ret (M) := Ret (M) + Pos (A) / Map (A, M);
             end if;
          end loop;
       end loop;
 
       return Ret;
-   end To_Stepper_Position;
+   end To_Motor_Position;
 
    protected body Runner is
-      procedure Setup (In_Map : Stepper_Pos_Map) is
+      procedure Setup (In_Map : Motor_Pos_Map) is
       begin
          if Setup_Done then
             raise Constraint_Error with "Setup already done.";
@@ -77,27 +77,27 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
       procedure Run (Block : in out Execution_Block; Needs_New_Profiles : out Boolean) is
          Current_Time          : Time := 0.0 * s;
          Current_Shapers       : Input_Shapers.Shapers.Axial_Shapers;
-         Last_Stepper_Position : Stepper_Position;
+         Last_Motor_Position : Motor_Position;
          First_Check           : Boolean := True;
 
-         procedure Check_Step (Stepper_Pos : Stepper_Position; I : Corners_Index);
+         procedure Check_Step (Motor_Pos : Motor_Position; I : Corners_Index);
 
-         procedure Check_Step (Stepper_Pos : Stepper_Position; I : Corners_Index) is
+         procedure Check_Step (Motor_Pos : Motor_Position; I : Corners_Index) is
          begin
             if First_Check then
-               Last_Stepper_Position := Stepper_Pos;
+               Last_Motor_Position := Motor_Pos;
                First_Check := False;
             end if;
 
-            for S in Stepper_Name loop
+            for S in Motor_Name loop
                declare
-                  Change : constant Dimensionless := abs (Last_Stepper_Position (S) - Stepper_Pos (S));
+                  Change : constant Dimensionless := abs (Last_Motor_Position (S) - Motor_Pos (S));
                begin
-                  Maximum_Overspeed (I) := Dimensionless'Max (@, Change * 1.01 / Maximum_Stepper_Delta (S));
+                  Maximum_Overspeed (I) := Dimensionless'Max (@, Change * 1.01 / Maximum_Motor_Delta (S));
                end;
             end loop;
 
-            Last_Stepper_Position := Stepper_Pos;
+            Last_Motor_Position := Motor_Pos;
          end Check_Step;
       begin
          In_Step_Rate_Limiter := True;
@@ -137,13 +137,13 @@ package body Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
                                (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers));
                         begin
                            for J in 0 .. Extra_Loops_Required loop
-                              Check_Step (To_Stepper_Position (Shaped_Pos, Pos_Map), I);
+                              Check_Step (To_Motor_Position (Shaped_Pos, Pos_Map), I);
 
                               Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
                            end loop;
                         end;
                      else
-                        Check_Step (To_Stepper_Position (Shaped_Pos, Pos_Map), I);
+                        Check_Step (To_Motor_Position (Shaped_Pos, Pos_Map), I);
                         --  Short-circuit if we're just going to disable shapers.
                         exit when
                           Block.Params.Axial_Shapers

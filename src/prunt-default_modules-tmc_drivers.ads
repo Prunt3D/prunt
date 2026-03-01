@@ -32,7 +32,7 @@ with Prunt.TMC_Types.TMC2240; use Prunt.TMC_Types.TMC2240;
 
 generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
-   Stepper_Hardware : My_Controller_Generic_Types.Stepper_Hardware_Parameters_Array_Type;
+   Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
 package Prunt.Default_Modules.TMC_Drivers is
 
    type Module is new My_Modules.Module with null record;
@@ -323,23 +323,29 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_TMC (Fixed_Kind : Stepper_Hardware_Kind := Basic_Kind) is record
+   --  TODO: We need to add support for `when others =>` in the configuration code generator so we don't need to edit
+   --  the record below this every time we add a new motor type.
+
+   type User_Config_Motor (Fixed_Kind : Motor_Hardware_Kind := Basic_Stepper_Kind) is record
       case Fixed_Kind is
          when TMC2240_UART_Kind =>
             TMC2240_Parameters : User_Config_TMC2240;
 
-         when Basic_Kind =>
+         when Basic_Stepper_Kind =>
+            Empty : User_Config_Empty;
+
+         when Basic_Motor_Kind =>
             Empty : User_Config_Empty;
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Stepper_Array is array (My_Controller_Generic_Types.Stepper_Name) of User_Config_TMC
+   type User_Config_Motor_Array is array (My_Controller_Generic_Types.Motor_Name) of User_Config_Motor
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Steppers : User_Config_Stepper_Array := [others => <>] with
-        Annotate => (Prunt_Config, Fixed_Kind, "Stepper_Hardware (Index_?).Kind");
+      Motors : User_Config_Motor_Array := [others => <>] with
+        Annotate => (Prunt_Config, Fixed_Kind, "Motor_Hardware (Index_?).Kind");
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

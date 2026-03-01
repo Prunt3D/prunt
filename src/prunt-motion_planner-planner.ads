@@ -105,11 +105,11 @@ generic
    --  The length of each interpolation period to be used by the step rate checker. This also determines the minimum
    --  time of a segment.
 
-   type Stepper_Name is (<>);
+   type Motor_Name is (<>);
 
-   type Stepper_Position is array (Stepper_Name) of Dimensionless;
+   type Motor_Position is array (Motor_Name) of Dimensionless;
 
-   Maximum_Stepper_Delta : Stepper_Position;
+   Maximum_Motor_Delta : Motor_Position;
    --  The maximum change in position for each axis within a single interpolation period. Step generation will be
    --  simulated and any moves that result in these limits being exceeded will be slowed down.
 
@@ -154,7 +154,7 @@ generic
    Initial_Position : Position := [others => 0.0 * mm];
 package Prunt.Motion_Planner.Planner is
 
-   type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
+   type Motor_Pos_Map is array (Axis_Name, Motor_Name) of Length;
    --  Defines how each axis moves in response to a step from a given motor. This is used during step simulation.
 
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
@@ -252,7 +252,7 @@ package Prunt.Motion_Planner.Planner is
    task Runner
      with CPU => Runner_CPU, Storage_Size => 32 * 1024 * 1024 is
       --  Large Storage_Size to allow for large shapers in the step rate limiter.
-      entry Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map);
+      entry Setup (In_Params : Kinematic_Parameters; In_Map : Motor_Pos_Map);
       entry Reset_Do_Not_Call_From_Other_Packages;
       --  Call the Reset procedure rather than this entry to avoid blocking and reset the preprocessor.
       --  TODO: There must be some way to hide this while still exposing the task.

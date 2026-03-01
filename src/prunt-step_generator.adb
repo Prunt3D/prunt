@@ -56,25 +56,25 @@ package body Prunt.Step_Generator is
       return Math.Cos (Dimensionless (Index), 4.0 * Dimensionless (Pause_Slew_Index'Last)) * Interpolation_Time;
    end Pause_Slew_Interpolation_Time;
 
-   function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position is
-      Ret : Stepper_Position := [others => 0.0];
+   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position is
+      Ret : Motor_Position := [others => 0.0];
    begin
-      for S in Stepper_Name loop
+      for M in Motor_Name loop
          for A in Axis_Name loop
             --  TODO: Use multiplication for the map instead of division so we don't need this check.
-            if Map (A, S) /= Length'Last then
-               Ret (S) := Ret (S) + Pos (A) / Map (A, S);
+            if Map (A, M) /= Length'Last then
+               Ret (M) := Ret (M) + Pos (A) / Map (A, M);
             end if;
          end loop;
       end loop;
 
       return Ret;
-   end To_Stepper_Position;
+   end To_Motor_Position;
 
    task body Runner is
       Current_Command_Index : Command_Index := 0;
       Current_Time          : Time;
-      Pos_Map               : Stepper_Pos_Map;
+      Pos_Map               : Motor_Pos_Map;
 
       type Homing_Move_When_Kind is (Not_Pending_Kind, This_Block_Kind, This_Move_Kind);
       Homing_Move_When : Homing_Move_When_Kind;
@@ -116,7 +116,7 @@ package body Prunt.Step_Generator is
          Do_Pause := False;
          Previous_Position := [others => Zero_Length];
 
-         accept Setup (Map : Stepper_Pos_Map) do
+         accept Setup (Map : Motor_Pos_Map) do
             Pos_Map := Map;
          end Setup;
 
@@ -257,7 +257,7 @@ package body Prunt.Step_Generator is
 
                                  Enqueue_Command
                                    (Pos             => Shaped_Pos,
-                                    Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
+                                    Motor_Pos       => To_Motor_Position (Shaped_Pos, Pos_Map),
                                     Index           => Current_Command_Index,
                                     Loop_Until_Hit  => Homing_Move_When = This_Move_Kind and then J = 0,
                                     Safe_Stop_After => J = Extra_Loops_Required,
@@ -278,7 +278,7 @@ package body Prunt.Step_Generator is
 
                            Enqueue_Command
                              (Pos             => Shaped_Pos,
-                              Stepper_Pos     => To_Stepper_Position (Shaped_Pos, Pos_Map),
+                              Motor_Pos       => To_Motor_Position (Shaped_Pos, Pos_Map),
                               Index           => Current_Command_Index,
                               Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
                               Safe_Stop_After => False,
@@ -351,7 +351,7 @@ package body Prunt.Step_Generator is
 
                Finish_Planner_Block
                  (Resetting_Data       => Block.Flush_Resetting_Data,
-                  Next_Block_Pos       => To_Stepper_Position (Block.Next_Block_Pos, Pos_Map),
+                  Next_Block_Pos       => To_Motor_Position (Block.Next_Block_Pos, Pos_Map),
                   First_Accel_Distance =>
                     Length'(if Block.N_Corners < 2 then Zero_Length else Segment_Accel_Distance (Block, 2)),
                   Last_Command_Index   => Current_Command_Index,

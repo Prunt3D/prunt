@@ -268,7 +268,7 @@ package body Prunt.Controller is
 
    procedure Enqueue_Command_Internal
      (Pos             : Position;
-      Stepper_Pos     : Stepper_Position;
+      Motor_Pos       : Motor_Position;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
@@ -288,7 +288,7 @@ package body Prunt.Controller is
 
    procedure Finish_Planner_Block
      (Resetting_Data       : Extra_Block_Resetting_Data_Holders.Holder;
-      Next_Block_Pos       : Stepper_Position;
+      Next_Block_Pos       : Motor_Position;
       First_Accel_Distance : Length;
       Last_Command_Index   : Command_Index;
       Loop_Move_Offset     : Position_Offset) is

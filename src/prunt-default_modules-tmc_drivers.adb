@@ -42,10 +42,13 @@ package body Prunt.Default_Modules.TMC_Drivers is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class is
+      return My_Modules.Module_Instance'Class
+   is
       My_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
    begin
-      --  TODO: Check parameters
+      --  for C of My_Config.Motors when C.Fixed_Kind = TMC2240_UART_Kind loop
+      --  end loop;
+
       return Module_Instance'(My_Modules.Module_Instance with Config => My_Config);
    end Initialize;
 

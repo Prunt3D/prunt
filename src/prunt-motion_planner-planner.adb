@@ -115,7 +115,7 @@ package body Prunt.Motion_Planner.Planner is
       Reset_Called : Boolean := False;
    begin
       loop
-         accept Setup (In_Params : Kinematic_Parameters; In_Map : Stepper_Pos_Map) do
+         accept Setup (In_Params : Kinematic_Parameters; In_Map : Motor_Pos_Map) do
             My_Preprocessor.Setup (In_Params);
             My_Step_Rate_Limiter.Setup (In_Map);
          end Setup;

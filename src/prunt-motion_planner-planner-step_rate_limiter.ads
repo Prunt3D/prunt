@@ -26,19 +26,19 @@ private with System.Pool_Local;
 private generic
 package Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
 
-   procedure Setup (In_Map : Stepper_Pos_Map);
+   procedure Setup (In_Map : Motor_Pos_Map);
 
    procedure Reset;
 
    procedure Run (Block : in out Execution_Block; Needs_New_Profiles : out Boolean);
-   --  Simulate the execution of the given block and check for step rate violations. If any stepper motor would exceed
-   --  its maximum step rate, the affected segments' velocities are reduced and `Needs_New_Profiles` is set to True,
-   --  indicating that the kinematic limiting stages must be re-run. If no violations are found, `Needs_New_Profiles`
-   --  is set to False.
+   --  Simulate the execution of the given block and check for step rate violations. If any motor would exceed its
+   --  maximum delta per command, the affected segments' velocities are reduced and `Needs_New_Profiles` is set to
+   --  `True`, indicating that the kinematic limiting stages must be re-run. If no violations are found,
+   --  `Needs_New_Profiles` is set to False.
 
 private
 
-   function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position;
+   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position;
 
    Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
 
@@ -46,13 +46,13 @@ private
    type Maximum_Overspeed_Type_Access is access Maximum_Overspeed_Type with Storage_Pool => Pool;
 
    protected Runner is
-      procedure Setup (In_Map : Stepper_Pos_Map);
+      procedure Setup (In_Map : Motor_Pos_Map);
       --  TODO: Check that calling Run does not copy Block.
       procedure Run (Block : in out Execution_Block; Needs_New_Profiles : out Boolean);
       procedure Reset;
    private
       Setup_Done        : Boolean := False;
-      Pos_Map           : Stepper_Pos_Map;
+      Pos_Map           : Motor_Pos_Map;
       Maximum_Overspeed : Maximum_Overspeed_Type_Access := new Maximum_Overspeed_Type;
    end Runner;
 

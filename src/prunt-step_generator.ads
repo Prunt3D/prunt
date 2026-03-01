@@ -28,9 +28,9 @@ with Prunt.Input_Shapers;
 generic
    with package Planner is new Motion_Planner.Planner (<>);
 
-   type Stepper_Name is (<>);
+   type Motor_Name is (<>);
 
-   type Stepper_Position is array (Stepper_Name) of Dimensionless;
+   type Motor_Position is array (Motor_Name) of Dimensionless;
 
    with
      procedure Start_Planner_Block
@@ -39,7 +39,7 @@ generic
    with
      procedure Enqueue_Command
        (Pos             : Position;
-        Stepper_Pos     : Stepper_Position;
+        Motor_Pos       : Motor_Position;
         Index           : Command_Index;
         Loop_Until_Hit  : Boolean;
         Safe_Stop_After : Boolean;
@@ -54,7 +54,7 @@ generic
    with
      procedure Finish_Planner_Block
        (Resetting_Data       : Planner.Flush_Resetting_Data_Type;
-        Next_Block_Pos       : Stepper_Position;
+        Next_Block_Pos       : Motor_Position;
         First_Accel_Distance : Length;
         Last_Command_Index   : Command_Index;
         Loop_Move_Offset     : Position_Offset);
@@ -70,7 +70,7 @@ generic
 package Prunt.Step_Generator is
    use Planner;
 
-   type Stepper_Pos_Map is array (Axis_Name, Stepper_Name) of Length;
+   type Motor_Pos_Map is array (Axis_Name, Motor_Name) of Length;
 
    task Runner
      with
@@ -78,8 +78,8 @@ package Prunt.Step_Generator is
        Storage_Size => 32 * 1024 * 1024
        --  Allows for very large shapers and shaper buffers to be allocated.
    is
-      entry Setup (Map : Stepper_Pos_Map);
-      --  Configure the step generator with the stepper position map. This must be called before any steps can be
+      entry Setup (Map : Motor_Pos_Map);
+      --  Configure the step generator with the motor position map. This must be called before any steps can be
       --  generated.
       entry Reset;
       --  Reset the step generator state. This should be called when the machine is disabled or reset.
@@ -101,7 +101,7 @@ private
    function Pause_Slew_Interpolation_Time (Index : Pause_Slew_Index) return Time;
    --  Calculates the interpolation time scaling factor for the pause/resume slew.
 
-   function To_Stepper_Position (Pos : Position; Map : Stepper_Pos_Map) return Stepper_Position;
-   --  Converts a cartesian position to stepper positions using the provided map.
+   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position;
+   --  Converts a cartesian position to motor positions using the provided map.
 
 end Prunt.Step_Generator;

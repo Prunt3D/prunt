@@ -68,9 +68,9 @@ generic
    --  and all heaters and motors should be disabled. Keep in mind that the motors may still be moving when the queue
    --  runs dry, so a delay may be required before disabling the motors.
 
-   with procedure Reset_Position (Pos : Stepper_Position);
-   --  Reset the position of all steppers to the given position. This procedure should not cause the steppers to move,
-   --  it just informs the steppers of their position. This procedure will always be called before `Enqueue_Command` is
+   with procedure Reset_Position (Pos : Motor_Position);
+   --  Reset the position of all motors to the given position. This procedure should not cause the motors to move, it
+   --  just informs the motors of their position. This procedure will always be called before `Enqueue_Command` is
    --  first called. This procedure will not be called if the last call to `Enqueue_Command` had the `Safe_Stop_After`
    --  parameter set to False.
 
@@ -206,8 +206,8 @@ private
    --  We need the insertion order here so we an start instances in the same order that they are initialised. This
    --  allows for all of an instances dependencies to start before it.
 
-   Maximum_Stepper_Delta : constant Stepper_Position :=
-     [for S in Stepper_Name => Hardware.Stepper_Hardware (S).Maximum_Delta_Per_Command];
+   Maximum_Motor_Delta : constant Motor_Position :=
+     [for S in Motor_Name => Hardware.Motor_Hardware (S).Maximum_Delta_Per_Command];
 
    Active_Config_File : constant Config.Config_File := Config.Create (Config_Path, Active_Module_Config_Schemas);
 
@@ -224,9 +224,9 @@ private
         Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
         Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
         Interpolation_Time                => Interpolation_Time,
-        Stepper_Name                      => Stepper_Name,
-        Stepper_Position                  => Stepper_Position,
-        Maximum_Stepper_Delta             => Maximum_Stepper_Delta,
+        Motor_Name                        => Motor_Name,
+        Motor_Position                    => Motor_Position,
+        Maximum_Motor_Delta               => Maximum_Motor_Delta,
         Log                               => My_Logger.Log,
         Runner_CPU                        => Command_Line_Arguments.Motion_Planner_CPU);
 
@@ -235,7 +235,7 @@ private
 
    procedure Enqueue_Command_Internal
      (Pos             : Position;
-      Stepper_Pos     : Stepper_Position;
+      Motor_Pos       : Motor_Position;
       Index           : Command_Index;
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
@@ -245,7 +245,7 @@ private
 
    procedure Finish_Planner_Block
      (Resetting_Data       : Extra_Block_Resetting_Data_Holders.Holder;
-      Next_Block_Pos       : Stepper_Position;
+      Next_Block_Pos       : Motor_Position;
       First_Accel_Distance : Length;
       Last_Command_Index   : Command_Index;
       Loop_Move_Offset     : Position_Offset);
@@ -268,8 +268,8 @@ private
    package My_Step_Generator is new
      Step_Generator
        (Planner              => My_Motion_Planner,
-        Stepper_Name         => Stepper_Name,
-        Stepper_Position     => Stepper_Position,
+        Motor_Name           => Motor_Name,
+        Motor_Position       => Motor_Position,
         Start_Planner_Block  => Start_Planner_Block,
         Enqueue_Command      => Enqueue_Command_Internal,
         Start_Corner         => Start_Corner,
