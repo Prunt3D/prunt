@@ -19,6 +19,11 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+--  If you're reading this file then there's a good chance that you're wondering why the `Config_Data_To_User_Config`
+--  functions are generating some convoluted nonsense with explicit statements instead of a nice, easy to generate
+--  expression like everything else. The reason is that GNAT is broken and will generate bogus visibility errors when
+--  using an aggregate expression to generate an array: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124282
+
 with Ada.Directories;
 with Ada.Strings;       use Ada.Strings;
 with Ada.Strings.Fixed; use Ada.Strings.Fixed;
@@ -512,10 +517,18 @@ package body Config_Generator is
       end Path_To_Vector_Access_String;
 
       procedure Handle_Item
-        (Item : Config_Type; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Prefix : Virtual_String);
+        (Item          : Config_Type;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Prefix    : Virtual_String);
 
       procedure Handle_Boolean
-        (Boolean_Val : Boolean_Data; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Expr : Virtual_String)
+        (Boolean_Val   : Boolean_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Expr      : Virtual_String)
       is
          pragma Unreferenced (Boolean_Val);
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
@@ -526,12 +539,20 @@ package body Config_Generator is
             & """, Default => "
             & Outer.Default
             & ")");
-         Emit_Reader ("Boolean'(Data.Get(Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "]))");
+         Emit_Reader
+           (Reader_Prefix
+            & " := Boolean'(Data.Get(Prunt.Config.Config_Data_Paths.Vector'["
+            & Path_Str
+            & "]));");
          Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & ");");
       end Handle_Boolean;
 
       procedure Handle_Float
-        (Float_Val : Float_Data; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Expr : Virtual_String)
+        (Float_Val     : Float_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Expr      : Virtual_String)
       is
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
       begin
@@ -554,10 +575,12 @@ package body Config_Generator is
             & (if Float_Val.Unit /= "" then Float_Val.Unit else Outer.Unit)
             & """)");
          Emit_Reader
-           ("Data.Get(Prunt.Config.Config_Data_Paths.Vector'["
+           (Reader_Prefix
+            & " := Data.Get(Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
             & "])"
-            & (if Float_Val.Unit /= "" then " * (" & Float_Val.Unit & ")" else ""));
+            & (if Float_Val.Unit /= "" then " * (" & Float_Val.Unit & ")" else "")
+            & ";");
          Emit_Setter
            ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
@@ -569,7 +592,11 @@ package body Config_Generator is
       end Handle_Float;
 
       procedure Handle_Ratio
-        (Ratio_Val : Ratio_Data; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Expr : Virtual_String)
+        (Ratio_Val     : Ratio_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Expr      : Virtual_String)
       is
          pragma Unreferenced (Ratio_Val);
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
@@ -584,12 +611,16 @@ package body Config_Generator is
             & ", Max => "
             & Outer.Max
             & ")");
-         Emit_Reader ("Data.Get (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "])");
+         Emit_Reader (Reader_Prefix & " := Data.Get (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "]);");
          Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & ");");
       end Handle_Ratio;
 
       procedure Handle_Integer
-        (Integer_Val : Integer_Data; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Expr : Virtual_String)
+        (Integer_Val   : Integer_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Expr      : Virtual_String)
       is
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
       begin
@@ -610,10 +641,12 @@ package body Config_Generator is
             & (if Integer_Val.Unit /= "" then Integer_Val.Unit else Outer.Unit)
             & """)");
          Emit_Reader
-           (Outer.Type_Name
+           (Reader_Prefix
+            & " := "
+            & Outer.Type_Name
             & "(Long_Long_Integer'(Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
-            & "])))");
+            & "])));");
          Emit_Setter
            ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
@@ -623,13 +656,21 @@ package body Config_Generator is
             & "));");
       end Handle_Integer;
 
-      procedure Handle_Component (Field : Component_Data; Path : String_Vectors.Vector; Ada_Expr : Virtual_String) is
+      procedure Handle_Component
+        (Field         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Expr      : Virtual_String) is
       begin
-         Handle_Item (Global_Config (Field.Type_Name), Field, Path, Ada_Expr);
+         Handle_Item (Global_Config (Field.Type_Name), Field, Path, Reader_Prefix, Ada_Expr);
       end Handle_Component;
 
       procedure Handle_Enum
-        (Enum_Val : Enum_Data; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Expr : Virtual_String)
+        (Enum_Val      : Enum_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Expr      : Virtual_String)
       is
          pragma Unreferenced (Enum_Val);
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
@@ -643,16 +684,22 @@ package body Config_Generator is
             & Outer.Type_Name
             & " => +I'Image])");
          Emit_Reader
-           (Outer.Type_Name
+           (Reader_Prefix
+            & " := "
+            & Outer.Type_Name
             & "'Value (VSS.Strings.Conversions.To_UTF_8_String (Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
-            & "])))");
+            & "])));");
          Emit_Setter
            ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], +(" & Ada_Expr & "'Image));");
       end Handle_Enum;
 
       procedure Handle_Array
-        (Array_Val : Array_Data; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Prefix : Virtual_String)
+        (Array_Val     : Array_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Prefix    : Virtual_String)
       is
          Loop_Index : constant Virtual_String :=
            "Index_" & Conversions.To_Virtual_String (Trim (Index_Level'Image, Both));
@@ -672,7 +719,7 @@ package body Config_Generator is
             & Loop_Index
             & "'Image => ");
 
-         Emit_Reader ("[for " & Loop_Index & " in " & Array_Val.Index_Type & " => ");
+         Emit_Reader ("for " & Loop_Index & " in " & Array_Val.Index_Type & " loop");
          Emit_Setter ("for " & Loop_Index & " in " & Array_Val.Index_Type & " loop");
 
          Handle_Component
@@ -685,17 +732,22 @@ package body Config_Generator is
                Min         => Array_Val.Min,
                Max         => Array_Val.Max),
             Path & [""" & (+" & Loop_Index & "'Image) & """],
+            Reader_Prefix & " (" & Loop_Index & ")",
             Ada_Prefix & " (" & Loop_Index & ")");
 
          Emit_Setter ("end loop;");
-         Emit_Reader ("]");
+         Emit_Reader ("end loop;");
          Emit_Config_Map ("])");
 
          Index_Level := @ - 1;
       end Handle_Array;
 
       procedure Handle_Record
-        (Record_Val : Record_Data; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Prefix : Virtual_String)
+        (Record_Val    : Record_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Prefix    : Virtual_String)
       is
          Fixed_Kind_Str    : Virtual_String;
          Fixed_Desc_Suffix : Virtual_String := "";
@@ -740,7 +792,6 @@ package body Config_Generator is
             end if;
          end if;
 
-         Emit_Reader ("(");
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Sequence'(Tabbed => "
             & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
@@ -759,7 +810,6 @@ package body Config_Generator is
                Is_First : Boolean := True;
             begin
                Emit_Config_Map ("Right => (");
-               Emit_Reader ("(");
 
                for Variant_C in Record_Val.Variants.Iterate loop
                   Emit_Config_Map
@@ -775,11 +825,14 @@ package body Config_Generator is
                      & Fixed_Kind_Str
                      & " = "
                      & Variant_Case_Maps.Key (Variant_C)
-                     & " then ("
+                     & " then");
+                  Emit_Reader
+                    (Reader_Prefix
+                     & " := ("
                      & Record_Val.Discriminant
                      & " => "
                      & Variant_Case_Maps.Key (Variant_C)
-                     & ",");
+                     & ", others => <>);");
                   Emit_Setter
                     (Virtual_String'(if Is_First then "" else "els")
                      & "if "
@@ -802,25 +855,23 @@ package body Config_Generator is
                            & """"
                            & Component_Data_Maps.Key (Component_C)
                            & """ =>");
-                        Emit_Reader (Component_Data_Maps.Key (Component_C) & Conversions.To_Virtual_String (" =>"));
                         Handle_Component
                           (Component_Data_Maps.Element (Component_C),
                            Path & ["Children", Component_Data_Maps.Key (Component_C)],
+                           Reader_Prefix & "." & Component_Data_Maps.Key (Component_C),
                            Ada_Prefix & "." & Component_Data_Maps.Key (Component_C));
-                        Emit_Reader (",");
                         Is_First := False;
                      end loop;
                   end;
 
-                  Emit_Reader ("others => <>)");
                   Emit_Config_Map ("]");
 
                   Is_First := False;
                end loop;
 
-               Emit_Reader
-                 ("else raise Constraint_Error)"
-                  & Virtual_String'(if Record_Val.Components.Is_Empty then "" else " with delta"));
+               Emit_Reader ("else");
+               Emit_Reader ("raise Constraint_Error;");
+               Emit_Reader ("end if;");
                Emit_Config_Map ("else raise Constraint_Error),");
                Emit_Setter ("else");
                Emit_Setter ("raise Constraint_Error;");
@@ -831,14 +882,15 @@ package body Config_Generator is
                Is_First : Boolean := True;
             begin
                Emit_Config_Map
-                 ("Right => ["""" => Prunt.Config.Config_Property_Parameters_Variant'(Default => """
+                 ("Right => ["""
+                  & Record_Val.Discriminant
+                  & """ => Prunt.Config.Config_Property_Parameters_Variant'(Default => """
                   & Record_Val.Discriminant_Default
                   & """, Description => """", Children => [");
                --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
                --  non-variant part. We can not simply place this code after the non-variant code generation as we use
                --  a delta aggregate to set the non-variant fields and delta aggregates can not set discriminants,
                --  which this code does.
-               Emit_Reader ("(");
 
                for Variant_C in Record_Val.Variants.Iterate loop
                   Emit_Config_Map
@@ -853,14 +905,16 @@ package body Config_Generator is
                   Emit_Reader
                     (Virtual_String'(if Is_First then "" else "els")
                      & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
-                     & Path_To_Vector_Access_String (Path & ["Selected"])
+                     & Path_To_Vector_Access_String (Path & [Record_Val.Discriminant, "Selected"])
                      & "]) = """
                      & Variant_Case_Maps.Key (Variant_C)
-                     & """ then ("
+                     & """ then "
+                     & Reader_Prefix
+                     & " := ("
                      & Record_Val.Discriminant
                      & " => "
                      & Variant_Case_Maps.Key (Variant_C)
-                     & ",");
+                     & ", others => <>);");
                   Emit_Setter
                     (Virtual_String'(if Is_First then "" else "els")
                      & "if "
@@ -883,26 +937,31 @@ package body Config_Generator is
                            & """"
                            & Component_Data_Maps.Key (Component_C)
                            & """ =>");
-                        Emit_Reader (Component_Data_Maps.Key (Component_C) & Conversions.To_Virtual_String (" =>"));
                         Handle_Component
                           (Component_Data_Maps.Element (Component_C),
                            Path
-                           & ["Children", Variant_Case_Maps.Key (Variant_C), Component_Data_Maps.Key (Component_C)],
-                           Ada_Prefix & "." & Component_Data_Maps.Key (Component_C));
-                        Emit_Reader (",");
+                           & [Record_Val.Discriminant,
+                              "Children",
+                              Variant_Case_Maps.Key (Variant_C),
+                              Component_Data_Maps.Key (Component_C)],
+                           Reader_Prefix
+                           & "."
+                           & Component_Data_Maps.Key (Component_C),
+                           Ada_Prefix
+                           & "."
+                           & Component_Data_Maps.Key (Component_C));
                         Is_First := False;
                      end loop;
                   end;
 
                   Is_First := False;
 
-                  Emit_Reader ("others => <>)");
                   Emit_Config_Map ("])");
                end loop;
 
-               Emit_Reader
-                 ("else raise Constraint_Error)"
-                  & Virtual_String'(if Record_Val.Components.Is_Empty then "" else " with delta"));
+               Emit_Reader ("else");
+               Emit_Reader ("raise Constraint_Error;");
+               Emit_Reader ("end if;");
                Emit_Config_Map ("])],");
                Emit_Setter ("else");
                Emit_Setter ("raise Constraint_Error;");
@@ -917,7 +976,6 @@ package body Config_Generator is
          if Record_Val.Components.Is_Empty then
             if not Record_Val.Has_Variant then
                Emit_Setter ("null;");
-               Emit_Reader ("null record");
             end if;
          else
             declare
@@ -926,11 +984,11 @@ package body Config_Generator is
                for C in Record_Val.Components.Iterate loop
                   Emit_Config_Map
                     (Virtual_String'(if Is_First then "" else ",") & """" & Component_Data_Maps.Key (C) & """ =>");
-                  Emit_Reader (Virtual_String'(if Is_First then "" else ",") & Component_Data_Maps.Key (C) & " =>");
 
                   Handle_Component
                     (Component_Data_Maps.Element (C),
                      Path & [Component_Data_Maps.Key (C)],
+                     Reader_Prefix & "." & Component_Data_Maps.Key (C),
                      Ada_Prefix & "." & Component_Data_Maps.Key (C));
 
                   Is_First := False;
@@ -940,34 +998,36 @@ package body Config_Generator is
 
          Emit_Config_Map ("]");
          Emit_Config_Map ("))");
-
-         Emit_Reader (")");
       end Handle_Record;
 
       procedure Handle_Item
-        (Item : Config_Type; Outer : Component_Data; Path : String_Vectors.Vector; Ada_Prefix : Virtual_String) is
+        (Item          : Config_Type;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Prefix    : Virtual_String) is
       begin
          case Item.Kind is
             when Record_Kind  =>
-               Handle_Record (Item.Record_Value, Outer, Path, Ada_Prefix);
+               Handle_Record (Item.Record_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
 
             when Array_Kind   =>
-               Handle_Array (Item.Array_Value, Outer, Path, Ada_Prefix);
+               Handle_Array (Item.Array_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
 
             when Enum_Kind    =>
-               Handle_Enum (Item.Enum_Value, Outer, Path, Ada_Prefix);
+               Handle_Enum (Item.Enum_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
 
             when Boolean_Kind =>
-               Handle_Boolean (Item.Boolean_Value, Outer, Path, Ada_Prefix);
+               Handle_Boolean (Item.Boolean_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
 
             when Integer_Kind =>
-               Handle_Integer (Item.Integer_Value, Outer, Path, Ada_Prefix);
+               Handle_Integer (Item.Integer_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
 
             when Float_Kind   =>
-               Handle_Float (Item.Float_Value, Outer, Path, Ada_Prefix);
+               Handle_Float (Item.Float_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
 
             when Ratio_Kind   =>
-               Handle_Ratio (Item.Ratio_Value, Outer, Path, Ada_Prefix);
+               Handle_Ratio (Item.Ratio_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
          end case;
       end Handle_Item;
    begin
@@ -1016,7 +1076,7 @@ package body Config_Generator is
          Emit_Reader ("pragma Warnings (On, ""use clause for package * has no effect"");");
          Emit_Reader ("begin");
          Emit_Reader ("pragma Extensions_Allowed (On);");
-         Emit_Reader ("return (");
+         Emit_Reader ("return Result : User_Config do");
 
          Emit_Setter ("pragma Style_Checks (Off);");
          Emit_Setter
@@ -1042,12 +1102,16 @@ package body Config_Generator is
          Emit_Setter ("begin");
 
          Handle_Item
-           (Item => Data.Config (Data.Root_Type), Outer => (others => <>), Path => [], Ada_Prefix => "Config");
+           (Item          => Data.Config (Data.Root_Type),
+            Outer         => (others => <>),
+            Path          => [],
+            Reader_Prefix => "Result",
+            Ada_Prefix    => "Config");
 
          Emit_Setter ("Data.Save;");
          Emit_Setter ("end User_Config_To_Config_Data;");
 
-         Emit_Reader (");");
+         Emit_Reader ("end return;");
          Emit_Reader ("end Config_Data_To_User_Config;");
 
          Emit_Config_Map (".Children;");

@@ -24,6 +24,7 @@ pragma Extensions_Allowed (On);
 with Ada.Tags;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
+with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types;      use Prunt.Module_Types;
 with Prunt.Status_Manager;
@@ -33,6 +34,8 @@ with Prunt.TMC_Types.TMC2240; use Prunt.TMC_Types.TMC2240;
 generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
+   with package Motor_Drivers_Module is new
+     Default_Modules.Motor_Drivers (Motor_Name => My_Controller_Generic_Types.Motor_Name);
 package Prunt.Default_Modules.TMC_Drivers is
 
    type Module is new My_Modules.Module with null record;
@@ -326,13 +329,10 @@ private
    --  TODO: We need to add support for `when others =>` in the configuration code generator so we don't need to edit
    --  the record below this every time we add a new motor type.
 
-   type User_Config_Motor (Fixed_Kind : Motor_Hardware_Kind := Basic_Stepper_Kind) is record
+   type User_Config_Motor (Fixed_Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
       case Fixed_Kind is
          when TMC2240_UART_Kind =>
             TMC2240_Parameters : User_Config_TMC2240;
-
-         when Basic_Stepper_Kind =>
-            Empty : User_Config_Empty;
 
          when Basic_Motor_Kind =>
             Empty : User_Config_Empty;
@@ -344,7 +344,7 @@ private
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Motors : User_Config_Motor_Array := [others => <>] with
+      Motors : User_Config_Motor_Array := [others => <>]with
         Annotate => (Prunt_Config, Fixed_Kind, "Motor_Hardware (Index_?).Kind");
    end record
    with Annotate => (Prunt_Config, Root_User_Config);

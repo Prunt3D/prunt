@@ -67,11 +67,11 @@ package Prunt.Controller_Generic_Types is
 
    --  Vendor defined parameters:
 
-   type Motor_Hardware_Parameters (Kind : Motor_Hardware_Kind := Basic_Stepper_Kind) is record
+   type Motor_Hardware_Parameters (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
       Maximum_Delta_Per_Command : Dimensionless;
 
       case Kind is
-         when Basic_Stepper_Kind | Basic_Motor_Kind =>
+         when Basic_Motor_Kind =>
             Enable  : access procedure (Motor : Motor_Name);
             Disable : access procedure (Motor : Motor_Name);
 

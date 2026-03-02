@@ -112,7 +112,7 @@ private
    --  All specified axes must be homed and the target position must be within the limits defined in the printer
    --  configuration or else an error will be raised.
    --
-   --  The G90, G91, M82, and M83 are used to switch between relative and absolute mode.
+   --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
 
    procedure Linear_Move
      (This    : in out Module_Instance;
@@ -135,7 +135,7 @@ private
    --  All specified axes must be homed and the target position must be within the limits defined in the printer
    --  configuration or else an error will be raised.
    --
-   --  The G90, G91, M82, and M83 are used to switch between relative and absolute mode.
+   --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
 
    procedure Retract (This : in out Module_Instance; Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "G10");

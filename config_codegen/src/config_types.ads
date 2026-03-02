@@ -73,14 +73,6 @@ package Config_Types is
 
    package Variant_Case_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Variant_Case_Data);
 
-   type Variant_Data is record
-      Type_Name    : Virtual_String;
-      --  Type name is fully qualified.
-      Discriminant : Virtual_String;
-      Default      : Virtual_String;
-      Variants     : Variant_Case_Maps.Map;
-   end record;
-
    type Record_Data (Has_Variant : Boolean := False) is record
       --  The members of this record represent the following parts of a record declaration:
       --

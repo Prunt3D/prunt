@@ -26,14 +26,16 @@ with Ada.Streams;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
 with Prunt.Exception_Occurrence_Holders;
-with Prunt.Default_Modules.Basic_Config;
-with Prunt.Default_Modules.Internal_Status_Reporter;
-with Prunt.Default_Modules.Motion;
 
-private with Ada.Containers.Ordered_Maps;
 private with Ada.Containers.Indefinite_Holders;
+private with Ada.Containers.Ordered_Maps;
 private with Prunt.Command_Line_Arguments;
 private with Prunt.Controller_Helpers;
+private with Prunt.Default_Modules.Basic_Config;
+private with Prunt.Default_Modules.Internal_Status_Reporter;
+private with Prunt.Default_Modules.Motion;
+private with Prunt.Default_Modules.Motor_Drivers;
+private with Prunt.Default_Modules.TMC_Drivers;
 private with Prunt.Gcode_Arguments;
 private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
@@ -156,6 +158,12 @@ private
            Get_File_Name  => Get_Current_File_Name,
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused);
+      package Motor_Drivers is new My_Default_Modules.Motor_Drivers (Motor_Name => Motor_Name);
+      --  package TMC_Drivers is new
+      --    My_Default_Modules.TMC_Drivers
+      --      (My_Controller_Generic_Types => Generic_Types,
+      --       Motor_Hardware              => Hardware.Motor_Hardware,
+      --       Motor_Drivers_Module        => Motor_Drivers);
    end My_Default_Modules_Children;
 
    protected Last_Command_Executed
@@ -181,6 +189,8 @@ private
    is ["Basic Config"             =>
          My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
        "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
+       "Motor_Drivers"            =>
+         My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
        "Internal Status Reporter" =>
          My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record)];
 

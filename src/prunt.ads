@@ -31,9 +31,7 @@ package Prunt is
 
    subtype Empty_Enumeration is Boolean range True .. False;
 
-   type Motor_Hardware_Kind is (Basic_Stepper_Kind, Basic_Motor_Kind, TMC2240_UART_Kind);
-   --  `Basic_Stepper_Kind` and `Basic_Motor_Kind` only differ in that the microsteps option is not presented to the
-   --  user for `Basic_Motor_Kind` and the wording of "mm per step" is changed to "mm per rotation".
+   type Motor_Hardware_Kind is (Basic_Motor_Kind, TMC2240_UART_Kind);
 
    type Command_Index is range 0 .. 2 ** 63 - 2;
 
