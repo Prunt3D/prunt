@@ -28,9 +28,9 @@
                 <li class="nav-item" data-target="control-view">Machine Control</li>
                 <li class="nav-item" data-target="gcode-explorer-view">G-Code Explorer</li>
             </ul>
-            <div class="sidebar-footer" style="margin-top: auto; padding: 24px;">
-                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Theme</div>
-                <select id="theme-select" style="width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; background-color: var(--bg-card); color: var(--text-main); font-family: inherit; font-size: 0.9rem; appearance: none; cursor: pointer;">
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-title">Theme</div>
+                <select id="theme-select" class="theme-select">
                     <option value="auto">System Auto</option>
                     <option value="light">Light Mode</option>
                     <option value="dark">Dark Mode</option>
@@ -42,7 +42,7 @@
             <section id="status-view" class="view active">
                 <div class="view-header">
                     <h2>Status Dashboard</h2>
-                    <div style="display: flex; gap: 8px;">
+                    <div class="header-actions-sm">
                         <button id="btn-reset-widgets" class="btn btn-secondary btn-sm">Reset Defaults</button>
                         <button id="btn-add-header" class="btn btn-secondary btn-sm">+ Add Header</button>
                         <button id="btn-add-widget" class="btn btn-primary btn-sm">+ Add Widget</button>
@@ -56,12 +56,12 @@
             <section id="config-view" class="view">
                 <div class="view-header">
                     <h2>Configuration</h2>
-                    <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="header-actions">
                         <label class="toggle-switch">
                             <input type="checkbox" id="config-group-toggle">
                             <span class="slider"></span>
                         </label>
-                        <span style="font-size: 0.9em; color: var(--text-muted);">Group by Module</span>
+                        <span class="toggle-label">Group by Module</span>
                         <button id="btn-save-config" class="btn btn-primary">Save Changes</button>
                     </div>
                 </div>
@@ -115,15 +115,15 @@
             <section id="gcode-explorer-view" class="view">
                 <div class="view-header">
                     <h2>G-Code Explorer</h2>
-                    <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="header-actions">
                         <label class="toggle-switch">
                             <input type="checkbox" id="gcode-group-toggle">
                             <span class="slider"></span>
                         </label>
-                        <span style="font-size: 0.9em; color: var(--text-muted);">Group by Module</span>
+                        <span class="toggle-label">Group by Module</span>
                     </div>
                 </div>
-                <div id="gcode-explorer-content" class="gcode-explorer-content" style="padding: 16px;">
+                <div id="gcode-explorer-content" class="gcode-explorer-content">
                     <!-- Content injected by TS -->
                 </div>
             </section>

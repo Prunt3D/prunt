@@ -59,6 +59,12 @@ package Prunt.Default_Modules.TMC_Drivers is
 
 private
 
+   function Generate_Default_Registers
+     (Config              : User_Config_TMC2240;
+      Enabled             : Boolean;
+      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String))
+      return TMC2240_Registers;
+
    type User_Config_TMC2240_SpreadCycle_Derived is record
       --  This option automatically calculates the optimal settings for the SpreadCycle chopper, which is a feature of
       --  Trinamic drivers that provides smooth and quiet motor operation. This is the recommended mode for most users
@@ -349,17 +355,40 @@ private
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 
+   type TMC2240_Registers is record
+      GCONF         : TMC_Types.TMC2240.GCONF;
+      DRV_CONF      : TMC_Types.TMC2240.DRV_CONF;
+      GLOBAL_SCALER : TMC_Types.TMC2240.GLOBAL_SCALER;
+      IHOLD_IRUN    : TMC_Types.TMC2240.IHOLD_IRUN;
+      TPOWERDOWN    : TMC_Types.TMC2240.TPOWERDOWN;
+      TPWMTHRS      : TMC_Types.TMC2240.TPWMTHRS;
+      TCOOLTHRS     : TMC_Types.TMC2240.TCOOLTHRS;
+      THIGH         : TMC_Types.TMC2240.THIGH;
+      PWMCONF       : TMC_Types.TMC2240.PWMCONF;
+      CHOPCONF      : TMC_Types.TMC2240.CHOPCONF;
+   end record;
+
+   type TMC_Registers (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
+      case Fixed_Kind is
+         when TMC2240_UART_Kind =>
+            TMC2240_Registers : TMC2240_Registers;
+
+         when others =>
+            null;
+      end case;
+   end record;
+
+   type Motor_Registers_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Registers;
+
    function Build_Schema return Config.Config_Property_Maps.Map;
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config);
 
-   type Motor_Enabled_Map is array (My_Controller_Generic_Types.Motor_Name) of Boolean;
-
    type Module_Instance is new My_Modules.Module_Instance with record
-      Config                  : User_Config;
-      Motor_Enabled_In_Config : Motor_Enabled_Map := (others => False);
+      Config    : User_Config;
+      Registers : Motor_Registers_Map;
    end record;
 
 end Prunt.Default_Modules.TMC_Drivers;

@@ -273,7 +273,7 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
 
 
     const wrap = document.createElement('div');
-    wrap.style.marginTop = '8px';
+    wrap.classList.add('mt-8');
 
     if (schema.Tabbed) {
         wrap.className = 'sequence-group tabbed';
@@ -309,13 +309,13 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
                 tabBtn.className = `config-tab ${first ? 'active' : ''}`;
                 tabBtn.innerText = childName;
                 tabBtn.dataset.tabPath = JSON.stringify(Array.isArray(cp) ? cp : (cp ? cp.Base : null));
-                pane.style.display = first ? 'block' : 'none';
+                pane.className = `tab-pane ${first ? 'active' : ''}`;
 
                 tabBtn.addEventListener('click', () => {
                     Array.from(tabContainer.children).forEach(c => c.classList.remove('active'));
-                    Array.from(contentContainer.children).forEach((c: any) => c.style.display = 'none');
+                    Array.from(contentContainer.children).forEach((c: any) => c.classList.remove('active'));
                     tabBtn.classList.add('active');
-                    pane.style.display = 'block';
+                    pane.classList.add('active');
                 });
 
                 tabContainer.appendChild(tabBtn);
@@ -331,8 +331,6 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
         wrap.appendChild(contentContainer);
     } else {
         wrap.className = 'sequence-group';
-        wrap.style.paddingLeft = '16px';
-        wrap.style.borderLeft = '2px solid var(--border)';
         const childPathsMap = pathsDef.ChildrenPaths || {};
         let hasAnyChild = false;
 
@@ -397,7 +395,7 @@ function createField(name: string, schema: any, value: any, path: string[]): HTM
     const errorSpan = document.createElement('span');
     errorSpan.className = 'error-message';
     errorSpan.id = `err-${path.join('-')}`;
-    errorSpan.style.display = 'none';
+    errorSpan.classList.add('d-none');
 
     let inputArea: HTMLElement | null = null;
     let actualValue = value !== undefined ? value : schema.Default;
@@ -481,8 +479,6 @@ function createNumberInput(path: string[], value: number, schema: any): HTMLElem
 
         const rangeSpan = document.createElement('div');
         rangeSpan.className = 'range-hint';
-        rangeSpan.style.fontSize = '0.85em';
-        rangeSpan.style.marginTop = '4px';
         rangeSpan.innerText = text.join(', ');
         container.appendChild(rangeSpan);
 
@@ -500,11 +496,7 @@ function createNumberInput(path: string[], value: number, schema: any): HTMLElem
                 }
             }
 
-            if (!valid) {
-                rangeSpan.style.color = 'var(--danger)';
-            } else {
-                rangeSpan.style.color = '';
-            }
+            rangeSpan.classList.toggle('has-error', !valid);
 
             // Dispatch input event to form to trigger global client error check if we are simulating one
             if ((input as any)._isSelfFiring) return;
@@ -570,8 +562,6 @@ function createRatioInput(path: string[], value: any, schema: any): HTMLElement 
 
         const rangeSpan = document.createElement('div');
         rangeSpan.className = 'range-hint';
-        rangeSpan.style.fontSize = '0.85em';
-        rangeSpan.style.marginTop = '4px';
         rangeSpan.innerText = text.join(', ');
         container.appendChild(rangeSpan);
 
@@ -591,11 +581,7 @@ function createRatioInput(path: string[], value: any, schema: any): HTMLElement 
                 }
             }
 
-            if (!valid) {
-                rangeSpan.style.color = 'var(--danger)';
-            } else {
-                rangeSpan.style.color = '';
-            }
+            rangeSpan.classList.toggle('has-error', !valid);
 
             if (!(num as any)._isSelfFiring) {
                 (num as any)._isSelfFiring = true;
@@ -624,7 +610,7 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
     wrap.appendChild(select);
 
     const childrenContainer = document.createElement('div');
-    childrenContainer.style.marginTop = '12px';
+    childrenContainer.className = 'variant-children';
     wrap.appendChild(childrenContainer);
 
     // Re-render children when selection changes
@@ -646,11 +632,9 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
         const activeSchema = schema.Children[activeName];
         if (activeSchema) {
             if (activeSchema.Kind === "Sequence" && !activeSchema.Tabbed) {
-                childrenContainer.style.paddingLeft = '0';
-                childrenContainer.style.borderLeft = 'none';
+                childrenContainer.className = 'variant-children variant-children-flush';
             } else {
-                childrenContainer.style.paddingLeft = '16px';
-                childrenContainer.style.borderLeft = '2px solid var(--border)';
+                childrenContainer.className = 'variant-children variant-children-indented';
             }
             const mappedChildVal = value?.Children?.[activeName];
             const childEl = createField("", activeSchema, mappedChildVal, [...path, 'Children', activeName]);
@@ -670,7 +654,7 @@ function createSequenceInput(path: string[], value: any, schema: any): HTMLEleme
     }
 
     const wrap = document.createElement('div');
-    wrap.style.marginTop = '8px';
+    wrap.classList.add('mt-8');
 
     if (schema.Tabbed) {
         wrap.className = 'sequence-group tabbed';
@@ -693,13 +677,13 @@ function createSequenceInput(path: string[], value: any, schema: any): HTMLEleme
                 tabBtn.className = `config-tab ${first ? 'active' : ''}`;
                 tabBtn.innerText = childName;
                 tabBtn.dataset.tabPath = JSON.stringify([...path, childName]);
-                pane.style.display = first ? 'block' : 'none';
+                pane.className = `tab-pane ${first ? 'active' : ''}`;
 
                 tabBtn.addEventListener('click', () => {
                     Array.from(tabContainer.children).forEach(c => c.classList.remove('active'));
-                    Array.from(contentContainer.children).forEach((c: any) => c.style.display = 'none');
+                    Array.from(contentContainer.children).forEach((c: any) => c.classList.remove('active'));
                     tabBtn.classList.add('active');
-                    pane.style.display = 'block';
+                    pane.classList.add('active');
                 });
 
                 tabContainer.appendChild(tabBtn);
@@ -715,8 +699,6 @@ function createSequenceInput(path: string[], value: any, schema: any): HTMLEleme
         wrap.appendChild(contentContainer);
     } else {
         wrap.className = 'sequence-group';
-        wrap.style.paddingLeft = '16px';
-        wrap.style.borderLeft = '2px solid var(--border)';
         const hasAdded = buildProperties(schema.Children, value || {}, wrap, path);
         if (!hasAdded) return null;
     }
@@ -881,7 +863,8 @@ async function saveConfiguration() {
 
     // Clear previous errors
     document.querySelectorAll('.error-message').forEach((el: any) => {
-        el.style.display = 'none';
+        el.classList.add('d-none');
+        el.classList.remove('d-block');
         el.innerText = '';
         el.classList.remove('server-error');
     });
@@ -964,11 +947,12 @@ function handleErrors(errors: any[]) {
         if (errSpan) {
             errSpan.classList.add('server-error');
             const msgWithNote = err.Message + ' (Will only be rechecked after saving)';
-            if (errSpan.style.display === 'block') {
+            if (!errSpan.classList.contains('d-none')) {
                 errSpan.innerText += '\n' + msgWithNote;
             } else {
                 errSpan.innerText = msgWithNote;
-                errSpan.style.display = 'block';
+                errSpan.classList.remove('d-none');
+                errSpan.classList.add('d-block');
             }
         } else if (globalErrors) {
             hasGlobal = true;

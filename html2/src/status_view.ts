@@ -205,9 +205,7 @@ function renderDashboard() {
             header.addEventListener('dragstart', handleDragStart);
             header.addEventListener('dragend', handleDragEnd);
 
-            header.style.display = 'flex';
-            header.style.justifyContent = 'space-between';
-            header.style.alignItems = 'center';
+            header.classList.add('status-header-flex');
 
             const titleSpan = document.createElement('span');
             titleSpan.innerText = item.value;
@@ -243,13 +241,11 @@ function renderDashboard() {
             header.innerText = mod + " - " + grp;
             if (unit) header.innerText += ` (${unit})`;
 
-            header.style.display = 'flex';
-            header.style.gap = '8px';
-            header.style.alignItems = 'center';
+            header.className = 'status-widget-header';
 
             const titleSpan = document.createElement('span');
             titleSpan.innerText = header.innerText;
-            titleSpan.style.flex = '1';
+            titleSpan.className = 'flex-1';
 
             header.innerHTML = '';
             header.appendChild(titleSpan);
@@ -291,8 +287,7 @@ function renderDashboard() {
                 const colors = ["#58a6ff", "#2ea043", "#d29922", "#f85149", "#a371f7", "#00bcd4"];
 
                 const legendContainer = document.createElement('div');
-                legendContainer.className = 'widget-legend';
-                legendContainer.style.marginTop = '8px';
+                legendContainer.className = 'widget-legend mt-8';
 
                 item.paths.forEach((path: StatusPath, i: number) => {
                     const c = colors[i % colors.length];
@@ -308,8 +303,7 @@ function renderDashboard() {
                     textVal.className = 'widget-text-val';
                     textVal.dataset.path = JSON.stringify(path);
                     textVal.style.color = c;
-                    textVal.style.fontSize = '1.1rem';
-                    textVal.style.fontWeight = 'bold';
+                    textVal.classList.add('status-val-text');
                     legendContainer.appendChild(textVal);
                 });
 
@@ -332,9 +326,7 @@ function renderDashboard() {
                     const textVal = document.createElement('div');
                     textVal.className = 'widget-text-val';
                     textVal.dataset.path = JSON.stringify(path);
-                    textVal.style.fontSize = '1.2rem';
-                    textVal.style.fontWeight = '500';
-                    textVal.style.padding = '4px 0';
+                    textVal.classList.add('status-val-large');
                     contentDiv.appendChild(textVal);
                 });
             }
