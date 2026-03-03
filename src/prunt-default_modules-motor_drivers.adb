@@ -69,8 +69,7 @@ package body Prunt.Default_Modules.Motor_Drivers is
 
    function Motor_Is_Enabled_In_Config (This : Module_Instance; Motor : Motor_Name) return Boolean is
    begin
-      --  TODO
-      return True;
+      return This.Config.Motors (Motor).Enabled;
    end Motor_Is_Enabled_In_Config;
 
 end Prunt.Default_Modules.Motor_Drivers;

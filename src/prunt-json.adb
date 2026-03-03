@@ -594,14 +594,19 @@ package body Prunt.JSON is
                --  Long_Long_Integer.
                declare
                   Int_Value : Long_Long_Integer;
+                  Failed : Boolean := False;
                begin
                   begin
                      Int_Value := Long_Long_Integer'Value (Token (Data, Event.First, Event.Last));
                   exception
                      when Constraint_Error =>
-                        raise Invalid_JSON_Stream with "integer number not in Long_Long_Integer range";
+                        Failed := True;
                   end;
-                  Tmp := Create (Int_Value);
+                  if Failed then
+                     Tmp := Create (Long_Float'Value (Token (Data, Event.First, Event.Last)));
+                  else
+                     Tmp := Create (Int_Value);
+                  end if;
                end;
 
             when NUMBER_VALUE  =>

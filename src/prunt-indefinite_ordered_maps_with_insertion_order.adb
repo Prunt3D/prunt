@@ -251,6 +251,27 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
       return Previous (Position);
    end Previous;
 
+   procedure Include (Container : in out Map; Key : Key_Type; New_Item : Element_Type) is
+   begin
+      if Container.Find (Key) = No_Element then
+         Container.Insert (Key, New_Item);
+      else
+         Container.Map.Include (Key, New_Item);
+      end if;
+   end Include;
+
+   procedure Exclude (Container : in out Map; Key : Key_Type) is
+   begin
+      if Container.Find (Key) /= No_Element then
+         Container.Delete (Key);
+      end if;
+   end Exclude;
+
+   function Is_Empty (Container : Map) return Boolean is
+   begin
+      return Container.Map.Is_Empty;
+   end Is_Empty;
+
    function "&" (Left, Right : Map) return Map is
    begin
       return Result : Map do

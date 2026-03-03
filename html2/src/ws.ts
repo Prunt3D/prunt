@@ -21,11 +21,8 @@ export class PruntWebSocket {
 
     connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // Connect to /websocket/everything
         const wsUrl = `${protocol}//${window.location.host}/websocket/everything`;
-        // Uncomment the below line for local development if Prunt host runs on 8080:
-        // const wsUrl = `ws://localhost:8080/websocket/everything`;
-        
+
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
@@ -44,7 +41,7 @@ export class PruntWebSocket {
                         this.emit('restarted', message);
                     }
                 }
-                
+
                 if (message.Status_Values) {
                     this.emit('tick', message);
                 }

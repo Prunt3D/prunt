@@ -1,7 +1,7 @@
 import { fetchGcodeSchema } from './api';
 
 let currentSchema: any = null;
-let groupByModule = true;
+let groupByModule = false;
 
 export async function initGcodeExplorerView() {
     const container = document.getElementById('gcode-explorer-content');
@@ -67,7 +67,7 @@ function renderGcodeExplorer(container: HTMLElement, schema: any) {
 
         const flatContainer = document.createElement('div');
         flatContainer.className = 'gcode-flat-group';
-        
+
         for (const cmd of sortedCommands) {
             flatContainer.appendChild(createCommandCard(cmd));
         }
@@ -112,13 +112,13 @@ function createCommandCard(cmd: any): HTMLElement {
         desc.style.marginBottom = '16px';
         desc.style.whiteSpace = 'pre-wrap';
         desc.style.lineHeight = '1.5';
-        // Replace escaped newlines if they are literal in the string
-        let descText = cmd.Description;
-        if (typeof descText === 'string') {
-            descText = descText.replace(/\\n/g, '\n');
+        for (const pText of cmd.Description.split('\n')) {
+            if (pText.trim().length === 0) continue;
+            const desc = document.createElement('p');
+            desc.className = 'description';
+            desc.innerText = pText;
+            cmdCard.appendChild(desc);
         }
-        desc.innerText = descText;
-        cmdCard.appendChild(desc);
     }
 
     if (cmd.Arguments && Object.keys(cmd.Arguments).length > 0) {

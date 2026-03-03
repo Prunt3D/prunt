@@ -85,7 +85,7 @@ package body Config_Parser is
             Trimmed  : constant Wide_Wide_String := Trim (Raw_Text (Raw_Text'First + 2 .. Raw_Text'Last), Both);
          begin
             if Trimmed = "" then
-               Result.Append ("\n");
+               Result.Append (""" & VSS.Characters.Latin.Line_Feed & """);
                Last_Was_LF := True;
             elsif Result /= "" and not Last_Was_LF then
                Result.Append (" ");

@@ -14,7 +14,7 @@ export function initUI() {
     initStatusView();
     initControlView();
     initGcodeExplorerView();
-    
+
     setupTheme();
 
     // Connect WebSocket

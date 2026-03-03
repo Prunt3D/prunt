@@ -45,9 +45,9 @@ export async function initStatusView() {
     try {
         statusSchema = await fetchStatusSchema();
         currentStatus = await fetchStatusValues();
-        
+
         loadDashboardLayout();
-        
+
         wsClient.on('tick', (msg: any) => {
             if (msg.Status_Values) {
                 currentStatus = msg.Status_Values;
@@ -62,7 +62,7 @@ export async function initStatusView() {
 
 function openAddWidgetModal() {
     if (!statusSchema) return;
-    
+
     const modal = document.getElementById('add-widget-modal') as HTMLDialogElement;
     const listContainer = document.getElementById('widget-selection-list');
     if (!modal || !listContainer) return;
@@ -89,23 +89,23 @@ function openAddWidgetModal() {
                 hasItems = true;
                 hasItems = true;
                 const pathStr = `${modName}/${groupName}/${valName}`;
-                
+
                 const label = document.createElement('label');
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 // Store serialized object in value so we can easily parse it back
                 checkbox.value = JSON.stringify({ module: modName, group: groupName, value: valName });
                 checkbox.checked = activePaths.has(pathStr);
-                
+
                 label.appendChild(checkbox);
                 label.appendChild(document.createTextNode(` ${groupName} - ${valName} (${(valSchema as any).Kind})`));
                 groupEl.appendChild(label);
             }
         }
-        
+
         if (hasItems) listContainer.appendChild(groupEl);
     }
-    
+
     modal.showModal();
 }
 
@@ -113,7 +113,7 @@ function applyWidgetSelection() {
     const modal = document.getElementById('add-widget-modal') as HTMLDialogElement;
     const checkboxes = document.querySelectorAll('#widget-selection-list input[type="checkbox"]:checked');
     const selectedPathJsonVars = new Set(Array.from(checkboxes).map(cb => (cb as HTMLInputElement).value));
-    
+
     const newLayout: any[] = [];
 
     // Filter existing widgets to only keep selected paths
@@ -155,18 +155,18 @@ function applyWidgetSelection() {
 
 function resetWidgetsToDefault(askConfirm = false) {
     if (askConfirm && !confirm("Are you sure you want to group all status values into module headers? This will clear your custom layout.")) return;
-    
+
     dashboardLayout = [];
     if (!statusSchema) return;
 
     for (const [modName, modSchema] of Object.entries(statusSchema)) {
         dashboardLayout.push({ type: 'header', value: modName });
-        
+
         const groups = new Map<string, StatusPath[]>();
         for (const [groupName, groupSchema] of Object.entries(modSchema as any)) {
             for (const [valName, valSchema] of Object.entries(groupSchema as any)) {
                 const pathObj: StatusPath = { module: modName, group: groupName, value: valName };
-                
+
                 let key = `${modName}/${groupName}`;
                 if ((valSchema as any).Kind === 'Real') {
                     key += `/Real/${(valSchema as any).Unit || ''}`;
@@ -180,10 +180,10 @@ function resetWidgetsToDefault(askConfirm = false) {
         }
 
         for (const [key, paths] of groups.entries()) {
-             dashboardLayout.push({ type: 'widget', groupKey: key, key, paths });
+            dashboardLayout.push({ type: 'widget', groupKey: key, key, paths });
         }
     }
-    
+
     saveDashboardLayout();
     renderDashboard();
 }
@@ -204,7 +204,7 @@ function renderDashboard() {
             header.draggable = true;
             header.addEventListener('dragstart', handleDragStart);
             header.addEventListener('dragend', handleDragEnd);
-            
+
             header.style.display = 'flex';
             header.style.justifyContent = 'space-between';
             header.style.alignItems = 'center';
@@ -230,7 +230,7 @@ function renderDashboard() {
             if (!actualGroupKey) return; // Should not happen
 
             const [mod, grp, kind, unit] = actualGroupKey.split('/');
-            
+
             const card = document.createElement('div');
             card.className = 'card widget-card';
             card.dataset.index = String(index);
@@ -240,9 +240,9 @@ function renderDashboard() {
             card.addEventListener('dragend', handleDragEnd);
 
             const header = document.createElement('h3');
-            header.innerText = grp;
+            header.innerText = mod + " - " + grp;
             if (unit) header.innerText += ` (${unit})`;
-            
+
             header.style.display = 'flex';
             header.style.gap = '8px';
             header.style.alignItems = 'center';
@@ -286,14 +286,14 @@ function renderDashboard() {
             card.appendChild(contentDiv);
 
             if (kind === 'Real') {
-                const seriesOpts: any[] = [ {} ];
-                const plotData: number[][] = [ [] ];
+                const seriesOpts: any[] = [{}];
+                const plotData: number[][] = [[]];
                 const colors = ["#58a6ff", "#2ea043", "#d29922", "#f85149", "#a371f7", "#00bcd4"];
-                
+
                 const legendContainer = document.createElement('div');
                 legendContainer.className = 'widget-legend';
                 legendContainer.style.marginTop = '8px';
-                
+
                 item.paths.forEach((path: StatusPath, i: number) => {
                     const c = colors[i % colors.length];
                     const valName = path.value;
@@ -325,7 +325,7 @@ function renderDashboard() {
                 const u = new uPlot(opts, plotData as any, contentDiv);
                 const uKey = actualGroupKey + "_" + index; // Ensure unique plot instance keys if duplicate groups exist
                 plots[uKey] = { plot: u, paths: item.paths, data: plotData };
-                
+
                 card.appendChild(legendContainer);
             } else {
                 item.paths.forEach((path: StatusPath) => {
@@ -349,7 +349,7 @@ function renderDashboard() {
 function updateWidgets() {
     if (!currentStatus) return;
     const now = Date.now() / 1000;
-    
+
     for (const pd of Object.values(plots)) {
         pd.data[0].push(now);
         pd.paths.forEach((p, idx) => {
@@ -367,10 +367,10 @@ function updateWidgets() {
         const p: StatusPath = JSON.parse((el as HTMLElement).dataset.path!);
         const v = currentStatus[p.module]?.[p.group]?.[p.value];
         const schema = statusSchema[p.module]?.[p.group]?.[p.value];
-        
+
         let displayStr = `${p.value}: ` + (v !== undefined ? String(v) : "N/A");
         if (schema?.Unit && v !== undefined) displayStr += ` ${schema.Unit}`;
-        
+
         el.innerHTML = displayStr;
     });
 }
@@ -387,9 +387,9 @@ function setupDragAndDrop() {
         e.preventDefault();
         const dragging = document.querySelector('.dragging') as HTMLElement;
         const target = (e.target as HTMLElement)?.closest('.widget-card, .dashboard-group-header') as HTMLElement;
-        
+
         if (!dragging) return;
-        
+
         if (!target || dragging === target) {
             document.querySelectorAll('.merge-target').forEach(el => el.classList.remove('merge-target'));
             return;
@@ -409,7 +409,7 @@ function setupDragAndDrop() {
             if (targetKey && dragKey && targetKey !== 'undefined') {
                 const [tMod, tGrp, tKind, tUnit] = targetKey.split('/');
                 const [dMod, dGrp, dKind, dUnit] = dragKey.split('/');
-                
+
                 // They must be from the same Module & Group
                 if (tMod === dMod && tGrp === dGrp) {
                     if (tKind === 'Real' && dKind === 'Real') {
@@ -455,7 +455,7 @@ function setupDragAndDrop() {
             } else {
                 const isLastInGroup = targetIdx === all.length - 1 || all[targetIdx + 1].classList.contains('dashboard-group-header');
                 const isFirstInGroup = targetIdx === 0 || all[targetIdx - 1].classList.contains('dashboard-group-header');
-                
+
                 if (isLastInGroup && draggingIdx < targetIdx && relY > rect.height * 0.5) {
                     target.after(dragging);
                 } else if (isFirstInGroup && draggingIdx > targetIdx && relY < rect.height * 0.5) {
@@ -496,7 +496,7 @@ function handleDragStart(e: DragEvent) {
 function handleDragEnd(e: DragEvent) {
     const target = e.currentTarget as HTMLElement;
     target.classList.remove('dragging');
-    
+
     const grid = document.getElementById('dashboard-grid');
     if (!grid) return;
 
@@ -512,16 +512,16 @@ function handleDragEnd(e: DragEvent) {
     if (isMergeDrop) {
         const dragIdx = parseInt(target.dataset.index!);
         const targetIdx = parseInt(mergeTargetEl.dataset.index!);
-        
+
         if (dragIdx !== targetIdx && !isNaN(dragIdx) && !isNaN(targetIdx)) {
             const dragItem = dashboardLayout[dragIdx];
             const targetItem = dashboardLayout[targetIdx];
-            
+
             if (dragItem && targetItem) {
                 const mergedPaths = new Set([...targetItem.paths, ...dragItem.paths]);
                 targetItem.paths = Array.from(mergedPaths);
                 dashboardLayout.splice(dragIdx, 1);
-                
+
                 saveDashboardLayout();
                 renderDashboard();
                 return;
@@ -533,7 +533,7 @@ function handleDragEnd(e: DragEvent) {
     Array.from(grid.children).forEach(child => {
         const idx = (child as HTMLElement).dataset.index;
         if (idx !== undefined) {
-             newLayout.push(dashboardLayout[parseInt(idx, 10)]);
+            newLayout.push(dashboardLayout[parseInt(idx, 10)]);
         }
     });
 
@@ -555,11 +555,11 @@ function loadDashboardLayout() {
         renderDashboard();
         return;
     }
-    
+
     // Fallback cleanup
     localStorage.removeItem('prunt-dashboard-layout-v3');
     localStorage.removeItem('prunt-dashboard-layout-v2');
     localStorage.removeItem('prunt-dashboard-layout');
-    
+
     resetWidgetsToDefault(false);
 }

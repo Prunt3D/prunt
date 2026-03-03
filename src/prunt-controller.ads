@@ -159,11 +159,11 @@ private
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused);
       package Motor_Drivers is new My_Default_Modules.Motor_Drivers (Motor_Name => Motor_Name);
-      --  package TMC_Drivers is new
-      --    My_Default_Modules.TMC_Drivers
-      --      (My_Controller_Generic_Types => Generic_Types,
-      --       Motor_Hardware              => Hardware.Motor_Hardware,
-      --       Motor_Drivers_Module        => Motor_Drivers);
+      package TMC_Drivers is new
+        My_Default_Modules.TMC_Drivers
+          (My_Controller_Generic_Types => Generic_Types,
+           Motor_Hardware              => Hardware.Motor_Hardware,
+           Motor_Drivers_Module        => Motor_Drivers);
    end My_Default_Modules_Children;
 
    protected Last_Command_Executed
@@ -191,6 +191,8 @@ private
        "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
        "Motor_Drivers"            =>
          My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
+       "TMC_Drivers"              =>
+         My_Default_Modules_Children.TMC_Drivers.Module'(My_Modules.Module with null record),
        "Internal Status Reporter" =>
          My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record)];
 

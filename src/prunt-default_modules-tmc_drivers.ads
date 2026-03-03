@@ -355,8 +355,11 @@ private
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config);
 
+   type Motor_Enabled_Map is array (My_Controller_Generic_Types.Motor_Name) of Boolean;
+
    type Module_Instance is new My_Modules.Module_Instance with record
-      Config : User_Config;
+      Config                  : User_Config;
+      Motor_Enabled_In_Config : Motor_Enabled_Map := (others => False);
    end record;
 
 end Prunt.Default_Modules.TMC_Drivers;

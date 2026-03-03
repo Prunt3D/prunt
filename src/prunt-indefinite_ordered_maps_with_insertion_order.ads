@@ -117,6 +117,12 @@ is
 
    procedure Delete (Container : in out Map; Key : Key_Type);
 
+   procedure Include (Container : in out Map; Key : Key_Type; New_Item : Element_Type);
+
+   procedure Exclude (Container : in out Map; Key : Key_Type);
+
+   function Is_Empty (Container : Map) return Boolean;
+
    procedure Reverse_Clear (Container : in out Map);
    --  Delete all elements starting with the most recently inserted.
 

@@ -74,12 +74,12 @@ async function handleUpload(file: File) {
 async function refreshFileList() {
     const fileListEl = document.getElementById('file-list');
     if (!fileListEl) return;
-    
+
     fileListEl.innerHTML = '<li>Loading...</li>';
     try {
         const files = await listUploads();
         fileListEl.innerHTML = '';
-        
+
         if (files.length === 0) {
             fileListEl.innerHTML = '<li>No files uploaded yet.</li>';
             return;
@@ -92,7 +92,7 @@ async function refreshFileList() {
                     <button class="btn btn-sm btn-primary">Run</button>
                     <a href="/uploads/${filename}" class="btn btn-sm btn-secondary" target="_blank">Download</a>
                 </div>`;
-            
+
             const btnRun = li.querySelector('.btn-primary');
             btnRun?.addEventListener('click', async () => {
                 try {

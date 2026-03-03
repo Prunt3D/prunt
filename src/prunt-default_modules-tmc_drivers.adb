@@ -44,12 +44,32 @@ package body Prunt.Default_Modules.TMC_Drivers is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      My_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
-   begin
-      --  for C of My_Config.Motors when C.Fixed_Kind = TMC2240_UART_Kind loop
-      --  end loop;
+      My_Config                         : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
+      Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=
+        Get_Other_Instance (Motor_Drivers_Module.Module_Instance'Tag);
+      Motor_Drivers_Module_Instance     : Motor_Drivers_Module.Module_Instance renames
+        Motor_Drivers_Module.Module_Instance (Motor_Drivers_Module_Instance_Ref.Get.Element.all);
 
-      return Module_Instance'(My_Modules.Module_Instance with Config => My_Config);
+      Motor_Enabled_In_Config : Motor_Enabled_Map :=
+        (for M in My_Controller_Generic_Types.Motor_Name =>
+           Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M));
+      --  We need to hold on to this so we know which motors to set registers on in the `Start` procedure, but we do
+      --  not need to hold on to the entire base motor module instance as we do not use anything else from it.
+   begin
+      for M in My_Controller_Generic_Types.Motor_Name when Motor_Enabled_In_Config (M) loop
+         case My_Config.Motors (M).Fixed_Kind is
+            when TMC2240_UART_Kind =>
+               --  TODO: Check params in procedure.
+               null;
+
+            when others            =>
+               null;
+         end case;
+      end loop;
+
+      return
+        Module_Instance'
+          (My_Modules.Module_Instance with Config => My_Config, Motor_Enabled_In_Config => Motor_Enabled_In_Config);
    end Initialize;
 
    overriding

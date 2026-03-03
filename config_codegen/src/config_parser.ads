@@ -41,8 +41,8 @@ private
    function Get_Comments_Starting_After (Start_Token : Token_Reference) return Virtual_String;
    --  Returns the contents of the comment block directly after the given token, ignoring any whitespace.
    --
-   --  "\" is replaces with "\\" and lines with nothing except whitespace after -- are replaced with "\n". Other lines
-   --  are joined using a space character after trimming whitespace.
+   --  Lines with nothing except whitespace after -- are replaced with LF. Other lines are joined using a space
+   --  character after trimming whitespace.
 
    function Get_Range (Decl : Base_Type_Decl) return Range_Spec;
    --  Recursively gets the parent of the given type declaration and returns the range spec if any of the resolved

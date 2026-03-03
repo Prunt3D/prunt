@@ -128,7 +128,7 @@ package body Prunt.Controller_Helpers is
                                  Allowed_Kinds_Arr.Append (Create ("Integer"));
 
                               when Float_Kind        =>
-                                 Allowed_Kinds_Arr.Append (Create ("Float"));
+                                 Allowed_Kinds_Arr.Append (Create ("Real"));
 
                               when String_Kind       =>
                                  Allowed_Kinds_Arr.Append (Create ("String"));

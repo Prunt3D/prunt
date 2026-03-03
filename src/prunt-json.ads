@@ -27,10 +27,12 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
---  This is a quick and dirty edit of GNATCOLL.JSON to use Virtual_String for
---  its public API. Changes to the logic are minimal to avoid introducing any
---  bugs, but that means there's still plenty of room for improvement to
---  fully take advantage of Virtual_String.
+--  This is a quick and dirty edit of GNATCOLL.JSON to use Virtual_String for its public API. Changes to the logic are
+--  minimal to avoid introducing any bugs, but that means there's still plenty of room for improvement to fully take
+--  advantage of Virtual_String.
+--
+--  This also changed integers which are too large for an integer to be parsed as floats and makes object elements
+--  ordered based on their insertion order.
 
 --  GNATCOLL.JSON exposes an API to parse and serialize data using the JSON
 --  (JavaScript Object Notation) format.
@@ -63,10 +65,10 @@ with Ada.Finalization;
 with GNATCOLL.Buffer;
 with VSS.Characters;
 
-private with Ada.Containers.Ordered_Maps;
 private with Ada.Containers.Vectors;
 private with GNATCOLL;
 private with GNATCOLL.Atomic;
+private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 
 package Prunt.JSON is
 
@@ -602,7 +604,7 @@ private
 
    --  JSON Object definition
    package Object_Items_Pkg is new
-     Ada.Containers.Ordered_Maps (Key_Type => Virtual_String, Element_Type => JSON_Value, "<" => "<");
+     Indefinite_Ordered_Maps_With_Insertion_Order (Key_Type => Virtual_String, Element_Type => JSON_Value, "<" => "<");
 
    type JSON_Object_Internal is record
       Cnt  : aliased GNATCOLL.Atomic.Atomic_Counter := 1;
