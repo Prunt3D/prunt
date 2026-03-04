@@ -863,7 +863,7 @@ package body Config_Generator is
                            & """ =>");
                         Handle_Component
                           (Component_Data_Maps.Element (Component_C),
-                           Path & ["Children", Component_Data_Maps.Key (Component_C)],
+                           Path & [Component_Data_Maps.Key (Component_C)],
                            Reader_Prefix & "." & Component_Data_Maps.Key (Component_C),
                            Ada_Prefix & "." & Component_Data_Maps.Key (Component_C));
                         Is_First := False;

@@ -54,22 +54,25 @@ package body Prunt.Default_Modules.TMC_Drivers is
       for M in My_Controller_Generic_Types.Motor_Name when Motor_Enabled_In_Config (M) loop
          case My_Config.Motors (M).Fixed_Kind is
             when TMC2240_UART_Kind =>
+               --  TODO: We have to provide the motor config before creating the default registers as we need to get
+               --  back distance per unit.
+
                Registers (M) :=
-                 (Kind              => TMC2240_UART_Kind,
-                  TMC2240_Registers =>
+                 (Kind         => TMC2240_UART_Kind,
+                  TMC2240_Regs =>
                     Generate_Default_Registers
                       (My_Config.Motors (M).TMC2240_Parameters,
                        Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M),
-                       Report_Config_Error));
+                       Report_Config_Error,
+                       M,
+                       Motor_Drivers_Module_Instance.Distance_Per_Unit (M)));
 
             when others            =>
                null;
          end case;
       end loop;
 
-      return
-        Module_Instance'
-          (My_Modules.Module_Instance with Config => My_Config, Motor_Enabled_In_Config => Motor_Enabled_In_Config);
+      return Module_Instance'(My_Modules.Module_Instance with Config => My_Config);
    end Initialize;
 
    overriding
@@ -82,8 +85,15 @@ package body Prunt.Default_Modules.TMC_Drivers is
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
       Enabled             : Boolean;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String))
-      return TMC2240_Registers is
+      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Motor               : My_Controller_Generic_Types.Motor_Name;
+      Distance_Per_Step   : Length) return TMC2240_Registers
+   is
+
+      procedure Report (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String) is
+      begin
+         Report_Config_Error (["Motors", +Motor'Image, "TMC2240_Parameters"] & Path, Message);
+      end Report;
    begin
       return
          Result : TMC2240_Registers :=
@@ -169,8 +179,8 @@ package body Prunt.Default_Modules.TMC_Drivers is
                          (Dimensionless'Min
                             (12_500_000.0
                              * hertz
-                             * abs (Get_Distance_Per_Step (S))
-                             / (Config.StealthChop2.Enabled.TPWMTHRS + 1.0E-100 * mm / Prunt.s),
+                             * abs (Distance_Per_Step)
+                             / (Config.StealthChop2.Enabled.TPWMTHRS + 1.0E-100 * mm / s),
                              2.0 ** 20 - 1.0)))
                   else TMC_Types.Unsigned_20'Last),
                Reserved   => 0),
@@ -180,10 +190,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
                  TMC_Types.Unsigned_20
                    (Dimensionless'Floor
                       (Dimensionless'Min
-                         (12_500_000.0
-                          * hertz
-                          * abs (Get_Distance_Per_Step (S))
-                          / (Config.THIGH + 1.0E-100 * mm / Prunt.s),
+                         (12_500_000.0 * hertz * abs (Distance_Per_Step) / (Config.THIGH + 1.0E-100 * mm / s),
                           2.0 ** 20 - 1.0))),
                Reserved => 0),
             PWMCONF       =>
@@ -240,10 +247,10 @@ package body Prunt.Default_Modules.TMC_Drivers is
                Disable_S2G          => False,
                Disable_S2Vs         => False))
       do
-         if Enabled and then IRUN_During_Homing > IRUN then
-            Report
-              ("Steppers$" & S'Image & "$IRUN during homing",
-               "IRUN during homing must be less than or equal to IRUN.");
+         if Enabled then
+            if Config.IRUN_During_Homing > Config.IRUN then
+               Report (["IRUN_During_Homing"], "IRUN during homing must be less than or equal to IRUN.");
+            end if;
          end if;
 
          if not Enabled then
@@ -260,20 +267,15 @@ package body Prunt.Default_Modules.TMC_Drivers is
             Result.CHOPCONF.HEND_OFFSET := TMC_Types.Unsigned_4 (Config.CHM.SpreadCycle.Manual.HEND + 3);
             Result.CHOPCONF.HSTRT_TFD210 := TMC_Types.Unsigned_3 (Config.CHM.SpreadCycle.Manual.HSTRT - 1);
 
-            if IRUN = 31
-              and then
-                Config.Steppers (S).TMC_2240_Kind.CHM.SpreadCycle.Manual.HEND
-                + Config.Steppers (S).TMC_2240_Kind.CHM.SpreadCycle.Manual.HSTRT
-                > 14
-            then
+            if IRUN = 31 and then Config.CHM.SpreadCycle.Manual.HEND + Config.CHM.SpreadCycle.Manual.HSTRT > 14 then
                --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks
                --  to be an off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but
                --  the maximum is probably actually 255.
                Report
-                 ("Steppers$" & S'Image & "$CHM$SpreadCycle$Manual",
-                  "HSTRT + HEND must be less than 15 unless IRUN is reduced to 0.97 or below as "
-                  & "otherwise the hysteresis start setting will be greater than the full scale "
-                  & "current, leading to incorrect operation.");
+                 (["CHM", "SpreadCycle", "Manual"],
+                  "HSTRT + HEND must be less than 15 unless IRUN is reduced to 0.97 or below as otherwise the "
+                  & "hysteresis start setting will be greater than the full scale current, leading to incorrect "
+                  & "operation.");
             end if;
          elsif Config.CHM.Kind = SpreadCycle and then Config.CHM.SpreadCycle.Kind = Derived then
             Result.CHOPCONF.CHM := SpreadCycle_Mode;
@@ -300,13 +302,13 @@ package body Prunt.Default_Modules.TMC_Drivers is
 
                if Sum_Too_High then
                   Report
-                    ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                    (["CHM", "SpreadCycle", "Derived"],
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning.");
                elsif Sum_Too_High_For_Full_Scale and IRUN = 31 then
                   Report
-                    ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                    (["CHM", "SpreadCycle", "Derived"],
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning. A very small reduction of IRUN to 0.97 will allow the computed parameters "
@@ -315,7 +317,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
 
                if Excessive_Heating then
                   Report
-                    ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                    (["CHM", "SpreadCycle", "Derived"],
                      "The stepper motor is likely to heat up excessively at the given driver voltage. "
                      & "Check that parameters are correct. If parameters are correct and you still want to "
                      & "use this motor then use manual tuning.");
@@ -323,7 +325,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
 
                if Driver_Voltage_Too_Low then
                   Report
-                    ("Steppers$" & S'Image & "$CHM$SpreadCycle$Derived",
+                    (["CHM", "SpreadCycle", "Derived"],
                      "The stepper motor requires a higher driver voltage to reach full current. Check that "
                      & "parameters are correct. If parameters are correct and you still want to use this "
                      & "motor then use manual tuning.");

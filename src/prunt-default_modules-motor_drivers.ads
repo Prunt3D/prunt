@@ -80,6 +80,12 @@ package Prunt.Default_Modules.Motor_Drivers is
    --  checking the validity of constraints for motors which will never be used. This can also be used to check if it
    --  makes sense to allow the user to specify the motor for another parameter.
 
+   function Distance_Per_Rotation (This : Module_Instance; Motor : Motor_Name) return Length;
+   --  Result will be negative if an increase in motor units results in a decrease in position as defined by the user.
+
+   function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name) return Length;
+   --  Result will be negative if an increase in motor units results in a decrease in position as defined by the user.
+
 private
 
    type Motor_Handler is abstract tagged limited null record;
@@ -91,10 +97,6 @@ private
 
       Distance_Per_Rotation : Length range 1.0E-100 * mm .. 1.0E100 * mm := 1.0E100 * mm;
       --  This is the linear distance that the axis moves for a single rotation of the motor.
-
-      Reverse_Direction : Boolean := False;
-      --  If an axis moves in the opposite direction to what you expect (e.g., moving to the right when it should move
-      --  to the left), you can enable this setting to reverse the motor's direction.
    end record
    with Annotate => (Prunt_Config, User_Config);
 
@@ -106,10 +108,6 @@ private
       --  often confused with pitch, which is the distance between adjacent threads. For a single-start screw, the lead
       --  and pitch are the same. However, for multi-start screws, the lead is the pitch multiplied by the number of
       --  starts. For example, a lead screw with a 2 mm pitch and 4 starts has a lead of 8 mm.
-
-      Reverse_Direction : Boolean := False;
-      --  If an axis moves in the opposite direction to what you expect (e.g., moving to the right when it should move
-      --  to the left), you can enable this setting to reverse the motor's direction.
 
       Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0)with
         Annotate => (Prunt_Config, Min, 1.0E-100),
@@ -127,10 +125,6 @@ private
 
       Circumference : Length range 1.0E-100 * mm .. 1.0E100 * mm := 1.0E100 * mm;
       --  This is the circumference of the pulley that drives the belt attached to the linearly moving part.
-
-      Reverse_Direction : Boolean := False;
-      --  If an axis moves in the opposite direction to what you expect (e.g., moving to the right when it should move
-      --  to the left), you can enable this setting to reverse the motor's direction.
 
       Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0)with
         Annotate => (Prunt_Config, Min, 1.0E-100),
@@ -151,10 +145,6 @@ private
       Tooth_Pitch : Length range 1.0E-100 * mm .. 1.0E100 * mm := 1.0E100 * mm;
       --  This is the distance between the centres of two adjacent teeth on the belt. Common belt pitches in 3D
       --  printers are 2mm (for GT2 belts) and 3mm (for GT3 belts).
-
-      Reverse_Direction : Boolean := False;
-      --  If an axis moves in the opposite direction to what you expect (e.g., moving to the right when it should move
-      --  to the left), you can enable this setting to reverse the motor's direction.
 
       Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0)with
         Annotate => (Prunt_Config, Min, 1.0E-100),
@@ -177,6 +167,10 @@ private
       --
       --  It is usually safer to start with a lower value here if you are unsure of what your motor and driver requires
       --  as a lower value will result in less rotation.
+
+      Reverse_Direction : Boolean := False;
+      --  If an axis moves in the opposite direction to what you expect (e.g., moving to the right when it should move
+      --  to the left), you can enable this setting to reverse the motor's direction.
 
       case Kind is
          when Direct_Entry =>
@@ -220,8 +214,13 @@ private
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config);
 
+   type Motor_Configuration_Array is array (Motor_Name) of Motor_Configuration;
+   type Motor_Configuration_Provided_Array is array (Motor_Name) of Boolean;
+
    type Module_Instance is new My_Modules.Module_Instance with record
-      Config : User_Config;
+      Config                 : User_Config;
+      Motor_Configs          : Motor_Configuration_Array;
+      Motor_Configs_Provided : Motor_Configuration_Provided_Array := [others => False];
    end record;
 
 end Prunt.Default_Modules.Motor_Drivers;

@@ -59,12 +59,6 @@ package Prunt.Default_Modules.TMC_Drivers is
 
 private
 
-   function Generate_Default_Registers
-     (Config              : User_Config_TMC2240;
-      Enabled             : Boolean;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String))
-      return TMC2240_Registers;
-
    type User_Config_TMC2240_SpreadCycle_Derived is record
       --  This option automatically calculates the optimal settings for the SpreadCycle chopper, which is a feature of
       --  Trinamic drivers that provides smooth and quiet motor operation. This is the recommended mode for most users
@@ -369,14 +363,21 @@ private
    end record;
 
    type TMC_Registers (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
-      case Fixed_Kind is
+      case Kind is
          when TMC2240_UART_Kind =>
-            TMC2240_Registers : TMC2240_Registers;
+            TMC2240_Regs : TMC2240_Registers;
 
          when others =>
             null;
       end case;
    end record;
+
+   function Generate_Default_Registers
+     (Config              : User_Config_TMC2240;
+      Enabled             : Boolean;
+      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Motor               : My_Controller_Generic_Types.Motor_Name;
+      Distance_Per_Step   : Length) return TMC2240_Registers;
 
    type Motor_Registers_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Registers;
 

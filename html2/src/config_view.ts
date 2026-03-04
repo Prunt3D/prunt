@@ -5,6 +5,7 @@ let currentValues: any = null;
 let currentErrors: any[] = [];
 
 let groupByModule = false;
+let devMode = false;
 
 export async function initConfigView() {
     const btnSave = document.getElementById('btn-save-config');
@@ -102,6 +103,24 @@ export async function initConfigView() {
             groupByModule = (e.target as HTMLInputElement).checked;
             renderConfigForm();
             if (currentErrors && currentErrors.length > 0) {
+                handleErrors(currentErrors);
+            }
+        });
+    }
+
+    const devToggle = document.getElementById('config-dev-mode-toggle') as HTMLInputElement;
+    if (devToggle) {
+        devMode = devToggle.checked;
+        devToggle.addEventListener('change', (e) => {
+            if (currentSchema && currentValues) {
+                const updatedValues = scrapeFormValues();
+                if (updatedValues) currentValues = updatedValues;
+            }
+            devMode = (e.target as HTMLInputElement).checked;
+            renderConfigForm();
+            if (currentErrors && currentErrors.length > 0) {
+                // Ignore missing definition of handleErrors since it is globally bound
+                // @ts-ignore
                 handleErrors(currentErrors);
             }
         });
@@ -271,6 +290,13 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
         }
     }
 
+    if (devMode && basePath && basePath.length > 0) {
+        const pathDesc = document.createElement('p');
+        pathDesc.className = 'description dev-mode-path';
+        pathDesc.innerText = JSON.stringify(basePath).replace(/,/g, ', ');
+        fieldDiv.appendChild(pathDesc);
+    }
+
 
     const wrap = document.createElement('div');
     wrap.classList.add('mt-8');
@@ -390,6 +416,13 @@ function createField(name: string, schema: any, value: any, path: string[]): HTM
             desc.innerText = pText;
             fieldDiv.appendChild(desc);
         }
+    }
+
+    if (devMode && path && path.length > 0) {
+        const pathDesc = document.createElement('p');
+        pathDesc.className = 'description dev-mode-path';
+        pathDesc.innerText = JSON.stringify(path).replace(/,/g, ', ');
+        fieldDiv.appendChild(pathDesc);
     }
 
     const errorSpan = document.createElement('span');

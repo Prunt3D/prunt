@@ -53,8 +53,4 @@ package Prunt.Command_Line_Arguments is
    --  Returns the argument supplied to --prunt-max-planner-block-corners=, or 50000 if no argument is provided.
    --  If the argument is provided more than once then Duplicate_Argument_Error is raised.
 
-   function Enable_Documentation_Dev_Mode return Boolean;
-   --  Returns the argument supplied to --enable-documentation-dev-mode=, or False if no argument is provided. If
-   --  the argument is provided more than once then Duplicate_Argument_Error is raised.
-
 end Prunt.Command_Line_Arguments;

@@ -59,7 +59,4 @@ package body Prunt.Command_Line_Arguments is
    function Max_Planner_Block_Corners return Motion_Planner.Max_Corners_Type
    is (Motion_Planner.Max_Corners_Type'Value (Argument_Value ("--prunt-max-planner-block-corners=", "50000")));
 
-   function Enable_Documentation_Dev_Mode return Boolean
-   is (Boolean'Value (Argument_Value ("--enable-documentation-dev-mode=", "false")));
-
 end Prunt.Command_Line_Arguments;

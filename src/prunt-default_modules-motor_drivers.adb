@@ -53,8 +53,11 @@ package body Prunt.Default_Modules.Motor_Drivers is
    overriding
    procedure Start (This : in out Module_Instance) is
    begin
-      --  TODO
-      null;
+      for M in Motor_Name loop
+         if not This.Motor_Configs_Provided (M) then
+            raise Program_Error with "Motor configuration not provided for " & Motor'Image;
+         end if;
+      end loop;
    end Start;
 
    procedure Provide_Motor_Configuration
@@ -63,13 +66,59 @@ package body Prunt.Default_Modules.Motor_Drivers is
       Configuration : Motor_Configuration;
       Handler       : Motor_Handler'Class) is
    begin
-      --  TODO
-      null;
+      if This.Motor_Configs_Provided (Motor) then
+         raise Program_Error with "Motor configuration already provided for " & Motor'Image;
+      end if;
+
+      This.Motor_Configs (Motor) := Configuration;
+      This.Motor_Configs_Provided (Motor) := True;
    end Provide_Motor_Configuration;
 
    function Motor_Is_Enabled_In_Config (This : Module_Instance; Motor : Motor_Name) return Boolean is
    begin
       return This.Config.Motors (Motor).Enabled;
    end Motor_Is_Enabled_In_Config;
+
+   function Distance_Per_Rotation (This : Module_Instance; Motor : Motor_Name) return Length is
+      Config               : constant User_Config_Motion_Units := This.Config.Motors (Motor).Motion_Units;
+      Direction_Multiplier : constant Dimensionless := (if Config.Reverse_Direction then -1.0 else 1.0);
+   begin
+      case Config.Kind is
+         when Direct_Entry                    =>
+            return Direction_Multiplier * Config.Direct_Entry.Distance_Per_Rotation;
+
+         when Lead_Screw                      =>
+            return
+              Direction_Multiplier
+              * Config.Lead_Screw.Lead
+              / (Config.Lead_Screw.Gear_Ratio.Numerator / Config.Lead_Screw.Gear_Ratio.Denominator);
+
+         when Gear_With_Circumference         =>
+            return
+              Direction_Multiplier
+              * Config.Gear_With_Circumference.Circumference
+              / (Config.Gear_With_Circumference.Gear_Ratio.Numerator
+                 / Config.Gear_With_Circumference.Gear_Ratio.Denominator);
+
+         when Gear_With_Tooth_Count_And_Pitch =>
+            return
+              Direction_Multiplier
+              * (Config.Gear_With_Tooth_Count_And_Pitch.Tooth_Count
+                 * Config.Gear_With_Tooth_Count_And_Pitch.Tooth_Pitch)
+              / (Config.Gear_With_Tooth_Count_And_Pitch.Gear_Ratio.Numerator
+                 / Config.Gear_With_Tooth_Count_And_Pitch.Gear_Ratio.Denominator);
+      end case;
+   end Distance_Per_Rotation;
+
+   function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name) return Length is
+   begin
+      if not This.Motor_Configs_Provided (Motor) then
+         raise Program_Error with "Motor configuration not yet provided for " & Motor'Image;
+      end if;
+
+      return
+        (This.Distance_Per_Rotation (Motor) / This.Config.Motors (Motor).Motion_Units.Units_Per_Rotation)
+        / This.Motor_Configs (Motor).Microsteps;
+   end Distance_Per_Unit;
 
 end Prunt.Default_Modules.Motor_Drivers;
