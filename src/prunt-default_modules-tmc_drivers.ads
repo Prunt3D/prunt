@@ -374,7 +374,7 @@ private
 
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
-      Enabled             : Boolean;
+      Motor_Enabled       : Boolean;
       Report_Config_Error : access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Motor               : My_Controller_Generic_Types.Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers;

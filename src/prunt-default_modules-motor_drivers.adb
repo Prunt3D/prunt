@@ -47,7 +47,10 @@ package body Prunt.Default_Modules.Motor_Drivers is
       My_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
    begin
       --  TODO
-      return Module_Instance'(My_Modules.Module_Instance with Config => My_Config);
+      return
+        Module_Instance'
+          (My_Modules.Module_Instance
+           with Config => My_Config, Motor_Configs => <>, Motor_Configs_Provided => [others => False]);
    end Initialize;
 
    overriding
@@ -55,7 +58,7 @@ package body Prunt.Default_Modules.Motor_Drivers is
    begin
       for M in Motor_Name loop
          if not This.Motor_Configs_Provided (M) then
-            raise Program_Error with "Motor configuration not provided for " & Motor'Image;
+            raise Program_Error with "Motor configuration not provided for " & M'Image;
          end if;
       end loop;
    end Start;

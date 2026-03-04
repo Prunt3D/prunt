@@ -45,13 +45,13 @@ package body Prunt.Default_Modules.TMC_Drivers is
       return My_Modules.Module_Instance'Class
    is
       My_Config                         : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
-      Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=
+      Motor_Drivers_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Motor_Drivers_Module.Module_Instance'Tag);
       Motor_Drivers_Module_Instance     : Motor_Drivers_Module.Module_Instance renames
         Motor_Drivers_Module.Module_Instance (Motor_Drivers_Module_Instance_Ref.Get.Element.all);
       Registers                         : Motor_Registers_Map;
    begin
-      for M in My_Controller_Generic_Types.Motor_Name when Motor_Enabled_In_Config (M) loop
+      for M in My_Controller_Generic_Types.Motor_Name loop
          case My_Config.Motors (M).Fixed_Kind is
             when TMC2240_UART_Kind =>
                --  TODO: We have to provide the motor config before creating the default registers as we need to get
@@ -72,7 +72,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
          end case;
       end loop;
 
-      return Module_Instance'(My_Modules.Module_Instance with Config => My_Config);
+      return Module_Instance'(My_Modules.Module_Instance with Config => My_Config, Registers => Registers);
    end Initialize;
 
    overriding
@@ -84,13 +84,14 @@ package body Prunt.Default_Modules.TMC_Drivers is
 
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
-      Enabled             : Boolean;
+      Motor_Enabled       : Boolean;
       Report_Config_Error : access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Motor               : My_Controller_Generic_Types.Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers
    is
 
-      procedure Report (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String) is
+      procedure Report (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String) is
+         use type Prunt.Config.Config_Data_Paths.Vector;
       begin
          Report_Config_Error (["Motors", +Motor'Image, "TMC2240_Parameters"] & Path, Message);
       end Report;
@@ -99,8 +100,8 @@ package body Prunt.Default_Modules.TMC_Drivers is
          Result : TMC2240_Registers :=
            (GCONF         =>
               (Reserved_1       => 0,
-               Fast_Standstill  => TMC_Boolean (TMC_Data.FAST_STANDSTILL),
-               En_PWM_Mode      => TMC_Boolean (TMC_Data.StealthChop2.Kind = Enabled),
+               Fast_Standstill  => TMC_Boolean (Config.FAST_STANDSTILL),
+               En_PWM_Mode      => TMC_Boolean (Config.StealthChop2.Kind = Enabled),
                Multistep_Filt   =>
                  TMC_Boolean
                    (Config.StealthChop2.Kind = Enabled and then Config.StealthChop2.Parameters.MULTISTEP_FILT),
@@ -151,12 +152,12 @@ package body Prunt.Default_Modules.TMC_Drivers is
                Reserved      => 0),
             IHOLD_IRUN    =>
               (I_Hold       =>
-                 (if Config.Enabled
+                 (if Motor_Enabled
                   then TMC_Types.Unsigned_5 (Dimensionless'Max (0.0, Dimensionless'Floor (Config.IHOLD * 32.0 - 1.0)))
                   else 0),
                Reserved_1   => 0,
                I_Run        =>
-                 (if Config.Enabled
+                 (if Motor_Enabled
                   then TMC_Types.Unsigned_5 (Dimensionless'Max (0.0, Dimensionless'Floor (Config.IRUN * 32.0 - 1.0)))
                   else 0),
                Reserved_2   => 0,
@@ -180,7 +181,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
                             (12_500_000.0
                              * hertz
                              * abs (Distance_Per_Step)
-                             / (Config.StealthChop2.Enabled.TPWMTHRS + 1.0E-100 * mm / s),
+                             / (Config.StealthChop2.Parameters.TPWMTHRS + 1.0E-100 * mm / s),
                              2.0 ** 20 - 1.0)))
                   else TMC_Types.Unsigned_20'Last),
                Reserved   => 0),
@@ -195,35 +196,35 @@ package body Prunt.Default_Modules.TMC_Drivers is
                Reserved => 0),
             PWMCONF       =>
               (PWM_OFS            =>
-                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Enabled.PWM_OFS else 29),
+                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Parameters.PWM_OFS else 29),
                PWM_Grad           =>
-                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Enabled.PWM_GRAD else 0),
+                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Parameters.PWM_GRAD else 0),
                PWM_Freq           =>
-                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Enabled.PWM_FREQ else Freq_1024),
+                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Parameters.PWM_FREQ else Freq_1024),
                PWM_Auto_Scale     =>
                  (if Config.StealthChop2.Kind = Enabled
-                  then TMC_Boolean (Config.StealthChop2.Enabled.PWM_AUTOSCALE)
+                  then TMC_Boolean (Config.StealthChop2.Parameters.PWM_AUTOSCALE)
                   else True),
                PWM_Auto_Grad      =>
                  (if Config.StealthChop2.Kind = Enabled
-                  then TMC_Boolean (Config.StealthChop2.Enabled.PWM_AUTOGRAD)
+                  then TMC_Boolean (Config.StealthChop2.Parameters.PWM_AUTOGRAD)
                   else True),
                Freewheel          =>
-                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Enabled.FREEWHEEL else Normal),
+                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Parameters.FREEWHEEL else Normal),
                PWM_Meas_SD_Enable =>
                  (if Config.StealthChop2.Kind = Enabled
-                  then TMC_Boolean (Config.StealthChop2.Enabled.PWM_MEAS_SD_ENABLE)
+                  then TMC_Boolean (Config.StealthChop2.Parameters.PWM_MEAS_SD_ENABLE)
                   else False),
                PWM_Dis_Reg_Stst   =>
                  (if Config.StealthChop2.Kind = Enabled
-                  then TMC_Boolean (Config.StealthChop2.Enabled.PWM_DIS_REG_STST)
+                  then TMC_Boolean (Config.StealthChop2.Parameters.PWM_DIS_REG_STST)
                   else False),
                PWM_Reg            =>
-                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Enabled.PWM_REG else 4),
+                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Parameters.PWM_REG else 4),
                PWM_Lim            =>
-                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Enabled.PWM_LIM else 12)),
+                 (if Config.StealthChop2.Kind = Enabled then Config.StealthChop2.Parameters.PWM_LIM else 12)),
             CHOPCONF      =>
-              (TOFF                 => (if Enabled then Config.TOFF else Disable_Driver),
+              (TOFF                 => (if Motor_Enabled then Config.TOFF else Disable_Driver),
                HSTRT_TFD210         => 5,
                --  Set later if required.
                HEND_OFFSET          => 3,
@@ -242,18 +243,18 @@ package body Prunt.Default_Modules.TMC_Drivers is
                TPFD                 => Config.TPFD,
                Microstep_Resolution => Config.MRES,
                Interpolate          => False,
-               Double_Edge          => TODO,
+               Double_Edge          => False,
                --  TODO: Extract from stepper hardware data.
                Disable_S2G          => False,
                Disable_S2Vs         => False))
       do
-         if Enabled then
+         if Motor_Enabled then
             if Config.IRUN_During_Homing > Config.IRUN then
                Report (["IRUN_During_Homing"], "IRUN during homing must be less than or equal to IRUN.");
             end if;
          end if;
 
-         if not Enabled then
+         if not Motor_Enabled then
             --  Use default parameters.
             null;
          elsif Config.CHM.Kind = Constant_Off_Time then
@@ -267,7 +268,9 @@ package body Prunt.Default_Modules.TMC_Drivers is
             Result.CHOPCONF.HEND_OFFSET := TMC_Types.Unsigned_4 (Config.CHM.SpreadCycle.Manual.HEND + 3);
             Result.CHOPCONF.HSTRT_TFD210 := TMC_Types.Unsigned_3 (Config.CHM.SpreadCycle.Manual.HSTRT - 1);
 
-            if IRUN = 31 and then Config.CHM.SpreadCycle.Manual.HEND + Config.CHM.SpreadCycle.Manual.HSTRT > 14 then
+            if Result.IHOLD_IRUN.I_Run = 31
+              and then Config.CHM.SpreadCycle.Manual.HEND + Config.CHM.SpreadCycle.Manual.HSTRT > 14
+            then
                --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks
                --  to be an off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but
                --  the maximum is probably actually 255.
@@ -306,7 +309,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning.");
-               elsif Sum_Too_High_For_Full_Scale and IRUN = 31 then
+               elsif Sum_Too_High_For_Full_Scale and Result.IHOLD_IRUN.I_Run = 31 then
                   Report
                     (["CHM", "SpreadCycle", "Derived"],
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
