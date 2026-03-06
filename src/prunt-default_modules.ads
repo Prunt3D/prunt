@@ -22,8 +22,10 @@
 pragma Extensions_Allowed (On);
 
 with Prunt.Modules;
+with Prunt.Logger;
 
 generic
    with package My_Modules is new Prunt.Modules;
+   with package My_Logger is new Prunt.Logger;
 package Prunt.Default_Modules is
 end Prunt.Default_Modules;

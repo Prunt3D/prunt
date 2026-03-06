@@ -113,15 +113,19 @@ package body Prunt.Default_Modules.Motor_Drivers is
       end case;
    end Distance_Per_Rotation;
 
+   function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name; Microsteps : Dimensionless) return Length is
+   begin
+      return
+        (This.Distance_Per_Rotation (Motor) / This.Config.Motors (Motor).Motion_Units.Units_Per_Rotation) / Microsteps;
+   end Distance_Per_Unit;
+
    function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name) return Length is
    begin
       if not This.Motor_Configs_Provided (Motor) then
          raise Program_Error with "Motor configuration not yet provided for " & Motor'Image;
       end if;
 
-      return
-        (This.Distance_Per_Rotation (Motor) / This.Config.Motors (Motor).Motion_Units.Units_Per_Rotation)
-        / This.Motor_Configs (Motor).Microsteps;
+      return This.Distance_Per_Unit (Motor, This.Motor_Configs (Motor).Microsteps);
    end Distance_Per_Unit;
 
 end Prunt.Default_Modules.Motor_Drivers;

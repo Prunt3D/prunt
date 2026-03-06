@@ -7,9 +7,10 @@
     "preserveConstEnums": true,
     "sourceMap": true,
     "downlevelIteration": true,
-    "esModuleInterop": true,
-    "moduleResolution": "node",
-    "lib": ["DOM", "ES2018"]
+    "moduleResolution": "bundler",
+    "module": "ES2022",
+    "target": "ES2022",
+    "lib": ["DOM", "ES2022"]
   },
   "include": [
     "src/**/*"

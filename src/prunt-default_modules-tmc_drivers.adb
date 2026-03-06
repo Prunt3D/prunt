@@ -54,8 +54,15 @@ package body Prunt.Default_Modules.TMC_Drivers is
       for M in My_Controller_Generic_Types.Motor_Name loop
          case My_Config.Motors (M).Fixed_Kind is
             when TMC2240_UART_Kind =>
+               Motor_Drivers_Module_Instance.Provide_Motor_Configuration
+                 (M,
+                  (Microsteps => MRES_To_Dimensionless (My_Config.Motors (M).TMC2240_Parameters.MRES)),
+                  TMC_Motor_Handler'(Motor_Handler with Motor => M, TMC_Module_Instance => This));
                --  TODO: We have to provide the motor config before creating the default registers as we need to get
                --  back distance per unit.
+
+               --  TODO: We really need some kind of register manager type here. We can use a shared pointer to put it
+               --  inside the handler.
 
                Registers (M) :=
                  (Kind         => TMC2240_UART_Kind,
@@ -243,14 +250,20 @@ package body Prunt.Default_Modules.TMC_Drivers is
                TPFD                 => Config.TPFD,
                Microstep_Resolution => Config.MRES,
                Interpolate          => False,
-               Double_Edge          => False,
-               --  TODO: Extract from stepper hardware data.
+               Double_Edge          => TMC_Boolean (Motor_Hardware (Motor).Double_Edge_Stepping),
                Disable_S2G          => False,
                Disable_S2Vs         => False))
       do
          if Motor_Enabled then
             if Config.IRUN_During_Homing > Config.IRUN then
                Report (["IRUN_During_Homing"], "IRUN during homing must be less than or equal to IRUN.");
+            end if;
+
+            if Config.TOFF = Disale_Driver then
+               Report
+                 (["TOFF"],
+                  "Setting TOFF to Disable_Driver will cause the motor to never be powered. If you do not want this "
+                  & "motor to be used then use the motor disable toggle.");
             end if;
          end if;
 
@@ -349,5 +362,165 @@ package body Prunt.Default_Modules.TMC_Drivers is
          end if;
       end return;
    end Generate_Default_Registers;
+
+   function MRES_To_Dimensionless (MRES : TMC_Types.TMC2240.Microstep_Resolution_Type) return Dimensionless is
+   begin
+      case MRES is
+         when MS_256        =>
+            return 256.0;
+
+         when MS_128        =>
+            return 128.0;
+
+         when MS_64         =>
+            return 64.0;
+
+         when MS_32         =>
+            return 32.0;
+
+         when MS_16         =>
+            return 16.0;
+
+         when MS_8          =>
+            return 8.0;
+
+         when MS_4          =>
+            return 4.0;
+
+         when MS_2          =>
+            return 2.0;
+
+         when MS_Full_Steps =>
+            return 1.0;
+      end case;
+   end MRES_To_Dimensionless;
+
+   procedure Write_And_Validate
+     (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : My_Controller_Generic_Types.Motor_Name) is
+   begin
+      if Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind then
+         --  This is always going to be a slow procedure so it is fine to have a check here in release builds.
+         raise Constraint_Error;
+      end if;
+
+      declare
+         Message_With_Address : constant TMC_Types.TMC2240.UART_Data_Message :=
+           (Message
+            with delta Content => (Message.Content with delta Node => Motor_Hardware (Motor).TMC2240_UART_Address));
+         Message_With_CRC     : constant TMC_Types.TMC2240.UART_Data_Message :=
+           (Message_With_Address
+            with delta Content => (Message_With_Address.Content with delta CRC => Message_With_Address.Compute_CRC));
+         Query                : TMC_Types.TMC2240.UART_Query_Message :=
+           (Bytes_Mode => False,
+            Content    =>
+              (Node => Message_With_CRC.Content.Node, Register => Message_With_CRC.Content.Register, others => <>));
+         Reply                : TMC_Types.TMC2240.UART_Data_Message;
+         Receive_Failed       : Boolean;
+
+         use type TMC_Types.TMC2240.UART_Data_Message_Inner;
+      begin
+         Motor_Hardware (Motor).TMC2240_UART_Write (Message_With_CRC.Bytes);
+
+         Query.Content.CRC := TMC_Types.TMC2240.Compute_CRC (Query);
+         Motor_Hardware (Motor).TMC2240_UART_Read (Query.Bytes, Receive_Failed, Reply.Bytes);
+         if Receive_Failed then
+            raise TMC_UART_Error with "No response from motor driver " & Motor'Image;
+         elsif Reply.Content.CRC /= TMC_Types.TMC2240.Compute_CRC (Reply) then
+            raise TMC_UART_Error with "Bad CRC from motor driver " & Motor'Image;
+         elsif Reply.Content.Node /= 255 then
+            raise TMC_UART_Error with "Bad node address from motor driver " & Motor'Image;
+         elsif Query.Content.Register /= TMC_Types.TMC2240.GSTAT_Address
+           and then
+             (Reply.Content with delta CRC => 0, Node => 0)
+             /= (Message.Content with delta CRC => 0, Node => 0, Is_Write => TMC_Types.False)
+         then
+            raise TMC_UART_Error with "Data read from TMC stepper does not match sent data for stepper " & Motor'Image;
+         end if;
+      exception
+         when TMC_UART_Error =>
+            My_Logger.Log ("Data from TMC2240 Write_And_Validate after error:");
+            My_Logger.Log (+("Sent: " & Message_With_CRC.Content'Image));
+            My_Logger.Log (+("Received: " & Reply.Content'Image));
+            raise;
+      end;
+   end Write_And_Validate;
+
+   procedure Write_Default_Registers (Regs : TMC2240_Registers; Motor : My_Controller_Generic_Types.Motor_Name) is
+      Message : TMC_Types.TMC2240.UART_Data_Message;
+   begin
+      if Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind then
+         --  This is always going to be a slow procedure so it is fine to have a check here in release builds.
+         raise Constraint_Error;
+      end if;
+
+      --  TODO
+   end Write_Default_Registers;
+
+   overriding
+   procedure Enable_Motor (This : in out TMC_Motor_Handler) is
+      Instance : TMC_Drivers.Module_Instance renames
+        TMC_Drivers.Module_Instance (This.TMC_Module_Instance.Get.Element.all);
+   begin
+      Instance.Enable_Motor (This.Motor);
+   end Enable_Motor;
+
+   overriding
+   procedure Disable_Motor (This : in out TMC_Motor_Handler) is
+      Instance : TMC_Drivers.Module_Instance renames
+        TMC_Drivers.Module_Instance (This.TMC_Module_Instance.Get.Element.all);
+   begin
+      Instance.Disable_Motor (This.Motor);
+   end Disable_Motor;
+
+   procedure Enable_Motor (This : in out Module_Instance; Motor : My_Controller_Generic_Types.Motor_Name) is
+   begin
+      if not This.Startup_Done then
+         raise Constraint_Error with "TMC module not started yet.";
+      end if;
+
+      case This.Registers (Motor).Kind is
+         when TMC2240_UART_Kind =>
+            if This.Registers (Motor).TMC2240_Regs.CHOPCONF.TOFF = Disable_Driver then
+               --  TODO: We should really use a flag for this outside of the registers field so that if we ever allow
+               --  users to configure registers at runtime we do not run in to conflicts here.
+               raise Constraint_Error with "Tried to enable motor which is disabled in config.";
+            end if;
+
+            Write_And_Validate
+              ((Bytes_Mode => False,
+                Content    =>
+                  (Register => CHOPCONF_Address, CHOPCONF_Data => This.Registers (Motor).TMC2240_Regs.CHOPCONF)),
+               Motor);
+
+         when others            =>
+            raise Constraint_Error with "Not a TMC motor.";
+      end case;
+   end Enable_Motor;
+
+   procedure Disable_Motor (This : in out Module_Instance; Motor : My_Controller_Generic_Types.Motor_Name) is
+   begin
+      if not This.Startup_Done then
+         raise Constraint_Error with "TMC module not started yet.";
+      end if;
+
+      case This.Registers (Motor).Kind is
+         when TMC2240_UART_Kind =>
+            if This.Registers (Motor).TMC2240_Regs.CHOPCONF.TOFF = Disable_Driver then
+               --  TODO: We should really use a flag for this outside of the registers field so that if we ever allow
+               --  users to configure registers at runtime we do not run in to conflicts here.
+               raise Constraint_Error with "Tried to enable motor which is disabled in config.";
+            end if;
+
+            Write_And_Validate
+              ((Bytes_Mode => False,
+                Content    =>
+                  (Register      => CHOPCONF_Address,
+                   CHOPCONF_Data => (This.Registers (Motor).TMC2240_Regs.CHOPCONF with delta TOFF => Disable_Driver))),
+               Motor);
+
+         when others            =>
+            raise Constraint_Error with "Not a TMC motor.";
+      end case;
+   end Disable_Motor;
 
 end Prunt.Default_Modules.TMC_Drivers;

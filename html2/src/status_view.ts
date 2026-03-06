@@ -1,6 +1,7 @@
-import uPlot from 'uplot';
-import { fetchStatusSchema, fetchStatusValues } from './api';
-import { wsClient } from './ws';
+// @ts-ignore
+import uPlot from './uPlot.esm.js';
+import { fetchStatusSchema, fetchStatusValues } from './api.js';
+import { wsClient } from './ws.js';
 
 export interface StatusPath {
     module: string;

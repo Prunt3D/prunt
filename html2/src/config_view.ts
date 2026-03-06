@@ -1,4 +1,4 @@
-import { fetchConfigSchema, fetchConfigValues, patchConfigValues } from './api';
+import { fetchConfigSchema, fetchConfigValues, patchConfigValues } from './api.js';
 
 let currentSchema: any = null;
 let currentValues: any = null;

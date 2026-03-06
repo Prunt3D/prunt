@@ -379,7 +379,7 @@ package body Prunt.Web_Server is
    end Create;
 
    procedure Do_Get_Head (Client : in out Prunt_Client; Get : Boolean) is
-      Status : Status_Line renames Get_Status_Line (Client);
+      Status : constant Status_Line := Get_Status_Line (Client);
 
       use type Web_Server_Resources.Content_Access;
    begin
@@ -616,7 +616,7 @@ package body Prunt.Web_Server is
 
    overriding
    procedure Do_Post (Client : in out Prunt_Client) is
-      Status : Status_Line renames Get_Status_Line (Client);
+      Status : constant Status_Line := Get_Status_Line (Client);
    begin
       if Client.Content.Post_Content.Failed then
          declare
@@ -766,7 +766,7 @@ package body Prunt.Web_Server is
 
    overriding
    procedure Do_Body (Client : in out Prunt_Client) is
-      Status : Status_Line renames Get_Status_Line (Client);
+      Status : constant Status_Line := Get_Status_Line (Client);
    begin
       if Client.Get_Method = HTTP_POST then
          Receive_Body (Client, Client.Content.Post_Content'Access);
@@ -841,7 +841,7 @@ package body Prunt.Web_Server is
 
    overriding
    function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept is
-      Status : Status_Line renames Get_Status_Line (Client.all);
+      Status : constant Status_Line := Get_Status_Line (Client.all);
    begin
       Client.WebSocket_Speed_Divisor := 20;
 

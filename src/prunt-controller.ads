@@ -136,10 +136,12 @@ package Prunt.Controller is
 
 private
 
+   package My_Logger is new Prunt.Logger;
+
    package My_Controller_Helpers is new Prunt.Controller_Helpers (Generic_Types);
    use My_Controller_Helpers;
 
-   package My_Default_Modules is new Default_Modules (My_Modules);
+   package My_Default_Modules is new Default_Modules (My_Modules, My_Logger);
 
    function Get_Current_Position return Position;
 
@@ -198,8 +200,6 @@ private
 
    Active_Modules : constant Module_Maps.Map :=
      ((if Disable_Default_Modules then Module_Maps.Map'[] else Get_Modules_For_Hardware) & Extra_Modules);
-
-   package My_Logger is new Prunt.Logger;
 
    Active_Module_Config_Schemas : constant Config.Config_Schema_Maps.Map :=
      [for C in Active_Modules.Iterate use Module_Maps.Key (C) => Module_Maps.Element (C).Config_Schema];

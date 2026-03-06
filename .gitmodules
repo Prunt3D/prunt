@@ -1,0 +1,3 @@
+[submodule "html2/uplot"]
+	path = html2/uplot
+	url = https://github.com/leeoniya/uPlot.git

@@ -59,6 +59,10 @@ package Prunt.Default_Modules.TMC_Drivers is
 
 private
 
+   procedure Enable_Motor (This : in out Module_Instance; Motor : My_Controller_Generic_Types.Motor_Name);
+
+   procedure Disable_Motor (This : in out Module_Instance; Motor : My_Controller_Generic_Types.Motor_Name);
+
    type User_Config_TMC2240_SpreadCycle_Derived is record
       --  This option automatically calculates the optimal settings for the SpreadCycle chopper, which is a feature of
       --  Trinamic drivers that provides smooth and quiet motor operation. This is the recommended mode for most users
@@ -261,6 +265,8 @@ private
       --  This setting allows you to specify a different IRUN value to be used during homing moves. This can be useful
       --  for sensorless homing, where a lower current may be needed to reliably detect a stall. The value has a
       --  resolution of 1/32, but any value may be enetered here as it is automatically rounded.
+      --
+      --  TODO: This does not do anything yet.
 
       IHOLDDELAY : Time range 0.0 * ms .. 315.0 * ms := 315.0 * ms;
       --  This is the time it takes for the driver to reduce the current from the run level to the hold level after the
@@ -391,5 +397,27 @@ private
       Config    : User_Config;
       Registers : Motor_Registers_Map;
    end record;
+
+   function MRES_To_Dimensionless (MRES : TMC_Types.TMC2240.Microstep_Resolution_Type) return Dimensionless;
+
+   procedure Write_And_Validate
+     (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : My_Controller_Generic_Types.Motor_Name)
+   with Pre => Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind;
+   --  Sets address and checksum.
+
+   procedure Write_Default_Registers (Regs : TMC2240_Registers; Motor : My_Controller_Generic_Types.Motor_Name)
+   with Pre => Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind;
+
+   type TMC_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record
+      Motor               : My_Controller_Generic_Types.Motor_Name;
+      TMC_Module_Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
+   end record
+   with Dynamic_Predicate => TMC_Motor_Handler.TMC_Module_Instance.Get.Element.all in TMC_Drivers.Module_Instance;
+
+   overriding
+   procedure Enable_Motor (This : in out TMC_Motor_Handler);
+
+   overriding
+   procedure Disable_Motor (This : in out TMC_Motor_Handler);
 
 end Prunt.Default_Modules.TMC_Drivers;

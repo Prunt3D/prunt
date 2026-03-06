@@ -86,6 +86,9 @@ package Prunt.Default_Modules.Motor_Drivers is
    function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name) return Length;
    --  Result will be negative if an increase in motor units results in a decrease in position as defined by the user.
 
+   function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name; Microsteps : Dimensionless) return Length;
+   --  Like the above version, but does not rely on the motor configuration having been provided by the handler.
+
 private
 
    type Motor_Handler is abstract tagged limited null record;

@@ -81,14 +81,23 @@ package Prunt.Controller_Generic_Types is
             --  It is also generally a good idea to reset TOFF as part of your startup and reset procedures.
 
             Double_Edge_Stepping : Boolean;
+            --  `CHOPCONF.Double_Edge` will be set to this value.
+
             TMC2240_UART_Address : TMC_Types.TMC2240.UART_Node_Address;
-            TMC2240_Diag_0       : Input_Switch_Name;
-            TMC2240_UART_Write   : access procedure (Message : TMC_Types.TMC2240.UART_Data_Byte_Array);
+            --  Hardware address of driver. Automatically built in to UART messages.
+
+            TMC2240_Diag_0 : Input_Switch_Name;
+            --  Pin to which the driver's DIAG_0 pin is attached.
+
+            TMC2240_UART_Write : access procedure (Message : TMC_Types.TMC2240.UART_Data_Byte_Array);
             --  Bytes sent in reverse order. Least significant bit sent first.
             --
             --  This procedure may be called from any task and may be called during step generation. Multiple calls may
             --  also run simultaneously. The server implementation should ensure that this will not cause any issues.
-            TMC2240_UART_Read    :
+            --
+            --  The write must be completed before the procedure returns.
+
+            TMC2240_UART_Read :
               access procedure
                 (Message        : TMC_Types.TMC2240.UART_Query_Byte_Array;
                  Receive_Failed : out Boolean;

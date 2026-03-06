@@ -29,16 +29,7 @@ gnatcoll = "^25.0.0"
 
 [[actions]]
 type = "pre-build"
-# command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (cd html && npm install webpack-cli && npx webpack)"]
-command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (cd html && npx webpack)"]
-
-[[actions]]
-type = "pre-build"
-command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (are --lang=Ada -o ./generated_src_html --content-only --name-access --rule=./html/package.xml ./html/dist && sed -i '1s/^/pragma Warnings (Off, \\\"array aggregate using () is an obsolescent syntax, use [] instead\\\");\\npragma Warnings (Off, \\\"subprogram body \\\"\\\"Get_Content\\\"\\\" not in alphabetical order\\\");\\n/' ./generated_src_html/prunt-web_server_resources.adb)"]
-
-[[actions]]
-type = "pre-build"
-command = ["sh", "-c", "[ \"$PRUNT_SKIP_PRE_BUILD\" = true ] || (VSS_EXTRA_ALIRE_PREFIX=\"\" VSS_TEXT_ALIRE_PREFIX=\"\" alr --chdir=config_codegen build --development && ./config_codegen/bin/config_codegen -P prunt.gpr)"]
+command = ["make", "prebuild"]
 
 [[depends-on]]
 simple_components = "^4.68.0"

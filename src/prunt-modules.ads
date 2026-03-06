@@ -67,8 +67,7 @@ package Prunt.Modules is
 
    package Config_Data_Shared_Pointers is new GNATCOLL.Refcount.Shared_Pointers (Config.Config_Data);
 
-   package Status_Emitter_Shared_Pointers is new
-     GNATCOLL.Refcount.Shared_Pointers (Status_Manager.Status_Emitter);
+   package Status_Emitter_Shared_Pointers is new GNATCOLL.Refcount.Shared_Pointers (Status_Manager.Status_Emitter);
 
    function Initialize
      (This                : Module;

@@ -1,4 +1,4 @@
-import { runCommand, listUploads, uploadFile, runFile, restartServer, allowFirmwareUpdate } from './api';
+import { runCommand, listUploads, uploadFile, runFile, restartServer, allowFirmwareUpdate } from './api.js';
 
 export function initControlView() {
     setupCommandInput();

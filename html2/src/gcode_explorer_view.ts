@@ -1,4 +1,4 @@
-import { fetchGcodeSchema } from './api';
+import { fetchGcodeSchema } from './api.js';
 
 let currentSchema: any = null;
 let groupByModule = false;

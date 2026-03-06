@@ -1,9 +1,9 @@
-import { wsClient } from './ws';
-import { pauseMachine, resumeMachine } from './api';
-import { initConfigView } from './config_view';
-import { initStatusView } from './status_view';
-import { initControlView } from './control_view';
-import { initGcodeExplorerView } from './gcode_explorer_view';
+import { wsClient } from './ws.js';
+import { pauseMachine, resumeMachine } from './api.js';
+import { initConfigView } from './config_view.js';
+import { initStatusView } from './status_view.js';
+import { initControlView } from './control_view.js';
+import { initGcodeExplorerView } from './gcode_explorer_view.js';
 
 export function initUI() {
     setupNavigation();
