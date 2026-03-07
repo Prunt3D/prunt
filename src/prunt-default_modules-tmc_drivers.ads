@@ -31,6 +31,8 @@ with Prunt.Status_Manager;
 with Prunt.TMC_Types;         use Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240; use Prunt.TMC_Types.TMC2240;
 
+private with Prunt.Limited_Shared_Pointers;
+
 generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
@@ -42,6 +44,9 @@ package Prunt.Default_Modules.TMC_Drivers is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+
+   overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
 
    type Module_Instance (<>) is new My_Modules.Module_Instance with private;
 
@@ -57,11 +62,10 @@ package Prunt.Default_Modules.TMC_Drivers is
    overriding
    procedure Start (This : in out Module_Instance);
 
+   overriding
+   procedure Finalize (Object : in out Module_Instance);
+
 private
-
-   procedure Enable_Motor (This : in out Module_Instance; Motor : My_Controller_Generic_Types.Motor_Name);
-
-   procedure Disable_Motor (This : in out Module_Instance; Motor : My_Controller_Generic_Types.Motor_Name);
 
    type User_Config_TMC2240_SpreadCycle_Derived is record
       --  This option automatically calculates the optimal settings for the SpreadCycle chopper, which is a feature of
@@ -393,11 +397,6 @@ private
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config);
 
-   type Module_Instance is new My_Modules.Module_Instance with record
-      Config    : User_Config;
-      Registers : Motor_Registers_Map;
-   end record;
-
    function MRES_To_Dimensionless (MRES : TMC_Types.TMC2240.Microstep_Resolution_Type) return Dimensionless;
 
    procedure Write_And_Validate
@@ -405,19 +404,52 @@ private
    with Pre => Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind;
    --  Sets address and checksum.
 
-   procedure Write_Default_Registers (Regs : TMC2240_Registers; Motor : My_Controller_Generic_Types.Motor_Name)
-   with Pre => Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind;
+   function Read
+     (Address : TMC_Types.TMC2240.UART_Register_Address; Motor : My_Controller_Generic_Types.Motor_Name)
+      return TMC_Types.TMC2240.UART_Data_Message;
 
-   type TMC_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record
-      Motor               : My_Controller_Generic_Types.Motor_Name;
-      TMC_Module_Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
-   end record
-   with Dynamic_Predicate => TMC_Motor_Handler.TMC_Module_Instance.Get.Element.all in TMC_Drivers.Module_Instance;
+   task type TMC2240_UART_Motor_Manager is
+      entry Setup
+        (Regs           : TMC2240_Registers;
+         Motor          : My_Controller_Generic_Types.Motor_Name;
+         Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+      entry Enable;
+      entry Disable;
+      entry Stop;
+   end TMC2240_UART_Motor_Manager;
+
+   package TMC2240_UART_Motor_Manager_Pointers is new Limited_Shared_Pointers (TMC2240_UART_Motor_Manager);
+
+   type TMC_Motor_Manager (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
+      case Kind is
+         when TMC2240_UART_Kind =>
+            TMC2240_UART : TMC2240_UART_Motor_Manager_Pointers.Ref;
+
+         when others =>
+            null;
+      end case;
+   end record;
+
+   --  It might be better to use a limited interface above, however right now we only support the TMC2240 so there is
+   --  no point thinking about what design is best. It can be changed later.
+
+   type Motor_Manager_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Motor_Manager;
+
+   type Module_Instance is new My_Modules.Module_Instance with record
+      Config         : User_Config;
+      Registers      : Motor_Registers_Map;
+      Managers       : Motor_Manager_Map;
+      Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+   end record;
+
+   type TMC2240_UART_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record
+      Manager : TMC2240_UART_Motor_Manager_Pointers.Ref;
+   end record;
 
    overriding
-   procedure Enable_Motor (This : in out TMC_Motor_Handler);
+   procedure Enable_Motor (This : in out TMC2240_UART_Motor_Handler);
 
    overriding
-   procedure Disable_Motor (This : in out TMC_Motor_Handler);
+   procedure Disable_Motor (This : in out TMC2240_UART_Motor_Handler);
 
 end Prunt.Default_Modules.TMC_Drivers;
