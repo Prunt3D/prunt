@@ -6,6 +6,7 @@
     "removeComments": true,
     "preserveConstEnums": true,
     "sourceMap": true,
+    "sourceRoot": "/",
     "downlevelIteration": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "bundler",

@@ -25,6 +25,7 @@ with Ada.Strings.Fixed;           use Ada.Strings.Fixed;
 with Ada.Directories;             use Ada.Directories;
 with Langkit_Support.Text;        use Langkit_Support.Text;
 with VSS.Strings.Conversions;
+with Ada.Text_IO;
 
 package body Config_Parser is
 
@@ -32,6 +33,8 @@ package body Config_Parser is
 
    procedure Raise_Error (Node : Ada_Node'Class; Message : String) is
    begin
+      Ada.Text_IO.Put_Line (Message);
+      --  Message may be too long for an exception.
       if Node.Is_Null then
          raise Constraint_Error with "Error at unknown location: " & Message;
       else
@@ -639,7 +642,7 @@ package body Config_Parser is
          if Index (Name, "Integer") > 0 then
             Res (Integer_Kind) := True;
          end if;
-         if Index (Name, "Float") > 0 or Index (Name, "Dimensionless") > 0 then
+         if Index (Name, "Float") > 0 or else Index (Name, "Dimensionless") > 0 then
             Res (Integer_Kind) := True;
             Res (Float_Kind) := True;
          end if;
@@ -649,7 +652,7 @@ package body Config_Parser is
          if Index (Name, "No_Value") > 0 then
             Res (No_Value_Kind) := True;
          end if;
-         if Index (Name, "Optional") > 0 or Default_Value /= "" then
+         if Index (Name, "Optional") > 0 or else Default_Value /= "" then
             Res (Not_Present_Kind) := True;
          end if;
          return Res;
@@ -807,9 +810,9 @@ package body Config_Parser is
                                  begin
                                     for C in C1.Arguments.Iterate loop
                                        if C2.Arguments.Contains (Gcode_Argument_Maps.Key (C)) then
-                                          if not Are_Kinds_Disjoint
-                                                   (Gcode_Argument_Maps.Element (C).Arg_Kinds,
-                                                    C2.Arguments.Element (Gcode_Argument_Maps.Key (C)).Arg_Kinds)
+                                          if Are_Kinds_Disjoint
+                                               (Gcode_Argument_Maps.Element (C).Arg_Kinds,
+                                                C2.Arguments.Element (Gcode_Argument_Maps.Key (C)).Arg_Kinds)
                                           then
                                              return False;
                                           end if;
@@ -820,9 +823,9 @@ package body Config_Parser is
 
                                     for C in C2.Arguments.Iterate loop
                                        if C1.Arguments.Contains (Gcode_Argument_Maps.Key (C)) then
-                                          if not Are_Kinds_Disjoint
-                                                   (Gcode_Argument_Maps.Element (C).Arg_Kinds,
-                                                    C1.Arguments.Element (Gcode_Argument_Maps.Key (C)).Arg_Kinds)
+                                          if Are_Kinds_Disjoint
+                                               (Gcode_Argument_Maps.Element (C).Arg_Kinds,
+                                                C1.Arguments.Element (Gcode_Argument_Maps.Key (C)).Arg_Kinds)
                                           then
                                              return False;
                                           end if;
@@ -844,7 +847,11 @@ package body Config_Parser is
                                                (Decl,
                                                 "Gcode command overlap detected with "
                                                 & VSS.Strings.Conversions.To_UTF_8_String (V.Name)
-                                                & ".");
+                                                & " ("
+                                                & New_Cmd.Arguments'Image
+                                                & ", "
+                                                & V.Arguments'Image
+                                                & ").");
                                           end if;
                                        end loop;
                                        Variants.Append (New_Cmd);

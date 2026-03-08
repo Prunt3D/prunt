@@ -123,6 +123,15 @@ package Prunt.Gcode_Arguments is
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
    --  `Constraint_Error`.
 
+   function Consume_No_Value (Args : in out Arguments; Index : Arguments_Index) return Boolean;
+   --  Consumes an argument that should not have a value.
+   --
+   --  Returns `True` if the argument is present without a value.  If the argument has a value or is not present,
+   --  `Parse_Error` will be raised.
+   --
+   --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
+   --  `Constraint_Error`.
+
    procedure Validate_All_Consumed (Args : Arguments);
    --  Checks that all arguments in `Args` have been consumed.
    --

@@ -113,6 +113,8 @@ package Prunt.Module_Types is
       end case;
    end record;
 
+   type Gcode_No_Value is null record;
+
    function "<" (Left, Right : Gcode_Command_Identifier) return Boolean
    is (if Left.Argument /= Right.Argument then Left.Argument < Right.Argument else Left.Number < Right.Number);
 

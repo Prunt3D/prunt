@@ -101,6 +101,7 @@ function createCommandCard(cmd: any): HTMLElement {
         for (const pText of cmd.Description.split('\n')) {
             if (pText.trim().length === 0) continue;
             const p = document.createElement('p');
+            p.className = 'description';
             p.innerText = pText;
             descContainer.appendChild(p);
         }
@@ -131,6 +132,7 @@ function createCommandCard(cmd: any): HTMLElement {
             argLabel.innerText = argName;
             argLabel.className = 'gcode-arg-label';
 
+            const isOptional = argDef.Allowed_Kinds.includes('Non_Existent');
             const allowedKinds = argDef.Allowed_Kinds.filter((k: string) => k !== 'Non_Existent');
             const typesSpan = document.createElement('span');
             typesSpan.className = 'gcode-arg-types';
@@ -138,6 +140,13 @@ function createCommandCard(cmd: any): HTMLElement {
 
             argHeader.appendChild(argLabel);
             argHeader.appendChild(typesSpan);
+
+            if (isOptional) {
+                const optionalBadge = document.createElement('span');
+                optionalBadge.className = 'gcode-arg-optional';
+                optionalBadge.innerText = 'optional';
+                argHeader.appendChild(optionalBadge);
+            }
             argItem.appendChild(argHeader);
 
             const argDesc = document.createElement('div');

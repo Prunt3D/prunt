@@ -117,6 +117,46 @@ package body Prunt.Default_Modules.Motion is
          Feedrate => This.Feedrate);
    end Linear_Move;
 
+   procedure Clockwise_Arc_Move_Offset_Form
+     (This          : in out Module_Instance;
+      Planner       : Planner_Interface'Class;
+      X, Y, Z, E, F : Gcode_Optional_Float;
+      I, J          : Dimensionless) is
+   begin
+      null;
+      --  TODO
+   end Clockwise_Arc_Move_Offset_Form;
+
+   procedure Clockwise_Arc_Move_Radius_Form
+     (This          : in out Module_Instance;
+      Planner       : Planner_Interface'Class;
+      X, Y, Z, E, F : Gcode_Optional_Float;
+      R             : Dimensionless) is
+   begin
+      null;
+      --  TODO
+   end Clockwise_Arc_Move_Radius_Form;
+
+   procedure Counter_Clockwise_Arc_Move_Offset_Form
+     (This          : in out Module_Instance;
+      Planner       : Planner_Interface'Class;
+      X, Y, Z, E, F : Gcode_Optional_Float;
+      I, J          : Dimensionless) is
+   begin
+      null;
+      --  TODO
+   end Counter_Clockwise_Arc_Move_Offset_Form;
+
+   procedure Counter_Clockwise_Arc_Move_Radius_Form
+     (This          : in out Module_Instance;
+      Planner       : Planner_Interface'Class;
+      X, Y, Z, E, F : Gcode_Optional_Float;
+      R             : Dimensionless) is
+   begin
+      null;
+      --  TODO
+   end Counter_Clockwise_Arc_Move_Radius_Form;
+
    procedure Retract (This : in out Module_Instance; Planner : Planner_Interface'Class) is
    begin
       null;
@@ -134,6 +174,54 @@ package body Prunt.Default_Modules.Motion is
       null;
       --  TODO
    end Millimeter_Units;
+
+   procedure Report_Stored_Positions (This : in out Module_Instance; Planner : Planner_Interface'Class) is
+   begin
+      null;
+      --  TODO
+   end Report_Stored_Positions;
+
+   procedure Save_Current_Position
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; S : Gcode_Arguments.Argument_Integer) is
+   begin
+      null;
+      --  TODO
+   end Save_Current_Position;
+
+   procedure Delete_Stored_Position
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; D : Gcode_Arguments.Argument_Integer) is
+   begin
+      null;
+      --  TODO
+   end Delete_Stored_Position;
+
+   procedure Delete_All_Stored_Positions
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; D : Gcode_No_Value) is
+   begin
+      null;
+      --  TODO
+   end Delete_All_Stored_Positions;
+
+   procedure Restore_Saved_Position_G60
+     (This          : in out Module_Instance;
+      Planner       : Planner_Interface'Class;
+      Q             : Gcode_Arguments.Argument_Integer;
+      F, X, Y, Z, E : Gcode_Optional_Float) is
+   begin
+      null;
+      --  TODO
+   end Restore_Saved_Position_G60;
+
+   procedure Return_To_Saved_Position
+     (This       : in out Module_Instance;
+      Planner    : Planner_Interface'Class;
+      F          : Gcode_Optional_Float;
+      S          : Gcode_Arguments.Argument_Integer;
+      X, Y, Z, E : Gcode_Optional_Float) is
+   begin
+      null;
+      --  TODO
+   end Return_To_Saved_Position;
 
    procedure Absolute_Positioning (This : in out Module_Instance; Planner : Planner_Interface'Class) is
    begin

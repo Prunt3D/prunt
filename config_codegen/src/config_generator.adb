@@ -248,11 +248,26 @@ package body Config_Generator is
                                        end if;
                                     elsif Index (Type_Name_St, "Optional_No_Value") > 0 then
                                        Val_Expr :=
-                                         "(Present => Args.Kind ('" & Arg_Name & "') = Gcode_Arguments.No_Value_Kind)";
+                                         "(Present => Args.Consume_No_Value_Or_False ('" & Arg_Name & "'))";
                                        if Arg_Data.Default /= "" then
                                           raise Constraint_Error
                                             with
                                               "Optional_No_Value can not have default ("
+                                              & L'Image
+                                              & N'Image
+                                              & ": "
+                                              & Variant'Image
+                                              & ")";
+                                       end if;
+                                    elsif Index (Type_Name_St, "No_Value") > 0 then
+                                       Val_Expr :=
+                                         "(if Args.Consume_No_Value ('"
+                                         & Arg_Name
+                                         & "') then (null record) else (null record))";
+                                       if Arg_Data.Default /= "" then
+                                          raise Constraint_Error
+                                            with
+                                              "No_Value can not have default ("
                                               & L'Image
                                               & N'Image
                                               & ": "

@@ -109,7 +109,7 @@ private
    --  set. This emulates the behaviour seen in some other motion controllers, including Marlin. This setting is off by
    --  default.
    --
-   --  All specified axes must be homed and the target position must be within the limits defined in the printer
+   --  All specified axes must be homed and the complete move must be within the limits defined in the printer
    --  configuration or else an error will be raised.
    --
    --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
@@ -126,13 +126,133 @@ private
       E       : Gcode_Optional_Float;
       --  E axis target position in mm, or offset in relative move mode.
       F       : Gcode_Optional_Float
-      --  Feedrate in mm/min, from last G1 if not specified.
+      --  Feedrate in mm/min, from last G1, G2, or G3 if not specified.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "G1");
    --  Perform a linear move. Axes which are not specified will not move. Moves at the same feedrate as the last G1
    --  command if feedrate is not specified.
    --
-   --  All specified axes must be homed and the target position must be within the limits defined in the printer
+   --  All specified axes must be homed and the complete move must be within the limits defined in the printer
+   --  configuration or else an error will be raised.
+   --
+   --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
+
+   procedure Clockwise_Arc_Move_Offset_Form
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      X       : Gcode_Optional_Float;
+      --  X axis target position in mm, or offset in relative move mode.
+      Y       : Gcode_Optional_Float;
+      --  Y axis target position in mm, or offset in relative move mode.
+      Z       : Gcode_Optional_Float;
+      --  Z axis target position in mm, or offset in relative move mode. If different from the current Z, the arc
+      --  becomes a helix with Z interpolating linearly over the arc.
+      E       : Gcode_Optional_Float;
+      --  E axis target position in mm, or offset in relative move mode.
+      F       : Gcode_Optional_Float;
+      --  Feedrate in mm/min, from last G1, G2, or G3 if not specified.
+      I       : Dimensionless;
+      --  X offset from the current position to the arc centre in mm.
+      J       : Dimensionless
+      --  Y offset from the current position to the arc centre in mm.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G2");
+   --  Perform a clockwise arc move in the XY plane. The endpoint is specified by X and Y, and the arc centre is
+   --  specified by I and J offsets from the current position.
+   --
+   --  If just one of X or Y is specified then the command will act as if the value of that parameter were zero in
+   --  relative movement mode, as with G0 and G1. If neither X nor Y are specified, a complete circle is performed.
+   --
+   --  All specified axes must be homed and the arc must be fully within the limits defined in the printer
+   --  configuration or else an error will be raised.
+   --
+   --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
+
+   procedure Clockwise_Arc_Move_Radius_Form
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      X       : Gcode_Optional_Float;
+      --  X axis target position in mm, or offset in relative move mode.
+      Y       : Gcode_Optional_Float;
+      --  Y axis target position in mm, or offset in relative move mode.
+      Z       : Gcode_Optional_Float;
+      --  Z axis target position in mm, or offset in relative move mode. If different from the current Z, the arc
+      --  becomes a helix with Z interpolating linearly over the arc.
+      E       : Gcode_Optional_Float;
+      --  E axis target position in mm, or offset in relative move mode.
+      F       : Gcode_Optional_Float;
+      --  Feedrate in mm/min, from last G1, G2, or G3 if not specified.
+      R       : Dimensionless
+      --  Arc radius in mm.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G2");
+   --  Perform a clockwise arc move in the XY plane. The endpoint is specified by X and Y, and the arc centre is
+   --  specified by R as the arc radius.
+   --
+   --  If just one of X or Y is specified then the command will act as if the value of that parameter were zero in
+   --  relative movement mode, as with G0 and G1. If neither X nor Y are specified, a complete circle is performed.
+   --
+   --  All specified axes must be homed and the arc must be fully within the limits defined in the printer
+   --  configuration or else an error will be raised.
+   --
+   --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
+
+   procedure Counter_Clockwise_Arc_Move_Offset_Form
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      X       : Gcode_Optional_Float;
+      --  X axis target position in mm, or offset in relative move mode.
+      Y       : Gcode_Optional_Float;
+      --  Y axis target position in mm, or offset in relative move mode.
+      Z       : Gcode_Optional_Float;
+      --  Z axis target position in mm, or offset in relative move mode. If different from the current Z, the arc
+      --  becomes a helix with Z interpolating linearly over the arc.
+      E       : Gcode_Optional_Float;
+      --  E axis target position in mm, or offset in relative move mode.
+      F       : Gcode_Optional_Float;
+      --  Feedrate in mm/min, from last G1, G2, or G3 if not specified.
+      I       : Dimensionless;
+      --  X offset from the current position to the arc centre in mm.
+      J       : Dimensionless
+      --  Y offset from the current position to the arc centre in mm.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G3");
+   --  Perform a counter-clockwise arc move in the XY plane. The endpoint is specified by X and Y, and the arc centre
+   --  is specified by I and J offsets from the current position.
+   --
+   --  If just one of X or Y is specified then the command will act as if the value of that parameter were zero in
+   --  relative movement mode, as with G0 and G1. If neither X nor Y are specified, a complete circle is performed.
+   --
+   --  All specified axes must be homed and the arc must be fully within the limits defined in the printer
+   --  configuration or else an error will be raised.
+   --
+   --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
+
+   procedure Counter_Clockwise_Arc_Move_Radius_Form
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      X       : Gcode_Optional_Float;
+      --  X axis target position in mm, or offset in relative move mode.
+      Y       : Gcode_Optional_Float;
+      --  Y axis target position in mm, or offset in relative move mode.
+      Z       : Gcode_Optional_Float;
+      --  Z axis target position in mm, or offset in relative move mode. If different from the current Z, the arc
+      --  becomes a helix with Z interpolating linearly over the arc.
+      E       : Gcode_Optional_Float;
+      --  E axis target position in mm, or offset in relative move mode.
+      F       : Gcode_Optional_Float;
+      --  Feedrate in mm/min, from last G1, G2, or G3 if not specified.
+      R       : Dimensionless
+      --  Arc radius in mm.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G3");
+   --  Perform a counter-clockwise arc move in the XY plane. The endpoint is specified by X and Y, and the arc centre
+   --  is specified by R as the arc radius.
+   --
+   --  If just one of X or Y is specified then the command will act as if the value of that parameter were zero in
+   --  relative movement mode, as with G0 and G1. If neither X nor Y are specified, a complete circle is performed.
+   --
+   --  All specified axes must be homed and the arc must be fully within the limits defined in the printer
    --  configuration or else an error will be raised.
    --
    --  The G90, G91, M82, and M83 commands are used to switch between relative and absolute mode.
@@ -151,6 +271,88 @@ private
    with Annotate => (Prunt_Config, Gcode_Command, "G21");
    --  Does nothing. Provided for compatibility with other motion controllers where G21 sets the units to millimetres.
    --  Prunt always uses millimetres as the unit for g-code.
+
+   procedure Report_Stored_Positions (This : in out Module_Instance; Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "G60");
+   --  Report all stored positions.
+
+   procedure Save_Current_Position
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Gcode_Arguments.Argument_Integer
+      --  Memory slot to restore from.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G60");
+   --  Save the current position to the specified memory slot. The saved position can later be restored with G60 or
+   --  G61.
+
+   procedure Delete_Stored_Position
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      D       : Gcode_Arguments.Argument_Integer
+      --  Memory slot to delete.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G60");
+   --  Delete the stored position in the specified slot.
+
+   procedure Delete_All_Stored_Positions
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      D       : Gcode_No_Value
+      --  Must be present without a value.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G60");
+   --  Delete all stored positions.
+
+   procedure Restore_Saved_Position_G60
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      Q       : Gcode_Arguments.Argument_Integer;
+      --  Memory slot to restore from.
+      F       : Gcode_Optional_Float;
+      --  Feedrate in mm/min. From last move command if not specified.
+      X       : Gcode_Optional_Float;
+      --  Restore the X axis. If a value is given it is applied as an offset to the saved position.
+      Y       : Gcode_Optional_Float;
+      --  Restore the Y axis. If a value is given it is applied as an offset to the saved position.
+      Z       : Gcode_Optional_Float;
+      --  Restore the Z axis. If a value is given it is applied as an offset to the saved position.
+      E       : Gcode_Optional_Float
+      --  Restore the virtual E axis position without moving the extruder. If a value is given it is applied as an
+      --  offset to the saved position.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G60");
+   --  Move to a previously saved position from a G60 command.
+   --
+   --  Without axis parameters, all axes are restored. If axis parameters are included, only those axes are restored.
+   --
+   --  A numeric value after an axis letter applies an offset to the saved position.
+   --
+   --  Equivalent to G61.
+
+   procedure Return_To_Saved_Position
+     (This    : in out Module_Instance;
+      Planner : Planner_Interface'Class;
+      F       : Gcode_Optional_Float;
+      --  Feedrate in mm/min. From last move command if not specified.
+      S       : Gcode_Arguments.Argument_Integer;
+      --  Memory slot to restore from.
+      X       : Gcode_Optional_Float;
+      --  Restore the X axis. If a value is given it is applied as an offset to the saved position.
+      Y       : Gcode_Optional_Float;
+      --  Restore the Y axis. If a value is given it is applied as an offset to the saved position.
+      Z       : Gcode_Optional_Float;
+      --  Restore the Z axis. If a value is given it is applied as an offset to the saved position.
+      E       : Gcode_Optional_Float
+      --  Restore the virtual E axis position without moving the extruder. If a value is given it is applied as an
+      --  offset to the saved position.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G61");
+   --  Move to a previously saved position from a G60 command.
+   --
+   --  Without axis parameters, all axes are restored. If axis parameters are included, only those axes are restored.
+   --
+   --  A numeric value after an axis letter applies an offset to the saved position.
 
    procedure Absolute_Positioning (This : in out Module_Instance; Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "G90");

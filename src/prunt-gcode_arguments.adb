@@ -332,6 +332,25 @@ package body Prunt.Gcode_Arguments is
       end case;
    end Consume_No_Value_Or_False;
 
+   function Consume_No_Value (Args : in out Arguments; Index : Arguments_Index) return Boolean is
+   begin
+      if Args.Arguments (Index).Consumed then
+         raise Constraint_Error with "Parameter " & Index'Image & " already consumed.";
+      end if;
+      Args.Arguments (Index).Consumed := True;
+
+      case Args.Arguments (Index).Kind is
+         when No_Value_Kind                           =>
+            return True;
+
+         when Non_Existent_Kind                       =>
+            raise Parse_Error with "Parameter " & Index'Image & " missing.";
+
+         when Integer_Kind | Float_Kind | String_Kind =>
+            raise Parse_Error with "Parameter " & Index'Image & " not allowed to have a value here.";
+      end case;
+   end Consume_No_Value;
+
    procedure Validate_All_Consumed (Args : Arguments) is
    begin
       for I in Args.Arguments'Range loop
