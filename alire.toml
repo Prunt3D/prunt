@@ -29,7 +29,12 @@ gnatcoll = "^25.0.0"
 
 [[actions]]
 type = "pre-build"
-command = ["make", "prebuild"]
+command = ["gnatmake", "-gnatW8", "-gnata", "-g", "prebuild.adb", "-o", "prebuild", "-bargs", "-Es"]
+
+[[actions]]
+type = "pre-build"
+command = ["./prebuild"]
+# TODO: Make this work on Windows
 
 [[depends-on]]
 simple_components = "^4.68.0"

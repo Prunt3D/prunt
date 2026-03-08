@@ -2,8 +2,11 @@
 /lib/
 /alire/
 /config/
-/html/node_modules/
-/html2/dist/
+/html/dist/
 /.dir-locals.el
 /.config_codegen_stamp
 /tests/*.srctrace
+/prebuild
+/b~prebuild*
+/prebuild.ali
+/prebuild.o

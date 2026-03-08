@@ -21,7 +21,7 @@
 
 with Ada.Real_Time;
 
-package body Prunt.Default_Modules.TMC_Drivers is
+package body Prunt.Default_Modules.TMC2240_Drivers is
 
    pragma Extensions_Allowed (On);
 
@@ -46,7 +46,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
          Result : Status_Manager.Status_Value_Maps.Map;
       begin
          for M in My_Controller_Generic_Types.Motor_Name loop
-            if Motor_Hardware (M).Kind = TMC2240_UART_Kind then
+            if Motor_Hardware (M).Kind in TMC2240_UART_Kind then
                Result.Insert
                  (+M'Image,
                   (Kind        => Kind,
@@ -113,37 +113,35 @@ package body Prunt.Default_Modules.TMC_Drivers is
       Registers                         : Motor_Registers_Map;
       Managers                          : Motor_Manager_Map;
 
-      function Create_TMC2240_UART_Manager return TMC2240_UART_Motor_Manager is
+      function Create_UART_Manager return UART_Motor_Manager is
       begin
-         return Result : TMC2240_UART_Motor_Manager;
-      end Create_TMC2240_UART_Manager;
+         return Result : UART_Motor_Manager;
+      end Create_UART_Manager;
    begin
       for M in My_Controller_Generic_Types.Motor_Name loop
          case My_Config.Motors (M).Fixed_Kind is
             when TMC2240_UART_Kind =>
                declare
-                  Manager_Ref : TMC2240_UART_Motor_Manager_Pointers.Ref;
+                  Manager_Ref : UART_Motor_Manager_Pointers.Ref;
                begin
-                  Manager_Ref.Set (Create_TMC2240_UART_Manager'Access);
-                  Managers (M) := (Kind => TMC2240_UART_Kind, TMC2240_UART => Manager_Ref);
+                  Manager_Ref.Set (Create_UART_Manager'Access);
+                  Managers (M) := (Kind => TMC2240_UART_Kind, UART => Manager_Ref);
 
                   Motor_Drivers_Module_Instance.Provide_Motor_Configuration
                     (M,
                      (Microsteps => MRES_To_Dimensionless (My_Config.Motors (M).TMC2240_Parameters.MRES)),
-                     TMC2240_UART_Motor_Handler'(Motor_Drivers_Module.Motor_Handler with Manager => Manager_Ref));
+                     UART_Motor_Handler'(Motor_Drivers_Module.Motor_Handler with Manager => Manager_Ref));
                   --  We have to provide the motor config before creating the default registers as we need to get
                   --  back distance per unit.
                end;
 
                Registers (M) :=
-                 (Kind         => TMC2240_UART_Kind,
-                  TMC2240_Regs =>
-                    Generate_Default_Registers
-                      (My_Config.Motors (M).TMC2240_Parameters,
-                       Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M),
-                       Report_Config_Error,
-                       M,
-                       Motor_Drivers_Module_Instance.Distance_Per_Unit (M)));
+                 Generate_Default_Registers
+                   (My_Config.Motors (M).TMC2240_Parameters,
+                    Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M),
+                    Report_Config_Error,
+                    M,
+                    Motor_Drivers_Module_Instance.Distance_Per_Unit (M));
 
             when others            =>
                null;
@@ -162,7 +160,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
       for M in My_Controller_Generic_Types.Motor_Name loop
          case This.Managers (M).Kind is
             when TMC2240_UART_Kind =>
-               This.Managers (M).TMC2240_UART.Get.Setup (This.Registers (M).TMC2240_Regs, M, This.Status_Emitter);
+               This.Managers (M).UART.Get.Setup (This.Registers (M), M, This.Status_Emitter);
 
             when others            =>
                null;
@@ -176,7 +174,7 @@ package body Prunt.Default_Modules.TMC_Drivers is
       for M in My_Controller_Generic_Types.Motor_Name loop
          case Object.Managers (M).Kind is
             when TMC2240_UART_Kind =>
-               Object.Managers (M).TMC2240_UART.Get.Stop;
+               Object.Managers (M).UART.Get.Stop;
 
             when others            =>
                null;
@@ -191,7 +189,6 @@ package body Prunt.Default_Modules.TMC_Drivers is
       Motor               : My_Controller_Generic_Types.Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers
    is
-
       procedure Report (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String) is
          use type Prunt.Config.Config_Data_Paths.Vector;
       begin
@@ -583,18 +580,18 @@ package body Prunt.Default_Modules.TMC_Drivers is
    end Read;
 
    overriding
-   procedure Enable_Motor (This : in out TMC2240_UART_Motor_Handler) is
+   procedure Enable_Motor (This : in out UART_Motor_Handler) is
    begin
       This.Manager.Get.Enable;
    end Enable_Motor;
 
    overriding
-   procedure Disable_Motor (This : in out TMC2240_UART_Motor_Handler) is
+   procedure Disable_Motor (This : in out UART_Motor_Handler) is
    begin
       This.Manager.Get.Disable;
    end Disable_Motor;
 
-   task body TMC2240_UART_Motor_Manager is
+   task body UART_Motor_Manager is
       use type Ada.Real_TIme.Time;
 
       My_Regs        : TMC2240_Registers;
@@ -773,6 +770,6 @@ package body Prunt.Default_Modules.TMC_Drivers is
             end;
          end select;
       end loop;
-   end TMC2240_UART_Motor_Manager;
+   end UART_Motor_Manager;
 
-end Prunt.Default_Modules.TMC_Drivers;
+end Prunt.Default_Modules.TMC2240_Drivers;

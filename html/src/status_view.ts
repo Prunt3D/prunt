@@ -1,4 +1,3 @@
-// @ts-ignore
 import uPlot from './uPlot.esm.js';
 import { fetchStatusSchema, fetchStatusValues } from './api.js';
 import { wsClient } from './ws.js';

@@ -35,7 +35,7 @@ private with Prunt.Default_Modules.Basic_Config;
 private with Prunt.Default_Modules.Internal_Status_Reporter;
 private with Prunt.Default_Modules.Motion;
 private with Prunt.Default_Modules.Motor_Drivers;
-private with Prunt.Default_Modules.TMC_Drivers;
+private with Prunt.Default_Modules.TMC2240_Drivers;
 private with Prunt.Gcode_Arguments;
 private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
@@ -161,8 +161,8 @@ private
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused);
       package Motor_Drivers is new My_Default_Modules.Motor_Drivers (Motor_Name => Motor_Name);
-      package TMC_Drivers is new
-        My_Default_Modules.TMC_Drivers
+      package TMC2240_Drivers is new
+        My_Default_Modules.TMC2240_Drivers
           (My_Controller_Generic_Types => Generic_Types,
            Motor_Hardware              => Hardware.Motor_Hardware,
            Motor_Drivers_Module        => Motor_Drivers);
@@ -191,10 +191,10 @@ private
    is ["Basic Config"             =>
          My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
        "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
-       "Motor_Drivers"            =>
+       "Motor Drivers"            =>
          My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
-       "TMC_Drivers"              =>
-         My_Default_Modules_Children.TMC_Drivers.Module'(My_Modules.Module with null record),
+       "TMC2240 Drivers"          =>
+         My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record),
        "Internal Status Reporter" =>
          My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record)];
 

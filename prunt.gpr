@@ -63,47 +63,47 @@ project Prunt is
         Prunt_Config.Ada_Compiler_Switches
         & Prunt_Extra_Ada_Compiler_Switches
         & ("-fdata-sections",
-           "-ffunction-sections",
-           "-fno-omit-frame-pointer",
-           "-gnatW8",    --  UTF-8 encoding
-           "-gnatX",     --  GNAT core extensions
-           "-gnateE",    --  Extra exception info in messages
-           "-gnaty3",    --  Check indentation level
-           "-gnatya",    --  Check attribute casing
-           "-gnatyA",    --  Check array index number usage
-           "-gnatyb",    --  No trailing spaces/tabs
-           "-gnatyB",    --  Enforce or else/and then
-           "-gnatyc",    --  Check comment style
-           "-gnatyd",    --  Disallow CRLF line ends
-           "-gnatye",    --  Make optional end labels mandatory
-           "-gnatyf",    --  No form feed/vertical tabs
-           "-gnatyh",    --  No horizontal tabs
-           "-gnatyi",    --  Check if-then layout
-           "-gnatyI",    --  Disallow in keyword on in parameters
-           "-gnatyk",    --  Enforce lowercase keywords
-           "-gnatyl",    --  General layout checks
-           "-gnatyM119", --  Maximum line length
-           "-gnatyn",    --  Check casing for entities of Standard
-           "-gnatyO",    --  Make overriding keyword mandatory
-           "-gnatyp",    --  Enforce mixed case pragma names
-           "-gnatyr",    --  Enforce consistent identifier casing
-           "-gnatys",    --  Require separate specs for all subprograms
-           "-gnatyS",    --  No statements on same line as if-then/else
-           "-gnatyt",    --  Check spaces around tokens
-           "-gnatyu",    --  No double blank lines
-           "-gnatyx",    --  No C-style parentheses for if conditions etc.
-           "-gnatwa",    --  Enable most optional warnings
-           "-gnatw.k",   --  No redefinitions of names in standard
-           "-gnatwl",    --  Detect possible elaboration issues
-           "-gnatwo",    --  Disallow address clauses which cause variables to overlap
-           "-gnatw.o",   --  Require out parameters to be read
-           "-gnatw.q",   --  Disallow inefficient default record layouts
-           "-gnatw_q",   --  Disallow ignored equality operators
-           "-gnatw.s",   --  Disallow conflicting size clauses
-           "-gnatwt",    --  Detect dead code in conditionals
-           "-gnatw.u",   --  Treat enumerations as unordered without ordered clause
-           "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
-           "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
+             "-ffunction-sections",
+             "-fno-omit-frame-pointer",
+             "-gnatW8",    --  UTF-8 encoding
+             "-gnatX",     --  GNAT core extensions
+             "-gnateE",    --  Extra exception info in messages
+             "-gnaty3",    --  Check indentation level
+             "-gnatya",    --  Check attribute casing
+             "-gnatyA",    --  Check array index number usage
+             "-gnatyb",    --  No trailing spaces/tabs
+             "-gnatyB",    --  Enforce or else/and then
+             "-gnatyc",    --  Check comment style
+             "-gnatyd",    --  Disallow CRLF line ends
+             "-gnatye",    --  Make optional end labels mandatory
+             "-gnatyf",    --  No form feed/vertical tabs
+             "-gnatyh",    --  No horizontal tabs
+             "-gnatyi",    --  Check if-then layout
+             "-gnatyI",    --  Disallow in keyword on in parameters
+             "-gnatyk",    --  Enforce lowercase keywords
+             "-gnatyl",    --  General layout checks
+             "-gnatyM119", --  Maximum line length
+             "-gnatyn",    --  Check casing for entities of Standard
+             "-gnatyO",    --  Make overriding keyword mandatory
+             "-gnatyp",    --  Enforce mixed case pragma names
+             "-gnatyr",    --  Enforce consistent identifier casing
+             "-gnatys",    --  Require separate specs for all subprograms
+             "-gnatyS",    --  No statements on same line as if-then/else
+             "-gnatyt",    --  Check spaces around tokens
+             "-gnatyu",    --  No double blank lines
+             "-gnatyx",    --  No C-style parentheses for if conditions etc.
+             "-gnatwa",    --  Enable most optional warnings
+             "-gnatw.k",   --  No redefinitions of names in standard
+             "-gnatwl",    --  Detect possible elaboration issues
+             "-gnatwo",    --  Disallow address clauses which cause variables to overlap
+             "-gnatw.o",   --  Require out parameters to be read
+             "-gnatw.q",   --  Disallow inefficient default record layouts
+             "-gnatw_q",   --  Disallow ignored equality operators
+             "-gnatw.s",   --  Disallow conflicting size clauses
+             "-gnatwt",    --  Detect dead code in conditionals
+             "-gnatw.u",   --  Treat enumerations as unordered without ordered clause
+             "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
+             "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
    end Compiler;
 
    package Builder is
@@ -113,31 +113,32 @@ project Prunt is
    package Binder is
       --  TODO: Do these propagate out or are they useless here?
       case Prunt_Config.Build_Profile is
-      when "release" =>
-         for Switches ("Ada") use
-           ("-Es"); --  Symbolic traceback
-      when "validation" =>
-         for Switches ("Ada") use
-           ("-we",  --  Treat warnings as errors
-            "-Es"); --  Symbolic traceback
-      when "development" =>
-         for Switches ("Ada") use
-           ("-Es"); --  Symbolic traceback
+         when "release" =>
+            for Switches ("Ada") use
+              ("-Es"); --  Symbolic traceback
+         when "validation" =>
+            for Switches ("Ada") use
+              ("-we",  --  Treat warnings as errors
+               "-Es"); --  Symbolic traceback
+         when "development" =>
+            for Switches ("Ada") use
+              ("-Es"); --  Symbolic traceback
       end case;
    end Binder;
 
-   package Linker is
-      case Prunt_Config.Build_Profile is
-      when "release" =>
-         for Switches ("Ada") use
-           ("-flto=auto", --  Link time optimization
-            "-Wl,--gc-sections", "--gc-sections"); --  Delete unreferenced sections
-      when "validation" =>
-         null;
-      when "development" =>
-         null;
-      end case;
-   end Linker;
+   -- package Linker is
+   --    case Prunt_Config.Build_Profile is
+   --    when "release" =>
+   --       for Switches ("Ada") use
+   --         ("-flto=auto", --  Link time optimization
+   --          "-Wl,--gc-sections", "--gc-sections"); --  Delete unreferenced sections
+   --    when "validation" =>
+   --       null;
+   --    when "development" =>
+   --       null;
+   --    end case;
+   -- end Linker;
+   -- Copy to server implementation.
 
    package Install is
       for Artifacts (".") use ("share");

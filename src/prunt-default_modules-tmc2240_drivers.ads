@@ -38,7 +38,7 @@ generic
    Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
    with package Motor_Drivers_Module is new
      Default_Modules.Motor_Drivers (Motor_Name => My_Controller_Generic_Types.Motor_Name);
-package Prunt.Default_Modules.TMC_Drivers is
+package Prunt.Default_Modules.TMC2240_Drivers is
 
    type Module is new My_Modules.Module with null record;
 
@@ -67,7 +67,7 @@ package Prunt.Default_Modules.TMC_Drivers is
 
 private
 
-   type User_Config_TMC2240_SpreadCycle_Derived is record
+   type User_Config_SpreadCycle_Derived is record
       --  This option automatically calculates the optimal settings for the SpreadCycle chopper, which is a feature of
       --  Trinamic drivers that provides smooth and quiet motor operation. This is the recommended mode for most users
       --  when the phase inductance and resistance are known, these parameters may be found in your stepper motor's
@@ -89,7 +89,7 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_TMC2240_SpreadCycle_Manual is record
+   type User_Config_SpreadCycle_Manual is record
       --  This section allows for manual configuration of the SpreadCycle chopper. These settings should only be
       --  adjusted by advanced users who are familiar with Trinamic driver tuning and have access to an oscilloscope to
       --  monitor the motor's current waveform. Incorrectly configured settings can lead to poor motor performance,
@@ -108,9 +108,9 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_TMC2240_SpreadCycle_Kind is (Derived, Manual);
+   type User_Config_SpreadCycle_Kind is (Derived, Manual);
 
-   type User_Config_TMC2240_SpreadCycle (Kind : User_Config_TMC2240_SpreadCycle_Kind := Derived) is record
+   type User_Config_SpreadCycle (Kind : User_Config_SpreadCycle_Kind := Derived) is record
       --  This section allows you to choose between automatically calculated ('Derived') or manually configured
       --  SpreadCycle settings. For the vast majority of users, 'Derived' is the best choice. Only select 'Manual' if
       --  you are familiar with the tuning process for TMC2240 stepper drivers or if the parameters required for the
@@ -118,15 +118,15 @@ private
 
       case Kind is
          when Derived =>
-            Derived : User_Config_TMC2240_SpreadCycle_Derived;
+            Derived : User_Config_SpreadCycle_Derived;
 
          when Manual =>
-            Manual : User_Config_TMC2240_SpreadCycle_Manual;
+            Manual : User_Config_SpreadCycle_Manual;
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_TMC2240_Constant_Off_Time is record
+   type User_Config_Constant_Off_Time is record
       --  This option allows for configuration of the Constant Off-Time chopper mode. There is no automatic tuning for
       --  these parameters. It is strongly recommended to use the SpreadCycle chopper unless you have a specific reason
       --  to use this mode.
@@ -146,9 +146,9 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_TMC2240_CHM_Kind is (SpreadCycle, Constant_Off_Time);
+   type User_Config_CHM_Kind is (SpreadCycle, Constant_Off_Time);
 
-   type User_Config_TMC2240_CHM (Kind : User_Config_TMC2240_CHM_Kind := SpreadCycle) is record
+   type User_Config_CHM (Kind : User_Config_CHM_Kind := SpreadCycle) is record
       --  This setting selects the chopper mode for the stepper motor driver. The chopper is responsible for
       --  controlling the current to the motor coils, which in turn affects the motor's performance, noise level, and
       --  heat generation.
@@ -161,15 +161,15 @@ private
 
       case Kind is
          when SpreadCycle =>
-            SpreadCycle : User_Config_TMC2240_SpreadCycle;
+            SpreadCycle : User_Config_SpreadCycle;
 
          when Constant_Off_Time =>
-            Constant_Off_Time : User_Config_TMC2240_Constant_Off_Time;
+            Constant_Off_Time : User_Config_Constant_Off_Time;
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_TMC2240_StealthChop2_Enabled is record
+   type User_Config_StealthChop2_Enabled is record
       --  This section contains the settings for StealthChop2. For most users, the settings, aside from TPWMTHRS,
       --  should always be set to the default values with auto-tuning enabled.
 
@@ -231,9 +231,9 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_TMC2240_StealthChop2_Kind is (Disabled, Enabled);
+   type User_Config_StealthChop2_Kind is (Disabled, Enabled);
 
-   type User_Config_TMC2240_StealthChop2 (Kind : User_Config_TMC2240_StealthChop2_Kind := Disabled) is record
+   type User_Config_StealthChop2 (Kind : User_Config_StealthChop2_Kind := Disabled) is record
       --  This section allows you to enable or disable StealthChop2 for this driver. StealthChop2 is a feature of
       --  TMC2240 stepper drivers that allows for extremely quiet stepper motor operation, especially at low speeds.
       --  While it can make your printer nearly silent, it may also have less torque than SpreadCycle, especially at
@@ -244,7 +244,7 @@ private
             Empty : User_Config_Empty;
 
          when Enabled =>
-            Parameters : User_Config_TMC2240_StealthChop2_Enabled;
+            Parameters : User_Config_StealthChop2_Enabled;
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -330,9 +330,9 @@ private
       --  the last step signal before it begins to detect a standstill. When disabled, the wait time is 2^20 cycles
       --  (typically 84ms).
 
-      CHM : User_Config_TMC2240_CHM := (others => <>);
+      CHM : User_Config_CHM := (others => <>);
 
-      StealthChop2 : User_Config_TMC2240_StealthChop2 := (others => <>);
+      StealthChop2 : User_Config_StealthChop2 := (others => <>);
    end record
    with Annotate => (Prunt_Config, User_Config);
 
@@ -372,16 +372,6 @@ private
       CHOPCONF      : TMC_Types.TMC2240.CHOPCONF;
    end record;
 
-   type TMC_Registers (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
-      case Kind is
-         when TMC2240_UART_Kind =>
-            TMC2240_Regs : TMC2240_Registers;
-
-         when others =>
-            null;
-      end case;
-   end record;
-
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
       Motor_Enabled       : Boolean;
@@ -389,7 +379,7 @@ private
       Motor               : My_Controller_Generic_Types.Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers;
 
-   type Motor_Registers_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Registers;
+   type Motor_Registers_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC2240_Registers;
 
    function Build_Schema return Config.Config_Property_Maps.Map;
 
@@ -408,7 +398,7 @@ private
      (Address : TMC_Types.TMC2240.UART_Register_Address; Motor : My_Controller_Generic_Types.Motor_Name)
       return TMC_Types.TMC2240.UART_Data_Message;
 
-   task type TMC2240_UART_Motor_Manager is
+   task type UART_Motor_Manager is
       entry Setup
         (Regs           : TMC2240_Registers;
          Motor          : My_Controller_Generic_Types.Motor_Name;
@@ -416,22 +406,19 @@ private
       entry Enable;
       entry Disable;
       entry Stop;
-   end TMC2240_UART_Motor_Manager;
+   end UART_Motor_Manager;
 
-   package TMC2240_UART_Motor_Manager_Pointers is new Limited_Shared_Pointers (TMC2240_UART_Motor_Manager);
+   package UART_Motor_Manager_Pointers is new Limited_Shared_Pointers (UART_Motor_Manager);
 
    type TMC_Motor_Manager (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
       case Kind is
          when TMC2240_UART_Kind =>
-            TMC2240_UART : TMC2240_UART_Motor_Manager_Pointers.Ref;
+            UART : UART_Motor_Manager_Pointers.Ref;
 
          when others =>
             null;
       end case;
    end record;
-
-   --  It might be better to use a limited interface above, however right now we only support the TMC2240 so there is
-   --  no point thinking about what design is best. It can be changed later.
 
    type Motor_Manager_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Motor_Manager;
 
@@ -442,14 +429,14 @@ private
       Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
    end record;
 
-   type TMC2240_UART_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record
-      Manager : TMC2240_UART_Motor_Manager_Pointers.Ref;
+   type UART_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record
+      Manager : UART_Motor_Manager_Pointers.Ref;
    end record;
 
    overriding
-   procedure Enable_Motor (This : in out TMC2240_UART_Motor_Handler);
+   procedure Enable_Motor (This : in out UART_Motor_Handler);
 
    overriding
-   procedure Disable_Motor (This : in out TMC2240_UART_Motor_Handler);
+   procedure Disable_Motor (This : in out UART_Motor_Handler);
 
-end Prunt.Default_Modules.TMC_Drivers;
+end Prunt.Default_Modules.TMC2240_Drivers;
