@@ -31,6 +31,7 @@ private with Ada.Containers.Indefinite_Holders;
 private with Ada.Containers.Ordered_Maps;
 private with Prunt.Command_Line_Arguments;
 private with Prunt.Controller_Helpers;
+private with Prunt.Default_Modules;
 private with Prunt.Default_Modules.Basic_Config;
 private with Prunt.Default_Modules.Internal_Status_Reporter;
 private with Prunt.Default_Modules.Motion;

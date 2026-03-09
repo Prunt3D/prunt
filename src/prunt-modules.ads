@@ -21,7 +21,6 @@
 
 pragma Extensions_Allowed (On);
 
-with Ada.Finalization;
 with Ada.Tags;
 with GNATCOLL.Refcount;
 with Prunt.Config;
@@ -46,7 +45,7 @@ package Prunt.Modules is
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map
    is ([]);
 
-   type Module_Instance is abstract new Ada.Finalization.Limited_Controlled with null record;
+   type Module_Instance is synchronized interface;
    --  Children of `Module_Instance` should be declared with an unknown discriminant part to prevent accidental
    --  instantiation without a constructor.
    --
@@ -57,9 +56,9 @@ package Prunt.Modules is
      (This               : in out Module_Instance;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
-      Command_Identifier : Gcode_Command_Identifier);
+      Command_Identifier : Gcode_Command_Identifier) is abstract;
 
-   procedure Start (This : in out Module_Instance) is null;
+   procedure Start (This : in out Module_Instance) is abstract;
    --  Modules should not start in the initialize procedure as the initialize procedure can be used to check for config
    --  errors without actually starting.
 

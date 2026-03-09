@@ -34,7 +34,7 @@ package Prunt.Default_Modules.Dwell is
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
 
-   type Module_Instance (<>) is new My_Modules.Module_Instance with private;
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
    overriding
    function Initialize
@@ -54,24 +54,22 @@ package Prunt.Default_Modules.Dwell is
 
 private
 
-   procedure Dwell_Seconds
-     (This    : in out Module_Instance;
-      Planner : Planner_Interface'Class;
-      S       : Dimensionless
-      --  Amount of time to dwell in seconds.
-      )
-   with Annotate => (Prunt_Config, Gcode_Command, "G4");
-   --  Dwell for a specified time in seconds.
+   protected type Module_Instance is new My_Modules.Module_Instance with
+      procedure Dwell_Seconds
+        (Planner : Planner_Interface'Class;
+         S       : Dimensionless
+         --  Amount of time to dwell in seconds.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "G4");
+      --  Dwell for a specified time in seconds.
 
-   procedure Dwell_Milliseconds
-     (This    : in out Module_Instance;
-      Planner : Planner_Interface'Class;
-      P       : Dimensionless
-      --  Amount of time to dwell in milliseconds.
-      )
-   with Annotate => (Prunt_Config, Gcode_Command, "G4");
-   --  Dwell for a specified time in milliseconds.
-
-   type Module_Instance is new My_Modules.Module_Instance with null record;
+      procedure Dwell_Milliseconds
+        (Planner : Planner_Interface'Class;
+         P       : Dimensionless
+         --  Amount of time to dwell in milliseconds.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "G4");
+      --  Dwell for a specified time in milliseconds.
+   end Module_Instance;
 
 end Prunt.Default_Modules.Dwell;

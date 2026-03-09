@@ -36,8 +36,6 @@ package Prunt.Default_Modules.Motor_Drivers is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
-   type Module_Instance (<>) is new My_Modules.Module_Instance with private;
-
    overriding
    function Initialize
      (This                : Module;
@@ -46,9 +44,6 @@ package Prunt.Default_Modules.Motor_Drivers is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
-
-   overriding
-   procedure Start (This : in out Module_Instance);
 
    type Motor_Configuration is record
       Microsteps : Dimensionless range 1.0 .. 1.0E100 := 1.0;
@@ -60,7 +55,7 @@ package Prunt.Default_Modules.Motor_Drivers is
       --  from a list of possible options.
    end record;
 
-   type Motor_Handler is abstract tagged limited private;
+   type Motor_Handler is limited interface;
 
    procedure Enable_Motor (This : in out Motor_Handler) is abstract;
    --  Power up the motor if possible. Will only be called when the motor is enabled in the user configuration.
@@ -69,29 +64,34 @@ package Prunt.Default_Modules.Motor_Drivers is
    --  Power down the motor if possible. May be called regardless of whether or not the motor is enabled in the user
    --  configuration.
 
+   type Module_Instance_Interface is synchronized interface;
+
    procedure Provide_Motor_Configuration
-     (This          : in out Module_Instance;
+     (This          : in out Module_Instance_Interface;
       Motor         : Motor_Name;
       Configuration : Motor_Configuration;
-      Handler       : Motor_Handler'Class);
+      Handler       : Motor_Handler'Class) is abstract;
 
-   function Motor_Is_Enabled_In_Config (This : Module_Instance; Motor : Motor_Name) return Boolean;
+   function Motor_Is_Enabled_In_Config (This : Module_Instance_Interface; Motor : Motor_Name) return Boolean
+   is abstract;
    --  Returns `True` is the user has enabled the motor in the current configuration. This can be used to avoid
    --  checking the validity of constraints for motors which will never be used. This can also be used to check if it
    --  makes sense to allow the user to specify the motor for another parameter.
 
-   function Distance_Per_Rotation (This : Module_Instance; Motor : Motor_Name) return Length;
+   function Distance_Per_Rotation (This : Module_Instance_Interface; Motor : Motor_Name) return Length is abstract;
    --  Result will be negative if an increase in motor units results in a decrease in position as defined by the user.
 
-   function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name) return Length;
+   function Distance_Per_Unit (This : Module_Instance_Interface; Motor : Motor_Name) return Length is abstract;
    --  Result will be negative if an increase in motor units results in a decrease in position as defined by the user.
 
-   function Distance_Per_Unit (This : Module_Instance; Motor : Motor_Name; Microsteps : Dimensionless) return Length;
+   function Distance_Per_Unit
+     (This : Module_Instance_Interface; Motor : Motor_Name; Microsteps : Dimensionless) return Length
+   is abstract;
    --  Like the above version, but does not rely on the motor configuration having been provided by the handler.
 
-private
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
-   type Motor_Handler is abstract tagged limited null record;
+private
 
    type User_Config_Motion_Units_Direct_Entry is record
       --  Use this option if you already know the exact distance the printer's axis moves for each rotation of the
@@ -220,10 +220,31 @@ private
    type Motor_Configuration_Array is array (Motor_Name) of Motor_Configuration;
    type Motor_Configuration_Provided_Array is array (Motor_Name) of Boolean;
 
-   type Module_Instance is new My_Modules.Module_Instance with record
+   protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
+      procedure Initialize (Config_In : User_Config);
+
+      overriding
+      procedure Start;
+
+      overriding
+      procedure Provide_Motor_Configuration
+        (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class);
+
+      overriding
+      function Motor_Is_Enabled_In_Config (Motor : Motor_Name) return Boolean;
+
+      overriding
+      function Distance_Per_Rotation (Motor : Motor_Name) return Length;
+
+      overriding
+      function Distance_Per_Unit (Motor : Motor_Name) return Length;
+
+      overriding
+      function Distance_Per_Unit (Motor : Motor_Name; Microsteps : Dimensionless) return Length;
+   private
       Config                 : User_Config;
       Motor_Configs          : Motor_Configuration_Array;
       Motor_Configs_Provided : Motor_Configuration_Provided_Array := [others => False];
-   end record;
+   end Module_Instance;
 
 end Prunt.Default_Modules.Motor_Drivers;

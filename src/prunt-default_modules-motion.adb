@@ -45,17 +45,11 @@ package body Prunt.Default_Modules.Motion is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class
-   is
-      My_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
+      return My_Modules.Module_Instance'Class is
    begin
-      return
-        Module_Instance'
-          (My_Modules.Module_Instance
-           with
-             Config         => My_Config,
-             Status_Emitter => Status_Emitter,
-             Feedrate       => My_Config.Motion_Gcode.Default_G1_Feedrate);
+      return Result : Module_Instance do
+         Result.Initialize (Config_Data_To_User_Config (Config_Data.Get), Status_Emitter);
+      end return;
    end Initialize;
 
    overriding
@@ -77,195 +71,201 @@ package body Prunt.Default_Modules.Motion is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
-   procedure Rapid_Linear_Move
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float) is
-   begin
-      --  TODO: Relative mode and handle retraction/G92 offsets.
-      if This.Config.Motion_Gcode.Replace_G0_With_G1 then
-         Linear_Move (This, Planner, X => X, Y => Y, Z => Z, E => E, F => F);
-      else
-         declare
-            Last_Pos : constant Position := Planner.Get_Last_Position;
-         begin
-            Planner.Add_Corner
-              (Pos      =>
-                 [X_Axis => (if X.Present then X.Value * mm else Last_Pos (X_Axis)),
-                  Y_Axis => (if Y.Present then Y.Value * mm else Last_Pos (Y_Axis)),
-                  Z_Axis => (if Z.Present then Z.Value * mm else Last_Pos (Z_Axis)),
-                  E_Axis => (if E.Present then E.Value * mm else Last_Pos (E_Axis))],
-               Feedrate => (if F.Present then F.Value * mm / s else Velocity'Last));
-         end;
-      end if;
-   end Rapid_Linear_Move;
+   protected body Module_Instance is
+      procedure Initialize (Config_In : User_Config; Status_Emitter_In : My_Modules.Status_Emitter_Shared_Pointers.Ref)
+      is
+      begin
+         Config := Config_In;
+         Status_Emitter := Status_Emitter_In;
+         Feedrate := Config.Motion_Gcode.Default_G1_Feedrate;
+      end Initialize;
 
-   procedure Linear_Move
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float)
-   is
-      Last_Pos : constant Position := Planner.Get_Last_Position;
-   begin
-      --  TODO: Relative mode and handle retraction/G92 offsets.
-      if F.Present then
-         This.Feedrate := F.Value * mm / min;
-      end if;
+      procedure Start is null;
 
-      Planner.Add_Corner
-        (Pos      =>
-           [X_Axis => (if X.Present then X.Value * mm else Last_Pos (X_Axis)),
-            Y_Axis => (if Y.Present then Y.Value * mm else Last_Pos (Y_Axis)),
-            Z_Axis => (if Z.Present then Z.Value * mm else Last_Pos (Z_Axis)),
-            E_Axis => (if E.Present then E.Value * mm else Last_Pos (E_Axis))],
-         Feedrate => This.Feedrate);
-   end Linear_Move;
+      procedure Rapid_Linear_Move (Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float) is
+      begin
+         --  TODO: Relative mode and handle retraction/G92 offsets.
+         if Config.Motion_Gcode.Replace_G0_With_G1 then
+            Linear_Move (Planner, X => X, Y => Y, Z => Z, E => E, F => F);
+         else
+            declare
+               Last_Pos : constant Position := Planner.Get_Last_Position;
+            begin
+               Planner.Add_Corner
+                 (Pos      =>
+                    [X_Axis => (if X.Present then X.Value * mm else Last_Pos (X_Axis)),
+                     Y_Axis => (if Y.Present then Y.Value * mm else Last_Pos (Y_Axis)),
+                     Z_Axis => (if Z.Present then Z.Value * mm else Last_Pos (Z_Axis)),
+                     E_Axis => (if E.Present then E.Value * mm else Last_Pos (E_Axis))],
+                  Feedrate => (if F.Present then F.Value * mm / s else Velocity'Last));
+            end;
+         end if;
+      end Rapid_Linear_Move;
 
-   procedure Clockwise_Arc_Move_Offset_Form
-     (This          : in out Module_Instance;
-      Planner       : Planner_Interface'Class;
-      X, Y, Z, E, F : Gcode_Optional_Float;
-      I, J          : Dimensionless) is
-   begin
-      null;
-      --  TODO
-   end Clockwise_Arc_Move_Offset_Form;
+      procedure Linear_Move (Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float) is
+         Last_Pos : constant Position := Planner.Get_Last_Position;
+      begin
+         --  TODO: Relative mode and handle retraction/G92 offsets.
+         if F.Present then
+            Feedrate := F.Value * mm / min;
+         end if;
 
-   procedure Clockwise_Arc_Move_Radius_Form
-     (This          : in out Module_Instance;
-      Planner       : Planner_Interface'Class;
-      X, Y, Z, E, F : Gcode_Optional_Float;
-      R             : Dimensionless) is
-   begin
-      null;
-      --  TODO
-   end Clockwise_Arc_Move_Radius_Form;
+         Planner.Add_Corner
+           (Pos      =>
+              [X_Axis => (if X.Present then X.Value * mm else Last_Pos (X_Axis)),
+               Y_Axis => (if Y.Present then Y.Value * mm else Last_Pos (Y_Axis)),
+               Z_Axis => (if Z.Present then Z.Value * mm else Last_Pos (Z_Axis)),
+               E_Axis => (if E.Present then E.Value * mm else Last_Pos (E_Axis))],
+            Feedrate => Feedrate);
+      end Linear_Move;
 
-   procedure Counter_Clockwise_Arc_Move_Offset_Form
-     (This          : in out Module_Instance;
-      Planner       : Planner_Interface'Class;
-      X, Y, Z, E, F : Gcode_Optional_Float;
-      I, J          : Dimensionless) is
-   begin
-      null;
-      --  TODO
-   end Counter_Clockwise_Arc_Move_Offset_Form;
+      procedure Clockwise_Arc_Move_Offset_Form
+        (Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float; I, J : Dimensionless) is
+      begin
+         null;
+         --  TODO
+      end Clockwise_Arc_Move_Offset_Form;
 
-   procedure Counter_Clockwise_Arc_Move_Radius_Form
-     (This          : in out Module_Instance;
-      Planner       : Planner_Interface'Class;
-      X, Y, Z, E, F : Gcode_Optional_Float;
-      R             : Dimensionless) is
-   begin
-      null;
-      --  TODO
-   end Counter_Clockwise_Arc_Move_Radius_Form;
+      procedure Clockwise_Arc_Move_Radius_Form
+        (Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float; R : Dimensionless) is
+      begin
+         null;
+         --  TODO
+      end Clockwise_Arc_Move_Radius_Form;
 
-   procedure Retract (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end Retract;
+      procedure Counter_Clockwise_Arc_Move_Offset_Form
+        (Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float; I, J : Dimensionless) is
+      begin
+         null;
+         --  TODO
+      end Counter_Clockwise_Arc_Move_Offset_Form;
 
-   procedure Recover (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end Recover;
+      procedure Counter_Clockwise_Arc_Move_Radius_Form
+        (Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float; R : Dimensionless) is
+      begin
+         null;
+         --  TODO
+      end Counter_Clockwise_Arc_Move_Radius_Form;
 
-   procedure Millimeter_Units (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end Millimeter_Units;
+      procedure Retract (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end Retract;
 
-   procedure Report_Stored_Positions (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end Report_Stored_Positions;
+      procedure Recover (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end Recover;
 
-   procedure Save_Current_Position
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; S : Gcode_Arguments.Argument_Integer) is
-   begin
-      null;
-      --  TODO
-   end Save_Current_Position;
+      procedure Millimeter_Units (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end Millimeter_Units;
 
-   procedure Delete_Stored_Position
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; D : Gcode_Arguments.Argument_Integer) is
-   begin
-      null;
-      --  TODO
-   end Delete_Stored_Position;
+      procedure Report_Stored_Positions (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end Report_Stored_Positions;
 
-   procedure Delete_All_Stored_Positions
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; D : Gcode_No_Value) is
-   begin
-      null;
-      --  TODO
-   end Delete_All_Stored_Positions;
+      procedure Save_Current_Position (Planner : Planner_Interface'Class; S : Gcode_Arguments.Argument_Integer) is
+      begin
+         null;
+         --  TODO
+      end Save_Current_Position;
 
-   procedure Restore_Saved_Position_G60
-     (This          : in out Module_Instance;
-      Planner       : Planner_Interface'Class;
-      Q             : Gcode_Arguments.Argument_Integer;
-      F, X, Y, Z, E : Gcode_Optional_Float) is
-   begin
-      null;
-      --  TODO
-   end Restore_Saved_Position_G60;
+      procedure Delete_Stored_Position (Planner : Planner_Interface'Class; D : Gcode_Arguments.Argument_Integer) is
+      begin
+         null;
+         --  TODO
+      end Delete_Stored_Position;
 
-   procedure Return_To_Saved_Position
-     (This       : in out Module_Instance;
-      Planner    : Planner_Interface'Class;
-      F          : Gcode_Optional_Float;
-      S          : Gcode_Arguments.Argument_Integer;
-      X, Y, Z, E : Gcode_Optional_Float) is
-   begin
-      null;
-      --  TODO
-   end Return_To_Saved_Position;
+      procedure Delete_All_Stored_Positions (Planner : Planner_Interface'Class; D : Gcode_No_Value) is
+      begin
+         null;
+         --  TODO
+      end Delete_All_Stored_Positions;
 
-   procedure Absolute_Positioning (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end Absolute_Positioning;
+      procedure Restore_Saved_Position_G60
+        (Planner : Planner_Interface'Class; Q : Gcode_Arguments.Argument_Integer; F, X, Y, Z, E : Gcode_Optional_Float)
+      is
+      begin
+         null;
+         --  TODO
+      end Restore_Saved_Position_G60;
 
-   procedure Relative_Positioning (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end Relative_Positioning;
+      procedure Return_To_Saved_Position
+        (Planner    : Planner_Interface'Class;
+         F          : Gcode_Optional_Float;
+         S          : Gcode_Arguments.Argument_Integer;
+         X, Y, Z, E : Gcode_Optional_Float) is
+      begin
+         null;
+         --  TODO
+      end Return_To_Saved_Position;
 
-   procedure Set_Virtual_Position
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; X, Y, Z, E : Gcode_Optional_Float) is
-   begin
-      null;
-      --  TODO
-   end Set_Virtual_Position;
+      procedure Absolute_Positioning (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end Absolute_Positioning;
 
-   procedure E_Axis_Absolute (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end E_Axis_Absolute;
+      procedure Relative_Positioning (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end Relative_Positioning;
 
-   procedure E_Axis_Relative (This : in out Module_Instance; Planner : Planner_Interface'Class) is
-   begin
-      null;
-      --  TODO
-   end E_Axis_Relative;
+      procedure Set_Virtual_Position (Planner : Planner_Interface'Class; X, Y, Z, E : Gcode_Optional_Float) is
+      begin
+         null;
+         --  TODO
+      end Set_Virtual_Position;
 
-   procedure Retraction_Settings
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; F, E, Z : Gcode_Optional_Float) is
-   begin
-      null;
-      --  TODO
-   end Retraction_Settings;
+      procedure E_Axis_Absolute (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end E_Axis_Absolute;
 
-   procedure Recover_Settings
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; F, S : Gcode_Optional_Float) is
-   begin
-      null;
-      --  TODO
-   end Recover_Settings;
+      procedure E_Axis_Relative (Planner : Planner_Interface'Class) is
+      begin
+         null;
+         --  TODO
+      end E_Axis_Relative;
+
+      procedure Retraction_Settings (Planner : Planner_Interface'Class; F, E, Z : Gcode_Optional_Float) is
+      begin
+         null;
+         --  TODO
+      end Retraction_Settings;
+
+      procedure Recover_Settings (Planner : Planner_Interface'Class; F, S : Gcode_Optional_Float) is
+      begin
+         null;
+         --  TODO
+      end Recover_Settings;
+
+      procedure Set_Auto_Retract (Planner : Planner_Interface'Class; S : Gcode_Optional_Float) is
+      begin
+         null;
+         --  TODO
+      end Set_Auto_Retract;
+
+      procedure Set_Feedrate_Percentage (Planner : Planner_Interface'Class; S : Gcode_Optional_Float) is
+      begin
+         null;
+         --  TODO
+      end Set_Feedrate_Percentage;
+
+      procedure Set_Flow_Percentage (Planner : Planner_Interface'Class; S : Gcode_Optional_Float) is
+      begin
+         null;
+         --  TODO
+      end Set_Flow_Percentage;
+   end Module_Instance;
 
 end Prunt.Default_Modules.Motion;

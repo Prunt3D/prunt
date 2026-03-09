@@ -42,19 +42,20 @@ package body Prunt.Default_Modules.Dwell is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
    begin
-      return Module_Instance'(My_Modules.Module_Instance with null record);
+      return Result : Module_Instance;
    end Initialize;
 
-   procedure Dwell_Seconds (This : in out Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless) is
-   begin
-      Planner.Add_Corner
-        (Pos => Planner.Get_Last_Position, Feedrate => 1.0 * mm / Prunt.s, Dwell_After => S * Prunt.s);
-   end Dwell_Seconds;
+   protected body Module_Instance is
+      procedure Dwell_Seconds (Planner : Planner_Interface'Class; S : Dimensionless) is
+      begin
+         Planner.Add_Corner
+           (Pos => Planner.Get_Last_Position, Feedrate => 1.0 * mm / Prunt.s, Dwell_After => S * Prunt.s);
+      end Dwell_Seconds;
 
-   procedure Dwell_Milliseconds (This : in out Module_Instance; Planner : Planner_Interface'Class; P : Dimensionless)
-   is
-   begin
-      Dwell_Seconds (This, Planner, S => P * ms / s);
-   end Dwell_Milliseconds;
+      procedure Dwell_Milliseconds (Planner : Planner_Interface'Class; P : Dimensionless) is
+      begin
+         Dwell_Seconds (Planner, S => P * ms / s);
+      end Dwell_Milliseconds;
+   end Module_Instance;
 
 end Prunt.Default_Modules.Dwell;

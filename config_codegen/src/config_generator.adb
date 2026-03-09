@@ -328,10 +328,9 @@ package body Config_Generator is
                               end if;
 
                               Emit
-                                (Data.Name
-                                 & "."
+                                ("This."
                                  & Variant.Name
-                                 & " (This => This, Planner => Planner"
+                                 & " (Planner => Planner"
                                  & Args_Call
                                  & ");");
                            end;

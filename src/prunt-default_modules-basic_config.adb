@@ -35,17 +35,6 @@ package body Prunt.Default_Modules.Basic_Config is
       return (Version => 1, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
-   procedure Disable_Prunt (This : in out Module_Instance) is
-   begin
-      This.Config.Prunt.Enabled := False;
-      User_Config_To_Config_Data (This.Config_Data.Get, This.Config);
-   end Disable_Prunt;
-
-   function Prunt_Is_Disabled (This : Module_Instance) return Boolean is
-   begin
-      return This.Config.Prunt.Enabled;
-   end Prunt_Is_Disabled;
-
    overriding
    function Initialize
      (This                : Module;
@@ -55,16 +44,43 @@ package body Prunt.Default_Modules.Basic_Config is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
    begin
-      return
-         Result : constant Module_Instance :=
-           (My_Modules.Module_Instance
-            with Config => Config_Data_To_User_Config (Config_Data.Get), Config_Data => Config_Data)
-      do
-         if not Result.Config.Prunt.Enabled then
+      return Result : Module_Instance do
+         Result.Initialize (Config_Data);
+         if Module_Instance_Interface'Class (Result).Prunt_Is_Disabled then
+            --  TODO: GCC bug above? Cast should not be required?
             Report_Config_Error
               (["Prunt", "Enabled"], "Prunt is currently disabled. Enable after configuring all other settings.");
          end if;
       end return;
    end Initialize;
+
+   protected body Module_Instance is
+      procedure Start is null;
+
+      procedure Gcode_Dispatch
+        (Args               : in out Gcode_Arguments.Arguments;
+         Planner            : Planner_Interface'Class;
+         Command_Identifier : Gcode_Command_Identifier) is
+      begin
+         raise Constraint_Error with "Not implemented.";
+      end Gcode_Dispatch;
+
+      procedure Initialize (Config_Data_In : My_Modules.Config_Data_Shared_Pointers.Ref) is
+      begin
+         Config_Data := Config_Data_In;
+         Config := Config_Data_To_User_Config (Config_Data.Get);
+      end Initialize;
+
+      procedure Disable_Prunt is
+      begin
+         Config.Prunt.Enabled := False;
+         User_Config_To_Config_Data (Config_Data.Get, Config);
+      end Disable_Prunt;
+
+      function Prunt_Is_Disabled return Boolean is
+      begin
+         return Config.Prunt.Enabled;
+      end Prunt_Is_Disabled;
+   end Module_Instance;
 
 end Prunt.Default_Modules.Basic_Config;

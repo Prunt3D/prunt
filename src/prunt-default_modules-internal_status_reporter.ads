@@ -23,8 +23,10 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Module_Types; use Prunt.Module_Types;
 with Prunt.Status_Manager;
 
+private with Ada.Finalization;
 private with Prunt.Limited_Shared_Pointers;
 
 generic
@@ -36,7 +38,7 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
 
    type Module is new My_Modules.Module with null record;
 
-   type Module_Instance (<>) is new My_Modules.Module_Instance with private;
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
    overriding
    function Initialize
@@ -48,13 +50,7 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
       return My_Modules.Module_Instance'Class;
 
    overriding
-   procedure Start (This : in out Module_Instance);
-
-   overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
-
-   overriding
-   procedure Finalize (Object : in out Module_Instance);
 
 private
 
@@ -64,10 +60,20 @@ private
       entry Stop;
    end Status_Updater;
 
-   package Status_Updater_Pointers is new Limited_Shared_Pointers (Status_Updater);
-
-   type Module_Instance is new My_Modules.Module_Instance with record
-      Updater : Status_Updater_Pointers.Ref := Status_Updater_Pointers.Null_Ref;
+   type Status_Updater_Wrapper is new Ada.Finalization.Limited_Controlled with record
+      Updater : Status_Updater;
    end record;
+
+   overriding
+   procedure Finalize (Object : in out Status_Updater_Wrapper);
+
+   protected type Module_Instance is new My_Modules.Module_Instance with
+      procedure Initialize (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+
+      overriding
+      procedure Start;
+   private
+      Updater : Status_Updater_Wrapper;
+   end Module_Instance;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

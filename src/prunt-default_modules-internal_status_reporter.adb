@@ -35,22 +35,11 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      function Create_Updater_Task return Status_Updater is
-      begin
-         return Result : Status_Updater;
-      end Create_Updater_Task;
    begin
-      return Result : Module_Instance := (My_Modules.Module_Instance with others => <>) do
-         Result.Updater.Set (Create_Updater_Task'Access);
-         Result.Updater.Get.Prepare (Status_Emitter);
+      return Result : Module_Instance do
+         Result.Initialize (Status_Emitter);
       end return;
    end Initialize;
-
-   overriding
-   procedure Start (This : in out Module_Instance) is
-   begin
-      This.Updater.Get.Start;
-   end Start;
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
@@ -117,9 +106,21 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    end Status_Updater;
 
    overriding
-   procedure Finalize (Object : in out Module_Instance) is
+   procedure Finalize (Object : in out Status_Updater_Wrapper) is
    begin
-      Object.Updater.Get.Stop;
+      Object.Updater.Stop;
    end Finalize;
+
+   protected body Module_Instance is
+      procedure Initialize (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) is
+      begin
+         Updater.Updater.Prepare (Status_Emitter);
+      end Initialize;
+
+      procedure Start is
+      begin
+         Updater.Updater.Start;
+      end Start;
+   end Module_Instance;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

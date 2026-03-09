@@ -23,6 +23,8 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Gcode_Arguments;
+with Prunt.Module_Types; use Prunt.Module_Types;
 
 generic
 package Prunt.Default_Modules.Basic_Config is
@@ -32,11 +34,13 @@ package Prunt.Default_Modules.Basic_Config is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
-   type Module_Instance (<>) is new My_Modules.Module_Instance with private;
+   type Module_Instance_Interface is synchronized interface;
 
-   procedure Disable_Prunt (This : in out Module_Instance);
+   procedure Disable_Prunt (This : in out Module_Instance_Interface) is abstract;
 
-   function Prunt_Is_Disabled (This : Module_Instance) return Boolean;
+   function Prunt_Is_Disabled (This : Module_Instance_Interface) return Boolean is abstract;
+
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
    overriding
    function Initialize
@@ -69,9 +73,26 @@ private
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config);
 
-   type Module_Instance is new My_Modules.Module_Instance with record
+   protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
+      overriding
+      procedure Start;
+
+      overriding
+      procedure Gcode_Dispatch
+        (Args               : in out Gcode_Arguments.Arguments;
+         Planner            : Planner_Interface'Class;
+         Command_Identifier : Gcode_Command_Identifier);
+
+      procedure Initialize (Config_Data_In : My_Modules.Config_Data_Shared_Pointers.Ref);
+
+      overriding
+      procedure Disable_Prunt;
+
+      overriding
+      function Prunt_Is_Disabled return Boolean;
+   private
       Config      : User_Config;
       Config_Data : My_Modules.Config_Data_Shared_Pointers.Ref;
-   end record;
+   end Module_Instance;
 
 end Prunt.Default_Modules.Basic_Config;

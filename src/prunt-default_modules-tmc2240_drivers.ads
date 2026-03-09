@@ -31,6 +31,7 @@ with Prunt.Status_Manager;
 with Prunt.TMC_Types;         use Prunt.TMC_Types;
 with Prunt.TMC_Types.TMC2240; use Prunt.TMC_Types.TMC2240;
 
+private with Ada.Finalization;
 private with Prunt.Limited_Shared_Pointers;
 
 generic
@@ -48,7 +49,7 @@ package Prunt.Default_Modules.TMC2240_Drivers is
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
 
-   type Module_Instance (<>) is new My_Modules.Module_Instance with private;
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
    overriding
    function Initialize
@@ -58,12 +59,6 @@ package Prunt.Default_Modules.TMC2240_Drivers is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
-
-   overriding
-   procedure Start (This : in out Module_Instance);
-
-   overriding
-   procedure Finalize (Object : in out Module_Instance);
 
 private
 
@@ -410,7 +405,8 @@ private
 
    package UART_Motor_Manager_Pointers is new Limited_Shared_Pointers (UART_Motor_Manager);
 
-   type TMC_Motor_Manager (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is record
+   type TMC_Motor_Manager (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is new Ada.Finalization.Limited_Controlled
+   with record
       case Kind is
          when TMC2240_UART_Kind =>
             UART : UART_Motor_Manager_Pointers.Ref;
@@ -420,14 +416,33 @@ private
       end case;
    end record;
 
+   overriding
+   procedure Finalize (Object : in out TMC_Motor_Manager);
+
    type Motor_Manager_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Motor_Manager;
 
-   type Module_Instance is new My_Modules.Module_Instance with record
+   protected type Module_Instance is new My_Modules.Module_Instance with
+      procedure Initialize
+        (Config_In                         : User_Config;
+         Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+         Report_Config_Error               :
+           access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+         Status_Emitter_In                 : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+
+      overriding
+      procedure Start;
+
+      overriding
+      procedure Gcode_Dispatch
+        (Args               : in out Gcode_Arguments.Arguments;
+         Planner            : Planner_Interface'Class;
+         Command_Identifier : Gcode_Command_Identifier);
+   private
       Config         : User_Config;
       Registers      : Motor_Registers_Map;
       Managers       : Motor_Manager_Map;
       Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
-   end record;
+   end Module_Instance;
 
    type UART_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record
       Manager : UART_Motor_Manager_Pointers.Ref;
