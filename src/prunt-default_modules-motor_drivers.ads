@@ -227,6 +227,12 @@ private
       procedure Start;
 
       overriding
+      procedure Gcode_Dispatch
+        (Args               : in out Gcode_Arguments.Arguments;
+         Planner            : Planner_Interface'Class;
+         Command_Identifier : Gcode_Command_Identifier);
+
+      overriding
       procedure Provide_Motor_Configuration
         (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class);
 

@@ -79,7 +79,7 @@ package body Prunt.Default_Modules.Basic_Config is
 
       function Prunt_Is_Disabled return Boolean is
       begin
-         return Config.Prunt.Enabled;
+         return not Config.Prunt.Enabled;
       end Prunt_Is_Disabled;
    end Module_Instance;
 

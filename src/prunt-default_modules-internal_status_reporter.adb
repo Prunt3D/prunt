@@ -33,8 +33,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class
-   is
+      return My_Modules.Module_Instance'Class is
    begin
       return Result : Module_Instance do
          Result.Initialize (Status_Emitter);
@@ -73,15 +72,13 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
       Status_Ref    : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Stop_Received : Boolean := False;
    begin
-      accept Prepare (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) do
-         Status_Ref := Status_Emitter;
-      end Prepare;
-
       select
          accept Stop;
          Stop_Received := True;
       or
-         accept Start;
+         accept Start (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) do
+            Status_Ref := Status_Emitter;
+         end Start;
       end select;
 
       while not Stop_Received loop
@@ -112,15 +109,28 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    end Finalize;
 
    protected body Module_Instance is
-      procedure Initialize (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) is
+      procedure Initialize (Status_Emitter_In : My_Modules.Status_Emitter_Shared_Pointers.Ref) is
+         function Make_Updater_Task return Status_Updater_Wrapper is
+         begin
+            return Result : Status_Updater_Wrapper;
+         end Make_Updater_Task;
       begin
-         Updater.Updater.Prepare (Status_Emitter);
+         Status_Emitter := Status_Emitter_In;
+         Updater.Set (Make_Updater_Task'Access);
       end Initialize;
 
       procedure Start is
       begin
-         Updater.Updater.Start;
+         Updater.Get.Updater.Start (Status_Emitter);
       end Start;
+
+      procedure Gcode_Dispatch
+        (Args               : in out Gcode_Arguments.Arguments;
+         Planner            : Planner_Interface'Class;
+         Command_Identifier : Gcode_Command_Identifier) is
+      begin
+         raise Constraint_Error with "Not implemented.";
+      end Gcode_Dispatch;
    end Module_Instance;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

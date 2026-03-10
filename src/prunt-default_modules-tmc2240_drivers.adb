@@ -721,11 +721,11 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
         (Config_In                         : User_Config;
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
-           access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+           access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
          Status_Emitter_In                 : My_Modules.Status_Emitter_Shared_Pointers.Ref)
       is
-         Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance renames
-           Motor_Drivers_Module.Module_Instance (Motor_Drivers_Module_Instance_Ref.Get.Element.all);
+         Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames
+           Motor_Drivers_Module.Module_Instance_Interface'Class (Motor_Drivers_Module_Instance_Ref.Get.Element.all);
 
          function Create_UART_Manager return UART_Motor_Manager is
          begin
@@ -738,19 +738,15 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          for M in My_Controller_Generic_Types.Motor_Name loop
             case Config.Motors (M).Fixed_Kind is
                when TMC2240_UART_Kind =>
-                  declare
-                     Manager_Ref : UART_Motor_Manager_Pointers.Ref;
-                  begin
-                     Manager_Ref.Set (Create_UART_Manager'Access);
-                     Managers (M) := (Kind => TMC2240_UART_Kind, UART => Manager_Ref);
+                  Managers (M).Kind := TMC2240_UART_Kind;
+                  Managers (M).UART.Set (Create_UART_Manager'Access);
 
-                     Motor_Drivers_Module_Instance.Provide_Motor_Configuration
-                       (M,
-                        (Microsteps => MRES_To_Dimensionless (Config.Motors (M).TMC2240_Parameters.MRES)),
-                        UART_Motor_Handler'(Motor_Drivers_Module.Motor_Handler with Manager => Manager_Ref));
-                     --  We have to provide the motor config before creating the default registers as we need to get
-                     --  back distance per unit.
-                  end;
+                  Motor_Drivers_Module_Instance.Provide_Motor_Configuration
+                    (M,
+                     (Microsteps => MRES_To_Dimensionless (Config.Motors (M).TMC2240_Parameters.MRES)),
+                     UART_Motor_Handler'(Motor_Drivers_Module.Motor_Handler with Manager => Managers (M).UART));
+                  --  We have to provide the motor config before creating the default registers as we need to get back
+                  --  distance per unit.
 
                   Registers (M) :=
                     Generate_Default_Registers

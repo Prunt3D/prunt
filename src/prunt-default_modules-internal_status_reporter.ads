@@ -23,6 +23,7 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 with Prunt.Status_Manager;
 
@@ -55,8 +56,7 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
 private
 
    task type Status_Updater is
-      entry Prepare (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
-      entry Start;
+      entry Start (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
       entry Stop;
    end Status_Updater;
 
@@ -67,13 +67,27 @@ private
    overriding
    procedure Finalize (Object : in out Status_Updater_Wrapper);
 
+   package Status_Updater_Wrapper_Pointers is new Limited_Shared_Pointers (Status_Updater_Wrapper);
+   --  TODO: GCC bug in comment below?
+   --
+   --  The task sometimes does not start if we do not wrap it in a shared pointer. I have no idea why. I do not just
+   --  mean that they don't start during the BIP (which they should not do), I mean that they do not start after the
+   --  assignment is complete.
+
    protected type Module_Instance is new My_Modules.Module_Instance with
-      procedure Initialize (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+      procedure Initialize (Status_Emitter_In : My_Modules.Status_Emitter_Shared_Pointers.Ref);
 
       overriding
       procedure Start;
+
+      overriding
+      procedure Gcode_Dispatch
+        (Args               : in out Gcode_Arguments.Arguments;
+         Planner            : Planner_Interface'Class;
+         Command_Identifier : Gcode_Command_Identifier);
    private
-      Updater : Status_Updater_Wrapper;
+      Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Updater        : Status_Updater_Wrapper_Pointers.Ref;
    end Module_Instance;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

@@ -405,16 +405,18 @@ private
 
    package UART_Motor_Manager_Pointers is new Limited_Shared_Pointers (UART_Motor_Manager);
 
-   type TMC_Motor_Manager (Kind : Motor_Hardware_Kind := Basic_Motor_Kind) is new Ada.Finalization.Limited_Controlled
-   with record
-      case Kind is
-         when TMC2240_UART_Kind =>
-            UART : UART_Motor_Manager_Pointers.Ref;
-
-         when others =>
-            null;
-      end case;
-   end record;
+   type TMC_Motor_Manager is new Ada.Finalization.Limited_Controlled with record
+      --  GCC bugs mean we can not use a variant record here, but we can use a dynamic predicate to get approximately
+      --  the same thing. Specifically, if we had a discriminant then we would have to initialize these in the
+      --  `Module_Instance` declaration, which is broken by the unfixed part of this bug:
+      --  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124282
+      Kind : Motor_Hardware_Kind := Basic_Motor_Kind;
+      UART : UART_Motor_Manager_Pointers.Ref := UART_Motor_Manager_Pointers.Null_Ref;
+   end record
+   with
+     Dynamic_Predicate =>
+       (if TMC_Motor_Manager.Kind /= TMC2240_UART_Kind
+        then UART_Motor_Manager_Pointers.Is_Null (TMC_Motor_Manager.UART));
 
    overriding
    procedure Finalize (Object : in out TMC_Motor_Manager);
@@ -426,8 +428,11 @@ private
         (Config_In                         : User_Config;
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
-           access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-         Status_Emitter_In                 : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+           access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+         Status_Emitter_In                 : My_Modules.Status_Emitter_Shared_Pointers.Ref)
+      with
+        Pre =>
+          Motor_Drivers_Module_Instance_Ref.Get.Element.all in Motor_Drivers_Module.Module_Instance_Interface'Class;
 
       overriding
       procedure Start;
