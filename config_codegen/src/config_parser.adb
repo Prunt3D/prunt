@@ -44,7 +44,16 @@ package body Config_Parser is
 
    function Has_Prunt_Config_Aspect (Decl : Base_Type_Decl; Recursive : Boolean := True) return Boolean is
    begin
-      if Decl.P_Fully_Qualified_Name = "Standard.Long_Float" or else Decl.P_Fully_Qualified_Name = "Standard.Boolean"
+      --  TODO: We need to check that the below names actually come from Prunt.Controller_Generic_Types.
+      if Decl.F_Name.Text = "Motor_Name"
+        or else Decl.F_Name.Text = "Heater_Name"
+        or else Decl.F_Name.Text = "Thermistor_Name"
+        or else Decl.F_Name.Text = "Board_Temperature_Probe_Name"
+        or else Decl.F_Name.Text = "Fan_Name"
+        or else Decl.F_Name.Text = "Input_Switch_Name"
+        or else Decl.P_Fully_Qualified_Name = "Standard.Boolean"
+        or else Decl.P_Fully_Qualified_Name = "Prunt.Dimensionless_Ratio"
+        or else Decl.P_Fully_Qualified_Name = "Standard.Long_Float"
       then
          return True;
       elsif not Decl.F_Aspects.Is_Null then
@@ -299,10 +308,7 @@ package body Config_Parser is
                         end loop;
                      end if;
 
-                     if Desig.P_Fully_Qualified_Name /= "Standard.Boolean"
-                       and then Desig.P_Fully_Qualified_Name /= "Prunt.Dimensionless_Ratio"
-                       and then not Has_Prunt_Config_Aspect (Desig)
-                     then
+                     if not Has_Prunt_Config_Aspect (Desig) then
                         Raise_Error
                           (Item,
                            "Type must have Prunt_Config annotation aspect to be used in config record. Declared at "
@@ -497,15 +503,12 @@ package body Config_Parser is
             Raise_Error (Def, "Could not resolve element type.");
          end if;
 
-         --  TODO: We don't perform the below check because we use some enumerations that come from generics. We should
-         --  have a special case for these.
-
-         --  if not Has_Prunt_Config_Aspect (Index_Decl.As_Base_Type_Decl) then
-         --     Raise_Error
-         --       (Decl,
-         --        "Index type must have Prunt_Config annotation aspect to be used in config record. Declared at "
-         --        & Index_Decl.Image);
-         --  end if;
+         if not Has_Prunt_Config_Aspect (Index_Decl.As_Base_Type_Decl) then
+            Raise_Error
+              (Decl,
+               "Index type must have Prunt_Config annotation aspect to be used in config record. Declared at "
+               & Index_Decl.Image);
+         end if;
 
          if not Has_Prunt_Config_Aspect (Elem_Decl) then
             Raise_Error

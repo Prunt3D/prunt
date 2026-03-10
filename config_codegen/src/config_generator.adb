@@ -682,6 +682,9 @@ package body Config_Generator is
          Reader_Prefix : Virtual_String;
          Ada_Expr      : Virtual_String) is
       begin
+         if not Global_Config.Contains (Field.Type_Name) then
+            raise Constraint_Error with "Unknown type: " & Field.Type_Name'Image;
+         end if;
          Handle_Item (Global_Config (Field.Type_Name), Field, Path, Reader_Prefix, Ada_Expr);
       end Handle_Component;
 

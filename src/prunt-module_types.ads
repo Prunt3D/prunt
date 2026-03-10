@@ -144,12 +144,17 @@ package Prunt.Module_Types is
       Loop_Move_Offset     : Position_Offset)
    is null;
 
+   procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;
+
+   procedure Mark_Axis_Unhomed (This : Planner_Interface; Axis : Axis_Name) is abstract;
+
    procedure Add_Corner
-     (This        : Planner_Interface;
-      Pos         : Position;
-      Feedrate    : Velocity;
-      Dwell_After : Time := 0.0 * s;
-      Corner_Data : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
+     (This          : Planner_Interface;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True;
+      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
    is abstract;
 
    procedure Add_Corner_Data (This : Planner_Interface; Corner_Data : Extra_Corner_Data'Class) is abstract;

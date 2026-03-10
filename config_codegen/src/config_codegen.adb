@@ -33,8 +33,11 @@ procedure Config_Codegen is
 
    Modules : Module_Data_Vectors.Vector := [];
    Config : Config_Maps.Map :=
-     ["Standard.Boolean"          => (Boolean_Kind, (null record)),
-      "Prunt.Dimensionless_Ratio" => (Ratio_Kind, (Unit => ""))];
+     ["Standard.Boolean"                                                           => (Boolean_Kind, (null record)),
+      "Prunt.Dimensionless_Ratio"                                                  => (Ratio_Kind, (Unit => "")),
+      "Prunt.Default_Modules.Homing.My_Controller_Generic_Types.Input_Switch_Name" => (Enum_Kind, (null record)),
+      "Prunt.Default_Modules.Homing.My_Controller_Generic_Types.Motor_Name"        => (Enum_Kind, (null record))];
+   --  TODO: We should properly resolve these.
 
    procedure Process_Unit (Context : Libadalang.Helpers.App_Job_Context; Unit : Analysis_Unit) is
       pragma Unreferenced (Context);

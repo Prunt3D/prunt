@@ -188,7 +188,7 @@ package Prunt is
    subtype Frequency_Over_Temperature is Dimensioned_Float
    with Dimension => (Symbol => "Hz/degC", Second => -1, Celsius => -1, others => 0);
 
-   type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis);
+   type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis) with Annotate => (Prunt_Config, User_Config);
 
    type Position is array (Axis_Name) of Length;
    type Scaled_Position is new Position;

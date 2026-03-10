@@ -71,7 +71,7 @@ private
    --  TODO: GCC bug in comment below?
    --
    --  The task sometimes does not start if we do not wrap it in a shared pointer. I have no idea why. I do not just
-   --  mean that they don't start during the BIP (which they should not do), I mean that they do not start after the
+   --  mean that it does not start during the BIP (which it should not do), I mean that it does not start after the
    --  assignment is complete.
 
    protected type Module_Instance is new My_Modules.Module_Instance with
