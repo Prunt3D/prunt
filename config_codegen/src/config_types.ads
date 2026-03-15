@@ -34,6 +34,9 @@ package Config_Types is
       --    [Annotate (Prunt_Config, Min, `Min`),]
       --    [Annotate (Prunt_Config, Max, `Max`),]
       --    [Annotate (Prunt_Config, Fixed_Kind, "`Fixed_Kind`"),]
+      --    [Annotate (Prunt_Config, Options_Expr, "`Options_Expr`"),]
+      --    [Annotate (Prunt_Config, Present_When, "`Present_When`"),]
+      --    [Annotate (Prunt_Config, Schema_Default_Expr, "`Schema_Default_Expr`"),]
       --    [Annotate (Prunt_Config, Unit, "`Unit`")];
       --  -- `Description`
       --
@@ -42,15 +45,25 @@ package Config_Types is
       --  The Fixed_Kind annotation is used when Type_Name refers to a record with discriminant which should have a
       --  value set by the expression contained within the string. The string may contain a `?` character, which will
       --  be replaced with the current index of last array in the config tree.
+      --
+      --  Options_Expr overrides the generated options expression for enum-backed discrete values.
+      --
+      --  Present_When conditionally includes the field in the generated schema and skips corresponding reader/setter
+      --  code when false.
+      --
+      --  Schema_Default_Expr overrides the generated schema default expression.
 
-      Type_Name   : Virtual_String;
+      Type_Name           : Virtual_String;
       --  Type name is fully qualified.
-      Default     : Virtual_String;
-      Description : Virtual_String;
-      Min         : Virtual_String;
-      Max         : Virtual_String;
-      Fixed_Kind  : Virtual_String;
-      Unit        : Virtual_String;
+      Default             : Virtual_String;
+      Description         : Virtual_String;
+      Min                 : Virtual_String;
+      Max                 : Virtual_String;
+      Fixed_Kind          : Virtual_String;
+      Options_Expr        : Virtual_String;
+      Present_When        : Virtual_String;
+      Schema_Default_Expr : Virtual_String;
+      Unit                : Virtual_String;
    end record;
 
    package Component_Data_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Component_Data);
@@ -72,6 +85,8 @@ package Config_Types is
    end record;
 
    package Variant_Case_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Variant_Case_Data);
+
+   package Virtual_String_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Virtual_String);
 
    type Record_Data (Has_Variant : Boolean := False) is record
       --  The members of this record represent the following parts of a record declaration:
@@ -103,7 +118,11 @@ package Config_Types is
       end case;
    end record;
 
-   type Enum_Data is null record;
+   type Enum_Data is record
+      --  Keys are enum literal names. Values are expressions controlling whether the literal is present in the
+      --  generated schema.
+      Present_When : Virtual_String_Maps.Map;
+   end record;
 
    type Array_Data is record
       --  The members of this record represent the following parts of an array declaration:

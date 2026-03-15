@@ -34,6 +34,7 @@ private with Prunt.Controller_Helpers;
 private with Prunt.Default_Modules;
 private with Prunt.Default_Modules.Basic_Config;
 private with Prunt.Default_Modules.Internal_Status_Reporter;
+private with Prunt.Default_Modules.Homing;
 private with Prunt.Default_Modules.Motion;
 private with Prunt.Default_Modules.Motor_Drivers;
 private with Prunt.Default_Modules.TMC2240_Drivers;
@@ -154,13 +155,18 @@ private
 
    package My_Default_Modules_Children is
       package Basic_Config is new My_Default_Modules.Basic_Config;
-      package Motion is new My_Default_Modules.Motion;
+      package Homing is new
+        My_Default_Modules.Homing
+          (My_Controller_Generic_Types => Generic_Types,
+           Motor_Hardware              => Hardware.Motor_Hardware,
+           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware);
       package Internal_Status_Reporter is new
         My_Default_Modules.Internal_Status_Reporter
           (Get_Position   => Get_Current_Position,
            Get_File_Name  => Get_Current_File_Name,
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused);
+      package Motion is new My_Default_Modules.Motion;
       package Motor_Drivers is new My_Default_Modules.Motor_Drivers (Motor_Name => Motor_Name);
       package TMC2240_Drivers is new
         My_Default_Modules.TMC2240_Drivers
@@ -191,13 +197,14 @@ private
    function Get_Modules_For_Hardware return Module_Maps.Map
    is ["Basic Config"             =>
          My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
+       "Homing"                   => My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record),
+       "Internal Status Reporter" =>
+         My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record),
        "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
        "Motor Drivers"            =>
          My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
        "TMC2240 Drivers"          =>
-         My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record),
-       "Internal Status Reporter" =>
-         My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record)];
+         My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record)];
 
    Active_Modules : constant Module_Maps.Map :=
      ((if Disable_Default_Modules then Module_Maps.Map'[] else Get_Modules_For_Hardware) & Extra_Modules);

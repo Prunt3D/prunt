@@ -536,6 +536,72 @@ package body Config_Generator is
          return Result;
       end Path_To_Vector_Access_String;
 
+      function Effective_Schema_Default (Outer : Component_Data; Fallback : Virtual_String) return Virtual_String is
+      begin
+         if Outer.Schema_Default_Expr /= "" then
+            return Outer.Schema_Default_Expr;
+         else
+            return Fallback;
+         end if;
+      end Effective_Schema_Default;
+
+      function Enum_Literal_Test
+        (Enum_Type_Name : Virtual_String; Iterator_Name : Virtual_String; Literal_Name : Virtual_String)
+         return Virtual_String
+      is
+      begin
+         return
+           Iterator_Name
+           & " = "
+           & Enum_Type_Name
+           & "'Value ("""
+           & Literal_Name
+           & """)";
+      end Enum_Literal_Test;
+
+      function Enum_Literal_Present_When
+        (Enum_Val       : Enum_Data;
+         Enum_Type_Name : Virtual_String;
+         Iterator_Name  : Virtual_String) return Virtual_String
+      is
+         Result   : Virtual_String := "";
+         Is_First : Boolean        := True;
+      begin
+         if Enum_Val.Present_When.Is_Empty then
+            return "True";
+         end if;
+
+         Result.Append ("(if ");
+         for Cond in Enum_Val.Present_When.Iterate loop
+            if not Is_First then
+               Result.Append (" elsif ");
+            end if;
+
+            Result.Append
+              (Enum_Literal_Test (Enum_Type_Name, Iterator_Name, Virtual_String_Maps.Key (Cond))
+               & " then "
+               & Virtual_String_Maps.Element (Cond));
+            Is_First := False;
+         end loop;
+         Result.Append (" else True)");
+         return Result;
+      end Enum_Literal_Present_When;
+
+      function Variant_Case_Present_When
+        (Record_Val : Record_Data; Variant_Name : Virtual_String) return Virtual_String
+      is
+      begin
+         if Global_Config.Contains (Record_Val.Discriminant_Type)
+           and then Global_Config (Record_Val.Discriminant_Type).Kind = Enum_Kind
+           and then
+             Global_Config (Record_Val.Discriminant_Type).Enum_Value.Present_When.Contains (Variant_Name)
+         then
+            return Global_Config (Record_Val.Discriminant_Type).Enum_Value.Present_When (Variant_Name);
+         else
+            return "";
+         end if;
+      end Variant_Case_Present_When;
+
       procedure Handle_Item
         (Item          : Config_Type;
          Outer         : Component_Data;
@@ -557,7 +623,7 @@ package body Config_Generator is
            ("Prunt.Config.Config_Property_Parameters_Boolean'(Description => """
             & Outer.Description
             & """, Default => "
-            & Outer.Default
+            & Effective_Schema_Default (Outer, Outer.Default)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -580,7 +646,7 @@ package body Config_Generator is
            ("Prunt.Config.Config_Property_Parameters_Float'(Description => """
             & Outer.Description
             & """, Default => ("
-            & Outer.Default
+            & Effective_Schema_Default (Outer, Outer.Default)
             & ")"
             & Virtual_String'(if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
             & ", Min => ("
@@ -625,7 +691,7 @@ package body Config_Generator is
            ("Prunt.Config.Config_Property_Parameters_Float_Ratio'(Description => """
             & Outer.Description
             & """, Default => "
-            & Outer.Default
+            & Effective_Schema_Default (Outer, Outer.Default)
             & ", Min => "
             & Outer.Min
             & ", Max => "
@@ -648,7 +714,7 @@ package body Config_Generator is
            ("Prunt.Config.Config_Property_Parameters_Integer'(Description => """
             & Outer.Description
             & """, Default => "
-            & Outer.Default
+            & Effective_Schema_Default (Outer, Outer.Default)
             & Virtual_String'(if Integer_Val.Unit /= "" then " / " else "")
             & Integer_Val.Unit
             & ", Min => "
@@ -685,7 +751,18 @@ package body Config_Generator is
          if not Global_Config.Contains (Field.Type_Name) then
             raise Constraint_Error with "Unknown type: " & Field.Type_Name'Image;
          end if;
+
+         if Field.Present_When /= "" then
+            Emit_Reader ("if " & Field.Present_When & " then");
+            Emit_Setter ("if " & Field.Present_When & " then");
+         end if;
+
          Handle_Item (Global_Config (Field.Type_Name), Field, Path, Reader_Prefix, Ada_Expr);
+
+         if Field.Present_When /= "" then
+            Emit_Reader ("end if;");
+            Emit_Setter ("end if;");
+         end if;
       end Handle_Component;
 
       procedure Handle_Enum
@@ -695,17 +772,25 @@ package body Config_Generator is
          Reader_Prefix : Virtual_String;
          Ada_Expr      : Virtual_String)
       is
-         pragma Unreferenced (Enum_Val);
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
+         Options  : constant Virtual_String :=
+           (if Outer.Options_Expr /= ""
+            then Outer.Options_Expr
+            else
+              "[for I in "
+              & Outer.Type_Name
+              & " when "
+              & Enum_Literal_Present_When (Enum_Val, Outer.Type_Name, "I")
+              & " => +I'Image]");
       begin
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Discrete'(Description => """
             & Outer.Description
-            & """, Default => +"
-            & Outer.Default
-            & "'Image, Options => [for I in "
-            & Outer.Type_Name
-            & " => +I'Image])");
+            & """, Default => "
+            & Effective_Schema_Default (Outer, "+" & Outer.Default & "'Image")
+            & ", Options => "
+            & Options
+            & ")");
          Emit_Reader
            (Reader_Prefix
             & " := "
@@ -774,6 +859,92 @@ package body Config_Generator is
       is
          Fixed_Kind_Str    : Virtual_String;
          Fixed_Desc_Suffix : Virtual_String := "";
+
+         function Has_Conditional_Components (Components : Component_Data_Maps.Map) return Boolean is
+         begin
+            for C in Components.Iterate loop
+               if Component_Data_Maps.Element (C).Present_When /= "" then
+                  return True;
+               end if;
+            end loop;
+
+            return False;
+         end Has_Conditional_Components;
+
+         function Has_Conditional_Variant_Cases return Boolean is
+         begin
+            if not Record_Val.Has_Variant then
+               return False;
+            end if;
+
+            for Variant_C in Record_Val.Variants.Iterate loop
+               if Variant_Case_Present_When (Record_Val, Variant_Case_Maps.Key (Variant_C)) /= "" then
+                  return True;
+               end if;
+            end loop;
+
+            return False;
+         end Has_Conditional_Variant_Cases;
+
+         procedure Emit_Component_Map
+           (Components     : Component_Data_Maps.Map;
+            Base_Path      : String_Vectors.Vector;
+            Reader_Base    : Virtual_String;
+            Ada_Base       : Virtual_String)
+         is
+            Is_First : Boolean := True;
+         begin
+            if Components.Is_Empty then
+               Emit_Config_Map ("[]");
+               return;
+            end if;
+
+            if not Has_Conditional_Components (Components) then
+               Emit_Config_Map ("[");
+
+               for C in Components.Iterate loop
+                  declare
+                     Name  : constant Virtual_String := Component_Data_Maps.Key (C);
+                     Field : constant Component_Data := Component_Data_Maps.Element (C);
+                  begin
+                     if not Is_First then
+                        Emit_Config_Map (", ");
+                     end if;
+
+                     Emit_Config_Map ("""" & Name & """ =>");
+                     Handle_Component (Field, Base_Path & [Name], Reader_Base & "." & Name, Ada_Base & "." & Name);
+                     Is_First := False;
+                  end;
+               end loop;
+
+               Emit_Config_Map ("]");
+            else
+               for C in Components.Iterate loop
+                  declare
+                     Name  : constant Virtual_String := Component_Data_Maps.Key (C);
+                     Field : constant Component_Data := Component_Data_Maps.Element (C);
+                  begin
+                     if not Is_First then
+                        Emit_Config_Map (" & ");
+                     end if;
+
+                     if Field.Present_When /= "" then
+                        Emit_Config_Map ("(if " & Field.Present_When & " then ");
+                     end if;
+
+                     Emit_Config_Map ("[""" & Name & """ =>");
+                     Handle_Component (Field, Base_Path & [Name], Reader_Base & "." & Name, Ada_Base & "." & Name);
+                     Emit_Config_Map ("]");
+
+                     if Field.Present_When /= "" then
+                        Emit_Config_Map (" else [])");
+                     end if;
+
+                     Is_First := False;
+                  end;
+               end loop;
+            end if;
+         end Emit_Component_Map;
       begin
          if Outer.Fixed_Kind /= "" then
             declare
@@ -841,7 +1012,7 @@ package body Config_Generator is
                      & Fixed_Kind_Str
                      & " = "
                      & Variant_Case_Maps.Key (Variant_C)
-                     & " then [");
+                     & " then ");
                   Emit_Reader
                     (Virtual_String'(if Is_First then "" else "els")
                      & "if "
@@ -868,26 +1039,11 @@ package body Config_Generator is
 
                   Emit_Setter ("null;");
 
-                  declare
-                     Components renames Variant_Case_Maps.Element (Variant_C).Components;
-                     Is_First : Boolean := True;
-                  begin
-                     for Component_C in Components.Iterate loop
-                        Emit_Config_Map
-                          (Virtual_String'(if Is_First then "" else ", ")
-                           & """"
-                           & Component_Data_Maps.Key (Component_C)
-                           & """ =>");
-                        Handle_Component
-                          (Component_Data_Maps.Element (Component_C),
-                           Path & [Component_Data_Maps.Key (Component_C)],
-                           Reader_Prefix & "." & Component_Data_Maps.Key (Component_C),
-                           Ada_Prefix & "." & Component_Data_Maps.Key (Component_C));
-                        Is_First := False;
-                     end loop;
-                  end;
-
-                  Emit_Config_Map ("]");
+                  Emit_Component_Map
+                    (Variant_Case_Maps.Element (Variant_C).Components,
+                     Path,
+                     Reader_Prefix,
+                     Ada_Prefix);
 
                   Is_First := False;
                end loop;
@@ -909,83 +1065,132 @@ package body Config_Generator is
                   & Record_Val.Discriminant
                   & """ => Prunt.Config.Config_Property_Parameters_Variant'(Default => """
                   & Record_Val.Discriminant_Default
-                  & """, Description => """", Children => [");
+                  & """, Description => """", Children => ");
                --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
                --  non-variant part. We can not simply place this code after the non-variant code generation as we use
                --  a delta aggregate to set the non-variant fields and delta aggregates can not set discriminants,
                --  which this code does.
 
-               for Variant_C in Record_Val.Variants.Iterate loop
-                  Emit_Config_Map
-                    (Virtual_String'(if Is_First then "" else ", ")
-                     & """"
-                     & Variant_Case_Maps.Key (Variant_C)
-                     & """ => Prunt.Config.Config_Property_Parameters_Sequence'(Tabbed => "
-                     & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
-                     & ", Description => """
-                     & Variant_Case_Maps.Element (Variant_C).Description
-                     & """, Children => [");
-                  Emit_Reader
-                    (Virtual_String'(if Is_First then "" else "els")
-                     & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
-                     & Path_To_Vector_Access_String (Path & [Record_Val.Discriminant, "Selected"])
-                     & "]) = """
-                     & Variant_Case_Maps.Key (Variant_C)
-                     & """ then "
-                     & Reader_Prefix
-                     & " := ("
-                     & Record_Val.Discriminant
-                     & " => "
-                     & Variant_Case_Maps.Key (Variant_C)
-                     & ", others => <>);");
-                  Emit_Setter
-                    (Virtual_String'(if Is_First then "" else "els")
-                     & "if "
-                     & Ada_Prefix
-                     & "."
-                     & Record_Val.Discriminant
-                     & " = "
-                     & Variant_Case_Maps.Key (Variant_C)
-                     & " then");
+               if not Has_Conditional_Variant_Cases then
+                  Emit_Config_Map ("[");
 
-                  Emit_Setter ("null;");
+                  for Variant_C in Record_Val.Variants.Iterate loop
+                     declare
+                        Name : constant Virtual_String := Variant_Case_Maps.Key (Variant_C);
+                     begin
+                        if not Is_First then
+                           Emit_Config_Map (", ");
+                        end if;
 
-                  declare
-                     Component renames Variant_Case_Maps.Element (Variant_C).Components;
-                     Is_First : Boolean := True;
-                  begin
-                     for Component_C in Component.Iterate loop
                         Emit_Config_Map
-                          (Virtual_String'(if Is_First then "" else ", ")
-                           & """"
-                           & Component_Data_Maps.Key (Component_C)
-                           & """ =>");
-                        Handle_Component
-                          (Component_Data_Maps.Element (Component_C),
-                           Path
-                           & [Record_Val.Discriminant,
-                              "Children",
-                              Variant_Case_Maps.Key (Variant_C),
-                              Component_Data_Maps.Key (Component_C)],
-                           Reader_Prefix
+                          (""""
+                           & Name
+                           & """ => Prunt.Config.Config_Property_Parameters_Sequence'(Tabbed => "
+                           & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
+                           & ", Description => """
+                           & Variant_Case_Maps.Element (Variant_C).Description
+                           & """, Children => ");
+                        Emit_Reader
+                          (Virtual_String'(if Is_First then "" else "els")
+                           & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
+                           & Path_To_Vector_Access_String (Path & [Record_Val.Discriminant, "Selected"])
+                           & "]) = """
+                           & Name
+                           & """ then "
+                           & Reader_Prefix
+                           & " := ("
+                           & Record_Val.Discriminant
+                           & " => "
+                           & Name
+                           & ", others => <>);");
+                        Emit_Setter
+                          (Virtual_String'(if Is_First then "" else "els")
+                           & "if "
+                           & Ada_Prefix
                            & "."
-                           & Component_Data_Maps.Key (Component_C),
-                           Ada_Prefix
-                           & "."
-                           & Component_Data_Maps.Key (Component_C));
+                           & Record_Val.Discriminant
+                           & " = "
+                           & Name
+                           & " then");
+
+                        Emit_Setter ("null;");
+
+                        Emit_Component_Map
+                          (Variant_Case_Maps.Element (Variant_C).Components,
+                           Path & [Record_Val.Discriminant, "Children", Name],
+                           Reader_Prefix,
+                           Ada_Prefix);
+
+                        Emit_Config_Map (")");
                         Is_First := False;
-                     end loop;
-                  end;
+                     end;
+                  end loop;
 
-                  Is_First := False;
+                  Emit_Config_Map ("]");
+               else
+                  for Variant_C in Record_Val.Variants.Iterate loop
+                     declare
+                        Name      : constant Virtual_String := Variant_Case_Maps.Key (Variant_C);
+                        Condition : constant Virtual_String := Variant_Case_Present_When (Record_Val, Name);
+                     begin
+                        Emit_Config_Map (Virtual_String'(if Is_First then "" else " & "));
+                        if Condition /= "" then
+                           Emit_Config_Map ("(if " & Condition & " then ");
+                        end if;
 
-                  Emit_Config_Map ("])");
-               end loop;
+                        Emit_Config_Map
+                          ("["""
+                           & Name
+                           & """ => Prunt.Config.Config_Property_Parameters_Sequence'(Tabbed => "
+                           & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
+                           & ", Description => """
+                           & Variant_Case_Maps.Element (Variant_C).Description
+                           & """, Children => ");
+                        Emit_Reader
+                          (Virtual_String'(if Is_First then "" else "els")
+                           & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
+                           & Path_To_Vector_Access_String (Path & [Record_Val.Discriminant, "Selected"])
+                           & "]) = """
+                           & Name
+                           & """ then "
+                           & Reader_Prefix
+                           & " := ("
+                           & Record_Val.Discriminant
+                           & " => "
+                           & Name
+                           & ", others => <>);");
+                        Emit_Setter
+                          (Virtual_String'(if Is_First then "" else "els")
+                           & "if "
+                           & Ada_Prefix
+                           & "."
+                           & Record_Val.Discriminant
+                           & " = "
+                           & Name
+                           & " then");
+
+                        Emit_Setter ("null;");
+
+                        Emit_Component_Map
+                          (Variant_Case_Maps.Element (Variant_C).Components,
+                           Path & [Record_Val.Discriminant, "Children", Name],
+                           Reader_Prefix,
+                           Ada_Prefix);
+
+                        Emit_Config_Map (")]");
+                        if Condition /= "" then
+                           Emit_Config_Map (" else [])");
+                        end if;
+
+                        Is_First := False;
+                     end;
+                  end loop;
+               end if;
 
                Emit_Reader ("else");
                Emit_Reader ("raise Constraint_Error;");
                Emit_Reader ("end if;");
-               Emit_Config_Map ("])],");
+               Emit_Config_Map (")],");
                Emit_Setter ("else");
                Emit_Setter ("raise Constraint_Error;");
                Emit_Setter ("end if;");
@@ -994,32 +1199,12 @@ package body Config_Generator is
             Emit_Config_Map ("Right => [],");
          end if;
 
-         Emit_Config_Map ("Left => [");
-
-         if Record_Val.Components.Is_Empty then
-            if not Record_Val.Has_Variant then
-               Emit_Setter ("null;");
-            end if;
-         else
-            declare
-               Is_First : Boolean := True;
-            begin
-               for C in Record_Val.Components.Iterate loop
-                  Emit_Config_Map
-                    (Virtual_String'(if Is_First then "" else ",") & """" & Component_Data_Maps.Key (C) & """ =>");
-
-                  Handle_Component
-                    (Component_Data_Maps.Element (C),
-                     Path & [Component_Data_Maps.Key (C)],
-                     Reader_Prefix & "." & Component_Data_Maps.Key (C),
-                     Ada_Prefix & "." & Component_Data_Maps.Key (C));
-
-                  Is_First := False;
-               end loop;
-            end;
+         if Record_Val.Components.Is_Empty and then not Record_Val.Has_Variant then
+            Emit_Setter ("null;");
          end if;
 
-         Emit_Config_Map ("]");
+         Emit_Config_Map ("Left => ");
+         Emit_Component_Map (Record_Val.Components, Path, Reader_Prefix, Ada_Prefix);
          Emit_Config_Map ("))");
       end Handle_Record;
 

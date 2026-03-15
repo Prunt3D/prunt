@@ -254,16 +254,19 @@ package body Config_Parser is
                   end if;
 
                   Component :=
-                    (Type_Name   => To_Virtual_String (Desig.P_Fully_Qualified_Name),
-                     Default     =>
+                    (Type_Name           => To_Virtual_String (Desig.P_Fully_Qualified_Name),
+                     Default             =>
                        (if Comp_Decl.F_Default_Expr.Is_Null
                         then ""
                         else To_Virtual_String (Comp_Decl.F_Default_Expr.Text)),
-                     Description => Get_Comments_Starting_After (Item.Token_End),
-                     Min         => "",
-                     Max         => "",
-                     Fixed_Kind  => "",
-                     Unit        => "");
+                     Description         => Get_Comments_Starting_After (Item.Token_End),
+                     Min                 => "",
+                     Max                 => "",
+                     Fixed_Kind          => "",
+                     Options_Expr        => "",
+                     Present_When        => "",
+                     Schema_Default_Expr => "",
+                     Unit                => "");
                   begin
                      if not Comp_Decl.F_Aspects.Is_Null then
                         for Assoc of
@@ -296,6 +299,12 @@ package body Config_Parser is
                                     Component.Unit := Strip (Argument (3));
                                  elsif Argument (2) = "Fixed_Kind" then
                                     Component.Fixed_Kind := Strip (Argument (3));
+                                 elsif Argument (2) = "Options_Expr" then
+                                    Component.Options_Expr := Strip (Argument (3));
+                                 elsif Argument (2) = "Present_When" then
+                                    Component.Present_When := Strip (Argument (3));
+                                 elsif Argument (2) = "Schema_Default_Expr" then
+                                    Component.Schema_Default_Expr := Strip (Argument (3));
                                  elsif Argument (2) = "Min" then
                                     Component.Min := Strip (Argument (3));
                                  elsif Argument (2) = "Max" then
@@ -560,9 +569,45 @@ package body Config_Parser is
    end Parse_Array;
 
    function Parse_Enum (Decl : Base_Type_Decl) return Config_Type is
-      pragma Unreferenced (Decl);
+      Data : Enum_Data := (Present_When => []);
    begin
-      return (Enum_Kind, (null record));
+      if not Decl.F_Aspects.Is_Null then
+         for Assoc of
+           Decl.F_Aspects.F_Aspect_Assocs
+           when Assoc.F_Id.Text = "Annotate"
+           and then Assoc.F_Expr.Kind in Ada_Aggregate
+           and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
+         loop
+            declare
+               function Argument (Index : Positive) return Text_Type is
+                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
+               begin
+                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
+               end Argument;
+
+               function Strip (Str : Text_Type) return Virtual_String is
+               begin
+                  if Str (Str'First) = '"' then
+                     return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
+                  else
+                     return To_Virtual_String (Str);
+                  end if;
+               end Strip;
+            begin
+               if Argument (1) = "Prunt_Config" then
+                  if Argument (2) = "Present_When" then
+                     Data.Present_When.Insert (Strip (Argument (3)), Strip (Argument (4)));
+                  elsif Argument (2) = "User_Config" then
+                     null;
+                  else
+                     Raise_Error (Assoc, "Unhandled Prunt_Config key.");
+                  end if;
+               end if;
+            end;
+         end loop;
+      end if;
+
+      return (Enum_Kind, Data);
    end Parse_Enum;
 
    function Parse_Integer (Decl : Base_Type_Decl) return Config_Type is

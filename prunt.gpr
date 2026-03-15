@@ -131,7 +131,7 @@ project Prunt is
    --    when "release" =>
    --       for Switches ("Ada") use
    --         ("-flto=auto", --  Link time optimization
-   --          "-Wl,--gc-sections", "--gc-sections"); --  Delete unreferenced sections
+   --          "-Wl,--gc-sections"); --  Delete unreferenced sections
    --    when "validation" =>
    --       null;
    --    when "development" =>
