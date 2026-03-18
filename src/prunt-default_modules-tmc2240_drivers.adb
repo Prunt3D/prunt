@@ -32,6 +32,16 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
 
    overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
+   overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
    begin
       return (Version => 1, Top_Level_Items => Build_Schema);
@@ -775,13 +785,204 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          end loop;
       end Start;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Report_TMC_Debug
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_No_Value;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         S       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Integer) is
       begin
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, I, X, Y, Z, E, V, S, P);
+         My_Logger.Log ("M122 TMC debug reporting is not implemented yet.");
+      end Report_TMC_Debug;
+
+      procedure Report_TMC_Debug
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_No_Value;
+         N       : Gcode_Arguments.Argument_Integer;
+         V       : Gcode_Optional_No_Value;
+         S       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, N, V, S, P);
+         My_Logger.Log ("M122 TMC debug reporting by index is not implemented yet.");
+      end Report_TMC_Debug;
+
+      procedure Report_TMC_Debug
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_No_Value;
+         N       : Virtual_String;
+         V       : Gcode_Optional_No_Value;
+         S       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, N, V, S, P);
+         My_Logger.Log ("M122 TMC debug reporting by name is not implemented yet.");
+      end Report_TMC_Debug;
+
+      procedure Set_TMC_Stepping_Mode
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, S, X, Y, Z, E, I, T);
+         raise Constraint_Error with "M569 is not implemented yet.";
+      end Set_TMC_Stepping_Mode;
+
+      procedure Set_TMC_Stepping_Mode
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         N       : Gcode_Arguments.Argument_Integer) is
+      begin
+         pragma Unreferenced (Planner, S, N);
+         raise Constraint_Error with "M569 by index is not implemented yet.";
+      end Set_TMC_Stepping_Mode;
+
+      procedure Set_TMC_Stepping_Mode
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         N       : Virtual_String) is
+      begin
+         pragma Unreferenced (Planner, S, N);
+         raise Constraint_Error with "M569 by name is not implemented yet.";
+      end Set_TMC_Stepping_Mode;
+
+      procedure Set_TMC_Current
+        (Planner : Planner_Interface'Class;
+         E       : Gcode_Optional_Integer;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, E, I, T, X, Y, Z);
+         raise Constraint_Error with "M906 is not implemented yet.";
+      end Set_TMC_Current;
+
+      procedure Report_TMC_OT_Prewarn (Planner : Planner_Interface'Class) is
+      begin
+         pragma Unreferenced (Planner);
+         My_Logger.Log ("M911 TMC OT prewarn reporting is not implemented yet.");
+      end Report_TMC_OT_Prewarn;
+
+      procedure Clear_TMC_OT_Prewarn
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value) is
+      begin
+         pragma Unreferenced (Planner, I, X, Y, Z, E);
+         raise Constraint_Error with "M912 is not implemented yet.";
+      end Clear_TMC_OT_Prewarn;
+
+      procedure Clear_TMC_OT_Prewarn
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         N       : Gcode_Arguments.Argument_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, N);
+         raise Constraint_Error with "M912 by index is not implemented yet.";
+      end Clear_TMC_OT_Prewarn;
+
+      procedure Clear_TMC_OT_Prewarn
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         N       : Virtual_String) is
+      begin
+         pragma Unreferenced (Planner, I, N);
+         raise Constraint_Error with "M912 by name is not implemented yet.";
+      end Clear_TMC_OT_Prewarn;
+
+      procedure Set_Hybrid_Threshold
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         A       : Gcode_Optional_Integer;
+         B       : Gcode_Optional_Integer;
+         C       : Gcode_Optional_Integer;
+         U       : Gcode_Optional_Integer;
+         V       : Gcode_Optional_Integer;
+         W       : Gcode_Optional_Integer;
+         E       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, T, X, Y, Z, A, B, C, U, V, W, E);
+         raise Constraint_Error with "M913 is not implemented yet.";
+      end Set_Hybrid_Threshold;
+
+      procedure Set_TMC_Chopper_Timing
+        (Planner : Planner_Interface'Class;
+         O       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value) is
+      begin
+         pragma Unreferenced (Planner, O, P, S, I, T, X, Y, Z, A, B, C, U, V, W);
+         raise Constraint_Error with "M919 is not implemented yet.";
+      end Set_TMC_Chopper_Timing;
+
+      procedure Set_TMC_Chopper_Timing
+        (Planner : Planner_Interface'Class;
+         O       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         N       : Gcode_Arguments.Argument_Integer) is
+      begin
+         pragma Unreferenced (Planner, O, P, S, N);
+         raise Constraint_Error with "M919 by index is not implemented yet.";
+      end Set_TMC_Chopper_Timing;
+
+      procedure Set_TMC_Chopper_Timing
+        (Planner : Planner_Interface'Class;
+         O       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         N       : Virtual_String) is
+      begin
+         pragma Unreferenced (Planner, O, P, S, N);
+         raise Constraint_Error with "M919 by name is not implemented yet.";
+      end Set_TMC_Chopper_Timing;
+
+      procedure Set_TMC_Homing_Current
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         A       : Gcode_Optional_Integer;
+         B       : Gcode_Optional_Integer;
+         C       : Gcode_Optional_Integer;
+         U       : Gcode_Optional_Integer;
+         V       : Gcode_Optional_Integer;
+         W       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, X, Y, Z, A, B, C, U, V, W);
+         raise Constraint_Error with "M920 is not implemented yet.";
+      end Set_TMC_Homing_Current;
    end Module_Instance;
 
 

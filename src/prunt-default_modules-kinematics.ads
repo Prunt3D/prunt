@@ -40,6 +40,9 @@ package Prunt.Default_Modules.Kinematics is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
    type Motor_Position_Map is array (Axis_Name, Motor_Name) of Length;
 
    type Motion_Planner_Configuration is record
@@ -64,19 +67,26 @@ package Prunt.Default_Modules.Kinematics is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
 
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
+
 private
 
    type User_Config_Cartesian_Axis_Name is (None, X_Axis, Y_Axis, Z_Axis, E_Axis)
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Kinematics_Cartesian is array (Motor_Name) of User_Config_Cartesian_Axis_Name
-   with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
+   with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Core_XY_Axis_Name is (None, A_Axis, B_Axis, Z_Axis, E_Axis)
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Kinematics_Core_XY is array (Motor_Name) of User_Config_Core_XY_Axis_Name
-   with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
+   with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Kinematics_Kind is (Cartesian, Core_XY) with Annotate => (Prunt_Config, User_Config);
 
@@ -213,11 +223,51 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Set_Print_And_Travel_Move_Limits
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer;
+         F       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M201");
+      --  Set maximum acceleration and XY frequency-limit values.
+
+      procedure Set_Max_Feedrate
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M203");
+      --  Set maximum feedrates.
+
+      procedure Set_Starting_Acceleration
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M204");
+      --  Set preferred starting acceleration values.
+
+      procedure Set_Advanced_Motion_Settings
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_String;
+         --  Must be set to `"Prunt"` for Prunt-specific settings.
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Float;
+         J       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M205");
+      --  Set advanced motion settings.
 
       overriding
       function Get_Default_Motion_Planner_Configuration return Motion_Planner_Configuration;

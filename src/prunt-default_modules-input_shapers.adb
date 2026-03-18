@@ -29,6 +29,16 @@ package body Prunt.Default_Modules.Input_Shapers is
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
    function Build_Shaper_Parameters
      (Method : User_Config_Input_Shaping_Method) return Prunt.Input_Shapers.Shaper_Parameters is
    begin
@@ -91,14 +101,17 @@ package body Prunt.Default_Modules.Input_Shapers is
 
       procedure Start is null;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Configure_Input_Shaping
+        (Planner : Planner_Interface'Class;
+         P       : Virtual_String;
+         X       : Gcode_Optional_String;
+         Y       : Gcode_Optional_String;
+         Z       : Gcode_Optional_String;
+         E       : Gcode_Optional_String) is
       begin
-         pragma Unreferenced (Args, Planner, Command_Identifier);
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, P, X, Y, Z, E);
+         raise Constraint_Error with "M493 is not implemented yet.";
+      end Configure_Input_Shaping;
 
       function Get_Default_Axial_Shapers return Prunt.Input_Shapers.Axial_Shaper_Parameters is
       begin

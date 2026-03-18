@@ -40,6 +40,9 @@ package Prunt.Default_Modules.Thermistors is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
    type Module_Instance_Interface is synchronized interface;
 
    function Thermistor_Is_Enabled_In_Config
@@ -65,6 +68,13 @@ package Prunt.Default_Modules.Thermistors is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
 
 private
 
@@ -273,11 +283,23 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Report_Temperatures
+        (Planner : Planner_Interface'Class;
+         R       : Gcode_Optional_No_Value;
+         --  Include redundant temperature information if present.
+         T       : Gcode_Optional_Integer
+         --  Optional hotend index.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M105");
+      --  Report temperatures to the logger.
+
+      procedure Set_Temperature_Auto_Report
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer
+         --  Interval in seconds between reports. `S0` disables auto-reporting.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M155");
+      --  Configure automatic temperature reporting to the logger.
 
       overriding
       function Thermistor_Is_Enabled_In_Config (Thermistor : Thermistor_Name) return Boolean;

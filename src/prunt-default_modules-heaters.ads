@@ -44,18 +44,18 @@ package Prunt.Default_Modules.Heaters is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
    type Module_Instance_Interface is synchronized interface;
 
-   function Heater_Is_Enabled_In_Config
-     (This : Module_Instance_Interface; Heater : Heater_Name) return Boolean
+   function Heater_Is_Enabled_In_Config (This : Module_Instance_Interface; Heater : Heater_Name) return Boolean
    is abstract;
 
-   function Assigned_Thermistor
-     (This : Module_Instance_Interface; Heater : Heater_Name) return Thermistor_Name
+   function Assigned_Thermistor (This : Module_Instance_Interface; Heater : Heater_Name) return Thermistor_Name
    is abstract;
 
-   function Get_Heater_Parameters
-     (This : Module_Instance_Interface; Heater : Heater_Name) return Heater_Parameters
+   function Get_Heater_Parameters (This : Module_Instance_Interface; Heater : Heater_Name) return Heater_Parameters
    is abstract;
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
@@ -68,6 +68,13 @@ package Prunt.Default_Modules.Heaters is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
 
 private
 
@@ -156,11 +163,127 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Set_Idle_Timeout
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M86");
+      --  Configure the idle timeout temperatures.
+
+      procedure Disable_Idle_Timeout (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M87");
+      --  Disable the heater idle timeout.
+
+      procedure Set_Hotend_Temperature
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         F       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M104");
+      --  Set a hotend target temperature without waiting.
+
+      procedure Wait_For_Hotend_Temperature
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         F       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M109");
+      --  Set and wait for a hotend target temperature.
+
+      procedure Set_Bed_Temperature
+        (Planner : Planner_Interface'Class; I : Gcode_Optional_Integer; S : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M140");
+      --  Set the bed target temperature.
+
+      procedure Set_Chamber_Temperature (Planner : Planner_Interface'Class; S : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M141");
+      --  Set the chamber target temperature.
+
+      procedure Set_Laser_Cooler_Temperature (Planner : Planner_Interface'Class; S : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M143");
+      --  Set the laser cooler target temperature.
+
+      procedure Wait_For_Bed_Temperature
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M190");
+      --  Set and wait for a bed target temperature.
+
+      procedure Wait_For_Chamber_Temperature
+        (Planner : Planner_Interface'Class; S : Gcode_Optional_Float; R : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M191");
+      --  Set and wait for a chamber target temperature.
+
+      procedure Wait_For_Laser_Cooler_Temperature (Planner : Planner_Interface'Class; S : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M193");
+      --  Set and wait for a laser cooler target temperature.
+
+      procedure Set_Hotend_PID
+        (Planner : Planner_Interface'Class;
+         E       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Float;
+         L       : Gcode_Optional_Float;
+         F       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M301");
+      --  Set hotend PID values.
+
+      procedure Cold_Extrude_Settings
+        (Planner : Planner_Interface'Class; S : Gcode_Optional_Float; P : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M302");
+      --  Configure cold extrusion settings.
+
+      procedure PID_Autotune
+        (Planner : Planner_Interface'Class;
+         E       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         U       : Gcode_Optional_Integer;
+         D       : Gcode_Optional_No_Value)
+      with Annotate => (Prunt_Config, Gcode_Command, "M303");
+      --  Run PID autotune.
+
+      procedure Set_Bed_PID
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M304");
+      --  Set bed PID values.
+
+      procedure Set_MPC_Values
+        (Planner : Planner_Interface'Class;
+         A       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Integer;
+         F       : Gcode_Optional_Float;
+         H       : Gcode_Optional_Float;
+         P       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_No_Value)
+      with Annotate => (Prunt_Config, Gcode_Command, "M306");
+      --  Set model-predictive temperature-control values.
+
+      procedure Set_Chamber_PID
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M309");
+      --  Set chamber PID values.
 
       overriding
       function Heater_Is_Enabled_In_Config (Heater : Heater_Name) return Boolean;

@@ -30,6 +30,16 @@ package body Prunt.Default_Modules.Motor_Drivers is
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
 
    overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
+   overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
    begin
       return (Version => 1, Top_Level_Items => Build_Schema);
@@ -64,13 +74,130 @@ package body Prunt.Default_Modules.Motor_Drivers is
          end loop;
       end Start;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Enable_Steppers
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value) is
       begin
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, X, Y, Z, E, A, B, C, U, V, W);
+         raise Constraint_Error with "M17 is not implemented yet.";
+      end Enable_Steppers;
+
+      procedure Disable_Steppers
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value) is
+      begin
+         pragma Unreferenced (Planner, S, X, Y, Z, E, A, B, C, U, V, W);
+         raise Constraint_Error with "M18 is not implemented yet.";
+      end Disable_Steppers;
+
+      procedure Disable_Steppers_M84
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value) is
+      begin
+         Disable_Steppers (Planner, S, X, Y, Z, E, A, B, C, U, V, W);
+      end Disable_Steppers_M84;
+
+      procedure Set_Microstepping
+        (Planner : Planner_Interface'Class;
+         B       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         A       : Gcode_Optional_Integer;
+         C       : Gcode_Optional_Integer;
+         U       : Gcode_Optional_Integer;
+         V       : Gcode_Optional_Integer;
+         W       : Gcode_Optional_Integer;
+         E       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, B, S, X, Y, Z, A, C, U, V, W, E);
+         raise Constraint_Error with "M350 is not implemented yet.";
+      end Set_Microstepping;
+
+      procedure Set_Microstep_Pins
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Arguments.Argument_Integer;
+         B       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         E       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, S, B, X, Y, Z, E);
+         raise Constraint_Error with "M351 is not implemented yet.";
+      end Set_Microstep_Pins;
+
+      procedure Set_Trimpot_Current
+        (Planner : Planner_Interface'Class;
+         B       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Float;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         J       : Gcode_Optional_Float;
+         K       : Gcode_Optional_Float;
+         U       : Gcode_Optional_Float;
+         V       : Gcode_Optional_Float;
+         W       : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, B, C, D, E, S, X, Y, Z, I, J, K, U, V, W);
+         raise Constraint_Error with "M907 is not implemented yet.";
+      end Set_Trimpot_Current;
+
+      procedure Set_Trimpot_Pin
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Arguments.Argument_Integer;
+         S       : Gcode_Arguments.Argument_Integer) is
+      begin
+         pragma Unreferenced (Planner, P, S);
+         raise Constraint_Error with "M908 is not implemented yet.";
+      end Set_Trimpot_Pin;
+
+      procedure Report_DAC_Current (Planner : Planner_Interface'Class) is
+      begin
+         pragma Unreferenced (Planner);
+         My_Logger.Log ("M909 reporting is not implemented yet.");
+      end Report_DAC_Current;
+
+      procedure Commit_DAC_To_EEPROM (Planner : Planner_Interface'Class) is
+      begin
+         pragma Unreferenced (Planner);
+         raise Constraint_Error with "M910 is not implemented yet.";
+      end Commit_DAC_To_EEPROM;
 
       procedure Provide_Motor_Configuration
         (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class) is

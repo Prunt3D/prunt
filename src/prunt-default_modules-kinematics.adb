@@ -29,6 +29,16 @@ package body Prunt.Default_Modules.Kinematics is
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
    function Cartesian_Path (Motor : Motor_Name) return Config.Config_Data_Paths.Vector
    is (["Kinematics", "Kinematics_Kind", "Kind", "Children", "Cartesian", "Cartesian", +Motor'Image]);
 
@@ -124,7 +134,6 @@ package body Prunt.Default_Modules.Kinematics is
       return My_Modules.Module_Instance'Class
    is
       pragma Unreferenced (This, Status_Emitter);
-      use type My_Modules.Module_Instance_Shared_Pointers.Ref;
 
       Parsed_Config                     : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
       Motor_Drivers_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
@@ -132,14 +141,6 @@ package body Prunt.Default_Modules.Kinematics is
       Input_Shapers_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Input_Shapers_Module.Module_Instance'Tag);
    begin
-      if Motor_Drivers_Module_Instance_Ref = My_Modules.Module_Instance_Shared_Pointers.Null_Ref then
-         raise Program_Error with "Motor drivers module instance not found.";
-      end if;
-
-      if Input_Shapers_Module_Instance_Ref = My_Modules.Module_Instance_Shared_Pointers.Null_Ref then
-         raise Program_Error with "Input shapers module instance not found.";
-      end if;
-
       return Result : Module_Instance do
          declare
             Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames
@@ -188,14 +189,58 @@ package body Prunt.Default_Modules.Kinematics is
 
       procedure Start is null;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Set_Print_And_Travel_Move_Limits
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer;
+         F       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float) is
       begin
-         pragma Unreferenced (Args, Planner, Command_Identifier);
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, X, Y, Z, E, T, F, S);
+         raise Constraint_Error with "M201 is not implemented yet.";
+      end Set_Print_And_Travel_Move_Limits;
+
+      procedure Set_Max_Feedrate
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, X, Y, Z, E, T);
+         raise Constraint_Error with "M203 is not implemented yet.";
+      end Set_Max_Feedrate;
+
+      procedure Set_Starting_Acceleration
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, P, R, T, S);
+         raise Constraint_Error with "M204 is not implemented yet.";
+      end Set_Starting_Acceleration;
+
+      procedure Set_Advanced_Motion_Settings
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_String;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Float;
+         J       : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, P, X, Y, Z, E, B, S, T, J);
+         raise Constraint_Error with "M205 is not implemented yet.";
+      end Set_Advanced_Motion_Settings;
 
       function Get_Default_Motion_Planner_Configuration return Motion_Planner_Configuration is
          Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames

@@ -37,6 +37,9 @@ package Prunt.Default_Modules.Motor_Drivers is
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
    overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
@@ -90,6 +93,13 @@ package Prunt.Default_Modules.Motor_Drivers is
    --  Like the above version, but does not rely on the motor configuration having been provided by the handler.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
 
 private
 
@@ -226,11 +236,113 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Enable_Steppers
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value)
+      with Annotate => (Prunt_Config, Gcode_Command, "M17");
+      --  Enable one or more steppers immediately.
+
+      procedure Disable_Steppers
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value)
+      with Annotate => (Prunt_Config, Gcode_Command, "M18");
+      --  Disable one or more steppers immediately or update the inactivity timeout.
+
+      procedure Disable_Steppers_M84
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value)
+      with Annotate => (Prunt_Config, Gcode_Command, "M84");
+      --  Alias of M18.
+
+      procedure Set_Microstepping
+        (Planner : Planner_Interface'Class;
+         B       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         A       : Gcode_Optional_Integer;
+         C       : Gcode_Optional_Integer;
+         U       : Gcode_Optional_Integer;
+         V       : Gcode_Optional_Integer;
+         W       : Gcode_Optional_Integer;
+         E       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M350");
+      --  Set stepper microstepping values.
+
+      procedure Set_Microstep_Pins
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Arguments.Argument_Integer;
+         B       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         E       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M351");
+      --  Set raw microstep pin states.
+
+      procedure Set_Trimpot_Current
+        (Planner : Planner_Interface'Class;
+         B       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Float;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         J       : Gcode_Optional_Float;
+         K       : Gcode_Optional_Float;
+         U       : Gcode_Optional_Float;
+         V       : Gcode_Optional_Float;
+         W       : Gcode_Optional_Float)
+      with Annotate => (Prunt_Config, Gcode_Command, "M907");
+      --  Set stepper current through a digital trimpot interface.
+
+      procedure Set_Trimpot_Pin
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Arguments.Argument_Integer;
+         S       : Gcode_Arguments.Argument_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M908");
+      --  Set a trimpot value by raw pin/address.
+
+      procedure Report_DAC_Current (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M909");
+      --  Report DAC current values to the logger.
+
+      procedure Commit_DAC_To_EEPROM (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M910");
+      --  Commit DAC values to external EEPROM.
 
       overriding
       procedure Provide_Motor_Configuration

@@ -19,15 +19,9 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.Default_Modules.Input_Switches is
+package body Prunt.Default_Modules.Print_Job is
 
    pragma Extensions_Allowed (On);
-
-   function Build_Schema return Config.Config_Property_Maps.Map is separate;
-
-   function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;
-
-   procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
@@ -40,62 +34,59 @@ package body Prunt.Default_Modules.Input_Switches is
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
    overriding
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
-   begin
-      return (Version => 1, Top_Level_Items => Build_Schema);
-   end Config_Schema;
-
-   overriding
    function Initialize
      (This                : Module;
       Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class
-   is
-      pragma Unreferenced (This, Report_Config_Error, Status_Emitter, Get_Other_Instance);
+      return My_Modules.Module_Instance'Class is
    begin
-      return Result : Module_Instance do
-         Result.Initialize (Config_Data_To_User_Config (Config_Data.Get));
-      end return;
+      return Result : Module_Instance;
    end Initialize;
 
    protected body Module_Instance is
-      procedure Initialize (Config_In : User_Config) is
-      begin
-         Config := Config_In;
-      end Initialize;
-
       procedure Start is null;
 
-      procedure Report_Endstop_States (Planner : Planner_Interface'Class) is
+      procedure Report_Print_Time (Planner : Planner_Interface'Class) is
       begin
          pragma Unreferenced (Planner);
-         My_Logger.Log ("M119 reporting is not implemented yet.");
-      end Report_Endstop_States;
+         My_Logger.Log ("M31 print-time reporting is not implemented yet.");
+      end Report_Print_Time;
 
-      procedure Enable_Endstops (Planner : Planner_Interface'Class) is
+      procedure Set_Print_Progress
+        (Planner : Planner_Interface'Class;
+         C       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Integer;
+         R       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, C, P, R);
+         My_Logger.Log ("M73 print progress reporting is not implemented yet.");
+      end Set_Print_Progress;
+
+      procedure Start_Print_Job_Timer (Planner : Planner_Interface'Class) is
       begin
          pragma Unreferenced (Planner);
-         null;
-      end Enable_Endstops;
+         raise Constraint_Error with "M75 is not implemented yet.";
+      end Start_Print_Job_Timer;
 
-      procedure Disable_Endstops (Planner : Planner_Interface'Class) is
+      procedure Pause_Print_Job_Timer (Planner : Planner_Interface'Class) is
       begin
          pragma Unreferenced (Planner);
-         null;
-      end Disable_Endstops;
+         raise Constraint_Error with "M76 is not implemented yet.";
+      end Pause_Print_Job_Timer;
 
-      function Switch_Is_Enabled_In_Config (Switch : Input_Switch_Name) return Boolean is
+      procedure Stop_Print_Job_Timer (Planner : Planner_Interface'Class) is
       begin
-         return Config.Switches (Switch).Enabled;
-      end Switch_Is_Enabled_In_Config;
+         pragma Unreferenced (Planner);
+         raise Constraint_Error with "M77 is not implemented yet.";
+      end Stop_Print_Job_Timer;
 
-      function Switch_Is_Normally_Closed (Switch : Input_Switch_Name) return Boolean is
+      procedure Report_Print_Job_Stats (Planner : Planner_Interface'Class) is
       begin
-         return Config.Switches (Switch).Kind = Normally_Closed;
-      end Switch_Is_Normally_Closed;
+         pragma Unreferenced (Planner);
+         My_Logger.Log ("M78 print-job statistics are not implemented yet.");
+      end Report_Print_Job_Stats;
    end Module_Instance;
 
-end Prunt.Default_Modules.Input_Switches;
+end Prunt.Default_Modules.Print_Job;

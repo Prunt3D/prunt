@@ -123,11 +123,34 @@ package body Prunt.Default_Modules.Fans is
          raise Constraint_Error with "Runtime fan duty control is not available through Fan_Hardware yet.";
       end Set_Fan_Speed;
 
+      procedure Set_Fan_Speed
+        (Planner : Planner_Interface'Class;
+         P       : Virtual_String;
+         S       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, P, S);
+         raise Constraint_Error with "Runtime fan duty control by name is not available through Fan_Hardware yet.";
+      end Set_Fan_Speed;
+
       procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Gcode_Optional_Integer) is
       begin
          pragma Unreferenced (Planner, P);
          raise Constraint_Error with "Runtime fan duty control is not available through Fan_Hardware yet.";
       end Turn_Off_Fan;
+
+      procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Virtual_String) is
+      begin
+         pragma Unreferenced (Planner, P);
+         raise Constraint_Error with "Runtime fan duty control by name is not available through Fan_Hardware yet.";
+      end Turn_Off_Fan;
+
+      procedure Report_Fan_Tachometers
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, S);
+         My_Logger.Log ("M123 fan tachometer reporting is not implemented yet.");
+      end Report_Fan_Tachometers;
    end Module_Instance;
 
 end Prunt.Default_Modules.Fans;

@@ -148,6 +148,16 @@ private
       with Annotate => (Prunt_Config, Gcode_Command, "M106");
       --  Set the speed of a fan.
 
+      procedure Set_Fan_Speed
+        (Planner : Planner_Interface'Class;
+         P       : Virtual_String;
+         --  Fan name.
+         S       : Gcode_Optional_Integer
+         --  Fan speed from 0 to 255. Uses full speed if not specified.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M106");
+      --  Set the speed of a fan by name.
+
       procedure Turn_Off_Fan
         (Planner : Planner_Interface'Class;
          P       : Gcode_Optional_Integer
@@ -155,6 +165,22 @@ private
          )
       with Annotate => (Prunt_Config, Gcode_Command, "M107");
       --  Turn a fan off.
+
+      procedure Turn_Off_Fan
+        (Planner : Planner_Interface'Class;
+         P       : Virtual_String
+         --  Fan name.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M107");
+      --  Turn a fan off by name.
+
+      procedure Report_Fan_Tachometers
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer
+         --  Interval in seconds between reports. Omit to report immediately.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M123");
+      --  Report fan tachometer readings to the logger.
 
    private
       Config : User_Config;

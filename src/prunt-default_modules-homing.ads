@@ -89,8 +89,8 @@ package Prunt.Default_Modules.Homing is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
-   --  overriding
-   --  function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
 
    type Module_Instance_Interface is synchronized interface;
 
@@ -112,6 +112,13 @@ package Prunt.Default_Modules.Homing is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
 
 private
 
@@ -345,11 +352,29 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Auto_Home
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_No_Value;
+         --  Home the X axis if present.
+         Y       : Gcode_Optional_No_Value;
+         --  Home the Y axis if present.
+         Z       : Gcode_Optional_No_Value
+         --  Home the Z axis if present.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "G28");
+      --  Home one or more axes.
+
+      procedure Set_Homing_Feedrate
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_Float;
+         --  X-axis homing feedrate.
+         Y       : Gcode_Optional_Float;
+         --  Y-axis homing feedrate.
+         Z       : Gcode_Optional_Float
+         --  Z-axis homing feedrate.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M210");
+      --  Set homing feedrates.
 
       overriding
       procedure Subscribe_To_Homing (Subscriber : not null access function return Homing_Event_Subscriber'Class);

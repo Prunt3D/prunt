@@ -71,8 +71,15 @@ package body Prunt.Default_Modules.Homing is
       return (Version => 1, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
-   --  overriding
-   --  function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
 
    overriding
    function Initialize
@@ -84,16 +91,11 @@ package body Prunt.Default_Modules.Homing is
       return My_Modules.Module_Instance'Class
    is
       pragma Unreferenced (This, Status_Emitter);
-      use type My_Modules.Module_Instance_Shared_Pointers.Ref;
 
       Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
       Input_Switches_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Input_Switches_Module.Module_Instance'Tag);
    begin
-      if Input_Switches_Module_Instance_Ref = My_Modules.Module_Instance_Shared_Pointers.Null_Ref then
-         raise Program_Error with "Input switches module instance not found.";
-      end if;
-
       return Result : Module_Instance do
          declare
             Input_Switches_Module_Instance : Input_Switches_Module.Module_Instance_Interface'Class renames
@@ -127,14 +129,25 @@ package body Prunt.Default_Modules.Homing is
 
       procedure Start is null;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Auto_Home
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value) is
       begin
-         null;
-         --  TODO
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, X, Y, Z);
+         raise Constraint_Error with "G28 is not implemented yet.";
+      end Auto_Home;
+
+      procedure Set_Homing_Feedrate
+        (Planner : Planner_Interface'Class;
+         X       : Gcode_Optional_Float;
+         Y       : Gcode_Optional_Float;
+         Z       : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, X, Y, Z);
+         raise Constraint_Error with "M210 is not implemented yet.";
+      end Set_Homing_Feedrate;
 
       procedure Subscribe_To_Homing (Subscriber : not null access function return Homing_Event_Subscriber'Class) is
          Subscriber_Ref : Homing_Event_Subscriber_Shared_Pointers.Ref;

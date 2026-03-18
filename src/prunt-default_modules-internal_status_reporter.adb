@@ -27,6 +27,16 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    pragma Extensions_Allowed (On);
 
    overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
@@ -124,13 +134,23 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
          Updater.Get.Updater.Start (Status_Emitter);
       end Start;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Report_Current_Position
+        (Planner : Planner_Interface'Class;
+         D       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         R       : Gcode_Optional_No_Value) is
       begin
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, D, E, R);
+         My_Logger.Log ("M114 reporting is not implemented yet.");
+      end Report_Current_Position;
+
+      procedure Set_Position_Auto_Report
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, S);
+         My_Logger.Log ("M154 auto-reporting is not implemented yet.");
+      end Set_Position_Auto_Report;
    end Module_Instance;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

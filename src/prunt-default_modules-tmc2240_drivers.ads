@@ -47,6 +47,9 @@ package Prunt.Default_Modules.TMC2240_Drivers is
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
    overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
+   overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
@@ -59,6 +62,13 @@ package Prunt.Default_Modules.TMC2240_Drivers is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
 
 private
 
@@ -437,11 +447,186 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Report_TMC_Debug
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_No_Value;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         S       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M122");
+      --  Report TMC diagnostics to the logger.
+
+      procedure Report_TMC_Debug
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_No_Value;
+         N       : Gcode_Arguments.Argument_Integer;
+         --  Motor index selector.
+         V       : Gcode_Optional_No_Value;
+         S       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M122");
+      --  Report TMC diagnostics for a selected motor index.
+
+      procedure Report_TMC_Debug
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_No_Value;
+         N       : Virtual_String;
+         --  Motor name selector.
+         V       : Gcode_Optional_No_Value;
+         S       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M122");
+      --  Report TMC diagnostics for a selected motor name.
+
+      procedure Set_TMC_Stepping_Mode
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M569");
+      --  Toggle TMC stepping mode.
+
+      procedure Set_TMC_Stepping_Mode
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         N       : Gcode_Arguments.Argument_Integer
+         --  Motor index selector.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M569");
+      --  Toggle TMC stepping mode for a selected motor index.
+
+      procedure Set_TMC_Stepping_Mode
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         N       : Virtual_String
+         --  Motor name selector.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M569");
+      --  Toggle TMC stepping mode for a selected motor name.
+
+      procedure Set_TMC_Current
+        (Planner : Planner_Interface'Class;
+         E       : Gcode_Optional_Integer;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M906");
+      --  Set TMC current values.
+
+      procedure Report_TMC_OT_Prewarn (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M911");
+      --  Report TMC overtemperature prewarn state to the logger.
+
+      procedure Clear_TMC_OT_Prewarn
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value)
+      with Annotate => (Prunt_Config, Gcode_Command, "M912");
+      --  Clear TMC overtemperature prewarn state.
+
+      procedure Clear_TMC_OT_Prewarn
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         N       : Gcode_Arguments.Argument_Integer
+         --  Motor index selector.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M912");
+      --  Clear TMC overtemperature prewarn state for a selected motor index.
+
+      procedure Clear_TMC_OT_Prewarn
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         N       : Virtual_String
+         --  Motor name selector.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M912");
+      --  Clear TMC overtemperature prewarn state for a selected motor name.
+
+      procedure Set_Hybrid_Threshold
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         A       : Gcode_Optional_Integer;
+         B       : Gcode_Optional_Integer;
+         C       : Gcode_Optional_Integer;
+         U       : Gcode_Optional_Integer;
+         V       : Gcode_Optional_Integer;
+         W       : Gcode_Optional_Integer;
+         E       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M913");
+      --  Set TMC hybrid threshold speeds.
+
+      procedure Set_TMC_Chopper_Timing
+        (Planner : Planner_Interface'Class;
+         O       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         I       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_No_Value;
+         Y       : Gcode_Optional_No_Value;
+         Z       : Gcode_Optional_No_Value;
+         A       : Gcode_Optional_No_Value;
+         B       : Gcode_Optional_No_Value;
+         C       : Gcode_Optional_No_Value;
+         U       : Gcode_Optional_No_Value;
+         V       : Gcode_Optional_No_Value;
+         W       : Gcode_Optional_No_Value)
+      with Annotate => (Prunt_Config, Gcode_Command, "M919");
+      --  Set TMC chopper timing values.
+
+      procedure Set_TMC_Chopper_Timing
+        (Planner : Planner_Interface'Class;
+         O       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         N       : Gcode_Arguments.Argument_Integer
+         --  Motor index selector.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M919");
+      --  Set TMC chopper timing for a selected motor index.
+
+      procedure Set_TMC_Chopper_Timing
+        (Planner : Planner_Interface'Class;
+         O       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         N       : Virtual_String
+         --  Motor name selector.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M919");
+      --  Set TMC chopper timing for a selected motor name.
+
+      procedure Set_TMC_Homing_Current
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         X       : Gcode_Optional_Integer;
+         Y       : Gcode_Optional_Integer;
+         Z       : Gcode_Optional_Integer;
+         A       : Gcode_Optional_Integer;
+         B       : Gcode_Optional_Integer;
+         C       : Gcode_Optional_Integer;
+         U       : Gcode_Optional_Integer;
+         V       : Gcode_Optional_Integer;
+         W       : Gcode_Optional_Integer)
+      with Annotate => (Prunt_Config, Gcode_Command, "M920");
+      --  Set TMC homing current values.
    private
       Config         : User_Config;
       Registers      : Motor_Registers_Map;

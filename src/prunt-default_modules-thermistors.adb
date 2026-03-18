@@ -29,6 +29,16 @@ package body Prunt.Default_Modules.Thermistors is
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
    function To_Thermistor_Parameters
      (Config : User_Config_Thermistor) return Prunt.Thermistors.Thermistor_Parameters
    is
@@ -197,14 +207,22 @@ package body Prunt.Default_Modules.Thermistors is
          end loop;
       end Start;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Report_Temperatures
+        (Planner : Planner_Interface'Class;
+         R       : Gcode_Optional_No_Value;
+         T       : Gcode_Optional_Integer) is
       begin
-         pragma Unreferenced (Args, Planner, Command_Identifier);
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, R, T);
+         My_Logger.Log ("M105 reporting is not implemented yet.");
+      end Report_Temperatures;
+
+      procedure Set_Temperature_Auto_Report
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, S);
+         My_Logger.Log ("M155 auto-reporting is not implemented yet.");
+      end Set_Temperature_Auto_Report;
 
       function Thermistor_Is_Enabled_In_Config (Thermistor : Thermistor_Name) return Boolean is
       begin

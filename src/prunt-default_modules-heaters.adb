@@ -29,39 +29,49 @@ package body Prunt.Default_Modules.Heaters is
 
    procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
    function Thermistor_Path (Heater : Heater_Name) return Config.Config_Data_Paths.Vector
    is (["Heaters", +Heater'Image, "Thermistor"]);
 
    function To_Heater_Parameters (Config : User_Config_Heater) return Heater_Parameters is
    begin
       case Config.Control_Method.Kind is
-         when Disabled =>
+         when Disabled  =>
             return
-              (Kind                         => Disabled_Kind,
-               Check_Max_Cumulative_Error   => Config.Check_Maximum_Cumulative_Error,
-               Check_Gain_Time              => Config.Check_Gain_Time,
-               Check_Minimum_Gain           => Config.Check_Minimum_Gain,
-               Check_Hysteresis             => Config.Check_Hysteresis);
+              (Kind                       => Disabled_Kind,
+               Check_Max_Cumulative_Error => Config.Check_Maximum_Cumulative_Error,
+               Check_Gain_Time            => Config.Check_Gain_Time,
+               Check_Minimum_Gain         => Config.Check_Minimum_Gain,
+               Check_Hysteresis           => Config.Check_Hysteresis);
 
-         when PID =>
+         when PID       =>
             return
-              (Kind                         => PID_Kind,
-               Check_Max_Cumulative_Error   => Config.Check_Maximum_Cumulative_Error,
-               Check_Gain_Time              => Config.Check_Gain_Time,
-               Check_Minimum_Gain           => Config.Check_Minimum_Gain,
-               Check_Hysteresis             => Config.Check_Hysteresis,
-               Proportional_Scale           => Config.Control_Method.PID.Proportional_Scale,
-               Integral_Scale               => Config.Control_Method.PID.Integral_Scale,
-               Derivative_Scale             => Config.Control_Method.PID.Derivative_Scale);
+              (Kind                       => PID_Kind,
+               Check_Max_Cumulative_Error => Config.Check_Maximum_Cumulative_Error,
+               Check_Gain_Time            => Config.Check_Gain_Time,
+               Check_Minimum_Gain         => Config.Check_Minimum_Gain,
+               Check_Hysteresis           => Config.Check_Hysteresis,
+               Proportional_Scale         => Config.Control_Method.PID.Proportional_Scale,
+               Integral_Scale             => Config.Control_Method.PID.Integral_Scale,
+               Derivative_Scale           => Config.Control_Method.PID.Derivative_Scale);
 
          when Bang_Bang =>
             return
-              (Kind                         => Bang_Bang_Kind,
-               Check_Max_Cumulative_Error   => Config.Check_Maximum_Cumulative_Error,
-               Check_Gain_Time              => Config.Check_Gain_Time,
-               Check_Minimum_Gain           => Config.Check_Minimum_Gain,
-               Check_Hysteresis             => Config.Check_Hysteresis,
-               Bang_Bang_Hysteresis         => Config.Control_Method.Bang_Bang.Hysteresis);
+              (Kind                       => Bang_Bang_Kind,
+               Check_Max_Cumulative_Error => Config.Check_Maximum_Cumulative_Error,
+               Check_Gain_Time            => Config.Check_Gain_Time,
+               Check_Minimum_Gain         => Config.Check_Minimum_Gain,
+               Check_Hysteresis           => Config.Check_Hysteresis,
+               Bang_Bang_Hysteresis       => Config.Control_Method.Bang_Bang.Hysteresis);
       end case;
    end To_Heater_Parameters;
 
@@ -81,16 +91,11 @@ package body Prunt.Default_Modules.Heaters is
       return My_Modules.Module_Instance'Class
    is
       pragma Unreferenced (This, Status_Emitter);
-      use type My_Modules.Module_Instance_Shared_Pointers.Ref;
 
-      Parsed_Config                  : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
+      Parsed_Config                   : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
       Thermistors_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Thermistors_Module.Module_Instance'Tag);
    begin
-      if Thermistors_Module_Instance_Ref = My_Modules.Module_Instance_Shared_Pointers.Null_Ref then
-         raise Program_Error with "Thermistors module instance not found.";
-      end if;
-
       return Result : Module_Instance do
          declare
             Thermistors_Module_Instance : Thermistors_Module.Module_Instance_Interface'Class renames
@@ -101,9 +106,8 @@ package body Prunt.Default_Modules.Heaters is
             for H in Heater_Name loop
                if Parsed_Config.Heaters (H).Control_Method.Kind /= Disabled
                  and then
-                   not
-                     Thermistors_Module_Instance.Thermistor_Is_Enabled_In_Config
-                       (Parsed_Config.Heaters (H).Thermistor)
+                   not Thermistors_Module_Instance.Thermistor_Is_Enabled_In_Config
+                         (Parsed_Config.Heaters (H).Thermistor)
                then
                   Report_Config_Error (Thermistor_Path (H), "This thermistor is disabled in Thermistors.");
                end if;
@@ -121,18 +125,164 @@ package body Prunt.Default_Modules.Heaters is
       procedure Start is
       begin
          for H in Heater_Name loop
-            Heater_Hardware (H).Reconfigure (H, To_Heater_Parameters (Config.Heaters (H)), Config.Heaters (H).Thermistor);
+            Heater_Hardware (H).Reconfigure
+              (H, To_Heater_Parameters (Config.Heaters (H)), Config.Heaters (H).Thermistor);
          end loop;
       end Start;
 
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
+      procedure Set_Idle_Timeout
+        (Planner : Planner_Interface'Class;
+         S       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Float) is
       begin
-         pragma Unreferenced (Args, Planner, Command_Identifier);
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
+         pragma Unreferenced (Planner, S, T, E, B);
+         raise Constraint_Error with "M86 is not implemented yet.";
+      end Set_Idle_Timeout;
+
+      procedure Disable_Idle_Timeout (Planner : Planner_Interface'Class) is
+      begin
+         pragma Unreferenced (Planner);
+         raise Constraint_Error with "M87 is not implemented yet.";
+      end Disable_Idle_Timeout;
+
+      procedure Set_Hotend_Temperature
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         F       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, S, F, B, T);
+         raise Constraint_Error with "M104 is not implemented yet.";
+      end Set_Hotend_Temperature;
+
+      procedure Wait_For_Hotend_Temperature
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         F       : Gcode_Optional_Float;
+         B       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, S, R, F, B, T);
+         raise Constraint_Error with "M109 is not implemented yet.";
+      end Wait_For_Hotend_Temperature;
+
+      procedure Set_Bed_Temperature
+        (Planner : Planner_Interface'Class; I : Gcode_Optional_Integer; S : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, I, S);
+         raise Constraint_Error with "M140 is not implemented yet.";
+      end Set_Bed_Temperature;
+
+      procedure Set_Chamber_Temperature (Planner : Planner_Interface'Class; S : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, S);
+         raise Constraint_Error with "M141 is not implemented yet.";
+      end Set_Chamber_Temperature;
+
+      procedure Set_Laser_Cooler_Temperature (Planner : Planner_Interface'Class; S : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, S);
+         raise Constraint_Error with "M143 is not implemented yet.";
+      end Set_Laser_Cooler_Temperature;
+
+      procedure Wait_For_Bed_Temperature
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         T       : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, I, S, R, T);
+         raise Constraint_Error with "M190 is not implemented yet.";
+      end Wait_For_Bed_Temperature;
+
+      procedure Wait_For_Chamber_Temperature
+        (Planner : Planner_Interface'Class; S : Gcode_Optional_Float; R : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, S, R);
+         raise Constraint_Error with "M191 is not implemented yet.";
+      end Wait_For_Chamber_Temperature;
+
+      procedure Wait_For_Laser_Cooler_Temperature (Planner : Planner_Interface'Class; S : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, S);
+         raise Constraint_Error with "M193 is not implemented yet.";
+      end Wait_For_Laser_Cooler_Temperature;
+
+      procedure Set_Hotend_PID
+        (Planner : Planner_Interface'Class;
+         E       : Gcode_Optional_Integer;
+         P       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Float;
+         L       : Gcode_Optional_Float;
+         F       : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, E, P, I, D, C, L, F);
+         raise Constraint_Error with "M301 is not implemented yet.";
+      end Set_Hotend_PID;
+
+      procedure Cold_Extrude_Settings
+        (Planner : Planner_Interface'Class; S : Gcode_Optional_Float; P : Gcode_Optional_Integer) is
+      begin
+         pragma Unreferenced (Planner, S, P);
+         raise Constraint_Error with "M302 is not implemented yet.";
+      end Cold_Extrude_Settings;
+
+      procedure PID_Autotune
+        (Planner : Planner_Interface'Class;
+         E       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Integer;
+         S       : Gcode_Optional_Float;
+         U       : Gcode_Optional_Integer;
+         D       : Gcode_Optional_No_Value) is
+      begin
+         pragma Unreferenced (Planner, E, C, S, U, D);
+         raise Constraint_Error with "M303 is not implemented yet.";
+      end PID_Autotune;
+
+      procedure Set_Bed_PID
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, P, I, D);
+         raise Constraint_Error with "M304 is not implemented yet.";
+      end Set_Bed_PID;
+
+      procedure Set_MPC_Values
+        (Planner : Planner_Interface'Class;
+         A       : Gcode_Optional_Float;
+         C       : Gcode_Optional_Float;
+         E       : Gcode_Optional_Integer;
+         F       : Gcode_Optional_Float;
+         H       : Gcode_Optional_Float;
+         P       : Gcode_Optional_Float;
+         R       : Gcode_Optional_Float;
+         S       : Gcode_Optional_Integer;
+         T       : Gcode_Optional_No_Value) is
+      begin
+         pragma Unreferenced (Planner, A, C, E, F, H, P, R, S, T);
+         raise Constraint_Error with "M306 is not implemented yet.";
+      end Set_MPC_Values;
+
+      procedure Set_Chamber_PID
+        (Planner : Planner_Interface'Class;
+         P       : Gcode_Optional_Float;
+         I       : Gcode_Optional_Float;
+         D       : Gcode_Optional_Float) is
+      begin
+         pragma Unreferenced (Planner, P, I, D);
+         raise Constraint_Error with "M309 is not implemented yet.";
+      end Set_Chamber_PID;
 
       function Heater_Is_Enabled_In_Config (Heater : Heater_Name) return Boolean is
       begin

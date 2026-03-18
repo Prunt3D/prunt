@@ -35,6 +35,9 @@ package Prunt.Default_Modules.Input_Switches is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
    type Module_Instance_Interface is synchronized interface;
 
    function Switch_Is_Enabled_In_Config (This : Module_Instance_Interface; Switch : Input_Switch_Name) return Boolean
@@ -53,6 +56,13 @@ package Prunt.Default_Modules.Input_Switches is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
 
 private
 
@@ -89,11 +99,17 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Report_Endstop_States (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M119");
+      --  Report configured input switch states to the logger.
+
+      procedure Enable_Endstops (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M120");
+      --  Enable endstops. Currently a documented no-op placeholder.
+
+      procedure Disable_Endstops (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M121");
+      --  Disable endstops. Currently a documented no-op placeholder.
 
       overriding
       function Switch_Is_Enabled_In_Config (Switch : Input_Switch_Name) return Boolean;

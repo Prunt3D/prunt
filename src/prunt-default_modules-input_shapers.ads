@@ -35,6 +35,9 @@ package Prunt.Default_Modules.Input_Shapers is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
 
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
    type Module_Instance_Interface is synchronized interface;
 
    function Get_Default_Axial_Shapers
@@ -51,6 +54,13 @@ package Prunt.Default_Modules.Input_Shapers is
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
 
 private
 
@@ -155,11 +165,21 @@ private
       overriding
       procedure Start;
 
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
+      procedure Configure_Input_Shaping
+        (Planner : Planner_Interface'Class;
+         P       : Virtual_String;
+         --  Must be set to `"Prunt"`.
+         X       : Gcode_Optional_String;
+         --  Optional X-axis shaping mode or payload.
+         Y       : Gcode_Optional_String;
+         --  Optional Y-axis shaping mode or payload.
+         Z       : Gcode_Optional_String;
+         --  Optional Z-axis shaping mode or payload.
+         E       : Gcode_Optional_String
+         --  Optional E-axis shaping mode or payload.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M493");
+      --  Configure input shaping for one or more axes.
 
       overriding
       function Get_Default_Axial_Shapers return Prunt.Input_Shapers.Axial_Shaper_Parameters;
