@@ -502,6 +502,27 @@ package body Config_Generator is
 
       Index_Level : Natural := 0;
 
+      function Expand_Index_Level (Expression : Virtual_String) return Virtual_String is
+         Expression_Split : constant VSS.String_Vectors.Virtual_String_Vector := Expression.Split ('?');
+      begin
+         if Expression = "" then
+            return "";
+         elsif Expression_Split.Length = 1 then
+            return Expression_Split.First_Element;
+         elsif Expression_Split.Length = 2 then
+            if Index_Level = 0 then
+               raise Constraint_Error with "Index_? may only be used within an array context.";
+            end if;
+
+            return
+              Expression_Split.First_Element
+              & Conversions.To_Virtual_String (Trim (Integer'Image (Index_Level - 1), Both))
+              & Expression_Split.Last_Element;
+         else
+            raise Constraint_Error with "Only one ? placeholder is supported per expression.";
+         end if;
+      end Expand_Index_Level;
+
       procedure Emit_Config_Map (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
       begin
          Config_Map_Out.Append (Text);
@@ -544,6 +565,15 @@ package body Config_Generator is
             return Fallback;
          end if;
       end Effective_Schema_Default;
+
+      function Effective_Display_Unit (Inner, Outer : Unit_Data) return Virtual_String is
+      begin
+         if Inner.Display /= "" then
+            return Inner.Display;
+         else
+            return Outer.Display;
+         end if;
+      end Effective_Display_Unit;
 
       function Enum_Literal_Test
         (Enum_Type_Name : Virtual_String; Iterator_Name : Virtual_String; Literal_Name : Virtual_String)
@@ -648,24 +678,27 @@ package body Config_Generator is
             & """, Default => ("
             & Effective_Schema_Default (Outer, Outer.Default)
             & ")"
-            & Virtual_String'(if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
+            & Virtual_String'
+                (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
             & ", Min => ("
             & Outer.Min
             & ")"
-            & Virtual_String'(if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
+            & Virtual_String'
+                (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
             & ", Max => ("
             & Outer.Max
             & ")"
-            & Virtual_String'(if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
+            & Virtual_String'
+                (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
             & ", Unit => """
-            & (if Float_Val.Unit /= "" then Float_Val.Unit else Outer.Unit)
+            & Effective_Display_Unit (Float_Val.Unit, Outer.Unit)
             & """)");
          Emit_Reader
            (Reader_Prefix
             & " := Data.Get(Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
             & "])"
-            & (if Float_Val.Unit /= "" then " * (" & Float_Val.Unit & ")" else "")
+            & (if Float_Val.Unit.Conversion /= "" then " * (" & Float_Val.Unit.Conversion & ")" else "")
             & ";");
          Emit_Setter
            ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'["
@@ -673,7 +706,7 @@ package body Config_Generator is
             & "], ("
             & Ada_Expr
             & ")"
-            & (if Float_Val.Unit /= "" then " / (" & Float_Val.Unit & ")" else "")
+            & (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
             & ");");
       end Handle_Float;
 
@@ -715,16 +748,16 @@ package body Config_Generator is
             & Outer.Description
             & """, Default => "
             & Effective_Schema_Default (Outer, Outer.Default)
-            & Virtual_String'(if Integer_Val.Unit /= "" then " / " else "")
-            & Integer_Val.Unit
+            & Virtual_String'(if Integer_Val.Unit.Conversion /= "" then " / " else "")
+            & Integer_Val.Unit.Conversion
             & ", Min => "
             & Outer.Min
-            & (if Integer_Val.Unit = "" then "" else " / " & Integer_Val.Unit)
+            & (if Integer_Val.Unit.Conversion = "" then "" else " / " & Integer_Val.Unit.Conversion)
             & ", Max => "
             & Outer.Max
-            & (if Integer_Val.Unit = "" then "" else " / " & Integer_Val.Unit)
+            & (if Integer_Val.Unit.Conversion = "" then "" else " / " & Integer_Val.Unit.Conversion)
             & ", Unit => """
-            & (if Integer_Val.Unit /= "" then Integer_Val.Unit else Outer.Unit)
+            & Effective_Display_Unit (Integer_Val.Unit, Outer.Unit)
             & """)");
          Emit_Reader
            (Reader_Prefix
@@ -738,7 +771,7 @@ package body Config_Generator is
             & Path_Str
             & "], Long_Long_Integer ("
             & Ada_Expr
-            & (if Integer_Val.Unit /= "" then " / " & Integer_Val.Unit else "")
+            & (if Integer_Val.Unit.Conversion /= "" then " / " & Integer_Val.Unit.Conversion else "")
             & "));");
       end Handle_Integer;
 
@@ -747,19 +780,20 @@ package body Config_Generator is
          Path          : String_Vectors.Vector;
          Reader_Prefix : Virtual_String;
          Ada_Expr      : Virtual_String) is
+         Present_When : constant Virtual_String := Expand_Index_Level (Field.Present_When);
       begin
          if not Global_Config.Contains (Field.Type_Name) then
             raise Constraint_Error with "Unknown type: " & Field.Type_Name'Image;
          end if;
 
-         if Field.Present_When /= "" then
-            Emit_Reader ("if " & Field.Present_When & " then");
-            Emit_Setter ("if " & Field.Present_When & " then");
+         if Present_When /= "" then
+            Emit_Reader ("if " & Present_When & " then");
+            Emit_Setter ("if " & Present_When & " then");
          end if;
 
          Handle_Item (Global_Config (Field.Type_Name), Field, Path, Reader_Prefix, Ada_Expr);
 
-         if Field.Present_When /= "" then
+         if Present_When /= "" then
             Emit_Reader ("end if;");
             Emit_Setter ("end if;");
          end if;
@@ -923,20 +957,21 @@ package body Config_Generator is
                   declare
                      Name  : constant Virtual_String := Component_Data_Maps.Key (C);
                      Field : constant Component_Data := Component_Data_Maps.Element (C);
+                     Present_When : constant Virtual_String := Expand_Index_Level (Field.Present_When);
                   begin
                      if not Is_First then
                         Emit_Config_Map (" & ");
                      end if;
 
-                     if Field.Present_When /= "" then
-                        Emit_Config_Map ("(if " & Field.Present_When & " then ");
+                     if Present_When /= "" then
+                        Emit_Config_Map ("(if " & Present_When & " then ");
                      end if;
 
                      Emit_Config_Map ("[""" & Name & """ =>");
                      Handle_Component (Field, Base_Path & [Name], Reader_Base & "." & Name, Ada_Base & "." & Name);
                      Emit_Config_Map ("]");
 
-                     if Field.Present_When /= "" then
+                     if Present_When /= "" then
                         Emit_Config_Map (" else [])");
                      end if;
 
@@ -947,20 +982,7 @@ package body Config_Generator is
          end Emit_Component_Map;
       begin
          if Outer.Fixed_Kind /= "" then
-            declare
-               Fixed_Kind_Split : constant VSS.String_Vectors.Virtual_String_Vector := Outer.Fixed_Kind.Split ('?');
-            begin
-               if Fixed_Kind_Split.Length = 1 then
-                  Fixed_Kind_Str := Fixed_Kind_Split.First_Element;
-               elsif Fixed_Kind_Split.Length = 2 then
-                  Fixed_Kind_Str :=
-                    Fixed_Kind_Split.First_Element
-                    & Conversions.To_Virtual_String (Trim (Integer'Image (Index_Level - 1), Both))
-                    & Fixed_Kind_Split.Last_Element;
-               else
-                  raise Constraint_Error;
-               end if;
-            end;
+            Fixed_Kind_Str := Expand_Index_Level (Outer.Fixed_Kind);
 
             if Record_Val.Has_Variant then
                declare

@@ -101,7 +101,7 @@ package Prunt is
      Dimension => (Symbol => "nH", Gram => 1, Millimeter => 2, Second => -2, Amp => -2, others => 0),
      Annotate  => (Prunt_Config, Unit, "millihenry");
 
-   subtype PWM_Scale is Dimensionless range 0.0 .. 1.0;
+   subtype PWM_Scale is Dimensionless range 0.0 .. 1.0 with Annotate => (Prunt_Config, Unit, "", "×");
 
    subtype Cruise_Ratio is Dimensionless range 0.03 .. 0.97;
 
@@ -134,7 +134,8 @@ package Prunt is
    min        : constant Time := s * 60.0;
    deg        : constant Angle := (Ada.Numerics.Pi / 180.0) * radian;
 
-   subtype Fan_PWM_Frequency is Frequency range 1.0 * hertz .. 50_000.0 * hertz;
+   subtype Fan_PWM_Frequency is Frequency range 1.0 * hertz .. 50_000.0 * hertz
+   with Annotate => (Prunt_Config, Unit, "hertz");
 
    subtype Velocity is Dimensioned_Float
    with
@@ -143,19 +144,19 @@ package Prunt is
    subtype Acceleration is Dimensioned_Float
    with
      Dimension => (Symbol => "mm/s²", Millimeter => 1, Second => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**2");
+     Annotate  => (Prunt_Config, Unit, "mm/s**2", "mm/s²");
    subtype Jerk is Dimensioned_Float
    with
      Dimension => (Symbol => "mm/s³", Millimeter => 1, Second => -3, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**3");
+     Annotate  => (Prunt_Config, Unit, "mm/s**3", "mm/s³");
    subtype Snap is Dimensioned_Float
    with
      Dimension => (Symbol => "mm/s⁴", Millimeter => 1, Second => -4, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**4");
+     Annotate  => (Prunt_Config, Unit, "mm/s**4", "mm/s⁴");
    subtype Crackle is Dimensioned_Float
    with
      Dimension => (Symbol => "mm/s⁵", Millimeter => 1, Second => -5, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**5");
+     Annotate  => (Prunt_Config, Unit, "mm/s**5", "mm/s⁵");
 
    subtype Area is Dimensioned_Float with Dimension => (Symbol => "mm²", Millimeter => 2, others => 0);
    subtype Volume is Dimensioned_Float with Dimension => (Symbol => "mm³", Millimeter => 3, others => 0);

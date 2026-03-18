@@ -1,32 +1,13 @@
-import { runCommand, listUploads, uploadFile, runFile, restartServer, allowFirmwareUpdate } from './api.js';
+import { listUploads, uploadFile, runFile, restartServer, allowFirmwareUpdate } from './api.js';
+import { onLocaleChange, t } from './localization.js';
 
 export function initControlView() {
-    setupCommandInput();
     setupFileInput();
     setupServerActions();
+    onLocaleChange(() => {
+        void refreshFileList();
+    });
     refreshFileList();
-}
-
-function setupCommandInput() {
-    const btn = document.getElementById('btn-send-command');
-    const input = document.getElementById('command-input') as HTMLInputElement;
-
-    btn?.addEventListener('click', async () => {
-        const cmd = input.value.trim();
-        if (cmd) {
-            try {
-                await runCommand(cmd);
-                input.value = ''; // clear upon success
-            } catch (e) {
-                console.error(e);
-                alert("Failed to send command.");
-            }
-        }
-    });
-
-    input?.addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') btn?.click();
-    });
 }
 
 function setupFileInput() {
@@ -62,12 +43,11 @@ function setupFileInput() {
 async function handleUpload(file: File) {
     try {
         await uploadFile(file);
-        // Refresh file list after upload
         await refreshFileList();
-        alert("File uploaded successfully.");
+        alert(t('ui.control.fileUploaded', 'File uploaded successfully.'));
     } catch (e) {
         console.error(e);
-        alert("Failed to upload file");
+        alert(t('ui.control.fileUploadFailed', 'Failed to upload file'));
     }
 }
 
@@ -75,32 +55,47 @@ async function refreshFileList() {
     const fileListEl = document.getElementById('file-list');
     if (!fileListEl) return;
 
-    fileListEl.innerHTML = '<li>Loading...</li>';
+    fileListEl.replaceChildren(createMessageItem(t('ui.control.loadingFiles', 'Loading...')));
     try {
         const files = await listUploads();
-        fileListEl.innerHTML = '';
+        fileListEl.replaceChildren();
 
         if (files.length === 0) {
-            fileListEl.innerHTML = '<li>No files uploaded yet.</li>';
+            fileListEl.appendChild(createMessageItem(t('ui.control.noFiles', 'No files uploaded yet.')));
             return;
         }
 
         files.forEach(filename => {
             const li = document.createElement('li');
-            li.innerHTML = `<span>${filename}</span>
-                <div class="file-actions">
-                    <button class="btn btn-sm btn-primary">Run</button>
-                    <a href="/uploads/${filename}" class="btn btn-sm btn-secondary" target="_blank">Download</a>
-                </div>`;
+            const name = document.createElement('span');
+            name.innerText = filename;
+            li.appendChild(name);
 
-            const btnRun = li.querySelector('.btn-primary');
-            btnRun?.addEventListener('click', async () => {
+            const actions = document.createElement('div');
+            actions.className = 'file-actions';
+
+            const btnRun = document.createElement('button');
+            btnRun.className = 'btn btn-sm btn-primary';
+            btnRun.innerText = t('ui.control.run', 'Run');
+            actions.appendChild(btnRun);
+
+            const download = document.createElement('a');
+            download.href = `/uploads/${encodeURIComponent(filename)}`;
+            download.className = 'btn btn-sm btn-secondary';
+            download.target = '_blank';
+            download.rel = 'noopener noreferrer';
+            download.innerText = t('ui.control.download', 'Download');
+            actions.appendChild(download);
+
+            li.appendChild(actions);
+
+            btnRun.addEventListener('click', async () => {
                 try {
                     await runFile(filename);
-                    alert(`Now running ${filename}`);
+                    alert(t('ui.control.runningFile', 'Now running {filename}', { filename }));
                 } catch (e) {
                     console.error(e);
-                    alert("Failed to run file");
+                    alert(t('ui.control.runFailed', 'Failed to run file'));
                 }
             });
 
@@ -108,7 +103,7 @@ async function refreshFileList() {
         });
     } catch (e) {
         console.error(e);
-        fileListEl.innerHTML = '<li>Error loading file list.</li>';
+        fileListEl.replaceChildren(createMessageItem(t('ui.control.fileListError', 'Error loading file list.')));
     }
 }
 
@@ -117,13 +112,13 @@ function setupServerActions() {
     const btnFirmware = document.getElementById('btn-firmware-update');
 
     btnRestart?.addEventListener('click', async () => {
-        if (confirm("Are you sure you want to restart the server?")) {
+        if (confirm(t('ui.control.restartConfirm', 'Are you sure you want to restart the server?'))) {
             try {
                 await restartServer();
-                alert("Server restart command sent.");
+                alert(t('ui.control.restartSent', 'Server restart command sent.'));
             } catch (e) {
                 console.error(e);
-                alert("Failed to restart server.");
+                alert(t('ui.control.restartFailed', 'Failed to restart server.'));
             }
         }
     });
@@ -131,10 +126,16 @@ function setupServerActions() {
     btnFirmware?.addEventListener('click', async () => {
         try {
             await allowFirmwareUpdate();
-            alert("Firmware update allowed.");
+            alert(t('ui.control.firmwareAllowed', 'Firmware update allowed.'));
         } catch (e) {
             console.error(e);
-            alert("Failed to allow firmware update.");
+            alert(t('ui.control.firmwareFailed', 'Failed to allow firmware update.'));
         }
     });
+}
+
+function createMessageItem(message: string): HTMLLIElement {
+    const item = document.createElement('li');
+    item.innerText = message;
+    return item;
 }

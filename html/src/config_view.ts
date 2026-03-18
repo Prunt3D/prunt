@@ -1,4 +1,13 @@
 import { fetchConfigSchema, fetchConfigValues, patchConfigValues } from './api.js';
+import { renderDescription } from './description_markup.js';
+import {
+    onLocaleChange,
+    t,
+    translateConfigDescription,
+    translateConfigLabel,
+    translateConfigOption,
+    translateConfigUnit
+} from './localization.js';
 
 let currentSchema: any = null;
 let currentValues: any = null;
@@ -139,6 +148,21 @@ export async function initConfigView() {
         });
     }
 
+    onLocaleChange(() => {
+        if (currentSchema && currentValues) {
+            const updatedValues = scrapeFormValues();
+            if (updatedValues) currentValues = updatedValues;
+            renderConfigForm();
+            if (currentErrors && currentErrors.length > 0) {
+                handleErrors(currentErrors);
+            }
+            const currentForm = document.getElementById('config-form');
+            if (currentForm) {
+                currentForm.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+    });
+
     try {
         currentSchema = await fetchConfigSchema();
         const res = await fetchConfigValues();
@@ -168,7 +192,7 @@ function renderConfigForm() {
             modContainer.dataset.groupPath = JSON.stringify(["Config", modName, "Config"]);
 
             const title = document.createElement('h3');
-            title.innerText = modName;
+            title.innerText = translateConfigLabel(["Config", modName, "Config"], modName);
             modContainer.appendChild(title);
 
             const modConfig = (modSchema as any).Config || {};
@@ -277,17 +301,12 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
     if (basePath) fieldDiv.dataset.path = JSON.stringify(basePath);
 
     const label = document.createElement('label');
-    label.innerText = name;
+    label.innerText = translateConfigLabel(basePath, name);
     fieldDiv.appendChild(label);
 
-    if (schema.Description) {
-        for (const pText of schema.Description.split('\n')) {
-            if (pText.trim().length === 0) continue;
-            const desc = document.createElement('p');
-            desc.className = 'description';
-            desc.innerText = pText;
-            fieldDiv.appendChild(desc);
-        }
+    const description = translateConfigDescription(basePath, schema.Description || '');
+    if (description) {
+        renderDescription(fieldDiv, description);
     }
 
     if (devMode && basePath && basePath.length > 0) {
@@ -333,9 +352,10 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
 
                 const tabBtn = document.createElement('div');
                 tabBtn.className = `config-tab ${first ? 'active' : ''}`;
-                tabBtn.innerText = childName;
+                tabBtn.innerText = translateConfigLabel(Array.isArray(cp) ? cp : (cp ? cp.Base : []), childName);
                 tabBtn.dataset.tabPath = JSON.stringify(Array.isArray(cp) ? cp : (cp ? cp.Base : null));
                 pane.className = `tab-pane ${first ? 'active' : ''}`;
+                pane.dataset.tabPath = JSON.stringify(Array.isArray(cp) ? cp : (cp ? cp.Base : null));
 
                 tabBtn.addEventListener('click', () => {
                     Array.from(tabContainer.children).forEach(c => c.classList.remove('active'));
@@ -404,18 +424,13 @@ function createField(name: string, schema: any, value: any, path: string[]): HTM
 
     if (name) {
         const label = document.createElement('label');
-        label.innerText = name;
+        label.innerText = translateConfigLabel(path, name);
         fieldDiv.appendChild(label);
     }
 
-    if (schema.Description) {
-        for (const pText of schema.Description.split('\n')) {
-            if (pText.trim().length === 0) continue;
-            const desc = document.createElement('p');
-            desc.className = 'description';
-            desc.innerText = pText;
-            fieldDiv.appendChild(desc);
-        }
+    const description = translateConfigDescription(path, schema.Description || '');
+    if (description) {
+        renderDescription(fieldDiv, description);
     }
 
     if (devMode && path && path.length > 0) {
@@ -442,7 +457,7 @@ function createField(name: string, schema: any, value: any, path: string[]): HTM
             inputArea = createNumberInput(path, actualValue, schema);
             break;
         case 'Discrete':
-            inputArea = createSelectInput(path, actualValue, schema.Options);
+            inputArea = createSelectInput(path, actualValue, schema.Options, opt => translateConfigOption(path, opt, opt));
             break;
         case 'Float_Ratio':
             inputArea = createRatioInput(path, actualValue || { Numerator: schema.Default_Numerator, Denominator: schema.Default_Denominator }, schema);
@@ -500,15 +515,15 @@ function createNumberInput(path: string[], value: number, schema: any): HTMLElem
 
     if (schema.Unit) {
         const unit = document.createElement('span');
-        unit.innerText = schema.Unit;
+        unit.innerText = translateConfigUnit(path, schema.Unit);
         wrap.appendChild(unit);
     }
     container.appendChild(wrap);
 
     if (schema.Min !== undefined || schema.Max !== undefined) {
         const text = [];
-        if (schema.Min !== undefined) text.push(`Min: ${schema.Min}`);
-        if (schema.Max !== undefined) text.push(`Max: ${schema.Max}`);
+        if (schema.Min !== undefined) text.push(t('ui.config.min', 'Min: {value}', { value: schema.Min }));
+        if (schema.Max !== undefined) text.push(t('ui.config.max', 'Max: {value}', { value: schema.Max }));
 
         const rangeSpan = document.createElement('div');
         rangeSpan.className = 'range-hint';
@@ -544,14 +559,19 @@ function createNumberInput(path: string[], value: number, schema: any): HTMLElem
     return container;
 }
 
-function createSelectInput(path: string[], value: string, options: string[]): HTMLElement {
+function createSelectInput(
+    path: string[],
+    value: string,
+    options: string[],
+    translateOption: (option: string) => string = option => translateConfigOption(path, option, option)
+): HTMLElement {
     const select = document.createElement('select');
     select.dataset.path = JSON.stringify(path);
     select.className = 'config-input-discrete';
     options.forEach(opt => {
         const option = document.createElement('option');
         option.value = opt;
-        option.innerText = opt;
+        option.innerText = translateOption(opt);
         if (opt === value) option.selected = true;
         select.appendChild(option);
     });
@@ -590,8 +610,8 @@ function createRatioInput(path: string[], value: any, schema: any): HTMLElement 
 
     if (schema && (schema.Min !== undefined || schema.Max !== undefined)) {
         const text = [];
-        if (schema.Min !== undefined) text.push(`Min: ${schema.Min}`);
-        if (schema.Max !== undefined) text.push(`Max: ${schema.Max}`);
+        if (schema.Min !== undefined) text.push(t('ui.config.min', 'Min: {value}', { value: schema.Min }));
+        if (schema.Max !== undefined) text.push(t('ui.config.max', 'Max: {value}', { value: schema.Max }));
 
         const rangeSpan = document.createElement('div');
         rangeSpan.className = 'range-hint';
@@ -638,7 +658,12 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
     const selectedName = value?.Selected || schema.Default;
     const selectStr = Object.keys(schema.Children);
 
-    const select = createSelectInput([...path, 'Selected'], selectedName, selectStr);
+    const select = createSelectInput(
+        [...path, 'Selected'],
+        selectedName,
+        selectStr,
+        option => translateConfigLabel([...path, 'Children', option], option)
+    );
     select.className = 'config-input-variant';
     wrap.appendChild(select);
 
@@ -708,9 +733,10 @@ function createSequenceInput(path: string[], value: any, schema: any): HTMLEleme
 
                 const tabBtn = document.createElement('div');
                 tabBtn.className = `config-tab ${first ? 'active' : ''}`;
-                tabBtn.innerText = childName;
+                tabBtn.innerText = translateConfigLabel([...path, childName], childName);
                 tabBtn.dataset.tabPath = JSON.stringify([...path, childName]);
                 pane.className = `tab-pane ${first ? 'active' : ''}`;
+                pane.dataset.tabPath = JSON.stringify([...path, childName]);
 
                 tabBtn.addEventListener('click', () => {
                     Array.from(tabContainer.children).forEach(c => c.classList.remove('active'));
@@ -864,7 +890,7 @@ async function saveConfiguration() {
             }
         }
         if (validationFailed) {
-            alert("Validation failed. Please correct the highlighted fields.");
+            alert(t('ui.config.validationFailed', 'Validation failed. Please correct the highlighted fields.'));
             return;
         }
     }
@@ -917,9 +943,9 @@ async function saveConfiguration() {
         if (response.Errors && response.Errors.length > 0) {
             currentErrors = response.Errors;
             handleErrors(response.Errors);
-            alert("Saved with errors. Please check the notifications.");
+            alert(t('ui.config.savedWithErrors', 'Saved with errors. Please check the notifications.'));
         } else {
-            alert("Configuration saved successfully!");
+            alert(t('ui.config.saved', 'Configuration saved successfully!'));
             // Clear server errors from DOM since the save successfully passed
             currentErrors = [];
             handleErrors(currentErrors);
@@ -936,7 +962,7 @@ async function saveConfiguration() {
         if (container) container.dispatchEvent(new Event('input', { bubbles: true }));
     } catch (e) {
         console.error("Save failed", e);
-        alert("Failed to save configuration. Network error.");
+        alert(t('ui.config.saveFailed', 'Failed to save configuration. Network error.'));
     }
 }
 
@@ -979,7 +1005,7 @@ function handleErrors(errors: any[]) {
 
         if (errSpan) {
             errSpan.classList.add('server-error');
-            const msgWithNote = err.Message + ' (Will only be rechecked after saving)';
+            const msgWithNote = `${err.Message} (${t('ui.config.serverErrorSuffix', 'Will only be rechecked after saving')})`;
             if (!errSpan.classList.contains('d-none')) {
                 errSpan.innerText += '\n' + msgWithNote;
             } else {
@@ -990,7 +1016,7 @@ function handleErrors(errors: any[]) {
         } else if (globalErrors) {
             hasGlobal = true;
             const p = document.createElement('p');
-            p.innerText = `${err.Path.join(' -> ')}: ${err.Message} (Will only be rechecked after saving)`;
+            p.innerText = `${err.Path.join(' -> ')}: ${err.Message} (${t('ui.config.serverErrorSuffix', 'Will only be rechecked after saving')})`;
             globalErrors.appendChild(p);
         }
 

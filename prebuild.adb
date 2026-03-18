@@ -54,6 +54,9 @@ procedure Prebuild is
    procedure Collect_Files (Dir : String; Result : in out String_Vectors.Vector; Recursive : Boolean := False);
    --  Append all file paths under `Dir` to `Result`.
 
+   procedure Collect_Directories (Dir : String; Result : in out String_Vectors.Vector; Recursive : Boolean := False);
+   --  Append all directory paths under `Dir` to `Result`.
+
    procedure Collect_Files_Containing
      (Dir : String; Needle : String; Result : in out String_Vectors.Vector; Recursive : Boolean := False);
    --  Append all file paths under `Dir` that contain `Needle` to `Result`.
@@ -157,6 +160,28 @@ procedure Prebuild is
       End_Search (Search);
    end Collect_Files;
 
+   procedure Collect_Directories (Dir : String; Result : in out String_Vectors.Vector; Recursive : Boolean := False) is
+      Search : Search_Type;
+      Ent    : Directory_Entry_Type;
+   begin
+      Start_Search
+        (Search    => Search,
+         Directory => Dir,
+         Pattern   => "",
+         Filter    => [Ordinary_File => False, Directory => Recursive, others => False]);
+
+      while More_Entries (Search) loop
+         Get_Next_Entry (Search, Ent);
+         if Kind (Ent) = Directory and then Simple_Name (Ent) not in "." | ".." then
+            Result.Append (Full_Name (Ent));
+            if Recursive then
+               Collect_Directories (Full_Name (Ent), Result, Recursive);
+            end if;
+         end if;
+      end loop;
+      End_Search (Search);
+   end Collect_Directories;
+
    procedure Collect_Files_Containing
      (Dir : String; Needle : String; Result : in out String_Vectors.Vector; Recursive : Boolean := False)
    is
@@ -208,6 +233,7 @@ procedure Prebuild is
    procedure Build_Html_Dist is
       Src_Base  : constant String := Join_Path ([Working_Dir, "html", "src"]);
       Dist_Base : constant String := Join_Path ([Working_Dir, "html", "dist"]);
+      Src_Dirs  : String_Vectors.Vector;
       Src_Files : String_Vectors.Vector;
       Ts_Files  : String_Vectors.Vector;
    begin
@@ -215,7 +241,21 @@ procedure Prebuild is
          Create_Directory (Dist_Base);
       end if;
 
+      Collect_Directories (Src_Base, Src_Dirs, Recursive => True);
       Collect_Files (Src_Base, Src_Files, Recursive => True);
+
+      for S of Src_Dirs loop
+         declare
+            Rel  : constant String :=
+              S (S'First + Src_Base'Length + String'("" & Directory_Separator)'Length .. S'Last);
+            Dest : constant String := Join_Path ([Dist_Base, Rel]);
+         begin
+            if not Exists (Dest) then
+               Put_Line ("Creating directory " & Rel);
+               Create_Path (Dest);
+            end if;
+         end;
+      end loop;
 
       for S of Src_Files loop
          declare
@@ -224,6 +264,7 @@ procedure Prebuild is
             Dest : constant String := Join_Path ([Dist_Base, Rel]);
          begin
             if not Exists (Dest) or else Modification_Time (S) > Modification_Time (Dest) then
+               Create_Path (Containing_Directory (Dest));
                Put_Line ("Copying " & Rel);
                Copy_File (S, Dest);
             end if;
@@ -258,6 +299,8 @@ procedure Prebuild is
       Dist_Files : String_Vectors.Vector;
       Removed    : Boolean := False;
    begin
+      --  We do not clean up stale directories as ARE does not pick them up anyway.
+
       if not Exists (Dist_Base) then
          return;
       end if;

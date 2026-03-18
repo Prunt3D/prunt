@@ -3,9 +3,14 @@ import { pauseMachine, resumeMachine } from './api.js';
 import { initConfigView } from './config_view.js';
 import { initStatusView } from './status_view.js';
 import { initControlView } from './control_view.js';
+import { initGcodeEntryView } from './gcode_entry_view.js';
 import { initGcodeExplorerView } from './gcode_explorer_view.js';
+import { initLocalization, t } from './localization.js';
+import { activateView } from './navigation.js';
 
-export function initUI() {
+export async function initUI() {
+    await initLocalization();
+
     setupNavigation();
     setupGlobalControls();
 
@@ -13,6 +18,7 @@ export function initUI() {
     initConfigView();
     initStatusView();
     initControlView();
+    initGcodeEntryView();
     initGcodeExplorerView();
 
     setupTheme();
@@ -22,7 +28,7 @@ export function initUI() {
         const statusEl = document.getElementById('connection-status');
         if (statusEl) {
             statusEl.className = 'status-indicator connected';
-            statusEl.innerText = 'Connected';
+            statusEl.innerText = t('ui.connection.connected', 'Connected');
         }
     });
 
@@ -30,7 +36,7 @@ export function initUI() {
         const statusEl = document.getElementById('connection-status');
         if (statusEl) {
             statusEl.className = 'status-indicator disconnected';
-            statusEl.innerText = 'Disconnected';
+            statusEl.innerText = t('ui.connection.disconnected', 'Disconnected');
         }
     });
 
@@ -44,19 +50,12 @@ export function initUI() {
 
 function setupNavigation() {
     const navItems = document.querySelectorAll('.nav-item');
-    const views = document.querySelectorAll('.view');
 
     navItems.forEach(item => {
         item.addEventListener('click', () => {
-            // Remove active class from all
-            navItems.forEach(n => n.classList.remove('active'));
-            views.forEach(v => v.classList.remove('active'));
-
-            // Add active class to clicked
-            item.classList.add('active');
             const targetId = item.getAttribute('data-target');
             if (targetId) {
-                document.getElementById(targetId)?.classList.add('active');
+                activateView(targetId);
             }
         });
     });
@@ -72,7 +71,7 @@ function setupGlobalControls() {
             console.log("Machine paused");
         } catch (e) {
             console.error(e);
-            alert("Failed to pause machine.");
+            alert(t('ui.global.pauseFailed', 'Failed to pause machine.'));
         }
     });
 
@@ -82,7 +81,7 @@ function setupGlobalControls() {
             console.log("Machine resumed");
         } catch (e) {
             console.error(e);
-            alert("Failed to resume machine.");
+            alert(t('ui.global.resumeFailed', 'Failed to resume machine.'));
         }
     });
 }

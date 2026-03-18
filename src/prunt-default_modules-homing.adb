@@ -62,6 +62,9 @@ package body Prunt.Default_Modules.Homing is
       raise Constraint_Error with "No user-visible input switches are available.";
    end First_User_Visible_Input_Switch;
 
+   function Input_Switch_Path (Axis : Axis_Name) return Config.Config_Data_Paths.Vector
+   is (["Homing", +Axis'Image, "Homing_Method", "Kind", "Children", "Use_Input_Switch", "Use_Input_Switch", "Switch"]);
+
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
    begin
@@ -80,19 +83,39 @@ package body Prunt.Default_Modules.Homing is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      pragma Unreferenced (This, Status_Emitter, Get_Other_Instance);
+      pragma Unreferenced (This, Status_Emitter);
+      use type My_Modules.Module_Instance_Shared_Pointers.Ref;
 
       Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
+      Input_Switches_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+        Get_Other_Instance (Input_Switches_Module.Module_Instance'Tag);
    begin
-      return Result : Module_Instance do
-         Result.Initialize (Parsed_Config);
+      if Input_Switches_Module_Instance_Ref = My_Modules.Module_Instance_Shared_Pointers.Null_Ref then
+         raise Program_Error with "Input switches module instance not found.";
+      end if;
 
-         for Axis in Axis_Name loop
-            if Parsed_Config.Homing (Axis).Homing_Method.Kind = Disabled then
-               Report_Config_Error
-                 (["Homing", +Axis'Image, "Homing_Method", "Kind"], "Homing is not configured for this axis.");
-            end if;
-         end loop;
+      return Result : Module_Instance do
+         declare
+            Input_Switches_Module_Instance : Input_Switches_Module.Module_Instance_Interface'Class renames
+              Input_Switches_Module.Module_Instance_Interface'Class (Input_Switches_Module_Instance_Ref.Get.Element.all);
+         begin
+            Result.Initialize (Parsed_Config);
+
+            for Axis in Axis_Name loop
+               if Parsed_Config.Homing (Axis).Homing_Method.Kind = Disabled then
+                  Report_Config_Error
+                    (["Homing", +Axis'Image, "Homing_Method", "Kind"], "Homing is not configured for this axis.");
+               elsif Parsed_Config.Homing (Axis).Homing_Method.Kind = Use_Input_Switch
+                 and then
+                   not
+                     Input_Switches_Module_Instance.Switch_Is_Enabled_In_Config
+                       (Parsed_Config.Homing (Axis).Homing_Method.Use_Input_Switch.Switch)
+               then
+                  Report_Config_Error
+                    (Input_Switch_Path (Axis), "This switch is disabled in Input Switches.");
+               end if;
+            end loop;
+         end;
       end return;
    end Initialize;
 
@@ -121,6 +144,7 @@ package body Prunt.Default_Modules.Homing is
       end Subscribe_To_Homing;
 
       function Get_Homing_Parameters (Axis : Axis_Name) return Axis_Homing_Parameters is
+         Method : User_Config_Homing_Method := Config.Homing (Axis).Homing_Method;
       begin
          case Method.Kind is
             when Disabled | Set_To_Value =>

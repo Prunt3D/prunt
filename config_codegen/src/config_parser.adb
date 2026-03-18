@@ -31,6 +31,33 @@ package body Config_Parser is
 
    pragma Extensions_Allowed (On);
 
+   function Strip (Str : Text_Type) return Virtual_String is
+   begin
+      if Str (Str'First) = '"' then
+         return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
+      else
+         return To_Virtual_String (Str);
+      end if;
+   end Strip;
+
+   function Argument (Assocs : Assoc_List; Index : Positive) return Text_Type is
+   begin
+      return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
+   end Argument;
+
+   function Has_Argument (Assocs : Assoc_List; Index : Positive) return Boolean is
+     (Assocs.First_Child_Index + Index - 1 <= Assocs.Last_Child_Index);
+
+   function Parse_Unit (Assocs : Assoc_List) return Unit_Data is
+      Conversion : constant Virtual_String := Strip (Argument (Assocs, 3));
+   begin
+      if Has_Argument (Assocs, 4) then
+         return (Conversion => Conversion, Display => Strip (Argument (Assocs, 4)));
+      else
+         return (Conversion => Conversion, Display => Conversion);
+      end if;
+   end Parse_Unit;
+
    procedure Raise_Error (Node : Ada_Node'Class; Message : String) is
    begin
       Ada.Text_IO.Put_Line (Message);
@@ -266,7 +293,7 @@ package body Config_Parser is
                      Options_Expr        => "",
                      Present_When        => "",
                      Schema_Default_Expr => "",
-                     Unit                => "");
+                     Unit                => (Conversion => "", Display => ""));
                   begin
                      if not Comp_Decl.F_Aspects.Is_Null then
                         for Assoc of
@@ -274,43 +301,28 @@ package body Config_Parser is
                           when Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate
                         loop
                            declare
-                              function Argument (Index : Positive) return Text_Type is
-                                 Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
-                              begin
-                                 return
-                                   Assocs.Child (Assocs.First_Child_Index + Index - 1)
-                                     .As_Aggregate_Assoc
-                                     .F_R_Expr
-                                     .Text;
-                              end Argument;
-
-                              function Strip (Str : Text_Type) return Virtual_String is
-                              begin
-                                 if Str (Str'First) = '"' then
-                                    return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
-                                 else
-                                    return To_Virtual_String (Str);
-                                 end if;
-                              end Strip;
+                              Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
                            begin
 
-                              if Argument (1) = "Prunt_Config" then
-                                 if Argument (2) = "Unit" then
-                                    Component.Unit := Strip (Argument (3));
-                                 elsif Argument (2) = "Fixed_Kind" then
-                                    Component.Fixed_Kind := Strip (Argument (3));
-                                 elsif Argument (2) = "Options_Expr" then
-                                    Component.Options_Expr := Strip (Argument (3));
-                                 elsif Argument (2) = "Present_When" then
-                                    Component.Present_When := Strip (Argument (3));
-                                 elsif Argument (2) = "Schema_Default_Expr" then
-                                    Component.Schema_Default_Expr := Strip (Argument (3));
-                                 elsif Argument (2) = "Min" then
-                                    Component.Min := Strip (Argument (3));
-                                 elsif Argument (2) = "Max" then
-                                    Component.Max := Strip (Argument (3));
+                              if Argument (Assocs, 1) = "Prunt_Config" then
+                                 if Argument (Assocs, 2) = "Unit" then
+                                    Component.Unit := Parse_Unit (Assocs);
+                                 elsif Argument (Assocs, 2) = "Fixed_Kind" then
+                                    Component.Fixed_Kind := Strip (Argument (Assocs, 3));
+                                 elsif Argument (Assocs, 2) = "Options_Expr" then
+                                    Component.Options_Expr := Strip (Argument (Assocs, 3));
+                                 elsif Argument (Assocs, 2) = "Present_When" then
+                                    Component.Present_When := Strip (Argument (Assocs, 3));
+                                 elsif Argument (Assocs, 2) = "Schema_Default_Expr" then
+                                    Component.Schema_Default_Expr := Strip (Argument (Assocs, 3));
+                                 elsif Argument (Assocs, 2) = "Min" then
+                                    Component.Min := Strip (Argument (Assocs, 3));
+                                 elsif Argument (Assocs, 2) = "Max" then
+                                    Component.Max := Strip (Argument (Assocs, 3));
                                  else
-                                    Raise_Error (Assoc, "Unhandled Prunt_Config key (" & Argument (2)'Image & ").");
+                                    Raise_Error
+                                      (Assoc,
+                                       "Unhandled Prunt_Config key (" & Argument (Assocs, 2)'Image & ").");
                                  end if;
                               end if;
                            end;
@@ -578,26 +590,13 @@ package body Config_Parser is
            and then Assoc.F_Expr.Kind in Ada_Aggregate
            and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
          loop
-            declare
-               function Argument (Index : Positive) return Text_Type is
-                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
-               begin
-                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
-               end Argument;
-
-               function Strip (Str : Text_Type) return Virtual_String is
-               begin
-                  if Str (Str'First) = '"' then
-                     return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
-                  else
-                     return To_Virtual_String (Str);
-                  end if;
-               end Strip;
+           declare
+               Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
             begin
-               if Argument (1) = "Prunt_Config" then
-                  if Argument (2) = "Present_When" then
-                     Data.Present_When.Insert (Strip (Argument (3)), Strip (Argument (4)));
-                  elsif Argument (2) = "User_Config" then
+               if Argument (Assocs, 1) = "Prunt_Config" then
+                  if Argument (Assocs, 2) = "Present_When" then
+                     Data.Present_When.Insert (Strip (Argument (Assocs, 3)), Strip (Argument (Assocs, 4)));
+                  elsif Argument (Assocs, 2) = "User_Config" then
                      null;
                   else
                      Raise_Error (Assoc, "Unhandled Prunt_Config key.");
@@ -619,30 +618,17 @@ package body Config_Parser is
            and then Assoc.F_Expr.Kind in Ada_Aggregate
            and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
          loop
-            declare
-               function Argument (Index : Positive) return Text_Type is
-                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
-               begin
-                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
-               end Argument;
-
-               function Strip (Str : Text_Type) return Virtual_String is
-               begin
-                  if Str (Str'First) = '"' then
-                     return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
-                  else
-                     return To_Virtual_String (Str);
-                  end if;
-               end Strip;
+           declare
+               Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
             begin
-               if Argument (1) = "Prunt_Config" and then Argument (2) = "Unit" then
-                  return (Integer_Kind, (Unit => Strip (Argument (3))));
+               if Argument (Assocs, 1) = "Prunt_Config" and then Argument (Assocs, 2) = "Unit" then
+                  return (Integer_Kind, (Unit => Parse_Unit (Assocs)));
                end if;
             end;
          end loop;
       end if;
 
-      return (Integer_Kind, (Unit => ""));
+      return (Integer_Kind, (Unit => (Conversion => "", Display => "")));
    end Parse_Integer;
 
    function Parse_Float (Decl : Base_Type_Decl) return Config_Type is
@@ -654,30 +640,17 @@ package body Config_Parser is
            and then Assoc.F_Expr.Kind in Ada_Aggregate
            and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
          loop
-            declare
-               function Argument (Index : Positive) return Text_Type is
-                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
-               begin
-                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
-               end Argument;
-
-               function Strip (Str : Text_Type) return Virtual_String is
-               begin
-                  if Str (Str'First) = '"' then
-                     return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
-                  else
-                     return To_Virtual_String (Str);
-                  end if;
-               end Strip;
+           declare
+               Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
             begin
-               if Argument (1) = "Prunt_Config" and then Argument (2) = "Unit" then
-                  return (Float_Kind, (Unit => Strip (Argument (3))));
+               if Argument (Assocs, 1) = "Prunt_Config" and then Argument (Assocs, 2) = "Unit" then
+                  return (Float_Kind, (Unit => Parse_Unit (Assocs)));
                end if;
             end;
          end loop;
       end if;
 
-      return (Float_Kind, (Unit => ""));
+      return (Float_Kind, (Unit => (Conversion => "", Display => "")));
    end Parse_Float;
 
    function Parse_Gcode_Command (Decl : Subp_Decl) return Gcode_Command_Data is

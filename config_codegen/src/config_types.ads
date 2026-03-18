@@ -27,6 +27,11 @@ with VSS.Strings; use VSS.Strings;
 
 package Config_Types is
 
+   type Unit_Data is record
+      Conversion : Virtual_String;
+      Display    : Virtual_String;
+   end record;
+
    type Component_Data is record
       --  The members of this record represent the following parts of a record component declaration:
       --
@@ -37,7 +42,7 @@ package Config_Types is
       --    [Annotate (Prunt_Config, Options_Expr, "`Options_Expr`"),]
       --    [Annotate (Prunt_Config, Present_When, "`Present_When`"),]
       --    [Annotate (Prunt_Config, Schema_Default_Expr, "`Schema_Default_Expr`"),]
-      --    [Annotate (Prunt_Config, Unit, "`Unit`")];
+      --    [Annotate (Prunt_Config, Unit, "`Conversion_Unit`" [, "`Display_Unit`"])];
       --  -- `Description`
       --
       --  Min and Max annotations are used for ratios where a range can not be used.
@@ -63,7 +68,7 @@ package Config_Types is
       Options_Expr        : Virtual_String;
       Present_When        : Virtual_String;
       Schema_Default_Expr : Virtual_String;
-      Unit                : Virtual_String;
+      Unit                : Unit_Data;
    end record;
 
    package Component_Data_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Component_Data);
@@ -154,29 +159,29 @@ package Config_Types is
    type Ratio_Data is record
       --  Ratio types are currently hardcoded rather than being parsed.
 
-      Unit : Virtual_String;
+      Unit : Unit_Data;
    end record;
 
    type Float_Data is record
       --  The members of this record represent the following parts of a float declaration:
       --
       --  [sub]type ... is [digits ... | type_name] [range `Min` .. `Max`] with
-      --    [Annotate (Prunt_Config, Unit, "`Unit`"),]
+      --    [Annotate (Prunt_Config, Unit, "`Conversion_Unit`" [, "`Display_Unit`"]),]
       --    [Annotate (Prunt_Config, User_Config)]; --  Not required if units are specified.
       --
       --  Ratio types are currently hardcoded rather than being parsed.
 
-      Unit : Virtual_String;
+      Unit : Unit_Data;
    end record;
 
    type Integer_Data is record
       --  The members of this record represent the following parts of an integer declaration:
       --
       --  [sub]type ... is [type_name | range `Min` .. `Max`] with
-      --    [Annotate (Prunt_Config, Unit, "`Unit`"),]
+      --    [Annotate (Prunt_Config, Unit, "`Conversion_Unit`" [, "`Display_Unit`"]),]
       --    [Annotate (Prunt_Config, User_Config)]; --  Not required if units are specified.
 
-      Unit : Virtual_String;
+      Unit : Unit_Data;
    end record;
 
    type Config_Kind is (Record_Kind, Array_Kind, Enum_Kind, Boolean_Kind, Integer_Kind, Float_Kind, Ratio_Kind);

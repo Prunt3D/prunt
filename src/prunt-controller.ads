@@ -33,10 +33,16 @@ private with Prunt.Command_Line_Arguments;
 private with Prunt.Controller_Helpers;
 private with Prunt.Default_Modules;
 private with Prunt.Default_Modules.Basic_Config;
+private with Prunt.Default_Modules.Fans;
+private with Prunt.Default_Modules.Heaters;
 private with Prunt.Default_Modules.Internal_Status_Reporter;
 private with Prunt.Default_Modules.Homing;
+private with Prunt.Default_Modules.Input_Shapers;
+private with Prunt.Default_Modules.Input_Switches;
+private with Prunt.Default_Modules.Kinematics;
 private with Prunt.Default_Modules.Motion;
 private with Prunt.Default_Modules.Motor_Drivers;
+private with Prunt.Default_Modules.Thermistors;
 private with Prunt.Default_Modules.TMC2240_Drivers;
 private with Prunt.Gcode_Arguments;
 private with Prunt.Gcode_Queues;
@@ -155,11 +161,13 @@ private
 
    package My_Default_Modules_Children is
       package Basic_Config is new My_Default_Modules.Basic_Config;
+      package Input_Switches is new My_Default_Modules.Input_Switches (Input_Switch_Name => Input_Switch_Name);
       package Homing is new
         My_Default_Modules.Homing
           (My_Controller_Generic_Types => Generic_Types,
            Motor_Hardware              => Hardware.Motor_Hardware,
-           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware);
+           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware,
+           Input_Switches_Module       => Input_Switches);
       package Internal_Status_Reporter is new
         My_Default_Modules.Internal_Status_Reporter
           (Get_Position   => Get_Current_Position,
@@ -167,7 +175,26 @@ private
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused);
       package Motion is new My_Default_Modules.Motion;
+      package Input_Shapers is new My_Default_Modules.Input_Shapers;
+      package Fans is new
+        My_Default_Modules.Fans
+          (My_Controller_Generic_Types => Generic_Types,
+           Fan_Hardware                => Hardware.Fan_Hardware);
       package Motor_Drivers is new My_Default_Modules.Motor_Drivers (Motor_Name => Motor_Name);
+      package Kinematics is new
+        My_Default_Modules.Kinematics
+          (Motor_Name           => Motor_Name,
+           Motor_Drivers_Module => Motor_Drivers,
+           Input_Shapers_Module => Input_Shapers);
+      package Thermistors is new
+        My_Default_Modules.Thermistors
+          (My_Controller_Generic_Types => Generic_Types,
+           Thermistor_Hardware         => Hardware.Thermistor_Hardware);
+      package Heaters is new
+        My_Default_Modules.Heaters
+          (My_Controller_Generic_Types => Generic_Types,
+           Heater_Hardware             => Hardware.Heater_Hardware,
+           Thermistors_Module          => Thermistors);
       package TMC2240_Drivers is new
         My_Default_Modules.TMC2240_Drivers
           (My_Controller_Generic_Types => Generic_Types,
@@ -197,12 +224,23 @@ private
    function Get_Modules_For_Hardware return Module_Maps.Map
    is ["Basic Config"             =>
          My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
+       "Input Switches"           =>
+         My_Default_Modules_Children.Input_Switches.Module'(My_Modules.Module with null record),
        "Homing"                   => My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record),
        "Internal Status Reporter" =>
          My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record),
        "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
+       "Input Shapers"            =>
+         My_Default_Modules_Children.Input_Shapers.Module'(My_Modules.Module with null record),
+       "Fans"                     => My_Default_Modules_Children.Fans.Module'(My_Modules.Module with null record),
        "Motor Drivers"            =>
          My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
+       "Kinematics"               =>
+         My_Default_Modules_Children.Kinematics.Module'(My_Modules.Module with null record),
+       "Thermistors"              =>
+         My_Default_Modules_Children.Thermistors.Module'(My_Modules.Module with null record),
+       "Heaters"                  =>
+         My_Default_Modules_Children.Heaters.Module'(My_Modules.Module with null record),
        "TMC2240 Drivers"          =>
          My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record)];
 

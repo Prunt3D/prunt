@@ -1,6 +1,15 @@
 import uPlot from './uPlot.esm.js';
 import { fetchStatusSchema, fetchStatusValues } from './api.js';
 import { wsClient } from './ws.js';
+import {
+    onLocaleChange,
+    t,
+    translateSchemaKind,
+    translateStatusGroupLabel,
+    translateStatusModuleLabel,
+    translateStatusUnit,
+    translateStatusValueLabel
+} from './localization.js';
 
 export interface StatusPath {
     module: string;
@@ -20,7 +29,10 @@ export async function initStatusView() {
 
     const btnAddHeader = document.getElementById('btn-add-header');
     btnAddHeader?.addEventListener('click', () => {
-        const title = prompt("Enter text for new header:", "New Area");
+        const title = prompt(
+            t('ui.status.newHeaderPrompt', 'Enter text for new header:'),
+            t('ui.status.newHeaderDefault', 'New Area')
+        );
         if (title) {
             dashboardLayout.push({ type: 'header', value: title });
             saveDashboardLayout();
@@ -41,6 +53,11 @@ export async function initStatusView() {
     btnApply?.addEventListener('click', applyWidgetSelection);
 
     setupDragAndDrop();
+    onLocaleChange(() => {
+        if (statusSchema) {
+            renderDashboard();
+        }
+    });
 
     try {
         statusSchema = await fetchStatusSchema();
@@ -80,7 +97,7 @@ function openAddWidgetModal() {
         const groupEl = document.createElement('div');
         groupEl.className = 'module-group';
         const title = document.createElement('h4');
-        title.innerText = modName;
+        title.innerText = translateStatusModuleLabel(modName, modName);
         groupEl.appendChild(title);
 
         let hasItems = false;
@@ -98,7 +115,13 @@ function openAddWidgetModal() {
                 checkbox.checked = activePaths.has(pathStr);
 
                 label.appendChild(checkbox);
-                label.appendChild(document.createTextNode(` ${groupName} - ${valName} (${(valSchema as any).Kind})`));
+                label.appendChild(document.createTextNode(
+                    ` ${t('ui.status.widgetSelectionLabel', '{group} - {value} ({kind})', {
+                        group: translateStatusGroupLabel(modName, groupName, groupName),
+                        value: translateStatusValueLabel(modName, groupName, valName, valName),
+                        kind: translateSchemaKind((valSchema as any).Kind)
+                    })}`
+                ));
                 groupEl.appendChild(label);
             }
         }
@@ -154,13 +177,13 @@ function applyWidgetSelection() {
 }
 
 function resetWidgetsToDefault(askConfirm = false) {
-    if (askConfirm && !confirm("Are you sure you want to group all status values into module headers? This will clear your custom layout.")) return;
+    if (askConfirm && !confirm(t('ui.status.resetConfirm', 'Are you sure you want to group all status values into module headers? This will clear your custom layout.'))) return;
 
     dashboardLayout = [];
     if (!statusSchema) return;
 
     for (const [modName, modSchema] of Object.entries(statusSchema)) {
-        dashboardLayout.push({ type: 'header', value: modName });
+        dashboardLayout.push({ type: 'header', value: modName, module: modName, translatable: true });
 
         const groups = new Map<string, StatusPath[]>();
         for (const [groupName, groupSchema] of Object.entries(modSchema as any)) {
@@ -208,13 +231,15 @@ function renderDashboard() {
             header.classList.add('status-header-flex');
 
             const titleSpan = document.createElement('span');
-            titleSpan.innerText = item.value;
+            titleSpan.innerText = item.translatable && item.module
+                ? translateStatusModuleLabel(item.module, item.value)
+                : item.value;
             header.appendChild(titleSpan);
 
             const delBtn = document.createElement('button');
             delBtn.innerText = 'x';
             delBtn.className = 'btn btn-sm btn-secondary';
-            delBtn.title = 'Remove header';
+            delBtn.title = t('ui.status.removeHeader', 'Remove header');
             delBtn.onclick = () => {
                 dashboardLayout.splice(index, 1);
                 saveDashboardLayout();
@@ -238,8 +263,11 @@ function renderDashboard() {
             card.addEventListener('dragend', handleDragEnd);
 
             const header = document.createElement('h3');
-            header.innerText = mod + " - " + grp;
-            if (unit) header.innerText += ` (${unit})`;
+            const firstPath = item.paths[0] as StatusPath | undefined;
+            header.innerText = `${translateStatusModuleLabel(mod, mod)} - ${translateStatusGroupLabel(mod, grp, grp)}`;
+            if (unit && firstPath) {
+                header.innerText += ` (${translateStatusUnit(firstPath.module, firstPath.group, firstPath.value, unit)})`;
+            }
 
             header.className = 'status-widget-header';
 
@@ -253,9 +281,9 @@ function renderDashboard() {
             // Ungroup button if multiple paths
             if (item.paths.length > 1) {
                 const ungroupBtn = document.createElement('button');
-                ungroupBtn.innerText = 'Ungroup';
+                ungroupBtn.innerText = t('ui.status.ungroup', 'Ungroup');
                 ungroupBtn.className = 'btn btn-sm btn-secondary';
-                ungroupBtn.title = 'Split into individual widgets';
+                ungroupBtn.title = t('ui.status.ungroupTitle', 'Split into individual widgets');
                 ungroupBtn.onclick = () => {
                     const newItems = item.paths.map((p: StatusPath) => ({ type: 'widget', groupKey: actualGroupKey, paths: [p] }));
                     dashboardLayout.splice(index, 1, ...newItems);
@@ -268,7 +296,7 @@ function renderDashboard() {
             const delBtn = document.createElement('button');
             delBtn.innerText = 'x';
             delBtn.className = 'btn btn-sm btn-secondary';
-            delBtn.title = 'Remove widget';
+            delBtn.title = t('ui.status.removeWidget', 'Remove widget');
             delBtn.onclick = () => {
                 dashboardLayout.splice(index, 1);
                 saveDashboardLayout();
@@ -291,7 +319,7 @@ function renderDashboard() {
 
                 item.paths.forEach((path: StatusPath, i: number) => {
                     const c = colors[i % colors.length];
-                    const valName = path.value;
+                    const valName = translateStatusValueLabel(path.module, path.group, path.value, path.value);
                     seriesOpts.push({
                         label: valName,
                         stroke: c,
@@ -359,9 +387,12 @@ function updateWidgets() {
         const p: StatusPath = JSON.parse((el as HTMLElement).dataset.path!);
         const v = currentStatus[p.module]?.[p.group]?.[p.value];
         const schema = statusSchema[p.module]?.[p.group]?.[p.value];
+        const valueLabel = translateStatusValueLabel(p.module, p.group, p.value, p.value);
 
-        let displayStr = `${p.value}: ` + (v !== undefined ? String(v) : "N/A");
-        if (schema?.Unit && v !== undefined) displayStr += ` ${schema.Unit}`;
+        let displayStr = `${valueLabel}: ` + (v !== undefined ? String(v) : t('ui.common.notAvailable', 'N/A'));
+        if (schema?.Unit && v !== undefined) {
+            displayStr += ` ${translateStatusUnit(p.module, p.group, p.value, schema.Unit)}`;
+        }
 
         el.innerHTML = displayStr;
     });

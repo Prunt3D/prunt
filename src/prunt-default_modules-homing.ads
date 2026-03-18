@@ -25,6 +25,7 @@ private with Ada.Containers.Vectors;
 with Ada.Tags;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
+with Prunt.Default_Modules.Input_Switches;
 with Prunt.Gcode_Arguments;
 with Prunt.Limited_Shared_Pointers;
 with Prunt.Module_Types; use Prunt.Module_Types;
@@ -33,6 +34,8 @@ generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
    Input_Switch_Hardware : My_Controller_Generic_Types.Input_Switch_Hardware_Parameters_Array_Type;
+   with package Input_Switches_Module is new
+     Default_Modules.Input_Switches (Input_Switch_Name => My_Controller_Generic_Types.Input_Switch_Name);
 package Prunt.Default_Modules.Homing is
 
    use My_Controller_Generic_Types;

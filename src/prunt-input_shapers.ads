@@ -23,14 +23,14 @@ pragma Extensions_Allowed (On);
 
 package Prunt.Input_Shapers is
 
-   type Cycle_Count is range -2**63 + 1 .. 2**63 - 1;
+   type Cycle_Count is range -2 ** 63 + 1 .. 2 ** 63 - 1;
 
-   subtype Shaper_Damping_Ratio is Dimensionless range 0.0 .. 1.0;
-   subtype Residual_Vibration_Level is Dimensionless range 0.0 .. 1.0;
+   subtype Shaper_Damping_Ratio is Dimensionless range 0.0 .. 1.0 with Annotate => (Prunt_Config, Unit, "", "×");
+   subtype Residual_Vibration_Level is Dimensionless range 0.0 .. 1.0 with Annotate => (Prunt_Config, Unit, "", "×");
 
-   type Zero_Vibration_Deriviatives_Count is range 0 .. 3;
-   type Extra_Insensitive_Humps_Count is range 1 .. 3;
-   type Modified_Zero_Vibration_Impulses_Count is range 2 .. 3;
+   type Zero_Vibration_Deriviatives_Count is range 0 .. 3 with Annotate => (Prunt_Config, User_Config);
+   type Extra_Insensitive_Humps_Count is range 1 .. 3 with Annotate => (Prunt_Config, User_Config);
+   type Modified_Zero_Vibration_Impulses_Count is range 2 .. 3 with Annotate => (Prunt_Config, User_Config);
 
    type Shaper_Kind is (No_Shaper, Zero_Vibration, Extra_Insensitive, Pressure_Advance);
 

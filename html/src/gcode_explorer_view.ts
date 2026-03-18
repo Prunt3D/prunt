@@ -1,4 +1,15 @@
 import { fetchGcodeSchema } from './api.js';
+import { renderDescription } from './description_markup.js';
+import {
+    onLocaleChange,
+    t,
+    translateGcodeArgumentDescription,
+    translateGcodeArgumentLabel,
+    translateGcodeCommandDescription,
+    translateGcodeCommandName,
+    translateGcodeModuleLabel,
+    translateSchemaKind
+} from './localization.js';
 
 let currentSchema: any = null;
 let groupByModule = false;
@@ -16,12 +27,21 @@ export async function initGcodeExplorerView() {
         });
     }
 
+    onLocaleChange(() => {
+        if (currentSchema) {
+            renderGcodeExplorer(container, currentSchema);
+        }
+    });
+
     try {
         currentSchema = await fetchGcodeSchema();
         renderGcodeExplorer(container, currentSchema);
     } catch (e) {
         console.error("Failed to fetch gcode schema", e);
-        container.innerHTML = '<p class="error-message error-block">Failed to load G-Code schema.</p>';
+        const error = document.createElement('p');
+        error.className = 'error-message error-block';
+        error.innerText = t('ui.gcode.loadFailed', 'Failed to load G-Code schema.');
+        container.replaceChildren(error);
     }
 }
 
@@ -36,11 +56,11 @@ function renderGcodeExplorer(container: HTMLElement, schema: any) {
             modContainer.className = 'gcode-module-group';
 
             const title = document.createElement('h3');
-            title.innerText = moduleName;
+            title.innerText = translateGcodeModuleLabel(moduleName, moduleName);
             modContainer.appendChild(title);
 
             for (const cmd of commands) {
-                modContainer.appendChild(createCommandCard(cmd));
+                modContainer.appendChild(createCommandCard(moduleName, cmd));
             }
 
             container.appendChild(modContainer);
@@ -65,18 +85,31 @@ function renderGcodeExplorer(container: HTMLElement, schema: any) {
         flatContainer.className = 'gcode-flat-group';
 
         for (const cmd of sortedCommands) {
-            flatContainer.appendChild(createCommandCard(cmd));
+            const moduleName = Object.entries(schema).find(([, commands]) => Array.isArray(commands) && commands.includes(cmd))?.[0];
+            flatContainer.appendChild(createCommandCard(moduleName || '', cmd));
         }
 
         container.appendChild(flatContainer);
     }
 
     if (container.children.length === 0) {
-        container.innerHTML = '<p class="text-muted">No G-Code commands available.</p>';
+        const empty = document.createElement('p');
+        empty.className = 'text-muted';
+        empty.innerText = t('ui.gcode.noCommands', 'No G-Code commands available.');
+        container.replaceChildren(empty);
     }
 }
 
-function createCommandCard(cmd: any): HTMLElement {
+function normalizeSearchTarget(...parts: string[]): string {
+    return parts
+        .join('_')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s.-]+/g, '_')
+        .replace(/[^a-z0-9_]+/g, '');
+}
+
+function createCommandCard(moduleName: string, cmd: any): HTMLElement {
     const cmdCard = document.createElement('div');
     cmdCard.className = 'card gcode-command-card';
 
@@ -85,32 +118,29 @@ function createCommandCard(cmd: any): HTMLElement {
 
     const identifier = document.createElement('strong');
     identifier.className = 'gcode-command-id';
-    identifier.innerText = `${cmd.Identifier.Argument}${cmd.Identifier.Number}`;
+    const commandIdentifier = `${cmd.Identifier.Argument}${cmd.Identifier.Number}`;
+    identifier.innerText = commandIdentifier;
+    cmdCard.dataset.gcodeTarget = normalizeSearchTarget(moduleName, cmd.Name || '');
 
     const name = document.createElement('span');
     name.className = 'gcode-command-name';
-    name.innerText = cmd.Name.replace(/_/g, ' ');
+    name.innerText = translateGcodeCommandName(commandIdentifier, cmd.Name);
 
     header.appendChild(identifier);
     header.appendChild(name);
     cmdCard.appendChild(header);
 
-    if (cmd.Description) {
+    const commandDescription = translateGcodeCommandDescription(commandIdentifier, cmd.Description || '');
+    if (commandDescription) {
         const descContainer = document.createElement('div');
         descContainer.className = 'gcode-command-desc';
-        for (const pText of cmd.Description.split('\n')) {
-            if (pText.trim().length === 0) continue;
-            const p = document.createElement('p');
-            p.className = 'description';
-            p.innerText = pText;
-            descContainer.appendChild(p);
-        }
+        renderDescription(descContainer, commandDescription);
         cmdCard.appendChild(descContainer);
     }
 
     if (cmd.Arguments && Object.keys(cmd.Arguments).length > 0) {
         const argsTitle = document.createElement('h4');
-        argsTitle.innerText = 'Arguments';
+        argsTitle.innerText = t('ui.gcode.arguments', 'Arguments');
         argsTitle.className = 'gcode-args-title';
         cmdCard.appendChild(argsTitle);
 
@@ -129,14 +159,14 @@ function createCommandCard(cmd: any): HTMLElement {
             argHeader.className = 'gcode-arg-header';
 
             const argLabel = document.createElement('strong');
-            argLabel.innerText = argName;
+            argLabel.innerText = translateGcodeArgumentLabel(commandIdentifier, argName, argName);
             argLabel.className = 'gcode-arg-label';
 
             const isOptional = argDef.Allowed_Kinds.includes('Non_Existent');
             const allowedKinds = argDef.Allowed_Kinds.filter((k: string) => k !== 'Non_Existent');
             const typesSpan = document.createElement('span');
             typesSpan.className = 'gcode-arg-types';
-            typesSpan.innerText = `[${allowedKinds.join(', ')}]`;
+            typesSpan.innerText = `[${allowedKinds.map((kind: string) => translateSchemaKind(kind)).join(', ')}]`;
 
             argHeader.appendChild(argLabel);
             argHeader.appendChild(typesSpan);
@@ -144,15 +174,18 @@ function createCommandCard(cmd: any): HTMLElement {
             if (isOptional) {
                 const optionalBadge = document.createElement('span');
                 optionalBadge.className = 'gcode-arg-optional';
-                optionalBadge.innerText = 'optional';
+                optionalBadge.innerText = t('ui.gcode.optional', 'optional');
                 argHeader.appendChild(optionalBadge);
             }
             argItem.appendChild(argHeader);
 
-            const argDesc = document.createElement('div');
-            argDesc.className = 'gcode-arg-desc';
-            argDesc.innerText = argDef.Description;
-            argItem.appendChild(argDesc);
+            const argumentDescription = translateGcodeArgumentDescription(commandIdentifier, argName, argDef.Description || '');
+            if (argumentDescription) {
+                const argDesc = document.createElement('div');
+                argDesc.className = 'gcode-arg-desc';
+                renderDescription(argDesc, argumentDescription, 'description inline-description');
+                argItem.appendChild(argDesc);
+            }
 
             argsList.appendChild(argItem);
         }
