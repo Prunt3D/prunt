@@ -168,7 +168,7 @@ package body Config_Generator is
                            end loop;
 
                            if Conditions = "" then
-                              Conditions := "True";
+                              Conditions := "Standard.True";
                            end if;
 
                            Emit (Virtual_String'(if First_Var then "" else "els") & "if " & Conditions & " then");

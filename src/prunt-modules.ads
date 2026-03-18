@@ -77,9 +77,10 @@ package Prunt.Modules is
       return Module_Instance'Class
    is abstract;
    --  `Get_Other_Instance` attempts to initialize all other modules and then returns the instance with a tag equal to
-   --  `Tag`. `Null_Ref` will be returned if the given module instance does not exist, this allows for probing of
-   --  optional dependencies. Circular dependencies will not be detected. All instances returned from
-   --  `Get_Other_Instance` will not be started at this point.
+   --  `Tag`. If the requested tag cannot be resolved, the controller raises an exception. The active initialization
+   --  chain is also logged so that dependency loops can be diagnosed.
+   --
+   --  All instances returned from `Get_Other_Instance` will not be started at this point.
    --
    --  A shared pointer is used so that an instance reference may be kept after this function returns to be used in
    --  g-code commands.

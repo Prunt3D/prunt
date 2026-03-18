@@ -19,6 +19,8 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
+with Ada.Containers.Ordered_Sets;
+with Ada.Containers.Vectors;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
@@ -45,7 +47,9 @@ package body Prunt.Controller is
             Had_Error := True;
          end Report_Config_Error;
       begin
-         Active_Module_Instances := Recursive_Module_Initialization (Report_Config_Error'Access, Active_Config_File);
+         Active_Module_Instances :=
+           Recursive_Module_Initialization
+             (Report_Config_Error'Access, Active_Config_File, Log_Dependency_Tree => True);
 
          if Had_Error then
             My_Logger.Log ("Prunt could not start due to configuration errors.");
@@ -106,47 +110,181 @@ package body Prunt.Controller is
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      My_Config_File      : Config.Config_File) return Module_Instance_Maps.Map
+      My_Config_File      : Config.Config_File;
+      Log_Dependency_Tree : Boolean := False) return Module_Instance_Maps.Map
    is
       use Module_Maps;
       use Module_Instance_Maps;
       use type Ada.Tags.Tag;
       use type My_Modules.Module_Instance_Shared_Pointers.Ref;
 
-      Result : Module_Instance_Maps.Map := [];
+      type Dependency_Request is record
+         Requester     : Virtual_String;
+         Requested_Tag : Ada.Tags.Tag;
+      end record;
+
+      package Dependency_Request_Vectors is new Ada.Containers.Vectors (Positive, Dependency_Request);
+      package String_Sets is new Ada.Containers.Ordered_Sets (Virtual_String);
+      package String_Vectors is new Ada.Containers.Vectors (Positive, Virtual_String);
+
+      Result               : Module_Instance_Maps.Map := [];
+      Initializing         : String_Sets.Set := [];
+      Initialization_Stack : String_Vectors.Vector := [];
+      Dependency_Requests  : Dependency_Request_Vectors.Vector := [];
+
+      function Find_Existing_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref is
+      begin
+         for I of Result loop
+            if I.Get.Element'Tag = Tag then
+               return I;
+            end if;
+         end loop;
+
+         return My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+      end Find_Existing_Instance;
+
+      function Find_Module_By_Tag (Tag : Ada.Tags.Tag) return Virtual_String is
+      begin
+         for I in Result.Iterate loop
+            if Element (I).Get.Element'Tag = Tag then
+               return Key (I);
+            end if;
+         end loop;
+
+         raise Constraint_Error;
+      end Find_Module_By_Tag;
+
+      procedure Record_Dependency_Request (Requester : Virtual_String; Requested_Tag : Ada.Tags.Tag) is
+      begin
+         for Request of Dependency_Requests loop
+            if Request.Requester = Requester and then Request.Requested_Tag = Requested_Tag then
+               return;
+            end if;
+         end loop;
+
+         Dependency_Requests.Append (Dependency_Request'(Requester => Requester, Requested_Tag => Requested_Tag));
+      end Record_Dependency_Request;
+
+      function Direct_Dependencies (Module_Name : Virtual_String) return String_Vectors.Vector is
+         Dependencies : String_Vectors.Vector := [];
+         Seen         : String_Sets.Set := [];
+      begin
+         for Request of Dependency_Requests loop
+            if Request.Requester = Module_Name then
+               declare
+                  Dependency_Name : constant Virtual_String := Find_Module_By_Tag (Request.Requested_Tag);
+               begin
+                  if not Seen.Contains (Dependency_Name) then
+                     Dependencies.Append (Dependency_Name);
+                     Seen.Insert (Dependency_Name);
+                  end if;
+               end;
+            end if;
+         end loop;
+
+         return Dependencies;
+      end Direct_Dependencies;
+
+      function Has_Incoming_Dependency (Module_Name : Virtual_String) return Boolean is
+      begin
+         for C in Active_Modules.Iterate loop
+            for Dependency_Name of Direct_Dependencies (Key (C)) loop
+               if Dependency_Name = Module_Name then
+                  return True;
+               end if;
+            end loop;
+         end loop;
+
+         return False;
+      end Has_Incoming_Dependency;
+
+      procedure Log_Module_Dependency_Tree is
+         Expanded : Config.Discrete_String_Sets.Set := [];
+         Path     : Config.Discrete_String_Sets.Set := [];
+
+         procedure Log_Subtree (Module_Name : Virtual_String; Prefix : Virtual_String);
+
+         procedure Log_Subtree (Module_Name : Virtual_String; Prefix : Virtual_String) is
+         begin
+            if Path.Contains (Module_Name) then
+               My_Logger.Log (Prefix & Module_Name & " (cycle)");
+               return;
+            end if;
+
+            if Expanded.Contains (Module_Name) then
+               My_Logger.Log (Prefix & Module_Name & " (already shown)");
+               return;
+            end if;
+
+            My_Logger.Log (Prefix & Module_Name);
+            Expanded.Insert (Module_Name);
+            Path.Insert (Module_Name);
+
+            for Dependency_Name of Direct_Dependencies (Module_Name) loop
+               Log_Subtree (Dependency_Name, "  " & Prefix);
+            end loop;
+
+            Path.Delete (Module_Name);
+         end Log_Subtree;
+      begin
+         My_Logger.Log ("Module dependency tree:");
+
+         for C in Active_Modules.Iterate loop
+            if not Has_Incoming_Dependency (Key (C)) then
+               Log_Subtree (Key (C), "- ");
+            end if;
+         end loop;
+
+         for C in Active_Modules.Iterate loop
+            if not Expanded.Contains (Key (C)) then
+               Log_Subtree (Key (C), "- ");
+            end if;
+         end loop;
+      end Log_Module_Dependency_Tree;
 
       function Recurse return Natural is
          function Get_Other_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref is
+            Requester : constant Virtual_String := Initialization_Stack.Last_Element;
+            Existing  : My_Modules.Module_Instance_Shared_Pointers.Ref :=
+              My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
          begin
-            loop
-               for I of Result loop
-                  if I /= My_Modules.Module_Instance_Shared_Pointers.Null_Ref and then I.Get.Element'Tag = Tag then
-                     return I;
-                  end if;
-               end loop;
+            Record_Dependency_Request (Requester, Tag);
 
+            loop
+               Existing := Find_Existing_Instance (Tag);
+               exit when Existing /= My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
                exit when Recurse = 0;
-               --  If the requested module instance is not found then keep instantiating modules until it is found
-               --  or until all other modules are trying to get another instance.
             end loop;
 
-            return My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+            if Existing = My_Modules.Module_Instance_Shared_Pointers.Null_Ref then
+               My_Logger.Log
+                 ("Module dependency could not be resolved: "
+                  & (+Ada.Tags.Expanded_Name (Tag))
+                  & " requested by "
+                  & Requester
+                  & ". Attempted initialization chain: "
+                  & (+Initialization_Stack'Image)
+                  & ". If this tag belongs to one of these modules then there is a dependency loop, otherwise no "
+                  & "module with the requested tag is in the initialization set.");
+
+               raise Program_Error with "Module dependency resolution error, refer to log.";
+            end if;
+
+            return Existing;
          end Get_Other_Instance;
 
          Modules_Initialized : Natural := 0;
       begin
          for C in Active_Modules.Iterate loop
-            if not Result.Contains (Key (C)) then
-               Result.Insert (Key (C), My_Modules.Module_Instance_Shared_Pointers.Null_Ref);
-               --  We insert a null reference to avoid an infinite loop when circular dependencies are present. One
-               --  of the modules in the dependency loop will receive the null reference.
+            if not Result.Contains (Key (C)) and then not Initializing.Contains (Key (C)) then
                declare
+                  Module_Name : constant Virtual_String := Key (C);
                   procedure Report_Config_Error_With_Module
                     (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String)
                   is
                      use type Config.Config_Data_Paths.Vector;
                   begin
-                     Report_Config_Error (["Config", Key (C), "Config"] & Path, Message);
+                     Report_Config_Error (["Config", Module_Name, "Config"] & Path, Message);
                   end Report_Config_Error_With_Module;
 
                   function Get_Data return My_Modules.Module_Instance'Class is
@@ -155,8 +293,8 @@ package body Prunt.Controller is
                      Config_Ref  : My_Modules.Config_Data_Shared_Pointers.Ref :=
                        My_Modules.Config_Data_Shared_Pointers.Null_Ref;
                   begin
-                     Emitter_Ref.Set (Status_Manager.Get_Emitter (My_Status_Data, Key (C)));
-                     Config_Ref.Set (My_Config_File.Get_Data (Key (C)));
+                     Emitter_Ref.Set (Status_Manager.Get_Emitter (My_Status_Data, Module_Name));
+                     Config_Ref.Set (My_Config_File.Get_Data (Module_Name));
                      return
                        Element (C).Initialize
                          (Config_Ref, Report_Config_Error_With_Module'Access, Emitter_Ref, Get_Other_Instance'Access);
@@ -165,25 +303,34 @@ package body Prunt.Controller is
                   Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=
                     My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
                begin
-                  Result.Delete (Key (C));
-                  --  Remove the previously inserted null reference.
+                  Initializing.Insert (Module_Name);
+                  Initialization_Stack.Append (Module_Name);
 
-                  Ref.Set (Get_Data'Access);
-                  Result.Insert (Key (C), Ref);
+                  begin
+                     Ref.Set (Get_Data'Access);
+                  exception
+                     when others =>
+                        Initialization_Stack.Delete_Last;
+                        Initializing.Delete (Module_Name);
+                        raise;
+                  end;
+
+                  Initialization_Stack.Delete_Last;
+                  Initializing.Delete (Module_Name);
+
+                  Result.Insert (Module_Name, Ref);
+
+                  for Other in Result.Iterate loop
+                     if Key (Other) /= Module_Name
+                       and then Element (Other).Get.Element'Tag = Result (Module_Name).Get.Element'Tag
+                     then
+                        raise Program_Error
+                          with "Duplicate module tag: " & Module_Name'Image & " and " & Key (Other)'Image;
+                     end if;
+                  end loop;
+
+                  Modules_Initialized := @ + 1;
                end;
-
-               for Other in Result.Iterate loop
-                  if Key (Other) /= Key (C)
-                    and then Element (Other) /= My_Modules.Module_Instance_Shared_Pointers.Null_Ref
-                    and then Element (Other).Get.Element'Tag = Result (Key (C)).Get.Element'Tag
-                  then
-                     --  Duplicate module tags are not supported as module instances retrieve other module instances
-                     --  solely by tag and not by name.
-                     raise Program_Error with "Duplicate module tag: " & Key (C)'Image & " and " & Key (Other)'Image;
-                  end if;
-               end loop;
-
-               Modules_Initialized := @ + 1;
             end if;
          end loop;
 
@@ -192,6 +339,10 @@ package body Prunt.Controller is
 
       Ignored : Natural := Recurse;
    begin
+      if Log_Dependency_Tree then
+         Log_Module_Dependency_Tree;
+      end if;
+
       return Result;
    end Recursive_Module_Initialization;
 
@@ -405,7 +556,4 @@ package body Prunt.Controller is
 
 begin
    Ada.Task_Termination.Set_Dependents_Fallback_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
-
-   My_Logger.Log
-     (Conversions.To_Virtual_String ("Gcode dispatch map size: " & Active_Module_Gcode_Dispatch_Map.Length'Image));
 end Prunt.Controller;

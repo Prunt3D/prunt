@@ -351,7 +351,6 @@ private
    is (My_Status_Data.JSON_Data);
 
    Active_Module_Gcode_Dispatch_Map : constant Gcode_Dispatch_Maps.Map := Build_Gcode_Dispatch_Map (Active_Modules);
-   --  TODO: Check that this map does not get too big once all gcode commands are added.
 
    Active_Module_Gcode_JSON_String : constant Virtual_String := Build_Gcode_JSON (Active_Modules).Write;
 
@@ -375,7 +374,8 @@ private
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      My_Config_File      : Config.Config_File) return Module_Instance_Maps.Map;
+      My_Config_File      : Config.Config_File;
+      Log_Dependency_Tree : Boolean := False) return Module_Instance_Maps.Map;
 
    protected Patch_Processor is
       procedure Apply

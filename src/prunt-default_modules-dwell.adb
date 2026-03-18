@@ -46,6 +46,8 @@ package body Prunt.Default_Modules.Dwell is
    end Initialize;
 
    protected body Module_Instance is
+      procedure Start is null;
+
       procedure Dwell_Seconds (Planner : Planner_Interface'Class; S : Dimensionless) is
       begin
          Planner.Add_Corner

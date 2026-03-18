@@ -55,6 +55,9 @@ package Prunt.Default_Modules.Dwell is
 private
 
    protected type Module_Instance is new My_Modules.Module_Instance with
+      overriding
+      procedure Start;
+
       procedure Dwell_Seconds
         (Planner : Planner_Interface'Class;
          S       : Dimensionless
