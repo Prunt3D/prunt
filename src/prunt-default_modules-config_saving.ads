@@ -26,6 +26,8 @@ with Prunt.Config;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
+private with Ada.Containers.Ordered_Maps;
+
 generic
 package Prunt.Default_Modules.Config_Saving is
 
@@ -34,12 +36,16 @@ package Prunt.Default_Modules.Config_Saving is
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
 
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
+   type Config_Saver is synchronized interface;
+
+   procedure Register_For_Saving (This : in out Config_Saver; Config_Data : Config.Config_Data) is abstract;
+
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Config_Saver with private;
 
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
@@ -54,13 +60,53 @@ package Prunt.Default_Modules.Config_Saving is
 
 private
 
-   protected type Module_Instance is new My_Modules.Module_Instance with
+   function Return_False (Left, Right : Config.Config_Data) return Boolean
+   is (False);
+
+   package Config_Data_Maps is new
+     Ada.Containers.Ordered_Maps (Virtual_String, Config.Config_Data, "=" => Return_False);
+
+   type Config_Save_Event is new Extra_Block_Resetting_Data with record
+      Config_To_Save : Config.Config_Data;
+   end record;
+
+   type Config_List_Event is new Extra_Block_Resetting_Data with record
+      Config_List : Virtual_String;
+   end record;
+
+   protected type Module_Instance is new My_Modules.Module_Instance and Config_Saver with
       overriding
-      procedure Start;
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
+
+      overriding
+      procedure Register_For_Saving (Config_Data : Config.Config_Data);
 
       procedure Save_Settings (Planner : Planner_Interface'Class)
       with Annotate => (Prunt_Config, Gcode_Command, "M500");
-      --  Save configurable settings.
+      --  Save all configurable settings for all modules that have been temporarily set as a result of g-code commands.
+      --  Settings and g-code commands which use this functionality make a note of this in their own descriptions.
+
+      procedure Save_Settings
+        (Planner : Planner_Interface'Class;
+         I       : Virtual_String
+         --  The name of the module to save.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M500");
+      --  Save all configurable settings for a specific module that have been temporarily set as a result of g-code
+      --  commands. Settings and g-code commands which use this functionality make a note of this in their own
+      --  descriptions.
+
+      procedure Save_Settings
+        (Planner : Planner_Interface'Class;
+         I       : Gcode_No_Value
+         --  When providing no value a listing of modules with savable settings will be emitted.
+         )
+      with Annotate => (Prunt_Config, Gcode_Command, "M500");
+      --  List modules with savable settings.
+
+   private
+      Self_Ref        : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Configs_To_Save : Config_Data_Maps.Map;
    end Module_Instance;
 
 end Prunt.Default_Modules.Config_Saving;

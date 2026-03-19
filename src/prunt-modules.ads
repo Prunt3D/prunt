@@ -45,7 +45,13 @@ package Prunt.Modules is
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map
    is ([]);
 
-   type Module_Instance is synchronized interface;
+   type Module_Instance_Parent is synchronized interface;
+
+   package Module_Instance_Shared_Pointers is new Limited_Shared_Pointers (Module_Instance_Parent'Class);
+   --  We need this outer type so that we can use it in a primitive on `Module_Instance`. This is a bit messy, but
+   --  users of `Module_Instance_Shared_Pointers` are always going to cast the result to a more specific type anyway.
+
+   type Module_Instance is synchronized interface and Module_Instance_Parent;
    --  Children of `Module_Instance` should be declared with an unknown discriminant part to prevent accidental
    --  instantiation without a constructor.
    --
@@ -56,21 +62,24 @@ package Prunt.Modules is
      (This               : in out Module_Instance;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
-      Command_Identifier : Gcode_Command_Identifier) is abstract;
+      Command_Identifier : Gcode_Command_Identifier)
+   is abstract;
+   --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
 
-   procedure Start (This : in out Module_Instance) is abstract;
+   procedure Start (This : in out Module_Instance; Self_Ref : Module_Instance_Shared_Pointers.Weak_Ref) is abstract;
    --  Modules should not start in the initialize procedure as the initialize procedure can be used to check for config
    --  errors without actually starting.
-
-   package Module_Instance_Shared_Pointers is new Limited_Shared_Pointers (Module_Instance'Class);
-
-   package Config_Data_Shared_Pointers is new GNATCOLL.Refcount.Shared_Pointers (Config.Config_Data);
+   --
+   --  `Self_Ref` is a reference to the instance that this is being called on and is mainly useful for g-code commands
+   --  which need to make use of the instance.
+   --
+   --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
 
    package Status_Emitter_Shared_Pointers is new GNATCOLL.Refcount.Shared_Pointers (Status_Manager.Status_Emitter);
 
    function Initialize
      (This                : Module;
-      Config_Data         : Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return Module_Instance_Shared_Pointers.Ref)
@@ -82,8 +91,8 @@ package Prunt.Modules is
    --
    --  All instances returned from `Get_Other_Instance` will not be started at this point.
    --
-   --  A shared pointer is used so that an instance reference may be kept after this function returns to be used in
-   --  g-code commands.
+   --  `Config_Data` values share the underlying module configuration state, so copies may be kept after this function
+   --  returns to be used in g-code commands.
 
 private
 

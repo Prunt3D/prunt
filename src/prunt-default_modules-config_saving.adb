@@ -36,7 +36,7 @@ package body Prunt.Default_Modules.Config_Saving is
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
@@ -46,12 +46,41 @@ package body Prunt.Default_Modules.Config_Saving is
    end Initialize;
 
    protected body Module_Instance is
-      procedure Start is null;
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
+      begin
+         Self_Ref := Self_Ref_In;
+      end Start;
+
+      procedure Register_For_Saving (Config_Data : Config.Config_Data) is
+      begin
+         Configs_To_Save.Insert (Config_Data.Module_Name, Config_Data);
+      end Register_For_Saving;
 
       procedure Save_Settings (Planner : Planner_Interface'Class) is
       begin
-         pragma Unreferenced (Planner);
-         raise Constraint_Error with "M500 is not implemented yet.";
+         for C of Configs_To_Save loop
+            Planner.Flush (Config_Save_Event'(Config_To_Save => C));
+         end loop;
+      end Save_Settings;
+
+      procedure Save_Settings (Planner : Planner_Interface'Class; I : Virtual_String) is
+      begin
+         if not Configs_To_Save.Contains (I) then
+            raise Gcode_Bad_Inputs_Error
+              with "Module """ & Conversions.To_UTF_8_String (I) & """ not known or does not have savable settings.";
+         end if;
+
+         Planner.Flush (Config_Save_Event'(Config_To_Save => Configs_To_Save (I)));
+      end Save_Settings;
+
+      procedure Save_Settings (Planner : Planner_Interface'Class; I : Gcode_No_Value) is
+         Module_List : Virtual_String := "Modules with savable settings: ";
+      begin
+         for C in Configs_To_Save.Iterate loop
+            Module_List := @ & C.Key & (if C.Key = Configs_To_Save.Last_Key then +"" else +", ");
+         end loop;
+
+         Planner.Flush (Config_List_Event'(Config_List => Module_List));
       end Save_Settings;
    end Module_Instance;
 

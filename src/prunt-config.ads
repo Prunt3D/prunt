@@ -208,9 +208,15 @@ package Prunt.Config is
       Children : Config_Property_Maps.Map;
    end record;
 
-   type Config_Data (<>) is private;
+   type Config_Data is private;
    --  All instances of `Config_Data` belonging to a `Config_File` must be finalised before the corresponding
    --  `Config_File` is finalised or else an error will be raised.
+   --
+   --  A copy or different instance of a `Config_Data` for the same module shares all values updated using `Set` with
+   --  the original, including those set after the copy is made. `Config_Data` is just a wrapper around a reference to
+   --  the `Config_File` except for those that come from `Migrate`, which should never be copied.
+   --
+   --  TODO: Enforce the above by making `Config_Data` a controlled type or giving it a controlled member.
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Boolean;
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Long_Float;
@@ -227,24 +233,27 @@ package Prunt.Config is
    --  - The value at Path is not compatible with the return type (e.g., trying to read a string as an integer).
    --  - The Path structure is invalid for the types traversed (e.g., requesting a field of a scalar).
 
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Boolean);
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Float);
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless);
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Long_Integer);
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Virtual_String);
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless_Ratio);
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Boolean);
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Float);
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless);
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Long_Integer);
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Virtual_String);
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless_Ratio);
    --  Updates a value in the configuration.
    --
    --  Changes are only in-memory until `Save` is called and no validation is performed until that point. Data is
    --  shared between all `Config_Data` instances for the same module.
 
-   procedure Save (Data : Config_Data);
+   procedure Save (Data : in out Config_Data);
    --  Persists the current state of `Data` to the underlying `Config_File`.
    --
    --  This writes the entire configuration to disk, but only with updates from the relevant module, not all modules.
    --  Creates a backup of the previous file if it existed (appended with _backup_N).
    --
    --  Raises `Constraint_Error` if the data does not match the schema.
+
+   function Module_Name (Data : Config_Data) return Virtual_String;
+   --  Returns the name of the module which this object is for.
 
    type Config_Schema_Version is new Positive;
 
@@ -257,6 +266,10 @@ package Prunt.Config is
    is null;
    --  When this procedure is called any new fields in the current schema version will be available in `Data` as well
    --  as the old fields. Any fields not present in the new schema will be removed after this procedure returns.
+   --
+   --  `Data` must not be copied.
+   --
+   --  TODO: Enforce the above by making `Config_Data` a controlled type or giving it a controlled member.
 
    package Config_Schema_Maps is new
      Ada.Containers.Indefinite_Ordered_Maps (Virtual_String, Versioned_Config_Schema'Class);
@@ -436,9 +449,11 @@ private
    procedure Set_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Value : JSON_Value);
 
    type Config_Data is record
-      For_Migration    : Boolean;
-      Module           : Virtual_String;
-      Internal         : Config_File_Internal_Shared_Pointers.Ref;
+      For_Migration    : Boolean := False;
+      Module           : Virtual_String := "";
+      Internal         : Config_File_Internal_Shared_Pointers.Ref := Config_File_Internal_Shared_Pointers.Null_Ref;
+      --  Setting this to null by default means we will get an error if a `Config_Data` is default-initialized and
+      --  then used. we need to allow default initialization as we store these in protected objects.
       Migration_Config : JSON_Value := JSON_Null;
    end record;
 

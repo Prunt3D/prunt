@@ -56,7 +56,7 @@ package body Prunt.Controller is
             Active_Module_Instances.Reverse_Clear;
          else
             for M of Active_Module_Instances loop
-               M.Get.Start;
+               My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak);
             end loop;
          end if;
       end Attempt_Start;
@@ -279,6 +279,10 @@ package body Prunt.Controller is
             if not Result.Contains (Key (C)) and then not Initializing.Contains (Key (C)) then
                declare
                   Module_Name : constant Virtual_String := Key (C);
+
+                  function Get_Data return My_Modules.Module_Instance_Parent'Class
+                  with Post => Get_Data'Result in My_Modules.Module_Instance'Class;
+
                   procedure Report_Config_Error_With_Module
                     (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String)
                   is
@@ -287,17 +291,15 @@ package body Prunt.Controller is
                      Report_Config_Error (["Config", Module_Name, "Config"] & Path, Message);
                   end Report_Config_Error_With_Module;
 
-                  function Get_Data return My_Modules.Module_Instance'Class is
+                  function Get_Data return My_Modules.Module_Instance_Parent'Class is
                      Emitter_Ref : My_Modules.Status_Emitter_Shared_Pointers.Ref :=
                        My_Modules.Status_Emitter_Shared_Pointers.Null_Ref;
-                     Config_Ref  : My_Modules.Config_Data_Shared_Pointers.Ref :=
-                       My_Modules.Config_Data_Shared_Pointers.Null_Ref;
+                     Config_Data : constant Config.Config_Data := My_Config_File.Get_Data (Module_Name);
                   begin
                      Emitter_Ref.Set (Status_Manager.Get_Emitter (My_Status_Data, Module_Name));
-                     Config_Ref.Set (My_Config_File.Get_Data (Module_Name));
                      return
                        Element (C).Initialize
-                         (Config_Ref, Report_Config_Error_With_Module'Access, Emitter_Ref, Get_Other_Instance'Access);
+                         (Config_Data, Report_Config_Error_With_Module'Access, Emitter_Ref, Get_Other_Instance'Access);
                   end Get_Data;
 
                   Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=

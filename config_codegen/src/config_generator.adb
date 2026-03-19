@@ -66,8 +66,10 @@ package body Config_Generator is
          & Conversions.To_Virtual_String (Filename));
       Emit ("--  Run config_codegen to regenerate this file.");
       Emit ("pragma Warnings (Off, ""no entities of * are referenced"");");
+      Emit ("pragma Warnings (Off, ""unit * is not referenced"");");
       Emit ("with Prunt.Gcode_Arguments;");
       Emit ("with VSS.Characters.Latin;");
+      Emit ("pragma Warnings (On, ""unit * is not referenced"");");
       Emit ("pragma Warnings (On, ""no entities of * are referenced"");");
       Emit ("separate (" & Data.Name & ")");
       Emit
@@ -378,8 +380,10 @@ package body Config_Generator is
          & Conversions.To_Virtual_String (Filename));
       Emit ("--  Run config_codegen to regenerate this file.");
       Emit ("pragma Warnings (Off, ""no entities of * are referenced"");");
+      Emit ("pragma Warnings (Off, ""unit * is not referenced"");");
       Emit ("with Prunt.Gcode_Arguments;");
       Emit ("with VSS.Characters.Latin;");
+      Emit ("pragma Warnings (On, ""unit * is not referenced"");");
       Emit ("pragma Warnings (On, ""no entities of * are referenced"");");
       Emit ("separate (" & Data.Name & ")");
       Emit ("function Gcode_Commands (This : Module) return Prunt.Module_Types.Gcode_Command_Vectors.Vector is");
@@ -1273,8 +1277,10 @@ package body Config_Generator is
             & Conversions.To_Virtual_String (Filename));
          Emit_Config_Map ("--  Run config_codegen to regenerate this file.");
          Emit_Config_Map ("pragma Warnings (Off, ""no entities of * are referenced"");");
+         Emit_Config_Map ("pragma Warnings (Off, ""unit * is not referenced"");");
          Emit_Config_Map ("with VSS.Characters.Latin;");
          Emit_Config_Map ("with Prunt.Config;");
+         Emit_Config_Map ("pragma Warnings (On, ""unit * is not referenced"");");
          Emit_Config_Map ("pragma Warnings (On, ""no entities of * are referenced"");");
          Emit_Config_Map ("separate (" & Data.Name & ")");
          Emit_Config_Map ("function Build_Schema return Prunt.Config.Config_Property_Maps.Map is");
@@ -1294,7 +1300,9 @@ package body Config_Generator is
             & Conversions.To_Virtual_String (Filename));
          Emit_Reader ("--  Run config_codegen to regenerate this file.");
          Emit_Reader ("pragma Warnings (Off, ""no entities of * are referenced"");");
+         Emit_Reader ("pragma Warnings (Off, ""unit * is not referenced"");");
          Emit_Reader ("with VSS.Characters.Latin;");
+         Emit_Reader ("pragma Warnings (On, ""unit * is not referenced"");");
          Emit_Reader ("pragma Warnings (On, ""no entities of * are referenced"");");
          Emit_Reader ("separate (" & Data.Name & ")");
          Emit_Reader
@@ -1310,11 +1318,13 @@ package body Config_Generator is
             & Conversions.To_Virtual_String (Filename));
          Emit_Setter ("--  Run config_codegen to regenerate this file.");
          Emit_Setter ("pragma Warnings (Off, ""no entities of * are referenced"");");
+         Emit_Setter ("pragma Warnings (Off, ""unit * is not referenced"");");
          Emit_Setter ("with VSS.Characters.Latin;");
+         Emit_Setter ("pragma Warnings (On, ""unit * is not referenced"");");
          Emit_Setter ("pragma Warnings (On, ""no entities of * are referenced"");");
          Emit_Setter ("separate (" & Data.Name & ")");
          Emit_Setter
-           ("procedure User_Config_To_Config_Data (Data : Prunt.Config.Config_Data; Config : User_Config) is");
+           ("procedure User_Config_To_Config_Data (Data : in out Prunt.Config.Config_Data; Config : User_Config) is");
          Emit_Setter ("pragma Unsuppress (All_Checks);");
          Emit_Setter ("pragma Extensions_Allowed (On);");
          Emit_Setter ("begin");

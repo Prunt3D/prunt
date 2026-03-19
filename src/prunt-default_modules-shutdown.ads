@@ -39,7 +39,7 @@ package Prunt.Default_Modules.Shutdown is
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
@@ -56,11 +56,13 @@ private
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding
-      procedure Start;
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
 
       procedure Full_Shutdown (Planner : Planner_Interface'Class)
       with Annotate => (Prunt_Config, Gcode_Command, "M112");
       --  Shut everything down and halt the machine.
+   private
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 
 end Prunt.Default_Modules.Shutdown;

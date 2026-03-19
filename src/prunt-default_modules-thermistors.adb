@@ -27,7 +27,7 @@ package body Prunt.Default_Modules.Thermistors is
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;
 
-   procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
+   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
@@ -169,7 +169,7 @@ package body Prunt.Default_Modules.Thermistors is
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
@@ -177,7 +177,7 @@ package body Prunt.Default_Modules.Thermistors is
    is
       pragma Unreferenced (This, Status_Emitter, Get_Other_Instance);
 
-      Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
+      Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data);
    begin
       return Result : Module_Instance do
          Result.Initialize (Parsed_Config);
@@ -200,8 +200,10 @@ package body Prunt.Default_Modules.Thermistors is
          Config := Config_In;
       end Initialize;
 
-      procedure Start is
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
       begin
+         Self_Ref := Self_Ref_In;
+
          for T in Thermistor_Name loop
             Thermistor_Hardware (T).Reconfigure (T, To_Thermistor_Parameters (Config.Thermistors (T)));
          end loop;

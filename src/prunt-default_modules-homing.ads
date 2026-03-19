@@ -107,7 +107,7 @@ package Prunt.Default_Modules.Homing is
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
@@ -335,7 +335,7 @@ private
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
 
-   procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config);
+   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
    package Homing_Event_Subscriber_Shared_Pointers is new
      Prunt.Limited_Shared_Pointers (Homing_Event_Subscriber'Class);
@@ -350,7 +350,7 @@ private
       procedure Initialize (Config_In : User_Config);
 
       overriding
-      procedure Start;
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
 
       procedure Auto_Home
         (Planner : Planner_Interface'Class;
@@ -383,6 +383,7 @@ private
       function Get_Homing_Parameters (Axis : Axis_Name) return Axis_Homing_Parameters;
    private
       Config      : User_Config;
+      Self_Ref    : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Subscribers : Homing_Subscriber_Vectors.Vector;
    end Module_Instance;
 

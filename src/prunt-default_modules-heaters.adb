@@ -27,7 +27,7 @@ package body Prunt.Default_Modules.Heaters is
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;
 
-   procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
+   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
@@ -84,7 +84,7 @@ package body Prunt.Default_Modules.Heaters is
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
@@ -92,7 +92,7 @@ package body Prunt.Default_Modules.Heaters is
    is
       pragma Unreferenced (This, Status_Emitter);
 
-      Parsed_Config                   : constant User_Config := Config_Data_To_User_Config (Config_Data.Get);
+      Parsed_Config                   : constant User_Config := Config_Data_To_User_Config (Config_Data);
       Thermistors_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Thermistors_Module.Module_Instance'Tag);
    begin
@@ -122,8 +122,10 @@ package body Prunt.Default_Modules.Heaters is
          Config := Config_In;
       end Initialize;
 
-      procedure Start is
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
       begin
+         Self_Ref := Self_Ref_In;
+
          for H in Heater_Name loop
             Heater_Hardware (H).Reconfigure
               (H, To_Heater_Parameters (Config.Heaters (H)), Config.Heaters (H).Thermistor);

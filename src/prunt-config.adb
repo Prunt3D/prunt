@@ -1060,7 +1060,8 @@ package body Prunt.Config is
    function Get_Data (This : Config_File; Module_Name : Virtual_String) return Config_Data is
    begin
       return
-        Config_Data'(For_Migration => False, Module => Module_Name, Internal => This.Internal, Migration_Config => <>);
+        Config_Data'
+          (For_Migration => False, Module => Module_Name, Internal => This.Internal, Migration_Config => JSON_Null);
    end Get_Data;
 
    function Get_Schema_String (This : Config_File) return Virtual_String is
@@ -1132,7 +1133,13 @@ package body Prunt.Config is
       end if;
    end Get;
 
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Boolean) is
+   function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Dimensionless_Ratio is
+      use Config_Data_Paths;
+   begin
+      return (Numerator => Get (Data, Path & "Numerator"), Denominator => Get (Data, Path & "Denominator"));
+   end Get;
+
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Boolean) is
    begin
       if Data.For_Migration then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
@@ -1141,7 +1148,7 @@ package body Prunt.Config is
       end if;
    end Set;
 
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Float) is
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Float) is
    begin
       if Data.For_Migration then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
@@ -1150,7 +1157,7 @@ package body Prunt.Config is
       end if;
    end Set;
 
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless) is
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless) is
    begin
       if Data.For_Migration then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Long_Float (Value)));
@@ -1159,7 +1166,7 @@ package body Prunt.Config is
       end if;
    end Set;
 
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Long_Integer) is
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Long_Integer) is
    begin
       if Data.For_Migration then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
@@ -1168,7 +1175,7 @@ package body Prunt.Config is
       end if;
    end Set;
 
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Virtual_String) is
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Virtual_String) is
    begin
       if Data.For_Migration then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
@@ -1177,13 +1184,7 @@ package body Prunt.Config is
       end if;
    end Set;
 
-   function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Dimensionless_Ratio is
-      use Config_Data_Paths;
-   begin
-      return (Numerator => Get (Data, Path & "Numerator"), Denominator => Get (Data, Path & "Denominator"));
-   end Get;
-
-   procedure Set (Data : Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless_Ratio) is
+   procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless_Ratio) is
       Val : constant JSON_Value := Create_Object;
    begin
       Set_Field (Val, "Numerator", Value.Numerator);
@@ -1196,12 +1197,17 @@ package body Prunt.Config is
       end if;
    end Set;
 
-   procedure Save (Data : Config_Data) is
+   procedure Save (Data : in out Config_Data) is
    begin
       if not Data.For_Migration then
          Data.Internal.Get.Save (Data.Module);
       end if;
    end Save;
+
+   function Module_Name (Data : Config_Data) return Virtual_String is
+   begin
+      return Data.Module;
+   end Module_Name;
 
    procedure Recursive_Left_Merge (Left : JSON_Value; Right : JSON_Value; Full_Join : Boolean := True) is
       procedure Map_Double_JSON_Object is new Gen_Map_JSON_Object (JSON_Value);

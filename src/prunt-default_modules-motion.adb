@@ -27,7 +27,7 @@ package body Prunt.Default_Modules.Motion is
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;
 
-   procedure User_Config_To_Config_Data (Data : Config.Config_Data; Config : User_Config) is separate;
+   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
@@ -41,14 +41,14 @@ package body Prunt.Default_Modules.Motion is
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
    begin
       return Result : Module_Instance do
-         Result.Initialize (Config_Data_To_User_Config (Config_Data.Get), Status_Emitter);
+         Result.Initialize (Config_Data_To_User_Config (Config_Data), Status_Emitter);
       end return;
    end Initialize;
 
@@ -80,7 +80,10 @@ package body Prunt.Default_Modules.Motion is
          Feedrate := Config.Motion_Gcode.Default_G1_Feedrate;
       end Initialize;
 
-      procedure Start is null;
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
+      begin
+         Self_Ref := Self_Ref_In;
+      end Start;
 
       procedure Rapid_Linear_Move (Planner : Planner_Interface'Class; X, Y, Z, E, F : Gcode_Optional_Float) is
       begin

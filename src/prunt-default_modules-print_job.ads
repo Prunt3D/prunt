@@ -39,7 +39,7 @@ package Prunt.Default_Modules.Print_Job is
    overriding
    function Initialize
      (This                : Module;
-      Config_Data         : My_Modules.Config_Data_Shared_Pointers.Ref;
+      Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
@@ -56,7 +56,7 @@ private
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding
-      procedure Start;
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
 
       procedure Report_Print_Time (Planner : Planner_Interface'Class)
       with Annotate => (Prunt_Config, Gcode_Command, "M31");
@@ -85,6 +85,8 @@ private
       procedure Report_Print_Job_Stats (Planner : Planner_Interface'Class)
       with Annotate => (Prunt_Config, Gcode_Command, "M78");
       --  Report print job statistics.
+   private
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 
 end Prunt.Default_Modules.Print_Job;
