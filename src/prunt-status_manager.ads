@@ -1,23 +1,20 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
 
 pragma Extensions_Allowed (On);
 
@@ -33,13 +30,13 @@ package Prunt.Status_Manager is
    --  TODO: Get rid of the unknown discriminant part and change everything to use Status_Emitter directly instead of
    --  shared pointers.
 
-   type Lock_Free_Dimensionless_Setter is private;
+   --  type Lock_Free_Dimensionless_Setter is private;
 
-   function Set_Value (This : Lock_Free_Dimensionless_Setter; Value : Dimensionless);
+   --  function Set_Value (This : Lock_Free_Dimensionless_Setter; Value : Dimensionless);
 
-   type Lock_Free_Boolean_Setter is private;
+   --  type Lock_Free_Boolean_Setter is private;
 
-   function Set_Value (This : Lock_Free_Boolean_Setter; Value : Boolean);
+   --  function Set_Value (This : Lock_Free_Boolean_Setter; Value : Boolean);
 
    --  TODO: Implement above via shared pointers to an atomic subtype. Inside the Status_Emitter these will need to be
    --  updated in the JSON every time JSON_Data is called and the normal Set_Value procedures will have to use these if
@@ -84,10 +81,10 @@ package Prunt.Status_Manager is
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Boolean);
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Virtual_String);
 
-   procedure Get_Lock_Free_Setter
-     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Dimensionless_Setter;
-   procedure Get_Lock_Free_Setter
-     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Boolean_Setter;
+   --  procedure Get_Lock_Free_Setter
+   --    (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Dimensionless_Setter;
+   --  procedure Get_Lock_Free_Setter
+   --    (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Boolean_Setter;
 
    function JSON_Schema (This : Status_Data_Collection) return Virtual_String;
    function JSON_Data (This : Status_Data_Collection) return Virtual_String;

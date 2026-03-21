@@ -1,23 +1,20 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
 
 package body Prunt.Default_Modules.Fans is
 
@@ -55,16 +52,16 @@ package body Prunt.Default_Modules.Fans is
          Result.Initialize (Parsed_Config);
 
          for F in Fan_Name loop
-            case Fan_Hardware (Fan).Kind is
+            case Fan_Hardware (F).Kind is
                when Fixed_Switching_Kind            =>
                   if Parsed_Config.Fans (F).PWM_Frequency > Fan_Hardware (F).Maximum_PWM_Frequency then
                      --  TODO: We should propagate this to the client in the schema and raise a constraint error if we
                      --  somehow get a bad value here.
                      Report_Config_Error
                        (["Fans", +F'Image, "PWM_Frequency"],
-                        "This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
-                        & Dimensionless'Image (Fan_Hardware (F).Maximum_PWM_Frequency / hertz)
-                        & " Hz.");
+                        +("This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
+                          & Dimensionless'Image (Fan_Hardware (F).Maximum_PWM_Frequency / hertz)
+                          & " Hz."));
                   end if;
 
                when Low_Or_High_Side_Switching_Kind =>
@@ -77,11 +74,11 @@ package body Prunt.Default_Modules.Fans is
                      --  friendly error message here.
                      Report_Config_Error
                        (["Fans", +F'Image, "PWM_Frequency"],
-                        "This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
-                        & Dimensionless'Image (Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency / hertz)
-                        & " Hz in low side switching mode or "
-                        & Dimensionless'Image (Fan_Hardware (F).Maximum_High_Side_PWM_Frequency / hertz)
-                        & " Hz in high side switching mode.");
+                        +("This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
+                          & Dimensionless'Image (Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency / hertz)
+                          & " Hz in low side switching mode or "
+                          & Dimensionless'Image (Fan_Hardware (F).Maximum_High_Side_PWM_Frequency / hertz)
+                          & " Hz in high side switching mode."));
                   end if;
             end case;
          end loop;
@@ -90,8 +87,9 @@ package body Prunt.Default_Modules.Fans is
 
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index) is
    begin
-      Fan_Hardware (This.Fan).Set_Duty_Cycle ((if This.Invert then 1.0 - This.Duty_Cycle else This.Duty_Cycle));
-      This.Speeds_Array.Get (This.Fan) := This.Duty_Cycle;
+      null; --  TODO
+      --  Fan_Hardware (This.Fan).Set_Duty_Cycle ((if This.Invert then 1.0 - This.Duty_Cycle else This.Duty_Cycle));
+      --  This.Speeds_Array.Get (This.Fan) := This.Duty_Cycle;
    end Process;
 
    overriding
@@ -145,11 +143,7 @@ package body Prunt.Default_Modules.Fans is
               Speed / 255.0 * Config.Fans (Fan).Control_Method.Dynamic_Duty_Cycle.Maximum_Duty_Cycle;
          begin
             Planner.Add_Corner_Data
-              (Fan_Speed_Change'
-                 (Fan          => Fan,
-                  Invert       => Config.Fans (Fan).Invert_PWM_Output,
-                  Duty_Cycle   => Duty_Cycle,
-                  Speeds_Array => Speeds_Array));
+              (Fan_Speed_Change'(Fan => Fan, Invert => Config.Fans (Fan).Invert_PWM_Output, Duty_Cycle => Duty_Cycle));
          end;
       end Set_Fan_Speed_Internal;
 
@@ -162,7 +156,8 @@ package body Prunt.Default_Modules.Fans is
         (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Dimensionless := 255.0) is
       begin
          --  TODO: Need a fan lookup array in controller generic types.
-         Set_Fan_Speed_Internal (Planner, P, S);
+         --  Set_Fan_Speed_Internal (Planner, P, S);
+         null;
       end Set_Fan_Speed;
 
       procedure Set_Fan_Speed (Planner : Planner_Interface'Class; P : Virtual_String; S : Dimensionless := 255.0) is
@@ -187,10 +182,12 @@ package body Prunt.Default_Modules.Fans is
       procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer) is
       begin
          --  TODO: Need a fan lookup array in controller generic types.
-         Set_Fan_Speed_Internal (Planner, P, 0.0);
+         --  Set_Fan_Speed_Internal (Planner, P, 0.0);
+         null;
       end Turn_Off_Fan;
 
       procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Virtual_String) is
+         Fan : Fan_Name;
       begin
          begin
             Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));

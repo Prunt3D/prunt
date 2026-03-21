@@ -1,23 +1,20 @@
------------------------------------------------------------------------------
---                                                                         --
---                   Part of the Prunt Motion Controller                   --
---                                                                         --
---            Copyright (C) 2026 Liam Powell (liam@prunt3d.com)            --
---                                                                         --
---  This program is free software: you can redistribute it and/or modify   --
---  it under the terms of the GNU General Public License as published by   --
---  the Free Software Foundation, either version 3 of the License, or      --
---  (at your option) any later version.                                    --
---                                                                         --
---  This program is distributed in the hope that it will be useful,        --
---  but WITHOUT ANY WARRANTY; without even the implied warranty of         --
---  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the          --
---  GNU General Public License for more details.                           --
---                                                                         --
---  You should have received a copy of the GNU General Public License      --
---  along with this program.  If not, see <http://www.gnu.org/licenses/>.  --
---                                                                         --
------------------------------------------------------------------------------
+--  Part of the Prunt Motion Controller
+--
+--  Copyright (C) 2026 Liam Powell (liam@prunt3d.com)
+--
+--  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+--  documentation files (the "Software"), to deal in the Software without restriction, including without limitation the
+--  rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+--  permit persons to whom the Software is furnished to do so, subject to the following conditions:
+--
+--  The above copyright notice and this permission notice (including the next paragraph) shall be included in all
+--  copies or substantial portions of the Software.
+--
+--  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+--  THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+--  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+--  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+--  SOFTWARE.
 
 pragma Extensions_Allowed (On);
 
@@ -62,22 +59,20 @@ package Prunt.Default_Modules.Tachometers is
 
 private
 
-
-   type User_Config is record
-      null;
-   end record
-   with Annotate => (Prunt_Config, Root_User_Config);
+   --  type User_Config is record
+   --  end record
+   --  with Annotate => (Prunt_Config, Root_User_Config);
 
    --  TODO: Tachometer settings.
 
-   function Build_Schema return Config.Config_Property_Maps.Map;
+   --  function Build_Schema return Config.Config_Property_Maps.Map;
 
-   function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
 
-   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
    protected type Module_Instance is new My_Modules.Module_Instance with
-      procedure Initialize (Config_In : User_Config);
+      --  procedure Initialize (Config_In : User_Config);
 
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
@@ -99,7 +94,7 @@ private
       --  This command differs from Marlin in that the `S` parameter may be a real number instead of just an integer.
 
    private
-      Config   : User_Config;
+      --  Config   : User_Config;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 
