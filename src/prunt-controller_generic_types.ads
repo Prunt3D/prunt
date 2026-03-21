@@ -112,16 +112,33 @@ package Prunt.Controller_Generic_Types is
    type Motor_Hardware_Parameters_Array_Type is array (Motor_Name) of Motor_Hardware_Parameters;
 
    type Fan_Hardware_Parameters (Kind : Fan_Hardware_Kind := Fixed_Switching_Kind) is record
+      Set_Duty_Cycle : access procedure (Fan : Fan_Name; Duty_Cycle : PWM_Scale);
+      --  Set the given fan to the given duty cycle.
+      --
+      --  This procedure will be called from the same task as movement commands. The change should occur at
+      --  approximately the point where this procedure was called in relation to movement commands.
+      --
+      --  It is up to the vendor to decide what best corresponds to 0% and 100%. 0% should generally correspond to the
+      --  fan not spinning, however this may obviously vary with the type of fan which a user connects. The user is
+      --  given the option to invert the output, which will result in this procedure being called with `Duty_Cycle =
+      --  1.0 - Original_Duty_Cycle`.
+
       case Kind is
          when Fixed_Switching_Kind =>
-            Reconfigure_Fixed_Switching_Fan : access procedure (Fan : Fan_Name; PWM_Freq : Fan_PWM_Frequency);
-            Maximum_PWM_Frequency           : Frequency;
+            Reconfigure_Fixed_Switching_Fan : access procedure (Fan : Fan_Name; PWM_Freq : Frequency);
+            --  Setting `PWM_Freq` to zero should still allow the fan to turn on and off, but there will be no PWM, it
+            --  will just be on or off.
+
+            Maximum_PWM_Frequency : Frequency;
 
          when Low_Or_High_Side_Switching_Kind =>
             Reconfigure_Low_Or_High_Side_Switching_Fan :
-              access procedure (Fan : Fan_Name; PWM_Freq : Fan_PWM_Frequency; Use_High_Side_Switching : Boolean);
-            Maximum_Low_Side_PWM_Frequency             : Frequency;
-            Maximum_High_Side_PWM_Frequency            : Frequency;
+              access procedure (Fan : Fan_Name; PWM_Freq : Frequency; Use_High_Side_Switching : Boolean);
+            --  Setting `PWM_Freq` to zero should still allow the fan to turn on and off, but there will be no PWM, it
+            --  will just be on or off.
+
+            Maximum_Low_Side_PWM_Frequency  : Frequency;
+            Maximum_High_Side_PWM_Frequency : Frequency;
 
       end case;
    end record;

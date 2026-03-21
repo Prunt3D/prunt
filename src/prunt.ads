@@ -59,47 +59,47 @@ package Prunt is
    with Dimension => (Symbol => "s", Second => 1, others => 0), Annotate => (Prunt_Config, Unit, "s");
 
    subtype Temperature is Dimensioned_Float
-   with Dimension => (Symbol => "°C", Celsius => 1, others => 0), Annotate => (Prunt_Config, Unit, "celsius");
+   with Dimension => (Symbol => "°C", Celsius => 1, others => 0), Annotate => (Prunt_Config, Unit, "celsius", "°C");
 
    subtype Angle is Dimensioned_Float
-   with Dimension => (Symbol => "rad", others => 0), Annotate => (Prunt_Config, Unit, "deg");
+   with Dimension => (Symbol => "rad", others => 0), Annotate => (Prunt_Config, Unit, "deg", "°");
 
    subtype Dimensionless is Dimensioned_Float
-   with Dimension => (Symbol => "×", others => 0), Annotate => (Prunt_Config, Unit, "");
+   with Dimension => (Symbol => "×", others => 0), Annotate => (Prunt_Config, Unit, "", "×");
 
    subtype Voltage is Dimensioned_Float
    with
      Dimension => (Symbol => "nV", Gram => 1, Millimeter => 2, Second => -3, Amp => -1, others => 0),
-     Annotate  => (Prunt_Config, Unit, "volt");
+     Annotate  => (Prunt_Config, Unit, "volt", "V");
 
    subtype Current is Dimensioned_Float
-   with Dimension => (Symbol => "A", Amp => 1, others => 0), Annotate => (Prunt_Config, Unit, "amp");
+   with Dimension => (Symbol => "A", Amp => 1, others => 0), Annotate => (Prunt_Config, Unit, "amp", "A");
 
    subtype Mass is Dimensioned_Float
-   with Dimension => (Symbol => "g", Gram => 1, others => 0), Annotate => (Prunt_Config, Unit, "gram");
+   with Dimension => (Symbol => "g", Gram => 1, others => 0), Annotate => (Prunt_Config, Unit, "gram", "g");
 
    subtype Resistance is Dimensioned_Float
    with
      Dimension => (Symbol => "nohm", Gram => 1, Millimeter => 2, Second => -3, Amp => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "ohm");
+     Annotate  => (Prunt_Config, Unit, "ohm", "Ω");
 
    subtype Power is Dimensioned_Float
    with
      Dimension => (Symbol => "nW", Gram => 1, Millimeter => 2, Second => -3, others => 0),
-     Annotate  => (Prunt_Config, Unit, "watt");
+     Annotate  => (Prunt_Config, Unit, "watt", "W");
 
    subtype Frequency is Dimensioned_Float
-   with Dimension => (Symbol => "Hz", Second => -1, others => 0), Annotate => (Prunt_Config, Unit, "hertz");
+   with Dimension => (Symbol => "Hz", Second => -1, others => 0), Annotate => (Prunt_Config, Unit, "hertz", "Hz");
 
    subtype Energy is Dimensioned_Float
    with
      Dimension => (Symbol => "nJ", Gram => 1, Millimeter => 2, Second => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "joule");
+     Annotate  => (Prunt_Config, Unit, "joule", "J");
 
    subtype Inductance is Dimensioned_Float
    with
      Dimension => (Symbol => "nH", Gram => 1, Millimeter => 2, Second => -2, Amp => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "millihenry");
+     Annotate  => (Prunt_Config, Unit, "millihenry", "mH");
 
    subtype PWM_Scale is Dimensionless range 0.0 .. 1.0 with Annotate => (Prunt_Config, Unit, "", "×");
 
@@ -133,9 +133,6 @@ package Prunt is
    ms         : constant Time := s / 1_000.0;
    min        : constant Time := s * 60.0;
    deg        : constant Angle := (Ada.Numerics.Pi / 180.0) * radian;
-
-   subtype Fan_PWM_Frequency is Frequency range 1.0 * hertz .. 50_000.0 * hertz
-   with Annotate => (Prunt_Config, Unit, "hertz");
 
    subtype Velocity is Dimensioned_Float
    with

@@ -58,6 +58,10 @@ private
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
 
+      procedure No_Operation (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "G4");
+      --  Does nothing. This command is provided for compatibility with Marlin g-code.
+
       procedure Dwell_Seconds
         (Planner : Planner_Interface'Class;
          S       : Dimensionless
@@ -65,6 +69,11 @@ private
          )
       with Annotate => (Prunt_Config, Gcode_Command, "G4");
       --  Dwell for a specified time in seconds.
+      --
+      --  Negative times will cause an error to be emitted.
+      --
+      --  This command differs from Marlin in that `S` and `P` can not be specified at the same time. In Marlin if both
+      --  `S` and `P` are specified then `P` will be silently ignored, however in Prunt it is an error to specify both.
 
       procedure Dwell_Milliseconds
         (Planner : Planner_Interface'Class;
@@ -73,6 +82,11 @@ private
          )
       with Annotate => (Prunt_Config, Gcode_Command, "G4");
       --  Dwell for a specified time in milliseconds.
+      --
+      --  Negative times will cause an error to be emitted.
+      --
+      --  This command differs from Marlin in that `S` and `P` can not be specified at the same time. In Marlin if both
+      --  `S` and `P` are specified then `P` will be silently ignored, however in Prunt it is an error to specify both.
    private
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;

@@ -51,21 +51,15 @@ package body Prunt.Default_Modules.Machine_Name is
          Self_Ref := Self_Ref_In;
       end Start;
 
-      procedure Expected_Printer_Check
-        (Planner : Planner_Interface'Class;
-         P       : Virtual_String) is
+      procedure Expected_Printer_Check (Planner : Planner_Interface'Class; P : Virtual_String) is
       begin
          pragma Unreferenced (Planner, P);
          raise Constraint_Error with "M16 is not implemented yet.";
       end Expected_Printer_Check;
 
-      procedure Set_Or_Report_Machine_Name
-        (Planner : Planner_Interface'Class;
-         P       : Gcode_Optional_String) is
-      begin
-         pragma Unreferenced (Planner, P);
-         My_Logger.Log ("M550 machine-name reporting is not implemented yet.");
-      end Set_Or_Report_Machine_Name;
+      procedure Set_Machine_Name (Planner : Planner_Interface'Class; P : Virtual_String); --  TODO
+
+      procedure Report_Machine_Name (Planner : Planner_Interface'Class); --  TODO
    end Module_Instance;
 
 end Prunt.Default_Modules.Machine_Name;

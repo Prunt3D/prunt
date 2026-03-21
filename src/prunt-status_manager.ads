@@ -29,9 +29,21 @@ private with Prunt.JSON;
 
 package Prunt.Status_Manager is
 
-   --  TODO: Should we allow more complex nested structures here?
-
    type Status_Emitter (<>) is private;
+   --  TODO: Get rid of the unknown discriminant part and change everything to use Status_Emitter directly instead of
+   --  shared pointers.
+
+   type Lock_Free_Dimensionless_Setter is private;
+
+   function Set_Value (This : Lock_Free_Dimensionless_Setter; Value : Dimensionless);
+
+   type Lock_Free_Boolean_Setter is private;
+
+   function Set_Value (This : Lock_Free_Boolean_Setter; Value : Boolean);
+
+   --  TODO: Implement above via shared pointers to an atomic subtype. Inside the Status_Emitter these will need to be
+   --  updated in the JSON every time JSON_Data is called and the normal Set_Value procedures will have to use these if
+   --  they exist for a given key.
 
    type Status_Value_Kind is (Real_Kind, Integer_Kind, Boolean_Kind, String_Kind);
 
@@ -71,6 +83,11 @@ package Prunt.Status_Manager is
      (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Long_Long_Integer);
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Boolean);
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Virtual_String);
+
+   procedure Get_Lock_Free_Setter
+     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Dimensionless_Setter;
+   procedure Get_Lock_Free_Setter
+     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Boolean_Setter;
 
    function JSON_Schema (This : Status_Data_Collection) return Virtual_String;
    function JSON_Data (This : Status_Data_Collection) return Virtual_String;

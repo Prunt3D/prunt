@@ -59,7 +59,7 @@ private
       Current_Index : Width_Per_Level_Type;
       Sums          : Single_Moving_Average_Sums (1 .. N_Levels);
       Buffers       : Single_Moving_Average_Buffers (1 .. Width_Per_Level, 1 .. N_Levels);
-      --  RM 3.6.2(11/3) advices that row-major order should be used by default. The order of the indices here improves
+      --  RM 3.6.2(11/3) advises that row-major order should be used by default. The order of the indices here improves
       --  memory locality when there are many levels if that advice is followed.
    end record;
 

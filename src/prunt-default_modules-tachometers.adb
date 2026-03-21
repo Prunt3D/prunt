@@ -19,19 +19,24 @@
 --                                                                         --
 -----------------------------------------------------------------------------
 
-package body Prunt.Default_Modules.Config_Saving is
+package body Prunt.Default_Modules.Tachometers is
 
    pragma Extensions_Allowed (On);
 
-   overriding
-   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+   function Build_Schema return Config.Config_Property_Maps.Map is separate;
+
+   function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;
+
+   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
    overriding
-   procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
-      Args               : in out Gcode_Arguments.Arguments;
-      Planner            : Planner_Interface'Class;
-      Command_Identifier : Gcode_Command_Identifier) is separate;
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
+   begin
+      return (Version => 1, Top_Level_Items => Build_Schema);
+   end Config_Schema;
+
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
 
    overriding
    function Initialize
@@ -40,52 +45,43 @@ package body Prunt.Default_Modules.Config_Saving is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class is
+      return My_Modules.Module_Instance'Class
+   is
+      pragma Unreferenced (This, Status_Emitter, Get_Other_Instance);
+
+      Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data);
    begin
       return Result : Module_Instance;
    end Initialize;
 
+   overriding
+   procedure Gcode_Dispatch
+     (This               : in out Module_Instance;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
+
    protected body Module_Instance is
+      procedure Initialize (Config_In : User_Config) is
+      begin
+         Config := Config_In;
+      end Initialize;
+
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
       begin
          Self_Ref := Self_Ref_In;
       end Start;
 
-      procedure Register_For_Saving (Config_Data : Config.Config_Data) is
+      procedure Report_Tachometers (Planner : Planner_Interface'Class) is
       begin
-         if not Self_Ref.Was_Freed then
-            raise Constraint_Error with "Modules must be registered before starting.";
-         end if;
+         null; --  TODO
+      end Report_Tachometers;
 
-         Configs_To_Save.Insert (Config_Data.Module_Name, Config_Data);
-      end Register_For_Saving;
-
-      procedure Save_Settings (Planner : Planner_Interface'Class) is
+      procedure Report_Tachometers (Planner : Planner_Interface'Class; S : Dimensionless) is
       begin
-         for C of Configs_To_Save loop
-            Planner.Flush (Config_Save_Event'(Config_To_Save => C));
-         end loop;
-      end Save_Settings;
-
-      procedure Save_Settings (Planner : Planner_Interface'Class; I : Virtual_String) is
-      begin
-         if not Configs_To_Save.Contains (I) then
-            raise Gcode_Bad_Inputs_Error
-              with "Module """ & Conversions.To_UTF_8_String (I) & """ not known or does not have savable settings.";
-         end if;
-
-         Planner.Flush (Config_Save_Event'(Config_To_Save => Configs_To_Save (I)));
-      end Save_Settings;
-
-      procedure Save_Settings (Planner : Planner_Interface'Class; I : Gcode_No_Value) is
-         Module_List : Virtual_String := "Modules with savable settings: ";
-      begin
-         for C in Configs_To_Save.Iterate loop
-            Module_List := @ & C.Key & (if C.Key = Configs_To_Save.Last_Key then +"" else +", ");
-         end loop;
-
-         Planner.Flush (Config_List_Event'(Config_List => Module_List));
-      end Save_Settings;
+         pragma Unreferenced (Planner, S);
+         My_Logger.Log ("M123 tachometer reporting is not implemented yet.");
+      end Report_Tachometers;
    end Module_Instance;
 
-end Prunt.Default_Modules.Config_Saving;
+end Prunt.Default_Modules.Tachometers;

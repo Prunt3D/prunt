@@ -23,24 +23,26 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Controller_Generic_Types;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
-private with Ada.Containers.Ordered_Maps;
-
 generic
-package Prunt.Default_Modules.Config_Saving is
+   with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
+   --  TODO
+package Prunt.Default_Modules.Tachometers is
+
+   use My_Controller_Generic_Types;
 
    type Module is new My_Modules.Module with null record;
 
    overriding
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+
+   overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
 
-   type Config_Saver is synchronized interface;
-
-   procedure Register_For_Saving (This : in out Config_Saver; Config_Data : Config.Config_Data) is abstract;
-
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Config_Saver with private;
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
    overriding
    function Initialize
@@ -60,61 +62,45 @@ package Prunt.Default_Modules.Config_Saving is
 
 private
 
-   function Return_False (Left, Right : Config.Config_Data) return Boolean
-   is (False);
 
-   package Config_Data_Maps is new
-     Ada.Containers.Ordered_Maps (Virtual_String, Config.Config_Data, "=" => Return_False);
+   type User_Config is record
+      null;
+   end record
+   with Annotate => (Prunt_Config, Root_User_Config);
 
-   type Config_Save_Event is new Extra_Block_Resetting_Data with record
-      Config_To_Save : Config.Config_Data;
-   end record;
+   --  TODO: Tachometer settings.
 
-   type Config_List_Event is new Extra_Block_Resetting_Data with record
-      Config_List : Virtual_String;
-   end record;
+   function Build_Schema return Config.Config_Property_Maps.Map;
 
-   protected type Module_Instance is new My_Modules.Module_Instance and Config_Saver with
+   function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+
+   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+
+   protected type Module_Instance is new My_Modules.Module_Instance with
+      procedure Initialize (Config_In : User_Config);
+
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
 
-      --  overriding
-      --  TODO: GCC bug above.
-      procedure Register_For_Saving (Config_Data : Config.Config_Data);
+      procedure Report_Tachometers (Planner : Planner_Interface'Class)
+      with Annotate => (Prunt_Config, Gcode_Command, "M123");
+      --  Report tachometer readings to the log immediately. This will not interrupt readings that are being reported
+      --  on an interval.
 
-      procedure Save_Settings (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M500");
-      --  Save all configurable settings for all modules that have been temporarily set as a result of g-code commands.
-      --  Settings and g-code commands which use this functionality make a note of this in their own descriptions.
-      --
-      --  This command differs from Marlin in that the exact settings that are available to be saved may not be the
-      --  same.
-
-      procedure Save_Settings
+      procedure Report_Tachometers
         (Planner : Planner_Interface'Class;
-         I       : Virtual_String
-         --  The name of the module to save.
+         S       : Dimensionless
+         --  Interval in seconds between reports.
          )
-      with Annotate => (Prunt_Config, Gcode_Command, "M500");
-      --  Save all configurable settings for a specific module that have been temporarily set as a result of g-code
-      --  commands. Settings and g-code commands which use this functionality make a note of this in their own
-      --  descriptions.
+      with Annotate => (Prunt_Config, Gcode_Command, "M123");
+      --  Report tachometer readings to the log repeatedly with a given interval. If this command has been called
+      --  previously then this will override the previous interval rather than using both.
       --
-      --  This command is not present in Marlin.
-
-      procedure Save_Settings
-        (Planner : Planner_Interface'Class;
-         I       : Gcode_No_Value
-         --  When providing no value a listing of modules with savable settings will be emitted.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M500");
-      --  List modules with savable settings.
-      --
-      --  This command is not present in Marlin.
+      --  This command differs from Marlin in that the `S` parameter may be a real number instead of just an integer.
 
    private
-      Self_Ref        : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-      Configs_To_Save : Config_Data_Maps.Map;
+      Config   : User_Config;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 
-end Prunt.Default_Modules.Config_Saving;
+end Prunt.Default_Modules.Tachometers;

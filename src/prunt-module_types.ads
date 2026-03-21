@@ -127,10 +127,6 @@ package Prunt.Module_Types is
 
    type Extra_Corner_Data is tagged null record;
 
-   Extra_Corner_Data_Max_Size : constant System.Storage_Elements.Storage_Count := 64;
-   --  A child of `Extra_Corner_Data` may not be larger than this size in storage elements or else an error will be
-   --  raised when it is used.
-
    procedure Process (This : Extra_Corner_Data; Last_Command_Index : Command_Index) is null;
 
    type Extra_Block_Resetting_Data is tagged null record;

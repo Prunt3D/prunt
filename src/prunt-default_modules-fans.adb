@@ -29,24 +29,6 @@ package body Prunt.Default_Modules.Fans is
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
-   function Maximum_PWM_Frequency
-     (Fan : Fan_Name; Use_High_Side_Switching : Boolean) return Frequency
-   is
-   begin
-      case Fan_Hardware (Fan).Kind is
-         when Fixed_Switching_Kind =>
-            return Fan_Hardware (Fan).Maximum_PWM_Frequency;
-
-         when Low_Or_High_Side_Switching_Kind =>
-            return
-              (if Use_High_Side_Switching
-               then Fan_Hardware (Fan).Maximum_High_Side_PWM_Frequency
-               else Fan_Hardware (Fan).Maximum_Low_Side_PWM_Frequency);
-      end case;
-   end Maximum_PWM_Frequency;
-
-   function PWM_Frequency_Path (Fan : Fan_Name) return Config.Config_Data_Paths.Vector is (["Fans", +Fan'Image, "PWM_Frequency"]);
-
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
    begin
@@ -73,16 +55,44 @@ package body Prunt.Default_Modules.Fans is
          Result.Initialize (Parsed_Config);
 
          for F in Fan_Name loop
-            if Parsed_Config.Fans (F).PWM_Frequency > Maximum_PWM_Frequency
-                 (F, Parsed_Config.Fans (F).Use_High_Side_Switching)
-            then
-               Report_Config_Error
-                 (PWM_Frequency_Path (F),
-                  "This PWM frequency exceeds the maximum supported by the selected fan hardware mode.");
-            end if;
+            case Fan_Hardware (Fan).Kind is
+               when Fixed_Switching_Kind            =>
+                  if Parsed_Config.Fans (F).PWM_Frequency > Fan_Hardware (F).Maximum_PWM_Frequency then
+                     --  TODO: We should propagate this to the client in the schema and raise a constraint error if we
+                     --  somehow get a bad value here.
+                     Report_Config_Error
+                       (["Fans", +F'Image, "PWM_Frequency"],
+                        "This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
+                        & Dimensionless'Image (Fan_Hardware (F).Maximum_PWM_Frequency / hertz)
+                        & " Hz.");
+                  end if;
+
+               when Low_Or_High_Side_Switching_Kind =>
+                  if Parsed_Config.Fans (F).PWM_Frequency
+                    > (if Parsed_Config.Fans (F).Use_High_Side_Switching
+                       then Fan_Hardware (F).Maximum_High_Side_PWM_Frequency
+                       else Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency)
+                  then
+                     --  TODO: We should propagate the largest value to the client in the schema and have a more
+                     --  friendly error message here.
+                     Report_Config_Error
+                       (["Fans", +F'Image, "PWM_Frequency"],
+                        "This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
+                        & Dimensionless'Image (Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency / hertz)
+                        & " Hz in low side switching mode or "
+                        & Dimensionless'Image (Fan_Hardware (F).Maximum_High_Side_PWM_Frequency / hertz)
+                        & " Hz in high side switching mode.");
+                  end if;
+            end case;
          end loop;
       end return;
    end Initialize;
+
+   procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index) is
+   begin
+      Fan_Hardware (This.Fan).Set_Duty_Cycle ((if This.Invert then 1.0 - This.Duty_Cycle else This.Duty_Cycle));
+      This.Speeds_Array.Get (This.Fan) := This.Duty_Cycle;
+   end Process;
 
    overriding
    procedure Gcode_Dispatch
@@ -95,64 +105,103 @@ package body Prunt.Default_Modules.Fans is
       procedure Initialize (Config_In : User_Config) is
       begin
          Config := Config_In;
+         --  TODO: Need to pass in status manager and set up the status schema.
       end Initialize;
 
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
       begin
          Self_Ref := Self_Ref_In;
 
-         --  The current fan hardware API only exposes PWM frequency and switching mode.
          for F in Fan_Name loop
             case Fan_Hardware (F).Kind is
-               when Fixed_Switching_Kind =>
+               when Fixed_Switching_Kind            =>
                   Fan_Hardware (F).Reconfigure_Fixed_Switching_Fan (F, Config.Fans (F).PWM_Frequency);
 
                when Low_Or_High_Side_Switching_Kind =>
                   Fan_Hardware (F).Reconfigure_Low_Or_High_Side_Switching_Fan
-                    (F,
-                     Config.Fans (F).PWM_Frequency,
-                     Config.Fans (F).Use_High_Side_Switching);
+                    (F, Config.Fans (F).PWM_Frequency, Config.Fans (F).Use_High_Side_Switching);
             end case;
          end loop;
+         --  TODO: Set fixed speed values.
       end Start;
 
-      procedure Set_Fan_Speed
-        (Planner : Planner_Interface'Class;
-         P       : Gcode_Optional_Integer;
-         S       : Gcode_Optional_Integer) is
+      procedure Set_Fan_Speed_Internal (Planner : Planner_Interface'Class; Fan : Fan_Name; Speed : Dimensionless) is
       begin
-         pragma Unreferenced (Planner, P, S);
-         raise Constraint_Error with "Runtime fan duty control is not available through Fan_Hardware yet.";
-      end Set_Fan_Speed;
+         if Config.Fans (Fan).Control_Method.Kind /= Dynamic_Duty_Cycle then
+            raise Gcode_Bad_Inputs_Error
+              with "Fan " & Fan'Image & " is not configured for dynamic duty cycle operation.";
+         end if;
+
+         if Speed < 0.0 then
+            raise Gcode_Bad_Inputs_Error with "Speed must not be less than 0.";
+         end if;
+
+         if Speed > 255.0 then
+            raise Gcode_Bad_Inputs_Error with "Speed must not be greater than 255.";
+         end if;
+
+         declare
+            Duty_Cycle : PWM_Scale :=
+              Speed / 255.0 * Config.Fans (Fan).Control_Method.Dynamic_Duty_Cycle.Maximum_Duty_Cycle;
+         begin
+            Planner.Add_Corner_Data
+              (Fan_Speed_Change'
+                 (Fan          => Fan,
+                  Invert       => Config.Fans (Fan).Invert_PWM_Output,
+                  Duty_Cycle   => Duty_Cycle,
+                  Speeds_Array => Speeds_Array));
+         end;
+      end Set_Fan_Speed_Internal;
+
+      procedure Set_Fan_Speed_For_Default_Fan (Planner : Planner_Interface'Class; S : Dimensionless := 255.0) is
+      begin
+         Set_Fan_Speed_Internal (Planner, Config.Gcode_Defaults.Default_Fan, S);
+      end Set_Fan_Speed_For_Default_Fan;
 
       procedure Set_Fan_Speed
-        (Planner : Planner_Interface'Class;
-         P       : Virtual_String;
-         S       : Gcode_Optional_Integer) is
+        (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Dimensionless := 255.0) is
       begin
-         pragma Unreferenced (Planner, P, S);
-         raise Constraint_Error with "Runtime fan duty control by name is not available through Fan_Hardware yet.";
+         --  TODO: Need a fan lookup array in controller generic types.
+         Set_Fan_Speed_Internal (Planner, P, S);
       end Set_Fan_Speed;
 
-      procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Gcode_Optional_Integer) is
+      procedure Set_Fan_Speed (Planner : Planner_Interface'Class; P : Virtual_String; S : Dimensionless := 255.0) is
+         Fan : Fan_Name;
       begin
-         pragma Unreferenced (Planner, P);
-         raise Constraint_Error with "Runtime fan duty control is not available through Fan_Hardware yet.";
+         begin
+            Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
+         exception
+            when Constraint_Error =>
+               --  TODO: Emit a list of valid fans here.
+               raise Gcode_Bad_Inputs_Error with "Fan name not known.";
+         end;
+
+         Set_Fan_Speed_Internal (Planner, Fan, S);
+      end Set_Fan_Speed;
+
+      procedure Turn_Off_Default_Fan (Planner : Planner_Interface'Class) is
+      begin
+         Set_Fan_Speed_Internal (Planner, Config.Gcode_Defaults.Default_Fan, 0.0);
+      end Turn_Off_Default_Fan;
+
+      procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer) is
+      begin
+         --  TODO: Need a fan lookup array in controller generic types.
+         Set_Fan_Speed_Internal (Planner, P, 0.0);
       end Turn_Off_Fan;
 
       procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Virtual_String) is
       begin
-         pragma Unreferenced (Planner, P);
-         raise Constraint_Error with "Runtime fan duty control by name is not available through Fan_Hardware yet.";
-      end Turn_Off_Fan;
+         begin
+            Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
+         exception
+            when Constraint_Error =>
+               --  TODO: Emit a list of valid fans here.
+               raise Gcode_Bad_Inputs_Error with "Fan name not known.";
+         end;
 
-      procedure Report_Fan_Tachometers
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_Integer) is
-      begin
-         pragma Unreferenced (Planner, S);
-         My_Logger.Log ("M123 fan tachometer reporting is not implemented yet.");
-      end Report_Fan_Tachometers;
+         Set_Fan_Speed_Internal (Planner, Fan, 0.0);
+      end Turn_Off_Fan;
    end Module_Instance;
 
 end Prunt.Default_Modules.Fans;

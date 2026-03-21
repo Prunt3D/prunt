@@ -51,8 +51,17 @@ package body Prunt.Default_Modules.Dwell is
          Self_Ref := Self_Ref_In;
       end Start;
 
+      procedure No_Operation (Planner : Planner_Interface'Class) is
+      begin
+         null;
+      end No_Operation;
+
       procedure Dwell_Seconds (Planner : Planner_Interface'Class; S : Dimensionless) is
       begin
+         if S < 0.0 then
+            raise Gcode_Bad_Inputs_Error with "Negative dwell times are not allowed.";
+         end if;
+
          Planner.Add_Corner
            (Pos => Planner.Get_Last_Position, Feedrate => 1.0 * mm / Prunt.s, Dwell_After => S * Prunt.s);
       end Dwell_Seconds;
