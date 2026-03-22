@@ -47,12 +47,12 @@ package body Prunt.Default_Modules.Fans is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      pragma Unreferenced (This, Status_Emitter, Get_Other_Instance);
+      pragma Unreferenced (This, Get_Other_Instance);
 
       Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data);
    begin
       return Result : Module_Instance do
-         Result.Initialize (Parsed_Config);
+         Result.Initialize (Parsed_Config, Status_Emitter);
 
          for F in Fan_Name loop
             case Fan_Hardware (F).Kind is
@@ -88,12 +88,25 @@ package body Prunt.Default_Modules.Fans is
       end return;
    end Initialize;
 
+   overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
+      pragma Unreferenced (This);
+   begin
+      return
+        ["Speed" =>
+           [for F in Fan_Name use +F'Image =>
+              (Kind        => Status_Manager.Real_Kind,
+               Unit        => "×",
+               Description => "Requested speed of fan " & (+F'Image),
+               Condition   => "")]];
+   end Status_Schema;
+
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index) is
+      pragma Unreferenced (Last_Command_Index);
    begin
       Fan_Hardware (This.Fan).Set_Duty_Cycle
         (This.Fan, (if This.Invert then 1.0 - This.Duty_Cycle else This.Duty_Cycle));
-      --  TODO: Status emitter.
-      --  This.Speeds_Array.Get (This.Fan) := This.Duty_Cycle;
+      This.Speed_Status.Set_Value (This.Duty_Cycle);
    end Process;
 
    overriding
@@ -104,13 +117,19 @@ package body Prunt.Default_Modules.Fans is
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
    protected body Module_Instance is
-      procedure Initialize (Config_In : User_Config) is
+      procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter) is
       begin
          Config := Config_In;
-         --  TODO: Need to pass in status manager and set up the status schema.
+
+         for F in Fan_Name loop
+            Speed_Status_Setters (F) := Status_Emitter_In.Get_Lock_Free_Setter ("Speed", +F'Image);
+         end loop;
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
 
@@ -123,8 +142,20 @@ package body Prunt.Default_Modules.Fans is
                   Fan_Hardware (F).Reconfigure_Low_Or_High_Side_Switching_Fan
                     (F, Config.Fans (F).PWM_Frequency, Config.Fans (F).Use_High_Side_Switching);
             end case;
+
+            if Config.Fans (F).Control_Method.Kind = Always_On then
+               declare
+                  Duty_Cycle : constant PWM_Scale := Config.Fans (F).Control_Method.Always_On.Duty_Cycle;
+               begin
+                  Fan_Hardware (F).Set_Duty_Cycle
+                    (F, (if Config.Fans (F).Invert_PWM_Output then 1.0 - Duty_Cycle else Duty_Cycle));
+                  Speed_Status_Setters (F).Set_Value (Duty_Cycle);
+               end;
+            else
+               Fan_Hardware (F).Set_Duty_Cycle (F, (if Config.Fans (F).Invert_PWM_Output then 1.0 else 0.0));
+               Speed_Status_Setters (F).Set_Value (0.0);
+            end if;
          end loop;
-         --  TODO: Set fixed speed values.
       end Start;
 
       procedure Set_Fan_Speed_Internal (Planner : Planner_Interface'Class; Fan : Fan_Name; Speed : Dimensionless) is
@@ -146,8 +177,16 @@ package body Prunt.Default_Modules.Fans is
             Duty_Cycle : PWM_Scale :=
               Speed / 255.0 * Config.Fans (Fan).Control_Method.Dynamic_Duty_Cycle.Maximum_Duty_Cycle;
          begin
+            if Duty_Cycle < Config.Fans (Fan).Control_Method.Dynamic_Duty_Cycle.Disable_Below then
+               Duty_Cycle := 0.0;
+            end if;
+
             Planner.Add_Corner_Data
-              (Fan_Speed_Change'(Fan => Fan, Invert => Config.Fans (Fan).Invert_PWM_Output, Duty_Cycle => Duty_Cycle));
+              (Fan_Speed_Change'
+                 (Fan          => Fan,
+                  Invert       => Config.Fans (Fan).Invert_PWM_Output,
+                  Duty_Cycle   => Duty_Cycle,
+                  Speed_Status => Speed_Status_Setters (Fan)));
          end;
       end Set_Fan_Speed_Internal;
 

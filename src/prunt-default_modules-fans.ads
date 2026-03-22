@@ -53,6 +53,9 @@ package Prunt.Default_Modules.Fans is
       return My_Modules.Module_Instance'Class;
 
    overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+
+   overriding
    procedure Gcode_Dispatch
      (This               : in out Module_Instance;
       Args               : in out Gcode_Arguments.Arguments;
@@ -140,20 +143,23 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
+   type Fan_Speed_Status_Setters is array (Fan_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
+
    type Fan_Speed_Change is new Extra_Corner_Data with record
       Fan          : Fan_Name;
       Invert       : Boolean;
       Duty_Cycle   : PWM_Scale;
-      --  Speed_Status : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Speed_Status : Status_Manager.Lock_Free_Dimensionless_Setter;
    end record;
 
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index);
 
    protected type Module_Instance is new My_Modules.Module_Instance with
-      procedure Initialize (Config_In : User_Config);
+      procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
 
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       procedure Set_Fan_Speed_Internal (Planner : Planner_Interface'Class; Fan : Fan_Name; Speed : Dimensionless);
       --  There are no constraints on the values provided to this procedure so the calling g-code does not need to
@@ -221,8 +227,9 @@ private
       --  on.
 
    private
-      Config   : User_Config;
-      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Config               : User_Config;
+      Self_Ref             : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Speed_Status_Setters : Fan_Speed_Status_Setters;
    end Module_Instance;
 
 end Prunt.Default_Modules.Fans;
