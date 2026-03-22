@@ -150,6 +150,8 @@ package Prunt.Controller is
 
 private
 
+   use Prunt.Module_Types;
+
    package My_Logger is new Prunt.Logger;
 
    package My_Controller_Helpers is new Prunt.Controller_Helpers (Generic_Types);
@@ -421,5 +423,61 @@ private
    end Reload_Signal;
 
    procedure Signal_Reload;
+
+   protected Planner_State is
+      procedure Reset;
+      function Get_Last_Position return Position;
+      function Get_Last_Kinematic_Parameters return Motion_Planner.Kinematic_Parameters;
+      procedure Set_Last_Position (Pos : Position);
+      procedure Set_Last_Kinematic_Parameters (Params : Motion_Planner.Kinematic_Parameters);
+   private
+      Last_Position             : Position := [others => 0.0 * mm];
+      Last_Kinematic_Parameters : Motion_Planner.Kinematic_Parameters := (others => <>);
+   end Planner_State;
+
+   type Planner_Wrapper is new Planner_Interface with record
+      Startup_Mode : Boolean := False;
+   end record;
+
+   overriding
+   function Get_Last_Position (This : Planner_Wrapper) return Position;
+
+   overriding
+   function Get_Last_Kinematic_Parameters (This : Planner_Wrapper) return Motion_Planner.Kinematic_Parameters;
+
+   overriding
+   procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name);
+
+   overriding
+   procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name);
+
+   overriding
+   procedure Add_Corner
+     (This          : Planner_Wrapper;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True;
+      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record));
+
+   overriding
+   procedure Add_Corner_Data (This : Planner_Wrapper; Corner_Data : Extra_Corner_Data'Class);
+
+   overriding
+   procedure Flush
+     (This       : Planner_Wrapper;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+
+   overriding
+   procedure Flush_And_Change_Kinematic_Parameters
+     (This       : Planner_Wrapper;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+
+   overriding
+   procedure Flush_And_Reset_Position
+     (This         : Planner_Wrapper;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
 
 end Prunt.Controller;

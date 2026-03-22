@@ -47,7 +47,7 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
      (This                : Module;
       Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
 
@@ -64,7 +64,7 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
 private
 
    task type Status_Updater is
-      entry Start (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+      entry Start (Status_Emitter : Status_Manager.Status_Emitter);
       entry Stop;
    end Status_Updater;
 
@@ -83,7 +83,7 @@ private
    --  assignment is complete.
 
    protected type Module_Instance is new My_Modules.Module_Instance with
-      procedure Initialize (Status_Emitter_In : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+      procedure Initialize (Status_Emitter_In : Status_Manager.Status_Emitter);
 
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
@@ -108,7 +108,7 @@ private
       with Annotate => (Prunt_Config, Gcode_Command, "M154");
       --  Configure automatic position reporting to the logger.
    private
-      Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter : Status_Manager.Status_Emitter;
       Self_Ref       : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Updater        : Status_Updater_Wrapper_Pointers.Ref;
    end Module_Instance;

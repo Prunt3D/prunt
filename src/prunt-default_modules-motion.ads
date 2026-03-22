@@ -43,7 +43,7 @@ package Prunt.Default_Modules.Motion is
      (This                : Module;
       Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
 
@@ -93,7 +93,7 @@ private
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       procedure Initialize
-        (Config_In : User_Config; Status_Emitter_In : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+        (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
 
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
@@ -444,7 +444,7 @@ private
    private
       Config         : User_Config;
       Self_Ref       : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-      Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter : Status_Manager.Status_Emitter;
       Feedrate       : Velocity;
    end Module_Instance;
 

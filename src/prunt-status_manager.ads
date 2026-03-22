@@ -27,9 +27,7 @@ private with Prunt.JSON;
 
 package Prunt.Status_Manager is
 
-   type Status_Emitter (<>) is private;
-   --  TODO: Get rid of the unknown discriminant part and change everything to use Status_Emitter directly instead of
-   --  shared pointers.
+   type Status_Emitter is private;
 
    --  type Lock_Free_Dimensionless_Setter is private;
 

@@ -22,12 +22,131 @@ with Ada.Containers.Vectors;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
-with Prunt.Module_Types; use Prunt.Module_Types;
 with VSS.Strings.Conversions;
 
 package body Prunt.Controller is
 
    pragma Extensions_Allowed (On);
+
+   protected body Planner_State is
+      procedure Reset is
+      begin
+         Last_Position := [others => 0.0 * mm];
+         Last_Kinematic_Parameters := (others => <>);
+      end Reset;
+
+      function Get_Last_Position return Position is
+      begin
+         return Last_Position;
+      end Get_Last_Position;
+
+      function Get_Last_Kinematic_Parameters return Motion_Planner.Kinematic_Parameters is
+      begin
+         return Last_Kinematic_Parameters;
+      end Get_Last_Kinematic_Parameters;
+
+      procedure Set_Last_Position (Pos : Position) is
+      begin
+         Last_Position := Pos;
+      end Set_Last_Position;
+
+      procedure Set_Last_Kinematic_Parameters (Params : Motion_Planner.Kinematic_Parameters) is
+      begin
+         Last_Kinematic_Parameters := Params;
+      end Set_Last_Kinematic_Parameters;
+   end Planner_State;
+
+   overriding
+   function Get_Last_Position (This : Planner_Wrapper) return Position is
+      pragma Unreferenced (This);
+   begin
+      return Planner_State.Get_Last_Position;
+   end Get_Last_Position;
+
+   overriding
+   function Get_Last_Kinematic_Parameters (This : Planner_Wrapper) return Motion_Planner.Kinematic_Parameters is
+      pragma Unreferenced (This);
+   begin
+      return Planner_State.Get_Last_Kinematic_Parameters;
+   end Get_Last_Kinematic_Parameters;
+
+   overriding
+   procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name) is
+   begin
+      pragma Unreferenced (This, Axis); --  TODO
+      null;
+   end Mark_Axis_Homed;
+
+   overriding
+   procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name) is
+   begin
+      pragma Unreferenced (This, Axis); --  TODO
+      null;
+   end Mark_Axis_Unhomed;
+
+   overriding
+   procedure Add_Corner
+     (This          : Planner_Wrapper;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True;
+      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
+   is
+      pragma Unreferenced (Require_Homed);
+   begin
+      if This.Startup_Mode and then Pos /= Planner_State.Get_Last_Position then
+         raise Constraint_Error with "Motion not allowed during startup.";
+      end if;
+
+      Planner_State.Set_Last_Position (Pos);
+
+      My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
+
+      if Corner_Data not in Extra_Corner_Data then
+         My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+      end if;
+   end Add_Corner;
+
+   overriding
+   procedure Add_Corner_Data (This : Planner_Wrapper; Corner_Data : Extra_Corner_Data'Class) is
+   begin
+      if Corner_Data not in Extra_Corner_Data then
+         My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+      end if;
+   end Add_Corner_Data;
+
+   overriding
+   procedure Flush
+     (This       : Planner_Wrapper;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+   begin
+      My_Motion_Planner.Enqueue_Flush (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data));
+   end Flush;
+
+   overriding
+   procedure Flush_And_Change_Kinematic_Parameters
+     (This       : Planner_Wrapper;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+   begin
+      Planner_State.Set_Last_Kinematic_Parameters (Params);
+
+      My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
+        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params);
+   end Flush_And_Change_Kinematic_Parameters;
+
+   overriding
+   procedure Flush_And_Reset_Position
+     (This         : Planner_Wrapper;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+   begin
+      Planner_State.Set_Last_Position (New_Position);
+
+      My_Motion_Planner.Enqueue_Flush_And_Reset_Position
+        (Data => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Pos => New_Position);
+   end Flush_And_Reset_Position;
 
    procedure Prompt_For_Update is
    begin
@@ -46,49 +165,10 @@ package body Prunt.Controller is
             Had_Error := True;
          end Report_Config_Error;
 
-         type Fake_Planner is new Planner_Interface with null record;
-
-         function Get_Last_Position (This : Fake_Planner) return Position
-         is (others => Length (0.0));
-
-         function Get_Last_Kinematic_Parameters (This : Fake_Planner) return Motion_Planner.Kinematic_Parameters
-         is (others => <>);
-
-         procedure Mark_Axis_Homed (This : Fake_Planner; Axis : Axis_Name) is null;
-
-         procedure Mark_Axis_Unhomed (This : Fake_Planner; Axis : Axis_Name) is null;
-
-         procedure Add_Corner
-           (This          : Fake_Planner;
-            Pos           : Position;
-            Feedrate      : Velocity;
-            Dwell_After   : Time := 0.0 * s;
-            Require_Homed : Boolean := True;
-            Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
-         is null;
-
-         procedure Add_Corner_Data (This : Fake_Planner; Corner_Data : Extra_Corner_Data'Class) is null;
-         --  May be attached to a dummy corner in the next block.
-
-         procedure Flush
-           (This       : Fake_Planner;
-            Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
-         is null;
-
-         procedure Flush_And_Change_Kinematic_Parameters
-           (This       : Fake_Planner;
-            Params     : Motion_Planner.Kinematic_Parameters;
-            Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
-         is null;
-
-         procedure Flush_And_Reset_Position
-           (This         : Fake_Planner;
-            New_Position : Position;
-            Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
-         is null;
-
-         My_Fake_Planner : Fake_Planner;
+         Startup_Planner : constant Planner_Wrapper := (Startup_Mode => True);
       begin
+         Planner_State.Reset;
+
          Active_Module_Instances :=
            Recursive_Module_Initialization
              (Report_Config_Error'Access, Active_Config_File, Log_Dependency_Tree => True);
@@ -98,7 +178,7 @@ package body Prunt.Controller is
             Active_Module_Instances.Reverse_Clear;
          else
             for M of Active_Module_Instances loop
-               My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, My_Fake_Planner);
+               My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
             end loop;
          end if;
       end Attempt_Start;
@@ -334,14 +414,14 @@ package body Prunt.Controller is
                   end Report_Config_Error_With_Module;
 
                   function Get_Data return My_Modules.Module_Instance_Parent'Class is
-                     Emitter_Ref : My_Modules.Status_Emitter_Shared_Pointers.Ref :=
-                       My_Modules.Status_Emitter_Shared_Pointers.Null_Ref;
                      Config_Data : constant Config.Config_Data := My_Config_File.Get_Data (Module_Name);
                   begin
-                     Emitter_Ref.Set (Status_Manager.Get_Emitter (My_Status_Data, Module_Name));
                      return
                        Element (C).Initialize
-                         (Config_Data, Report_Config_Error_With_Module'Access, Emitter_Ref, Get_Other_Instance'Access);
+                         (Config_Data,
+                          Report_Config_Error_With_Module'Access,
+                          Status_Manager.Get_Emitter (My_Status_Data, Module_Name),
+                          Get_Other_Instance'Access);
                   end Get_Data;
 
                   Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=

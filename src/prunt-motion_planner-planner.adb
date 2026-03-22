@@ -49,9 +49,11 @@ package body Prunt.Motion_Planner.Planner is
         ((Kind => Move_Kind, Dwell_After => Dwell_After, Pos => Pos, Feedrate => Feedrate), Ignore_Bounds);
    end Enqueue_Move;
 
-   procedure Enqueue_Corner_Extra_Data (Data : aliased Corner_Extra_Data_Type) is
+   procedure Enqueue_Corner_Extra_Data (Data : Corner_Extra_Data_Type) is
+      Data_Copy : aliased Corner_Extra_Data_Type := Data;
    begin
-      My_Preprocessor.Enqueue (Comm => (Kind => Corner_Extra_Data_Kind), Ignore_Bounds => False, Extra => Data'Access);
+      My_Preprocessor.Enqueue
+        (Comm => (Kind => Corner_Extra_Data_Kind), Ignore_Bounds => False, Extra => Data_Copy'Access);
    end Enqueue_Corner_Extra_Data;
 
    procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False) is

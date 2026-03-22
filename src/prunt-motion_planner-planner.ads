@@ -223,7 +223,7 @@ package Prunt.Motion_Planner.Planner is
    procedure Enqueue_Move
      (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False);
 
-   procedure Enqueue_Corner_Extra_Data (Data : aliased Corner_Extra_Data_Type);
+   procedure Enqueue_Corner_Extra_Data (Data : Corner_Extra_Data_Type);
    --  This could be pushed to the next block if there is no space for the data.
 
    procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False);

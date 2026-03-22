@@ -109,7 +109,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
      (This                : Module;
       Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
    begin
@@ -548,7 +548,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
 
       My_Regs        : TMC2240_Registers;
       My_Motor       : My_Controller_Generic_Types.Motor_Name;
-      Status_Ref     : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Ref     : Status_Manager.Status_Emitter;
       Stop_Requested : Boolean := False;
       Next_Poll_Time : Ada.Real_Time.Time := Ada.Real_Time.Clock;
    begin
@@ -556,7 +556,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          accept Setup
            (Regs           : TMC2240_Registers;
             Motor          : My_Controller_Generic_Types.Motor_Name;
-            Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref)
+            Status_Emitter : Status_Manager.Status_Emitter)
          do
             My_Regs := Regs;
             My_Motor := Motor;
@@ -645,11 +645,11 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                GSTAT_Reply : TMC_Types.TMC2240.UART_Data_Message;
             begin
                GSTAT_Reply := Read (TMC_Types.TMC2240.GSTAT_Address, My_Motor);
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Driver error", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.Drv_Err));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Undervoltage charge pump", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.UV_CP));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("VM undervoltage", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.VM_UVLO));
             exception
                when TMC_UART_Error =>
@@ -660,7 +660,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                ADC_VSUPPLY_AIN_Reply : TMC_Types.TMC2240.UART_Data_Message;
             begin
                ADC_VSUPPLY_AIN_Reply := Read (TMC_Types.TMC2240.ADC_VSUPPLY_AIN_Address, My_Motor);
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Supply voltage",
                   +My_Motor'Image,
                   Dimensionless (ADC_VSUPPLY_AIN_Reply.Content.ADC_VSUPPLY_AIN_Data.ADC_V_Supply));
@@ -673,7 +673,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                ADC_TEMP_Reply : TMC_Types.TMC2240.UART_Data_Message;
             begin
                ADC_TEMP_Reply := Read (TMC_Types.TMC2240.ADC_TEMP_Address, My_Motor);
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Temperature",
                   +My_Motor'Image,
                   Dimensionless (ADC_TEMP_Reply.Content.ADC_TEMP_Data.ADC_Temp) - 2038.0 * (10.0 / 77.0));
@@ -686,35 +686,35 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                DRV_STATUS_Reply : TMC_Types.TMC2240.UART_Data_Message;
             begin
                DRV_STATUS_Reply := Read (TMC_Types.TMC2240.DRV_STATUS_Address, My_Motor);
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("StallGuard value",
                   +My_Motor'Image,
                   Long_Long_Integer (DRV_STATUS_Reply.Content.DRV_STATUS_Data.SG_Result));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Short to VS phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2VSA));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Short to VS phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2VSB));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("StealthChop active", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.Stealth));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Full step active", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.FSActive));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Stall detected", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.StallGuard));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Overtemperature", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OT));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Overtemperature pre-warning",
                   +My_Motor'Image,
                   Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OTPW));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Short to GND phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2GA));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Short to GND phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2GB));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Open load phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OLA));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Open load phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OLB));
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value
                  ("Motor standstill", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.STST));
             exception
                when TMC_UART_Error =>
@@ -730,7 +730,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
            access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
-         Status_Emitter_In                 : My_Modules.Status_Emitter_Shared_Pointers.Ref)
+         Status_Emitter_In                 : Status_Manager.Status_Emitter)
       is
          Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames
            Motor_Drivers_Module.Module_Instance_Interface'Class (Motor_Drivers_Module_Instance_Ref.Get.Element.all);

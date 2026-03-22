@@ -20,7 +20,6 @@
 pragma Extensions_Allowed (On);
 
 with Ada.Tags;
-with GNATCOLL.Refcount;
 with Prunt.Config;
 with Prunt.Gcode_Arguments;
 with Prunt.Limited_Shared_Pointers;
@@ -80,13 +79,11 @@ package Prunt.Modules is
    --
    --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
 
-   package Status_Emitter_Shared_Pointers is new GNATCOLL.Refcount.Shared_Pointers (Status_Manager.Status_Emitter);
-
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      Status_Emitter      : Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return Module_Instance_Shared_Pointers.Ref)
       return Module_Instance'Class
    is abstract;

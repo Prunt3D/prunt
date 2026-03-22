@@ -57,7 +57,7 @@ package Prunt.Default_Modules.TMC2240_Drivers is
      (This                : Module;
       Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
 
@@ -405,7 +405,7 @@ private
       entry Setup
         (Regs           : TMC2240_Registers;
          Motor          : My_Controller_Generic_Types.Motor_Name;
-         Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref);
+         Status_Emitter : Status_Manager.Status_Emitter);
       entry Enable;
       entry Disable;
       entry Stop;
@@ -437,7 +437,7 @@ private
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
            access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
-         Status_Emitter_In                 : My_Modules.Status_Emitter_Shared_Pointers.Ref)
+         Status_Emitter_In                 : Status_Manager.Status_Emitter)
       with
         Pre =>
           Motor_Drivers_Module_Instance_Ref.Get.Element.all in Motor_Drivers_Module.Module_Instance_Interface'Class;
@@ -630,7 +630,7 @@ private
       Registers      : Motor_Registers_Map;
       Managers       : Motor_Manager_Map;
       Self_Ref       : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-      Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter : Status_Manager.Status_Emitter;
    end Module_Instance;
 
    type UART_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record

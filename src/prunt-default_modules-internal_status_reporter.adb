@@ -39,7 +39,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
      (This                : Module;
       Config_Data         : Config.Config_Data;
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-      Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
    begin
@@ -77,14 +77,14 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    end Status_Schema;
 
    task body Status_Updater is
-      Status_Ref    : My_Modules.Status_Emitter_Shared_Pointers.Ref;
+      Status_Ref    : Status_Manager.Status_Emitter;
       Stop_Received : Boolean := False;
    begin
       select
          accept Stop;
          Stop_Received := True;
       or
-         accept Start (Status_Emitter : My_Modules.Status_Emitter_Shared_Pointers.Ref) do
+         accept Start (Status_Emitter : Status_Manager.Status_Emitter) do
             Status_Ref := Status_Emitter;
          end Start;
       end select;
@@ -99,12 +99,12 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
                Pos : constant Position := Get_Position;
             begin
                for A in Axis_Name loop
-                  Status_Ref.Get.Set_Value ("Position", Conversions.To_Virtual_String (A'Image), Pos (A) / mm);
+                  Status_Ref.Set_Value ("Position", Conversions.To_Virtual_String (A'Image), Pos (A) / mm);
                end loop;
-               Status_Ref.Get.Set_Value ("Print status", "File name", Get_File_Name);
-               Status_Ref.Get.Set_Value
+               Status_Ref.Set_Value ("Print status", "File name", Get_File_Name);
+               Status_Ref.Set_Value
                  ("Print status", "Current line", Long_Long_Integer (File_Line_Count'(Get_Line)));
-               Status_Ref.Get.Set_Value ("Print status", "Paused", Stepgen_Paused);
+               Status_Ref.Set_Value ("Print status", "Paused", Stepgen_Paused);
             end;
          end select;
       end loop;
@@ -117,7 +117,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    end Finalize;
 
    protected body Module_Instance is
-      procedure Initialize (Status_Emitter_In : My_Modules.Status_Emitter_Shared_Pointers.Ref) is
+      procedure Initialize (Status_Emitter_In : Status_Manager.Status_Emitter) is
          function Make_Updater_Task return Status_Updater_Wrapper is
          begin
             return Result : Status_Updater_Wrapper;
