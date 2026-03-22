@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 --  If you're reading this file then there's a good chance that you're wondering why the `Config_Data_To_User_Config`
 --  functions are generating some convoluted nonsense with explicit statements instead of a nice, easy to generate
@@ -1333,7 +1334,6 @@ package body Config_Generator is
             Reader_Prefix => "Result",
             Ada_Prefix    => "Config");
 
-         Emit_Setter ("Data.Save;");
          Emit_Setter ("end User_Config_To_Config_Data;");
 
          Emit_Reader ("end return;");

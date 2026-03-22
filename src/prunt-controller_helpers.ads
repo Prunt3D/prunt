@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 --  This package just contains a few functions for `Prunt.Controller` that are required to be called in the
 --  specification but are difficult to implement with expression functions, and things that those functions rely

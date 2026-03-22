@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 pragma Extensions_Allowed (On);
 
@@ -63,12 +64,19 @@ package Prunt.Modules is
    is abstract;
    --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
 
-   procedure Start (This : in out Module_Instance; Self_Ref : Module_Instance_Shared_Pointers.Weak_Ref) is abstract;
+   procedure Start
+     (This     : in out Module_Instance;
+      Self_Ref : Module_Instance_Shared_Pointers.Weak_Ref;
+      Planner  : Planner_Interface'Class)
+   is abstract;
    --  Modules should not start in the initialize procedure as the initialize procedure can be used to check for config
    --  errors without actually starting.
    --
    --  `Self_Ref` is a reference to the instance that this is being called on and is mainly useful for g-code commands
    --  which need to make use of the instance.
+   --
+   --  Access to a planner is provided here mainly for setting kinematic limits, motion should not be generated during
+   --  startup.
    --
    --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
 

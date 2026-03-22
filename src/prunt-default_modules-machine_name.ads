@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 pragma Extensions_Allowed (On);
 
@@ -57,7 +58,7 @@ private
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       procedure Expected_Printer_Check
         (Planner : Planner_Interface'Class;

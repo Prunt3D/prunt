@@ -15,12 +15,14 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 with Ada.Containers.Ordered_Sets;
 with Ada.Containers.Vectors;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
+with Prunt.Module_Types; use Prunt.Module_Types;
 with VSS.Strings.Conversions;
 
 package body Prunt.Controller is
@@ -43,6 +45,49 @@ package body Prunt.Controller is
             My_Logger.Log ("Startup error: " & Conversions.To_Virtual_String (Path'Image) & ": " & Message);
             Had_Error := True;
          end Report_Config_Error;
+
+         type Fake_Planner is new Planner_Interface with null record;
+
+         function Get_Last_Position (This : Fake_Planner) return Position
+         is (others => Length (0.0));
+
+         function Get_Last_Kinematic_Parameters (This : Fake_Planner) return Motion_Planner.Kinematic_Parameters
+         is (others => <>);
+
+         procedure Mark_Axis_Homed (This : Fake_Planner; Axis : Axis_Name) is null;
+
+         procedure Mark_Axis_Unhomed (This : Fake_Planner; Axis : Axis_Name) is null;
+
+         procedure Add_Corner
+           (This          : Fake_Planner;
+            Pos           : Position;
+            Feedrate      : Velocity;
+            Dwell_After   : Time := 0.0 * s;
+            Require_Homed : Boolean := True;
+            Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
+         is null;
+
+         procedure Add_Corner_Data (This : Fake_Planner; Corner_Data : Extra_Corner_Data'Class) is null;
+         --  May be attached to a dummy corner in the next block.
+
+         procedure Flush
+           (This       : Fake_Planner;
+            Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+         is null;
+
+         procedure Flush_And_Change_Kinematic_Parameters
+           (This       : Fake_Planner;
+            Params     : Motion_Planner.Kinematic_Parameters;
+            Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+         is null;
+
+         procedure Flush_And_Reset_Position
+           (This         : Fake_Planner;
+            New_Position : Position;
+            Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+         is null;
+
+         My_Fake_Planner : Fake_Planner;
       begin
          Active_Module_Instances :=
            Recursive_Module_Initialization
@@ -53,7 +98,7 @@ package body Prunt.Controller is
             Active_Module_Instances.Reverse_Clear;
          else
             for M of Active_Module_Instances loop
-               My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak);
+               My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, My_Fake_Planner);
             end loop;
          end if;
       end Attempt_Start;
@@ -411,9 +456,10 @@ package body Prunt.Controller is
    procedure Start_Planner_Block
      (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index) is
    begin
-      if not Resetting_Data.Is_Empty then
-         Resetting_Data.Element.Process_Before_Block (Last_Command_Index);
-      end if;
+      null;
+      --  if not Resetting_Data.Is_Empty then
+      --     Resetting_Data.Element.Process_Before_Block (Last_Command_Index);
+      --  end if;
    end Start_Planner_Block;
 
    procedure Enqueue_Command_Internal

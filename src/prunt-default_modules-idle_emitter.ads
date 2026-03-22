@@ -17,28 +17,40 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+--  This package receives idle notifications from the controller and then distributes them to everything else.
+
 pragma Extensions_Allowed (On);
 
+with Ada.Containers.Vectors;
 with Ada.Tags;
 with Prunt.Config;
 with Prunt.Gcode_Arguments;
+with Prunt.Limited_Shared_Pointers;
 with Prunt.Module_Types; use Prunt.Module_Types;
+with Prunt.Controller_Interfaces;
 
 generic
-package Prunt.Default_Modules.Basic_Config is
+package Prunt.Default_Modules.Idle_Emitter is
 
    type Module is new My_Modules.Module with null record;
 
-   overriding
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   type Idle_Notification_Receiver is synchronized interface;
 
-   type Module_Instance_Interface is synchronized interface;
+   procedure Idle_Start (This : in out Idle_Notification_Receiver) is abstract;
 
-   procedure Disable_Prunt (This : in out Module_Instance_Interface) is abstract;
+   procedure Idle_End (This : in out Idle_Notification_Receiver) is abstract;
 
-   function Prunt_Is_Disabled (This : Module_Instance_Interface) return Boolean is abstract;
+   type Idle_Notification_Emitter is limited interface;
 
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
+   procedure Request_Idle_Notifications
+     (This     : in out Idle_Notification_Emitter;
+      Receiver : not null access function return Idle_Notification_Receiver'Class)
+   is abstract;
+
+   type Module_Instance (<>) is synchronized
+     new My_Modules.Module_Instance
+     and Idle_Notification_Emitter
+     and Controller_Interfaces.Idle_Notification_Receiver with private;
 
    overriding
    function Initialize
@@ -51,48 +63,41 @@ package Prunt.Default_Modules.Basic_Config is
 
 private
 
-   type User_Config_Prunt is record
-      --  This section contains general settings for Prunt.
+   package Idle_Notification_Receiver_Shared_Pointers is new
+     Prunt.Limited_Shared_Pointers (Idle_Notification_Receiver'Class);
 
-      Enabled : Boolean := False;
-      --  This is the main switch to enable or disable all functionality of your machine. Enable this after configuring
-      --  all other settings.
-   end record
-   with Annotate => (Prunt_Config, User_Config);
+   function Return_False
+     (Left, Right : Idle_Notification_Receiver_Shared_Pointers.Ref with Unreferenced) return Boolean
+   is (False);
 
-   type User_Config is record
-      Prunt : User_Config_Prunt := (others => <>);
-   end record
-   with Annotate => (Prunt_Config, Root_User_Config);
+   package Idle_Notification_Receiver_Vectors is new
+     Ada.Containers.Vectors (Positive, Idle_Notification_Receiver_Shared_Pointers.Ref, "=" => Return_False);
 
-   function Build_Schema return Config.Config_Property_Maps.Map;
-
-   function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
-
-   procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
-
-   protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
+   protected type Module_Instance is new My_Modules.Module_Instance
+   and Idle_Notification_Emitter
+   and Controller_Interfaces.Idle_Notification_Receiver with
       overriding
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+
+      overriding
+      procedure Request_Idle_Notifications
+        (Receiver : not null access function return Idle_Notification_Receiver'Class);
+
+      overriding
+      procedure Idle_Start;
+
+      overriding
+      procedure Idle_End;
 
       overriding
       procedure Gcode_Dispatch
         (Args               : in out Gcode_Arguments.Arguments;
          Planner            : Planner_Interface'Class;
          Command_Identifier : Gcode_Command_Identifier);
-
-      procedure Initialize (Config_Data_In : Prunt.Config.Config_Data);
-
-      overriding
-      procedure Disable_Prunt;
-
-      overriding
-      function Prunt_Is_Disabled return Boolean;
    private
-      Self_Ref    : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-      Config      : User_Config;
-      Config_Data : Prunt.Config.Config_Data;
+      Self_Ref  : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Receivers : Idle_Notification_Receiver_Vectors.Vector;
    end Module_Instance;
 
-end Prunt.Default_Modules.Basic_Config;
+end Prunt.Default_Modules.Idle_Emitter;

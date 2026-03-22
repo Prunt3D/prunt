@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 pragma Extensions_Allowed (On);
 
@@ -128,7 +129,9 @@ package Prunt.Module_Types is
 
    type Extra_Block_Resetting_Data is tagged null record;
 
-   procedure Process_Before_Block (This : Extra_Block_Resetting_Data; Last_Command_Index : Command_Index) is null;
+   --  procedure Process_Before_Block (This : Extra_Block_Resetting_Data; Last_Command_Index : Command_Index) is null;
+   --  TODO: Do we need the above? It's probably a bad idea to have this with the module system. Modules should instead
+   --  just use `Process_After_Block` for everything.
 
    procedure Process_After_Block
      (This                 : Extra_Block_Resetting_Data;

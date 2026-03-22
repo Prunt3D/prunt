@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 pragma Extensions_Allowed (On);
 
@@ -123,8 +124,7 @@ private
 
    type User_Config_Gcode_Defaults is record
       Default_Fan : Fan_Name := Fan_Name'First;
-      --  Fan to use for [M106](gcode:fans.set_fan_speed_for_default_fan) and [M107](gcode:fans.turn_off_default_fan)
-      --  if no fan is specified.
+      --  Fan to use for M106 and M107 if no fan is specified.
    end record
    with Annotate => (Prunt_Config, User_Config);
 
@@ -153,7 +153,7 @@ private
       procedure Initialize (Config_In : User_Config);
 
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref);
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       procedure Set_Fan_Speed_Internal (Planner : Planner_Interface'Class; Fan : Fan_Name; Speed : Dimensionless);
       --  There are no constraints on the values provided to this procedure so the calling g-code does not need to

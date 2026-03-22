@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 package body Prunt.Default_Modules.Kinematics is
 
@@ -184,7 +185,7 @@ package body Prunt.Default_Modules.Kinematics is
          Input_Shapers_Module_Instance_Ref := Input_Shapers_Module_Instance_Ref_In;
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
          Self_Ref := Self_Ref_In;
       end Start;

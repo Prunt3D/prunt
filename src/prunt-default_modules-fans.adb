@@ -15,10 +15,13 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 package body Prunt.Default_Modules.Fans is
 
    pragma Extensions_Allowed (On);
+
+   use type Gcode_Arguments.Argument_Integer;
 
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
@@ -87,8 +90,9 @@ package body Prunt.Default_Modules.Fans is
 
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index) is
    begin
-      null; --  TODO
-      --  Fan_Hardware (This.Fan).Set_Duty_Cycle ((if This.Invert then 1.0 - This.Duty_Cycle else This.Duty_Cycle));
+      Fan_Hardware (This.Fan).Set_Duty_Cycle
+        (This.Fan, (if This.Invert then 1.0 - This.Duty_Cycle else This.Duty_Cycle));
+      --  TODO: Status emitter.
       --  This.Speeds_Array.Get (This.Fan) := This.Duty_Cycle;
    end Process;
 
@@ -106,7 +110,7 @@ package body Prunt.Default_Modules.Fans is
          --  TODO: Need to pass in status manager and set up the status schema.
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
          Self_Ref := Self_Ref_In;
 
@@ -155,9 +159,15 @@ package body Prunt.Default_Modules.Fans is
       procedure Set_Fan_Speed
         (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Dimensionless := 255.0) is
       begin
-         --  TODO: Need a fan lookup array in controller generic types.
-         --  Set_Fan_Speed_Internal (Planner, P, S);
-         null;
+         for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
+            --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this
+            --  but that's their own problem.
+            Set_Fan_Speed_Internal (Planner, F, S);
+            return;
+         end loop;
+
+         --  TODO: Emit a list of valid fans here.
+         raise Gcode_Bad_Inputs_Error with "Fan index not known.";
       end Set_Fan_Speed;
 
       procedure Set_Fan_Speed (Planner : Planner_Interface'Class; P : Virtual_String; S : Dimensionless := 255.0) is
@@ -181,9 +191,16 @@ package body Prunt.Default_Modules.Fans is
 
       procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer) is
       begin
-         --  TODO: Need a fan lookup array in controller generic types.
-         --  Set_Fan_Speed_Internal (Planner, P, 0.0);
-         null;
+
+         for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
+            --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this
+            --  but that's their own problem.
+            Set_Fan_Speed_Internal (Planner, F, 0.0);
+            return;
+         end loop;
+
+         --  TODO: Emit a list of valid fans here.
+         raise Gcode_Bad_Inputs_Error with "Fan index not known.";
       end Turn_Off_Fan;
 
       procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Virtual_String) is

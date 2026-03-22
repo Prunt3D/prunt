@@ -15,9 +15,11 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 pragma Extensions_Allowed (On);
 
+with Prunt.Gcode_Arguments;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 with Prunt.TMC_Types.TMC2240;
 with Prunt.Thermistors;
@@ -32,6 +34,8 @@ generic
    type Fan_Name is (<>);
    type Input_Switch_Name is (<>);
 package Prunt.Controller_Generic_Types is
+
+   use type Gcode_Arguments.Argument_Integer;
 
    type Motor_Position is array (Motor_Name) of Dimensionless;
    --  Position multiplied by mm/step values provided by the user. This array is using floating point types and the
@@ -120,6 +124,10 @@ package Prunt.Controller_Generic_Types is
       --  given the option to invert the output, which will result in this procedure being called with `Duty_Cycle =
       --  1.0 - Original_Duty_Cycle`.
 
+      Gcode_Index : Gcode_Arguments.Argument_Integer;
+      --  Used in g-code when the user needs to specify a fan using an integer index. These should align with numbers
+      --  in fan name if they are present. Each fan should have a unique index.
+
       case Kind is
          when Fixed_Switching_Kind =>
             Reconfigure_Fixed_Switching_Fan : access procedure (Fan : Fan_Name; PWM_Freq : Frequency);
@@ -140,7 +148,13 @@ package Prunt.Controller_Generic_Types is
       end case;
    end record;
 
-   type Fan_Hardware_Parameters_Array_Type is array (Fan_Name) of Fan_Hardware_Parameters;
+   type Fan_Hardware_Parameters_Array_Type is array (Fan_Name) of Fan_Hardware_Parameters
+   with
+     Dynamic_Predicate =>
+       (for all I in Fan_Name =>
+          (for all J in Fan_Name when I /= J =>
+             Fan_Hardware_Parameters_Array_Type (I).Gcode_Index
+             /= Fan_Hardware_Parameters_Array_Type (J).Gcode_Index));
 
    type Input_Switch_Hardware_Parameters is record
       Visible_To_User : Boolean;

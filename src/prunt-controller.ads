@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 pragma Extensions_Allowed (On);
 
@@ -34,10 +35,11 @@ private with Prunt.Default_Modules.Config_Saving;
 private with Prunt.Default_Modules.Dwell;
 private with Prunt.Default_Modules.Fans;
 private with Prunt.Default_Modules.Heaters;
-private with Prunt.Default_Modules.Internal_Status_Reporter;
 private with Prunt.Default_Modules.Homing;
+private with Prunt.Default_Modules.Idle_Emitter;
 private with Prunt.Default_Modules.Input_Shapers;
 private with Prunt.Default_Modules.Input_Switches;
+private with Prunt.Default_Modules.Internal_Status_Reporter;
 private with Prunt.Default_Modules.Kinematics;
 private with Prunt.Default_Modules.Machine_Idle_Timeout;
 private with Prunt.Default_Modules.Machine_Name;
@@ -46,8 +48,8 @@ private with Prunt.Default_Modules.Motor_Drivers;
 private with Prunt.Default_Modules.Power_Control;
 private with Prunt.Default_Modules.Print_Job;
 private with Prunt.Default_Modules.Shutdown;
-private with Prunt.Default_Modules.Thermistors;
 private with Prunt.Default_Modules.TMC2240_Drivers;
+private with Prunt.Default_Modules.Thermistors;
 private with Prunt.Gcode_Arguments;
 private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
@@ -164,6 +166,7 @@ private
    function Stepgen_Paused return Boolean;
 
    package My_Default_Modules_Children is
+      package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
       package Basic_Config is new My_Default_Modules.Basic_Config;
       package Machine_Name is new My_Default_Modules.Machine_Name;
       package Machine_Idle_Timeout is new My_Default_Modules.Machine_Idle_Timeout;
@@ -239,6 +242,8 @@ private
        "Fans"                     => My_Default_Modules_Children.Fans.Module'(My_Modules.Module with null record),
        "Heaters"                  => My_Default_Modules_Children.Heaters.Module'(My_Modules.Module with null record),
        "Homing"                   => My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record),
+       "Idle Emitter"             =>
+         My_Default_Modules_Children.Idle_Emitter.Module'(My_Modules.Module with null record),
        "Input Shapers"            =>
          My_Default_Modules_Children.Input_Shapers.Module'(My_Modules.Module with null record),
        "Input Switches"           =>

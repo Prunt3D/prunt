@@ -15,6 +15,7 @@
 --  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 --  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 --  SOFTWARE.
+--------------------------------------------------
 
 package body Prunt.Default_Modules.Basic_Config is
 
@@ -52,7 +53,8 @@ package body Prunt.Default_Modules.Basic_Config is
    end Initialize;
 
    protected body Module_Instance is
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
          Self_Ref := Self_Ref_In;
       end Start;
@@ -75,6 +77,7 @@ package body Prunt.Default_Modules.Basic_Config is
       begin
          Config.Prunt.Enabled := False;
          User_Config_To_Config_Data (Config_Data, Config);
+         Config_Data.Save;
       end Disable_Prunt;
 
       function Prunt_Is_Disabled return Boolean is

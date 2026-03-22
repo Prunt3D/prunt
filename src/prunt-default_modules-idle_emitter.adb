@@ -17,22 +17,9 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-pragma Extensions_Allowed (On);
+package body Prunt.Default_Modules.Idle_Emitter is
 
-with Ada.Tags;
-with Prunt.Config;
-with Prunt.Gcode_Arguments;
-with Prunt.Module_Types; use Prunt.Module_Types;
-
-generic
-package Prunt.Default_Modules.Power_Control is
-
-   type Module is new My_Modules.Module with null record;
-
-   overriding
-   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
-
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
+   pragma Extensions_Allowed (On);
 
    overriding
    function Initialize
@@ -41,34 +28,47 @@ package Prunt.Default_Modules.Power_Control is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : My_Modules.Status_Emitter_Shared_Pointers.Ref;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class;
+      return My_Modules.Module_Instance'Class is
+   begin
+      return Result : Module_Instance;
+   end Initialize;
 
-   overriding
-   procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
-      Args               : in out Gcode_Arguments.Arguments;
-      Planner            : Planner_Interface'Class;
-      Command_Identifier : Gcode_Command_Identifier);
+   protected body Module_Instance is
+      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      begin
+         Self_Ref := Self_Ref_In;
+      end Start;
 
-private
+      procedure Request_Idle_Notifications
+        (Receiver : not null access function return Idle_Notification_Receiver'Class)
+      is
+         Receiver_Ref : Idle_Notification_Receiver_Shared_Pointers.Ref;
+      begin
+         Receiver_Ref.Set (Receiver);
+         Receivers.Append (Receiver_Ref);
+      end Request_Idle_Notifications;
 
-   protected type Module_Instance is new My_Modules.Module_Instance with
-      overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+      procedure Idle_Start is
+      begin
+         for Receiver of Receivers loop
+            Receiver.Get.Idle_Start;
+         end loop;
+      end Idle_Start;
 
-      procedure Power_On
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_No_Value
-         --  Report power state if present.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M80");
-      --  Turn on or report the power supply state.
+      procedure Idle_End is
+      begin
+         for Receiver of Receivers loop
+            Receiver.Get.Idle_End;
+         end loop;
+      end Idle_End;
 
-      procedure Power_Off (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M81");
-      --  Turn off the power supply.
-   private
-      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      procedure Gcode_Dispatch
+        (Args               : in out Gcode_Arguments.Arguments;
+         Planner            : Planner_Interface'Class;
+         Command_Identifier : Gcode_Command_Identifier) is
+      begin
+         raise Constraint_Error with "Not implemented.";
+      end Gcode_Dispatch;
    end Module_Instance;
 
-end Prunt.Default_Modules.Power_Control;
+end Prunt.Default_Modules.Idle_Emitter;
