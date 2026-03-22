@@ -21,6 +21,16 @@ package body Prunt.Status_Manager is
 
    pragma Extensions_Allowed (On);
 
+   procedure Set_Value (This : Lock_Free_Dimensionless_Setter; Value : Dimensionless) is
+   begin
+      Atomic_Dimensionless_Shared_Pointers.Unchecked_Get (This.Internal).all := Atomic_Dimensionless (Value);
+   end Set_Value;
+
+   procedure Set_Value (This : Lock_Free_Boolean_Setter; Value : Boolean) is
+   begin
+      Atomic_Boolean_Shared_Pointers.Unchecked_Get (This.Internal).all := Atomic_Boolean (Value);
+   end Set_Value;
+
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Dimensionless) is
    begin
       This.Internal.Get.Set_Value (This.Module, Group, Key, Value);
@@ -41,6 +51,24 @@ package body Prunt.Status_Manager is
    begin
       This.Internal.Get.Set_Value (This.Module, Group, Key, Value);
    end Set_Value;
+
+   function Get_Lock_Free_Setter
+     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Dimensionless_Setter
+   is
+      Internal : Atomic_Dimensionless_Shared_Pointers.Ref;
+   begin
+      This.Internal.Get.Get_Lock_Free_Setter (This.Module, Group, Key, Internal);
+      return (Internal => Internal);
+   end Get_Lock_Free_Setter;
+
+   function Get_Lock_Free_Setter
+     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Boolean_Setter
+   is
+      Internal : Atomic_Boolean_Shared_Pointers.Ref;
+   begin
+      This.Internal.Get.Get_Lock_Free_Setter (This.Module, Group, Key, Internal);
+      return (Internal => Internal);
+   end Get_Lock_Free_Setter;
 
    function Build_Collection (Modules : Status_Module_Maps.Map) return Status_Data_Collection is
    begin
@@ -64,8 +92,10 @@ package body Prunt.Status_Manager is
    end JSON_Schema;
 
    function JSON_Data (This : Status_Data_Collection) return Virtual_String is
+      Result : Virtual_String;
    begin
-      return This.Internal.Get.JSON_Data;
+      This.Internal.Get.JSON_Data (Result);
+      return Result;
    end JSON_Data;
 
    protected body Status_Data_Collection_Internal is
@@ -121,6 +151,36 @@ package body Prunt.Status_Manager is
          return Modules.Contains (Module_Name);
       end Has_Module;
 
+      procedure Validate_Key
+        (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Kind : Status_Value_Kind) is
+      begin
+         Ensure_Module_And_Group_Nodes (Module, Group);
+
+         if not Modules.Element (Module).Element (Group).Contains (Key) then
+            raise Constraint_Error
+              with
+                "Status key "
+                & Key'Image
+                & " does not exist in group "
+                & Group'Image
+                & " in module "
+                & Module'Image
+                & ".";
+         end if;
+
+         if Modules.Element (Module).Element (Group).Element (Key).Kind /= Kind then
+            raise Constraint_Error
+              with
+                "Status key "
+                & Key'Image
+                & " in group "
+                & Group'Image
+                & " in module "
+                & Module'Image
+                & " has the wrong type.";
+         end if;
+      end Validate_Key;
+
       procedure Ensure_Module_And_Group_Nodes (Module : Virtual_String; Group : Virtual_String) is
          Module_Node : JSON_Value;
       begin
@@ -146,26 +206,31 @@ package body Prunt.Status_Manager is
       procedure Set_Value_Internal
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : JSON_Value) is
       begin
-         Ensure_Module_And_Group_Nodes (Module, Group);
-
-         if not Modules.Element (Module).Element (Group).Contains (Key) then
-            raise Constraint_Error
-              with
-                "Status key "
-                & Key'Image
-                & " does not exist in group "
-                & Group'Image
-                & " in module "
-                & Module'Image
-                & ".";
-         end if;
+         Validate_Key (Module, Group, Key, Real_Kind);
          Status.Get (Module).Get (Group).Set_Field (Key, Value);
       end Set_Value_Internal;
 
       procedure Set_Value
-        (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : Dimensionless) is
+        (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : Dimensionless)
+      is
+         Module_Refs : Atomic_Dimensionless_Group_Maps.Map;
+         Group_Refs  : Atomic_Dimensionless_Ref_Maps.Map;
       begin
-         Set_Value_Internal (Module, Group, Key, Create (Long_Float (Value)));
+         Validate_Key (Module, Group, Key, Real_Kind);
+
+         if Lock_Free_Dimensionless_Refs.Contains (Module) then
+            Module_Refs := Lock_Free_Dimensionless_Refs.Element (Module);
+            if Module_Refs.Contains (Group) then
+               Group_Refs := Module_Refs.Element (Group);
+               if Group_Refs.Contains (Key) then
+                  Atomic_Dimensionless_Shared_Pointers.Unchecked_Get (Group_Refs.Element (Key)).all :=
+                    Atomic_Dimensionless (Value);
+                  return;
+               end if;
+            end if;
+         end if;
+
+         Status.Get (Module).Get (Group).Set_Field_Long_Float (Key, Long_Float (Value));
       end Set_Value;
 
       procedure Set_Value
@@ -175,8 +240,24 @@ package body Prunt.Status_Manager is
       end Set_Value;
 
       procedure Set_Value (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : Boolean) is
+         Module_Refs : Atomic_Boolean_Group_Maps.Map;
+         Group_Refs  : Atomic_Boolean_Ref_Maps.Map;
       begin
-         Set_Value_Internal (Module, Group, Key, Create (Value));
+         Validate_Key (Module, Group, Key, Boolean_Kind);
+
+         if Lock_Free_Boolean_Refs.Contains (Module) then
+            Module_Refs := Lock_Free_Boolean_Refs.Element (Module);
+            if Module_Refs.Contains (Group) then
+               Group_Refs := Module_Refs.Element (Group);
+               if Group_Refs.Contains (Key) then
+                  Atomic_Boolean_Shared_Pointers.Unchecked_Get (Group_Refs.Element (Key)).all :=
+                    Atomic_Boolean (Value);
+                  return;
+               end if;
+            end if;
+         end if;
+
+         Status.Get (Module).Get (Group).Set_Field (Key, Value);
       end Set_Value;
 
       procedure Set_Value
@@ -185,14 +266,107 @@ package body Prunt.Status_Manager is
          Set_Value_Internal (Module, Group, Key, Create (Value));
       end Set_Value;
 
+      procedure Get_Lock_Free_Setter
+        (Module : Virtual_String;
+         Group  : Virtual_String;
+         Key    : Virtual_String;
+         Value  : out Atomic_Dimensionless_Shared_Pointers.Ref)
+      is
+         function Get_Data return Atomic_Dimensionless
+         is (if Status.Has_Field (Module)
+               and then Status.Get (Module).Has_Field (Group)
+               and then Status.Get (Module).Get (Group).Has_Field (Key)
+             then Atomic_Dimensionless (Dimensionless'(Status.Get (Module).Get (Group).Get (Key).Get))
+             else 0.0);
+
+         Module_Refs : Atomic_Dimensionless_Group_Maps.Map;
+         Group_Refs  : Atomic_Dimensionless_Ref_Maps.Map;
+      begin
+         Validate_Key (Module, Group, Key, Real_Kind);
+
+         if not Lock_Free_Dimensionless_Refs.Contains (Module) then
+            Lock_Free_Dimensionless_Refs.Insert (Module, []);
+         end if;
+
+         Module_Refs := Lock_Free_Dimensionless_Refs.Element (Module);
+
+         if not Module_Refs.Contains (Group) then
+            Module_Refs.Insert (Group, []);
+         end if;
+
+         Group_Refs := Module_Refs.Element (Group);
+
+         if Group_Refs.Contains (Key) then
+            Value := Group_Refs.Element (Key);
+         else
+            Value.Set (Get_Data'Access);
+            Group_Refs.Insert (Key, Value);
+         end if;
+      end Get_Lock_Free_Setter;
+
+      procedure Get_Lock_Free_Setter
+        (Module : Virtual_String;
+         Group  : Virtual_String;
+         Key    : Virtual_String;
+         Value  : out Atomic_Boolean_Shared_Pointers.Ref)
+      is
+         function Get_Data return Atomic_Boolean
+         is (if Status.Has_Field (Module)
+               and then Status.Get (Module).Has_Field (Group)
+               and then Status.Get (Module).Get (Group).Has_Field (Key)
+             then Atomic_Boolean (Boolean'(Status.Get (Module).Get (Group).Get (Key).Get))
+             else Status_Manager.False);
+
+         Module_Refs : Atomic_Boolean_Group_Maps.Map;
+         Group_Refs  : Atomic_Boolean_Ref_Maps.Map;
+      begin
+         Validate_Key (Module, Group, Key, Boolean_Kind);
+
+         if not Lock_Free_Boolean_Refs.Contains (Module) then
+            Lock_Free_Boolean_Refs.Insert (Module, []);
+         end if;
+
+         Module_Refs := Lock_Free_Boolean_Refs.Element (Module);
+
+         if not Module_Refs.Contains (Group) then
+            Module_Refs.Insert (Group, []);
+         end if;
+
+         Group_Refs := Module_Refs.Element (Group);
+
+         if Group_Refs.Contains (Key) then
+            Value := Group_Refs.Element (Key);
+         else
+            Value.Set (Get_Data'Access);
+            Group_Refs.Insert (Key, Value);
+         end if;
+      end Get_Lock_Free_Setter;
+
       function JSON_Schema return Virtual_String is
       begin
          return Cached_Schema;
       end JSON_Schema;
 
-      function JSON_Data return Virtual_String is
+      procedure JSON_Data (Value : out Virtual_String) is
       begin
-         return Write (Status);
+         for Module in Lock_Free_Dimensionless_Refs.Iterate loop
+            for Group in Module.Element.Iterate loop
+               for Key in Group.Element.Iterate loop
+                  Status.Get (Module.Key).Get (Group.Key).Set_Field_Long_Float
+                    (Key.Key, Long_Float (Key.Element.Get.Element.all));
+               end loop;
+            end loop;
+         end loop;
+
+         for Module in Lock_Free_Boolean_Refs.Iterate loop
+            for Group in Module.Element.Iterate loop
+               for Key in Group.Element.Iterate loop
+                  Status.Get (Module.Key).Get (Group.Key).Set_Field (Key.Key, Boolean (Key.Element.Get.Element.all));
+               end loop;
+            end loop;
+         end loop;
+
+         Value := Write (Status);
       end JSON_Data;
 
    end Status_Data_Collection_Internal;

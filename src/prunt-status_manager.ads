@@ -29,17 +29,13 @@ package Prunt.Status_Manager is
 
    type Status_Emitter is private;
 
-   --  type Lock_Free_Dimensionless_Setter is private;
+   type Lock_Free_Dimensionless_Setter is private;
 
-   --  function Set_Value (This : Lock_Free_Dimensionless_Setter; Value : Dimensionless);
+   procedure Set_Value (This : Lock_Free_Dimensionless_Setter; Value : Dimensionless);
 
-   --  type Lock_Free_Boolean_Setter is private;
+   type Lock_Free_Boolean_Setter is private;
 
-   --  function Set_Value (This : Lock_Free_Boolean_Setter; Value : Boolean);
-
-   --  TODO: Implement above via shared pointers to an atomic subtype. Inside the Status_Emitter these will need to be
-   --  updated in the JSON every time JSON_Data is called and the normal Set_Value procedures will have to use these if
-   --  they exist for a given key.
+   procedure Set_Value (This : Lock_Free_Boolean_Setter; Value : Boolean);
 
    type Status_Value_Kind is (Real_Kind, Integer_Kind, Boolean_Kind, String_Kind);
 
@@ -80,10 +76,10 @@ package Prunt.Status_Manager is
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Boolean);
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Virtual_String);
 
-   --  procedure Get_Lock_Free_Setter
-   --    (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Dimensionless_Setter;
-   --  procedure Get_Lock_Free_Setter
-   --    (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Boolean_Setter;
+   function Get_Lock_Free_Setter
+     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Dimensionless_Setter;
+   function Get_Lock_Free_Setter
+     (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Boolean_Setter;
 
    function JSON_Schema (This : Status_Data_Collection) return Virtual_String;
    function JSON_Data (This : Status_Data_Collection) return Virtual_String;
@@ -91,6 +87,56 @@ package Prunt.Status_Manager is
 private
 
    use Prunt.JSON;
+
+   type Atomic_Dimensionless is new Dimensionless with Atomic, Volatile;
+   type Atomic_Boolean is new Boolean with Atomic, Volatile;
+
+   package Atomic_Dimensionless_Shared_Pointers is new Limited_Shared_Pointers (Atomic_Dimensionless);
+   package Atomic_Boolean_Shared_Pointers is new Limited_Shared_Pointers (Atomic_Boolean);
+
+   type Lock_Free_Dimensionless_Setter is record
+      Internal : Atomic_Dimensionless_Shared_Pointers.Ref := Atomic_Dimensionless_Shared_Pointers.Null_Ref;
+   end record;
+
+   type Lock_Free_Boolean_Setter is record
+      Internal : Atomic_Boolean_Shared_Pointers.Ref := Atomic_Boolean_Shared_Pointers.Null_Ref;
+   end record;
+
+   package Atomic_Dimensionless_Ref_Maps is new
+     Ada.Containers.Ordered_Maps
+       (Virtual_String,
+        Atomic_Dimensionless_Shared_Pointers.Ref,
+        "=" => Atomic_Dimensionless_Shared_Pointers."=");
+
+   function Return_False (Left, Right : Atomic_Dimensionless_Ref_Maps.Map with Unreferenced) return Boolean
+   is (False);
+
+   package Atomic_Dimensionless_Group_Maps is new
+     Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Dimensionless_Ref_Maps.Map, "=" => Return_False);
+
+   function Return_False (Left, Right : Atomic_Dimensionless_Group_Maps.Map with Unreferenced) return Boolean
+   is (False);
+
+   package Atomic_Dimensionless_Module_Maps is new
+     Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Dimensionless_Group_Maps.Map, "=" => Return_False);
+
+   package Atomic_Boolean_Ref_Maps is new
+     Ada.Containers.Ordered_Maps
+       (Virtual_String,
+        Atomic_Boolean_Shared_Pointers.Ref,
+        "=" => Atomic_Boolean_Shared_Pointers."=");
+
+   function Return_False (Left, Right : Atomic_Boolean_Ref_Maps.Map with Unreferenced) return Boolean
+   is (False);
+
+   package Atomic_Boolean_Group_Maps is new
+     Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Boolean_Ref_Maps.Map, "=" => Return_False);
+
+   function Return_False (Left, Right : Atomic_Boolean_Group_Maps.Map with Unreferenced) return Boolean
+   is (False);
+
+   package Atomic_Boolean_Module_Maps is new
+     Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Boolean_Group_Maps.Map, "=" => Return_False);
 
    protected type Status_Data_Collection_Internal is
       procedure Initialize (Modules : Status_Module_Maps.Map);
@@ -105,15 +151,32 @@ private
       procedure Set_Value
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : Virtual_String);
 
+      procedure Get_Lock_Free_Setter
+        (Module : Virtual_String;
+         Group  : Virtual_String;
+         Key    : Virtual_String;
+         Value  : out Atomic_Dimensionless_Shared_Pointers.Ref);
+      procedure Get_Lock_Free_Setter
+        (Module : Virtual_String;
+         Group  : Virtual_String;
+         Key    : Virtual_String;
+         Value  : out Atomic_Boolean_Shared_Pointers.Ref);
+
       function JSON_Schema return Virtual_String;
-      function JSON_Data return Virtual_String;
+      procedure JSON_Data (Value : out Virtual_String);
    private
+      procedure Ensure_Module_And_Group_Nodes (Module : Virtual_String; Group : Virtual_String);
+
       procedure Set_Value_Internal
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : JSON_Value);
+      procedure Validate_Key
+        (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Kind : Status_Value_Kind);
 
-      Modules       : Status_Module_Maps.Map := [];
-      Status        : JSON.JSON_Value := JSON.Create_Object;
-      Cached_Schema : Virtual_String := "{}";
+      Modules                      : Status_Module_Maps.Map := [];
+      Status                       : JSON.JSON_Value := JSON.Create_Object;
+      Cached_Schema                : Virtual_String := "{}";
+      Lock_Free_Dimensionless_Refs : Atomic_Dimensionless_Module_Maps.Map := [];
+      Lock_Free_Boolean_Refs       : Atomic_Boolean_Module_Maps.Map := [];
    end Status_Data_Collection_Internal;
 
    package Status_Data_Collection_Internal_Shared_Pointers is new
