@@ -673,6 +673,8 @@ package body Config_Generator is
          Ada_Expr      : Virtual_String)
       is
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
+         Min_Expr : constant Virtual_String := Expand_Index_Level (Outer.Min);
+         Max_Expr : constant Virtual_String := Expand_Index_Level (Outer.Max);
       begin
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Float'(Description => """
@@ -683,12 +685,12 @@ package body Config_Generator is
             & Virtual_String'
                 (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
             & ", Min => ("
-            & Outer.Min
+            & Min_Expr
             & ")"
             & Virtual_String'
                 (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
             & ", Max => ("
-            & Outer.Max
+            & Max_Expr
             & ")"
             & Virtual_String'
                 (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
@@ -721,6 +723,8 @@ package body Config_Generator is
       is
          pragma Unreferenced (Ratio_Val);
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
+         Min_Expr : constant Virtual_String := Expand_Index_Level (Outer.Min);
+         Max_Expr : constant Virtual_String := Expand_Index_Level (Outer.Max);
       begin
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Float_Ratio'(Description => """
@@ -728,9 +732,9 @@ package body Config_Generator is
             & """, Default => "
             & Effective_Schema_Default (Outer, Outer.Default)
             & ", Min => "
-            & Outer.Min
+            & Min_Expr
             & ", Max => "
-            & Outer.Max
+            & Max_Expr
             & ")");
          Emit_Reader (Reader_Prefix & " := Data.Get (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "]);");
          Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & ");");
@@ -744,6 +748,8 @@ package body Config_Generator is
          Ada_Expr      : Virtual_String)
       is
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
+         Min_Expr : constant Virtual_String := Expand_Index_Level (Outer.Min);
+         Max_Expr : constant Virtual_String := Expand_Index_Level (Outer.Max);
       begin
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Integer'(Description => """
@@ -753,10 +759,10 @@ package body Config_Generator is
             & Virtual_String'(if Integer_Val.Unit.Conversion /= "" then " / " else "")
             & Integer_Val.Unit.Conversion
             & ", Min => "
-            & Outer.Min
+            & Min_Expr
             & (if Integer_Val.Unit.Conversion = "" then "" else " / " & Integer_Val.Unit.Conversion)
             & ", Max => "
-            & Outer.Max
+            & Max_Expr
             & (if Integer_Val.Unit.Conversion = "" then "" else " / " & Integer_Val.Unit.Conversion)
             & ", Unit => """
             & Effective_Display_Unit (Integer_Val.Unit, Outer.Unit)

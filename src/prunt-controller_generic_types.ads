@@ -116,8 +116,8 @@ package Prunt.Controller_Generic_Types is
       Set_Duty_Cycle : access procedure (Fan : Fan_Name; Duty_Cycle : PWM_Scale);
       --  Set the given fan to the given duty cycle.
       --
-      --  This procedure will be called from the same task as movement commands. The change should occur at
-      --  approximately the point where this procedure was called in relation to movement commands.
+      --  The change should occur at approximately the point where this procedure was called in relation to movement
+      --  commands.
       --
       --  It is up to the vendor to decide what best corresponds to 0% and 100%. 0% should generally correspond to the
       --  fan not spinning, however this may obviously vary with the type of fan which a user connects. The user is
@@ -144,7 +144,6 @@ package Prunt.Controller_Generic_Types is
 
             Maximum_Low_Side_PWM_Frequency  : Frequency;
             Maximum_High_Side_PWM_Frequency : Frequency;
-
       end case;
    end record;
 
@@ -166,11 +165,16 @@ package Prunt.Controller_Generic_Types is
    type Input_Switch_Hardware_Parameters_Array_Type is array (Input_Switch_Name) of Input_Switch_Hardware_Parameters;
 
    type Heater_Hardware_Parameters is record
-      Reconfigure :
+      Reconfigure     :
         access procedure (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
       --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from
       --  any task. `Params.Kind` will not be equal to `PID_Autotune_Kind`.
-      Autotune    :
+      Set_Temperature : access procedure (Heater : Heater_Name; Target : Temperature);
+      --  Set the current target temperature for a heater.
+      --
+      --  The change should occur at approximately the point where this procedure was called in relation to movement
+      --  commands.
+      Autotune        :
         access procedure (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
       --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
       --  `Params.Kind` will always be `PID_Autotune_Kind`.

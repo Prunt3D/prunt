@@ -256,6 +256,54 @@ package body Config_Parser is
       return Get_Base_Def (Decl).Kind in Ada_Signed_Int_Type_Def | Ada_Floating_Point_Def;
    end Is_Numeric_Base;
 
+   procedure Extract_Bounds
+     (Ada_Range : Range_Spec;
+      Min, Max  : out Virtual_String;
+      Error_For : Ada_Node'Class;
+      Context   : String)
+   is
+   begin
+      if Ada_Range.Is_Null then
+         Min := "";
+         Max := "";
+      elsif Ada_Range.F_Range.Kind in Ada_Bin_Op then
+         Min := To_Virtual_String (Ada_Range.F_Range.As_Bin_Op.F_Left.Text);
+         Max := To_Virtual_String (Ada_Range.F_Range.As_Bin_Op.F_Right.Text);
+      else
+         Raise_Error (Error_For, "Only basic range constraints are supported. " & Context);
+      end if;
+   end Extract_Bounds;
+
+   function Effective_Min
+     (Type_Name        : Virtual_String;
+      Range_Min        : Virtual_String;
+      Annotation_Min   : Virtual_String) return Virtual_String
+   is
+   begin
+      if Range_Min.Is_Empty then
+         return Annotation_Min;
+      elsif Annotation_Min.Is_Empty then
+         return Range_Min;
+      else
+         return Type_Name & "'Max (" & Range_Min & ", " & Annotation_Min & ")";
+      end if;
+   end Effective_Min;
+
+   function Effective_Max
+     (Type_Name        : Virtual_String;
+      Range_Max        : Virtual_String;
+      Annotation_Max   : Virtual_String) return Virtual_String
+   is
+   begin
+      if Range_Max.Is_Empty then
+         return Annotation_Max;
+      elsif Annotation_Max.Is_Empty then
+         return Range_Max;
+      else
+         return Type_Name & "'Min (" & Range_Max & ", " & Annotation_Max & ")";
+      end if;
+   end Effective_Max;
+
    function Parse_Record (Decl : Base_Type_Decl) return Config_Type is
       function Parse_Component_Items (Items : Ada_Node_List) return Component_Data_Maps.Map is
          Components : Component_Data_Maps.Map;
@@ -334,49 +382,63 @@ package body Config_Parser is
                            & Desig.Image);
                      end if;
 
-                     if (Component.Min.Is_Empty and then not Component.Max.Is_Empty)
-                       or else (Component.Max.Is_Empty and then not Component.Min.Is_Empty)
+                     if not Is_Numeric_Base (Desig)
+                       and then
+                         ((Component.Min.Is_Empty and then not Component.Max.Is_Empty)
+                          or else (Component.Max.Is_Empty and then not Component.Min.Is_Empty))
                      then
                         Raise_Error (Item, "Both min and max aspect must be specified if either is specified.");
                      end if;
 
-                     if Component.Min.Is_Empty and then Is_Numeric_Base (Desig) then
-                        if Comp_Decl.F_Component_Def.F_Type_Expr.Kind in Ada_Subtype_Indication then
-                           declare
-                              Constr : constant Constraint :=
-                                Comp_Decl.F_Component_Def.F_Type_Expr.As_Subtype_Indication.F_Constraint;
-                           begin
-                              if not Constr.Is_Null then
-                                 if Constr.Kind in Ada_Range_Constraint
-                                   and then Constr.As_Range_Constraint.F_Range.F_Range.Kind in Ada_Bin_Op
-                                 then
-                                    Component.Min :=
-                                      To_Virtual_String
-                                        (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Left.Text);
-                                    Component.Max :=
-                                      To_Virtual_String
-                                        (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Right.Text);
-                                 else
-                                    Raise_Error
-                                      (Constr, "Only basic range constraints are supported. " & Constr.Text'Image);
+                     if Is_Numeric_Base (Desig) then
+                        declare
+                           Range_Min, Range_Max : Virtual_String;
+                        begin
+                           if Comp_Decl.F_Component_Def.F_Type_Expr.Kind in Ada_Subtype_Indication then
+                              declare
+                                 Constr : constant Constraint :=
+                                   Comp_Decl.F_Component_Def.F_Type_Expr.As_Subtype_Indication.F_Constraint;
+                              begin
+                                 if not Constr.Is_Null then
+                                    if Constr.Kind in Ada_Range_Constraint then
+                                       Extract_Bounds
+                                         (Constr.As_Range_Constraint.F_Range,
+                                          Range_Min,
+                                          Range_Max,
+                                          Constr,
+                                          Constr.Text'Image);
+                                    else
+                                       Raise_Error
+                                         (Constr, "Only range constraints are supported. " & Constr.Text'Image);
+                                    end if;
                                  end if;
+                              end;
+                           end if;
+
+                           if Range_Min.Is_Empty then
+                              if Component.Min.Is_Empty and then Get_Range (Desig).Is_Null then
+                                 Raise_Error (Item, "Component or underlying type requires a range constraint.");
                               end if;
-                           end;
-                        end if;
-                     end if;
 
+                              if not Get_Range (Desig).Is_Null then
+                                 Extract_Bounds
+                                   (Get_Range (Desig),
+                                    Range_Min,
+                                    Range_Max,
+                                    Get_Range (Desig),
+                                    Get_Range (Desig).Text'Image);
+                              end if;
+                           end if;
 
-                     if Component.Min.Is_Empty and then Is_Numeric_Base (Desig) then
-                        if Get_Range (Desig).Is_Null then
-                           Raise_Error (Item, "Component or underlying type requires a range constraint.");
-                        end if;
+                           Component.Min := Effective_Min (Component.Type_Name, Range_Min, Component.Min);
+                           Component.Max := Effective_Max (Component.Type_Name, Range_Max, Component.Max);
 
-                        if Get_Range (Desig).F_Range.Kind in Ada_Bin_Op then
-                           Component.Min := To_Virtual_String (Get_Range (Desig).F_Range.As_Bin_Op.F_Left.Text);
-                           Component.Max := To_Virtual_String (Get_Range (Desig).F_Range.As_Bin_Op.F_Right.Text);
-                        else
-                           Raise_Error (Get_Range (Desig), "Only basic range constraints are supported.");
-                        end if;
+                           if Component.Min.Is_Empty or else Component.Max.Is_Empty then
+                              Raise_Error
+                                (Item,
+                                 "Both min and max must be provided by annotations or range constraints.");
+                           end if;
+                        end;
                      end if;
 
                      for Id of Comp_Decl.F_Ids loop
@@ -537,35 +599,47 @@ package body Config_Parser is
          end if;
 
          if Is_Numeric_Base (Elem_Decl) then
-            if Def.F_Component_Type.F_Type_Expr.Kind in Ada_Subtype_Indication then
-               declare
-                  Constr : constant Constraint := Def.F_Component_Type.F_Type_Expr.As_Subtype_Indication.F_Constraint;
-               begin
-                  if not Constr.Is_Null then
-                     if Constr.Kind in Ada_Range_Constraint
-                       and then Constr.As_Range_Constraint.F_Range.F_Range.Kind in Ada_Bin_Op
-                     then
-                        Min := To_Virtual_String (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Left.Text);
-                        Max := To_Virtual_String (Constr.As_Range_Constraint.F_Range.F_Range.As_Bin_Op.F_Right.Text);
-                     else
-                        Raise_Error (Constr, "Only basic range constraints are supported. " & Constr.Text'Image);
+            declare
+               Range_Min, Range_Max : Virtual_String;
+            begin
+               if Def.F_Component_Type.F_Type_Expr.Kind in Ada_Subtype_Indication then
+                  declare
+                     Constr : constant Constraint :=
+                       Def.F_Component_Type.F_Type_Expr.As_Subtype_Indication.F_Constraint;
+                  begin
+                     if not Constr.Is_Null then
+                        if Constr.Kind in Ada_Range_Constraint then
+                           Extract_Bounds
+                             (Constr.As_Range_Constraint.F_Range,
+                              Range_Min,
+                              Range_Max,
+                              Constr,
+                              Constr.Text'Image);
+                        else
+                           Raise_Error (Constr, "Only range constraints are supported. " & Constr.Text'Image);
+                        end if;
                      end if;
+                  end;
+               end if;
+
+               if Range_Min.Is_Empty then
+                  if Min.Is_Empty and then Get_Range (Elem_Decl).Is_Null then
+                     Raise_Error (Decl, "Array element or underlying type requires a range constraint.");
                   end if;
-               end;
-            end if;
 
-            if Min.Is_Empty then
-               if Get_Range (Elem_Decl).Is_Null then
-                  Raise_Error (Decl, "Array element or underlying type requires a range constraint.");
+                  if not Get_Range (Elem_Decl).Is_Null then
+                     Extract_Bounds
+                       (Get_Range (Elem_Decl),
+                        Range_Min,
+                        Range_Max,
+                        Get_Range (Elem_Decl),
+                        Get_Range (Elem_Decl).Text'Image);
+                  end if;
                end if;
 
-               if Get_Range (Elem_Decl).F_Range.Kind in Ada_Bin_Op then
-                  Min := To_Virtual_String (Get_Range (Elem_Decl).F_Range.As_Bin_Op.F_Left.Text);
-                  Max := To_Virtual_String (Get_Range (Elem_Decl).F_Range.As_Bin_Op.F_Right.Text);
-               else
-                  Raise_Error (Get_Range (Elem_Decl), "Only basic range constraints are supported.");
-               end if;
-            end if;
+               Min := Effective_Min (To_Virtual_String (Elem_Decl.P_Fully_Qualified_Name), Range_Min, Min);
+               Max := Effective_Max (To_Virtual_String (Elem_Decl.P_Fully_Qualified_Name), Range_Max, Max);
+            end;
          end if;
 
          return

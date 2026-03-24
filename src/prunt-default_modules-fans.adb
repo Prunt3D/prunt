@@ -17,11 +17,61 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Strings;       use Ada.Strings;
+with Ada.Strings.Fixed; use Ada.Strings.Fixed;
+
 package body Prunt.Default_Modules.Fans is
 
    pragma Extensions_Allowed (On);
 
    use type Gcode_Arguments.Argument_Integer;
+
+   function Valid_Fan_Indices return Virtual_String is
+   begin
+      return Result : Virtual_String := "" do
+         for F in Fan_Name loop
+            if Result /= "" then
+               Result.Append (", ");
+            end if;
+
+            Result.Append (+Trim (Fan_Hardware (F).Gcode_Index'Image, Both));
+            Result.Append (" (");
+            Result.Append (+F'Image);
+            Result.Append (")");
+         end loop;
+      end return;
+   end Valid_Fan_Indices;
+
+   function Valid_Fan_Names return Virtual_String is
+      Result : Virtual_String := "";
+   begin
+      return Result : Virtual_String := "" do
+         for F in Fan_Name loop
+            if Result /= "" then
+               Result.Append (", ");
+            end if;
+
+            Result.Append (+F'Image);
+         end loop;
+      end return;
+   end Valid_Fan_Names;
+
+   function PWM_Frequency (Config : User_Config_Fan) return Frequency is
+   begin
+      case Config.Fixed_Kind is
+         when Fixed_Switching_Kind            =>
+            return Config.Fixed_Switching.PWM_Frequency;
+
+         when Low_Or_High_Side_Switching_Kind =>
+            case Config.Low_Or_High_Side_Switching.Kind is
+               when Low_Side_Switching  =>
+                  return Config.Low_Or_High_Side_Switching.Low_Side_Switching.PWM_Frequency;
+
+               when High_Side_Switching =>
+                  return Config.Low_Or_High_Side_Switching.High_Side_Switching.PWM_Frequency;
+            end case;
+      end case;
+   end PWM_Frequency;
 
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
@@ -47,44 +97,12 @@ package body Prunt.Default_Modules.Fans is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      pragma Unreferenced (This, Get_Other_Instance);
+      pragma Unreferenced (This, Report_Config_Error, Get_Other_Instance);
 
       Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data);
    begin
       return Result : Module_Instance do
          Result.Initialize (Parsed_Config, Status_Emitter);
-
-         for F in Fan_Name loop
-            case Fan_Hardware (F).Kind is
-               when Fixed_Switching_Kind            =>
-                  if Parsed_Config.Fans (F).PWM_Frequency > Fan_Hardware (F).Maximum_PWM_Frequency then
-                     --  TODO: We should propagate this to the client in the schema and raise a constraint error if we
-                     --  somehow get a bad value here.
-                     Report_Config_Error
-                       (["Fans", +F'Image, "PWM_Frequency"],
-                        +("This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
-                          & Dimensionless'Image (Fan_Hardware (F).Maximum_PWM_Frequency / hertz)
-                          & " Hz."));
-                  end if;
-
-               when Low_Or_High_Side_Switching_Kind =>
-                  if Parsed_Config.Fans (F).PWM_Frequency
-                    > (if Parsed_Config.Fans (F).Use_High_Side_Switching
-                       then Fan_Hardware (F).Maximum_High_Side_PWM_Frequency
-                       else Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency)
-                  then
-                     --  TODO: We should propagate the largest value to the client in the schema and have a more
-                     --  friendly error message here.
-                     Report_Config_Error
-                       (["Fans", +F'Image, "PWM_Frequency"],
-                        +("This frequency exceeds the maximum supported by this fan output. The maximum frequency is "
-                          & Dimensionless'Image (Fan_Hardware (F).Maximum_Low_Side_PWM_Frequency / hertz)
-                          & " Hz in low side switching mode or "
-                          & Dimensionless'Image (Fan_Hardware (F).Maximum_High_Side_PWM_Frequency / hertz)
-                          & " Hz in high side switching mode."));
-                  end if;
-            end case;
-         end loop;
       end return;
    end Initialize;
 
@@ -94,7 +112,7 @@ package body Prunt.Default_Modules.Fans is
    begin
       return
         ["Speed" =>
-           [for F in Fan_Name use +F'Image =>
+           [for F in Fan_Name use+F'Image =>
               (Kind        => Status_Manager.Real_Kind,
                Unit        => "×",
                Description => "Requested speed of fan " & (+F'Image),
@@ -136,11 +154,13 @@ package body Prunt.Default_Modules.Fans is
          for F in Fan_Name loop
             case Fan_Hardware (F).Kind is
                when Fixed_Switching_Kind            =>
-                  Fan_Hardware (F).Reconfigure_Fixed_Switching_Fan (F, Config.Fans (F).PWM_Frequency);
+                  Fan_Hardware (F).Reconfigure_Fixed_Switching_Fan (F, PWM_Frequency (Config.Fans (F)));
 
                when Low_Or_High_Side_Switching_Kind =>
                   Fan_Hardware (F).Reconfigure_Low_Or_High_Side_Switching_Fan
-                    (F, Config.Fans (F).PWM_Frequency, Config.Fans (F).Use_High_Side_Switching);
+                    (F,
+                     PWM_Frequency (Config.Fans (F)),
+                     Config.Fans (F).Low_Or_High_Side_Switching.Kind = High_Side_Switching);
             end case;
 
             if Config.Fans (F).Control_Method.Kind = Always_On then
@@ -205,8 +225,8 @@ package body Prunt.Default_Modules.Fans is
             return;
          end loop;
 
-         --  TODO: Emit a list of valid fans here.
-         raise Gcode_Bad_Inputs_Error with "Fan index not known.";
+         My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
+         raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
       end Set_Fan_Speed;
 
       procedure Set_Fan_Speed (Planner : Planner_Interface'Class; P : Virtual_String; S : Dimensionless := 255.0) is
@@ -216,8 +236,8 @@ package body Prunt.Default_Modules.Fans is
             Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
          exception
             when Constraint_Error =>
-               --  TODO: Emit a list of valid fans here.
-               raise Gcode_Bad_Inputs_Error with "Fan name not known.";
+               My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
+               raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
          end;
 
          Set_Fan_Speed_Internal (Planner, Fan, S);
@@ -238,8 +258,8 @@ package body Prunt.Default_Modules.Fans is
             return;
          end loop;
 
-         --  TODO: Emit a list of valid fans here.
-         raise Gcode_Bad_Inputs_Error with "Fan index not known.";
+         My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
+         raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
       end Turn_Off_Fan;
 
       procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Virtual_String) is
@@ -249,8 +269,8 @@ package body Prunt.Default_Modules.Fans is
             Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
          exception
             when Constraint_Error =>
-               --  TODO: Emit a list of valid fans here.
-               raise Gcode_Bad_Inputs_Error with "Fan name not known.";
+               My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
+               raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
          end;
 
          Set_Fan_Speed_Internal (Planner, Fan, 0.0);

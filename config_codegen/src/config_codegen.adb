@@ -39,6 +39,8 @@ procedure Config_Codegen is
       => (Enum_Kind, (Present_When => [])),
       "Prunt.Default_Modules.Homing.My_Controller_Generic_Types.Input_Switch_Name"
       => (Enum_Kind, (Present_When => [])),
+      "Prunt.Default_Modules.Heaters.My_Controller_Generic_Types.Heater_Name"
+      => (Enum_Kind, (Present_When => [])),
       "Prunt.Default_Modules.Homing.My_Controller_Generic_Types.Motor_Name"
       => (Enum_Kind, (Present_When => []))];
    --  TODO: We should properly resolve these.

@@ -124,10 +124,13 @@ package Prunt.Module_Types is
    is abstract;
 
    type Extra_Corner_Data is tagged null record;
+   --  Use this for non-blocking handlers with a low cost that should not interrupt motion. If this procedure takes too
+   --  long then the motion queue will run dry in an unsafe state.
 
    procedure Process (This : Extra_Corner_Data; Last_Command_Index : Command_Index) is null;
 
    type Extra_Block_Resetting_Data is tagged null record;
+   -- Use this for handlers which need motion to stop before processing.
 
    --  procedure Process_Before_Block (This : Extra_Block_Resetting_Data; Last_Command_Index : Command_Index) is null;
    --  TODO: Do we need the above? It's probably a bad idea to have this with the module system. Modules should instead

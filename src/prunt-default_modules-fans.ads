@@ -99,26 +99,73 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Fan is record
-      --  This section contains the configuration for a single fan.
-
-      Invert_PWM_Output : Boolean := False;
-      --  Invert the PWM signal. This may be required depending on how the fan is wired.
-
-      PWM_Frequency : Frequency range 0.0 * hertz .. 1.0E100 * hertz := 30.0 * hertz;
+   type User_Config_Fan_Fixed_Switching is record
+      PWM_Frequency : Frequency range 0.0 * hertz .. 1.0E100 * hertz := 30.0 * hertz with
+        Annotate => (Prunt_Config, Max, "Fan_Hardware (Index_?).Maximum_PWM_Frequency");
       --  Set the PWM frequency. Low frequencies such as 30 Hz are often best for 2-wire fans, while 4-wire PWM fans
       --  usually require much higher values such as 25000 Hz.
       --
       --  Setting this value to 0 Hz will still allow the fan to turn on and off, but there will be no PWM, it will
       --  just be on or off.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Fan_Low_Side_Switching is record
+      PWM_Frequency : Frequency range 0.0 * hertz .. 1.0E100 * hertz := 30.0 * hertz with
+        Annotate => (Prunt_Config, Max, "Fan_Hardware (Index_?).Maximum_Low_Side_PWM_Frequency");
+      --  Set the PWM frequency. Low frequencies such as 30 Hz are often best for 2-wire fans, while 4-wire PWM fans
+      --  usually require much higher values such as 25000 Hz.
+      --
+      --  Setting this value to 0 Hz will still allow the fan to turn on and off, but there will be no PWM, it will
+      --  just be on or off.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Fan_High_Side_Switching is record
+      PWM_Frequency : Frequency range 0.0 * hertz .. 1.0E100 * hertz := 30.0 * hertz with
+        Annotate => (Prunt_Config, Max, "Fan_Hardware (Index_?).Maximum_High_Side_PWM_Frequency");
+      --  Set the PWM frequency. Low frequencies such as 30 Hz are often best for 2-wire fans, while 4-wire PWM fans
+      --  usually require much higher values such as 25000 Hz.
+      --
+      --  Setting this value to 0 Hz will still allow the fan to turn on and off, but there will be no PWM, it will
+      --  just be on or off.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Fan_Low_Or_High_Side_Switching_Kind is (Low_Side_Switching, High_Side_Switching)
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Fan_Low_Or_High_Side_Switching
+     (Kind : User_Config_Fan_Low_Or_High_Side_Switching_Kind := Low_Side_Switching)
+   is record
+      --  Select whether the fan is switched on the low or high side.
+
+      case Kind is
+         when Low_Side_Switching =>
+            Low_Side_Switching : User_Config_Fan_Low_Side_Switching;
+
+         when High_Side_Switching =>
+            High_Side_Switching : User_Config_Fan_High_Side_Switching;
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Fan (Fixed_Kind : Fan_Hardware_Kind := Fixed_Switching_Kind) is record
+      --  This section contains the configuration for a single fan.
+
+      Invert_PWM_Output : Boolean := False;
+      --  Invert the PWM signal. This may be required depending on how the fan is wired.
 
       Control_Method : User_Config_Fan_Control_Method := (others => <>);
       --  Select how this fan is controlled.
 
-      Use_High_Side_Switching : Boolean := False with
-        Annotate => (Prunt_Config, Present_When, "Fan_Hardware (Index_?).Kind = Low_Or_High_Side_Switching_Kind");
-      --  Toggle the fan's power pin instead of its PWM pin. This is primarily useful for 3-wire fans where the
-      --  tachometer must keep a fixed ground reference.
+      case Fixed_Kind is
+         when Fixed_Switching_Kind =>
+            Fixed_Switching : User_Config_Fan_Fixed_Switching;
+
+         when Low_Or_High_Side_Switching_Kind =>
+            Low_Or_High_Side_Switching : User_Config_Fan_Low_Or_High_Side_Switching := (others => <>);
+      end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
@@ -132,7 +179,8 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Fans           : User_Config_Fan_Array := [others => <>];
+      Fans           : User_Config_Fan_Array := [others => <>]with
+        Annotate => (Prunt_Config, Fixed_Kind, "Fan_Hardware (Index_?).Kind");
       Gcode_Defaults : User_Config_Gcode_Defaults;
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
@@ -153,6 +201,10 @@ private
    end record;
 
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index);
+
+   function Valid_Fan_Indices return Virtual_String;
+
+   function Valid_Fan_Names return Virtual_String;
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
