@@ -32,6 +32,7 @@ private with Prunt.Controller_Helpers;
 private with Prunt.Default_Modules;
 private with Prunt.Default_Modules.Basic_Config;
 private with Prunt.Default_Modules.Config_Saving;
+private with Prunt.Default_Modules.Blocking_Tracker;
 private with Prunt.Default_Modules.Dwell;
 private with Prunt.Default_Modules.Fans;
 private with Prunt.Default_Modules.Heaters;
@@ -169,7 +170,9 @@ private
 
    package My_Default_Modules_Children is
       package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
+      --  TODO: Idle emitter needs to be connected to controller idle interface.
       package Basic_Config is new My_Default_Modules.Basic_Config;
+      package Blocking_Tracker is new My_Default_Modules.Blocking_Tracker;
       package Machine_Name is new My_Default_Modules.Machine_Name;
       package Machine_Idle_Timeout is new My_Default_Modules.Machine_Idle_Timeout;
       package Print_Job is new My_Default_Modules.Print_Job;
@@ -208,7 +211,8 @@ private
         My_Default_Modules.Heaters
           (My_Controller_Generic_Types => Generic_Types,
            Heater_Hardware             => Hardware.Heater_Hardware,
-           Thermistors_Module          => Thermistors);
+           Thermistors_Module          => Thermistors,
+           Blocking_Tracker_Module     => Blocking_Tracker);
       package TMC2240_Drivers is new
         My_Default_Modules.TMC2240_Drivers
           (My_Controller_Generic_Types => Generic_Types,
@@ -240,6 +244,8 @@ private
          My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
        "Config Saving"            =>
          My_Default_Modules_Children.Config_Saving.Module'(My_Modules.Module with null record),
+       "Blocking Tracker"         =>
+         My_Default_Modules_Children.Blocking_Tracker.Module'(My_Modules.Module with null record),
        "Dwell"                    => My_Default_Modules_Children.Dwell.Module'(My_Modules.Module with null record),
        "Fans"                     => My_Default_Modules_Children.Fans.Module'(My_Modules.Module with null record),
        "Heaters"                  => My_Default_Modules_Children.Heaters.Module'(My_Modules.Module with null record),

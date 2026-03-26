@@ -17,11 +17,15 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+--  TODO: Add a `Safe_Below` component to each heater to determine when we should raise an error if the heater is not
+--  cooling down when off.
+
 pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
+with Prunt.Default_Modules.Blocking_Tracker;
 with Prunt.Default_Modules.Thermistors;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
@@ -33,6 +37,7 @@ generic
      Default_Modules.Thermistors
        (My_Controller_Generic_Types => My_Controller_Generic_Types,
         Thermistor_Hardware         => <>);
+   with package Blocking_Tracker_Module is new Default_Modules.Blocking_Tracker;
 package Prunt.Default_Modules.Heaters is
 
    use My_Controller_Generic_Types;
@@ -44,6 +49,9 @@ package Prunt.Default_Modules.Heaters is
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+
+   overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
 
    type Module_Instance_Interface is synchronized interface;
 
@@ -76,6 +84,8 @@ package Prunt.Default_Modules.Heaters is
 
 private
 
+   Wait_Period : constant Duration := 0.1;
+
    type User_Config_Heater_PID is record
       --  Use PID control for this heater.
 
@@ -91,10 +101,13 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Heater_Bang_Bang is record
-      --  Use bang-bang control for this heater.
+      --  Use bang-bang control for this heater. Bang-bang control turns on when the temperature drops below the
+      --  setpoint minus half the hysteresis value, and turns off when the temperature rises above the setpoint plus
+      --  half the hysteresis value.
 
       Hysteresis : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 0.0 * celsius;
-      --  Temperature range around the target where the heater output does not switch.
+      --  This is the temperature range around the setpoint within which the heater will not change its state. A larger
+      --  hysteresis will result in less frequent switching, but larger temperature swings.
    end record
    with Annotate => (Prunt_Config, User_Config);
 
@@ -118,20 +131,24 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
+   --  TODO: Below should be a variant so we can disable or enable heaters.
+
    type User_Config_Heater is record
       --  This section contains the configuration for a single heater.
 
       Thermistor : Thermistor_Name := Thermistor_Name'First;
       --  Select the thermistor used to measure this heater's temperature.
 
-      Check_Maximum_Cumulative_Error : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 120.0 * celsius;
-      --  Maximum accumulated temperature error allowed before the heater is treated as failed.
-
       Check_Gain_Time : Time range 0.0 * s .. 1.0E100 * s := 20.0 * s;
       --  Time window used when checking that the heater is gaining temperature.
 
       Check_Minimum_Gain : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 2.0 * celsius;
       --  Minimum temperature rise required within the gain time to reset the cumulative error counter.
+
+      Check_Maximum_Cumulative_Error : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 120.0 * celsius;
+      --  Maximum accumulated temperature error allowed before the heater is treated as failed.
+
+      --  TODO: Above needs a better description.
 
       Check_Hysteresis : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 3.0 * celsius;
       --  Temperature range around the target where the heater is considered on target for fault checking.
@@ -144,12 +161,38 @@ private
    type User_Config_Heater_Array is array (Heater_Name) of User_Config_Heater
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
+   type User_Config_Default_Heater_Kind is (Disabled, Enabled) with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Default_Heater (Kind : User_Config_Default_Heater_Kind := Disabled) is record
+      --  Select the heater used for the related g-code commands.
+
+      case Kind is
+         when Disabled =>
+            Disabled : User_Config_Empty;
+
+         when Enabled =>
+            Heater : Heater_Name := Heater_Name'First;
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Gcode_Defaults is record
+      Hotend : User_Config_Default_Heater := (others => <>);
+      --  Heater used for hotend temperature g-code commands.
+
+      Bed : User_Config_Default_Heater := (others => <>);
+      --  Heater used for bed temperature g-code commands.
+
+      Chamber : User_Config_Default_Heater := (others => <>);
+      --  Heater used for chamber temperature g-code commands.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
    type User_Config is record
-      Heaters : User_Config_Heater_Array := [others => <>];
+      Heaters        : User_Config_Heater_Array := [others => <>];
+      Gcode_Defaults : User_Config_Gcode_Defaults := (others => <>);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
-
-   --  TODO: Expose settings for default hotend/bed/chamber heater under User_Config.Gcode_Defaults.
 
    function Build_Schema return Config.Config_Property_Maps.Map;
 
@@ -157,53 +200,54 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
+   type Heater_Target_Status_Setters is array (Heater_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
+
+   type Heater_Target_Command is new Extra_Corner_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Heater              : Heater_Name;
+      Target_Status       : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Target              : Temperature;
+   end record;
+
+   overriding
+   procedure Process (This : Heater_Target_Command; Last_Command_Index : Command_Index);
+   --  Set the given heater to the given temperature and update the status value. This does not wait for the
+   --  temperature to be reached.
+
+   type Heater_Temperature_Wait is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref             : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Heater                          : Heater_Name;
+      Target_Status                   : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Thermistors_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Assigned_Thermistor             : Thermistor_Name;
+      Target                          : Temperature;
+      Check_Hysteresis                : Temperature;
+      Wait_Only_If_Heating            : Boolean;
+      Ramp_Duration                   : Time;
+      Ramp_Only_If_Heating            : Boolean;
+   end record;
+
+   overriding
+   procedure Process_After_Block
+     (This                 : Heater_Temperature_Wait;
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset);
+
+   type Heater_Target_Array is array (Heater_Name) of Temperature;
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
-      procedure Initialize (Config_In : User_Config);
+      procedure Initialize
+        (Config_In                           : User_Config;
+         Status_Emitter_In                   : Status_Manager.Status_Emitter;
+         Thermistors_Module_Instance_In      : My_Modules.Module_Instance_Shared_Pointers.Ref;
+         Blocking_Tracker_Module_Instance_In : My_Modules.Module_Instance_Shared_Pointers.Ref);
 
       overriding
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
-      procedure Set_Idle_Timeout
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_Integer;
-         --  Timeout period in seconds, after which the temperature will be reduced. Setting this to zero will disable
-         --  the idle timeout functionality.
-         T       : Gcode_Optional_Float;
-         --  Hotend trigger temperature in Celsius, below which timeouts will not trigger. This refers to the set
-         --  temperature, not the real temperature.
-         E       : Gcode_Optional_Float;
-         --  Hotend idle temperature. Must not be greater than the trigger temperature.
-         B       : Gcode_Optional_Float
-         --  Bed idle temperature.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M86");
-      --  Configure the idle timeout temperatures. These can be saved using M500. These can also be configured on the
-      --  configuration page.
-      --
-      --  When the machine is idle for the given time with the hotend set to above the given temperature, the
-      --  temperatures will be reduced to the given values. This will only ever decrease the bed temperature, it will
-      --  never increase it.
-      --
-      --  Before the machine resumes, temperatures will be increased back to the previous values.
-
-      --  TODO: Expose above in config records.
-
-      procedure Disable_Idle_Timeout (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M87");
-      --  Disable heater idle timeout functionality.
-
-      --  TODO: Expose above in config records.
-
-      procedure Set_Hotend_Temperature
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless
-         --  Hotend target temperature in Celsius.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M104");
-      --  Set the hotend target temperature and continue without waiting for the hotend to reach the given temperature.
-      --
-      --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
+      procedure Queue_Target_Command (Planner : Planner_Interface'Class; Heater : Heater_Name; Target : Temperature);
 
       procedure Wait_For_Hotend_Temperature_Heat
         (Planner : Planner_Interface'Class;
@@ -229,8 +273,7 @@ private
 
       procedure Set_Bed_Temperature
         (Planner : Planner_Interface'Class;
-         I       : Gcode_Optional_Integer;
-         S       : Gcode_Optional_Float
+         S       : Dimensionless
          --  Bed target temperature in Celsius.
          )
       with Annotate => (Prunt_Config, Gcode_Command, "M140");
@@ -240,11 +283,12 @@ private
 
       procedure Set_Chamber_Temperature
         (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_Float
+         S       : Dimensionless
          --  Chamber target temperature in Celsius.
          )
       with Annotate => (Prunt_Config, Gcode_Command, "M141");
-      --  Set the chamber target temperature and continue without waiting for the chamber to reach the given temperature.
+      --  Set the chamber target temperature and continue without waiting for the chamber to reach the given
+      --  temperature.
 
       procedure Wait_For_Bed_Temperature_Heat
         (Planner : Planner_Interface'Class;
@@ -309,9 +353,28 @@ private
 
       overriding
       function Get_Heater_Parameters (Heater : Heater_Name) return Heater_Parameters;
+
+      procedure Set_Blocking_Tracker (Value : Virtual_String);
+
+      procedure Clear_Blocking_Tracker;
    private
-      Config   : User_Config;
-      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      procedure Queue_Temperature_Wait
+        (Planner              : Planner_Interface'Class;
+         Heater               : Heater_Name;
+         Target               : Temperature;
+         Wait_Only_If_Heating : Boolean;
+         Ramp_Duration        : Time;
+         Ramp_Only_If_Heating : Boolean);
+
+      procedure Validate_Target (Heater : Heater_Name; Target : Temperature);
+
+      function Get_Default_Heater (Selection : User_Config_Default_Heater; Display_Name : String) return Heater_Name;
+
+      Config                               : User_Config;
+      Self_Ref                             : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Thermistors_Module_Instance_Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Blocking_Tracker_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Target_Status_Setters                : Heater_Target_Status_Setters;
    end Module_Instance;
 
 end Prunt.Default_Modules.Heaters;

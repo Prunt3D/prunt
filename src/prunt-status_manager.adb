@@ -206,7 +206,6 @@ package body Prunt.Status_Manager is
       procedure Set_Value_Internal
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : JSON_Value) is
       begin
-         Validate_Key (Module, Group, Key, Real_Kind);
          Status.Get (Module).Get (Group).Set_Field (Key, Value);
       end Set_Value_Internal;
 
@@ -236,6 +235,8 @@ package body Prunt.Status_Manager is
       procedure Set_Value
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : Long_Long_Integer) is
       begin
+         Validate_Key (Module, Group, Key, Integer_Kind);
+
          Set_Value_Internal (Module, Group, Key, Create (Value));
       end Set_Value;
 
@@ -263,6 +264,8 @@ package body Prunt.Status_Manager is
       procedure Set_Value
         (Module : Virtual_String; Group : Virtual_String; Key : Virtual_String; Value : Virtual_String) is
       begin
+         Validate_Key (Module, Group, Key, String_Kind);
+
          Set_Value_Internal (Module, Group, Key, Create (Value));
       end Set_Value;
 

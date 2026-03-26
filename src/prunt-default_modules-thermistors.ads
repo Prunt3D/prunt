@@ -254,7 +254,7 @@ private
 
       Maximum_Temperature : Temperature range -1.0E100 * celsius .. 1.0E100 * celsius := 0.0 * celsius;
       --  If the measured temperature rises above this value while the sensor is used by a heater, Prunt treats it as
-      --  a critical fault and performs an emergency stop.
+      --  a fault and performs an emergency stop.
 
       Sensor_Model : User_Config_Thermistor_Model := (others => <>);
       --  This selects the sensor model and any custom coefficients needed to interpret its resistance.

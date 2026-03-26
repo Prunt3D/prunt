@@ -17,40 +17,21 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+--  This package contains various interfaces for modules which require special handling by the controller.
+
 pragma Extensions_Allowed (On);
 
-package Prunt.Thermistors is
+package Prunt.Controller_Interfaces is
 
-   type Thermistor_Kind is (Disabled_Kind, Steinhart_Hart_Kind, Callendar_Van_Dusen_Kind);
+   type Idle_Notification_Receiver is synchronized interface;
 
-   --  TODO: Should a polynomial mode be added? It would allow for higher accuracy, but what we already have is more
-   --  than good enough for 3d printers.
-   type Thermistor_Parameters (Kind : Thermistor_Kind := Disabled_Kind) is record
-      Minimum_Temperature : Temperature := 0.0 * celsius;
-      Maximum_Temperature : Temperature := 0.0 * celsius;
+   procedure Idle_Start (This : in out Idle_Notification_Receiver) is abstract;
+   --  Called when command execution catches up to the last emitted command and there is no end--of-block handler
+   --  running.
 
-      case Kind is
-         when Disabled_Kind =>
-            null;
+   procedure Idle_End (This : in out Idle_Notification_Receiver) is abstract;
+   --  Called before a new command is emitted after command execution catches up to the last emitted command. This
+   --  procedure is allowed to block to stop the given command from being enqueued until the machine is in a state
+   --  where it is ready to do so. For example, a module might need to wait for heaters to heat back up.
 
-         when Steinhart_Hart_Kind =>
-            SH_A, SH_B, SH_C : Dimensionless;
-
-         when Callendar_Van_Dusen_Kind =>
-            CVD_R0       : Resistance;
-            CVD_A, CVD_B : Dimensionless;
-      end case;
-   end record;
-
-   function Temperature_To_Resistance (Params : Thermistor_Parameters; Temp : Temperature) return Resistance
-   with
-     Pre =>
-       Temp >= Params.Minimum_Temperature
-       and then Temp <= Params.Maximum_Temperature
-       and then Params.Kind /= Disabled_Kind;
-
-private
-
-   function Safe_Cbrt (Val : Dimensionless) return Dimensionless;
-
-end Prunt.Thermistors;
+end Prunt.Controller_Interfaces;
