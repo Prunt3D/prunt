@@ -90,14 +90,15 @@ package body Prunt.Default_Modules.Homing is
    is
       pragma Unreferenced (This, Status_Emitter);
 
-      Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data);
+      Parsed_Config                      : constant User_Config := Config_Data_To_User_Config (Config_Data);
       Input_Switches_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Input_Switches_Module.Module_Instance'Tag);
    begin
       return Result : Module_Instance do
          declare
             Input_Switches_Module_Instance : Input_Switches_Module.Module_Instance_Interface'Class renames
-              Input_Switches_Module.Module_Instance_Interface'Class (Input_Switches_Module_Instance_Ref.Get.Element.all);
+              Input_Switches_Module.Module_Instance_Interface'Class
+                (Input_Switches_Module_Instance_Ref.Get.Element.all);
          begin
             Result.Initialize (Parsed_Config);
 
@@ -107,12 +108,10 @@ package body Prunt.Default_Modules.Homing is
                     (["Homing", +Axis'Image, "Homing_Method", "Kind"], "Homing is not configured for this axis.");
                elsif Parsed_Config.Homing (Axis).Homing_Method.Kind = Use_Input_Switch
                  and then
-                   not
-                     Input_Switches_Module_Instance.Switch_Is_Enabled_In_Config
-                       (Parsed_Config.Homing (Axis).Homing_Method.Use_Input_Switch.Switch)
+                   not Input_Switches_Module_Instance.Switch_Is_Enabled_In_Config
+                         (Parsed_Config.Homing (Axis).Homing_Method.Use_Input_Switch.Switch)
                then
-                  Report_Config_Error
-                    (Input_Switch_Path (Axis), "This switch is disabled in Input Switches.");
+                  Report_Config_Error (Input_Switch_Path (Axis), "This switch is disabled in Input Switches.");
                end if;
             end loop;
          end;
@@ -125,7 +124,8 @@ package body Prunt.Default_Modules.Homing is
          Config := Config_In;
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
          Self_Ref := Self_Ref_In;
       end Start;
@@ -134,21 +134,11 @@ package body Prunt.Default_Modules.Homing is
         (Planner : Planner_Interface'Class;
          X       : Gcode_Optional_No_Value;
          Y       : Gcode_Optional_No_Value;
-         Z       : Gcode_Optional_No_Value) is
+         Z       : Gcode_Optional_No_Value;
+         E       : Gcode_Optional_No_Value) is
       begin
-         pragma Unreferenced (Planner, X, Y, Z);
-         raise Constraint_Error with "G28 is not implemented yet.";
+         --  TODO: Implement this.
       end Auto_Home;
-
-      procedure Set_Homing_Feedrate
-        (Planner : Planner_Interface'Class;
-         X       : Gcode_Optional_Float;
-         Y       : Gcode_Optional_Float;
-         Z       : Gcode_Optional_Float) is
-      begin
-         pragma Unreferenced (Planner, X, Y, Z);
-         raise Constraint_Error with "M210 is not implemented yet.";
-      end Set_Homing_Feedrate;
 
       procedure Subscribe_To_Homing (Subscriber : not null access function return Homing_Event_Subscriber'Class) is
          Subscriber_Ref : Homing_Event_Subscriber_Shared_Pointers.Ref;

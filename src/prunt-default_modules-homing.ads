@@ -348,19 +348,28 @@ private
       procedure Initialize (Config_In : User_Config);
 
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       procedure Auto_Home
         (Planner : Planner_Interface'Class;
          X       : Gcode_Optional_No_Value;
-         --  Home the X axis if present.
+         --  If included then the X axis will be homed.
          Y       : Gcode_Optional_No_Value;
-         --  Home the Y axis if present.
+         --  If included then the Y axis will be homed.
          Z       : Gcode_Optional_No_Value
-         --  Home the Z axis if present.
+         --  If included then the Z axis will be homed.
+         E       : Gcode_Optional_No_Value
+         --  If included then the E axis will be homed.
          )
       with Annotate => (Prunt_Config, Gcode_Command, "G28");
-      --  Home one or more axes.
+      --  Home the specified axes using the method and parameters specified in the configuration. If no axes are
+      --  specified then all axes are homed, including the E axis.
+      --
+      --  The `ABCUVW` parameters from Marlin are not present as Prunt does not support these axes. The `LOR`
+      --  parameters are not present but are planned for a future version. These parameters are present in Marlin.
+      --
+      --  The `E` parameter is not present in Marlin as Marlin does not homing of the E axis.
 
       procedure Set_Homing_Feedrate
         (Planner : Planner_Interface'Class;
@@ -373,6 +382,8 @@ private
          )
       with Annotate => (Prunt_Config, Gcode_Command, "M210");
       --  Set homing feedrates.
+      --
+      --  The `ABCUVW` parameters from Marlin are not present as Prunt does not support these axes. The `LOR`
 
       overriding
       procedure Subscribe_To_Homing (Subscriber : not null access function return Homing_Event_Subscriber'Class);
