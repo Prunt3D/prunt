@@ -505,24 +505,45 @@ package body Config_Generator is
       Index_Level : Natural := 0;
 
       function Expand_Index_Level (Expression : Virtual_String) return Virtual_String is
-         Expression_Split : constant VSS.String_Vectors.Virtual_String_Vector := Expression.Split ('?');
+         Expression_String    : constant String := Conversions.To_UTF_8_String (Expression);
+         Result              : Virtual_String := "";
+         Question_Run_Length : Natural := 0;
+
+         procedure Flush_Question_Run is
+            Target_Index_Level : Natural;
+         begin
+            if Question_Run_Length = 0 then
+               return;
+            end if;
+
+            if Index_Level < Question_Run_Length then
+               raise Constraint_Error with "Index placeholder exceeds available array nesting.";
+            end if;
+
+            Target_Index_Level := Index_Level - Question_Run_Length;
+            Result.Append (Conversions.To_Virtual_String (Trim (Integer'Image (Target_Index_Level), Both)));
+            Question_Run_Length := 0;
+         end Flush_Question_Run;
       begin
          if Expression = "" then
             return "";
-         elsif Expression_Split.Length = 1 then
-            return Expression_Split.First_Element;
-         elsif Expression_Split.Length = 2 then
-            if Index_Level = 0 then
-               raise Constraint_Error with "Index_? may only be used within an array context.";
-            end if;
-
-            return
-              Expression_Split.First_Element
-              & Conversions.To_Virtual_String (Trim (Integer'Image (Index_Level - 1), Both))
-              & Expression_Split.Last_Element;
-         else
-            raise Constraint_Error with "Only one ? placeholder is supported per expression.";
          end if;
+
+         for C of Expression_String loop
+            if C = '?' then
+               if Index_Level = 0 then
+                  raise Constraint_Error with "Index placeholders may only be used within an array context.";
+               end if;
+
+               Question_Run_Length := @ + 1;
+            else
+               Flush_Question_Run;
+               Result.Append (VSS.Strings.Conversions.To_Virtual_String (String'(1 => C)));
+            end if;
+         end loop;
+
+         Flush_Question_Run;
+         return Result;
       end Expand_Index_Level;
 
       procedure Emit_Config_Map (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
@@ -851,10 +872,12 @@ package body Config_Generator is
          Reader_Prefix : Virtual_String;
          Ada_Prefix    : Virtual_String)
       is
-         Loop_Index : constant Virtual_String :=
+         Loop_Index           : constant Virtual_String :=
            "Index_" & Conversions.To_Virtual_String (Trim (Index_Level'Image, Both));
+         Element_Present_When : Virtual_String;
       begin
          Index_Level := @ + 1;
+         Element_Present_When := Expand_Index_Level (Array_Val.Present_When);
 
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Sequence'(Description => """
@@ -865,12 +888,18 @@ package body Config_Generator is
             & Loop_Index
             & " in "
             & Array_Val.Index_Type
+            & (if Element_Present_When /= "" then " when " & Element_Present_When else "")
             & " use +"
             & Loop_Index
             & "'Image => ");
 
          Emit_Reader ("for " & Loop_Index & " in " & Array_Val.Index_Type & " loop");
          Emit_Setter ("for " & Loop_Index & " in " & Array_Val.Index_Type & " loop");
+
+         if Element_Present_When /= "" then
+            Emit_Reader ("if " & Element_Present_When & " then");
+            Emit_Setter ("if " & Element_Present_When & " then");
+         end if;
 
          Handle_Component
            ((Outer
@@ -884,6 +913,11 @@ package body Config_Generator is
             Path & [""" & (+" & Loop_Index & "'Image) & """],
             Reader_Prefix & " (" & Loop_Index & ")",
             Ada_Prefix & " (" & Loop_Index & ")");
+
+         if Element_Present_When /= "" then
+            Emit_Setter ("end if;");
+            Emit_Reader ("end if;");
+         end if;
 
          Emit_Setter ("end loop;");
          Emit_Reader ("end loop;");

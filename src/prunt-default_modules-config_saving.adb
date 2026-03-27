@@ -43,6 +43,26 @@ package body Prunt.Default_Modules.Config_Saving is
       return Result : Module_Instance;
    end Initialize;
 
+   overriding
+   procedure Process_After_Block
+     (This                 : Config_Save_Event;
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset)
+   is
+      pragma Unreferenced (First_Accel_Distance, Last_Command_Index, Loop_Move_Offset);
+
+      Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
+   begin
+      case This.Save_All is
+         when False =>
+            Instance.Process_Save_Settings (This.Config_To_Save);
+
+         when True  =>
+            Instance.Process_Save_All_Settings;
+      end case;
+   end Process_After_Block;
+
    protected body Module_Instance is
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
@@ -60,20 +80,23 @@ package body Prunt.Default_Modules.Config_Saving is
       end Register_For_Saving;
 
       procedure Save_Settings (Planner : Planner_Interface'Class) is
+         Self_Ref_Strong : My_Modules.Module_Instance_Shared_Pointers.Ref;
       begin
-         for C of Configs_To_Save loop
-            Planner.Flush (Config_Save_Event'(Config_To_Save => C));
-         end loop;
+         Self_Ref_Strong.Set (Self_Ref);
+         Planner.Flush (Config_Save_Event'(Save_All => True, Module_Instance_Ref => Self_Ref_Strong));
       end Save_Settings;
 
       procedure Save_Settings (Planner : Planner_Interface'Class; I : Virtual_String) is
+         Self_Ref_Strong : My_Modules.Module_Instance_Shared_Pointers.Ref;
       begin
          if not Configs_To_Save.Contains (I) then
             raise Gcode_Bad_Inputs_Error
               with "Module """ & Conversions.To_UTF_8_String (I) & """ not known or does not have savable settings.";
          end if;
 
-         Planner.Flush (Config_Save_Event'(Config_To_Save => Configs_To_Save (I)));
+         Self_Ref_Strong.Set (Self_Ref);
+         Planner.Flush
+           (Config_Save_Event'(Save_All => False, Module_Instance_Ref => Self_Ref_Strong, Config_To_Save => I));
       end Save_Settings;
 
       procedure Save_Settings (Planner : Planner_Interface'Class; I : Gcode_No_Value) is
@@ -85,6 +108,19 @@ package body Prunt.Default_Modules.Config_Saving is
 
          Planner.Flush (Config_List_Event'(Config_List => Module_List));
       end Save_Settings;
+
+      procedure Process_Save_All_Settings is
+      begin
+         for C of Configs_To_Save loop
+            C.Save;
+         end loop;
+      end Process_Save_All_Settings;
+
+      procedure Process_Save_Settings (I : Virtual_String) is
+         Config_To_Save : Config.Config_Data := Configs_To_Save (I);
+      begin
+         Config_To_Save.Save;
+      end Process_Save_Settings;
    end Module_Instance;
 
 end Prunt.Default_Modules.Config_Saving;

@@ -456,7 +456,10 @@ package body Config_Parser is
 
       Data : Record_Data :=
         (Has_Variant => False,
-         Components  => Parse_Component_Items (Def.F_Record_Def.F_Components.F_Components),
+         Components  =>
+           (if Def.F_Record_Def.F_Components.Is_Null or else Def.F_Record_Def.F_Components.F_Components.Is_Null
+            then []
+            else Parse_Component_Items (Def.F_Record_Def.F_Components.F_Components)),
          Description => Get_Comments_Starting_After (Def.F_Record_Def.Token_Start),
          Tabbed      => False);
       --  Comment is first comment inside `record ... end record`.
@@ -526,7 +529,10 @@ package body Config_Parser is
 
                Data.Variants.Insert
                  (To_Virtual_String (Variant.F_Choices.First_Child.As_Identifier.Text),
-                  (Components  => Parse_Component_Items (Variant.F_Components.F_Components),
+                  (Components  =>
+                     (if Variant.F_Components.Is_Null or else Variant.F_Components.F_Components.Is_Null
+                      then []
+                      else Parse_Component_Items (Variant.F_Components.F_Components)),
                    Description => Get_Comments_Starting_After (Tok)));
             end;
          end loop;
@@ -536,9 +542,10 @@ package body Config_Parser is
    end Parse_Record;
 
    function Parse_Array (Decl : Base_Type_Decl) return Config_Type is
-      Def       : constant Array_Type_Def := Decl.As_Type_Decl.F_Type_Def.As_Array_Type_Def;
-      Is_Tabbed : Boolean := False;
-      Min, Max  : Virtual_String := "";
+      Def          : constant Array_Type_Def := Decl.As_Type_Decl.F_Type_Def.As_Array_Type_Def;
+      Is_Tabbed    : Boolean := False;
+      Present_When : Virtual_String := "";
+      Min, Max     : Virtual_String := "";
    begin
       --  TODO: We need to handle index types with range constraints here.
       --  TODO: We need to handle ratio element types with range constraints here.
@@ -557,6 +564,8 @@ package body Config_Parser is
                if Argument (1) = "Prunt_Config" then
                   if Argument (2) = "Tabbed" then
                      Is_Tabbed := True;
+                  elsif Argument (2) = "Present_When" then
+                     Present_When := Strip (Argument (3));
                   elsif Argument (2) = "User_Config" then
                      null;
                   else
@@ -647,6 +656,7 @@ package body Config_Parser is
             (Index_Type   => To_Virtual_String (Index_Decl.P_Fully_Qualified_Name),
              Element_Type => To_Virtual_String (Elem_Decl.P_Fully_Qualified_Name),
              Tabbed       => Is_Tabbed,
+             Present_When => Present_When,
              Min          => Min,
              Max          => Max));
       end;

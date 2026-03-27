@@ -47,8 +47,8 @@ package Config_Types is
       --  Min and Max annotations are used for ratios where a range can not be used.
       --
       --  The Fixed_Kind annotation is used when Type_Name refers to a record with discriminant which should have a
-      --  value set by the expression contained within the string. The string may contain a `?` character, which will
-      --  be replaced with the current index of last array in the config tree.
+      --  value set by the expression contained within the string. Each run of `?` characters is replaced with an
+      --  array index from the config tree. `?` refers to the innermost array index, `??` to its parent, and so on.
       --
       --  Options_Expr overrides the generated options expression for enum-backed discrete values.
       --
@@ -136,6 +136,8 @@ package Config_Types is
       --
       --  type ... is array (`Index_Type`) of `Element_Type` with
       --    [Annotate (Prunt_Config, Tabbed),] --  `Tabbed` is True if this annotation is present.
+      --    [Annotate (Prunt_Config, Present_When, "`Present_When`"),]
+      --      Above applies to each element, `Index_?` may be used in the expression.
       --    Annotate (Prunt_Config, User_Config);
       --
       --  TODO: Add support for ranges on Index_Type.
@@ -147,6 +149,7 @@ package Config_Types is
       Element_Type : Virtual_String;
       --  Type name is fully qualified.
       Tabbed       : Boolean;
+      Present_When : Virtual_String;
       Min          : Virtual_String;
       Max          : Virtual_String;
    end record;

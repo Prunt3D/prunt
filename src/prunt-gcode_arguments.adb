@@ -42,7 +42,8 @@ package body Prunt.Gcode_Arguments is
          Start_Marker := Iter.Marker;
 
          loop
-            if Iter.Element not in '.' | '-' | '0' .. '9' then
+            if Iter.Element not in '.' | '-' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' then
+               --  0 to 9 might not be a contiguous range for a given VSS encoding.
                Assert (Iter.Backward);
                exit;
             end if;
@@ -102,10 +103,10 @@ package body Prunt.Gcode_Arguments is
          end;
       end Parse_Number;
 
-      procedure Parse_String (Index : Arguments_Index) is
+      procedure Parse_String (Index : Arguments_Index; Delimiter : Virtual_Character) is
          Start_String : constant Character_Marker := Iter.Marker;
       begin
-         while Iter.Element /= '"' loop
+         while Iter.Element /= Delimiter loop
             if not Iter.Forward then
                raise Parse_Error with "Unterminated string.";
             end if;
@@ -130,12 +131,17 @@ package body Prunt.Gcode_Arguments is
             end if;
          end loop;
 
-         if Iter.Element = '"' then
-            if not Iter.Forward then
-               raise Parse_Error with "Unterminated string.";
-            end if;
-            Parse_String (Index);
-         elsif Iter.Element in '.' | '-' | '0' .. '9' then
+         if Iter.Element in '"' | ''' then
+            declare
+               Delimiter : constant Virtual_Character := Iter.Element;
+            begin
+               if not Iter.Forward then
+                  raise Parse_Error with "Unterminated string.";
+               end if;
+               Parse_String (Index, Delimiter);
+            end;
+         elsif Iter.Element in '.' | '-' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' then
+            --  0 to 9 might not be a contiguous range for a given VSS encoding.
             Parse_Number (Index);
          else
             Assert (Iter.Backward);
@@ -282,7 +288,7 @@ package body Prunt.Gcode_Arguments is
             return Default;
 
          when Integer_Kind | Float_Kind =>
-            raise Parse_Error with "Parameter " & Index'Image & " should be a string surrounded by "".";
+            raise Parse_Error with "Parameter " & Index'Image & " should be a string surrounded by "" or '.";
 
          when String_Kind               =>
             return Args.Arguments (Index).String_Value;
@@ -304,7 +310,7 @@ package body Prunt.Gcode_Arguments is
             raise Parse_Error with "Parameter " & Index'Image & " missing in command requiring string.";
 
          when Integer_Kind | Float_Kind =>
-            raise Parse_Error with "Parameter " & Index'Image & " should be a string surrounded by "".";
+            raise Parse_Error with "Parameter " & Index'Image & " should be a string surrounded by "" or '.";
 
          when String_Kind               =>
             return Args.Arguments (Index).String_Value;

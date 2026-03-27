@@ -21,11 +21,15 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Default_Modules.Config_Saving;
 with Prunt.Gcode_Arguments;
 with Prunt.Input_Shapers;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
+private with Ada.Containers.Ordered_Maps;
+
 generic
+   with package Config_Saving_Module is new Default_Modules.Config_Saving;
 package Prunt.Default_Modules.Input_Shapers is
 
    type Module is new My_Modules.Module with null record;
@@ -38,7 +42,7 @@ package Prunt.Default_Modules.Input_Shapers is
 
    type Module_Instance_Interface is synchronized interface;
 
-   function Get_Default_Axial_Shapers
+   function Get_Current_Axial_Shapers
      (This : Module_Instance_Interface) return Prunt.Input_Shapers.Axial_Shaper_Parameters
    is abstract;
 
@@ -157,33 +161,66 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
+   package Input_Shaping_Update_Maps is new Ada.Containers.Ordered_Maps (Axis_Name, User_Config_Input_Shaping_Method);
+
+   type Input_Shaping_Config_Update is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Updated_Configs     : Input_Shaping_Update_Maps.Map;
+   end record;
+
+   overriding
+   procedure Process_After_Block
+     (This                 : Input_Shaping_Config_Update;
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset);
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
-      procedure Initialize (Config_In : User_Config);
+      procedure Initialize (Config_In : User_Config; Config_Data_In : Prunt.Config.Config_Data);
 
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+
+      procedure Apply_Runtime_Config (Updates : Input_Shaping_Update_Maps.Map);
 
       procedure Configure_Input_Shaping
         (Planner : Planner_Interface'Class;
          P       : Virtual_String;
-         --  Must be set to `"Prunt"`.
+         --  Must be set to `"Prunt"` to avoid conflicts with Marlin g-code.
          X       : Gcode_Optional_String;
-         --  Optional X-axis shaping mode or payload.
+         --  JSON object describing the X-axis shaper.
          Y       : Gcode_Optional_String;
-         --  Optional Y-axis shaping mode or payload.
+         --  JSON object describing the Y-axis shaper.
          Z       : Gcode_Optional_String;
-         --  Optional Z-axis shaping mode or payload.
+         --  JSON object describing the Z-axis shaper.
          E       : Gcode_Optional_String
-         --  Optional E-axis shaping mode or payload.
+         --  JSON object describing the E-axis shaper.
          )
       with Annotate => (Prunt_Config, Gcode_Command, "M493");
       --  Configure input shaping for one or more axes.
+      --
+      --  Each provided axis parameter must be a JSON object inside a G-code string. Use single quotes around the whole
+      --  JSON payload so normal JSON double quotes can be used inside it. Below are the various options:
+      --
+      --  `{"Kind" : "No_Shaper"}`
+      --
+      --  `{"Kind" : "Zero_Vibration", "Shaper_Frequency" : 40.0, "Damping_Ratio" : 0.1, "Number_Of_Derivatives" : 1}`
+      --
+      --  `{"Kind" : "Extra_Insensitive", "Shaper_Frequency" : 40.0, "Damping_Ratio":0.1, "Residual_Vibration_Level" :
+      --  0.05, "Number_Of_Humps" : 1}`
+      --
+      --  `{"Kind" : "Pressure_Advance", "Pressure_Advance_Time" : 0.02, "Pressure_Advance_Smooth_Time" : 0.01,
+      --  "Smooth_Added_Part_Only" : false, "Smoothing_Levels" : 2}`.
+      --
+      --  `Shaper_Frequency` is in hertz and all time values are in seconds. Changes can be saved with `M500`.
 
       overriding
-      function Get_Default_Axial_Shapers return Prunt.Input_Shapers.Axial_Shaper_Parameters;
+      function Get_Current_Axial_Shapers return Prunt.Input_Shapers.Axial_Shaper_Parameters;
    private
-      Config   : User_Config;
-      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Config      : User_Config;
+      Config_Data : Prunt.Config.Config_Data;
+      Self_Ref    : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 
 end Prunt.Default_Modules.Input_Shapers;

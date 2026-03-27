@@ -33,7 +33,9 @@ generic
    Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
    Input_Switch_Hardware : My_Controller_Generic_Types.Input_Switch_Hardware_Parameters_Array_Type;
    with package Input_Switches_Module is new
-     Default_Modules.Input_Switches (Input_Switch_Name => My_Controller_Generic_Types.Input_Switch_Name);
+     Default_Modules.Input_Switches
+       (My_Controller_Generic_Types => My_Controller_Generic_Types,
+        Input_Switch_Hardware       => Input_Switch_Hardware);
 package Prunt.Default_Modules.Homing is
 
    use My_Controller_Generic_Types;
@@ -357,7 +359,7 @@ private
          --  If included then the X axis will be homed.
          Y       : Gcode_Optional_No_Value;
          --  If included then the Y axis will be homed.
-         Z       : Gcode_Optional_No_Value
+         Z       : Gcode_Optional_No_Value;
          --  If included then the Z axis will be homed.
          E       : Gcode_Optional_No_Value
          --  If included then the E axis will be homed.
@@ -370,20 +372,6 @@ private
       --  parameters are not present but are planned for a future version. These parameters are present in Marlin.
       --
       --  The `E` parameter is not present in Marlin as Marlin does not homing of the E axis.
-
-      procedure Set_Homing_Feedrate
-        (Planner : Planner_Interface'Class;
-         X       : Gcode_Optional_Float;
-         --  X-axis homing feedrate.
-         Y       : Gcode_Optional_Float;
-         --  Y-axis homing feedrate.
-         Z       : Gcode_Optional_Float
-         --  Z-axis homing feedrate.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M210");
-      --  Set homing feedrates.
-      --
-      --  The `ABCUVW` parameters from Marlin are not present as Prunt does not support these axes. The `LOR`
 
       overriding
       procedure Subscribe_To_Homing (Subscriber : not null access function return Homing_Event_Subscriber'Class);

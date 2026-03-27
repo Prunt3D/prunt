@@ -32,11 +32,6 @@ package Prunt.Module_Types is
 
    type User_Config_Integer is range -1_000_000 .. 1_000_000 with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Empty is record
-      null;
-   end record
-   with Annotate => (Prunt_Config, User_Config);
-
    type Planner_Interface is limited interface;
    --  Subprograms towards end of file.
 
@@ -122,6 +117,8 @@ package Prunt.Module_Types is
 
    function Get_Last_Kinematic_Parameters (This : Planner_Interface) return Motion_Planner.Kinematic_Parameters
    is abstract;
+   --  TODO: This should probably be changed to a set of procedures to update a particular field without reading all
+   --  the kinematic limits so that there are less restrictions on the planner.
 
    type Extra_Corner_Data is tagged null record;
    --  Use this for non-blocking handlers with a low cost that should not interrupt motion. If this procedure takes too
@@ -160,20 +157,23 @@ package Prunt.Module_Types is
    --  May be attached to a dummy corner in the next block.
 
    procedure Flush
-     (This       : Planner_Interface;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+     (This           : Planner_Interface;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
    is abstract;
 
    procedure Flush_And_Change_Kinematic_Parameters
-     (This       : Planner_Interface;
-      Params     : Motion_Planner.Kinematic_Parameters;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+     (This           : Planner_Interface;
+      Params         : Motion_Planner.Kinematic_Parameters;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
    is abstract;
 
    procedure Flush_And_Reset_Position
-     (This         : Planner_Interface;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+     (This           : Planner_Interface;
+      New_Position   : Position;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
    is abstract;
 
 end Prunt.Module_Types;

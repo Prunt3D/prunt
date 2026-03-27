@@ -44,7 +44,7 @@ package Prunt.Gcode_Arguments is
    --  The arguments may be any of the following:
    --  - An integer from 0 to 999.
    --  - A real number with an optional decimal part.
-   --  - A string surrounded by `"` characters.
+   --  - A string surrounded by `"` or `'` characters.
    --
    --  Duplicate parameters are not allowed. Parameters may be in any order. Spaces are ignored. Anything after a `;`
    --  character is also ignored as a comment.

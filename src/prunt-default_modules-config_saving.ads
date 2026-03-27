@@ -64,9 +64,24 @@ private
    package Config_Data_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Config.Config_Data, "=" => Return_False);
 
-   type Config_Save_Event is new Extra_Block_Resetting_Data with record
-      Config_To_Save : Config.Config_Data;
+   type Config_Save_Event (Save_All : Boolean) is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+
+      case Save_All is
+         when False =>
+            Config_To_Save : Virtual_String;
+
+         when True =>
+            null;
+      end case;
    end record;
+
+   overriding
+   procedure Process_After_Block
+     (This                 : Config_Save_Event;
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset);
 
    type Config_List_Event is new Extra_Block_Resetting_Data with record
       Config_List : Virtual_String;
@@ -111,7 +126,12 @@ private
       --
       --  This command is not present in Marlin.
 
+      procedure Process_Save_All_Settings;
+
+      procedure Process_Save_Settings (I : Virtual_String);
+
    private
+
       Self_Ref        : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Configs_To_Save : Config_Data_Maps.Map;
    end Module_Instance;

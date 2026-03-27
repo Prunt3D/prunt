@@ -160,6 +160,10 @@ package Prunt.Controller_Generic_Types is
       --  Controls whether the input switch is presented to the user in the configuration interface. This is primarily
       --  intended for hiding of DIAG0 pins on TMC drivers which are required for StallGuard homing but should not be
       --  directly selectable by the user.
+
+      Get_State : access function (Switch : Input_Switch_Name) return Boolean;
+      --  Return `True` when the switch is currently electrically closed, before applying the configured normally-open
+      --  or normally-closed interpretation. May be called from any task.
    end record;
 
    type Input_Switch_Hardware_Parameters_Array_Type is array (Input_Switch_Name) of Input_Switch_Hardware_Parameters;
