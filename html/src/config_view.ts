@@ -288,7 +288,24 @@ function buildPropertiesCombined(schemaMap: any, valuesMap: any, pathsMap: any, 
     return hasAdded;
 }
 
-function createCombinedSequence(name: string, schema: any, value: any, pathsDef: any): HTMLElement | null {
+type FieldRenderOptions = {
+    showLabel?: boolean;
+    redundantTitleContext?: string | null;
+};
+
+function getOnlyChildName(schema: any): string | null {
+    if (!schema?.Children) return null;
+    const childNames = Object.keys(schema.Children);
+    return childNames.length === 1 ? childNames[0] : null;
+}
+
+function createCombinedSequence(
+    name: string,
+    schema: any,
+    value: any,
+    pathsDef: any,
+    options: FieldRenderOptions = {}
+): HTMLElement | null {
     if (!schema.Children || Object.keys(schema.Children).length === 0) {
         return null;
     }
@@ -300,9 +317,11 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
     let basePath = Array.isArray(pathsDef) ? pathsDef : pathsDef.Base;
     if (basePath) fieldDiv.dataset.path = JSON.stringify(basePath);
 
-    const label = document.createElement('label');
-    label.innerText = translateConfigLabel(basePath, name);
-    fieldDiv.appendChild(label);
+    if (name && options.showLabel !== false) {
+        const label = document.createElement('label');
+        label.innerText = translateConfigLabel(basePath, name);
+        fieldDiv.appendChild(label);
+    }
 
     const description = translateConfigDescription(basePath, schema.Description || '');
     if (description) {
@@ -342,9 +361,15 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
 
             let f: HTMLElement | null = null;
             if ((childSchema as any).Kind === "Sequence") {
-                f = createCombinedSequence(childName, childSchema, childVal, cp);
+                f = createCombinedSequence(childName, childSchema, childVal, cp, {
+                    showLabel: false,
+                    redundantTitleContext: childName
+                });
             } else {
-                f = createField(childName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base);
+                f = createField(childName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base, {
+                    showLabel: false,
+                    redundantTitleContext: childName
+                });
             }
 
             if (f) {
@@ -380,19 +405,46 @@ function createCombinedSequence(name: string, schema: any, value: any, pathsDef:
         const childPathsMap = pathsDef.ChildrenPaths || {};
         let hasAnyChild = false;
 
-        for (const [childName, childSchema] of Object.entries(schema.Children)) {
-            const childVal = value ? value[childName] : undefined;
-            let cp = childPathsMap[childName] || (basePath ? [...basePath, childName] : undefined);
+        const onlyChildName = getOnlyChildName(schema);
+        const shouldSuppressOnlyChildTitle = onlyChildName !== null && onlyChildName === options.redundantTitleContext;
+
+        if (shouldSuppressOnlyChildTitle) {
+            const childSchema = schema.Children[onlyChildName];
+            const childVal = value ? value[onlyChildName] : undefined;
+            const cp = childPathsMap[onlyChildName] || (basePath ? [...basePath, onlyChildName] : undefined);
 
             let f: HTMLElement | null = null;
             if ((childSchema as any).Kind === "Sequence") {
-                f = createCombinedSequence(childName, childSchema, childVal, cp);
+                f = createCombinedSequence(onlyChildName, childSchema, childVal, cp, {
+                    showLabel: false,
+                    redundantTitleContext: onlyChildName
+                });
             } else {
-                f = createField(childName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base);
+                f = createField(onlyChildName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base, {
+                    showLabel: false,
+                    redundantTitleContext: onlyChildName
+                });
             }
+
             if (f) {
                 wrap.appendChild(f);
                 hasAnyChild = true;
+            }
+        } else {
+            for (const [childName, childSchema] of Object.entries(schema.Children)) {
+                const childVal = value ? value[childName] : undefined;
+                let cp = childPathsMap[childName] || (basePath ? [...basePath, childName] : undefined);
+
+                let f: HTMLElement | null = null;
+                if ((childSchema as any).Kind === "Sequence") {
+                    f = createCombinedSequence(childName, childSchema, childVal, cp);
+                } else {
+                    f = createField(childName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base);
+                }
+                if (f) {
+                    wrap.appendChild(f);
+                    hasAnyChild = true;
+                }
             }
         }
 
@@ -417,20 +469,29 @@ function buildProperties(schemaMap: any, valuesMap: any, parentEl: HTMLElement, 
     return hasAdded;
 }
 
-function createField(name: string, schema: any, value: any, path: string[]): HTMLElement | null {
+function createField(
+    name: string,
+    schema: any,
+    value: any,
+    path: string[],
+    options: FieldRenderOptions = {}
+): HTMLElement | null {
     const fieldDiv = document.createElement('div');
     fieldDiv.className = 'form-group';
     fieldDiv.dataset.path = JSON.stringify(path);
+    let hasContent = false;
 
-    if (name) {
+    if (name && options.showLabel !== false) {
         const label = document.createElement('label');
         label.innerText = translateConfigLabel(path, name);
         fieldDiv.appendChild(label);
+        hasContent = true;
     }
 
     const description = translateConfigDescription(path, schema.Description || '');
     if (description) {
         renderDescription(fieldDiv, description);
+        hasContent = true;
     }
 
     if (devMode && path && path.length > 0) {
@@ -438,6 +499,7 @@ function createField(name: string, schema: any, value: any, path: string[]): HTM
         pathDesc.className = 'description dev-mode-path';
         pathDesc.innerText = JSON.stringify(path).replace(/,/g, ', ');
         fieldDiv.appendChild(pathDesc);
+        hasContent = true;
     }
 
     const errorSpan = document.createElement('span');
@@ -466,7 +528,7 @@ function createField(name: string, schema: any, value: any, path: string[]): HTM
             inputArea = createVariantInput(path, actualValue, schema);
             break;
         case 'Sequence':
-            inputArea = createSequenceInput(path, actualValue, schema);
+            inputArea = createSequenceInput(path, actualValue, schema, options.redundantTitleContext ?? null);
             break;
         default:
             console.warn(`Unknown config kind: ${schema.Kind}`);
@@ -477,7 +539,7 @@ function createField(name: string, schema: any, value: any, path: string[]): HTM
         fieldDiv.appendChild(errorSpan);
         return fieldDiv;
     }
-    return null;
+    return hasContent ? fieldDiv : null;
 }
 
 function createBooleanInput(path: string[], value: boolean): HTMLElement {
@@ -695,7 +757,9 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
                 childrenContainer.className = 'variant-children variant-children-indented';
             }
             const mappedChildVal = value?.Children?.[activeName];
-            const childEl = createField("", activeSchema, mappedChildVal, [...path, 'Children', activeName]);
+            const childEl = createField("", activeSchema, mappedChildVal, [...path, 'Children', activeName], {
+                redundantTitleContext: activeName
+            });
             if (childEl) childrenContainer.appendChild(childEl);
         }
     };
@@ -706,7 +770,12 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
     return wrap;
 }
 
-function createSequenceInput(path: string[], value: any, schema: any): HTMLElement | null {
+function createSequenceInput(
+    path: string[],
+    value: any,
+    schema: any,
+    redundantTitleContext: string | null = null
+): HTMLElement | null {
     if (!schema.Children || Object.keys(schema.Children).length === 0) {
         return null;
     }
@@ -727,7 +796,10 @@ function createSequenceInput(path: string[], value: any, schema: any): HTMLEleme
             const childVal = value ? value[childName] : undefined;
             
             const pane = document.createElement('div');
-            const f = createField(childName, childSchema, childVal, [...path, childName]);
+            const f = createField(childName, childSchema, childVal, [...path, childName], {
+                showLabel: false,
+                redundantTitleContext: childName
+            });
             if (f) {
                 pane.appendChild(f);
 
@@ -758,7 +830,24 @@ function createSequenceInput(path: string[], value: any, schema: any): HTMLEleme
         wrap.appendChild(contentContainer);
     } else {
         wrap.className = 'sequence-group';
-        const hasAdded = buildProperties(schema.Children, value || {}, wrap, path);
+        const onlyChildName = getOnlyChildName(schema);
+        let hasAdded = false;
+
+        if (onlyChildName !== null && onlyChildName === redundantTitleContext) {
+            const childSchema = schema.Children[onlyChildName];
+            const childVal = value ? value[onlyChildName] : undefined;
+            const childField = createField(onlyChildName, childSchema, childVal, [...path, onlyChildName], {
+                showLabel: false,
+                redundantTitleContext: onlyChildName
+            });
+            if (childField) {
+                wrap.appendChild(childField);
+                hasAdded = true;
+            }
+        } else {
+            hasAdded = buildProperties(schema.Children, value || {}, wrap, path);
+        }
+
         if (!hasAdded) return null;
     }
 

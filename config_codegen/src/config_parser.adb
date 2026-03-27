@@ -786,6 +786,25 @@ package body Config_Parser is
       return Command;
    end Parse_Gcode_Command;
 
+   function Format_Gcode_Arguments (Arguments : Gcode_Argument_Maps.Map) return String is
+      Result : Virtual_String := "(";
+      First  : Boolean        := True;
+   begin
+      for C in Arguments.Iterate loop
+         if not First then
+            Result.Append (", ");
+         end if;
+
+         Result.Append (Gcode_Argument_Maps.Key (C));
+         Result.Append (" => ");
+         Result.Append (Conversions.To_Virtual_String (Gcode_Argument_Maps.Element (C)'Image));
+         First := False;
+      end loop;
+
+      Result.Append (")");
+      return Conversions.To_UTF_8_String (Result);
+   end Format_Gcode_Arguments;
+
    function Parse (Context : Libadalang.Analysis.Analysis_Context; Filename : String) return Module_Data is
       Result : Module_Data := (Name => "", Filename => "", Root_Type => "", others => <>);
 
@@ -941,9 +960,9 @@ package body Config_Parser is
                                                 "Gcode command overlap detected with "
                                                 & VSS.Strings.Conversions.To_UTF_8_String (V.Name)
                                                 & " ("
-                                                & New_Cmd.Arguments'Image
+                                                & Format_Gcode_Arguments (New_Cmd.Arguments)
                                                 & ", "
-                                                & V.Arguments'Image
+                                                & Format_Gcode_Arguments (V.Arguments)
                                                 & ").");
                                           end if;
                                        end loop;

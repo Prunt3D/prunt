@@ -47,15 +47,11 @@ package body Prunt.Default_Modules.Heaters is
 
    function To_Heater_Parameters (Config : User_Config_Heater) return Heater_Parameters is
    begin
-      case Config.Control_Method.Kind is
-         when Disabled  =>
-            return
-              (Kind                       => Disabled_Kind,
-               Check_Max_Cumulative_Error => Config.Check_Maximum_Cumulative_Error,
-               Check_Gain_Time            => Config.Check_Gain_Time,
-               Check_Minimum_Gain         => Config.Check_Minimum_Gain,
-               Check_Hysteresis           => Config.Check_Hysteresis);
+      if Config.Kind = Disabled then
+         return (Kind => Disabled_Kind);
+      end if;
 
+      case Config.Control_Method.Kind is
          when PID       =>
             return
               (Kind                       => PID_Kind,
@@ -198,7 +194,7 @@ package body Prunt.Default_Modules.Heaters is
               (Parsed_Config, Status_Emitter, Thermistors_Module_Instance_Ref, Blocking_Tracker_Module_Instance_Ref);
 
             for H in Heater_Name loop
-               if Parsed_Config.Heaters (H).Control_Method.Kind /= Disabled
+               if Parsed_Config.Heaters (H).Kind /= Disabled
                  and then
                    not Thermistors_Module_Instance.Thermistor_Is_Enabled_In_Config
                          (Parsed_Config.Heaters (H).Thermistor)
@@ -210,9 +206,7 @@ package body Prunt.Default_Modules.Heaters is
             declare
                procedure Validate_Default (Name : Virtual_String; Selection : User_Config_Default_Heater) is
                begin
-                  if Selection.Kind = Enabled
-                    and then Parsed_Config.Heaters (Selection.Heater).Control_Method.Kind = Disabled
-                  then
+                  if Selection.Kind = Enabled and then Parsed_Config.Heaters (Selection.Heater).Kind = Disabled then
                      Report_Config_Error (["Gcode_Defaults", Name, "Heater"], "This heater is disabled.");
                   end if;
                end Validate_Default;
@@ -274,12 +268,20 @@ package body Prunt.Default_Modules.Heaters is
          for H in Heater_Name loop
             declare
                Min_Temp : constant Temperature :=
-                 Thermistors_Module.Module_Instance_Interface'Class (Thermistors_Module_Instance_Ref.Get.Element.all)
-                   .Get_Thermistor_Parameters (Config.Heaters (H).Thermistor)
-                   .Minimum_Temperature;
+                 (if Config.Heaters (H).Kind = Disabled
+                  then 0.0 * celsius
+                  else
+                    Thermistors_Module.Module_Instance_Interface'Class
+                      (Thermistors_Module_Instance_Ref.Get.Element.all)
+                      .Get_Thermistor_Parameters (Config.Heaters (H).Thermistor)
+                      .Minimum_Temperature);
             begin
                Heater_Hardware (H).Reconfigure
-                 (H, To_Heater_Parameters (Config.Heaters (H)), Config.Heaters (H).Thermistor);
+                 (H,
+                  To_Heater_Parameters (Config.Heaters (H)),
+                  (if Config.Heaters (H).Kind = Disabled
+                   then Thermistor_Name'First
+                   else Config.Heaters (H).Thermistor));
                Heater_Hardware (H).Set_Temperature (H, Min_Temp);
                Target_Status_Setters (H).Set_Value (Min_Temp / celsius);
             end;
@@ -328,24 +330,31 @@ package body Prunt.Default_Modules.Heaters is
       procedure Validate_Target (Heater : Heater_Name; Target : Temperature) is
          Thermistors_Module_Instance : Thermistors_Module.Module_Instance_Interface'Class renames
            Thermistors_Module.Module_Instance_Interface'Class (Thermistors_Module_Instance_Ref.Get.Element.all);
-         Thermistor_Params           : constant Prunt.Thermistors.Thermistor_Parameters :=
-           Thermistors_Module_Instance.Get_Thermistor_Parameters (Config.Heaters (Heater).Thermistor);
       begin
-         if Target < Thermistor_Params.Minimum_Temperature then
-            raise Gcode_Bad_Inputs_Error
-              with
-                "Target temperature must not be less than "
-                & Dimensionless'Image (Thermistor_Params.Minimum_Temperature / celsius)
-                & " °C.";
+         if Config.Heaters (Heater).Kind = Disabled then
+            raise Gcode_Bad_Inputs_Error with "This heater is disabled in config.";
          end if;
 
-         if Target > Thermistor_Params.Maximum_Temperature then
-            raise Gcode_Bad_Inputs_Error
-              with
-                "Target temperature must not be greater than "
-                & Dimensionless'Image (Thermistor_Params.Maximum_Temperature / celsius)
-                & " °C.";
-         end if;
+         declare
+            Thermistor_Params : constant Prunt.Thermistors.Thermistor_Parameters :=
+              Thermistors_Module_Instance.Get_Thermistor_Parameters (Config.Heaters (Heater).Thermistor);
+         begin
+            if Target < Thermistor_Params.Minimum_Temperature then
+               raise Gcode_Bad_Inputs_Error
+                 with
+                   "Target temperature must not be less than "
+                   & Dimensionless'Image (Thermistor_Params.Minimum_Temperature / celsius)
+                   & " °C.";
+            end if;
+
+            if Target > Thermistor_Params.Maximum_Temperature then
+               raise Gcode_Bad_Inputs_Error
+                 with
+                   "Target temperature must not be greater than "
+                   & Dimensionless'Image (Thermistor_Params.Maximum_Temperature / celsius)
+                   & " °C.";
+            end if;
+         end;
       end Validate_Target;
 
       function Get_Default_Heater (Selection : User_Config_Default_Heater; Display_Name : String) return Heater_Name is
@@ -468,11 +477,15 @@ package body Prunt.Default_Modules.Heaters is
 
       function Heater_Is_Enabled_In_Config (Heater : Heater_Name) return Boolean is
       begin
-         return Config.Heaters (Heater).Control_Method.Kind /= Disabled;
+         return Config.Heaters (Heater).Kind /= Disabled;
       end Heater_Is_Enabled_In_Config;
 
       function Assigned_Thermistor (Heater : Heater_Name) return Thermistor_Name is
       begin
+         if Config.Heaters (Heater).Kind = Disabled then
+            raise Constraint_Error with "Disabled heaters do not have assigned thermistors.";
+         end if;
+
          return Config.Heaters (Heater).Thermistor;
       end Assigned_Thermistor;
 

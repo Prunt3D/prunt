@@ -1003,7 +1003,9 @@ package body Config_Generator is
                      end if;
                      Fixed_Desc_Suffix.Append (Fixed_Kind_Str & " = " & Variant_Case_Maps.Key (Variant_C));
                      Fixed_Desc_Suffix.Append
-                       (" then +""\n" & Variant_Case_Maps.Element (Variant_C).Description & """");
+                       (" then (VSS.Characters.Latin.Line_Feed & (+"""
+                        & Variant_Case_Maps.Element (Variant_C).Description
+                        & """))");
                      Is_First := False;
                   end loop;
 

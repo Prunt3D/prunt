@@ -183,8 +183,6 @@ function resetWidgetsToDefault(askConfirm = false) {
     if (!statusSchema) return;
 
     for (const [modName, modSchema] of Object.entries(statusSchema)) {
-        dashboardLayout.push({ type: 'header', value: modName, module: modName, translatable: true });
-
         const groups = new Map<string, StatusPath[]>();
         for (const [groupName, groupSchema] of Object.entries(modSchema as any)) {
             for (const [valName, valSchema] of Object.entries(groupSchema as any)) {
@@ -202,6 +200,9 @@ function resetWidgetsToDefault(askConfirm = false) {
             }
         }
 
+        if (groups.size === 0) continue;
+
+        dashboardLayout.push({ type: 'header', value: modName, module: modName, translatable: true });
         for (const [key, paths] of groups.entries()) {
             dashboardLayout.push({ type: 'widget', groupKey: key, key, paths });
         }

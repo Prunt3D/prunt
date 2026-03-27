@@ -21,6 +21,7 @@ pragma Extensions_Allowed (On);
 
 with Ada.Containers.Ordered_Maps;
 with Ada.Containers.Vectors;
+with Indefinite_Ordered_Maps_With_Insertion_Order;
 with VSS.Strings; use VSS.Strings;
 
 package Config_Types is
@@ -69,7 +70,8 @@ package Config_Types is
       Unit                : Unit_Data;
    end record;
 
-   package Component_Data_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Component_Data);
+   package Component_Data_Maps is new
+     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Component_Data);
 
    type Variant_Case_Data is record
       --  The members of this record represent the following parts of a record variant case:
@@ -87,9 +89,11 @@ package Config_Types is
       Description : Virtual_String;
    end record;
 
-   package Variant_Case_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Variant_Case_Data);
+   package Variant_Case_Maps is new
+     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Variant_Case_Data);
 
-   package Virtual_String_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Virtual_String);
+   package Virtual_String_Maps is new
+     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Virtual_String);
 
    type Record_Data (Has_Variant : Boolean := False) is record
       --  The members of this record represent the following parts of a record declaration:
@@ -209,7 +213,7 @@ package Config_Types is
       end case;
    end record;
 
-   package Config_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Config_Type);
+   package Config_Maps is new Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Config_Type);
 
    type Gcode_Argument_Kind is (Integer_Kind, Float_Kind, String_Kind, No_Value_Kind, Not_Present_Kind);
 
@@ -222,7 +226,8 @@ package Config_Types is
       Arg_Kinds   : Gcode_Argument_Kind_Set;
    end record;
 
-   package Gcode_Argument_Maps is new Ada.Containers.Ordered_Maps (Virtual_String, Gcode_Argument_Data);
+   package Gcode_Argument_Maps is new
+     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Gcode_Argument_Data);
 
    type Gcode_Command_Data is record
       Name        : Virtual_String;

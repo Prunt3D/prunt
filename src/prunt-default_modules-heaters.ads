@@ -60,6 +60,7 @@ package Prunt.Default_Modules.Heaters is
 
    function Assigned_Thermistor (This : Module_Instance_Interface; Heater : Heater_Name) return Thermistor_Name
    is abstract;
+   --  Raises `Constraint_Error` if the heater is not enabled.
 
    function Get_Heater_Parameters (This : Module_Instance_Interface; Heater : Heater_Name) return Heater_Parameters
    is abstract;
@@ -111,17 +112,14 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Heater_Control_Method_Kind is (Disabled, PID, Bang_Bang)
-   with Annotate => (Prunt_Config, User_Config);
+   type User_Config_Heater_Kind is (Disabled, Enabled) with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Heater_Control_Method (Kind : User_Config_Heater_Control_Method_Kind := Disabled) is record
+   type User_Config_Heater_Control_Method_Kind is (PID, Bang_Bang) with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Heater_Control_Method (Kind : User_Config_Heater_Control_Method_Kind := PID) is record
       --  Select how this heater is controlled.
 
       case Kind is
-         when Disabled =>
-            Disabled : User_Config_Empty;
-            --  Disable this heater. The output remains off and the heater cannot be used.
-
          when PID =>
             PID : User_Config_Heater_PID;
 
@@ -131,30 +129,36 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   --  TODO: Below should be a variant so we can disable or enable heaters.
-
-   type User_Config_Heater is record
+   type User_Config_Heater (Kind : User_Config_Heater_Kind := Disabled) is record
       --  This section contains the configuration for a single heater.
 
-      Thermistor : Thermistor_Name := Thermistor_Name'First;
-      --  Select the thermistor used to measure this heater's temperature.
+      case Kind is
+         when Disabled =>
+            --  Disable this heater. The output remains off and the heater cannot be used.
 
-      Check_Gain_Time : Time range 0.0 * s .. 1.0E100 * s := 20.0 * s;
-      --  Time window used when checking that the heater is gaining temperature.
+            Disabled : User_Config_Empty;
 
-      Check_Minimum_Gain : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 2.0 * celsius;
-      --  Minimum temperature rise required within the gain time to reset the cumulative error counter.
+         when Enabled =>
+            Thermistor : Thermistor_Name := Thermistor_Name'First;
+            --  Select the thermistor used to measure this heater's temperature.
 
-      Check_Maximum_Cumulative_Error : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 120.0 * celsius;
-      --  Maximum accumulated temperature error allowed before the heater is treated as failed.
+            Check_Gain_Time : Time range 0.0 * s .. 1.0E100 * s := 20.0 * s;
+            --  Time window used when checking that the heater is gaining temperature.
 
-      --  TODO: Above needs a better description.
+            Check_Minimum_Gain : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 2.0 * celsius;
+            --  Minimum temperature rise required within the gain time to reset the cumulative error counter.
 
-      Check_Hysteresis : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 3.0 * celsius;
-      --  Temperature range around the target where the heater is considered on target for fault checking.
+            Check_Maximum_Cumulative_Error : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 120.0 * celsius;
+            --  Maximum accumulated temperature error allowed before the heater is treated as failed.
 
-      Control_Method : User_Config_Heater_Control_Method := (others => <>);
-      --  Select the control method for this heater.
+            --  TODO: Above needs a better description.
+
+            Check_Hysteresis : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 3.0 * celsius;
+            --  Temperature range around the target where the heater is considered on target for fault checking.
+
+            Control_Method : User_Config_Heater_Control_Method := (others => <>);
+            --  Select the control method for this heater.
+      end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
