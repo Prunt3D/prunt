@@ -33,9 +33,8 @@ generic
    Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
    Input_Switch_Hardware : My_Controller_Generic_Types.Input_Switch_Hardware_Parameters_Array_Type;
    with package Input_Switches_Module is new
-     Default_Modules.Input_Switches
-       (My_Controller_Generic_Types => My_Controller_Generic_Types,
-        Input_Switch_Hardware       => Input_Switch_Hardware);
+     Default_Modules.Input_Switches (My_Controller_Generic_Types => My_Controller_Generic_Types, others => <>);
+   --  TODO: We should take `Input_Switch_Hardware` directly from the package instead of having two instances of it.
 package Prunt.Default_Modules.Homing is
 
    use My_Controller_Generic_Types;
@@ -251,9 +250,9 @@ private
 
       case Kind is
          when Disabled =>
-            Disabled : User_Config_Empty;
             --  Homing is not yet configured for this axis. Movement on this axis will be disabled until a homing
             --  method is selected and configured.
+            null;
 
          when Set_To_Value =>
             Set_To_Value : User_Config_Homing_Set_To_Value;
@@ -288,12 +287,12 @@ private
 
       case Kind is
          when No_Requirement =>
-            Empty_1 : User_Config_Empty;
             --  There are no requirements for this axis during homing.
+            null;
 
          when Must_Be_Homed =>
-            Empty_2 : User_Config_Empty;
             --  This axis must be homed prior to the parent axis, but the position does not matter.
+            null;
 
          when Must_Be_At_Position =>
             Must_Be_At_Position : User_Config_Homing_Prereq_Must_Be_At_Position;
@@ -302,7 +301,9 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Homing_Prereq_Array is array (Axis_Name) of User_Config_Homing_Prereq
-   with Annotate => (Prunt_Config, User_Config);
+   with
+     Annotate => (Prunt_Config, Present_When, "Index_? /= Index_??"),
+     Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axis_Homing is record
       --  This section contains the homing procedure configuration for a single axis.
@@ -346,6 +347,21 @@ private
    package Homing_Subscriber_Vectors is new
      Ada.Containers.Vectors (Positive, Homing_Event_Subscriber_Shared_Pointers.Ref, "=" => Return_False);
 
+   type Homing_Event_Kind is (Axis_Start_Event, Axis_Finish_Event);
+
+   type Homing_Event is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Axis                : Axis_Name;
+      Kind                : Homing_Event_Kind;
+   end record;
+
+   overriding
+   procedure Process_After_Block
+     (This                 : Homing_Event;
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset);
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config);
 
@@ -378,7 +394,13 @@ private
 
       overriding
       function Get_Homing_Parameters (Axis : Axis_Name) return Axis_Homing_Parameters;
+
+      procedure Notify_Homing_Axis_Start (Axis : Axis_Name);
+
+      procedure Notify_Homing_Axis_Finish (Axis : Axis_Name);
+
    private
+
       Config      : User_Config;
       Self_Ref    : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Subscribers : Homing_Subscriber_Vectors.Vector;

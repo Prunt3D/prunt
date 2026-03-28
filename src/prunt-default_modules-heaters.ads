@@ -135,8 +135,7 @@ private
       case Kind is
          when Disabled =>
             --  Disable this heater. The output remains off and the heater cannot be used.
-
-            Disabled : User_Config_Empty;
+            null;
 
          when Enabled =>
             Thermistor : Thermistor_Name := Thermistor_Name'First;
@@ -172,7 +171,7 @@ private
 
       case Kind is
          when Disabled =>
-            Disabled : User_Config_Empty;
+            null;
 
          when Enabled =>
             Heater : Heater_Name := Heater_Name'First;

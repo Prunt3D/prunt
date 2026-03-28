@@ -92,8 +92,7 @@ private
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
-      --  overriding
-      --  TODO: GCC bug above: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124596
+      overriding
       procedure Register_For_Saving (Config_Data : Config.Config_Data);
 
       procedure Save_Settings (Planner : Planner_Interface'Class)

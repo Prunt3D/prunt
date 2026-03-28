@@ -139,10 +139,15 @@ package Prunt.Module_Types is
       Last_Command_Index   : Command_Index;
       Loop_Move_Offset     : Position_Offset)
    is null;
+   --  TODO: We should pass in an anonymous-access-to-interface here that exposes everything instead of direct
+   --  parameters since we might want to add or remove things later. The interface can also expose `Wait_For_Idle` as a
+   --  procedure instead of having to work with the command index directly.
 
    procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;
 
    procedure Mark_Axis_Unhomed (This : Planner_Interface; Axis : Axis_Name) is abstract;
+
+   function Axis_Is_Homed (This : Planner_Interface; Axis : Axis_Name) return Boolean is abstract;
 
    procedure Add_Corner
      (This          : Planner_Interface;
