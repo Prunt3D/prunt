@@ -67,19 +67,52 @@ package body Config_Parser is
       end if;
    end Raise_Error;
 
-   function Has_Prunt_Config_Aspect (Decl : Base_Type_Decl; Recursive : Boolean := True) return Boolean is
+   function Is_Controller_Generic_Discrete_Type (Decl : Base_Type_Decl) return Boolean is
+      Name : constant Text_Type := Decl.F_Name.Text;
    begin
-      --  TODO: We need to check that the below names actually come from Prunt.Controller_Generic_Types.
-      if Decl.F_Name.Text = "Motor_Name"
-        or else Decl.F_Name.Text = "Heater_Name"
-        or else Decl.F_Name.Text = "Thermistor_Name"
-        or else Decl.F_Name.Text = "Board_Temperature_Probe_Name"
-        or else Decl.F_Name.Text = "Fan_Name"
-        or else Decl.F_Name.Text = "Input_Switch_Name"
-        or else Decl.P_Fully_Qualified_Name = "Standard.Boolean"
-        or else Decl.P_Fully_Qualified_Name = "Prunt.Dimensionless_Ratio"
-        or else Decl.P_Fully_Qualified_Name = "Standard.Long_Float"
+      if Name /= "Motor_Name"
+        and then Name /= "Heater_Name"
+        and then Name /= "Thermistor_Name"
+        and then Name /= "Board_Temperature_Probe_Name"
+        and then Name /= "Fan_Name"
+        and then Name /= "Input_Switch_Name"
       then
+         return False;
+      end if;
+
+      return
+        Decl.P_Fully_Qualified_Name = "Prunt.Controller_Generic_Types." & Name
+        or else Simple_Name (Decl.Unit.Get_Filename) = "prunt-controller_generic_types.ads";
+   end Is_Controller_Generic_Discrete_Type;
+
+   function Has_Implicit_Config_Type (Decl : Base_Type_Decl; Value : out Config_Type) return Boolean is
+   begin
+      if Decl.P_Fully_Qualified_Name = "Standard.Boolean" then
+         Value := (Boolean_Kind, (null record));
+      elsif Decl.P_Fully_Qualified_Name = "Prunt.Dimensionless_Ratio" then
+         Value := (Ratio_Kind, (Unit => (Conversion => "", Display => "")));
+      elsif Is_Controller_Generic_Discrete_Type (Decl) then
+         Value := (Enum_Kind, (Present_When => []));
+      else
+         return False;
+      end if;
+
+      return True;
+   end Has_Implicit_Config_Type;
+
+   procedure Register_Implicit_Config_Type (Decl : Base_Type_Decl; Config : in out Config_Maps.Map) is
+      Value : Config_Type;
+      Name  : constant Virtual_String := To_Virtual_String (Decl.P_Fully_Qualified_Name);
+   begin
+      if Has_Implicit_Config_Type (Decl, Value) and then not Config.Contains (Name) then
+         Config.Insert (Name, Value);
+      end if;
+   end Register_Implicit_Config_Type;
+
+   function Has_Prunt_Config_Aspect (Decl : Base_Type_Decl; Recursive : Boolean := True) return Boolean is
+      Value : Config_Type;
+   begin
+      if Has_Implicit_Config_Type (Decl, Value) then
          return True;
       elsif not Decl.F_Aspects.Is_Null then
          for Assoc of Decl.F_Aspects.F_Aspect_Assocs loop
@@ -304,7 +337,7 @@ package body Config_Parser is
       end if;
    end Effective_Max;
 
-   function Parse_Record (Decl : Base_Type_Decl) return Config_Type is
+   function Parse_Record (Decl : Base_Type_Decl; Implicit_Config : in out Config_Maps.Map) return Config_Type is
       function Parse_Component_Items (Items : Ada_Node_List) return Component_Data_Maps.Map is
          Components : Component_Data_Maps.Map;
       begin
@@ -325,6 +358,8 @@ package body Config_Parser is
                   if Desig.Is_Null then
                      Raise_Error (T_Expr, "Could not resolve type.");
                   end if;
+
+                  Register_Implicit_Config_Type (Desig, Implicit_Config);
 
                   Component :=
                     (Type_Name           => To_Virtual_String (Desig.P_Fully_Qualified_Name),
@@ -504,6 +539,7 @@ package body Config_Parser is
          for Spec of Decl.As_Type_Decl.F_Discriminants.As_Known_Discriminant_Part.F_Discr_Specs loop
             for D_Id of Spec.F_Ids loop
                if D_Id.Text = Def.F_Record_Def.F_Components.F_Variant_Part.F_Discr_Name.Text then
+                  Register_Implicit_Config_Type (Spec.F_Type_Expr.P_Designated_Type_Decl, Implicit_Config);
                   Data.Discriminant_Type :=
                     To_Virtual_String (Spec.F_Type_Expr.P_Designated_Type_Decl.P_Fully_Qualified_Name);
                   Data.Discriminant_Default := To_Virtual_String (Spec.F_Default_Expr.Text);
@@ -541,7 +577,7 @@ package body Config_Parser is
       return (Record_Kind, Data);
    end Parse_Record;
 
-   function Parse_Array (Decl : Base_Type_Decl) return Config_Type is
+   function Parse_Array (Decl : Base_Type_Decl; Implicit_Config : in out Config_Maps.Map) return Config_Type is
       Def          : constant Array_Type_Def := Decl.As_Type_Decl.F_Type_Def.As_Array_Type_Def;
       Is_Tabbed    : Boolean := False;
       Present_When : Virtual_String := "";
@@ -592,6 +628,9 @@ package body Config_Parser is
          if Elem_Decl.Is_Null then
             Raise_Error (Def, "Could not resolve element type.");
          end if;
+
+         Register_Implicit_Config_Type (Index_Decl.As_Base_Type_Decl, Implicit_Config);
+         Register_Implicit_Config_Type (Elem_Decl, Implicit_Config);
 
          if not Has_Prunt_Config_Aspect (Index_Decl.As_Base_Type_Decl) then
             Raise_Error
@@ -846,9 +885,9 @@ package body Config_Parser is
                                  Def : constant Type_Def := Decl.As_Type_Decl.F_Type_Def;
                               begin
                                  if Def.Kind = Ada_Record_Type_Def then
-                                    Result.Config.Insert (Name, Parse_Record (Decl));
+                                    Result.Config.Insert (Name, Parse_Record (Decl, Result.Config));
                                  elsif Def.Kind = Ada_Array_Type_Def then
-                                    Result.Config.Insert (Name, Parse_Array (Decl));
+                                    Result.Config.Insert (Name, Parse_Array (Decl, Result.Config));
                                  elsif Def.Kind in Ada_Signed_Int_Type_Def then
                                     Result.Config.Insert (Name, Parse_Integer (Decl));
                                  elsif Def.Kind in Ada_Floating_Point_Def then

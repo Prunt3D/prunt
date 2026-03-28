@@ -30,20 +30,7 @@ procedure Config_Codegen is
    pragma Extensions_Allowed (On);
 
    Modules : Module_Data_Vectors.Vector := [];
-   Config : Config_Maps.Map :=
-     ["Standard.Boolean"          => (Boolean_Kind, (null record)),
-      "Prunt.Dimensionless_Ratio" => (Ratio_Kind, (Unit => (Conversion => "", Display => ""))),
-      "Prunt.Default_Modules.Fans.My_Controller_Generic_Types.Fan_Name"
-      => (Enum_Kind, (Present_When => [])),
-      "Prunt.Default_Modules.Heaters.My_Controller_Generic_Types.Thermistor_Name"
-      => (Enum_Kind, (Present_When => [])),
-      "Prunt.Default_Modules.Homing.My_Controller_Generic_Types.Input_Switch_Name"
-      => (Enum_Kind, (Present_When => [])),
-      "Prunt.Default_Modules.Heaters.My_Controller_Generic_Types.Heater_Name"
-      => (Enum_Kind, (Present_When => [])),
-      "Prunt.Default_Modules.Homing.My_Controller_Generic_Types.Motor_Name"
-      => (Enum_Kind, (Present_When => []))];
-   --  TODO: We should properly resolve these.
+   Config : Config_Maps.Map := [];
 
    procedure Process_Unit (Context : Libadalang.Helpers.App_Job_Context; Unit : Analysis_Unit) is
       pragma Unreferenced (Context);
