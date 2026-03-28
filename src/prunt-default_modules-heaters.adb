@@ -100,13 +100,8 @@ package body Prunt.Default_Modules.Heaters is
       This.Target_Status.Set_Value (This.Target / celsius);
    end Process;
 
-   procedure Process_After_Block
-     (This                 : Heater_Temperature_Wait;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset)
-   is
-      pragma Unreferenced (First_Accel_Distance, Last_Command_Index, Loop_Move_Offset);
+   procedure Process_After_Block (This : Heater_Temperature_Wait; Context : Block_End_Context'Class) is
+      pragma Unreferenced (Context);
 
       Thermistors_Module_Instance : Thermistors_Module.Module_Instance_Interface'Class renames
         Thermistors_Module.Module_Instance_Interface'Class (This.Thermistors_Module_Instance_Ref.Get.Element.all);

@@ -301,9 +301,7 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Homing_Prereq_Array is array (Axis_Name) of User_Config_Homing_Prereq
-   with
-     Annotate => (Prunt_Config, Present_When, "Index_? /= Index_??"),
-     Annotate => (Prunt_Config, User_Config);
+   with Annotate => (Prunt_Config, Present_When, "Index_? /= Index_??"), Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axis_Homing is record
       --  This section contains the homing procedure configuration for a single axis.
@@ -356,11 +354,7 @@ private
    end record;
 
    overriding
-   procedure Process_After_Block
-     (This                 : Homing_Event;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset);
+   procedure Process_After_Block (This : Homing_Event; Context : Block_End_Context'Class);
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config);

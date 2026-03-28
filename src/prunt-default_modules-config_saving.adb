@@ -44,13 +44,8 @@ package body Prunt.Default_Modules.Config_Saving is
    end Initialize;
 
    overriding
-   procedure Process_After_Block
-     (This                 : Config_Save_Event;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset)
-   is
-      pragma Unreferenced (First_Accel_Distance, Last_Command_Index, Loop_Move_Offset);
+   procedure Process_After_Block (This : Config_Save_Event; Context : Block_End_Context'Class) is
+      pragma Unreferenced (Context);
 
       Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
    begin

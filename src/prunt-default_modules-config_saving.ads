@@ -77,11 +77,7 @@ private
    end record;
 
    overriding
-   procedure Process_After_Block
-     (This                 : Config_Save_Event;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset);
+   procedure Process_After_Block (This : Config_Save_Event; Context : Block_End_Context'Class);
 
    type Config_List_Event is new Extra_Block_Resetting_Data with record
       Config_List : Virtual_String;

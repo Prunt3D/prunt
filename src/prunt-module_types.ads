@@ -133,15 +133,20 @@ package Prunt.Module_Types is
    --  TODO: Do we need the above? It's probably a bad idea to have this with the module system. Modules should instead
    --  just use `Process_After_Block` for everything.
 
+   type Block_End_Context is limited interface;
+
+   function Get_First_Accel_Distance (This : Block_End_Context) return Length is abstract;
+
+   function Get_Last_Command_Index (This : Block_End_Context) return Command_Index is abstract;
+
+   function Get_Loop_Move_Offset (This : Block_End_Context) return Position_Offset is abstract;
+
+   procedure Wait_For_Idle (This : Block_End_Context) is abstract;
+
    procedure Process_After_Block
-     (This                 : Extra_Block_Resetting_Data;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset)
+     (This    : Extra_Block_Resetting_Data;
+      Context : Block_End_Context'Class)
    is null;
-   --  TODO: We should pass in an anonymous-access-to-interface here that exposes everything instead of direct
-   --  parameters since we might want to add or remove things later. The interface can also expose `Wait_For_Idle` as a
-   --  procedure instead of having to work with the command index directly.
 
    procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;
 

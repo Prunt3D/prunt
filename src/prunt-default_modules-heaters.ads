@@ -231,11 +231,7 @@ private
    end record;
 
    overriding
-   procedure Process_After_Block
-     (This                 : Heater_Temperature_Wait;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset);
+   procedure Process_After_Block (This : Heater_Temperature_Wait; Context : Block_End_Context'Class);
 
    type Heater_Target_Array is array (Heater_Name) of Temperature;
 

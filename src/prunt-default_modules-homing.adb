@@ -77,13 +77,8 @@ package body Prunt.Default_Modules.Homing is
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
    overriding
-   procedure Process_After_Block
-     (This                 : Homing_Event;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset)
-   is
-      pragma Unreferenced (First_Accel_Distance, Last_Command_Index, Loop_Move_Offset);
+   procedure Process_After_Block (This : Homing_Event; Context : Block_End_Context'Class) is
+      pragma Unreferenced (Context);
 
       Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
    begin
