@@ -78,13 +78,8 @@ package body Prunt.Default_Modules.Input_Shapers is
    is (["Input_Shaping", +Axis'Image, "Kind", "Selected"]);
 
    overriding
-   procedure Process_After_Block
-     (This                 : Input_Shaping_Config_Update;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset)
-   is
-      pragma Unreferenced (First_Accel_Distance, Last_Command_Index, Loop_Move_Offset);
+   procedure Process_After_Block (This : Input_Shaping_Config_Update; Context : Block_End_Context'Class) is
+      pragma Unreferenced (Context);
    begin
       Module_Instance (This.Module_Instance_Ref.Get.Element.all).Apply_Runtime_Config (This.Updated_Configs);
    end Process_After_Block;

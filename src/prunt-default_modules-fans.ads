@@ -57,7 +57,8 @@ package Prunt.Default_Modules.Fans is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
@@ -206,6 +207,70 @@ private
 
    function Valid_Fan_Names return Virtual_String;
 
+   procedure Set_Fan_Speed_For_Default_Fan
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Dimensionless := 255.0
+      --  Fan speed from 0 to 255 where 255 is full speed. Uses full speed if not specified.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M106");
+   --  Set the speed of the default fan. The speed is scaled according to the maximum speed configured for the selected
+   --  fan. It is an error to attempt to set the speed of a fan that is configured to be always on.
+   --
+   --  This command differs from Marlin in that the `I` and `T` parameters are not available. Additionally, the `S`
+   --  parameter allows for a real number instead of just an integer.
+
+   procedure Set_Fan_Speed
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      P       : Gcode_Arguments.Argument_Integer;
+      --  Fan index.
+      S       : Dimensionless := 255.0
+      --  Fan speed from 0 to 255 where 255 is full speed. Uses full speed if not specified.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M106");
+   --  Set the speed of a fan by index number. The speed is scaled according to the maximum speed configured for the
+   --  selected fan. It is an error to attempt to set the speed of a fan that is configured to be always on.
+   --
+   --  This command differs from Marlin in that the `I` and `T` parameters are not available. Additionally, the `S`
+   --  parameter allows for a real number instead of just an integer.
+
+   procedure Set_Fan_Speed
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      P       : Virtual_String;
+      --  Fan name.
+      S       : Dimensionless := 255.0
+      --  Fan speed from 0 to 255 where 255 is full speed. Uses full speed if not specified.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M106");
+   --  Set the speed of a fan by name. The speed is scaled according to the maximum speed configured for the selected
+   --  fan. It is an error to attempt to set the speed of a fan that is configured to be always on.
+   --
+   --  This command variant is not present in Marlin.
+
+   procedure Turn_Off_Default_Fan (This : Module_Instance; Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M107");
+   --  Turn the default fan off. It is an error to attempt to turn off a fan that is configured to be always on.
+
+   procedure Turn_Off_Fan
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      P       : Gcode_Arguments.Argument_Integer
+      --  Fan index.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M107");
+   --  Turn a fan off by index number. It is an error to attempt to turn off a fan that is configured to be always on.
+
+   procedure Turn_Off_Fan
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      P       : Virtual_String
+      --  Fan name.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M107");
+   --  Turn a fan off by name. It is an error to attempt to turn off a fan that is configured to be always on.
+
    protected type Module_Instance is new My_Modules.Module_Instance with
       procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
 
@@ -213,70 +278,11 @@ private
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
-      procedure Set_Fan_Speed_Internal (Planner : Planner_Interface'Class; Fan : Fan_Name; Speed : Dimensionless);
+      function Prepare_Fan_Speed_Change (Fan : Fan_Name; Speed : Dimensionless) return Fan_Speed_Change;
       --  There are no constraints on the values provided to this procedure so the calling g-code does not need to
       --  check that the fan is a PWM kind or if the speed is in range.
 
-      procedure Set_Fan_Speed_For_Default_Fan
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless := 255.0
-         --  Fan speed from 0 to 255 where 255 is full speed. Uses full speed if not specified.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M106");
-      --  Set the speed of the default fan. The speed is scaled according to the maximum speed configured for the
-      --  selected fan. It is an error to attempt to set the speed of a fan that is configured to be always on.
-      --
-      --  This command differs from Marlin in that the `I` and `T` parameters are not available. Additionally, the `S`
-      --  parameter allows for a real number instead of just an integer.
-
-      procedure Set_Fan_Speed
-        (Planner : Planner_Interface'Class;
-         P       : Gcode_Arguments.Argument_Integer;
-         --  Fan index.
-         S       : Dimensionless := 255.0
-         --  Fan speed from 0 to 255 where 255 is full speed. Uses full speed if not specified.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M106");
-      --  Set the speed of a fan by index number. The speed is scaled according to the maximum speed configured for the
-      --  selected fan. It is an error to attempt to set the speed of a fan that is configured to be always on.
-      --
-      --  This command differs from Marlin in that the `I` and `T` parameters are not available. Additionally, the `S`
-      --  parameter allows for a real number instead of just an integer.
-
-      procedure Set_Fan_Speed
-        (Planner : Planner_Interface'Class;
-         P       : Virtual_String;
-         --  Fan name.
-         S       : Dimensionless := 255.0
-         --  Fan speed from 0 to 255 where 255 is full speed. Uses full speed if not specified.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M106");
-      --  Set the speed of a fan by name. The speed is scaled according to the maximum speed configured for the
-      --  selected fan. It is an error to attempt to set the speed of a fan that is configured to be always on.
-      --
-      --  This command variant is not present in Marlin.
-
-      procedure Turn_Off_Default_Fan (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M107");
-      --  Turn the default fan off. It is an error to attempt to turn off a fan that is configured to be always on.
-
-      procedure Turn_Off_Fan
-        (Planner : Planner_Interface'Class;
-         P       : Gcode_Arguments.Argument_Integer
-         --  Fan index.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M107");
-      --  Turn the default fan off by index number. It is an error to attempt to turn off a fan that is configured to
-      --  be always on.
-
-      procedure Turn_Off_Fan
-        (Planner : Planner_Interface'Class;
-         P       : Virtual_String
-         --  Fan name.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M107");
-      --  Turn the default fan off by name. It is an error to attempt to turn off a fan that is configured to be always
-      --  on.
+      function Default_Fan return Fan_Name;
 
    private
       Config               : User_Config;

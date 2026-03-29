@@ -78,7 +78,8 @@ package Prunt.Default_Modules.Heaters is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
@@ -235,6 +236,110 @@ private
 
    type Heater_Target_Array is array (Heater_Name) of Temperature;
 
+   procedure Wait_For_Hotend_Temperature_Heat
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Dimensionless
+      --  Hotend target temperature in Celsius.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M109");
+   --  Set the hotend target temperature and wait for the hotend to go over the given temperature. This only waits
+   --  for the hotend to heat up, it does not wait for the hotend to cool down.
+   --
+   --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
+
+   procedure Wait_For_Hotend_Temperature_Heat_Or_Cool
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      R       : Dimensionless
+      --  Hotend target temperature in Celsius.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M109");
+   --  Set the hotend target temperature and wait for the hotend to reach the given temperature. This applies to
+   --  heating or cooling.
+   --
+   --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
+
+   procedure Set_Bed_Temperature
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Dimensionless
+      --  Bed target temperature in Celsius.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M140");
+   --  Set the bed target temperature and continue without waiting for the bed to reach the given temperature.
+   --
+   --  This command differs from Marlin in that the I parameter is not available.
+
+   procedure Set_Chamber_Temperature
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Dimensionless
+      --  Chamber target temperature in Celsius.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M141");
+   --  Set the chamber target temperature and continue without waiting for the chamber to reach the given
+   --  temperature.
+
+   procedure Wait_For_Bed_Temperature_Heat
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Dimensionless;
+      --  Bed target temperature in Celsius.
+      T       : Dimensionless := 0.0
+      --  If present then spread out heating over this many seconds.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M190");
+   --  Set the bed target temperature and wait for the bed to go over the given temperature. This only waits for the
+   --  bed to heat up, it does not wait for the bed to cool down.
+   --
+   --  If the T parameter is present then heating will be performed as a linear interpolation over the given time
+   --  starting from the current temperature. If the temperature is already over the target temperature then no
+   --  interpolation will be performed.
+   --
+   --  This command differs from Marlin in that the I parameter is not available and the T parameter is available
+   --  for heating as well as cooling.
+
+   procedure Wait_For_Bed_Temperature_Heat_Or_Cool
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      R       : Dimensionless;
+      --  Bed target temperature in Celsius.
+      T       : Dimensionless := 0.0
+      --  If present then spread out heating over this many seconds.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M190");
+   --  Set the bed target temperature and wait for the bed to reach the given temperature. This applies to
+   --  heating or cooling.
+   --
+   --  If the T parameter is present then heating or cooling will be performed as a linear interpolation over the
+   --  given time starting from the current temperature.
+   --
+   --  This command differs from Marlin in that the I parameter is not available and the T parameter is available
+   --  for heating as well as cooling.
+
+   procedure Wait_For_Chamber_Temperature_Heat
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Dimensionless
+      --  Chamber target temperature in Celsius.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M191");
+   --  Set the chamber target temperature and wait for the chamber to go over the given temperature. This only waits
+   --  for the chamber to heat up, it does not wait for the chamber to cool down.
+
+   procedure Wait_For_Chamber_Temperature_Heat_Or_Cool
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      R       : Dimensionless
+      --  Chamber target temperature in Celsius.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M191");
+   --  Set the chamber target temperature and wait for the chamber to reach the given temperature. This applies to
+   --  heating or cooling.
+
+   type Dummy_Type is null record;
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize
         (Config_In                           : User_Config;
@@ -246,101 +351,7 @@ private
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
-      procedure Queue_Target_Command (Planner : Planner_Interface'Class; Heater : Heater_Name; Target : Temperature);
-
-      procedure Wait_For_Hotend_Temperature_Heat
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless
-         --  Hotend target temperature in Celsius.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M109");
-      --  Set the hotend target temperature and wait for the hotend to go over the given temperature. This only waits
-      --  for the hotend to heat up, it does not wait for the hotend to cool down.
-      --
-      --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
-
-      procedure Wait_For_Hotend_Temperature_Heat_Or_Cool
-        (Planner : Planner_Interface'Class;
-         R       : Dimensionless
-         --  Hotend target temperature in Celsius.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M109");
-      --  Set the hotend target temperature and wait for the hotend to reach the given temperature. This applies to
-      --  heating or cooling.
-      --
-      --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
-
-      procedure Set_Bed_Temperature
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless
-         --  Bed target temperature in Celsius.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M140");
-      --  Set the bed target temperature and continue without waiting for the bed to reach the given temperature.
-      --
-      --  This command differs from Marlin in that the I parameter is not available.
-
-      procedure Set_Chamber_Temperature
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless
-         --  Chamber target temperature in Celsius.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M141");
-      --  Set the chamber target temperature and continue without waiting for the chamber to reach the given
-      --  temperature.
-
-      procedure Wait_For_Bed_Temperature_Heat
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless;
-         --  Bed target temperature in Celsius.
-         T       : Dimensionless := 0.0
-         --  If present then spread out heating over this many seconds.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M190");
-      --  Set the bed target temperature and wait for the bed to go over the given temperature. This only waits for the
-      --  bed to heat up, it does not wait for the bed to cool down.
-      --
-      --  If the T parameter is present then heating will be performed as a linear interpolation over the given time
-      --  starting from the current temperature. If the temperature is already over the target temperature then no
-      --  interpolation will be performed.
-      --
-      --  This command differs from Marlin in that the I parameter is not available and the T parameter is available
-      --  for heating as well as cooling.
-
-      procedure Wait_For_Bed_Temperature_Heat_Or_Cool
-        (Planner : Planner_Interface'Class;
-         R       : Dimensionless;
-         --  Bed target temperature in Celsius.
-         T       : Dimensionless := 0.0
-         --  If present then spread out heating over this many seconds.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M190");
-      --  Set the bed target temperature and wait for the bed to reach the given temperature. This applies to
-      --  heating or cooling.
-      --
-      --  If the T parameter is present then heating or cooling will be performed as a linear interpolation over the
-      --  given time starting from the current temperature.
-      --
-      --  This command differs from Marlin in that the I parameter is not available and the T parameter is available
-      --  for heating as well as cooling.
-
-      procedure Wait_For_Chamber_Temperature_Heat
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless
-         --  Chamber target temperature in Celsius.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M191");
-      --  Set the chamber target temperature and wait for the chamber to go over the given temperature. This only waits
-      --  for the chamber to heat up, it does not wait for the chamber to cool down.
-
-      procedure Wait_For_Chamber_Temperature_Heat_Or_Cool
-        (Planner : Planner_Interface'Class;
-         R       : Dimensionless
-         --  Chamber target temperature in Celsius.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M191");
-      --  Set the chamber target temperature and wait for the chamber to reach the given temperature. This applies to
-      --  heating or cooling.
+      function Build_Target_Command (Heater : Heater_Name; Target : Temperature) return Heater_Target_Command;
 
       --  TODO: PID and autotune.
 
@@ -356,19 +367,20 @@ private
       procedure Set_Blocking_Tracker (Value : Virtual_String);
 
       procedure Clear_Blocking_Tracker;
-   private
-      procedure Queue_Temperature_Wait
-        (Planner              : Planner_Interface'Class;
-         Heater               : Heater_Name;
+
+      function Get_Config return User_Config;
+
+      function Build_Temperature_Wait
+        (Heater               : Heater_Name;
          Target               : Temperature;
          Wait_Only_If_Heating : Boolean;
          Ramp_Duration        : Time;
-         Ramp_Only_If_Heating : Boolean);
+         Ramp_Only_If_Heating : Boolean) return Heater_Temperature_Wait;
 
-      procedure Validate_Target (Heater : Heater_Name; Target : Temperature);
+      function Validate_Target (Heater : Heater_Name; Target : Temperature) return Dummy_Type;
 
       function Get_Default_Heater (Selection : User_Config_Default_Heater; Display_Name : String) return Heater_Name;
-
+   private
       Config                               : User_Config;
       Self_Ref                             : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Thermistors_Module_Instance_Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;

@@ -129,7 +129,8 @@ package body Prunt.Default_Modules.Fans is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -178,7 +179,7 @@ package body Prunt.Default_Modules.Fans is
          end loop;
       end Start;
 
-      procedure Set_Fan_Speed_Internal (Planner : Planner_Interface'Class; Fan : Fan_Name; Speed : Dimensionless) is
+      function Prepare_Fan_Speed_Change (Fan : Fan_Name; Speed : Dimensionless) return Fan_Speed_Change is
       begin
          if Config.Fans (Fan).Control_Method.Kind /= Dynamic_Duty_Cycle then
             raise Gcode_Bad_Inputs_Error
@@ -201,80 +202,91 @@ package body Prunt.Default_Modules.Fans is
                Duty_Cycle := 0.0;
             end if;
 
-            Planner.Add_Corner_Data
-              (Fan_Speed_Change'
-                 (Fan          => Fan,
-                  Invert       => Config.Fans (Fan).Invert_PWM_Output,
-                  Duty_Cycle   => Duty_Cycle,
-                  Speed_Status => Speed_Status_Setters (Fan)));
+            return
+              Fan_Speed_Change'
+                (Fan          => Fan,
+                 Invert       => Config.Fans (Fan).Invert_PWM_Output,
+                 Duty_Cycle   => Duty_Cycle,
+                 Speed_Status => Speed_Status_Setters (Fan));
          end;
-      end Set_Fan_Speed_Internal;
+      end Prepare_Fan_Speed_Change;
 
-      procedure Set_Fan_Speed_For_Default_Fan (Planner : Planner_Interface'Class; S : Dimensionless := 255.0) is
+      function Default_Fan return Fan_Name is
       begin
-         Set_Fan_Speed_Internal (Planner, Config.Gcode_Defaults.Default_Fan, S);
-      end Set_Fan_Speed_For_Default_Fan;
-
-      procedure Set_Fan_Speed
-        (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Dimensionless := 255.0) is
-      begin
-         for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
-            --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this
-            --  but that's their own problem.
-            Set_Fan_Speed_Internal (Planner, F, S);
-            return;
-         end loop;
-
-         My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
-         raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
-      end Set_Fan_Speed;
-
-      procedure Set_Fan_Speed (Planner : Planner_Interface'Class; P : Virtual_String; S : Dimensionless := 255.0) is
-         Fan : Fan_Name;
-      begin
-         begin
-            Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
-         exception
-            when Constraint_Error =>
-               My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
-               raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
-         end;
-
-         Set_Fan_Speed_Internal (Planner, Fan, S);
-      end Set_Fan_Speed;
-
-      procedure Turn_Off_Default_Fan (Planner : Planner_Interface'Class) is
-      begin
-         Set_Fan_Speed_Internal (Planner, Config.Gcode_Defaults.Default_Fan, 0.0);
-      end Turn_Off_Default_Fan;
-
-      procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer) is
-      begin
-
-         for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
-            --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this
-            --  but that's their own problem.
-            Set_Fan_Speed_Internal (Planner, F, 0.0);
-            return;
-         end loop;
-
-         My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
-         raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
-      end Turn_Off_Fan;
-
-      procedure Turn_Off_Fan (Planner : Planner_Interface'Class; P : Virtual_String) is
-         Fan : Fan_Name;
-      begin
-         begin
-            Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
-         exception
-            when Constraint_Error =>
-               My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
-               raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
-         end;
-
-         Set_Fan_Speed_Internal (Planner, Fan, 0.0);
-      end Turn_Off_Fan;
+         return Config.Gcode_Defaults.Default_Fan;
+      end Default_Fan;
    end Module_Instance;
+
+   procedure Set_Fan_Speed_For_Default_Fan
+     (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless := 255.0) is
+   begin
+      Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (This.Default_Fan, S));
+   end Set_Fan_Speed_For_Default_Fan;
+
+   procedure Set_Fan_Speed
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      P       : Gcode_Arguments.Argument_Integer;
+      S       : Dimensionless := 255.0) is
+   begin
+      for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
+         --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this but
+         --  it's not our problem at that point.
+         Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (F, S));
+         return;
+      end loop;
+
+      My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
+      raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
+   end Set_Fan_Speed;
+
+   procedure Set_Fan_Speed
+     (This : Module_Instance; Planner : Planner_Interface'Class; P : Virtual_String; S : Dimensionless := 255.0)
+   is
+      Fan : Fan_Name;
+   begin
+      begin
+         Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
+      exception
+         when Constraint_Error =>
+            My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
+            raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
+      end;
+
+      Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (Fan, S));
+   end Set_Fan_Speed;
+
+   procedure Turn_Off_Default_Fan (This : Module_Instance; Planner : Planner_Interface'Class) is
+   begin
+      Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (This.Default_Fan, 0.0));
+   end Turn_Off_Default_Fan;
+
+   procedure Turn_Off_Fan
+     (This : Module_Instance; Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer) is
+   begin
+      for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
+         --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this but
+         --  it's not our problem at that point.
+         Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (F, 0.0));
+         return;
+      end loop;
+
+      My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
+      raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
+   end Turn_Off_Fan;
+
+   procedure Turn_Off_Fan (This : Module_Instance; Planner : Planner_Interface'Class; P : Virtual_String) is
+      Fan : Fan_Name;
+   begin
+      begin
+         Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
+      exception
+         when Constraint_Error =>
+            My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
+            raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
+      end;
+
+      Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (Fan, 0.0));
+   end Turn_Off_Fan;
 
 end Prunt.Default_Modules.Fans;

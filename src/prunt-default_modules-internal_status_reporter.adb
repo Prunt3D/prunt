@@ -94,7 +94,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
             accept Stop;
             Stop_Received := True;
          or
-            delay 0.5;
+            delay Status_Report_Period;
             declare
                Pos : constant Position := Get_Position;
             begin
@@ -114,6 +114,9 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    procedure Finalize (Object : in out Status_Updater_Wrapper) is
    begin
       Object.Updater.Stop;
+      --  This is valid since this wrapper will always exist inside a smart pointer. Specifically, we do not have to
+      --  worry about the fact that 7.6.1(4) says tasks are stopped before finalization of a master since finalization
+      --  here is not happening via finalization of a master.
    end Finalize;
 
    protected body Module_Instance is

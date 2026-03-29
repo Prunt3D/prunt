@@ -40,7 +40,8 @@ package body Prunt.Default_Modules.Heaters is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -283,46 +284,47 @@ package body Prunt.Default_Modules.Heaters is
          end loop;
       end Start;
 
-      procedure Queue_Target_Command (Planner : Planner_Interface'Class; Heater : Heater_Name; Target : Temperature) is
+      function Build_Target_Command (Heater : Heater_Name; Target : Temperature) return Heater_Target_Command is
          Self_Ref_Strong : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      begin
-         Validate_Target (Heater, Target);
-         Self_Ref_Strong.Set (Self_Ref);
-         Planner.Add_Corner_Data
-           (Heater_Target_Command'
-              (Module_Instance_Ref => Self_Ref_Strong,
-               Heater              => Heater,
-               Target_Status       => Target_Status_Setters (Heater),
-               Target              => Target));
-      end Queue_Target_Command;
 
-      procedure Queue_Temperature_Wait
-        (Planner              : Planner_Interface'Class;
-         Heater               : Heater_Name;
+         Junk : Dummy_Type := Validate_Target (Heater, Target);
+      begin
+         Self_Ref_Strong.Set (Self_Ref);
+         return
+           Heater_Target_Command'
+             (Module_Instance_Ref => Self_Ref_Strong,
+              Heater              => Heater,
+              Target_Status       => Target_Status_Setters (Heater),
+              Target              => Target);
+      end Build_Target_Command;
+
+      function Build_Temperature_Wait
+        (Heater               : Heater_Name;
          Target               : Temperature;
          Wait_Only_If_Heating : Boolean;
          Ramp_Duration        : Time;
-         Ramp_Only_If_Heating : Boolean)
+         Ramp_Only_If_Heating : Boolean) return Heater_Temperature_Wait
       is
          Self_Ref_Strong : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      begin
-         Validate_Target (Heater, Target);
-         Self_Ref_Strong.Set (Self_Ref);
-         Planner.Flush
-           (Heater_Temperature_Wait'
-              (Module_Instance_Ref             => Self_Ref_Strong,
-               Heater                          => Heater,
-               Target_Status                   => Target_Status_Setters (Heater),
-               Thermistors_Module_Instance_Ref => Thermistors_Module_Instance_Ref,
-               Assigned_Thermistor             => Config.Heaters (Heater).Thermistor,
-               Target                          => Target,
-               Check_Hysteresis                => Config.Heaters (Heater).Check_Hysteresis,
-               Wait_Only_If_Heating            => Wait_Only_If_Heating,
-               Ramp_Duration                   => Ramp_Duration,
-               Ramp_Only_If_Heating            => Ramp_Only_If_Heating));
-      end Queue_Temperature_Wait;
 
-      procedure Validate_Target (Heater : Heater_Name; Target : Temperature) is
+         Junk : Dummy_Type := Validate_Target (Heater, Target);
+      begin
+         Self_Ref_Strong.Set (Self_Ref);
+         return
+           Heater_Temperature_Wait'
+             (Module_Instance_Ref             => Self_Ref_Strong,
+              Heater                          => Heater,
+              Target_Status                   => Target_Status_Setters (Heater),
+              Thermistors_Module_Instance_Ref => Thermistors_Module_Instance_Ref,
+              Assigned_Thermistor             => Config.Heaters (Heater).Thermistor,
+              Target                          => Target,
+              Check_Hysteresis                => Config.Heaters (Heater).Check_Hysteresis,
+              Wait_Only_If_Heating            => Wait_Only_If_Heating,
+              Ramp_Duration                   => Ramp_Duration,
+              Ramp_Only_If_Heating            => Ramp_Only_If_Heating);
+      end Build_Temperature_Wait;
+
+      function Validate_Target (Heater : Heater_Name; Target : Temperature) return Dummy_Type is
          Thermistors_Module_Instance : Thermistors_Module.Module_Instance_Interface'Class renames
            Thermistors_Module.Module_Instance_Interface'Class (Thermistors_Module_Instance_Ref.Get.Element.all);
       begin
@@ -350,6 +352,8 @@ package body Prunt.Default_Modules.Heaters is
                    & " °C.";
             end if;
          end;
+
+         return (null record);
       end Validate_Target;
 
       function Get_Default_Heater (Selection : User_Config_Default_Heater; Display_Name : String) return Heater_Name is
@@ -377,99 +381,6 @@ package body Prunt.Default_Modules.Heaters is
          Blocking_Tracker_Instance.Clear_Blocker;
       end Clear_Blocking_Tracker;
 
-      procedure Set_Hotend_Temperature (Planner : Planner_Interface'Class; S : Dimensionless) is
-      begin
-         Queue_Target_Command (Planner, Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"), S * celsius);
-      end Set_Hotend_Temperature;
-
-      procedure Wait_For_Hotend_Temperature_Heat (Planner : Planner_Interface'Class; S : Dimensionless) is
-      begin
-         Queue_Temperature_Wait
-           (Planner              => Planner,
-            Heater               => Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"),
-            Target               => S * celsius,
-            Wait_Only_If_Heating => True,
-            Ramp_Duration        => 0.0 * Prunt.s,
-            Ramp_Only_If_Heating => True);
-      end Wait_For_Hotend_Temperature_Heat;
-
-      procedure Wait_For_Hotend_Temperature_Heat_Or_Cool (Planner : Planner_Interface'Class; R : Dimensionless) is
-      begin
-         Queue_Temperature_Wait
-           (Planner              => Planner,
-            Heater               => Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"),
-            Target               => R * celsius,
-            Wait_Only_If_Heating => False,
-            Ramp_Duration        => 0.0 * Prunt.s,
-            Ramp_Only_If_Heating => True);
-      end Wait_For_Hotend_Temperature_Heat_Or_Cool;
-
-      procedure Set_Bed_Temperature (Planner : Planner_Interface'Class; S : Dimensionless) is
-      begin
-         Queue_Target_Command (Planner, Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"), S * celsius);
-      end Set_Bed_Temperature;
-
-      procedure Set_Chamber_Temperature (Planner : Planner_Interface'Class; S : Dimensionless) is
-      begin
-         Queue_Target_Command (Planner, Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"), S * celsius);
-      end Set_Chamber_Temperature;
-
-      procedure Wait_For_Bed_Temperature_Heat
-        (Planner : Planner_Interface'Class; S : Dimensionless; T : Dimensionless := 0.0) is
-      begin
-         if T < 0.0 then
-            raise Gcode_Bad_Inputs_Error with "The T parameter must not be less than 0.";
-         end if;
-
-         Queue_Temperature_Wait
-           (Planner              => Planner,
-            Heater               => Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"),
-            Target               => S * celsius,
-            Wait_Only_If_Heating => True,
-            Ramp_Duration        => T * Prunt.s,
-            Ramp_Only_If_Heating => True);
-      end Wait_For_Bed_Temperature_Heat;
-
-      procedure Wait_For_Bed_Temperature_Heat_Or_Cool
-        (Planner : Planner_Interface'Class; R : Dimensionless; T : Dimensionless := 0.0) is
-      begin
-         if T < 0.0 then
-            raise Gcode_Bad_Inputs_Error with "The T parameter must not be less than 0.";
-         end if;
-
-         Queue_Temperature_Wait
-           (Planner              => Planner,
-            Heater               => Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"),
-            Target               => R * celsius,
-            Wait_Only_If_Heating => False,
-            Ramp_Duration        => T * Prunt.s,
-            Ramp_Only_If_Heating => False);
-      end Wait_For_Bed_Temperature_Heat_Or_Cool;
-
-      procedure Wait_For_Chamber_Temperature_Heat (Planner : Planner_Interface'Class; S : Dimensionless) is
-      begin
-         Queue_Temperature_Wait
-           (Planner              => Planner,
-            Heater               => Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"),
-            Target               => S * celsius,
-            Wait_Only_If_Heating => True,
-            Ramp_Duration        => 0.0 * Prunt.s,
-            Ramp_Only_If_Heating => False);
-      end Wait_For_Chamber_Temperature_Heat;
-
-      procedure Wait_For_Chamber_Temperature_Heat_Or_Cool (Planner : Planner_Interface'Class; R : Dimensionless) is
-         Heater : constant Heater_Name := Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber");
-         Target : constant Temperature := R * celsius;
-      begin
-         Queue_Temperature_Wait
-           (Planner              => Planner,
-            Heater               => Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"),
-            Target               => R * celsius,
-            Wait_Only_If_Heating => False,
-            Ramp_Duration        => 0.0 * Prunt.s,
-            Ramp_Only_If_Heating => False);
-      end Wait_For_Chamber_Temperature_Heat_Or_Cool;
-
       function Heater_Is_Enabled_In_Config (Heater : Heater_Name) return Boolean is
       begin
          return Config.Heaters (Heater).Kind /= Disabled;
@@ -488,6 +399,117 @@ package body Prunt.Default_Modules.Heaters is
       begin
          return To_Heater_Parameters (Config.Heaters (Heater));
       end Get_Heater_Parameters;
+
+      function Get_Config return User_Config is
+      begin
+         return Config;
+      end Get_Config;
    end Module_Instance;
+
+   procedure Wait_For_Hotend_Temperature_Heat
+     (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless)
+   is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      Planner.Flush
+        (This.Build_Temperature_Wait
+           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"),
+            Target               => S * celsius,
+            Wait_Only_If_Heating => True,
+            Ramp_Duration        => 0.0 * Prunt.s,
+            Ramp_Only_If_Heating => True));
+   end Wait_For_Hotend_Temperature_Heat;
+
+   procedure Wait_For_Hotend_Temperature_Heat_Or_Cool
+     (This : Module_Instance; Planner : Planner_Interface'Class; R : Dimensionless)
+   is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      Planner.Flush
+        (This.Build_Temperature_Wait
+           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"),
+            Target               => R * celsius,
+            Wait_Only_If_Heating => False,
+            Ramp_Duration        => 0.0 * Prunt.s,
+            Ramp_Only_If_Heating => True));
+   end Wait_For_Hotend_Temperature_Heat_Or_Cool;
+
+   procedure Set_Bed_Temperature (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless) is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      Planner.Add_Corner_Data
+        (This.Build_Target_Command (This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"), S * celsius));
+   end Set_Bed_Temperature;
+
+   procedure Set_Chamber_Temperature (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless) is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      Planner.Add_Corner_Data
+        (This.Build_Target_Command (This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"), S * celsius));
+   end Set_Chamber_Temperature;
+
+   procedure Wait_For_Bed_Temperature_Heat
+     (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless; T : Dimensionless := 0.0)
+   is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      if T < 0.0 then
+         raise Gcode_Bad_Inputs_Error with "The T parameter must not be less than 0.";
+      end if;
+
+      Planner.Flush
+        (This.Build_Temperature_Wait
+           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"),
+            Target               => S * celsius,
+            Wait_Only_If_Heating => True,
+            Ramp_Duration        => T * Prunt.s,
+            Ramp_Only_If_Heating => True));
+   end Wait_For_Bed_Temperature_Heat;
+
+   procedure Wait_For_Bed_Temperature_Heat_Or_Cool
+     (This : Module_Instance; Planner : Planner_Interface'Class; R : Dimensionless; T : Dimensionless := 0.0)
+   is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      if T < 0.0 then
+         raise Gcode_Bad_Inputs_Error with "The T parameter must not be less than 0.";
+      end if;
+
+      Planner.Flush
+        (This.Build_Temperature_Wait
+           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"),
+            Target               => R * celsius,
+            Wait_Only_If_Heating => False,
+            Ramp_Duration        => T * Prunt.s,
+            Ramp_Only_If_Heating => False));
+   end Wait_For_Bed_Temperature_Heat_Or_Cool;
+
+   procedure Wait_For_Chamber_Temperature_Heat
+     (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless)
+   is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      Planner.Flush
+        (This.Build_Temperature_Wait
+           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"),
+            Target               => S * celsius,
+            Wait_Only_If_Heating => True,
+            Ramp_Duration        => 0.0 * Prunt.s,
+            Ramp_Only_If_Heating => False));
+   end Wait_For_Chamber_Temperature_Heat;
+
+   procedure Wait_For_Chamber_Temperature_Heat_Or_Cool
+     (This : Module_Instance; Planner : Planner_Interface'Class; R : Dimensionless)
+   is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      Planner.Flush
+        (This.Build_Temperature_Wait
+           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"),
+            Target               => R * celsius,
+            Wait_Only_If_Heating => False,
+            Ramp_Duration        => 0.0 * Prunt.s,
+            Ramp_Only_If_Heating => False));
+   end Wait_For_Chamber_Temperature_Heat_Or_Cool;
 
 end Prunt.Default_Modules.Heaters;

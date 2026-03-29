@@ -801,14 +801,23 @@ package body Config_Parser is
       end Parse_Argument_Kinds;
 
       Command : Gcode_Command_Data :=
-        (Name        => To_Virtual_String (Decl.F_Subp_Spec.F_Subp_Name.Text),
-         Arguments   => [],
-         Description => Get_Comments_Starting_After (Decl.Token_End));
+        (Name         => To_Virtual_String (Decl.F_Subp_Spec.F_Subp_Name.Text),
+         Arguments    => [],
+         Has_This     => False,
+         Has_Self_Ref => False,
+         Has_Planner  => False,
+         Description  => Get_Comments_Starting_After (Decl.Token_End));
    begin
 
       for Param_Spec of Decl.F_Subp_Spec.F_Subp_Params.F_Params loop
          for Id of Param_Spec.F_Ids loop
-            if Id.Text /= "This" and then Id.Text /= "Planner" then
+            if Id.Text = "This" then
+               Command.Has_This := True;
+            elsif Id.Text = "Self_Ref" then
+               Command.Has_Self_Ref := True;
+            elsif Id.Text = "Planner" then
+               Command.Has_Planner := True;
+            else
                declare
                   Type_Name : constant Virtual_String := To_Virtual_String (Param_Spec.F_Type_Expr.Text);
                   Default   : constant Virtual_String :=

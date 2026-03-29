@@ -26,7 +26,8 @@ package body Prunt.Default_Modules.Dwell is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -47,28 +48,30 @@ package body Prunt.Default_Modules.Dwell is
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
-         Self_Ref := Self_Ref_In;
+         null;
       end Start;
 
-      procedure No_Operation (Planner : Planner_Interface'Class) is
-      begin
-         null;
-      end No_Operation;
-
-      procedure Dwell_Seconds (Planner : Planner_Interface'Class; S : Dimensionless) is
-      begin
-         if S < 0.0 then
-            raise Gcode_Bad_Inputs_Error with "Negative dwell times are not allowed.";
-         end if;
-
-         Planner.Add_Corner
-           (Pos => Planner.Get_Last_Position, Feedrate => 1.0 * mm / Prunt.s, Dwell_After => S * Prunt.s);
-      end Dwell_Seconds;
-
-      procedure Dwell_Milliseconds (Planner : Planner_Interface'Class; P : Dimensionless) is
-      begin
-         Dwell_Seconds (Planner, S => P * ms / s);
-      end Dwell_Milliseconds;
    end Module_Instance;
+
+   procedure No_Operation (Planner : Planner_Interface'Class) is
+      pragma Unreferenced (Planner);
+   begin
+      null;
+   end No_Operation;
+
+   procedure Dwell_Seconds (Planner : Planner_Interface'Class; S : Dimensionless) is
+   begin
+      if S < 0.0 then
+         raise Gcode_Bad_Inputs_Error with "Negative dwell times are not allowed.";
+      end if;
+
+      Planner.Add_Corner
+        (Pos => Planner.Get_Last_Position, Feedrate => 1.0 * mm / Prunt.s, Dwell_After => S * Prunt.s);
+   end Dwell_Seconds;
+
+   procedure Dwell_Milliseconds (Planner : Planner_Interface'Class; P : Dimensionless) is
+   begin
+      Dwell_Seconds (Planner, S => P * ms / s);
+   end Dwell_Milliseconds;
 
 end Prunt.Default_Modules.Dwell;

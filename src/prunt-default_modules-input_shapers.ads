@@ -169,11 +169,7 @@ private
    end record;
 
    overriding
-   procedure Process_After_Block
-     (This                 : Input_Shaping_Config_Update;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset);
+   procedure Process_After_Block (This : Input_Shaping_Config_Update; Context : Block_End_Context'Class);
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config; Config_Data_In : Prunt.Config.Config_Data);

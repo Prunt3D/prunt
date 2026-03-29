@@ -52,6 +52,14 @@ package Prunt.Default_Modules.Blocking_Tracker is
 
 private
 
+   overriding
+   procedure Gcode_Dispatch
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Status_Emitter_In : Status_Manager.Status_Emitter);
 
@@ -64,12 +72,6 @@ private
 
       overriding
       procedure Clear_Blocker;
-
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
    private
       Status_Emitter : Status_Manager.Status_Emitter;
    end Module_Instance;

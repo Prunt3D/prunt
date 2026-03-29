@@ -37,6 +37,7 @@ package Prunt.Default_Modules.Config_Saving is
    type Config_Saver is synchronized interface;
 
    procedure Register_For_Saving (This : in out Config_Saver; Config_Data : Config.Config_Data) is abstract;
+   --  Must be called before `Start` is called.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Config_Saver with private;
 
@@ -51,7 +52,8 @@ package Prunt.Default_Modules.Config_Saving is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
@@ -80,8 +82,45 @@ private
    procedure Process_After_Block (This : Config_Save_Event; Context : Block_End_Context'Class);
 
    type Config_List_Event is new Extra_Block_Resetting_Data with record
-      Config_List : Virtual_String;
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
    end record;
+
+   overriding
+   procedure Process_After_Block (This : Config_List_Event; Context : Block_End_Context'Class);
+
+   procedure Save_Settings
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M500");
+   --  Save all configurable settings for all modules that have been temporarily set as a result of g-code commands.
+   --  Settings and g-code commands which use this functionality make a note of this in their own descriptions.
+   --
+   --  This command differs from Marlin in that the exact settings that are available to be saved may not be the
+   --  same.
+
+   procedure Save_Settings
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      I        : Virtual_String
+      --  The name of the module to save.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M500");
+   --  Save all configurable settings for a specific module that have been temporarily set as a result of g-code
+   --  commands. Settings and g-code commands which use this functionality make a note of this in their own
+   --  descriptions.
+   --
+   --  This command is not present in Marlin.
+
+   procedure List_Savable_Settings
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      I        : Gcode_No_Value
+      --  When providing no value a listing of modules with savable settings will be emitted.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M500");
+   --  List modules with savable settings.
+   --
+   --  This command is not present in Marlin.
 
    protected type Module_Instance is new My_Modules.Module_Instance and Config_Saver with
       overriding
@@ -90,45 +129,19 @@ private
 
       overriding
       procedure Register_For_Saving (Config_Data : Config.Config_Data);
-
-      procedure Save_Settings (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M500");
-      --  Save all configurable settings for all modules that have been temporarily set as a result of g-code commands.
-      --  Settings and g-code commands which use this functionality make a note of this in their own descriptions.
-      --
-      --  This command differs from Marlin in that the exact settings that are available to be saved may not be the
-      --  same.
-
-      procedure Save_Settings
-        (Planner : Planner_Interface'Class;
-         I       : Virtual_String
-         --  The name of the module to save.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M500");
-      --  Save all configurable settings for a specific module that have been temporarily set as a result of g-code
-      --  commands. Settings and g-code commands which use this functionality make a note of this in their own
-      --  descriptions.
-      --
-      --  This command is not present in Marlin.
-
-      procedure Save_Settings
-        (Planner : Planner_Interface'Class;
-         I       : Gcode_No_Value
-         --  When providing no value a listing of modules with savable settings will be emitted.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M500");
-      --  List modules with savable settings.
-      --
-      --  This command is not present in Marlin.
+      --  Must be called before module starts, therefore `Contains_Config_To_Save` can be used to check arguments early
+      --  in g-code processing.
 
       procedure Process_Save_All_Settings;
 
       procedure Process_Save_Settings (I : Virtual_String);
 
-   private
+      function Contains_Config_To_Save (I : Virtual_String) return Boolean;
 
-      Self_Ref        : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-      Configs_To_Save : Config_Data_Maps.Map;
+      function Config_List return Virtual_String;
+   private
+      Started         : Boolean := False;
+      Configs_To_Save : Config_Data_Maps.Map := [];
    end Module_Instance;
 
 end Prunt.Default_Modules.Config_Saving;

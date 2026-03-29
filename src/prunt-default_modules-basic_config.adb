@@ -52,20 +52,23 @@ package body Prunt.Default_Modules.Basic_Config is
       end return;
    end Initialize;
 
+   overriding
+   procedure Gcode_Dispatch
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is
+   begin
+      raise Constraint_Error with "Not implemented.";
+   end Gcode_Dispatch;
+
    protected body Module_Instance is
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
          Self_Ref := Self_Ref_In;
       end Start;
-
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
-      begin
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
 
       procedure Initialize (Config_Data_In : Prunt.Config.Config_Data) is
       begin

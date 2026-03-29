@@ -71,7 +71,8 @@ package body Config_Generator is
       Emit ("pragma Warnings (On, ""no entities of * are referenced"");");
       Emit ("separate (" & Data.Name & ")");
       Emit
-        ("procedure Gcode_Dispatch (This : in out Module_Instance; Args : in out Gcode_Arguments.Arguments; "
+        ("procedure Gcode_Dispatch (This : Module_Instance; Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; "
+         & "Args : in out Gcode_Arguments.Arguments; "
          & "Planner : Prunt.Module_Types.Planner_Interface'Class; "
          & "Command_Identifier : Prunt.Module_Types.Gcode_Command_Identifier) is");
       Emit ("pragma Unsuppress (All_Checks);");
@@ -139,7 +140,10 @@ package body Config_Generator is
                                     Checks.Append ("Args.Kind ('" & Arg_Name & "') = " & K);
                                  end Add_Check;
                               begin
-                                 if Arg_Name /= "This" and then Arg_Name /= "Planner" then
+                                 if Arg_Name /= "This"
+                                   and then Arg_Name /= "Self_Ref"
+                                   and then Arg_Name /= "Planner"
+                                 then
                                     if Arg_Data.Arg_Kinds (Config_Types.Integer_Kind) then
                                        Add_Check ("Gcode_Arguments.Integer_Kind");
                                     end if;
@@ -180,6 +184,7 @@ package body Config_Generator is
                               for Arg_C in
                                 Variant.Arguments.Iterate
                                 when Gcode_Argument_Maps.Key (Arg_C) /= "This"
+                                and then Gcode_Argument_Maps.Key (Arg_C) /= "Self_Ref"
                                 and then Gcode_Argument_Maps.Key (Arg_C) /= "Planner"
                               loop
                                  declare
@@ -323,16 +328,38 @@ package body Config_Generator is
                                  end;
                               end loop;
 
-                              if not First_Arg then
-                                 Args_Call := ", " & Args_Call;
-                              end if;
+                              declare
+                                 Call_Prefix : Virtual_String := "";
+                              begin
+                                 if Variant.Has_This then
+                                    Call_Prefix.Append ("This => This");
+                                 end if;
 
-                              Emit
-                                ("This."
-                                 & Variant.Name
-                                 & " (Planner => Planner"
-                                 & Args_Call
-                                 & ");");
+                                 if Variant.Has_Self_Ref then
+                                    if Call_Prefix /= "" then
+                                       Call_Prefix.Append (", ");
+                                    end if;
+                                    Call_Prefix.Append ("Self_Ref => Self_Ref");
+                                 end if;
+
+                                 if Variant.Has_Planner then
+                                    if Call_Prefix /= "" then
+                                       Call_Prefix.Append (", ");
+                                    end if;
+                                    Call_Prefix.Append ("Planner => Planner");
+                                 end if;
+
+                                 if Args_Call /= "" then
+                                    if Call_Prefix /= "" then
+                                       Call_Prefix.Append (", ");
+                                       Call_Prefix.Append (Args_Call);
+                                    else
+                                       Call_Prefix := Args_Call;
+                                    end if;
+                                 end if;
+
+                                 Emit (Variant.Name & " (" & Call_Prefix & ");");
+                              end;
                            end;
 
                            First_Var := False;
@@ -436,7 +463,10 @@ package body Config_Generator is
                                     Kinds.Append (K & " => True");
                                  end Add_K;
                               begin
-                                 if Arg_Name /= "This" and then Arg_Name /= "Planner" then
+                                 if Arg_Name /= "This"
+                                   and then Arg_Name /= "Self_Ref"
+                                   and then Arg_Name /= "Planner"
+                                 then
                                     if not First_Arg then
                                        Emit (",");
                                     end if;

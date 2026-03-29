@@ -233,9 +233,12 @@ package Config_Types is
      Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Gcode_Argument_Data);
 
    type Gcode_Command_Data is record
-      Name        : Virtual_String;
-      Arguments   : Gcode_Argument_Maps.Map;
-      Description : Virtual_String;
+      Name         : Virtual_String;
+      Arguments    : Gcode_Argument_Maps.Map;
+      Has_This     : Boolean := False;
+      Has_Self_Ref : Boolean := False;
+      Has_Planner  : Boolean := False;
+      Description  : Virtual_String;
    end record;
 
    type Gcode_Key is record
