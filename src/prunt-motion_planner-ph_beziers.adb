@@ -24,58 +24,33 @@ package body Prunt.Motion_Planner.PH_Beziers is
 
    pragma Extensions_Allowed (On);
 
+   Collinear_Sine_Tolerance : constant Dimensionless := 1.0E-7;
+
    function Distance_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length is
       --  Note that this assumes symmetrical curves as it makes the computation significantly faster.
       --
       --  The details of this implementation are here:
       --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
-      --
-      --  The distance along the curve is the integral of the curve's parametric speed function. This integral is a
-      --  high-degree polynomial. To improve numerical stability when dealing with floating-point numbers, the terms of
-      --  the polynomial are sorted by magnitude before being summed.
       L : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
       B : constant Length := abs (Bez.Control_Points (4) - Bez.Control_Points (5));
+      Z : constant Dimensionless := 2.0 * T - 1.0;
+      Y : constant Dimensionless := Z * Z;
+      D : constant Length := (if L = 0.0 * mm then 0.0 * mm else (B ** 2 - L ** 2) / L);
+      H : constant Dimensionless :=
+        (((((((-102_245.0 / 544_768.0) * Y + 70_785.0 / 38_912.0) * Y - 630_201.0 / 77_824.0) * Y
+            + 1_329_185.0 / 58_368.0)
+           * Y
+           - 3_374_085.0 / 77_824.0)
+          * Y
+          + 2_147_145.0 / 38_912.0)
+         * Y
+         - 3_578_575.0 / 77_824.0)
+        * Y
+        + 61_347.0 / 2_128.0;
 
-      type Sum_Terms_Type_Index is range 1 .. 12;
-      type Sum_Terms_Type is array (Sum_Terms_Type_Index) of Area;
-
-      function Abs_Less_Then (Left, Right : Area) return Boolean;
-
-      function Abs_Less_Then (Left, Right : Area) return Boolean is
-      begin
-         return abs Left < abs Right;
-      end Abs_Less_Then;
-
-      procedure Sort is new
-        Ada.Containers.Generic_Constrained_Array_Sort (Sum_Terms_Type_Index, Area, Sum_Terms_Type, Abs_Less_Then);
-
-      Sum_Terms : Sum_Terms_Type :=
-        [23_940.0 * L**2,
-         9_815_520.0 * T**14 * (-B**2 + L**2),
-         73_616_400.0 * T**13 * (B**2 - L**2),
-         233_873_640.0 * T**12 * (-B**2 + L**2),
-         403_663_260.0 * T**11 * (B**2 - L**2),
-         400_071_672.0 * T**10 * (-B**2 + L**2),
-         216_432_216.0 * T**9 * (B**2 - L**2),
-         50_100_050.0 * T**8 * (-B**2 + L**2),
-         920_205.0 * T**7 * (-B**2 + L**2),
-         3_680_820.0 * T**6 * (B**2 - L**2),
-         5_153_148.0 * T**5 * (-B**2 + L**2),
-         2_576_574.0 * T**4 * (B**2 - L**2)];
+      Total_Length : constant Length := 15.0 * L + (5_005.0 / 228.0) * D;
    begin
-      if L = 0.0 then
-         return 0.0 * mm;
-      else
-         Sort (Sum_Terms);
-         declare
-            Sum : Area := 0.0 * mm**2;
-         begin
-            for X of Sum_Terms loop
-               Sum := Sum + X;
-            end loop;
-            return T * (Sum) / (1_596.0 * L);
-         end;
-      end if;
+      return Total_Length / 2.0 + Z * (15.0 * L / 2.0 + D * H);
    end Distance_At_T;
 
    function T_At_Distance (Bez : PH_Bezier; Distance : Length) return Curve_Parameter is
@@ -86,7 +61,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
       Lower  : Curve_Parameter := 0.0;
       Upper  : Curve_Parameter := 1.0;
 
-      type Casted_Curve_Parameter is mod 2**64;
+      type Casted_Curve_Parameter is mod 2 ** 64;
       function Cast_Curve_Parameter is new Ada.Unchecked_Conversion (Curve_Parameter, Casted_Curve_Parameter);
       function Cast_Curve_Parameter is new Ada.Unchecked_Conversion (Casted_Curve_Parameter, Curve_Parameter);
    begin
@@ -142,39 +117,38 @@ package body Prunt.Motion_Planner.PH_Beziers is
       return Bez_2 (Bez_2'First);
    end Point_At_T;
 
-   function Tangent_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position_Offset is
-      --  Uses De Casteljau's algorithm and returns the vector between the two points at the second last iteration.
-      Bez_2 : PH_Control_Points := Bez.Control_Points;
-   begin
-      for J in reverse Bez_2'First + 1 .. Bez_2'Last - 1 loop
-         for I in Bez_2'First .. J loop
-            Bez_2 (I) := Bez_2 (I) + (Bez_2 (I + 1) - Bez_2 (I)) * T;
-         end loop;
-      end loop;
+   --  function Tangent_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position_Offset is
+   --     --  Uses De Casteljau's algorithm and returns the vector between the two points at the second last iteration.
+   --     Bez_2 : PH_Control_Points := Bez.Control_Points;
+   --  begin
+   --     for J in reverse Bez_2'First + 1 .. Bez_2'Last - 1 loop
+   --        for I in Bez_2'First .. J loop
+   --           Bez_2 (I) := Bez_2 (I) + (Bez_2 (I + 1) - Bez_2 (I)) * T;
+   --        end loop;
+   --     end loop;
 
-      return Bez_2 (Bez_2'First + 1) - Bez_2 (Bez_2'First);
-   end Tangent_At_T;
+   --     return Bez_2 (Bez_2'First + 1) - Bez_2 (Bez_2'First);
+   --  end Tangent_At_T;
 
    function Point_At_T_V2 (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position is
    begin
       return
-        Bez.Control_Points (0)
-        * ((1.0 - T)**15)
-        + Scaled_Position_Offset (Bez.Control_Points (1)) * (15.0 * T * (1.0 - T)**14)
-        + Scaled_Position_Offset (Bez.Control_Points (2)) * (105.0 * T**2 * (1.0 - T)**13)
-        + Scaled_Position_Offset (Bez.Control_Points (3)) * (455.0 * T**3 * (1.0 - T)**12)
-        + Scaled_Position_Offset (Bez.Control_Points (4)) * (1_365.0 * T**4 * (1.0 - T)**11)
-        + Scaled_Position_Offset (Bez.Control_Points (5)) * (3_003.0 * T**5 * (1.0 - T)**10)
-        + Scaled_Position_Offset (Bez.Control_Points (6)) * (5_005.0 * T**6 * (1.0 - T)**9)
-        + Scaled_Position_Offset (Bez.Control_Points (7)) * (6_435.0 * T**7 * (1.0 - T)**8)
-        + Scaled_Position_Offset (Bez.Control_Points (8)) * (6_435.0 * T**8 * (1.0 - T)**7)
-        + Scaled_Position_Offset (Bez.Control_Points (9)) * (5_005.0 * T**9 * (1.0 - T)**6)
-        + Scaled_Position_Offset (Bez.Control_Points (10)) * (3_003.0 * T**10 * (1.0 - T)**5)
-        + Scaled_Position_Offset (Bez.Control_Points (11)) * (1_365.0 * T**11 * (1.0 - T)**4)
-        + Scaled_Position_Offset (Bez.Control_Points (12)) * (455.0 * T**12 * (1.0 - T)**3)
-        + Scaled_Position_Offset (Bez.Control_Points (13)) * (105.0 * T**13 * (1.0 - T)**2)
-        + Scaled_Position_Offset (Bez.Control_Points (14)) * (15.0 * T**14 * (1.0 - T))
-        + Scaled_Position_Offset (Bez.Control_Points (15)) * (T**15);
+        Bez.Control_Points (0) * ((1.0 - T) ** 15)
+        + Scaled_Position_Offset (Bez.Control_Points (1)) * (15.0 * T * (1.0 - T) ** 14)
+        + Scaled_Position_Offset (Bez.Control_Points (2)) * (105.0 * T ** 2 * (1.0 - T) ** 13)
+        + Scaled_Position_Offset (Bez.Control_Points (3)) * (455.0 * T ** 3 * (1.0 - T) ** 12)
+        + Scaled_Position_Offset (Bez.Control_Points (4)) * (1_365.0 * T ** 4 * (1.0 - T) ** 11)
+        + Scaled_Position_Offset (Bez.Control_Points (5)) * (3_003.0 * T ** 5 * (1.0 - T) ** 10)
+        + Scaled_Position_Offset (Bez.Control_Points (6)) * (5_005.0 * T ** 6 * (1.0 - T) ** 9)
+        + Scaled_Position_Offset (Bez.Control_Points (7)) * (6_435.0 * T ** 7 * (1.0 - T) ** 8)
+        + Scaled_Position_Offset (Bez.Control_Points (8)) * (6_435.0 * T ** 8 * (1.0 - T) ** 7)
+        + Scaled_Position_Offset (Bez.Control_Points (9)) * (5_005.0 * T ** 9 * (1.0 - T) ** 6)
+        + Scaled_Position_Offset (Bez.Control_Points (10)) * (3_003.0 * T ** 10 * (1.0 - T) ** 5)
+        + Scaled_Position_Offset (Bez.Control_Points (11)) * (1_365.0 * T ** 11 * (1.0 - T) ** 4)
+        + Scaled_Position_Offset (Bez.Control_Points (12)) * (455.0 * T ** 12 * (1.0 - T) ** 3)
+        + Scaled_Position_Offset (Bez.Control_Points (13)) * (105.0 * T ** 13 * (1.0 - T) ** 2)
+        + Scaled_Position_Offset (Bez.Control_Points (14)) * (15.0 * T ** 14 * (1.0 - T))
+        + Scaled_Position_Offset (Bez.Control_Points (15)) * (T ** 15);
    end Point_At_T_V2;
 
    function Point_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position is
@@ -182,16 +156,19 @@ package body Prunt.Motion_Planner.PH_Beziers is
       return Point_At_T (Bez, T_At_Distance (Bez, Distance));
    end Point_At_Distance;
 
-   function Tangent_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position_Offset is
-   begin
-      return Tangent_At_T (Bez, T_At_Distance (Bez, Distance));
-   end Tangent_At_Distance;
+   --  function Tangent_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position_Offset is
+   --  begin
+   --     return Tangent_At_T (Bez, T_At_Distance (Bez, Distance));
+   --  end Tangent_At_Distance;
 
    function Create_Bezier (Start, Corner, Finish : Scaled_Position; Deviation_Limit : Length) return PH_Bezier is
       function Real_Create_Bezier return PH_Bezier;
 
       function Real_Create_Bezier return PH_Bezier is
          function Sine_Secondary_Angle return Dimensionless;
+         --  The secondary angle here is pi minus the angle of the corner, or the angles not equal to the corner in an
+         --  equilateral triangle at the corner.
+
          function Cosine_Secondary_Angle return Dimensionless;
          function Base_Length return Length;
 
@@ -203,10 +180,10 @@ package body Prunt.Motion_Planner.PH_Beziers is
          begin
             if 0.5 + A / B < 0.0 then
                return 0.0;
-            elsif (0.5 + A / B)**(1 / 2) > 1.0 then
+            elsif (0.5 + A / B) ** (1 / 2) > 1.0 then
                return 1.0;
             else
-               return (0.5 + A / B)**(1 / 2);
+               return (0.5 + A / B) ** (1 / 2);
             end if;
          end Sine_Secondary_Angle;
 
@@ -218,10 +195,10 @@ package body Prunt.Motion_Planner.PH_Beziers is
          begin
             if 0.5 + A / B < 0.0 then
                return 0.0;
-            elsif (0.5 + A / B)**(1 / 2) > 1.0 then
+            elsif (0.5 + A / B) ** (1 / 2) > 1.0 then
                return 1.0;
             else
-               return (0.5 + A / B)**(1 / 2);
+               return (0.5 + A / B) ** (1 / 2);
             end if;
          end Cosine_Secondary_Angle;
 
@@ -229,10 +206,10 @@ package body Prunt.Motion_Planner.PH_Beziers is
             Incoming_Length : constant Length := abs (Start - Corner);
             Outgoing_Length : constant Length := abs (Finish - Corner);
 
-            Deviation_Base_Length_Numerator   : constant Length := Deviation_Limit * 2.0**14;
+            Deviation_Base_Length_Numerator   : constant Length := Deviation_Limit * 2.0 ** 14;
             Deviation_Base_Length_Denominator : constant Dimensionless :=
               Sine_Secondary_Angle
-              * (4_072_849.0 / 429.0 + 714.0 + 2.0**14 * 1_225.0 / (858.0 * Cosine_Secondary_Angle));
+              * (4_072_849.0 / 429.0 + 714.0 + 2.0 ** 14 * 1_225.0 / (858.0 * Cosine_Secondary_Angle));
             Incoming_Limit                    : constant Length :=
               (0.49 * 858.0 * Incoming_Length * Cosine_Secondary_Angle) / (5_210.0 * Cosine_Secondary_Angle + 1_225.0);
             Outgoing_Limit                    : constant Length :=
@@ -278,15 +255,16 @@ package body Prunt.Motion_Planner.PH_Beziers is
          Points (9) := Points (10) - M * (38.0 / 143.0) - Outgoing_Unit * ((105.0 / 143.0) * Base_Length);
          Points (8) := Points (9) - M * (254.0 / 429.0) - Outgoing_Unit * ((175.0 / 429.0) * Base_Length);
 
-         --  TODO: Do we need a small error margin here?
-         if Sine_Secondary_Angle = 0.0 then
+         --  Near-collinear inputs can land just above zero because the angle is reconstructed from floating-point dot
+         --  products.
+         if Sine_Secondary_Angle <= Collinear_Sine_Tolerance then
             --  Collinear points. The curvature is zero, so we return the largest possible inverse curvature value.
             return (Control_Points => Points, Inverse_Curvature => Length'Last);
          else
             return
               (Control_Points    => Points,
                Inverse_Curvature =>
-                 (12.0 / 7.0) * Base_Length / (Sine_Secondary_Angle / (1.0 - Sine_Secondary_Angle**2)**(1 / 2)));
+                 (12.0 / 14.0) * Base_Length * (1.0 + Cosine_Secondary_Angle) ** 2 / Sine_Secondary_Angle);
          end if;
       end Real_Create_Bezier;
    begin

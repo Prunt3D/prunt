@@ -47,6 +47,7 @@ private with Prunt.Default_Modules.Machine_Name;
 private with Prunt.Default_Modules.Motion;
 private with Prunt.Default_Modules.Motor_Drivers;
 private with Prunt.Default_Modules.Power_Control;
+private with Prunt.Default_Modules.Tachometers;
 private with Prunt.Default_Modules.TMC2240_Drivers;
 private with Prunt.Default_Modules.Thermistors;
 private with Prunt.Gcode_Arguments;
@@ -196,6 +197,10 @@ private
       package Input_Shapers is new My_Default_Modules.Input_Shapers (Config_Saving_Module => Config_Saving);
       package Fans is new
         My_Default_Modules.Fans (My_Controller_Generic_Types => Generic_Types, Fan_Hardware => Hardware.Fan_Hardware);
+      package Tachometers is new
+        My_Default_Modules.Tachometers
+          (My_Controller_Generic_Types => Generic_Types,
+           Tachometer_Hardware         => Hardware.Tachometer_Hardware);
       package Motor_Drivers is new My_Default_Modules.Motor_Drivers (My_Controller_Generic_Types => Generic_Types);
       package Kinematics is new
         My_Default_Modules.Kinematics
@@ -269,6 +274,8 @@ private
          My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
        "Power Control"            =>
          My_Default_Modules_Children.Power_Control.Module'(My_Modules.Module with null record),
+       "Tachometers"              =>
+         My_Default_Modules_Children.Tachometers.Module'(My_Modules.Module with null record),
        "TMC2240 Drivers"          =>
          My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record),
        "Thermistors"              =>

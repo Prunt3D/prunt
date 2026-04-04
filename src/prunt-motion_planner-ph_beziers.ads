@@ -19,7 +19,7 @@
 
 pragma Extensions_Allowed (On);
 
-private package Prunt.Motion_Planner.PH_Beziers is
+package Prunt.Motion_Planner.PH_Beziers is
 
    type PH_Bezier is private;
    --  C⁴ continuous Pythagorean-hodograph curve as specified in https://doi.org/10.1007/s00170-022-09463-y.
@@ -42,7 +42,12 @@ private package Prunt.Motion_Planner.PH_Beziers is
    function Point_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position;
    --  Return the point on the curve at parameter `T`.
 
-   function Tangent_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position_Offset;
+   --  function Tangent_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position_Offset;
+   --
+   --  TODO: Need to validate that this function is correct. LLM says it is 1/15 of what it should be and that logic
+   --  looks sound at a glance but proper investigation is required. We do not actually use this so it is not a high
+   --  priority, it used to be part of pressure advance shaping.
+   --
    --  Return a vector tangent to the curve at parameter `T`. This vector is not normalised and will be zero is the
    --  curve has no length.
 
@@ -51,7 +56,10 @@ private package Prunt.Motion_Planner.PH_Beziers is
    --  Point_At_T (Bez, T_At_Distance (Bez, Distance)). This vector is not normalised and will be zero is the curve has
    --  no length.
 
-   function Tangent_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position_Offset;
+   --  function Tangent_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position_Offset;
+   --
+   --  TODO: Relies on Tangent_At_T, see related TODO comment.
+   --
    --  Return a vector tangent to the curve at at the given distance along the curve. Equivalent to
    --  Tangent_At_T (Bez, T_At_Distance (Bez, Distance)).
 

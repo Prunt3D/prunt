@@ -32,6 +32,7 @@ generic
    type Thermistor_Name is (<>);
    type Board_Temperature_Probe_Name is (<>);
    type Fan_Name is (<>);
+   type Tachometer_Name is (<>);
    type Input_Switch_Name is (<>);
 package Prunt.Controller_Generic_Types is
 
@@ -155,6 +156,16 @@ package Prunt.Controller_Generic_Types is
              Fan_Hardware_Parameters_Array_Type (I).Gcode_Index
              /= Fan_Hardware_Parameters_Array_Type (J).Gcode_Index));
 
+   type Tachometer_Hardware_Parameters is record
+      Get_Pulse_Frequency :
+        access function (Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Frequency;
+      --  Return the pulse frequency currently being measured for the tachometer input. May be called from any task.
+      --
+      --  This value is not converted to RPM. The tachometer module applies the configured pulses-per-revolution value.
+   end record;
+
+   type Tachometer_Hardware_Parameters_Array_Type is array (Tachometer_Name) of Tachometer_Hardware_Parameters;
+
    type Input_Switch_Hardware_Parameters is record
       Visible_To_User : Boolean;
       --  Controls whether the input switch is presented to the user in the configuration interface. This is primarily
@@ -208,6 +219,7 @@ package Prunt.Controller_Generic_Types is
       --  We want this to raise an error if the user tries to default-initialize any of these fields.
       Motor_Hardware                   : Motor_Hardware_Parameters_Array_Type := [];
       Fan_Hardware                     : Fan_Hardware_Parameters_Array_Type := [];
+      Tachometer_Hardware              : Tachometer_Hardware_Parameters_Array_Type := [];
       Input_Switch_Hardware            : Input_Switch_Hardware_Parameters_Array_Type := [];
       Heater_Hardware                  : Heater_Hardware_Parameters_Array_Type := [];
       Thermistor_Hardware              : Thermistor_Hardware_Parameters_Array_Type := [];

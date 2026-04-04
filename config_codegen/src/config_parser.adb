@@ -75,6 +75,7 @@ package body Config_Parser is
         and then Name /= "Thermistor_Name"
         and then Name /= "Board_Temperature_Probe_Name"
         and then Name /= "Fan_Name"
+        and then Name /= "Tachometer_Name"
         and then Name /= "Input_Switch_Name"
       then
          return False;
