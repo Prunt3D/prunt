@@ -203,7 +203,7 @@ package body Prunt.Config.Test is
       File : constant Config_File := Create (Filename, Schemas);
 
       for I in 1 .. 25 loop
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
          Data.Set (Config_Data_Paths.Vector'([1 => "i"]), Long_Long_Integer (I));
          Data.Save;
       end loop;
@@ -212,7 +212,7 @@ package body Prunt.Config.Test is
          Backup_Filename : constant String :=
            Filename & "_backup_" & Ada.Strings.Fixed.Trim (I'Image, Ada.Strings.Both);
          Backup_File : constant Config_File := Create (Backup_Filename, Schemas);
-         Data : constant Config_Data := Backup_File.Get_Data ("M");
+         Data : Config_Data := Backup_File.Get_Data ("M");
          Expected_Value : constant Long_Long_Integer := Long_Long_Integer (25 - I);
 
          T.Assert (Data.Get ([1 => "i"]) = Expected_Value, "Backup " & I'Image & " has value " & Expected_Value'Image);
@@ -232,7 +232,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "b"]) = False);
          Data.Set ([1 => "b"], True);
@@ -241,7 +241,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "b"]) = False, "Field should not be saved without Save call.");
       end;
@@ -259,7 +259,7 @@ package body Prunt.Config.Test is
 
       declare
          File       : constant Config_File := Create (Filename, Schemas);
-         Inner_Data : constant Config_Data := File.Get_Data ("M");
+         Inner_Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Inner_Data in Config_Data);
          Data := Config_Data (Inner_Data);
@@ -284,7 +284,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "b"]) = False);
          Data.Set ([1 => "b"], True);
@@ -294,7 +294,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "b"]) = True);
       end;
@@ -316,7 +316,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "f"]) = Dimensionless'(5.5));
          Data.Set ([1 => "f"], Dimensionless'(2.5));
@@ -335,7 +335,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "f"]) = Dimensionless'(2.5));
       end;
@@ -356,7 +356,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "d"]) = "a");
          Data.Set ([1 => "d"], "b");
@@ -375,7 +375,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "d"]) = "b");
       end;
@@ -397,7 +397,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "f"]) = Long_Float'(5.5));
          Data.Set ([1 => "f"], Long_Float'(2.5));
@@ -416,7 +416,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "f"]) = Long_Float'(2.5));
       end;
@@ -438,7 +438,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          declare
             Ratio : constant Dimensionless_Ratio := Data.Get ([1 => "r"]);
@@ -460,7 +460,7 @@ package body Prunt.Config.Test is
 
       declare
          File  : constant Config_File := Create (Filename, Schemas);
-         Data  : constant Config_Data := File.Get_Data ("M");
+         Data  : Config_Data := File.Get_Data ("M");
          Ratio : constant Dimensionless_Ratio := Data.Get ([1 => "r"]);
       begin
          T.Assert (Ratio.Numerator = 2.0);
@@ -484,7 +484,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "i"]) = Long_Long_Integer'(5));
          Data.Set ([1 => "i"], Long_Long_Integer'(10));
@@ -503,7 +503,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get ([1 => "i"]) = Long_Long_Integer'(10));
       end;
@@ -530,7 +530,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get (["v", "Selected"]) = "a");
 
@@ -541,7 +541,7 @@ package body Prunt.Config.Test is
 
       declare
          File : constant Config_File := Create (Filename, Schemas);
-         Data : constant Config_Data := File.Get_Data ("M");
+         Data : Config_Data := File.Get_Data ("M");
       begin
          T.Assert (Data.Get (["v", "Children", "a"]) = 5);
       end;
@@ -627,7 +627,7 @@ package body Prunt.Config.Test is
                            Config_Property_Parameters_Integer'
                              (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
-      Data : constant Config_Data := File.Get_Data ("M");
+      Data : Config_Data := File.Get_Data ("M");
 
       Data.Set (Config_Data_Paths.Vector'(["v", "Children", "a"]), True);
       --  Same parent, should not recreate parent.
@@ -1070,7 +1070,7 @@ package body Prunt.Config.Test is
              (Version         => 1,
               Top_Level_Items => ["b" => Config_Property_Parameters_Boolean'(Description => "", Default => True)])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
-      Data : constant Config_Data := File.Get_Data ("M");
+      Data : Config_Data := File.Get_Data ("M");
       S1 : constant Save_Counter := File.Last_Save;
       S2 : Save_Counter;
 
@@ -1218,7 +1218,7 @@ package body Prunt.Config.Test is
               Top_Level_Items => ["b" => Config_Property_Parameters_Boolean'(Description => "", Default => False)])];
       Filename : constant String := Next_Test_Filename;
       File : constant Config_File := Create (Filename, Schemas);
-      Data : constant Config_Data := File.Get_Data ("M");
+      Data : Config_Data := File.Get_Data ("M");
 
       Errors : Config_Error_Vectors.Vector;
 
@@ -1279,7 +1279,7 @@ package body Prunt.Config.Test is
                              (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)]),
                  "leaf" => Config_Property_Parameters_Boolean'(Description => "", Default => True)])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
-      Data : constant Config_Data := File.Get_Data ("M");
+      Data : Config_Data := File.Get_Data ("M");
 
       begin
          declare
@@ -1452,7 +1452,7 @@ package body Prunt.Config.Test is
                      (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
       Filename : constant String := Next_Test_Filename;
       File : constant Config_File := Create (Filename, Schemas);
-      Data : constant Config_Data := File.Get_Data ("M");
+      Data : Config_Data := File.Get_Data ("M");
 
       Data.Save;
    end Test_Save_No_Changes;
@@ -2092,7 +2092,7 @@ package body Prunt.Config.Test is
 
    overriding
    procedure Migrate (This : Custom_Schema; Old_Version : Config_Schema_Version; Data : in out Config_Data) is
-      Path : constant Config_Data_Paths.Vector := [1 => "migrated_field"];
+      Path : Config_Data_Paths.Vector := [1 => "migrated_field"];
    begin
       if Old_Version = 1 then
          Data.Set (Path, Long_Long_Integer'(999));
@@ -2268,7 +2268,7 @@ package body Prunt.Config.Test is
       end;
 
       File : constant Config_File := Create (Filename, Migration_Accessors_Schemas);
-      Data : constant Config_Data := File.Get_Data ("M");
+      Data : Config_Data := File.Get_Data ("M");
 
       T.Assert (Data.Get (Config_Data_Paths.Vector'([1 => "b"])) = False, "Boolean migrated");
       T.Assert (Data.Get (Config_Data_Paths.Vector'([1 => "i"])) = Long_Long_Integer'(3), "Integer migrated");
@@ -2305,7 +2305,7 @@ package body Prunt.Config.Test is
       Filename : constant String := Next_Test_Filename;
 
       File : constant Config_File := Create (Filename, Schemas);
-      Data : constant Config_Data := File.Get_Data ("M");
+      Data : Config_Data := File.Get_Data ("M");
       pragma Unreferenced (Data);
 
       begin

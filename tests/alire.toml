@@ -23,7 +23,7 @@ executables = ["tests"]
 "*".source_encoding = []
 
 [[depends-on]]
-aunit = "^25.0.0"
+# aunit = "^25.0.0"
 # gnatcov = "^22.0.1"
 prunt = "~0.0.0"
 

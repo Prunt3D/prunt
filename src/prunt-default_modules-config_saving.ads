@@ -127,7 +127,7 @@ private
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
-      overriding
+      --  overriding
       procedure Register_For_Saving (Config_Data : Config.Config_Data);
       --  Must be called before module starts, therefore `Contains_Config_To_Save` can be used to check arguments early
       --  in g-code processing.
