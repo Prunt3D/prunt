@@ -47,8 +47,6 @@ private with Prunt.Default_Modules.Machine_Name;
 private with Prunt.Default_Modules.Motion;
 private with Prunt.Default_Modules.Motor_Drivers;
 private with Prunt.Default_Modules.Power_Control;
-private with Prunt.Default_Modules.Print_Job;
-private with Prunt.Default_Modules.Shutdown;
 private with Prunt.Default_Modules.TMC2240_Drivers;
 private with Prunt.Default_Modules.Thermistors;
 private with Prunt.Gcode_Arguments;
@@ -176,9 +174,7 @@ private
       package Config_Saving is new My_Default_Modules.Config_Saving;
       package Machine_Name is new My_Default_Modules.Machine_Name (Config_Saving_Module => Config_Saving);
       package Machine_Idle_Timeout is new My_Default_Modules.Machine_Idle_Timeout;
-      package Print_Job is new My_Default_Modules.Print_Job;
       package Power_Control is new My_Default_Modules.Power_Control;
-      package Shutdown is new My_Default_Modules.Shutdown;
       package Dwell is new My_Default_Modules.Dwell;
       package Input_Switches is new
         My_Default_Modules.Input_Switches
@@ -273,8 +269,6 @@ private
          My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
        "Power Control"            =>
          My_Default_Modules_Children.Power_Control.Module'(My_Modules.Module with null record),
-       "Print Job"                => My_Default_Modules_Children.Print_Job.Module'(My_Modules.Module with null record),
-       "Shutdown"                 => My_Default_Modules_Children.Shutdown.Module'(My_Modules.Module with null record),
        "TMC2240 Drivers"          =>
          My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record),
        "Thermistors"              =>
