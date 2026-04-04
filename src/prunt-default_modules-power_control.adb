@@ -26,7 +26,8 @@ package body Prunt.Default_Modules.Power_Control is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -48,20 +49,20 @@ package body Prunt.Default_Modules.Power_Control is
       begin
          Self_Ref := Self_Ref_In;
       end Start;
-
-      procedure Power_On
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_No_Value) is
-      begin
-         pragma Unreferenced (Planner, S);
-         raise Constraint_Error with "M80 is not implemented yet.";
-      end Power_On;
-
-      procedure Power_Off (Planner : Planner_Interface'Class) is
-      begin
-         pragma Unreferenced (Planner);
-         raise Constraint_Error with "M81 is not implemented yet.";
-      end Power_Off;
    end Module_Instance;
+
+   procedure Power_On
+     (Planner : Planner_Interface'Class;
+      S       : Gcode_Optional_No_Value) is
+   begin
+      pragma Unreferenced (Planner, S);
+      raise Constraint_Error with "M80 is not implemented yet.";
+   end Power_On;
+
+   procedure Power_Off (Planner : Planner_Interface'Class) is
+   begin
+      pragma Unreferenced (Planner);
+      raise Constraint_Error with "M81 is not implemented yet.";
+   end Power_Off;
 
 end Prunt.Default_Modules.Power_Control;

@@ -45,28 +45,29 @@ package Prunt.Default_Modules.Power_Control is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
 
 private
 
+   procedure Power_On
+     (Planner : Planner_Interface'Class;
+      S       : Gcode_Optional_No_Value
+      --  Report power state if present.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M80");
+   --  Turn on or report the power supply state.
+
+   procedure Power_Off (Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M81");
+   --  Turn off the power supply.
+
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
-
-      procedure Power_On
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_No_Value
-         --  Report power state if present.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M80");
-      --  Turn on or report the power supply state.
-
-      procedure Power_Off (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M81");
-      --  Turn off the power supply.
    private
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;

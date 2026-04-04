@@ -56,7 +56,8 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
@@ -67,6 +68,7 @@ private
 
    task type Status_Updater is
       entry Start (Status_Emitter : Status_Manager.Status_Emitter);
+      entry Set_Position_Auto_Report_Interval (Value : Duration);
       entry Stop;
    end Status_Updater;
 
@@ -84,6 +86,36 @@ private
    --  mean that it does not start during the BIP (which it should not do), I mean that it does not start after the
    --  assignment is complete.
 
+   type Position_Report_Event is new Extra_Block_Resetting_Data with null record;
+
+   overriding
+   procedure Process_After_Block (This : Position_Report_Event; Context : Block_End_Context'Class);
+
+   type Position_Auto_Report_Event is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Interval            : Duration;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Position_Auto_Report_Event; Context : Block_End_Context'Class);
+
+   procedure Report_Current_Position (Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M114");
+   --  Report the current position to the logger.
+   --
+   --  THE `DER` parameters from Marlin are not present.
+
+   procedure Set_Position_Auto_Report
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless
+      --  Interval in seconds between reports. `S0` disables auto-reporting.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M154");
+   --  Configure automatic position reporting to the logger.
+   --
+   --  This command differs from Marlin in that the `S` parameter is not optional.
+
    protected type Module_Instance is new My_Modules.Module_Instance with
       procedure Initialize (Status_Emitter_In : Status_Manager.Status_Emitter);
 
@@ -91,28 +123,9 @@ private
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
-      procedure Report_Current_Position
-        (Planner : Planner_Interface'Class;
-         D       : Gcode_Optional_No_Value;
-         --  Request detailed information if present.
-         E       : Gcode_Optional_No_Value;
-         --  Request E stepper details if present.
-         R       : Gcode_Optional_No_Value
-         --  Request realtime position information if present.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M114");
-      --  Report the current position to the logger.
-
-      procedure Set_Position_Auto_Report
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_Integer
-         --  Interval in seconds between reports. `S0` disables auto-reporting.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M154");
-      --  Configure automatic position reporting to the logger.
+      procedure Set_Position_Auto_Report_Interval (Value : Duration);
    private
       Status_Emitter : Status_Manager.Status_Emitter;
-      Self_Ref       : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Updater        : Status_Updater_Wrapper_Pointers.Ref;
    end Module_Instance;
 

@@ -33,10 +33,22 @@ package body Prunt.Default_Modules.Idle_Emitter is
       return Result : Module_Instance;
    end Initialize;
 
+   overriding
+   procedure Gcode_Dispatch
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier) is
+   begin
+      raise Constraint_Error with "Not implemented.";
+   end Gcode_Dispatch;
+
    protected body Module_Instance is
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
-         Self_Ref := Self_Ref_In;
+         null;
       end Start;
 
       procedure Request_Idle_Notifications
@@ -61,14 +73,6 @@ package body Prunt.Default_Modules.Idle_Emitter is
             Receiver.Get.Idle_End;
          end loop;
       end Idle_End;
-
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier) is
-      begin
-         raise Constraint_Error with "Not implemented.";
-      end Gcode_Dispatch;
    end Module_Instance;
 
 end Prunt.Default_Modules.Idle_Emitter;

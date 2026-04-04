@@ -154,10 +154,15 @@ package Config_Types is
       Max          : Virtual_String;
    end record;
 
-   type Primitive_Type_Kind is (Boolean_Kind, Integer_Kind, Float_Kind, Ratio_Kind);
+   type Primitive_Type_Kind is (Boolean_Kind, String_Kind, Integer_Kind, Float_Kind, Ratio_Kind);
 
    type Boolean_Data is record
       --  Boolean types are currently hardcoded rather than being parsed.
+      null;
+   end record;
+
+   type String_Data is record
+      --  String types are currently hardcoded rather than being parsed.
       null;
    end record;
 
@@ -189,7 +194,7 @@ package Config_Types is
       Unit : Unit_Data;
    end record;
 
-   type Config_Kind is (Record_Kind, Array_Kind, Enum_Kind, Boolean_Kind, Integer_Kind, Float_Kind, Ratio_Kind);
+   type Config_Kind is (Record_Kind, Array_Kind, Enum_Kind, Boolean_Kind, String_Kind, Integer_Kind, Float_Kind, Ratio_Kind);
 
    type Config_Type (Kind : Config_Kind := Record_Kind) is record
       case Kind is
@@ -204,6 +209,9 @@ package Config_Types is
 
          when Boolean_Kind =>
             Boolean_Value : Boolean_Data;
+
+         when String_Kind =>
+            String_Value : String_Data;
 
          when Float_Kind =>
             Float_Value : Float_Data;

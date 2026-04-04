@@ -45,20 +45,21 @@ package Prunt.Default_Modules.Shutdown is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
 
 private
 
+   procedure Full_Shutdown (Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M112");
+   --  Shut everything down and halt the machine.
+
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
-
-      procedure Full_Shutdown (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M112");
-      --  Shut everything down and halt the machine.
    private
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;

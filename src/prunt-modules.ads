@@ -56,11 +56,16 @@ package Prunt.Modules is
    --  started.
 
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier)
    is abstract;
+   --  `This` is intentionally not an `in out` parameter to discourage making changes to the module instance at this
+   --  point. It is possible to use `Self_Ref` to bypass this, however it generally does not make sense to do so as
+   --  g-code is only meant to execute after it makes its way through the planner.
+   --
    --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
 
    procedure Start

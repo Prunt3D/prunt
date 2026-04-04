@@ -78,6 +78,14 @@ private
    package Idle_Notification_Receiver_Vectors is new
      Ada.Containers.Vectors (Positive, Idle_Notification_Receiver_Shared_Pointers.Ref, "=" => Return_False);
 
+   overriding
+   procedure Gcode_Dispatch
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Args               : in out Gcode_Arguments.Arguments;
+      Planner            : Planner_Interface'Class;
+      Command_Identifier : Gcode_Command_Identifier);
+
    protected type Module_Instance is new My_Modules.Module_Instance
    and Idle_Notification_Emitter
    and Controller_Interfaces.Idle_Notification_Receiver with
@@ -94,14 +102,7 @@ private
 
       overriding
       procedure Idle_End;
-
-      overriding
-      procedure Gcode_Dispatch
-        (Args               : in out Gcode_Arguments.Arguments;
-         Planner            : Planner_Interface'Class;
-         Command_Identifier : Gcode_Command_Identifier);
    private
-      Self_Ref  : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Receivers : Idle_Notification_Receiver_Vectors.Vector;
    end Module_Instance;
 

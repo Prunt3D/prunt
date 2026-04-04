@@ -89,6 +89,8 @@ package body Config_Parser is
    begin
       if Decl.P_Fully_Qualified_Name = "Standard.Boolean" then
          Value := (Boolean_Kind, (null record));
+      elsif Decl.P_Fully_Qualified_Name = "VSS.Strings.Virtual_String" then
+         Value := (String_Kind, (null record));
       elsif Decl.P_Fully_Qualified_Name = "Prunt.Dimensionless_Ratio" then
          Value := (Ratio_Kind, (Unit => (Conversion => "", Display => "")));
       elsif Is_Controller_Generic_Discrete_Type (Decl) then

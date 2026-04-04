@@ -716,6 +716,30 @@ package body Config_Generator is
          Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & ");");
       end Handle_Boolean;
 
+      procedure Handle_String
+        (String_Val    : String_Data;
+         Outer         : Component_Data;
+         Path          : String_Vectors.Vector;
+         Reader_Prefix : Virtual_String;
+         Ada_Expr      : Virtual_String)
+      is
+         pragma Unreferenced (String_Val);
+         Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
+      begin
+         Emit_Config_Map
+           ("Prunt.Config.Config_Property_Parameters_String'(Description => """
+            & Outer.Description
+            & """, Default => "
+            & Effective_Schema_Default (Outer, Outer.Default)
+            & ")");
+         Emit_Reader
+           (Reader_Prefix
+            & " := Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
+            & Path_Str
+            & "]);");
+         Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & ");");
+      end Handle_String;
+
       procedure Handle_Float
         (Float_Val     : Float_Data;
          Outer         : Component_Data;
@@ -1323,6 +1347,9 @@ package body Config_Generator is
 
             when Boolean_Kind =>
                Handle_Boolean (Item.Boolean_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
+
+            when String_Kind  =>
+               Handle_String (Item.String_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
 
             when Integer_Kind =>
                Handle_Integer (Item.Integer_Value, Outer, Path, Reader_Prefix, Ada_Prefix);

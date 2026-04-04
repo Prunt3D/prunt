@@ -32,7 +32,8 @@ package body Prunt.Default_Modules.Input_Switches is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -44,6 +45,50 @@ package body Prunt.Default_Modules.Input_Switches is
    end Config_Schema;
 
    overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
+      pragma Unreferenced (This);
+   begin
+      return
+        ["Triggered" =>
+           [for S in Input_Switch_Name use+S'Image =>
+              (Kind        => Status_Manager.Boolean_Kind,
+               Unit        => "",
+               Description => "True if input switch " & (+S'Image) & " is currently triggered.",
+               Condition   => "")]];
+   end Status_Schema;
+
+   function Switch_Is_Triggered (Config : User_Config; Switch : Input_Switch_Name) return Boolean is
+   begin
+      return
+        (if Config.Switches (Switch).Kind = Normally_Closed
+         then not Input_Switch_Hardware (Switch).Get_State (Switch)
+         else Input_Switch_Hardware (Switch).Get_State (Switch));
+   end Switch_Is_Triggered;
+
+   overriding
+   procedure Process_After_Block (This : Endstop_Report_Event; Context : Block_End_Context'Class) is
+      Found_Enabled_Switch : Boolean := False;
+   begin
+      Context.Wait_For_Idle;
+
+      My_Logger.Log ("Input switch status:");
+
+      for Switch in Input_Switch_Name loop
+         if This.Config.Switches (Switch).Enabled then
+            Found_Enabled_Switch := True;
+            My_Logger.Log
+              (+(Switch'Image
+                 & ": "
+                 & (if Switch_Is_Triggered (This.Config, Switch) then "Triggered" else "Not triggered")));
+         end if;
+      end loop;
+
+      if not Found_Enabled_Switch then
+         My_Logger.Log ("No input switches are enabled.");
+      end if;
+   end Process_After_Block;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
@@ -52,41 +97,67 @@ package body Prunt.Default_Modules.Input_Switches is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      pragma Unreferenced (This, Report_Config_Error, Status_Emitter, Get_Other_Instance);
+      pragma Unreferenced (This, Report_Config_Error, Get_Other_Instance);
    begin
       return Result : Module_Instance do
-         Result.Initialize (Config_Data_To_User_Config (Config_Data));
+         Result.Initialize (Config_Data_To_User_Config (Config_Data), Status_Emitter);
       end return;
    end Initialize;
 
+   task body Status_Updater is
+      Config_Ref    : User_Config;
+      Status_Ref    : Status_Manager.Status_Emitter;
+      Stop_Received : Boolean := False;
+   begin
+      select
+         accept Stop;
+         Stop_Received := True;
+      or
+         accept Start (Config : User_Config; Status_Emitter : Status_Manager.Status_Emitter) do
+            Config_Ref := Config;
+            Status_Ref := Status_Emitter;
+         end Start;
+      end select;
+
+      while not Stop_Received loop
+         select
+            accept Stop;
+            Stop_Received := True;
+         or
+            delay Status_Report_Period;
+
+            for S in Input_Switch_Name loop
+               Status_Ref.Set_Value ("Triggered", +S'Image, Switch_Is_Triggered (Config_Ref, S));
+            end loop;
+         end select;
+      end loop;
+   end Status_Updater;
+
+   overriding
+   procedure Finalize (Object : in out Status_Updater_Wrapper) is
+   begin
+      Object.Updater.Stop;
+   end Finalize;
+
    protected body Module_Instance is
-      procedure Initialize (Config_In : User_Config) is
+      procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter) is
+         function Make_Updater_Task return Status_Updater_Wrapper is
+         begin
+            return Result : Status_Updater_Wrapper;
+         end Make_Updater_Task;
       begin
          Config := Config_In;
+         Status_Emitter := Status_Emitter_In;
+         Updater.Set (Make_Updater_Task'Access);
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Planner);
       begin
-         Self_Ref := Self_Ref_In;
+         Updater.Get.Updater.Start (Config, Status_Emitter);
       end Start;
-
-      procedure Report_Endstop_States (Planner : Planner_Interface'Class) is
-      begin
-         pragma Unreferenced (Planner);
-         My_Logger.Log ("M119 reporting is not implemented yet.");
-      end Report_Endstop_States;
-
-      procedure Enable_Endstops (Planner : Planner_Interface'Class) is
-      begin
-         pragma Unreferenced (Planner);
-         null;
-      end Enable_Endstops;
-
-      procedure Disable_Endstops (Planner : Planner_Interface'Class) is
-      begin
-         pragma Unreferenced (Planner);
-         null;
-      end Disable_Endstops;
 
       function Switch_Is_Enabled_In_Config (Switch : Input_Switch_Name) return Boolean is
       begin
@@ -97,6 +168,16 @@ package body Prunt.Default_Modules.Input_Switches is
       begin
          return Config.Switches (Switch).Kind = Normally_Closed;
       end Switch_Is_Normally_Closed;
+
+      function Get_Config return User_Config is
+      begin
+         return Config;
+      end Get_Config;
    end Module_Instance;
+
+   procedure Report_Endstop_States (This : Module_Instance; Planner : Planner_Interface'Class) is
+   begin
+      Planner.Flush (Endstop_Report_Event'(Config => This.Get_Config));
+   end Report_Endstop_States;
 
 end Prunt.Default_Modules.Input_Switches;

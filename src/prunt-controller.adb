@@ -77,12 +77,61 @@ package body Prunt.Controller is
       null;
    end Mark_Axis_Homed;
 
+   type Planner_Block_End_Context is limited new Module_Types.Block_End_Context with record
+      First_Accel_Distance : Length;
+      Last_Command_Index   : Command_Index;
+      Loop_Move_Offset     : Position_Offset;
+   end record;
+
+   overriding
+   function Get_First_Accel_Distance (This : Planner_Block_End_Context) return Length;
+   overriding
+   function Get_Last_Command_Index (This : Planner_Block_End_Context) return Command_Index;
+   overriding
+   function Get_Loop_Move_Offset (This : Planner_Block_End_Context) return Position_Offset;
+   overriding
+   procedure Wait_For_Idle (This : Planner_Block_End_Context);
+
+   overriding
+   function Get_First_Accel_Distance (This : Planner_Block_End_Context) return Length is
+   begin
+      return This.First_Accel_Distance;
+   end Get_First_Accel_Distance;
+
+   overriding
+   function Get_Last_Command_Index (This : Planner_Block_End_Context) return Command_Index is
+   begin
+      return This.Last_Command_Index;
+   end Get_Last_Command_Index;
+
+   overriding
+   function Get_Loop_Move_Offset (This : Planner_Block_End_Context) return Position_Offset is
+   begin
+      return This.Loop_Move_Offset;
+   end Get_Loop_Move_Offset;
+
+   overriding
+   procedure Wait_For_Idle (This : Planner_Block_End_Context) is
+   begin
+      loop
+         exit when Last_Command_Executed.Get >= This.Last_Command_Index;
+         delay 0.001;
+      end loop;
+   end Wait_For_Idle;
+
    overriding
    procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name) is
    begin
       pragma Unreferenced (This, Axis); --  TODO
       null;
    end Mark_Axis_Unhomed;
+
+   overriding
+   function Axis_Is_Homed (This : Planner_Wrapper; Axis : Axis_Name) return Boolean is
+   begin
+      --  TODO
+      return False;
+   end Axis_Is_Homed;
 
    overriding
    procedure Add_Corner
@@ -118,34 +167,46 @@ package body Prunt.Controller is
 
    overriding
    procedure Flush
-     (This       : Planner_Wrapper;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+     (This           : Planner_Wrapper;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
+   is
+      pragma Unreferenced (This);
    begin
-      My_Motion_Planner.Enqueue_Flush (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data));
+      My_Motion_Planner.Enqueue_Flush
+        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Is_Homing_Move => Is_Homing_Move);
    end Flush;
 
    overriding
    procedure Flush_And_Change_Kinematic_Parameters
-     (This       : Planner_Wrapper;
-      Params     : Motion_Planner.Kinematic_Parameters;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+     (This           : Planner_Wrapper;
+      Params         : Motion_Planner.Kinematic_Parameters;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
+   is
+      pragma Unreferenced (This);
    begin
       Planner_State.Set_Last_Kinematic_Parameters (Params);
 
       My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
-        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params);
+        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
    end Flush_And_Change_Kinematic_Parameters;
 
    overriding
    procedure Flush_And_Reset_Position
-     (This         : Planner_Wrapper;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+     (This           : Planner_Wrapper;
+      New_Position   : Position;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False)
+   is
+      pragma Unreferenced (This);
    begin
       Planner_State.Set_Last_Position (New_Position);
 
       My_Motion_Planner.Enqueue_Flush_And_Reset_Position
-        (Data => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Pos => New_Position);
+        (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
+         Pos            => New_Position,
+         Is_Homing_Move => Is_Homing_Move);
    end Flush_And_Reset_Position;
 
    procedure Prompt_For_Update is
@@ -567,13 +628,15 @@ package body Prunt.Controller is
       Next_Block_Pos       : Motor_Position;
       First_Accel_Distance : Length;
       Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset) is
+      Loop_Move_Offset     : Position_Offset)
+   is
+      Context : constant Planner_Block_End_Context :=
+        (First_Accel_Distance => First_Accel_Distance,
+         Last_Command_Index   => Last_Command_Index,
+         Loop_Move_Offset     => Loop_Move_Offset);
    begin
       if not Resetting_Data.Is_Empty then
-         Resetting_Data.Element.Process_After_Block
-           (First_Accel_Distance => First_Accel_Distance,
-            Last_Command_Index   => Last_Command_Index,
-            Loop_Move_Offset     => Loop_Move_Offset);
+         Resetting_Data.Element.Process_After_Block (Context);
          Reset_Position (Next_Block_Pos);
       end if;
    end Finish_Planner_Block;

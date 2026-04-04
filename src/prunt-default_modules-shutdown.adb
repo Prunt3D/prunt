@@ -26,7 +26,8 @@ package body Prunt.Default_Modules.Shutdown is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -48,12 +49,12 @@ package body Prunt.Default_Modules.Shutdown is
       begin
          Self_Ref := Self_Ref_In;
       end Start;
-
-      procedure Full_Shutdown (Planner : Planner_Interface'Class) is
-      begin
-         pragma Unreferenced (Planner);
-         raise Constraint_Error with "M112 is not implemented yet.";
-      end Full_Shutdown;
    end Module_Instance;
+
+   procedure Full_Shutdown (Planner : Planner_Interface'Class) is
+   begin
+      pragma Unreferenced (Planner);
+      raise Constraint_Error with "M112 is not implemented yet.";
+   end Full_Shutdown;
 
 end Prunt.Default_Modules.Shutdown;

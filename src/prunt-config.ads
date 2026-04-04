@@ -110,6 +110,20 @@ package Prunt.Config is
       Options : Discrete_String_Sets.Set;
    end record;
 
+   type Config_Property_Parameters_String is new Config_Property_Parameters with record
+      --  Schema format:
+      --     {
+      --        "Kind": "String",
+      --        "Description": string,
+      --        "Default": string
+      --     }
+      --
+      --  Config format:
+      --     string
+
+      Default : Virtual_String;
+   end record;
+
    type Config_Property_Parameters_Integer is new Config_Property_Parameters with record
       --  Schema format:
       --     {

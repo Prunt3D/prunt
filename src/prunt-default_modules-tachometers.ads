@@ -53,12 +53,29 @@ package Prunt.Default_Modules.Tachometers is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
 
 private
+
+   procedure Report_Tachometers (Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M123");
+   --  Report tachometer readings to the log immediately. This will not interrupt readings that are being reported
+   --  on an interval.
+
+   procedure Report_Tachometers
+     (Planner : Planner_Interface'Class;
+      S       : Dimensionless
+      --  Interval in seconds between reports.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M123");
+   --  Report tachometer readings to the log repeatedly with a given interval. If this command has been called
+   --  previously then this will override the previous interval rather than using both.
+   --
+   --  This command differs from Marlin in that the `S` parameter may be a real number instead of just an integer.
 
    --  type User_Config is record
    --  end record
@@ -77,22 +94,6 @@ private
 
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
-
-      procedure Report_Tachometers (Planner : Planner_Interface'Class)
-      with Annotate => (Prunt_Config, Gcode_Command, "M123");
-      --  Report tachometer readings to the log immediately. This will not interrupt readings that are being reported
-      --  on an interval.
-
-      procedure Report_Tachometers
-        (Planner : Planner_Interface'Class;
-         S       : Dimensionless
-         --  Interval in seconds between reports.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M123");
-      --  Report tachometer readings to the log repeatedly with a given interval. If this command has been called
-      --  previously then this will override the previous interval rather than using both.
-      --
-      --  This command differs from Marlin in that the `S` parameter may be a real number instead of just an integer.
 
    private
       --  Config   : User_Config;

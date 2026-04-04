@@ -69,7 +69,8 @@ package Prunt.Default_Modules.Thermistors is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
@@ -275,29 +276,29 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
+   procedure Report_Temperatures
+     (Planner : Planner_Interface'Class;
+      R       : Gcode_Optional_No_Value;
+      --  Include redundant temperature information if present.
+      T       : Gcode_Optional_Integer
+      --  Optional hotend index.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M105");
+   --  Report temperatures to the logger.
+
+   procedure Set_Temperature_Auto_Report
+     (Planner : Planner_Interface'Class;
+      S       : Gcode_Optional_Integer
+      --  Interval in seconds between reports. `S0` disables auto-reporting.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M155");
+   --  Configure automatic temperature reporting to the logger.
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config);
 
       overriding
       procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
-
-      procedure Report_Temperatures
-        (Planner : Planner_Interface'Class;
-         R       : Gcode_Optional_No_Value;
-         --  Include redundant temperature information if present.
-         T       : Gcode_Optional_Integer
-         --  Optional hotend index.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M105");
-      --  Report temperatures to the logger.
-
-      procedure Set_Temperature_Auto_Report
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_Integer
-         --  Interval in seconds between reports. `S0` disables auto-reporting.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M155");
-      --  Configure automatic temperature reporting to the logger.
 
       overriding
       function Thermistor_Is_Enabled_In_Config (Thermistor : Thermistor_Name) return Boolean;

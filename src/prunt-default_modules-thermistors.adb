@@ -32,7 +32,8 @@ package body Prunt.Default_Modules.Thermistors is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -207,23 +208,6 @@ package body Prunt.Default_Modules.Thermistors is
          end loop;
       end Start;
 
-      procedure Report_Temperatures
-        (Planner : Planner_Interface'Class;
-         R       : Gcode_Optional_No_Value;
-         T       : Gcode_Optional_Integer) is
-      begin
-         pragma Unreferenced (Planner, R, T);
-         My_Logger.Log ("M105 reporting is not implemented yet.");
-      end Report_Temperatures;
-
-      procedure Set_Temperature_Auto_Report
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_Integer) is
-      begin
-         pragma Unreferenced (Planner, S);
-         My_Logger.Log ("M155 auto-reporting is not implemented yet.");
-      end Set_Temperature_Auto_Report;
-
       function Thermistor_Is_Enabled_In_Config (Thermistor : Thermistor_Name) return Boolean is
       begin
          return Config.Thermistors (Thermistor).Sensor_Model.Kind /= Disabled;
@@ -241,5 +225,22 @@ package body Prunt.Default_Modules.Thermistors is
          return Thermistor_Hardware (Thermistor).Get_Temperature (Thermistor, Requires_Fresh);
       end Get_Temperature;
    end Module_Instance;
+
+   procedure Report_Temperatures
+     (Planner : Planner_Interface'Class;
+      R       : Gcode_Optional_No_Value;
+      T       : Gcode_Optional_Integer) is
+   begin
+      pragma Unreferenced (Planner, R, T);
+      My_Logger.Log ("M105 reporting is not implemented yet.");
+   end Report_Temperatures;
+
+   procedure Set_Temperature_Auto_Report
+     (Planner : Planner_Interface'Class;
+      S       : Gcode_Optional_Integer) is
+   begin
+      pragma Unreferenced (Planner, S);
+      My_Logger.Log ("M155 auto-reporting is not implemented yet.");
+   end Set_Temperature_Auto_Report;
 
 end Prunt.Default_Modules.Thermistors;

@@ -55,7 +55,8 @@ package body Prunt.Default_Modules.Tachometers is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -71,16 +72,18 @@ package body Prunt.Default_Modules.Tachometers is
          Self_Ref := Self_Ref_In;
       end Start;
 
-      procedure Report_Tachometers (Planner : Planner_Interface'Class) is
-      begin
-         null; --  TODO
-      end Report_Tachometers;
-
-      procedure Report_Tachometers (Planner : Planner_Interface'Class; S : Dimensionless) is
-      begin
-         pragma Unreferenced (Planner, S);
-         My_Logger.Log ("M123 tachometer reporting is not implemented yet.");
-      end Report_Tachometers;
    end Module_Instance;
+
+   procedure Report_Tachometers (Planner : Planner_Interface'Class) is
+   begin
+      pragma Unreferenced (Planner);
+      null; --  TODO
+   end Report_Tachometers;
+
+   procedure Report_Tachometers (Planner : Planner_Interface'Class; S : Dimensionless) is
+   begin
+      pragma Unreferenced (Planner, S);
+      My_Logger.Log ("M123 tachometer reporting is not implemented yet.");
+   end Report_Tachometers;
 
 end Prunt.Default_Modules.Tachometers;

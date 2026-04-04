@@ -195,6 +195,7 @@ package body Prunt.Config is
       is
          procedure Validate (Property : Config_Property_Parameters_Boolean);
          procedure Validate (Property : Config_Property_Parameters_Discrete);
+         procedure Validate (Property : Config_Property_Parameters_String);
          procedure Validate (Property : Config_Property_Parameters_Integer);
          procedure Validate (Property : Config_Property_Parameters_Float);
          procedure Validate (Property : Config_Property_Parameters_Float_Ratio);
@@ -218,6 +219,14 @@ package body Prunt.Config is
                  (Path,
                   Conversions.To_Virtual_String
                     ("Value is not a valid option, options are " & Property.Options'Image & "."));
+            end if;
+         end Validate;
+
+         procedure Validate (Property : Config_Property_Parameters_String) is
+            pragma Unreferenced (Property);
+         begin
+            if Value.Kind /= JSON_String_Type then
+               Report (Path, "Value type should be string.");
             end if;
          end Validate;
 
@@ -339,6 +348,8 @@ package body Prunt.Config is
             Validate (Config_Property_Parameters_Boolean (Property));
          elsif Property in Config_Property_Parameters_Discrete then
             Validate (Config_Property_Parameters_Discrete (Property));
+         elsif Property in Config_Property_Parameters_String then
+            Validate (Config_Property_Parameters_String (Property));
          elsif Property in Config_Property_Parameters_Integer then
             Validate (Config_Property_Parameters_Integer (Property));
          elsif Property in Config_Property_Parameters_Float then
@@ -363,6 +374,7 @@ package body Prunt.Config is
       function Outer_Generate (Property : Config_Property_Parameters'Class) return JSON_Value is
          function Generate (Property : Config_Property_Parameters_Boolean) return JSON_Value;
          function Generate (Property : Config_Property_Parameters_Discrete) return JSON_Value;
+         function Generate (Property : Config_Property_Parameters_String) return JSON_Value;
          function Generate (Property : Config_Property_Parameters_Integer) return JSON_Value;
          function Generate (Property : Config_Property_Parameters_Float) return JSON_Value;
          function Generate (Property : Config_Property_Parameters_Float_Ratio) return JSON_Value;
@@ -375,6 +387,11 @@ package body Prunt.Config is
          end Generate;
 
          function Generate (Property : Config_Property_Parameters_Discrete) return JSON_Value is
+         begin
+            return Create (Property.Default);
+         end Generate;
+
+         function Generate (Property : Config_Property_Parameters_String) return JSON_Value is
          begin
             return Create (Property.Default);
          end Generate;
@@ -422,6 +439,8 @@ package body Prunt.Config is
             return Generate (Config_Property_Parameters_Boolean (Property));
          elsif Property in Config_Property_Parameters_Discrete then
             return Generate (Config_Property_Parameters_Discrete (Property));
+         elsif Property in Config_Property_Parameters_String then
+            return Generate (Config_Property_Parameters_String (Property));
          elsif Property in Config_Property_Parameters_Integer then
             return Generate (Config_Property_Parameters_Integer (Property));
          elsif Property in Config_Property_Parameters_Float then
@@ -466,6 +485,9 @@ package body Prunt.Config is
                end loop;
                Result.Set_Field ("Options", Arr);
             end;
+         elsif Property in Config_Property_Parameters_String then
+            Result.Set_Field ("Kind", "String");
+            Result.Set_Field ("Default", Config_Property_Parameters_String (Property).Default);
          elsif Property in Config_Property_Parameters_Integer then
             Result.Set_Field ("Kind", "Integer");
             Result.Set_Field ("Min", Create (Config_Property_Parameters_Integer (Property).Min));

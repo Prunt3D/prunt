@@ -17,6 +17,9 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Real_Time;
+with Ada.Strings;
+with Ada.Strings.Fixed;
 with VSS.Strings.Conversions;
 use VSS.Strings;
 
@@ -24,15 +27,39 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
 
    pragma Extensions_Allowed (On);
 
+   use type Ada.Real_Time.Time;
+
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
+
+   function Current_Position_Report (Pos : Position) return Virtual_String is
+      use Ada.Strings;
+      use Ada.Strings.Fixed;
+   begin
+      return
+        +("X:"
+          & Trim (Dimensionless'Image (Pos (X_Axis) / mm), Both)
+          & " Y:"
+          & Trim (Dimensionless'Image (Pos (Y_Axis) / mm), Both)
+          & " Z:"
+          & Trim (Dimensionless'Image (Pos (Z_Axis) / mm), Both)
+          & " E:"
+          & Trim (Dimensionless'Image (Pos (E_Axis) / mm), Both));
+   end Current_Position_Report;
+
+   procedure Log_Position is
+      Pos : constant Position := Get_Position;
+   begin
+      My_Logger.Log (Current_Position_Report (Pos));
+   end Log_Position;
 
    overriding
    function Initialize
@@ -77,8 +104,11 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    end Status_Schema;
 
    task body Status_Updater is
-      Status_Ref    : Status_Manager.Status_Emitter;
-      Stop_Received : Boolean := False;
+      Status_Ref                   : Status_Manager.Status_Emitter;
+      Stop_Received                : Boolean := False;
+      Next_Status_Report           : Ada.Real_Time.Time;
+      Current_Auto_Report_Interval : Duration := 0.0;
+      Next_Position_Auto_Report    : Ada.Real_Time.Time := Ada.Real_Time.Time_First;
    begin
       select
          accept Stop;
@@ -86,6 +116,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
       or
          accept Start (Status_Emitter : Status_Manager.Status_Emitter) do
             Status_Ref := Status_Emitter;
+            Next_Status_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Status_Report_Period);
          end Start;
       end select;
 
@@ -94,18 +125,43 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
             accept Stop;
             Stop_Received := True;
          or
-            delay Status_Report_Period;
+            accept Set_Position_Auto_Report_Interval (Value : Duration) do
+               Current_Auto_Report_Interval := Value;
+
+               if Current_Auto_Report_Interval > 0.0 then
+                  Next_Position_Auto_Report :=
+                    Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+               end if;
+            end Set_Position_Auto_Report_Interval;
+         or
+            delay until Next_Status_Report;
+
             declare
                Pos : constant Position := Get_Position;
             begin
                for A in Axis_Name loop
-                  Status_Ref.Set_Value ("Position", Conversions.To_Virtual_String (A'Image), Pos (A) / mm);
+                  Status_Ref.Set_Value ("Position", +A'Image, Pos (A) / mm);
                end loop;
                Status_Ref.Set_Value ("Print status", "File name", Get_File_Name);
-               Status_Ref.Set_Value
-                 ("Print status", "Current line", Long_Long_Integer (File_Line_Count'(Get_Line)));
+               Status_Ref.Set_Value ("Print status", "Current line", Long_Long_Integer (File_Line_Count'(Get_Line)));
                Status_Ref.Set_Value ("Print status", "Paused", Stepgen_Paused);
             end;
+
+            Next_Status_Report := Next_Status_Report + Ada.Real_Time.To_Time_Span (Status_Report_Period);
+            if Next_Status_Report > Ada.Real_Time.Clock then
+               Next_Status_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Status_Report_Period);
+            end if;
+         or
+            when Current_Auto_Report_Interval > 0.0
+            =>delay until Next_Position_Auto_Report;
+            Log_Position;
+
+            Next_Position_Auto_Report :=
+              Next_Position_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+            if Next_Position_Auto_Report > Ada.Real_Time.Clock then
+               Next_Position_Auto_Report :=
+                 Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+            end if;
          end select;
       end loop;
    end Status_Updater;
@@ -130,30 +186,73 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
          Updater.Set (Make_Updater_Task'Access);
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
-         Self_Ref := Self_Ref_In;
-
+         pragma Unreferenced (Self_Ref_In, Planner);
          Updater.Get.Updater.Start (Status_Emitter);
       end Start;
 
-      procedure Report_Current_Position
-        (Planner : Planner_Interface'Class;
-         D       : Gcode_Optional_No_Value;
-         E       : Gcode_Optional_No_Value;
-         R       : Gcode_Optional_No_Value) is
+      procedure Set_Position_Auto_Report_Interval (Value : Duration) is
       begin
-         pragma Unreferenced (Planner, D, E, R);
-         My_Logger.Log ("M114 reporting is not implemented yet.");
-      end Report_Current_Position;
+         Updater.Get.Updater.Set_Position_Auto_Report_Interval (Value);
+      end Set_Position_Auto_Report_Interval;
 
-      procedure Set_Position_Auto_Report
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Optional_Integer) is
-      begin
-         pragma Unreferenced (Planner, S);
-         My_Logger.Log ("M154 auto-reporting is not implemented yet.");
-      end Set_Position_Auto_Report;
    end Module_Instance;
+
+   overriding
+   procedure Process_After_Block (This : Position_Report_Event; Context : Block_End_Context'Class) is
+      pragma Unreferenced (This);
+   begin
+      Context.Wait_For_Idle;
+
+      Log_Position;
+   end Process_After_Block;
+
+   overriding
+   procedure Process_After_Block (This : Position_Auto_Report_Event; Context : Block_End_Context'Class) is
+   begin
+      Context.Wait_For_Idle;
+
+      Module_Instance (This.Module_Instance_Ref.Get.Element.all).Set_Position_Auto_Report_Interval (This.Interval);
+
+      if This.Interval = 0.0 then
+         My_Logger.Log ("Position auto-reporting disabled.");
+      else
+         My_Logger.Log
+           (+("Position auto-reporting every "
+              & Ada.Strings.Fixed.Trim (This.Interval'Image, Ada.Strings.Both)
+              & " seconds."));
+      end if;
+   end Process_After_Block;
+
+   procedure Report_Current_Position (Planner : Planner_Interface'Class) is
+   begin
+      Planner.Flush (Position_Report_Event'(null record));
+   end Report_Current_Position;
+
+   procedure Set_Position_Auto_Report
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
+   is
+      Interval : Duration;
+   begin
+      if S < 0.1 then
+         raise Gcode_Bad_Inputs_Error with "Position auto-report interval must be 0.1 or higher.";
+      end if;
+
+      if S > Dimensionless (Duration'Last) then
+         raise Gcode_Bad_Inputs_Error
+           with "Position auto-report interval must not be greater than " & Duration'Last'Image;
+      end if;
+
+      begin
+         Interval := Duration (S);
+      exception
+         when Constraint_Error =>
+            raise Gcode_Bad_Inputs_Error with "Position auto-report interval is out of range.";
+      end;
+
+      Planner.Flush (Position_Auto_Report_Event'(Module_Instance_Ref => Self_Ref, Interval => Interval));
+   end Set_Position_Auto_Report;
 
 end Prunt.Default_Modules.Internal_Status_Reporter;

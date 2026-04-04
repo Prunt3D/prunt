@@ -37,7 +37,8 @@ package body Prunt.Default_Modules.Input_Shapers is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -304,58 +305,56 @@ package body Prunt.Default_Modules.Input_Shapers is
          User_Config_To_Config_Data (Config_Data, Config);
       end Apply_Runtime_Config;
 
-      procedure Configure_Input_Shaping
-        (Planner : Planner_Interface'Class;
-         P       : Virtual_String;
-         X       : Gcode_Optional_String;
-         Y       : Gcode_Optional_String;
-         Z       : Gcode_Optional_String;
-         E       : Gcode_Optional_String)
-      is
-         Updated_Configs : Input_Shaping_Update_Maps.Map := [];
-         Updated         : Boolean := False;
-         Self_Ref_Strong : My_Modules.Module_Instance_Shared_Pointers.Ref;
-         New_Shapers     : Prunt.Input_Shapers.Axial_Shaper_Parameters :=
-           Planner.Get_Last_Kinematic_Parameters.Axial_Shapers;
-
-         procedure Handle_Axis (Axis : Axis_Name; Value : Gcode_Optional_String) is
-            Method : User_Config_Input_Shaping_Method;
-         begin
-            if Value.Present then
-               Method := Parse_Axial_Shaper_Config (Value.Value);
-               Updated_Configs.Insert (Axis, Method);
-               New_Shapers (Axis) := Build_Shaper_Parameters (Method);
-               Updated := True;
-            end if;
-         exception
-            when E : Gcode_Bad_Inputs_Error =>
-               raise Gcode_Bad_Inputs_Error
-                 with "Invalid " & Axis'Image & " payload: " & Ada.Exceptions.Exception_Message (E);
-         end Handle_Axis;
-      begin
-         if P /= "Prunt" then
-            raise Gcode_Bad_Inputs_Error with "The P parameter must be set to ""Prunt"".";
-         end if;
-
-         Handle_Axis (X_Axis, X);
-         Handle_Axis (Y_Axis, Y);
-         Handle_Axis (Z_Axis, Z);
-         Handle_Axis (E_Axis, E);
-
-         if Updated then
-            Self_Ref_Strong.Set (Self_Ref);
-            Planner.Flush_And_Change_Kinematic_Parameters
-              (Params     => (Planner.Get_Last_Kinematic_Parameters with delta Axial_Shapers => New_Shapers),
-               Extra_Data =>
-                 Input_Shaping_Config_Update'
-                   (Module_Instance_Ref => Self_Ref_Strong, Updated_Configs => Updated_Configs));
-         end if;
-      end Configure_Input_Shaping;
-
       function Get_Current_Axial_Shapers return Prunt.Input_Shapers.Axial_Shaper_Parameters is
       begin
          return [for Axis in Axis_Name => Build_Shaper_Parameters (Config.Input_Shaping (Axis))];
       end Get_Current_Axial_Shapers;
    end Module_Instance;
+
+   procedure Configure_Input_Shaping
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      P        : Virtual_String;
+      X        : Gcode_Optional_String;
+      Y        : Gcode_Optional_String;
+      Z        : Gcode_Optional_String;
+      E        : Gcode_Optional_String)
+   is
+      Updated_Configs : Input_Shaping_Update_Maps.Map := [];
+      Updated         : Boolean := False;
+      New_Shapers     : Prunt.Input_Shapers.Axial_Shaper_Parameters :=
+        Planner.Get_Last_Kinematic_Parameters.Axial_Shapers;
+
+      procedure Handle_Axis (Axis : Axis_Name; Value : Gcode_Optional_String) is
+         Method : User_Config_Input_Shaping_Method;
+      begin
+         if Value.Present then
+            Method := Parse_Axial_Shaper_Config (Value.Value);
+            Updated_Configs.Insert (Axis, Method);
+            New_Shapers (Axis) := Build_Shaper_Parameters (Method);
+            Updated := True;
+         end if;
+      exception
+         when Error : Gcode_Bad_Inputs_Error =>
+            raise Gcode_Bad_Inputs_Error
+              with "Invalid " & Axis'Image & " payload: " & Ada.Exceptions.Exception_Message (Error);
+      end Handle_Axis;
+   begin
+      if P /= "Prunt" then
+         raise Gcode_Bad_Inputs_Error with "The P parameter must be set to ""Prunt"".";
+      end if;
+
+      Handle_Axis (X_Axis, X);
+      Handle_Axis (Y_Axis, Y);
+      Handle_Axis (Z_Axis, Z);
+      Handle_Axis (E_Axis, E);
+
+      if Updated then
+         Planner.Flush_And_Change_Kinematic_Parameters
+           (Params     => (Planner.Get_Last_Kinematic_Parameters with delta Axial_Shapers => New_Shapers),
+            Extra_Data =>
+              Input_Shaping_Config_Update'(Module_Instance_Ref => Self_Ref, Updated_Configs => Updated_Configs));
+      end if;
+   end Configure_Input_Shaping;
 
 end Prunt.Default_Modules.Input_Shapers;

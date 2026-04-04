@@ -114,7 +114,8 @@ package Prunt.Default_Modules.Homing is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
@@ -356,32 +357,34 @@ private
    overriding
    procedure Process_After_Block (This : Homing_Event; Context : Block_End_Context'Class);
 
+   procedure Auto_Home
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_No_Value;
+      --  If included then the X axis will be homed.
+      Y        : Gcode_Optional_No_Value;
+      --  If included then the Y axis will be homed.
+      Z        : Gcode_Optional_No_Value;
+      --  If included then the Z axis will be homed.
+      E        : Gcode_Optional_No_Value
+      --  If included then the E axis will be homed.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "G28");
+   --  Home the specified axes using the method and parameters specified in the configuration. If no axes are specified
+   --  then all axes are homed, including the E axis.
+   --
+   --  The `ABCUVW` parameters from Marlin are not present as Prunt does not support these axes. The `LOR` parameters
+   --  are not present but are planned for a future version. These parameters are present in Marlin.
+   --
+   --  The `E` parameter is not present in Marlin as Marlin does not homing of the E axis.
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config);
 
       overriding
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
-
-      procedure Auto_Home
-        (Planner : Planner_Interface'Class;
-         X       : Gcode_Optional_No_Value;
-         --  If included then the X axis will be homed.
-         Y       : Gcode_Optional_No_Value;
-         --  If included then the Y axis will be homed.
-         Z       : Gcode_Optional_No_Value;
-         --  If included then the Z axis will be homed.
-         E       : Gcode_Optional_No_Value
-         --  If included then the E axis will be homed.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "G28");
-      --  Home the specified axes using the method and parameters specified in the configuration. If no axes are
-      --  specified then all axes are homed, including the E axis.
-      --
-      --  The `ABCUVW` parameters from Marlin are not present as Prunt does not support these axes. The `LOR`
-      --  parameters are not present but are planned for a future version. These parameters are present in Marlin.
-      --
-      --  The `E` parameter is not present in Marlin as Marlin does not homing of the E axis.
 
       overriding
       procedure Subscribe_To_Homing (Subscriber : not null access function return Homing_Event_Subscriber'Class);
@@ -393,10 +396,13 @@ private
 
       procedure Notify_Homing_Axis_Finish (Axis : Axis_Name);
 
+      function Get_Config return User_Config;
+      --  This is fine to use directly in g-code processors as we do not provide any way to change it post-startup in
+      --  this module.
+
    private
 
       Config      : User_Config;
-      Self_Ref    : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Subscribers : Homing_Subscriber_Vectors.Vector;
    end Module_Instance;
 

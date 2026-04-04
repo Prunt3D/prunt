@@ -59,7 +59,8 @@ package Prunt.Default_Modules.Input_Shapers is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
@@ -171,6 +172,38 @@ private
    overriding
    procedure Process_After_Block (This : Input_Shaping_Config_Update; Context : Block_End_Context'Class);
 
+   procedure Configure_Input_Shaping
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      P        : Virtual_String;
+      --  Must be set to `"Prunt"` to avoid conflicts with Marlin g-code.
+      X        : Gcode_Optional_String;
+      --  JSON object describing the X-axis shaper.
+      Y        : Gcode_Optional_String;
+      --  JSON object describing the Y-axis shaper.
+      Z        : Gcode_Optional_String;
+      --  JSON object describing the Z-axis shaper.
+      E        : Gcode_Optional_String
+      --  JSON object describing the E-axis shaper.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M493");
+   --  Configure input shaping for one or more axes.
+   --
+   --  Each provided axis parameter must be a JSON object inside a G-code string. Use single quotes around the whole
+   --  JSON payload so normal JSON double quotes can be used inside it. Below are the various options:
+   --
+   --  `{"Kind" : "No_Shaper"}`
+   --
+   --  `{"Kind" : "Zero_Vibration", "Shaper_Frequency" : 40.0, "Damping_Ratio" : 0.1, "Number_Of_Derivatives" : 1}`
+   --
+   --  `{"Kind" : "Extra_Insensitive", "Shaper_Frequency" : 40.0, "Damping_Ratio":0.1, "Residual_Vibration_Level" :
+   --  0.05, "Number_Of_Humps" : 1}`
+   --
+   --  `{"Kind" : "Pressure_Advance", "Pressure_Advance_Time" : 0.02, "Pressure_Advance_Smooth_Time" : 0.01,
+   --  "Smooth_Added_Part_Only" : false, "Smoothing_Levels" : 2}`.
+   --
+   --  `Shaper_Frequency` is in hertz and all time values are in seconds. Changes can be saved with `M500`.
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config; Config_Data_In : Prunt.Config.Config_Data);
 
@@ -179,37 +212,6 @@ private
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       procedure Apply_Runtime_Config (Updates : Input_Shaping_Update_Maps.Map);
-
-      procedure Configure_Input_Shaping
-        (Planner : Planner_Interface'Class;
-         P       : Virtual_String;
-         --  Must be set to `"Prunt"` to avoid conflicts with Marlin g-code.
-         X       : Gcode_Optional_String;
-         --  JSON object describing the X-axis shaper.
-         Y       : Gcode_Optional_String;
-         --  JSON object describing the Y-axis shaper.
-         Z       : Gcode_Optional_String;
-         --  JSON object describing the Z-axis shaper.
-         E       : Gcode_Optional_String
-         --  JSON object describing the E-axis shaper.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M493");
-      --  Configure input shaping for one or more axes.
-      --
-      --  Each provided axis parameter must be a JSON object inside a G-code string. Use single quotes around the whole
-      --  JSON payload so normal JSON double quotes can be used inside it. Below are the various options:
-      --
-      --  `{"Kind" : "No_Shaper"}`
-      --
-      --  `{"Kind" : "Zero_Vibration", "Shaper_Frequency" : 40.0, "Damping_Ratio" : 0.1, "Number_Of_Derivatives" : 1}`
-      --
-      --  `{"Kind" : "Extra_Insensitive", "Shaper_Frequency" : 40.0, "Damping_Ratio":0.1, "Residual_Vibration_Level" :
-      --  0.05, "Number_Of_Humps" : 1}`
-      --
-      --  `{"Kind" : "Pressure_Advance", "Pressure_Advance_Time" : 0.02, "Pressure_Advance_Smooth_Time" : 0.01,
-      --  "Smooth_Added_Part_Only" : false, "Smoothing_Levels" : 2}`.
-      --
-      --  `Shaper_Frequency` is in hertz and all time values are in seconds. Changes can be saved with `M500`.
 
       overriding
       function Get_Current_Axial_Shapers return Prunt.Input_Shapers.Axial_Shaper_Parameters;

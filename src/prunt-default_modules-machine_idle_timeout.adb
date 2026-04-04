@@ -26,7 +26,8 @@ package body Prunt.Default_Modules.Machine_Idle_Timeout is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
@@ -44,18 +45,17 @@ package body Prunt.Default_Modules.Machine_Idle_Timeout is
    end Initialize;
 
    protected body Module_Instance is
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
       begin
-         Self_Ref := Self_Ref_In;
+         null;
       end Start;
-
-      procedure Set_Inactivity_Shutdown
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Arguments.Argument_Integer) is
-      begin
-         pragma Unreferenced (Planner, S);
-         raise Constraint_Error with "M85 is not implemented yet.";
-      end Set_Inactivity_Shutdown;
    end Module_Instance;
+
+   procedure Set_Inactivity_Shutdown (Planner : Planner_Interface'Class; S : Gcode_Arguments.Argument_Integer) is
+   begin
+      pragma Unreferenced (Planner, S);
+      raise Constraint_Error with "M85 is not implemented yet."; --  TODO
+   end Set_Inactivity_Shutdown;
 
 end Prunt.Default_Modules.Machine_Idle_Timeout;

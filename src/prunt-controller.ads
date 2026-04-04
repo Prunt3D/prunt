@@ -173,14 +173,17 @@ private
       --  TODO: Idle emitter needs to be connected to controller idle interface.
       package Basic_Config is new My_Default_Modules.Basic_Config;
       package Blocking_Tracker is new My_Default_Modules.Blocking_Tracker;
-      package Machine_Name is new My_Default_Modules.Machine_Name;
+      package Config_Saving is new My_Default_Modules.Config_Saving;
+      package Machine_Name is new My_Default_Modules.Machine_Name (Config_Saving_Module => Config_Saving);
       package Machine_Idle_Timeout is new My_Default_Modules.Machine_Idle_Timeout;
       package Print_Job is new My_Default_Modules.Print_Job;
       package Power_Control is new My_Default_Modules.Power_Control;
       package Shutdown is new My_Default_Modules.Shutdown;
-      package Config_Saving is new My_Default_Modules.Config_Saving;
       package Dwell is new My_Default_Modules.Dwell;
-      package Input_Switches is new My_Default_Modules.Input_Switches (Input_Switch_Name => Input_Switch_Name);
+      package Input_Switches is new
+        My_Default_Modules.Input_Switches
+          (My_Controller_Generic_Types => Generic_Types,
+           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware);
       package Homing is new
         My_Default_Modules.Homing
           (My_Controller_Generic_Types => Generic_Types,
@@ -194,15 +197,16 @@ private
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused);
       package Motion is new My_Default_Modules.Motion;
-      package Input_Shapers is new My_Default_Modules.Input_Shapers;
+      package Input_Shapers is new My_Default_Modules.Input_Shapers (Config_Saving_Module => Config_Saving);
       package Fans is new
         My_Default_Modules.Fans (My_Controller_Generic_Types => Generic_Types, Fan_Hardware => Hardware.Fan_Hardware);
-      package Motor_Drivers is new My_Default_Modules.Motor_Drivers (Motor_Name => Motor_Name);
+      package Motor_Drivers is new My_Default_Modules.Motor_Drivers (My_Controller_Generic_Types => Generic_Types);
       package Kinematics is new
         My_Default_Modules.Kinematics
-          (Motor_Name           => Motor_Name,
-           Motor_Drivers_Module => Motor_Drivers,
-           Input_Shapers_Module => Input_Shapers);
+          (My_Controller_Generic_Types => Generic_Types,
+           Config_Saving_Module        => Config_Saving,
+           Motor_Drivers_Module        => Motor_Drivers,
+           Input_Shapers_Module        => Input_Shapers);
       package Thermistors is new
         My_Default_Modules.Thermistors
           (My_Controller_Generic_Types => Generic_Types,
@@ -458,6 +462,9 @@ private
    procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name);
 
    overriding
+   function Axis_Is_Homed (This : Planner_Wrapper; Axis : Axis_Name) return Boolean;
+
+   overriding
    procedure Add_Corner
      (This          : Planner_Wrapper;
       Pos           : Position;
@@ -471,19 +478,22 @@ private
 
    overriding
    procedure Flush
-     (This       : Planner_Wrapper;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+     (This           : Planner_Wrapper;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False);
 
    overriding
    procedure Flush_And_Change_Kinematic_Parameters
-     (This       : Planner_Wrapper;
-      Params     : Motion_Planner.Kinematic_Parameters;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+     (This           : Planner_Wrapper;
+      Params         : Motion_Planner.Kinematic_Parameters;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False);
 
    overriding
    procedure Flush_And_Reset_Position
-     (This         : Planner_Wrapper;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+     (This           : Planner_Wrapper;
+      New_Position   : Position;
+      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Is_Homing_Move : Boolean := False);
 
 end Prunt.Controller;

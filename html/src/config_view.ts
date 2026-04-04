@@ -514,6 +514,9 @@ function createField(
         case 'Boolean':
             inputArea = createBooleanInput(path, actualValue);
             break;
+        case 'String':
+            inputArea = createStringInput(path, actualValue);
+            break;
         case 'Integer':
         case 'Float':
             inputArea = createNumberInput(path, actualValue, schema);
@@ -557,6 +560,16 @@ function createBooleanInput(path: string[], value: boolean): HTMLElement {
     wrap.appendChild(input);
     wrap.appendChild(slider);
     return wrap;
+}
+
+function createStringInput(path: string[], value: string): HTMLElement {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.required = true;
+    input.value = value ?? '';
+    input.dataset.path = JSON.stringify(path);
+    input.className = 'config-input-string';
+    return input;
 }
 
 function createNumberInput(path: string[], value: number, schema: any): HTMLElement {
@@ -865,6 +878,7 @@ function scrapeFormValues(): any | null {
     if (!container) return patchPayload;
 
     const bools = Array.from(container.querySelectorAll('.config-input-bool')) as HTMLInputElement[];
+    const strings = Array.from(container.querySelectorAll('.config-input-string')) as HTMLInputElement[];
     const ints = Array.from(container.querySelectorAll('.config-input-int')) as HTMLInputElement[];
     const floats = Array.from(container.querySelectorAll('.config-input-float')) as HTMLInputElement[];
     const discretes = Array.from(container.querySelectorAll('.config-input-discrete')) as HTMLSelectElement[];
@@ -883,6 +897,7 @@ function scrapeFormValues(): any | null {
     };
 
     bools.forEach(el => applyValue(el.dataset.path!, el.checked));
+    strings.forEach(el => applyValue(el.dataset.path!, el.value));
     ints.forEach(el => applyValue(el.dataset.path!, parseInt(el.value, 10)));
     floats.forEach(el => applyValue(el.dataset.path!, parseFloat(el.value)));
     discretes.forEach(el => applyValue(el.dataset.path!, el.value));
@@ -900,6 +915,7 @@ function populateFormValues(newValues: any) {
     if (!container) return;
 
     const bools = Array.from(container.querySelectorAll('.config-input-bool')) as HTMLInputElement[];
+    const strings = Array.from(container.querySelectorAll('.config-input-string')) as HTMLInputElement[];
     const ints = Array.from(container.querySelectorAll('.config-input-int')) as HTMLInputElement[];
     const floats = Array.from(container.querySelectorAll('.config-input-float')) as HTMLInputElement[];
     const discretes = Array.from(container.querySelectorAll('.config-input-discrete')) as HTMLSelectElement[];
@@ -920,6 +936,11 @@ function populateFormValues(newValues: any) {
     bools.forEach(el => {
         const val = getValue(el.dataset.path!);
         if (val !== undefined) el.checked = !!val;
+    });
+
+    strings.forEach(el => {
+        const val = getValue(el.dataset.path!);
+        if (val !== undefined) el.value = val;
     });
 
     ints.forEach(el => {

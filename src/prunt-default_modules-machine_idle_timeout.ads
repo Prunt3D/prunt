@@ -45,26 +45,26 @@ package Prunt.Default_Modules.Machine_Idle_Timeout is
 
    overriding
    procedure Gcode_Dispatch
-     (This               : in out Module_Instance;
+     (This               : Module_Instance;
+      Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
 
 private
 
+   procedure Set_Inactivity_Shutdown
+     (Planner : Planner_Interface'Class;
+      S       : Gcode_Arguments.Argument_Integer
+      --  Maximum inactive seconds.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M85");
+   --  Configure inactivity shutdown.
+
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
-
-      procedure Set_Inactivity_Shutdown
-        (Planner : Planner_Interface'Class;
-         S       : Gcode_Arguments.Argument_Integer
-         --  Maximum inactive seconds.
-         )
-      with Annotate => (Prunt_Config, Gcode_Command, "M85");
-      --  Configure inactivity shutdown.
-   private
-      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
    end Module_Instance;
 
 end Prunt.Default_Modules.Machine_Idle_Timeout;
