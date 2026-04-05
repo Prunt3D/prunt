@@ -54,16 +54,36 @@ package body Prunt.Motion_Planner.PH_Beziers is
    end Distance_At_T;
 
    function T_At_Distance (Bez : PH_Bezier; Distance : Length) return Curve_Parameter is
-      --  TODO: Currently we use a binary search to solve this, maybe there is some clever analytical solution that we
-      --  could use instead.
+      function Speed_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length is
+         --  Exact derivative of `Distance_At_T`.
+
+         L : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
+         B : constant Length := abs (Bez.Control_Points (4) - Bez.Control_Points (5));
+         D : constant Length := (if L = 0.0 * mm then 0.0 * mm else (B ** 2 - L ** 2) / L);
+         X : constant Dimensionless := T * (1.0 - T);
+         P : constant Dimensionless := (((400.0 * X + 140.0) * X + 56.0) * X + 35.0);
+      begin
+         return 15.0 * L + (61_347.0 / 266.0) * D * X ** 4 * P;
+      end Speed_At_T;
+
+      Target : Length := Distance;
 
       Result : Curve_Parameter;
       Lower  : Curve_Parameter := 0.0;
-      Upper  : Curve_Parameter := 1.0;
+      Upper  : Curve_Parameter := 0.5;
+
+      Total_Length : constant Length := Distance_At_T (Bez, 1.0);
 
       type Casted_Curve_Parameter is mod 2 ** 64;
       function Cast_Curve_Parameter is new Ada.Unchecked_Conversion (Curve_Parameter, Casted_Curve_Parameter);
       function Cast_Curve_Parameter is new Ada.Unchecked_Conversion (Casted_Curve_Parameter, Curve_Parameter);
+
+      function Binary_Midpoint (Lower, Upper : Curve_Parameter) return Curve_Parameter is
+      begin
+         return
+           Cast_Curve_Parameter
+             (Cast_Curve_Parameter (Lower) + (Cast_Curve_Parameter (Upper) - Cast_Curve_Parameter (Lower)) / 2);
+      end Binary_Midpoint;
    begin
       --  This probably breaks when not using IEEE 754 floats or on other weird systems, so try to check for
       --  that.
@@ -71,21 +91,73 @@ package body Prunt.Motion_Planner.PH_Beziers is
       pragma Assert (Casted_Curve_Parameter'Size = 64);
       pragma Assert (Cast_Curve_Parameter (0.123_45) = 4_593_559_930_647_147_132);
 
-      pragma Assert (Distance <= Distance_At_T (Bez, 1.0));
+      pragma Assert (Target <= Total_Length);
+      pragma Assert (Target >= 0.0 * mm);
+
+      if Target <= 0.0 * mm then
+         return 0.0;
+      elsif Target >= Total_Length then
+         return 1.0;
+      end if;
+
+      if Target > Total_Length / 2.0 then
+         --  Avoid calling `T_At_Distance` again here as with certain values we might get stuck in a loop.
+         Target := Total_Length - Target;
+      end if;
+
+      Result := Target / Total_Length;
+
+      if Result < Lower then
+         Result := Lower;
+      elsif Result > Upper then
+         Result := Upper;
+      end if;
+
+      for I in 1 .. 5 loop
+         declare
+            F      : constant Length := Distance_At_T (Bez, Result) - Target;
+            Fp     : Length;
+            Next_T : Curve_Parameter;
+         begin
+            if F <= 0.0 then
+               Lower := Result;
+            else
+               Upper := Result;
+            end if;
+
+            Fp := Speed_At_T (Bez, Result);
+            if Fp > 0.0 then
+               Next_T := Result - F / Fp;
+            else
+               Next_T := Binary_Midpoint (Lower, Upper);
+            end if;
+
+            if Next_T <= Lower or else Next_T >= Upper then
+               Next_T := Binary_Midpoint (Lower, Upper);
+            end if;
+
+            exit when Next_T = Result;
+
+            Result := Next_T;
+         end;
+      end loop;
 
       loop
-         Result :=
-           Cast_Curve_Parameter
-             (Cast_Curve_Parameter (Lower) + (Cast_Curve_Parameter (Upper) - Cast_Curve_Parameter (Lower)) / 2);
-         exit when Lower = Result or else Upper = Result;
-         if Distance_At_T (Bez, Result) <= Distance then
+         Result := Binary_Midpoint (Lower, Upper);
+         exit when Result = Lower or else Result = Upper;
+
+         if Distance_At_T (Bez, Result) <= Target then
             Lower := Result;
          else
             Upper := Result;
          end if;
       end loop;
 
-      return Result;
+      if Distance > Total_Length / 2.0 then
+         return 1.0 - Result;
+      else
+         return Result;
+      end if;
    end T_At_Distance;
 
    function Inverse_Curvature (Bez : PH_Bezier) return Length is
