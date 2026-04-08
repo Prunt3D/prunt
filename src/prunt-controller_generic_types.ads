@@ -216,7 +216,9 @@ package Prunt.Controller_Generic_Types is
 
    type Hardware_Parameters is record
       pragma Warnings (Off, "null array aggregate indexed by an enumeration type");
-      --  We want this to raise an error if the user tries to default-initialize any of these fields.
+      --  We want this to raise an error if the user tries to default-initialize any of these fields when providing a
+      --  non-empty range. The error might be quite confusing so we will put a term here that will show up in searches:
+      --  "range check failed"
       Motor_Hardware                   : Motor_Hardware_Parameters_Array_Type := [];
       Fan_Hardware                     : Fan_Hardware_Parameters_Array_Type := [];
       Tachometer_Hardware              : Tachometer_Hardware_Parameters_Array_Type := [];

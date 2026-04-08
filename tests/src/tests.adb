@@ -28,6 +28,7 @@ with Prunt.Gcode_Queues.Test;
 with Prunt.Generic_Lock.Test;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test;
 with Prunt.Motion_Planner.Test;
+with Prunt.Motion_Planner.PH_Beziers.Test;
 with Prunt.Moving_Averages.Test;
 with Prunt.Thermistors.Test;
 with Trendy_Test.Reports;
@@ -58,6 +59,7 @@ begin
    Trendy_Test.Register (Prunt.Gcode_Arguments.Test.All_Tests);
    Trendy_Test.Register (Prunt.Gcode_Queues.Test.All_Tests);
    Trendy_Test.Register (Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test.All_Tests);
+   Trendy_Test.Register (Prunt.Motion_Planner.PH_Beziers.Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Test.All_Tests);
    Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
 
