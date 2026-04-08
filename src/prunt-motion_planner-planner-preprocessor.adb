@@ -295,7 +295,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                               raise Constraint_Error with "Extra corner data too big.";
                            end if;
                            Command_Queue.Cancel_Dequeue;
-                           --  This will be seen as a `Corner_Extra_Data_Kind` command by the next call to `Run` and it
+                           --  This will be seen as a Corner_Extra_Data_Kind command by the next call to Run and it
                            --  will be applied to the first corner, which is will be equal to this one.
                            exit Read_In_Commands;
                      end;

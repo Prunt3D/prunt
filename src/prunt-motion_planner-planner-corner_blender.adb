@@ -37,7 +37,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          --  iterative corner shifting process.
 
          function Allow_Corner_Shift (I : Corners_Index) return Boolean;
-         --  Determines if the given corner should be shifted. This checks both the `Shift_Blended_Corners` parameter
+         --  Determines if the given corner should be shifted. This checks both the Shift_Blended_Corners parameter
          --  and whether the corner is sufficiently far from the work area boundaries as to ensure that no shift will
          --  place the new path outside of the work area boundaries. This is based on the original corner and not the
          --  new virtual corner.
@@ -89,23 +89,23 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
               Deviation_Limit => 0.0 * mm);
 
          loop
-            --  This loop iteratively adjusts the positions of virtual corners to meet the `Shift_Blended_Corners`
+            --  This loop iteratively adjusts the positions of virtual corners to meet the Shift_Blended_Corners
             --  goal, where the midpoint of the blended curve aligns with the original corner.
             --
-            --  1. Generate Bézier curves for each corner. This is based on the current `Shifted_Corners` (which are
-            --     initially the original corners) and the allowed `Shifted_Corner_Error_Limits`. Corners with dwell
-            --     times or angles below `Corner_Blender_Min_Corner_Angle_To_Blend` are not blended and result in a
+            --  1. Generate Bézier curves for each corner. This is based on the current Shifted_Corners (which are
+            --     initially the original corners) and the allowed Shifted_Corner_Error_Limits. Corners with dwell
+            --     times or angles below Corner_Blender_Min_Corner_Angle_To_Blend are not blended and result in a
             --     zero-length curve (a sharp corner).
             --
             --  2. Calculate the maximum error. For each corner where shifting is enabled, we find the distance
             --     between the original corner and the midpoint of the newly generated Bézier curve. The largest of
-            --     these distances is stored in `Last_Comp_Error`. This is skipped for any corners that are too close
+            --     these distances is stored in Last_Comp_Error. This is skipped for any corners that are too close
             --     to the position limits and is skipped entirely is corner shifting is turned off.
             --
-            --  3. Check for convergence. If `Last_Comp_Error` is within the `Corner_Blender_Max_Computational_Error`,
+            --  3. Check for convergence. If Last_Comp_Error is within the Corner_Blender_Max_Computational_Error,
             --     the process has converged, and we exit the loop.
             --
-            --  4. Shift the virtual corners. For each corner, the corresponding virtual corner in `Shifted_Corners` is
+            --  4. Shift the virtual corners. For each corner, the corresponding virtual corner in Shifted_Corners is
             --     translated by the vector from the curve's midpoint to the original corner. This moves the curve
             --     closer to the desired position for the next iteration. Again this is skipped for any corners that
             --     are too close to the position limits and is skipped entirely is corner shifting is turned off.

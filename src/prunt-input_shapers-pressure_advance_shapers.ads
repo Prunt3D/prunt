@@ -66,8 +66,8 @@ private
       Interpolation_Time     : Time;
       Smooth_Added_Part_Only : Boolean;
       Previous_Input         : Length;
-      Current_Buffer_Index   : Cycle_Count; --  Unused when `Smooth_Added_Part_Only` is False.
-      Buffer                 : Buffer_Array (1 .. Buffer_Size); --  Unused when `Smooth_Added_Part_Only` is False.
+      Current_Buffer_Index   : Cycle_Count; --  Unused when Smooth_Added_Part_Only is False.
+      Buffer                 : Buffer_Array (1 .. Buffer_Size); --  Unused when Smooth_Added_Part_Only is False.
       Filter                 :
         Length_Moving_Averages.Cascading_Moving_Average
           (N_Levels => Filter_N_Levels, Width_Per_Level => Filter_Width_Per_Level);

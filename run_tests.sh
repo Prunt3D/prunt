@@ -21,7 +21,7 @@ rm -f gnatcov_out/*.html
 rm -f gnatcov_out/*.css
 rm -f *.srctrace
 
-# Run the instrumented testsuite. This will produce at least one `.srctrace` file for the coverage analysis.
+# Run the instrumented testsuite. This will produce at least one .srctrace file for the coverage analysis.
 [ "$PRUNT_XCOV_DUMP" = true ] && alr exec ./bin/tests -- xcov_dump
 [ "$PRUNT_XCOV_DUMP" = true ] || alr exec ./bin/tests
 

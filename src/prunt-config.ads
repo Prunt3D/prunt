@@ -20,15 +20,15 @@
 --  This package provides a schema-validated configuration system.
 --
 --  Two copies of the configuration are kept: One for the configuration stored on disk and one for the live
---  configuration used by modules. The live configuration is accessed via `Config_Data` objects which give access to a
+--  configuration used by modules. The live configuration is accessed via Config_Data objects which give access to a
 --  partial view of the configuration file and are intended to be passed to module instances when they are created. The
---  stored configuration is accessed via a single `Config_File` object, this is intended to be used for things such as
+--  stored configuration is accessed via a single Config_File object, this is intended to be used for things such as
 --  the web UI configuration editor. A procedure is provided to reset the state of the live configuration to that of
 --  the stored configuration when Prunt is restarted.
 --
 --  The configuration can be edited in two ways. Firstly, modules may apply patches to the live configuration via
---  `Config_Data` objects, which are also applied to the stored configuration when a save procedure is called.
---  Secondly, the web UI or other parts of Prunt may edit the stored configuration via `Config_File`, these changes are
+--  Config_Data objects, which are also applied to the stored configuration when a save procedure is called.
+--  Secondly, the web UI or other parts of Prunt may edit the stored configuration via Config_File, these changes are
 --  not mirrored to the live configuration until the reset procedure is called.
 --
 --  The configuration file and schema are JSON object with the following structure:
@@ -39,7 +39,7 @@
 --           "My_Module": {
 --              "Version": 1,
 --              "Config": {
---                 ... as defined in the `Config_Property_Parameters` children below.
+--                 ... as defined in the Config_Property_Parameters children below.
 --              }
 --           },
 --           ...
@@ -220,14 +220,14 @@ package Prunt.Config is
    end record;
 
    type Config_Data is private;
-   --  All instances of `Config_Data` belonging to a `Config_File` must be finalised before the corresponding
-   --  `Config_File` is finalised or else an error will be raised.
+   --  All instances of Config_Data belonging to a Config_File must be finalised before the corresponding
+   --  Config_File is finalised or else an error will be raised.
    --
-   --  A copy or different instance of a `Config_Data` for the same module shares all values updated using `Set` with
-   --  the original, including those set after the copy is made. `Config_Data` is just a wrapper around a reference to
-   --  the `Config_File` except for those that come from `Migrate`, which should never be copied.
+   --  A copy or different instance of a Config_Data for the same module shares all values updated using Set with
+   --  the original, including those set after the copy is made. Config_Data is just a wrapper around a reference to
+   --  the Config_File except for those that come from Migrate, which should never be copied.
    --
-   --  TODO: Enforce the above by making `Config_Data` a controlled type or giving it a controlled member.
+   --  TODO: Enforce the above by making Config_Data a controlled type or giving it a controlled member.
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Boolean;
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Long_Float;
@@ -237,9 +237,9 @@ package Prunt.Config is
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Dimensionless_Ratio;
    --  Retrieves a value from the configuration.
    --
-   --  Data is shared between all `Config_Data` instances for the same module.
+   --  Data is shared between all Config_Data instances for the same module.
    --
-   --  Raises `Constraint_Error` if:
+   --  Raises Constraint_Error if:
    --  - The Path does not exist in the configuration data.
    --  - The value at Path is not compatible with the return type (e.g., trying to read a string as an integer).
    --  - The Path structure is invalid for the types traversed (e.g., requesting a field of a scalar).
@@ -252,16 +252,16 @@ package Prunt.Config is
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless_Ratio);
    --  Updates a value in the configuration.
    --
-   --  Changes are only in-memory until `Save` is called and no validation is performed until that point. Data is
-   --  shared between all `Config_Data` instances for the same module.
+   --  Changes are only in-memory until Save is called and no validation is performed until that point. Data is
+   --  shared between all Config_Data instances for the same module.
 
    procedure Save (Data : in out Config_Data);
-   --  Persists the current state of `Data` to the underlying `Config_File`.
+   --  Persists the current state of Data to the underlying Config_File.
    --
    --  This writes the entire configuration to disk, but only with updates from the relevant module, not all modules.
    --  Creates a backup of the previous file if it existed (appended with _backup_N).
    --
-   --  Raises `Constraint_Error` if the data does not match the schema.
+   --  Raises Constraint_Error if the data does not match the schema.
 
    function Module_Name (Data : Config_Data) return Virtual_String;
    --  Returns the name of the module which this object is for.
@@ -275,12 +275,12 @@ package Prunt.Config is
 
    procedure Migrate (This : Versioned_Config_Schema; Old_Version : Config_Schema_Version; Data : in out Config_Data)
    is null;
-   --  When this procedure is called any new fields in the current schema version will be available in `Data` as well
+   --  When this procedure is called any new fields in the current schema version will be available in Data as well
    --  as the old fields. Any fields not present in the new schema will be removed after this procedure returns.
    --
-   --  `Data` must not be copied.
+   --  Data must not be copied.
    --
-   --  TODO: Enforce the above by making `Config_Data` a controlled type or giving it a controlled member.
+   --  TODO: Enforce the above by making Config_Data a controlled type or giving it a controlled member.
 
    package Config_Schema_Maps is new
      Ada.Containers.Indefinite_Ordered_Maps (Virtual_String, Versioned_Config_Schema'Class);
@@ -291,21 +291,21 @@ package Prunt.Config is
    --  Initializes access to a configuration file.
    --
    --  Behaviour:
-   --  - For each module in `Schemas`:
+   --  - For each module in Schemas:
    --    - If present in file:
    --      - Checks "Version".
-   --      - If File.Version < Schema.Version, `Migrate` is called.
-   --      - If File.Version > Schema.Version, raises `Constraint_Error`.
+   --      - If File.Version < Schema.Version, Migrate is called.
+   --      - If File.Version > Schema.Version, raises Constraint_Error.
    --      - If Versions match, structure is validated against Schema.
    --    - If missing in file, it is initialized with defaults.
-   --  - If the file contains modules NOT in `Schemas`, `Constraint_Error` is raised.
-   --  - If the file does not exist, it is created with default values for all modules in `Schemas`.
+   --  - If the file contains modules NOT in Schemas, Constraint_Error is raised.
+   --  - If the file does not exist, it is created with default values for all modules in Schemas.
 
    function Get_Data (This : Config_File; Module_Name : Virtual_String) return Config_Data;
    --  Retrieves the configuration data for a specific module.
    --
-   --  The returned `Config_Data` object provides access to the live configuration for the specified module. Changes
-   --  made via this object are local to the live configuration until `Save` is called.
+   --  The returned Config_Data object provides access to the live configuration for the specified module. Changes
+   --  made via this object are local to the live configuration until Save is called.
 
    function Get_Schema_String (This : Config_File) return Virtual_String;
    --  Returns the JSON string representation of the configuration schema.
@@ -320,7 +320,7 @@ package Prunt.Config is
       Errors : out Config_Error_Vectors.Vector);
    --  Applies a JSON patch to the configuration.
    --
-   --  The `Value` string must be a JSON object following the top-level structure:
+   --  The Value string must be a JSON object following the top-level structure:
    --    {
    --       "Prunt config version": 1,
    --       "Config": {
@@ -328,10 +328,10 @@ package Prunt.Config is
    --       }
    --    }
    --
-   --  It performs a recursive merge and calls `Report` for any validation errors encountered (e.g. unknown modules,
+   --  It performs a recursive merge and calls Report for any validation errors encountered (e.g. unknown modules,
    --  extra fields, type mismatches). If any part of the validation fails then no part of the patch is applied.
    --
-   --  `Value` is always set to the contents of the stored config.
+   --  Value is always set to the contents of the stored config.
 
    procedure Reset_Live_To_Stored (This : Config_File);
    --  Discard all pending changes in the live configuration and revert to the version stored on disk.
@@ -339,14 +339,14 @@ package Prunt.Config is
    type Save_Counter is range 0 .. 2 ** 63 - 1;
 
    function Last_Save (This : Config_File) return Save_Counter;
-   --  Incremented when `Save` is called of a `Config_Data`.
+   --  Incremented when Save is called of a Config_Data.
 
 private
 
    use Prunt.JSON;
 
    package File_Access_Lock is new Generic_Lock;
-   --  Anything that touches a file uses this as multiple `Config_File` objects may refer to the same file.
+   --  Anything that touches a file uses this as multiple Config_File objects may refer to the same file.
    --
    --  TODO: We should only allow a single writer to exist for any given file.
 
@@ -357,7 +357,7 @@ private
       Allowed_Fields : VSS.String_Vectors.Virtual_String_Vector;
       Report         : access procedure (Path : Config_Data_Paths.Vector; Message : Virtual_String);
       Path           : Config_Data_Paths.Vector);
-   --  Validates that all fields in `Val` are present in `Allowed_Fields`. Calls `Report` for any unknown fields found.
+   --  Validates that all fields in Val are present in Allowed_Fields. Calls Report for any unknown fields found.
 
    procedure Set_Field (Val : JSON_Value; Field : Virtual_String; Value : Dimensionless);
 
@@ -381,10 +381,10 @@ private
    function Generate_Schemas_String (Schemas : Config_Schema_Maps.Map) return Virtual_String;
 
    procedure Recursive_Left_Merge (Left : JSON_Value; Right : JSON_Value; Full_Join : Boolean := True);
-   --  Takes the content of the `Right` JSON object and places it into `Left`. Objects are recursively merged rather
-   --  than being overwritten. All other types are overwritten with the values from `Right`.
+   --  Takes the content of the Right JSON object and places it into Left. Objects are recursively merged rather
+   --  than being overwritten. All other types are overwritten with the values from Right.
    --
-   --  If `Full_Join` is False then no keys which only exist in `Right` will be added to `Left`.
+   --  If Full_Join is False then no keys which only exist in Right will be added to Left.
 
    protected type Config_File_Internal is
       --  The file IO in here is all potentially blocking, but the global lock means it should never cause an issue as
@@ -400,14 +400,14 @@ private
       --  Reads the configuration file, validates it, and performs migrations if necessary.
 
       function Get (Owner : Virtual_String; Path : Config_Data_Paths.Vector) return JSON_Value;
-      --  Gets a value from the live configuration. `Owner` specifies the module requesting the data.
+      --  Gets a value from the live configuration. Owner specifies the module requesting the data.
 
       procedure Set (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Value : JSON_Value);
-      --  Sets a value in the live configuration. `Owner` specifies the module setting the data.
+      --  Sets a value in the live configuration. Owner specifies the module setting the data.
 
       procedure Save (Owner : Virtual_String; Lock : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Saves the current live configuration to the stored configuration and to disk for the relevant module only.
-      --  `Owner` specifies the module triggering the save.
+      --  Owner specifies the module triggering the save.
 
       procedure Apply_Untrusted_Patch
         (Value  : Virtual_String;
@@ -427,7 +427,7 @@ private
       --  Returns the a counter value which is incremented every time the stored configuration is changed.
 
       procedure Reset_Live_To_Stored (Check_Ref_Count : access procedure);
-      --  Resets the live configuration to match the stored configuration. `Check_Ref_Count` is called immdiately upon
+      --  Resets the live configuration to match the stored configuration. Check_Ref_Count is called immdiately upon
       --  entry and may be used to raise an exception if there are still references to the configuration file which
       --  are not expecting the live configuration to change.
    private
@@ -449,8 +449,8 @@ private
 
    overriding
    procedure Finalize (Object : in out Config_File);
-   --  During finalisation we check that all `Config_Data` instances are finalised as the modules that hold them should
-   --  be finalised before the relevant `Config_File` is.
+   --  During finalisation we check that all Config_Data instances are finalised as the modules that hold them should
+   --  be finalised before the relevant Config_File is.
    --
    --  Excluding this check would not lead to any memory safety issues. This check is just to make sure that modules
    --  are not misbehaving.
@@ -463,7 +463,7 @@ private
       For_Migration    : Boolean := False;
       Module           : Virtual_String := "";
       Internal         : Config_File_Internal_Shared_Pointers.Ref := Config_File_Internal_Shared_Pointers.Null_Ref;
-      --  Setting this to null by default means we will get an error if a `Config_Data` is default-initialized and
+      --  Setting this to null by default means we will get an error if a Config_Data is default-initialized and
       --  then used. we need to allow default initialization as we store these in protected objects.
       Migration_Config : JSON_Value := JSON_Null;
    end record;

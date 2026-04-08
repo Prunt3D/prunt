@@ -24,7 +24,7 @@ with Prunt.Motion_Planner;
 with System.Multiprocessors;
 
 --  TODO: We should get these from the implementation instead of getting them directly as a given implementation might
---  have multiple `Prunt.Controller` instances.
+--  have multiple Prunt.Controller instances.
 
 package Prunt.Command_Line_Arguments is
 

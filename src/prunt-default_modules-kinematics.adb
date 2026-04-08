@@ -260,7 +260,7 @@ package body Prunt.Default_Modules.Kinematics is
       E        : Gcode_Optional_Float)
    is
       pragma Unsuppress (All_Checks);
-      --  Required so we get a `Constraint_Error` when we try to set an invalid value.
+      --  Required so we get a Constraint_Error when we try to set an invalid value.
       pragma Unreferenced (This);
 
       Updates    : Runtime_Kinematics_Updates;
@@ -310,7 +310,7 @@ package body Prunt.Default_Modules.Kinematics is
       D        : Gcode_Optional_Float)
    is
       pragma Unsuppress (All_Checks);
-      --  Required so we get a `Constraint_Error` when we try to set an invalid value.
+      --  Required so we get a Constraint_Error when we try to set an invalid value.
       pragma Unreferenced (This);
 
       Updates    : Runtime_Kinematics_Updates;

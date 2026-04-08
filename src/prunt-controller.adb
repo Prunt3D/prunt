@@ -322,7 +322,7 @@ package body Prunt.Controller is
       Dependency_Requests  : Dependency_Request_Vectors.Vector := [];
 
       function Find_Existing_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref;
-      --  Return the initialized module instance with `Tag`, or `Null_Ref` if none has been initialized.
+      --  Return the initialized module instance with Tag, or Null_Ref if none has been initialized.
 
       function Find_Existing_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref is
       begin

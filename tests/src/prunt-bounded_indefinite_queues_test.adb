@@ -102,7 +102,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
    begin
       T.Register;
 
-      --  TODO: Use a controlled type here so we can test the alignment in `Initialize`.
+      --  TODO: Use a controlled type here so we can test the alignment in Initialize.
 
       Q : Aligned_Queues.Queue;
       Item : Aligned_Item := (V => 123);

@@ -21,7 +21,7 @@
 --  snap, and crackle limits. Blending of corners is also provided to limit axial acceleration through crackle.
 --
 --  The package works by collecting a series of corners before processing them as a single batch, called an
---  `Execution_Block` which starts and ends at zero velocity. Corners are collected until a flush command is received
+--  Execution_Block which starts and ends at zero velocity. Corners are collected until a flush command is received
 --  or the block is full. Once a block is filled, it passes through a multi-stage planning pipeline, each of which is
 --  implemented in a child package of this one:
 --
@@ -33,17 +33,17 @@
 --  2. Corner_Blender:
 --
 --     Sharp corners are replaced with C4 continuous Pythagorean-Hodograph (PH) Bézier curves. The maximal deviation of
---     these curves from the original path is determined by the `Chord_Error_Max` parameter. Corners may optionally be
+--     these curves from the original path is determined by the Chord_Error_Max parameter. Corners may optionally be
 --     shifted so that the midpoint of the curve is equal to the original corner, this can produce paths which more
 --     closely match original CAD files before conversion to triangulated surface formats such as STL files.
 --
 --  3. Early_Kinematic_Limiter:
 --
---     The programmed feed-rate is adjusted if `Ignore_E_In_XYZE` is set so that it is equal to the desired feedrate
+--     The programmed feed-rate is adjusted if Ignore_E_In_XYZE is set so that it is equal to the desired feedrate
 --     when the E axis movement is included. After this the total time of each move is adjusted such that no move will
---     be less than `Interpolation_Time`, This ensures that the step generator will not have to skip over many segments
+--     be less than Interpolation_Time, This ensures that the step generator will not have to skip over many segments
 --     in a row, which could cause the command queue to run dry. Finally the axial limits defined in
---     `Axial_Velocity_Maxes` are applied.
+--     Axial_Velocity_Maxes are applied.
 --
 --  4. Kinematic_Limiter:
 --
@@ -61,7 +61,7 @@
 --  6. Homing move limits:
 --
 --     If the move is a homing sequence, an inner loop first checks if the generated profile has a sufficiently long
---     constant-velocity (coast) phase, as defined by `Home_Move_Minimum_Coast_Time`. If the coast time is too short,
+--     constant-velocity (coast) phase, as defined by Home_Move_Minimum_Coast_Time. If the coast time is too short,
 --     the segment's maximum velocity is reduced before going back to stage 4 (Kinematic_Limiter).
 --
 --  7. Step_Rate_Limiter:
@@ -71,7 +71,7 @@
 --     reduces the velocity of the corresponding segment. If any segments are reduced then the planner goes back to
 --     stage 4 (Kinematic_Limiter).
 --
---  The fully processed `Execution_Block` is then made available via the `Dequeue` procedure.
+--  The fully processed Execution_Block is then made available via the Dequeue procedure.
 
 pragma Extensions_Allowed (On);
 
@@ -87,7 +87,7 @@ pragma Warnings (Off, "formal object * is not referenced");
 
 generic
    type Flush_Resetting_Data_Type is private;
-   --  Data to be included in each `Execution_Block` which is reset to a default value at the start of each block. Can
+   --  Data to be included in each Execution_Block which is reset to a default value at the start of each block. Can
    --  be used to indicate if a move is a homing move or if the machine should pause after completion.
 
    Flush_Resetting_Data_Type_Default : Flush_Resetting_Data_Type;
@@ -96,7 +96,7 @@ generic
    --  Data to be included with each corner such as heater targets or the current file line number.
 
    Home_Move_Minimum_Coast_Time : Time;
-   --  The minimum time that should be used for the coasting phase of a move where `Is_Homing_Move` returns True. This
+   --  The minimum time that should be used for the coasting phase of a move where Is_Homing_Move returns True. This
    --  can be used to have a section that can be repeated in a loop until a switch is hit.
 
    Interpolation_Time : Time;
@@ -127,9 +127,9 @@ generic
    Max_Corners_Extra_Data_Count : Max_Corners_Extra_Data_Type := 1_000;
 
    Max_Corners_Extra_Data_Storage : System.Storage_Elements.Storage_Count := 1_000_000;
-   --  The maximum amount of data in storage elements that the vector of `Corner_Extra_Data_Type` for a block may use
-   --  for its backing storage. If a `Corner_Extra_Data_Type` does not fit in a corner then it will be forced to the
-   --  next block, along with the relevant corner. If a `Corner_Extra_Data_Type` does not fit in an empty block then an
+   --  The maximum amount of data in storage elements that the vector of Corner_Extra_Data_Type for a block may use
+   --  for its backing storage. If a Corner_Extra_Data_Type does not fit in a corner then it will be forced to the
+   --  next block, along with the relevant corner. If a Corner_Extra_Data_Type does not fit in an empty block then an
    --  error will be raised.
 
    Max_Corners_Extra_Data_Per_Corner : Max_Corners_Extra_Data_Type := 10;
@@ -271,7 +271,7 @@ private
          when Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
             Flush_Resetting_Data : Flush_Resetting_Data_Type;
             Is_Homing_Move       : Boolean := False;
-            --  Indicates whether a move is a homing move for the purposes of applying `Home_Move_Minimum_Coast_Time`.
+            --  Indicates whether a move is a homing move for the purposes of applying Home_Move_Minimum_Coast_Time.
             --  Currently a block containing a homing move must have exactly 2 corners, however this is trivial to
             --  change if required as the planner does not do anything with homing moves beyond setting the minimum
             --  coast time.

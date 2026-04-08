@@ -129,7 +129,7 @@ package Prunt.Module_Types is
 
    --  procedure Process_Before_Block (This : Extra_Block_Resetting_Data; Last_Command_Index : Command_Index) is null;
    --  TODO: Do we need the above? It's probably a bad idea to have this with the module system. Modules should instead
-   --  just use `Process_After_Block` for everything.
+   --  just use Process_After_Block for everything.
 
    type Block_End_Context is limited interface;
 

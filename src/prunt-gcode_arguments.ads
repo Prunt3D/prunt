@@ -30,7 +30,7 @@ package Prunt.Gcode_Arguments is
    type Argument_Kind is (Non_Existent_Kind, No_Value_Kind, Integer_Kind, Float_Kind, String_Kind);
 
    type Argument_Integer is range 0 .. 999;
-   --  The parser will only report a number as an `Integer_Kind` rather than a `Float_Kind` if it fits in this
+   --  The parser will only report a number as an Integer_Kind rather than a Float_Kind if it fits in this
    --  type. Changing the range of this type will not change the range of values reported as integers as it is
    --  hardcoded to 0-999 elsewhere.
 
@@ -38,103 +38,103 @@ package Prunt.Gcode_Arguments is
    --  Holds the parsed arguments from a single G-code line.
 
    function Parse_Arguments (Line : Virtual_String) return Arguments;
-   --  Parses a line of G-code. The line is made up of single letter parameters from `A` to `Z`, and optional arguments
+   --  Parses a line of G-code. The line is made up of single letter parameters from A to Z, and optional arguments
    --  following each.
    --
    --  The arguments may be any of the following:
    --  - An integer from 0 to 999.
    --  - A real number with an optional decimal part.
-   --  - A string surrounded by `"` or `'` characters.
+   --  - A string surrounded by " or ' characters.
    --
-   --  Duplicate parameters are not allowed. Parameters may be in any order. Spaces are ignored. Anything after a `;`
+   --  Duplicate parameters are not allowed. Parameters may be in any order. Spaces are ignored. Anything after a ;
    --  character is also ignored as a comment.
    --
-   --  Raises `Parse_Error` if the line is malformed.
+   --  Raises Parse_Error if the line is malformed.
 
    function Kind (Args : Arguments; Index : Arguments_Index) return Argument_Kind;
-   --  Returns the kind of the argument for a given `Index`. The kind is as described in the documentation for the
-   --  `Parse_Arguments` function.
+   --  Returns the kind of the argument for a given Index. The kind is as described in the documentation for the
+   --  Parse_Arguments function.
 
    function Consume_Float_Or_Default
      (Args : in out Arguments; Index : Arguments_Index; Default : Dimensionless) return Dimensionless;
    --  Retrieves the value of an argument.
    --
-   --  Returns the value of the argument if it exists and is an integer or float. Returns `Default` if the argument
-   --  does not exist. Raises `Parse_Error` if the argument has the wrong type.
+   --  Returns the value of the argument if it exists and is an integer or float. Returns Default if the argument
+   --  does not exist. Raises Parse_Error if the argument has the wrong type.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    function Consume_Float (Args : in out Arguments; Index : Arguments_Index) return Dimensionless;
    --  Retrieves the value of an argument.
    --
-   --  Returns the value of the argument if it exists and is an integer or float. Raises `Parse_Error` if the argument
+   --  Returns the value of the argument if it exists and is an integer or float. Raises Parse_Error if the argument
    --  does not exist or has the wrong type.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    function Consume_Integer_Or_Default
      (Args : in out Arguments; Index : Arguments_Index; Default : Argument_Integer) return Argument_Integer;
    --  Retrieves the value of an argument.
    --
-   --  Returns the value of the argument if it exists and is an integer. Returns `Default` if the argument does not
-   --  exist. Raises `Parse_Error` if the argument has the wrong type.
+   --  Returns the value of the argument if it exists and is an integer. Returns Default if the argument does not
+   --  exist. Raises Parse_Error if the argument has the wrong type.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    function Consume_Integer (Args : in out Arguments; Index : Arguments_Index) return Argument_Integer;
    --  Retrieves the value of an argument.
    --
-   --  Returns the value of the argument if it exists and is an integer. Raises `Parse_Error` if the argument does not
+   --  Returns the value of the argument if it exists and is an integer. Raises Parse_Error if the argument does not
    --  exist or has the wrong type.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    function Consume_String_Or_Default
      (Args : in out Arguments; Index : Arguments_Index; Default : Virtual_String) return Virtual_String;
    --  Retrieves the value of an argument.
    --
-   --  Returns the value of the argument if it exists and is a string. Returns `Default` if the argument does not
-   --  exist. Raises `Parse_Error` if the argument has the wrong type.
+   --  Returns the value of the argument if it exists and is a string. Returns Default if the argument does not
+   --  exist. Raises Parse_Error if the argument has the wrong type.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    function Consume_String (Args : in out Arguments; Index : Arguments_Index) return Virtual_String;
    --  Retrieves the value of an argument.
    --
-   --  Returns the value of the argument if it exists and is a string. Raises `Parse_Error` if the argument does not
+   --  Returns the value of the argument if it exists and is a string. Raises Parse_Error if the argument does not
    --  exist or has the wrong type.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    function Consume_No_Value_Or_False (Args : in out Arguments; Index : Arguments_Index) return Boolean;
    --  Consumes an argument that should not have a value.
    --
-   --  Returns `True` if the argument is present without a value, and `False` if the argument is not present at all.
-   --  If the argument has a value, `Parse_Error` will be raised.
+   --  Returns True if the argument is present without a value, and False if the argument is not present at all.
+   --  If the argument has a value, Parse_Error will be raised.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    function Consume_No_Value (Args : in out Arguments; Index : Arguments_Index) return Boolean;
    --  Consumes an argument that should not have a value.
    --
-   --  Returns `True` if the argument is present without a value.  If the argument has a value or is not present,
-   --  `Parse_Error` will be raised.
+   --  Returns True if the argument is present without a value.  If the argument has a value or is not present,
+   --  Parse_Error will be raised.
    --
    --  This function marks the argument as consumed. If the argument has already been consumed, it will raise
-   --  `Constraint_Error`.
+   --  Constraint_Error.
 
    procedure Validate_All_Consumed (Args : Arguments);
-   --  Checks that all arguments in `Args` have been consumed.
+   --  Checks that all arguments in Args have been consumed.
    --
    --  This is used to enforce the rule that unused arguments are not allowed. If any argument that was present on the
-   --  line has not been consumed, this procedure will raise `Parse_Error`.
+   --  line has not been consumed, this procedure will raise Parse_Error.
 
 private
 

@@ -233,7 +233,7 @@ package body Prunt.Default_Modules.Fans is
       S       : Dimensionless := 255.0) is
    begin
       for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
-         --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this but
+         --  There is a predicate on the Fan_Hardware type to avoid duplicate indices. A vendor could bypass this but
          --  it's not our problem at that point.
          Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (F, S));
          return;
@@ -268,7 +268,7 @@ package body Prunt.Default_Modules.Fans is
      (This : Module_Instance; Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer) is
    begin
       for F in Fan_Name when Fan_Hardware (F).Gcode_Index = P loop
-         --  There is a predicate on the `Fan_Hardware` type to avoid duplicate indices. A vendor could bypass this but
+         --  There is a predicate on the Fan_Hardware type to avoid duplicate indices. A vendor could bypass this but
          --  it's not our problem at that point.
          Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (F, 0.0));
          return;

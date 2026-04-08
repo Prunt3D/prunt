@@ -32,20 +32,20 @@ generic
 package Prunt.Bounded_Indefinite_Queues is
 
    --  pragma Preelaborate (Bounded_Indefinite_Queues);
-   --  TODO: Uncomment above when we switch to GCC 16 where `Ada.Unchecked_Deallocate_Subpool` is preelaborated.
+   --  TODO: Uncomment above when we switch to GCC 16 where Ada.Unchecked_Deallocate_Subpool is preelaborated.
 
    type Queue is tagged private;
 
    Out_Of_Space_Error : exception;
 
    procedure Enqueue (This : in out Queue; New_Item : Element_Type);
-   --  Raises `Out_Of_Space_Error` if there is no space for the element in the backing storage but there might be in
-   --  the future. Raises `Program_Error` if there will never be space for the element in the backing storage, this may
-   --  occur after a previous call raises `Out_Of_Space_Error`.
+   --  Raises Out_Of_Space_Error if there is no space for the element in the backing storage but there might be in
+   --  the future. Raises Program_Error if there will never be space for the element in the backing storage, this may
+   --  occur after a previous call raises Out_Of_Space_Error.
 
    procedure Dequeue (This : in out Queue; Item : out Element_Type)
    with Pre => not This.Is_Empty;
-   --  Sets `Item` to the head element and removes it.
+   --  Sets Item to the head element and removes it.
 
    procedure Dequeue (This : in out Queue)
    with Pre => not This.Is_Empty;
@@ -68,10 +68,10 @@ private
    is (Size + ((Alignment - (Size mod Alignment)) mod Alignment));
 
    package Subpool_Support is
-      --  TODO: Do we really need subpools here of can we just use `Prunt.Dummy_Allocator` for everything?
+      --  TODO: Do we really need subpools here of can we just use Prunt.Dummy_Allocator for everything?
 
       function Aligned_Address (Addr : System.Address; Alignment : Storage_Count) return System.Address;
-      --  Return `Addr`, rounded up to multiple of `Alignment`.
+      --  Return Addr, rounded up to multiple of Alignment.
 
       Local_Dummy_Pool : Prunt.Dummy_Allocator.Dummy_Pool_Type;
 
@@ -92,7 +92,7 @@ private
          --  starts.
 
          Current_Free : System.Address := System.Null_Address;
-         --  The first address which has not been returned as part of an allocation. Can be past `End_Address` in the
+         --  The first address which has not been returned as part of an allocation. Can be past End_Address in the
          --  case of an allocation which exactly fills the buffer, in which case wrapping should be attempted.
 
          Head_Address : System.Address := System.Null_Address;
@@ -138,11 +138,11 @@ private
       --  Next node in the linked list, null if this is the last node (most recently enqueued).
 
       Element : Element_Access;
-      --  Pointer to copy of data supplied to `Enqueue`.
+      --  Pointer to copy of data supplied to Enqueue.
 
       Allocation_Address : System.Address;
-      --  The address returned by `Allocate_From_Subpool` when allocating this node. This is not necessarily equal to
-      --  the address stored in `Next` as the compiler is allowed to add padding or a header.
+      --  The address returned by Allocate_From_Subpool when allocating this node. This is not necessarily equal to
+      --  the address stored in Next as the compiler is allowed to add padding or a header.
    end record;
 
    Rounded_Storage_Size : constant Storage_Count :=
@@ -172,7 +172,7 @@ private
 
       Subpool : Pooled_Subpool_Handle := null;
       Storage : aliased Storage_Array (1 .. Rounded_Storage_Size + Queue_Elements_Subpool_Storage_Size);
-      --  We place the subpool after the element storage to guarantee that `Subpool.Current_Free` will never overflow.
+      --  We place the subpool after the element storage to guarantee that Subpool.Current_Free will never overflow.
    end record
    with Preelaborable_Initialization => Element_Type'Preelaborable_Initialization;
 

@@ -71,27 +71,27 @@ generic
    with procedure Enqueue_Command (Command : Queued_Command);
    --  Enqueue a command to be executed.
    --
-   --  If `Loop_Until_Hit` = False then the time delta of the move is `Interpolation_Time`, otherwise the time delta is
-   --  `Loop_Interpolation_Time`.
+   --  If Loop_Until_Hit = False then the time delta of the move is Interpolation_Time, otherwise the time delta is
+   --  Loop_Interpolation_Time.
    --
-   --  If `Loop_Until_Hit` = True then the move should be repeated indefinitely until the condition set by
-   --  `Setup_For_Loop_Move` is met. If the condition is met before the loop move is reached then
-   --  `Report_External_Error` should be called. After the loop move is completed, `Report_Loop_Cycles` must be called.
+   --  If Loop_Until_Hit = True then the move should be repeated indefinitely until the condition set by
+   --  Setup_For_Loop_Move is met. If the condition is met before the loop move is reached then
+   --  Report_External_Error should be called. After the loop move is completed, Report_Loop_Cycles must be called.
    --
-   --  If the queue runs dry on a move where `Safe_Stop_After` = False then `Report_External_Error` should be called
+   --  If the queue runs dry on a move where Safe_Stop_After = False then Report_External_Error should be called
    --  and all heaters and motors should be disabled. Keep in mind that the motors may still be moving when the queue
    --  runs dry, so a delay may be required before disabling the motors.
 
    with procedure Reset_Position (Pos : Motor_Position);
    --  Reset the position of all motors to the given position. This procedure should not cause the motors to move, it
-   --  just informs the motors of their position. This procedure will always be called before `Enqueue_Command` is
-   --  first called. This procedure will not be called if the last call to `Enqueue_Command` had the `Safe_Stop_After`
+   --  just informs the motors of their position. This procedure will always be called before Enqueue_Command is
+   --  first called. This procedure will not be called if the last call to Enqueue_Command had the Safe_Stop_After
    --  parameter set to False.
 
    with procedure Wait_Until_Idle (Last_Command_Index : Command_Index);
    --  Block until all queued commands are completed. This procedure will not be called if the last call to
-   --  `Enqueue_Command` had the `Safe_Stop_After` parameter set to False. Will only be called from the same task as
-   --  `Enqueue_Command`.
+   --  Enqueue_Command had the Safe_Stop_After parameter set to False. Will only be called from the same task as
+   --  Enqueue_Command.
 
    with procedure Reset_Hardware;
    --  Reset the device to power-on state.
@@ -106,7 +106,7 @@ generic
 
    with function Get_Board_Specific_Documentation (Key : Virtual_String) return Virtual_String;
    --  Get the board specific documentation HTML to be appended to the documentation for a given configuration option.
-   --  Keys can be displayed in the web interface by running the server with `--enable-documentation-dev-mode=true`.
+   --  Keys can be displayed in the web interface by running the server with --enable-documentation-dev-mode=true.
 
    Update_Check : Update_Check_Details := (Method => None);
    --  Method to be used for update checking. When an update is available it will be displayed via the web interface.

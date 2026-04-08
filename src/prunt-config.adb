@@ -795,7 +795,7 @@ package body Prunt.Config is
          pragma Unreferenced (Lock);
 
          procedure Raise_Error_For_Module (Path : Config_Data_Paths.Vector; Message : Virtual_String);
-         --  Raise a schema validation error with `Owner` prefixed onto `Path`.
+         --  Raise a schema validation error with Owner prefixed onto Path.
 
          procedure Raise_Error_For_Module (Path : Config_Data_Paths.Vector; Message : Virtual_String) is
             use Config_Data_Paths;
@@ -835,9 +835,9 @@ package body Prunt.Config is
 
          Live_Config.Get ("Config").Get (Owner).Set_Field ("Config", Live_Config_Clone);
          Stored_Config.Get ("Config").Get (Owner).Set_Field ("Config", Stored_Config_Clone);
-         --  We use a clone here to avoid `Stored_Config` ever being in an invalid state. This is to avoid the case
+         --  We use a clone here to avoid Stored_Config ever being in an invalid state. This is to avoid the case
          --  where a module catches the Constraint_Error raised above then another module could still save after that
-         --  point, in that case an invalid `Stored_Config` would be saved to a file.
+         --  point, in that case an invalid Stored_Config would be saved to a file.
 
          Write_File;
       end Save;
@@ -1037,7 +1037,7 @@ package body Prunt.Config is
       Ref_Count : constant Natural := Object.Internal.Get_Refcount;
    begin
       if Internal.Element /= null then
-         --  TODO: Figure out what to do here if there is still any unsaved data left in `Update_Deltas`.
+         --  TODO: Figure out what to do here if there is still any unsaved data left in Update_Deltas.
          if Ref_Count /= 1 then
             raise Constraint_Error
               with Ref_Count'Image & " references to config file still exist during finalisation.";

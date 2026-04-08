@@ -51,11 +51,11 @@ package body Prunt.Bounded_Indefinite_Queues is
          when Out_Of_Space_Error =>
          Free (New_Node);
          This.Subpool.Current_Free := Old_Current_Free;
-         --  TODO: Could the initializer for `New_Item` do something here with the queue which would cause this to
+         --  TODO: Could the initializer for New_Item do something here with the queue which would cause this to
          --  be the wrong value to restore? Do we even care about that possibility?
 
          if This.Is_Empty then
-            --  The item may be smaller than `Rounded_Storage_Size` but not fit when there's already a node in the
+            --  The item may be smaller than Rounded_Storage_Size but not fit when there's already a node in the
             --  pool.
             raise Program_Error with "Item too large for storage pool";
          else
@@ -65,7 +65,7 @@ package body Prunt.Bounded_Indefinite_Queues is
 
       New_Node.Element := New_Element;
       New_Node.Next := null;
-      --  `Allocation_Address` already set above.
+      --  Allocation_Address already set above.
 
       if This.Tail /= null then
          This.Tail.Next := New_Node;
@@ -189,7 +189,7 @@ package body Prunt.Bounded_Indefinite_Queues is
             Clear (This);
 
             Ada.Unchecked_Deallocate_Subpool (Handle);
-            --  `Free` should be all we need here, but GCC does not currently finalize subpools correctly, leading to
+            --  Free should be all we need here, but GCC does not currently finalize subpools correctly, leading to
             --  memory corruption as the freed subpool will still belong to the pool. Refer to
             --  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124107
 
@@ -236,7 +236,7 @@ package body Prunt.Bounded_Indefinite_Queues is
            (if Q_Subpool.Head_Address = System.Null_Address
             then Q_Subpool.End_Address + 1
             else Q_Subpool.Head_Address);
-         --  `End_Address + 1` is safe as we store more data past `End_Address`.
+         --  End_Address + 1 is safe as we store more data past End_Address.
       begin
          if Rounded_Size > Rounded_Storage_Size then
             raise Program_Error with "Item too large for storage pool";
@@ -245,7 +245,7 @@ package body Prunt.Bounded_Indefinite_Queues is
          if Aligned >= Read_Barrier then
             --  We are allocating after a single contiguous used region.
             if Q_Subpool.Current_Free <= Read_Barrier then
-               --  We have caught up to `Read_Barrier` from behind, possibly after skipping over part of an existing
+               --  We have caught up to Read_Barrier from behind, possibly after skipping over part of an existing
                --  allocation, therefore this address is not safe to use.
                raise Out_Of_Space_Error with "Storage exhausted";
             elsif Rounded_Size <= Q_Subpool.End_Address - Aligned + 1 then

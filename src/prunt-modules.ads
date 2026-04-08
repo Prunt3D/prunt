@@ -28,7 +28,7 @@ with Prunt.Status_Manager;
 
 generic
    --  This package is generic to allow it to have the same accessibility level as generic modules. This is required as
-   --  it contains shared pointers to class-wide `Module_Instance` types.
+   --  it contains shared pointers to class-wide Module_Instance types.
 package Prunt.Modules is
 
    type Module is abstract tagged private;
@@ -45,11 +45,11 @@ package Prunt.Modules is
    type Module_Instance_Parent is synchronized interface;
 
    package Module_Instance_Shared_Pointers is new Limited_Shared_Pointers (Module_Instance_Parent'Class);
-   --  We need this outer type so that we can use it in a primitive on `Module_Instance`. This is a bit messy, but
-   --  users of `Module_Instance_Shared_Pointers` are always going to cast the result to a more specific type anyway.
+   --  We need this outer type so that we can use it in a primitive on Module_Instance. This is a bit messy, but
+   --  users of Module_Instance_Shared_Pointers are always going to cast the result to a more specific type anyway.
 
    type Module_Instance is synchronized interface and Module_Instance_Parent;
-   --  Children of `Module_Instance` should be declared with an unknown discriminant part to prevent accidental
+   --  Children of Module_Instance should be declared with an unknown discriminant part to prevent accidental
    --  instantiation without a constructor.
    --
    --  Finalization should reset motors/heaters/etc. to their initial power-on state iff the module instance has been
@@ -62,8 +62,8 @@ package Prunt.Modules is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier)
    is abstract;
-   --  `This` is intentionally not an `in out` parameter to discourage making changes to the module instance at this
-   --  point. It is possible to use `Self_Ref` to bypass this, however it generally does not make sense to do so as
+   --  This is intentionally not an in out parameter to discourage making changes to the module instance at this
+   --  point. It is possible to use Self_Ref to bypass this, however it generally does not make sense to do so as
    --  g-code is only meant to execute after it makes its way through the planner.
    --
    --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
@@ -76,7 +76,7 @@ package Prunt.Modules is
    --  Modules should not start in the initialize procedure as the initialize procedure can be used to check for config
    --  errors without actually starting.
    --
-   --  `Self_Ref` is a reference to the instance that this is being called on and is mainly useful for g-code commands
+   --  Self_Ref is a reference to the instance that this is being called on and is mainly useful for g-code commands
    --  which need to make use of the instance.
    --
    --  Access to a planner is provided here mainly for setting kinematic limits, motion should not be generated during
@@ -92,13 +92,13 @@ package Prunt.Modules is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return Module_Instance_Shared_Pointers.Ref)
       return Module_Instance'Class
    is abstract;
-   --  `Get_Other_Instance` attempts to initialize all other modules and then returns the instance with a tag equal to
-   --  `Tag`. If the requested tag cannot be resolved, the controller raises an exception. The active initialization
+   --  Get_Other_Instance attempts to initialize all other modules and then returns the instance with a tag equal to
+   --  Tag. If the requested tag cannot be resolved, the controller raises an exception. The active initialization
    --  chain is also logged so that dependency loops can be diagnosed.
    --
-   --  All instances returned from `Get_Other_Instance` will not be started at this point.
+   --  All instances returned from Get_Other_Instance will not be started at this point.
    --
-   --  `Config_Data` values share the underlying module configuration state, so copies may be kept after this function
+   --  Config_Data values share the underlying module configuration state, so copies may be kept after this function
    --  returns to be used in g-code commands.
 
 private

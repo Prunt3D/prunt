@@ -38,14 +38,14 @@ package body Prunt.Bounded_Indefinite_Vectors is
       pragma Annotate (Xcov, Exempt_Off);
 
       This.Elements (This.Last_Used_Index + 1) := new (This.Subpool.all'Access) Element_Type'(New_Item);
-      --  `Allocate_From_Subpool` may raise an exception, so don't change `Last_Used_Index` until after this point.
+      --  Allocate_From_Subpool may raise an exception, so don't change Last_Used_Index until after this point.
 
       This.Last_Used_Index := @ + 1;
    end Append;
 
    procedure Clear (This : in out Vector) is
    begin
-      --  No init required. Guarded by `Last_Used_Index` check.
+      --  No init required. Guarded by Last_Used_Index check.
 
       for E of This.Elements (Index_Type'First .. This.Last_Used_Index) loop
          Free (E);
@@ -58,7 +58,7 @@ package body Prunt.Bounded_Indefinite_Vectors is
 
    function Element (This : Vector; Index : Index_Type) return Element_Type is
    begin
-      --  No init required. `Elements` will just be all nulls before init.
+      --  No init required. Elements will just be all nulls before init.
       return This.Elements (Index).all;
    end Element;
 
@@ -103,7 +103,7 @@ package body Prunt.Bounded_Indefinite_Vectors is
             Clear (This);
 
             Ada.Unchecked_Deallocate_Subpool (Handle);
-            --  `Free` should be all we need here, but GCC does not currently finalize subpools correctly, leading to
+            --  Free should be all we need here, but GCC does not currently finalize subpools correctly, leading to
             --  memory corruption as the freed subpool will still belong to the pool. Refer to
             --  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124107
 
@@ -128,7 +128,7 @@ package body Prunt.Bounded_Indefinite_Vectors is
       Finish : Extended_Index;
       Action : not null access procedure (Item : in out Element_Type)) is
    begin
-      --  No init required. Guarded by `Last_Used_Index` precondition and `.all` on null.
+      --  No init required. Guarded by Last_Used_Index precondition and .all on null.
 
       for E of This.Elements (Start .. Finish) loop
          Action (E.all);

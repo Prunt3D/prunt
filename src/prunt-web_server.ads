@@ -99,7 +99,7 @@ private
    type Virtual_String_Source is new Content_Source with record
       Content    : Virtual_String;
       Next_Start : Positive := Positive'Last;
-      --  `Next_Start` needs to be set manually when we use it, but we can't use a raise expression here as we need to
+      --  Next_Start needs to be set manually when we use it, but we can't use a raise expression here as we need to
       --  default initialise this when it's not used, so instead we use a large value where it will be obvious that we
       --  forgot to set it.
    end record;

@@ -35,7 +35,7 @@ package Prunt.Generic_Lock is
    --  scope), the lock is automatically released.
 
    function Lock return Lock_Holder;
-   --  Acquires the lock and returns a `Lock_Holder` object.
+   --  Acquires the lock and returns a Lock_Holder object.
    --
    --  This function blocks until the lock becomes available. The lock will remain held until the returned object is
    --  finalized.

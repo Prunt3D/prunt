@@ -33,7 +33,7 @@ generic
 package Prunt.Bounded_Indefinite_Vectors is
 
    --  pragma Preelaborate (Bounded_Indefinite_Vectors);
-   --  TODO: Uncomment above when we switch to GCC 16 where `Ada.Unchecked_Deallocate_Subpool` is preelaborated.
+   --  TODO: Uncomment above when we switch to GCC 16 where Ada.Unchecked_Deallocate_Subpool is preelaborated.
 
    subtype Extended_Index is Index_Type'Base range Index_Type'First - 1 .. Index_Type'Last;
 
@@ -43,9 +43,9 @@ package Prunt.Bounded_Indefinite_Vectors is
 
    procedure Append (This : in out Vector; New_Item : Element_Type)
    with Pre => This.Last_Index < Index_Type'Last;
-   --  Raises `Out_Of_Space_Error` if there is no space for the element in the backing storage but there might be in
-   --  the future. Raises `Program_Error` if there will never be space for the element in the backing storage, this may
-   --  occur after a previous call raises `Out_Of_Space_Error`.
+   --  Raises Out_Of_Space_Error if there is no space for the element in the backing storage but there might be in
+   --  the future. Raises Program_Error if there will never be space for the element in the backing storage, this may
+   --  occur after a previous call raises Out_Of_Space_Error.
 
    procedure Clear (This : in out Vector);
 
@@ -74,10 +74,10 @@ private
    Rounded_Storage_Size : constant Storage_Count := Round_Up_Size (Storage_Size, Standard'Maximum_Alignment);
 
    package Subpool_Support is
-      --  TODO: Do we really need subpools here of can we just use `Prunt.Dummy_Allocator` for everything?
+      --  TODO: Do we really need subpools here of can we just use Prunt.Dummy_Allocator for everything?
 
       function Aligned_Address (Addr : System.Address; Alignment : Storage_Count) return System.Address;
-      --  Return `Addr`, rounded up to multiple of `Alignment`.
+      --  Return Addr, rounded up to multiple of Alignment.
 
       Local_Dummy_Pool : Prunt.Dummy_Allocator.Dummy_Pool_Type;
 
@@ -93,7 +93,7 @@ private
          --  The final address which may be returned as part of an allocation. If an allocation returns this address
          --  then it must only be for a single storage element.
          --
-         --  As a special case, when `Storage_Size` is zero, this will not be a valid address to return.
+         --  As a special case, when Storage_Size is zero, this will not be a valid address to return.
       end record;
 
       overriding
@@ -139,7 +139,7 @@ private
    --  required, but there should be no harm in keeping it.
 
    type Element_Array is array (Extended_Index) of Element_Access;
-   --  We use `Extended_Index` here to help catch any user errors in the `Element` function without requiring an extra
+   --  We use Extended_Index here to help catch any user errors in the Element function without requiring an extra
    --  check.
 
    type Aligned_Storage_Array is array (Storage_Offset range <>) of aliased Storage_Element
@@ -149,24 +149,24 @@ private
 
    type Vector is new Ada.Finalization.Controlled with record
       Last_Used_Index : Extended_Index := Extended_Index'First;
-      --  The last index within `Elements` which is populated, or `Extended_Index'First` if no elements are used.
+      --  The last index within Elements which is populated, or Extended_Index'First if no elements are used.
 
       Subpool : Pooled_Subpool_Handle := null;
-      --  Pointer to a subpool allocated within `Subpool_Record_Storage`. This allows the subpool to be a limited type.
+      --  Pointer to a subpool allocated within Subpool_Record_Storage. This allows the subpool to be a limited type.
 
       Elements : Element_Array := [others => null];
-      --  Pointers to elements within `Storage`, allocated when the user calls `Append`.
+      --  Pointers to elements within Storage, allocated when the user calls Append.
 
       Storage : aliased Aligned_Storage_Array (1 .. Rounded_Storage_Size + Vector_Elements_Subpool_Storage_Size);
-      --  We place the subpool after the element storage to guarantee that `Subpool.Current_Free` will never overflow.
+      --  We place the subpool after the element storage to guarantee that Subpool.Current_Free will never overflow.
    end record
    with Preelaborable_Initialization => Element_Type'Preelaborable_Initialization;
 
    procedure Maybe_Initialize (This : in out Vector);
-   --  Populate `This.Subpool` if it is null, otherwise do nothing.
+   --  Populate This.Subpool if it is null, otherwise do nothing.
 
-   --  No `Initialize` procedure as `Vector` might have `Preelaborable_Initialization => True`. Instead we just run
-   --  initialization when `Subpool = null` inside a procedure which makes use of it.
+   --  No Initialize procedure as Vector might have Preelaborable_Initialization => True. Instead we just run
+   --  initialization when Subpool = null inside a procedure which makes use of it.
    overriding
    procedure Adjust (This : in out Vector);
    overriding

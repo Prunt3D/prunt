@@ -30,9 +30,9 @@ package Prunt.Motion_Planner.Planner.Step_Rate_Limiter is
 
    procedure Run (Block : in out Execution_Block; Needs_New_Profiles : out Boolean);
    --  Simulate the execution of the given block and check for step rate violations. If any motor would exceed its
-   --  maximum delta per command, the affected segments' velocities are reduced and `Needs_New_Profiles` is set to
-   --  `True`, indicating that the kinematic limiting stages must be re-run. If no violations are found,
-   --  `Needs_New_Profiles` is set to False.
+   --  maximum delta per command, the affected segments' velocities are reduced and Needs_New_Profiles is set to
+   --  True, indicating that the kinematic limiting stages must be re-run. If no violations are found,
+   --  Needs_New_Profiles is set to False.
 
 private
 

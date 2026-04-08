@@ -57,7 +57,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
       --  Return the exact derivative of Distance_At_T at T.
 
       function Speed_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length is
-         --  Exact derivative of `Distance_At_T`.
+         --  Exact derivative of Distance_At_T.
 
          L : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
          B : constant Length := abs (Bez.Control_Points (4) - Bez.Control_Points (5));
@@ -106,7 +106,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
       end if;
 
       if Target > Total_Length / 2.0 then
-         --  Avoid calling `T_At_Distance` again here as with certain values we might get stuck in a loop.
+         --  Avoid calling T_At_Distance again here as with certain values we might get stuck in a loop.
          Target := Total_Length - Target;
       end if;
 

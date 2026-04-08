@@ -40,7 +40,7 @@ package Prunt.Motion_Planner.PH_Beziers is
    --  Returns the midpoint of the curve. Equivalent to Point_At_T (Bez, 0.5).
 
    function Point_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position;
-   --  Return the point on the curve at parameter `T`.
+   --  Return the point on the curve at parameter T.
 
    --  function Tangent_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Scaled_Position_Offset;
    --
@@ -48,7 +48,7 @@ package Prunt.Motion_Planner.PH_Beziers is
    --  looks sound at a glance but proper investigation is required. We do not actually use this so it is not a high
    --  priority, it used to be part of pressure advance shaping.
    --
-   --  Return a vector tangent to the curve at parameter `T`. This vector is not normalised and will be zero is the
+   --  Return a vector tangent to the curve at parameter T. This vector is not normalised and will be zero is the
    --  curve has no length.
 
    function Point_At_Distance (Bez : PH_Bezier; Distance : Length) return Scaled_Position;
@@ -69,11 +69,11 @@ package Prunt.Motion_Planner.PH_Beziers is
    --  The curve is generated based on the method described in https://doi.org/10.1007/s00170-022-09463-y, but is
    --  simplified to always be symmetrical.
    --
-   --  `Start`, `Corner`, and `Finish` define the two lines that form the corner to be blended. The generated curve
-   --  will be tangent to the lines `Start - Corner` and `Finish - Corner` at its endpoints.
+   --  Start, Corner, and Finish define the two lines that form the corner to be blended. The generated curve
+   --  will be tangent to the lines Start - Corner and Finish - Corner at its endpoints.
    --
-   --  `Deviation_Limit` constraints how far the midpoint of the curve can be from `Corner`. The start and end points
-   --  of the curve lie on the segments between `Start` and `Corner`, and `Finish` and `Corner` respectively. They are
+   --  Deviation_Limit constraints how far the midpoint of the curve can be from Corner. The start and end points
+   --  of the curve lie on the segments between Start and Corner, and Finish and Corner respectively. They are
    --  positioned to not go beyond the halfway point of these segments.
 private
 

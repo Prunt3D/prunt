@@ -25,14 +25,14 @@ private generic
 package Prunt.Motion_Planner.Planner.Corner_Blender is
 
    procedure Run (Block : in out Execution_Block);
-   --  Replaces sharp corners in `Block.Corners` with C4 continuous PH Bézier curves, storing them in `Block.Beziers`.
+   --  Replaces sharp corners in Block.Corners with C4 continuous PH Bézier curves, storing them in Block.Beziers.
    --
-   --  The maximum deviation of these curves from the original path is limited by `Chord_Error_Max`.
+   --  The maximum deviation of these curves from the original path is limited by Chord_Error_Max.
    --
-   --  If `Shift_Blended_Corners` is True then corners that are not within `Chord_Error_Max` of the work area
+   --  If Shift_Blended_Corners is True then corners that are not within Chord_Error_Max of the work area
    --  boundaries and are not outside of the work area will be shifted so that the midpoint of the curve is where the
-   --  original corner was. `Block.Corners` will not be modified when the generated curves are shifted. The accuracy
-   --  for this shifting is controlled by the generic parameter `Corner_Blender_Max_Computational_Error`.
+   --  original corner was. Block.Corners will not be modified when the generated curves are shifted. The accuracy
+   --  for this shifting is controlled by the generic parameter Corner_Blender_Max_Computational_Error.
    --
    --  This procedure uses a number of large allocated arrays and will only allow one call to run at a time while other
    --  calls block. This package may be instantiated multiple times if concurrency is required.
@@ -66,8 +66,8 @@ private
    --  1.0 is returned in the case of any two of the points being equal.
 
    function Unit_Bisector (Start, Corner, Finish : Scaled_Position) return Position_Scale;
-   --  Computes the unit vector that bisects the angle formed by the segments (`Start` -> `Corner`) and (`Corner` ->
-   --  `Finish`). The input vectors do not need to be normalised by the caller.
+   --  Computes the unit vector that bisects the angle formed by the segments (Start -> Corner) and (Corner ->
+   --  Finish). The input vectors do not need to be normalised by the caller.
    --
    --  All elements in the return value are set to zero if either segment has zero length.
 

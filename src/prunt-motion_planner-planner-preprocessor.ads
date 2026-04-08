@@ -33,17 +33,17 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
 
    procedure Enqueue
      (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null);
-   --  Add a new command to the processing queue. Commands are processed in FIFO order. If `Ignore_Bounds` is True,
+   --  Add a new command to the processing queue. Commands are processed in FIFO order. If Ignore_Bounds is True,
    --  position bounds checking is bypassed for this command (useful for homing operations). May block if the queue is
    --  full.
 
    procedure Reset;
-   --  Cause Run to immediately return with `Reset_Called` set to True and resets the planner back to its initial
+   --  Cause Run to immediately return with Reset_Called set to True and resets the planner back to its initial
    --  state. This clears the command queue and resets position tracking to the initial values.
 
    procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
    --  Process queued commands and assemble them into an execution block. This procedure blocks until either a complete
-   --  block is assembled or a reset is requested. `Reset_Called` indicates whether the operation was terminated by a
+   --  block is assembled or a reset is requested. Reset_Called indicates whether the operation was terminated by a
    --  reset request.
 
 private
@@ -109,7 +109,7 @@ private
    end Runner;
 
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters);
-   --  Check if a given position is within the machine's boundaries defined in `Params`. Raises `Out_Of_Bounds_Error`
+   --  Check if a given position is within the machine's boundaries defined in Params. Raises Out_Of_Bounds_Error
    --  if the check fails.
 
    function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters;

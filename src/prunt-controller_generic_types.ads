@@ -49,12 +49,12 @@ package Prunt.Controller_Generic_Types is
       --  Position to move to.
       Safe_Stop_After : Boolean;
       --  If True then the machine can stop after executing this move without violating kinematic constraints. If the
-      --  implementation runs out of moves to execute before receiving a `Safe_Stop_After` move then an exception
-      --  should be raised. It is recommended that an implementation buffers moves until a `Safe_Stop_After` move is
+      --  implementation runs out of moves to execute before receiving a Safe_Stop_After move then an exception
+      --  should be raised. It is recommended that an implementation buffers moves until a Safe_Stop_After move is
       --  received, at which point it should begin executing the buffer, if a buffer becomes full then execution should
       --  of course be started at that point instead.
       Loop_Until_Hit  : Boolean;
-      --  If True then this move should be looped until the condition set in `Setup_For_Loop_Move` is met.
+      --  If True then this move should be looped until the condition set in Setup_For_Loop_Move is met.
    end record;
 
    package My_Modules is new Prunt.Modules;
@@ -64,7 +64,7 @@ package Prunt.Controller_Generic_Types is
 
    package Module_Maps is new
      Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, My_Modules.Module'Class, "=" => Return_False);
-   --  We do not care about the insertion order here, but we do need the `&` function, which this type includes.
+   --  We do not care about the insertion order here, but we do need the & function, which this type includes.
    --  Reusing this type is easier than adding an extra function.
 
    --  Vendor defined parameters:
@@ -78,12 +78,12 @@ package Prunt.Controller_Generic_Types is
             Disable : access procedure (Motor : Motor_Name);
 
          when TMC2240_UART_Kind =>
-            --  The `Enable` and `Disable` procedures are not used for TMC2240 motors as the TOFF register is used
+            --  The Enable and Disable procedures are not used for TMC2240 motors as the TOFF register is used
             --  instead. If the enable pin is connected to a toggleable pin then it should be driven low at all times.
             --  It is also generally a good idea to reset TOFF as part of your startup and reset procedures.
 
             Double_Edge_Stepping : Boolean;
-            --  `CHOPCONF.Double_Edge` will be set to this value.
+            --  CHOPCONF.Double_Edge will be set to this value.
 
             TMC2240_UART_Address : TMC_Types.TMC2240.UART_Node_Address;
             --  Hardware address of driver. Automatically built in to UART messages.
@@ -132,7 +132,7 @@ package Prunt.Controller_Generic_Types is
       case Kind is
          when Fixed_Switching_Kind =>
             Reconfigure_Fixed_Switching_Fan : access procedure (Fan : Fan_Name; PWM_Freq : Frequency);
-            --  Setting `PWM_Freq` to zero should still allow the fan to turn on and off, but there will be no PWM, it
+            --  Setting PWM_Freq to zero should still allow the fan to turn on and off, but there will be no PWM, it
             --  will just be on or off.
 
             Maximum_PWM_Frequency : Frequency;
@@ -140,7 +140,7 @@ package Prunt.Controller_Generic_Types is
          when Low_Or_High_Side_Switching_Kind =>
             Reconfigure_Low_Or_High_Side_Switching_Fan :
               access procedure (Fan : Fan_Name; PWM_Freq : Frequency; Use_High_Side_Switching : Boolean);
-            --  Setting `PWM_Freq` to zero should still allow the fan to turn on and off, but there will be no PWM, it
+            --  Setting PWM_Freq to zero should still allow the fan to turn on and off, but there will be no PWM, it
             --  will just be on or off.
 
             Maximum_Low_Side_PWM_Frequency  : Frequency;
@@ -173,7 +173,7 @@ package Prunt.Controller_Generic_Types is
       --  directly selectable by the user.
 
       Get_State : access function (Switch : Input_Switch_Name) return Boolean;
-      --  Return `True` when the switch is currently electrically closed, before applying the configured normally-open
+      --  Return True when the switch is currently electrically closed, before applying the configured normally-open
       --  or normally-closed interpretation. May be called from any task.
    end record;
 
@@ -183,7 +183,7 @@ package Prunt.Controller_Generic_Types is
       Reconfigure     :
         access procedure (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
       --  Reconfigure a heater. May be called multiple times per heater with different parameters. May be called from
-      --  any task. `Params.Kind` will not be equal to `PID_Autotune_Kind`.
+      --  any task. Params.Kind will not be equal to PID_Autotune_Kind.
       Set_Temperature : access procedure (Heater : Heater_Name; Target : Temperature);
       --  Set the current target temperature for a heater.
       --
@@ -192,7 +192,7 @@ package Prunt.Controller_Generic_Types is
       Autotune        :
         access procedure (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
       --  Run autotuning for the given heater and setpoint. Should not return until the autotune is complete.
-      --  `Params.Kind` will always be `PID_Autotune_Kind`.
+      --  Params.Kind will always be PID_Autotune_Kind.
       --
       --  TODO: Save the results to the config file.
    end record;

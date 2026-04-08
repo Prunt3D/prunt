@@ -35,12 +35,12 @@ package Prunt.Dummy_Allocator is
       Storage_Address          : out System.Address;
       Size_In_Storage_Elements : Storage_Count;
       Alignment                : Storage_Count);
-   --  Sets `Storage_Address` to `Next_Allocation_Address`. This should not be used unless you fully control the type
+   --  Sets Storage_Address to Next_Allocation_Address. This should not be used unless you fully control the type
    --  and can guarantee that initialization will not also use this procedure. This procedure sets
-   --  `Next_Allocation_Address` to null before returning to try and catch such an error.
+   --  Next_Allocation_Address to null before returning to try and catch such an error.
    --
    --  If this procedure needs to be made to work more generally then every user would need to save and restore
-   --  `Next_Allocation_Address`. This could be achieved by making use of a controlled type rather than setting the
+   --  Next_Allocation_Address. This could be achieved by making use of a controlled type rather than setting the
    --  allocation address directly.
 
    overriding

@@ -31,13 +31,13 @@ package Prunt.Moving_Averages is
 
    function Create
      (N_Levels : Positive; Max_Total_Width : Natural; Initial_Value : Number) return Cascading_Moving_Average;
-   --  Creates a new filter with the requested parameters. `Max_Total_Width` is a maximum rather than an exact value as
-   --  it must be split evenly between `N_Levels` levels.
+   --  Creates a new filter with the requested parameters. Max_Total_Width is a maximum rather than an exact value as
+   --  it must be split evenly between N_Levels levels.
 
    function Total_Delay (CMA : Cascading_Moving_Average) return Natural
    is (if CMA.Width_Per_Level > 1 then (CMA.N_Levels * (CMA.Width_Per_Level - 1)) / 2 else 0);
    --  Returns the number of cycles from when a signal enters the filter to when the effect of the signal on the output
-   --  is maximised. This may not be equal to `Max_Total_Width` / 2 as provided to `Create` as that value may be
+   --  is maximised. This may not be equal to Max_Total_Width / 2 as provided to Create as that value may be
    --  reduced to suit the number of layers specified.
 
    function Do_Step (CMA : in out Cascading_Moving_Average; Input : Number) return Number;

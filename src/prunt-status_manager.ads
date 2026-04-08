@@ -192,8 +192,8 @@ private
 
    overriding
    procedure Finalize (Object : in out Status_Data_Collection);
-   --  During finalisation we check that all `Status_Emitter` instances are finalised as the modules that hold them
-   --  should be finalised before the relevant `Status_Data_Collection` is.
+   --  During finalisation we check that all Status_Emitter instances are finalised as the modules that hold them
+   --  should be finalised before the relevant Status_Data_Collection is.
    --
    --  Excluding this check would not lead to any memory safety issues. This check is just to make sure that modules
    --  are not misbehaving.
