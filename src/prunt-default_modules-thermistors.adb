@@ -38,18 +38,17 @@ package body Prunt.Default_Modules.Thermistors is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
-   function To_Thermistor_Parameters
-     (Config : User_Config_Thermistor) return Prunt.Thermistors.Thermistor_Parameters
+   function To_Thermistor_Parameters (Config : User_Config_Thermistor) return Prunt.Thermistors.Thermistor_Parameters
    is
    begin
       case Config.Sensor_Model.Kind is
-         when Disabled =>
+         when Disabled                      =>
             return
               (Kind                => Prunt.Thermistors.Disabled_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
                Maximum_Temperature => Config.Maximum_Temperature);
 
-         when ATC_Semitec_104GT_2 =>
+         when ATC_Semitec_104GT_2           =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -58,7 +57,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => 2.1163E-4,
                SH_C                => 7.0742E-8);
 
-         when ATC_Semitec_104NT_4_R025H42G =>
+         when ATC_Semitec_104NT_4_R025H42G  =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -67,7 +66,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => 2.1360E-4,
                SH_C                => 6.4830E-8);
 
-         when EPCOS_100K_B57560G104F =>
+         when EPCOS_100K_B57560G104F        =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -76,7 +75,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => 2.1676E-4,
                SH_C                => 8.9293E-8);
 
-         when Generic_3950 =>
+         when Generic_3950                  =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -85,7 +84,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => 2.0076E-4,
                SH_C                => 1.6328E-7);
 
-         when Slice_Engineering_450 =>
+         when Slice_Engineering_450         =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -94,7 +93,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => 2.1171E-4,
                SH_C                => 1.1962E-7);
 
-         when TDK_NTCG104LH104JT1 =>
+         when TDK_NTCG104LH104JT1           =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -112,7 +111,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => 2.5163E-4,
                SH_C                => 0.0);
 
-         when NTC_100K_MGB18_104F39050L32 =>
+         when NTC_100K_MGB18_104F39050L32   =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -121,7 +120,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => 2.4390E-4,
                SH_C                => 0.0);
 
-         when PT_1000_PT_385 =>
+         when PT_1000_PT_385                =>
             return
               (Kind                => Prunt.Thermistors.Callendar_Van_Dusen_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -130,7 +129,7 @@ package body Prunt.Default_Modules.Thermistors is
                CVD_A               => 3.9083E-3,
                CVD_B               => -5.775E-7);
 
-         when PT_1000_PT_392 =>
+         when PT_1000_PT_392                =>
             return
               (Kind                => Prunt.Thermistors.Callendar_Van_Dusen_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -139,7 +138,7 @@ package body Prunt.Default_Modules.Thermistors is
                CVD_A               => 3.9827E-3,
                CVD_B               => -5.875E-7);
 
-         when Custom_Steinhart_Hart =>
+         when Custom_Steinhart_Hart         =>
             return
               (Kind                => Prunt.Thermistors.Steinhart_Hart_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -148,7 +147,7 @@ package body Prunt.Default_Modules.Thermistors is
                SH_B                => Config.Sensor_Model.Custom_Steinhart_Hart.B,
                SH_C                => Config.Sensor_Model.Custom_Steinhart_Hart.C);
 
-         when Custom_Callendar_Van_Dusen =>
+         when Custom_Callendar_Van_Dusen    =>
             return
               (Kind                => Prunt.Thermistors.Callendar_Van_Dusen_Kind,
                Minimum_Temperature => Config.Minimum_Temperature,
@@ -183,7 +182,8 @@ package body Prunt.Default_Modules.Thermistors is
 
          for T in Thermistor_Name loop
             if Parsed_Config.Thermistors (T).Sensor_Model.Kind /= Disabled
-              and then Parsed_Config.Thermistors (T).Minimum_Temperature >= Parsed_Config.Thermistors (T).Maximum_Temperature
+              and then
+                Parsed_Config.Thermistors (T).Minimum_Temperature >= Parsed_Config.Thermistors (T).Maximum_Temperature
             then
                Report_Config_Error
                  (["Thermistors", +T'Image, "Maximum_Temperature"],
@@ -199,7 +199,10 @@ package body Prunt.Default_Modules.Thermistors is
          Config := Config_In;
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
 
@@ -213,8 +216,7 @@ package body Prunt.Default_Modules.Thermistors is
          return Config.Thermistors (Thermistor).Sensor_Model.Kind /= Disabled;
       end Thermistor_Is_Enabled_In_Config;
 
-      function Get_Thermistor_Parameters
-        (Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters
+      function Get_Thermistor_Parameters (Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters
       is
       begin
          return To_Thermistor_Parameters (Config.Thermistors (Thermistor));
@@ -227,17 +229,13 @@ package body Prunt.Default_Modules.Thermistors is
    end Module_Instance;
 
    procedure Report_Temperatures
-     (Planner : Planner_Interface'Class;
-      R       : Gcode_Optional_No_Value;
-      T       : Gcode_Optional_Integer) is
+     (Planner : Planner_Interface'Class; R : Gcode_Optional_No_Value; T : Gcode_Optional_Integer) is
    begin
       pragma Unreferenced (Planner, R, T);
       My_Logger.Log ("M105 reporting is not implemented yet.");
    end Report_Temperatures;
 
-   procedure Set_Temperature_Auto_Report
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer) is
+   procedure Set_Temperature_Auto_Report (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer) is
    begin
       pragma Unreferenced (Planner, S);
       My_Logger.Log ("M155 auto-reporting is not implemented yet.");

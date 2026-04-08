@@ -21,7 +21,6 @@ with Ada.Real_Time;
 with Ada.Strings;
 with Ada.Strings.Fixed;
 with VSS.Strings.Conversions;
-use VSS.Strings;
 
 package body Prunt.Default_Modules.Internal_Status_Reporter is
 
@@ -153,7 +152,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
             end if;
          or
             when Current_Auto_Report_Interval > 0.0
-            =>delay until Next_Position_Auto_Report;
+            => delay until Next_Position_Auto_Report;
             Log_Position;
 
             Next_Position_Auto_Report :=

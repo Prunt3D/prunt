@@ -93,6 +93,7 @@ package body Prunt.Bounded_Indefinite_Queues is
 
       Free (Old_Head.Element);
       Free (Old_Head);
+      pragma Assert (Old_Head = null); --  Silences warning.
    end Dequeue;
 
    procedure Dequeue (This : in out Queue) is
@@ -109,6 +110,7 @@ package body Prunt.Bounded_Indefinite_Queues is
 
       Free (Old_Head.Element);
       Free (Old_Head);
+      pragma Assert (Old_Head = null); --  Silences warning.
    end Dequeue;
 
    function Peek (This : Queue) return Element_Type is
@@ -197,8 +199,6 @@ package body Prunt.Bounded_Indefinite_Queues is
    end Finalize;
 
    package body Subpool_Support is
-
-      use type System.Address;
 
       function Aligned_Address (Addr : System.Address; Alignment : Storage_Count) return System.Address is
          Initial_Align : constant Storage_Count := Addr mod Alignment;

@@ -75,9 +75,6 @@ package body Prunt.Default_Modules.Input_Shapers is
       end case;
    end Build_Shaper_Parameters;
 
-   function Selected_Path (Axis : Axis_Name) return Config.Config_Data_Paths.Vector
-   is (["Input_Shaping", +Axis'Image, "Kind", "Selected"]);
-
    overriding
    procedure Process_After_Block (This : Input_Shaping_Config_Update; Context : Block_End_Context'Class) is
       pragma Unreferenced (Context);
@@ -86,7 +83,7 @@ package body Prunt.Default_Modules.Input_Shapers is
    end Process_After_Block;
 
    function Parse_Axial_Shaper_Config (Value : Virtual_String) return User_Config_Input_Shaping_Method is
-      pragma Unsupress (All_Checks);
+      pragma Unsuppress (All_Checks);
       --  We use this to make sure that components are within range in the returned value.
 
       type Field_Name_Array is array (Positive range <>) of Virtual_String;
@@ -292,6 +289,7 @@ package body Prunt.Default_Modules.Input_Shapers is
 
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+         pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
       end Start;

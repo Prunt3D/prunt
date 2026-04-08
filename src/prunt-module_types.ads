@@ -23,11 +23,9 @@ with Ada.Containers.Indefinite_Vectors;
 with Ada.Containers.Ordered_Maps;
 with Prunt.Gcode_Arguments;
 with Prunt.Motion_Planner;
-with System.Storage_Elements;
 
 package Prunt.Module_Types is
 
-   use type Gcode_Arguments.Arguments_Index;
    use type Gcode_Arguments.Argument_Integer;
 
    type User_Config_Integer is range -1_000_000 .. 1_000_000 with Annotate => (Prunt_Config, User_Config);
@@ -127,7 +125,7 @@ package Prunt.Module_Types is
    procedure Process (This : Extra_Corner_Data; Last_Command_Index : Command_Index) is null;
 
    type Extra_Block_Resetting_Data is tagged null record;
-   -- Use this for handlers which need motion to stop before processing.
+   --  Use this for handlers which need motion to stop before processing.
 
    --  procedure Process_Before_Block (This : Extra_Block_Resetting_Data; Last_Command_Index : Command_Index) is null;
    --  TODO: Do we need the above? It's probably a bad idea to have this with the module system. Modules should instead

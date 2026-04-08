@@ -67,7 +67,8 @@ private
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
    private
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;

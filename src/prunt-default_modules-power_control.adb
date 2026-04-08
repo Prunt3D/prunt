@@ -45,15 +45,16 @@ package body Prunt.Default_Modules.Power_Control is
    end Initialize;
 
    protected body Module_Instance is
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
       end Start;
    end Module_Instance;
 
-   procedure Power_On
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_No_Value) is
+   procedure Power_On (Planner : Planner_Interface'Class; S : Gcode_Optional_No_Value) is
    begin
       pragma Unreferenced (Planner, S);
       raise Constraint_Error with "M80 is not implemented yet.";

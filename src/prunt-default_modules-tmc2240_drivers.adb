@@ -771,7 +771,10 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          end loop;
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
 
@@ -842,18 +845,14 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    end Set_TMC_Stepping_Mode;
 
    procedure Set_TMC_Stepping_Mode
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer;
-      N       : Gcode_Arguments.Argument_Integer) is
+     (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer; N : Gcode_Arguments.Argument_Integer) is
    begin
       pragma Unreferenced (Planner, S, N);
       raise Constraint_Error with "M569 by index is not implemented yet.";
    end Set_TMC_Stepping_Mode;
 
-   procedure Set_TMC_Stepping_Mode
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer;
-      N       : Virtual_String) is
+   procedure Set_TMC_Stepping_Mode (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer; N : Virtual_String)
+   is
    begin
       pragma Unreferenced (Planner, S, N);
       raise Constraint_Error with "M569 by name is not implemented yet.";
@@ -891,18 +890,14 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    end Clear_TMC_OT_Prewarn;
 
    procedure Clear_TMC_OT_Prewarn
-     (Planner : Planner_Interface'Class;
-      I       : Gcode_Optional_Integer;
-      N       : Gcode_Arguments.Argument_Integer) is
+     (Planner : Planner_Interface'Class; I : Gcode_Optional_Integer; N : Gcode_Arguments.Argument_Integer) is
    begin
       pragma Unreferenced (Planner, I, N);
       raise Constraint_Error with "M912 by index is not implemented yet.";
    end Clear_TMC_OT_Prewarn;
 
-   procedure Clear_TMC_OT_Prewarn
-     (Planner : Planner_Interface'Class;
-      I       : Gcode_Optional_Integer;
-      N       : Virtual_String) is
+   procedure Clear_TMC_OT_Prewarn (Planner : Planner_Interface'Class; I : Gcode_Optional_Integer; N : Virtual_String)
+   is
    begin
       pragma Unreferenced (Planner, I, N);
       raise Constraint_Error with "M912 by name is not implemented yet.";
@@ -986,6 +981,4 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       pragma Unreferenced (Planner, I, X, Y, Z, A, B, C, U, V, W);
       raise Constraint_Error with "M920 is not implemented yet.";
    end Set_TMC_Homing_Current;
-
-
 end Prunt.Default_Modules.TMC2240_Drivers;

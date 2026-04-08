@@ -65,7 +65,9 @@ package body Prunt.Default_Modules.Basic_Config is
 
    protected body Module_Instance is
       procedure Start
-        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
       end Start;

@@ -217,8 +217,14 @@ package body Prunt.Controller is
    procedure Run is
       Active_Module_Instances : Module_Instance_Maps.Map := [];
 
+      procedure Attempt_Start;
+      --  Initialize configured modules and start them if no configuration errors are reported.
+
       procedure Attempt_Start is
          Had_Error : Boolean := False;
+
+         procedure Report_Config_Error (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+         --  Log a startup configuration error and mark the current start attempt as failed.
 
          procedure Report_Config_Error (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String) is
          begin
@@ -315,6 +321,9 @@ package body Prunt.Controller is
       Initialization_Stack : String_Vectors.Vector := [];
       Dependency_Requests  : Dependency_Request_Vectors.Vector := [];
 
+      function Find_Existing_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref;
+      --  Return the initialized module instance with `Tag`, or `Null_Ref` if none has been initialized.
+
       function Find_Existing_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref is
       begin
          for I of Result loop
@@ -325,6 +334,9 @@ package body Prunt.Controller is
 
          return My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
       end Find_Existing_Instance;
+
+      function Find_Module_By_Tag (Tag : Ada.Tags.Tag) return Virtual_String;
+      --  Return the configured module name for an initialized instance tag.
 
       function Find_Module_By_Tag (Tag : Ada.Tags.Tag) return Virtual_String is
       begin
@@ -337,6 +349,9 @@ package body Prunt.Controller is
          raise Constraint_Error;
       end Find_Module_By_Tag;
 
+      procedure Record_Dependency_Request (Requester : Virtual_String; Requested_Tag : Ada.Tags.Tag);
+      --  Record a dependency request unless the same requester and requested tag have already been recorded.
+
       procedure Record_Dependency_Request (Requester : Virtual_String; Requested_Tag : Ada.Tags.Tag) is
       begin
          for Request of Dependency_Requests loop
@@ -347,6 +362,9 @@ package body Prunt.Controller is
 
          Dependency_Requests.Append (Dependency_Request'(Requester => Requester, Requested_Tag => Requested_Tag));
       end Record_Dependency_Request;
+
+      function Direct_Dependencies (Module_Name : Virtual_String) return String_Vectors.Vector;
+      --  Return the unique module names directly requested by Module_Name during initialization.
 
       function Direct_Dependencies (Module_Name : Virtual_String) return String_Vectors.Vector is
          Dependencies : String_Vectors.Vector := [];
@@ -368,6 +386,9 @@ package body Prunt.Controller is
          return Dependencies;
       end Direct_Dependencies;
 
+      function Has_Incoming_Dependency (Module_Name : Virtual_String) return Boolean;
+      --  Return True when another active module directly depends on Module_Name.
+
       function Has_Incoming_Dependency (Module_Name : Virtual_String) return Boolean is
       begin
          for C in Active_Modules.Iterate loop
@@ -380,6 +401,9 @@ package body Prunt.Controller is
 
          return False;
       end Has_Incoming_Dependency;
+
+      procedure Log_Module_Dependency_Tree;
+      --  Log the module dependency tree using the dependency requests recorded during initialization.
 
       procedure Log_Module_Dependency_Tree is
          Expanded : Config.Discrete_String_Sets.Set := [];
@@ -425,7 +449,13 @@ package body Prunt.Controller is
          end loop;
       end Log_Module_Dependency_Tree;
 
+      function Recurse return Natural;
+      --  Initialize all currently unblocked modules and return the number initialized in this pass.
+
       function Recurse return Natural is
+         function Get_Other_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref;
+         --  Resolve a requested module dependency, recursively initializing modules if needed.
+
          function Get_Other_Instance (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref is
             Requester : constant Virtual_String := Initialization_Stack.Last_Element;
             Existing  : My_Modules.Module_Instance_Shared_Pointers.Ref :=
@@ -465,6 +495,11 @@ package body Prunt.Controller is
 
                   function Get_Data return My_Modules.Module_Instance_Parent'Class
                   with Post => Get_Data'Result in My_Modules.Module_Instance'Class;
+                  --  Initialize the module selected by the current cursor and return its instance data.
+
+                  procedure Report_Config_Error_With_Module
+                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+                  --  Prefix a configuration error path with the module location before reporting it.
 
                   procedure Report_Config_Error_With_Module
                     (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String)

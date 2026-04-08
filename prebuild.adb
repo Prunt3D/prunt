@@ -44,7 +44,8 @@ procedure Prebuild is
    --  Join path parts with the OS path separator.
 
    function Needs_Rebuild (Target : String; Sources : String_Vectors.Vector) return Boolean;
-   --  True if `Target` does not exist or any source in `Sources` is newer than it. The prebuild binary is always included.
+   --  True if `Target` does not exist or any source in `Sources` is newer than it. The prebuild binary is always
+   --  included.
 
    procedure Run (Program : String; Args : String_Vectors.Vector; Dir : String := "");
    --  Run Program with `Args`, optionally changing to `Dir` first.
@@ -359,6 +360,7 @@ procedure Prebuild is
         "pragma Warnings (Off, ""array aggregate using () is an obsolescent syntax, use [] instead"");" & ASCII.LF;
       Pragma_2 : constant String :=
         "pragma Warnings (Off, ""subprogram body """"Get_Content"""" not in alphabetical order"");" & ASCII.LF;
+      Pragma_3 : constant String := "pragma Style_Checks (Off);" & ASCII.LF;
    begin
       Collect_Files (Join_Path ([Working_Dir, "html", "dist"]), Sources, Recursive => True);
       Sources.Append (Join_Path ([Working_Dir, "html", "package.xml"]));
@@ -376,7 +378,7 @@ procedure Prebuild is
           "--name-access",
           "--rule=" & Join_Path (["html", "package.xml"]),
           Join_Path (["html", "dist"])]);
-      Prepend_To_File (Target, Pragma_1 & Pragma_2);
+      Prepend_To_File (Target, Pragma_1 & Pragma_2 & Pragma_3);
    end Build_Ada_Resources;
 
    procedure Build_Config_Codegen is

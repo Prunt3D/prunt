@@ -48,8 +48,7 @@ package Prunt.Default_Modules.Thermistors is
    is abstract;
 
    function Get_Thermistor_Parameters
-     (This : Module_Instance_Interface; Thermistor : Thermistor_Name)
-      return Prunt.Thermistors.Thermistor_Parameters
+     (This : Module_Instance_Interface; Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters
    is abstract;
 
    function Get_Temperature
@@ -298,14 +297,14 @@ private
       procedure Initialize (Config_In : User_Config);
 
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       overriding
       function Thermistor_Is_Enabled_In_Config (Thermistor : Thermistor_Name) return Boolean;
 
       overriding
-      function Get_Thermistor_Parameters
-        (Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters;
+      function Get_Thermistor_Parameters (Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters;
 
       overriding
       function Get_Temperature (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;

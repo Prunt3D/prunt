@@ -49,7 +49,7 @@ package Prunt.Controller_Helpers is
 
    package Gcode_Dispatch_Entry_Vectors is new Ada.Containers.Vectors (Positive, Gcode_Dispatch_Entry);
 
-   function Return_False (Left, Right : Gcode_Dispatch_Entry_Vectors.Vector) return Boolean
+   function Return_False (Left, Right : Gcode_Dispatch_Entry_Vectors.Vector with Unreferenced) return Boolean
    is (False);
 
    package Gcode_Dispatch_Maps is new

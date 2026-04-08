@@ -26,7 +26,6 @@ with Prunt.Controller_Generic_Types;
 with Prunt.Exception_Occurrence_Holders;
 
 private with Ada.Containers.Indefinite_Holders;
-private with Ada.Containers.Ordered_Maps;
 private with Prunt.Command_Line_Arguments;
 private with Prunt.Controller_Helpers;
 private with Prunt.Default_Modules;
@@ -50,7 +49,6 @@ private with Prunt.Default_Modules.Power_Control;
 private with Prunt.Default_Modules.Tachometers;
 private with Prunt.Default_Modules.TMC2240_Drivers;
 private with Prunt.Default_Modules.Thermistors;
-private with Prunt.Gcode_Arguments;
 private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 private with Prunt.Logger;
@@ -121,6 +119,8 @@ package Prunt.Controller is
    pragma Extensions_Allowed (On);
    --  TODO: We need to repeat this here or we get errors, but it's unclear why. Does the pragma above the generic not
    --  carry through to the instantiation?
+
+   pragma Unreferenced (Enqueue_Command, Wait_Until_Idle, Get_Board_Specific_Documentation);
 
    procedure Prompt_For_Update;
    --  Prompts the user to click a button to allow a firmware update in the GUI and returns when the user clicks the

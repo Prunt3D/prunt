@@ -154,7 +154,7 @@ package body Prunt.Default_Modules.Input_Switches is
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
       is
-         pragma Unreferenced (Planner);
+         pragma Unreferenced (Self_Ref_In, Planner);
       begin
          Updater.Get.Updater.Start (Config, Status_Emitter);
       end Start;

@@ -100,6 +100,9 @@ package body Prunt.Step_Generator is
 
       Zero_Length : constant Length := 0.0 * mm;
 
+      procedure Process_Corner_Extra_Data (Data : in out Planner.Corner_Extra_Data_Type);
+      --  Forward corner extra data to the controller callback with the current command index.
+
       procedure Process_Corner_Extra_Data (Data : in out Planner.Corner_Extra_Data_Type) is
       begin
          Start_Corner (Current_Command_Index, Data);

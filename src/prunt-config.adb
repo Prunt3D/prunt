@@ -794,6 +794,9 @@ package body Prunt.Config is
       procedure Save (Owner : Virtual_String; Lock : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock) is
          pragma Unreferenced (Lock);
 
+         procedure Raise_Error_For_Module (Path : Config_Data_Paths.Vector; Message : Virtual_String);
+         --  Raise a schema validation error with `Owner` prefixed onto `Path`.
+
          procedure Raise_Error_For_Module (Path : Config_Data_Paths.Vector; Message : Virtual_String) is
             use Config_Data_Paths;
          begin

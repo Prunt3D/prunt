@@ -27,8 +27,6 @@ package Prunt is
 
    pragma Preelaborate (Prunt);
 
-   subtype Empty_Enumeration is Boolean range True .. False;
-
    type Motor_Hardware_Kind is (Basic_Motor_Kind, TMC2240_UART_Kind);
 
    type Command_Index is range 0 .. 2 ** 63 - 2;

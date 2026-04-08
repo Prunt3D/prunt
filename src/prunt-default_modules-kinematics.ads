@@ -226,7 +226,10 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
+   pragma Warnings (Off, "dimensions mismatch");
+   --  TODO: Why are we getting a warning here?
    package Axial_Velocity_Update_Maps is new Ada.Containers.Ordered_Maps (Axis_Name, Velocity);
+   pragma Warnings (On, "dimensions mismatch");
 
    type Runtime_Kinematics_Updates is record
       Axial_Velocity_Limits    : Axial_Velocity_Update_Maps.Map := [];

@@ -115,6 +115,9 @@ package body Prunt.Motion_Planner is
       T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
 
+      function Snap_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Snap;
+      --  Return snap at offset DT within a feedrate profile stage.
+
       function Snap_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Snap is
       begin
          case Stage is
@@ -207,6 +210,9 @@ package body Prunt.Motion_Planner is
       T3 : constant Time := Profile (3);
       T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
+
+      function Jerk_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Jerk;
+      --  Return jerk at offset DT within a feedrate profile stage.
 
       function Jerk_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Jerk is
       begin
@@ -303,6 +309,9 @@ package body Prunt.Motion_Planner is
       T3 : constant Time := Profile (3);
       T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
+
+      function Acceleration_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Acceleration;
+      --  Return acceleration at offset DT within a feedrate profile stage.
 
       function Acceleration_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Acceleration is
       begin
@@ -403,6 +412,9 @@ package body Prunt.Motion_Planner is
       T3 : constant Time := Profile (3);
       T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
+
+      function Velocity_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Velocity;
+      --  Return velocity at offset DT within a feedrate profile stage.
 
       function Velocity_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Velocity is
       begin
@@ -568,6 +580,9 @@ package body Prunt.Motion_Planner is
       T3 : constant Time := Profile (3);
       T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
+
+      function Distance_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Length;
+      --  Return distance at offset DT within a feedrate profile stage.
 
       function Distance_At_Stage (DT : Time; Stage : Feedrate_Profile_Stage_Index) return Length is
       begin
@@ -1016,6 +1031,10 @@ package body Prunt.Motion_Planner is
       Region : Constraint_Region;
 
       function Solve_Distance_At_Time
+        (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index) return Internal_Profile_Result;
+      --  Solve one profile time variable so the profile covers the requested distance.
+
+      function Solve_Distance_At_Time
         (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index) return Internal_Profile_Result
       is
          Result : Feedrate_Profile_Times := Profile;
@@ -1154,6 +1173,11 @@ package body Prunt.Motion_Planner is
       Sm     : constant Snap := Snap_Max;
       Cm     : constant Crackle := Crackle_Max;
       Region : Constraint_Region;
+
+      function Solve_Velocity_At_Time
+        (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index; Target : Velocity)
+         return Internal_Profile_Result;
+      --  Solve one profile time variable so the profile reaches Target velocity.
 
       function Solve_Velocity_At_Time
         (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index; Target : Velocity)

@@ -25,6 +25,9 @@ package body Prunt.Controller_Helpers is
 
    pragma Extensions_Allowed (On);
 
+   function Identifier_Image (Identifier : Module_Types.Gcode_Command_Identifier) return String;
+   --  Return a compact G-code identifier string such as G1 or M104.
+
    function Identifier_Image (Identifier : Module_Types.Gcode_Command_Identifier) return String is
       use Ada.Strings;
       use Ada.Strings.Fixed;
@@ -40,6 +43,10 @@ package body Prunt.Controller_Helpers is
       end case;
    end Identifier_Image;
 
+   function Are_Kinds_Disjoint
+     (Left, Right : Module_Types.Gcode_Argument_Allowed_Kinds) return Boolean;
+   --  Return True when two argument-kind sets have no common allowed kind.
+
    function Are_Kinds_Disjoint (Left, Right : Module_Types.Gcode_Argument_Allowed_Kinds) return Boolean is
       use Gcode_Arguments;
    begin
@@ -52,6 +59,9 @@ package body Prunt.Controller_Helpers is
       return True;
    end Are_Kinds_Disjoint;
 
+   function Overlaps (Left, Right : Gcode_Dispatch_Entry) return Boolean;
+   --  Return True when two dispatch entries can both match the same parsed command arguments.
+
    function Overlaps (Left, Right : Gcode_Dispatch_Entry) return Boolean is
       use Module_Types;
    begin
@@ -63,6 +73,10 @@ package body Prunt.Controller_Helpers is
 
       return True;
    end Overlaps;
+
+   function Build_Dispatch_Entry
+     (Module_Name : Virtual_String; Command : Module_Types.Gcode_Command) return Gcode_Dispatch_Entry;
+   --  Build a symbolic dispatch entry for one module-owned command variant.
 
    function Build_Dispatch_Entry
      (Module_Name : Virtual_String; Command : Module_Types.Gcode_Command) return Gcode_Dispatch_Entry
@@ -91,7 +105,7 @@ package body Prunt.Controller_Helpers is
             begin
                if Active_Module_Gcode_Dispatch_Map.Contains (G.Identifier) then
                   declare
-                     Entries : Vector := Active_Module_Gcode_Dispatch_Map.Element (G.Identifier);
+                     Entries : constant Vector := Active_Module_Gcode_Dispatch_Map.Element (G.Identifier);
                   begin
                      for Existing_Entry of Entries loop
                         if Overlaps (Existing_Entry, New_Entry) then
@@ -167,7 +181,6 @@ package body Prunt.Controller_Helpers is
             for G of Module_Maps.Element (C).Gcode_Commands loop
                declare
                   use Prunt.Gcode_Arguments;
-                  use Prunt.Module_Types;
 
                   Command_Object    : constant JSON_Value := Create_Object;
                   Identifier_Object : constant JSON_Value := Create_Object;

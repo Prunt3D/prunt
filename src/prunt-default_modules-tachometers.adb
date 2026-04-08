@@ -199,7 +199,7 @@ package body Prunt.Default_Modules.Tachometers is
             end if;
          or
             when Current_Auto_Report_Interval > 0.0
-            =>delay until Next_Auto_Report;
+            => delay until Next_Auto_Report;
 
             Log_Tachometers (Config_Ref, Requires_Fresh => False);
 

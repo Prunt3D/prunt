@@ -107,8 +107,7 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
-   type Tachometer_Speed_Status_Setters is
-     array (Tachometer_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
+   type Tachometer_Speed_Status_Setters is array (Tachometer_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
 
    procedure Report_Tachometers (This : Module_Instance; Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M123");
@@ -148,8 +147,7 @@ private
 
       overriding
       procedure Start
-        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-         Planner     : Planner_Interface'Class);
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       procedure Set_Auto_Report_Interval (Value : Duration);
 

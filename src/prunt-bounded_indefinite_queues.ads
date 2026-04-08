@@ -19,7 +19,6 @@
 
 pragma Extensions_Allowed (On);
 
-with Ada.Containers;
 with System.Storage_Elements;
 
 private with Ada.Finalization;
@@ -46,7 +45,7 @@ package Prunt.Bounded_Indefinite_Queues is
 
    procedure Dequeue (This : in out Queue; Item : out Element_Type)
    with Pre => not This.Is_Empty;
-   -- Sets `Item` to the head element and removes it.
+   --  Sets `Item` to the head element and removes it.
 
    procedure Dequeue (This : in out Queue)
    with Pre => not This.Is_Empty;

@@ -50,6 +50,25 @@ package body Config_Generator is
       Letters         : String_Vectors.Vector;
       Current_Map_Out : Virtual_String;
 
+      function Uses_Gcode_Args return Boolean is
+      begin
+         for C in Data.Gcode_Commands.Iterate loop
+            for Variant of Gcode_Command_Maps.Element (C) loop
+               for Arg_C in Variant.Arguments.Iterate loop
+                  declare
+                     Arg_Name : constant Virtual_String := Gcode_Argument_Maps.Key (Arg_C);
+                  begin
+                     if Arg_Name /= "This" and then Arg_Name /= "Self_Ref" and then Arg_Name /= "Planner" then
+                        return True;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+         end loop;
+
+         return False;
+      end Uses_Gcode_Args;
+
       procedure Emit (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
       begin
          Current_Map_Out.Append (Text);
@@ -71,12 +90,17 @@ package body Config_Generator is
       Emit ("pragma Warnings (On, ""no entities of * are referenced"");");
       Emit ("separate (" & Data.Name & ")");
       Emit
-        ("procedure Gcode_Dispatch (This : Module_Instance; Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; "
+        ("procedure Gcode_Dispatch "
+         & "(This : Module_Instance; Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; "
          & "Args : in out Gcode_Arguments.Arguments; "
          & "Planner : Prunt.Module_Types.Planner_Interface'Class; "
          & "Command_Identifier : Prunt.Module_Types.Gcode_Command_Identifier) is");
       Emit ("pragma Unsuppress (All_Checks);");
-      Emit ("use type Prunt.Gcode_Arguments.Argument_Kind;");
+      if Uses_Gcode_Args then
+         Emit ("use type Prunt.Gcode_Arguments.Argument_Kind;");
+      else
+         Emit ("pragma Unreferenced (Args);");
+      end if;
       Emit ("begin");
       Emit ("pragma Extensions_Allowed (On);");
       Emit ("case Command_Identifier.Argument is");
@@ -1016,6 +1040,13 @@ package body Config_Generator is
             return False;
          end Has_Conditional_Variant_Cases;
 
+         function Needs_Others_Choice (Variant_C : Variant_Case_Maps.Cursor) return Boolean is
+         begin
+            return
+              not Record_Val.Components.Is_Empty
+              or else not Variant_Case_Maps.Element (Variant_C).Components.Is_Empty;
+         end Needs_Others_Choice;
+
          procedure Emit_Component_Map
            (Components     : Component_Data_Maps.Map;
             Base_Path      : String_Vectors.Vector;
@@ -1146,7 +1177,8 @@ package body Config_Generator is
                      & Record_Val.Discriminant
                      & " => "
                      & Variant_Case_Maps.Key (Variant_C)
-                     & ", others => <>);");
+                     & Virtual_String'(if Needs_Others_Choice (Variant_C) then ", others => <>" else "")
+                     & ");");
                   Emit_Setter
                     (Virtual_String'(if Is_First then "" else "els")
                      & "if "
@@ -1222,7 +1254,8 @@ package body Config_Generator is
                            & Record_Val.Discriminant
                            & " => "
                            & Name
-                           & ", others => <>);");
+                           & Virtual_String'(if Needs_Others_Choice (Variant_C) then ", others => <>" else "")
+                           & ");");
                         Emit_Setter
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if "
@@ -1278,7 +1311,8 @@ package body Config_Generator is
                            & Record_Val.Discriminant
                            & " => "
                            & Name
-                           & ", others => <>);");
+                           & Virtual_String'(if Needs_Others_Choice (Variant_C) then ", others => <>" else "")
+                           & ");");
                         Emit_Setter
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if "

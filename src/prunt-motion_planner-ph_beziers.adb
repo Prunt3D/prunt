@@ -17,7 +17,6 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Ada.Containers.Generic_Constrained_Array_Sort;
 with Ada.Unchecked_Conversion;
 
 package body Prunt.Motion_Planner.PH_Beziers is
@@ -54,6 +53,9 @@ package body Prunt.Motion_Planner.PH_Beziers is
    end Distance_At_T;
 
    function T_At_Distance (Bez : PH_Bezier; Distance : Length) return Curve_Parameter is
+      function Speed_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length;
+      --  Return the exact derivative of Distance_At_T at T.
+
       function Speed_At_T (Bez : PH_Bezier; T : Curve_Parameter) return Length is
          --  Exact derivative of `Distance_At_T`.
 
@@ -77,6 +79,9 @@ package body Prunt.Motion_Planner.PH_Beziers is
       type Casted_Curve_Parameter is mod 2 ** 64;
       function Cast_Curve_Parameter is new Ada.Unchecked_Conversion (Curve_Parameter, Casted_Curve_Parameter);
       function Cast_Curve_Parameter is new Ada.Unchecked_Conversion (Casted_Curve_Parameter, Curve_Parameter);
+
+      function Binary_Midpoint (Lower, Upper : Curve_Parameter) return Curve_Parameter;
+      --  Return the floating-point midpoint between Lower and Upper using the representation as an integer.
 
       function Binary_Midpoint (Lower, Upper : Curve_Parameter) return Curve_Parameter is
       begin

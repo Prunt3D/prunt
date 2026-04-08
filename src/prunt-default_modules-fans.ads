@@ -24,7 +24,6 @@ with Prunt.Config;
 with Prunt.Controller_Generic_Types;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
-with GNATCOLL.Refcount;
 
 generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
@@ -201,6 +200,7 @@ private
       Speed_Status : Status_Manager.Lock_Free_Dimensionless_Setter;
    end record;
 
+   overriding
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index);
 
    function Valid_Fan_Indices return Virtual_String;

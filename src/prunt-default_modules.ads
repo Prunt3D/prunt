@@ -21,7 +21,11 @@ pragma Extensions_Allowed (On);
 
 with Prunt.Modules;
 with Prunt.Logger;
+
+pragma Warnings (Off, "unit ""Prunt.Status_Manager"" is not referenced");
+--  Used by child units.
 with Prunt.Status_Manager;
+pragma Warnings (On, "unit ""Prunt.Status_Manager"" is not referenced");
 
 generic
    with package My_Modules is new Prunt.Modules;

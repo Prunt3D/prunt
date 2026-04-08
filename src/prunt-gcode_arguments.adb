@@ -31,7 +31,14 @@ package body Prunt.Gcode_Arguments is
       Args : Arguments_Array := [others => (Kind => Non_Existent_Kind, Consumed => False)];
       Iter : Character_Iterator := Line.Before_First_Character;
 
-      use type VSS.Characters.Virtual_Character;
+      procedure Parse_Number (Index : Arguments_Index);
+      --  Parse the numeric value after Index and store it in Args.
+
+      procedure Parse_String (Index : Arguments_Index; Delimiter : Virtual_Character);
+      --  Parse a quoted string value ending at Delimiter and store it in Args.
+
+      procedure Parse_Argument (Index : Arguments_Index);
+      --  Parse the optional argument value following Index and store it in Args.
 
       procedure Parse_Number (Index : Arguments_Index) is
          In_Decimal_Part : Boolean := False;

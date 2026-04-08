@@ -51,7 +51,9 @@ package body Prunt.Default_Modules.Motor_Drivers is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class is
+      return My_Modules.Module_Instance'Class
+   is
+      pragma Unreferenced (This, Report_Config_Error, Status_Emitter, Get_Other_Instance);
    begin
       return Result : Module_Instance do
          Result.Initialize (Config_Data_To_User_Config (Config_Data));
@@ -64,7 +66,10 @@ package body Prunt.Default_Modules.Motor_Drivers is
          Config := Config_In;
       end Initialize;
 
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
 
@@ -76,7 +81,9 @@ package body Prunt.Default_Modules.Motor_Drivers is
       end Start;
 
       procedure Provide_Motor_Configuration
-        (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class) is
+        (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class)
+      is
+         pragma Unreferenced (Handler);
       begin
          if Motor_Configs_Provided (Motor) then
             raise Program_Error with "Motor configuration already provided for " & Motor'Image;
@@ -242,9 +249,7 @@ package body Prunt.Default_Modules.Motor_Drivers is
    end Set_Trimpot_Current;
 
    procedure Set_Trimpot_Pin
-     (Planner : Planner_Interface'Class;
-      P       : Gcode_Arguments.Argument_Integer;
-      S       : Gcode_Arguments.Argument_Integer) is
+     (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Gcode_Arguments.Argument_Integer) is
    begin
       pragma Unreferenced (Planner, P, S);
       raise Constraint_Error with "M908 is not implemented yet.";

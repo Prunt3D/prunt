@@ -318,7 +318,7 @@ private
       --  Immediately after the homing procedure for this axis is complete, the axis will move to this position. This
       --  position must be within the machine's travel limits.
 
-      Prerequisites : User_Config_Homing_Prereq_Array := (others => <>);
+      Prerequisites : User_Config_Homing_Prereq_Array := [others => <>];
       --  Define the required state of each other axis before this axis can be homed.
    end record
    with Annotate => (Prunt_Config, User_Config);

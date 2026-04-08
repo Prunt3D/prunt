@@ -74,7 +74,8 @@ package Prunt.Default_Modules.Motor_Drivers is
      (This          : in out Module_Instance_Interface;
       Motor         : Motor_Name;
       Configuration : Motor_Configuration;
-      Handler       : Motor_Handler'Class) is abstract;
+      Handler       : Motor_Handler'Class)
+   is abstract;
 
    function Motor_Is_Enabled_In_Config (This : Module_Instance_Interface; Motor : Motor_Name) return Boolean
    is abstract;
@@ -124,7 +125,7 @@ private
       --  and pitch are the same. However, for multi-start screws, the lead is the pitch multiplied by the number of
       --  starts. For example, a lead screw with a 2 mm pitch and 4 starts has a lead of 8 mm.
 
-      Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0)with
+      Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0) with
         Annotate => (Prunt_Config, Min, 1.0E-100),
         Annotate => (Prunt_Config, Max, 1.0E100);
       --  If there is a gear system between the motor and the lead screw, you need to specify the gear ratio here. The
@@ -326,9 +327,7 @@ private
    --  Set stepper current through a digital trimpot interface.
 
    procedure Set_Trimpot_Pin
-     (Planner : Planner_Interface'Class;
-      P       : Gcode_Arguments.Argument_Integer;
-      S       : Gcode_Arguments.Argument_Integer)
+     (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Gcode_Arguments.Argument_Integer)
    with Annotate => (Prunt_Config, Gcode_Command, "M908");
    --  Set a trimpot value by raw pin/address.
 
@@ -344,7 +343,8 @@ private
       procedure Initialize (Config_In : User_Config);
 
       overriding
-      procedure Start (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+      procedure Start
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       overriding
       procedure Provide_Motor_Configuration

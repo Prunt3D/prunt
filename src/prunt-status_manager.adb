@@ -376,6 +376,9 @@ package body Prunt.Status_Manager is
 
    overriding
    procedure Initialize (Object : in out Status_Data_Collection) is
+      function Get_Data return Status_Data_Collection_Internal;
+      --  Create the internal shared status data object.
+
       function Get_Data return Status_Data_Collection_Internal is
       begin
          return Result : Status_Data_Collection_Internal;

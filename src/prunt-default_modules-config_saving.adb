@@ -68,7 +68,9 @@ package body Prunt.Default_Modules.Config_Saving is
 
    protected body Module_Instance is
       procedure Start
-        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
+         pragma Unreferenced (Self_Ref_In, Planner);
       begin
          Started := True;
       end Start;
@@ -90,9 +92,9 @@ package body Prunt.Default_Modules.Config_Saving is
       end Process_Save_All_Settings;
 
       procedure Process_Save_Settings (I : Virtual_String) is
-         Config_To_Save : Config.Config_Data := Configs_To_Save (I);
+         Config_To_Save : constant Config_Data_Maps.Reference_Type := Configs_To_Save.Reference (I);
       begin
-         Config_To_Save.Save;
+         Config.Save (Config_To_Save.Element.all);
       end Process_Save_Settings;
 
       function Contains_Config_To_Save (I : Virtual_String) return Boolean is

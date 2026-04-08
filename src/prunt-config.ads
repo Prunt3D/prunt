@@ -50,7 +50,6 @@ pragma Extensions_Allowed (On);
 
 with Ada.Containers.Indefinite_Ordered_Maps;
 with Ada.Containers.Ordered_Sets;
-with Ada.Containers.Ordered_Maps;
 with Ada.Containers.Vectors;
 with Prunt.Generic_Lock;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;

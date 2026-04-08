@@ -67,10 +67,10 @@ private
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
-      --  overriding
+      overriding
       procedure Set_Blocker (Value : Virtual_String);
 
-      --  overriding
+      overriding
       procedure Clear_Blocker;
    private
       Status_Emitter : Status_Manager.Status_Emitter;

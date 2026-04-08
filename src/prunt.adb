@@ -19,7 +19,6 @@
 
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Strings.Fixed;
-with VSS.Strings.Conversions;
 
 package body Prunt is
 

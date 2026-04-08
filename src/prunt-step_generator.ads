@@ -21,7 +21,6 @@ pragma Extensions_Allowed (On);
 
 with System.Multiprocessors;
 with Prunt.Motion_Planner.Planner;
-with Prunt.Input_Shapers;
 
 generic
    with package Planner is new Motion_Planner.Planner (<>);

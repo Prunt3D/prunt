@@ -27,8 +27,6 @@ package body Prunt.Default_Modules.Heaters is
    use type Ada.Real_Time.Time;
    use type Ada.Real_Time.Time_Span;
 
-   use type Gcode_Arguments.Argument_Integer;
-
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;

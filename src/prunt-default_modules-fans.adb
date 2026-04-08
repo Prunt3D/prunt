@@ -26,6 +26,9 @@ package body Prunt.Default_Modules.Fans is
 
    use type Gcode_Arguments.Argument_Integer;
 
+   function PWM_Frequency (Config : User_Config_Fan) return Frequency;
+   --  Return the configured PWM frequency for the fan hardware kind selected by Config.
+
    function Valid_Fan_Indices return Virtual_String is
    begin
       return Result : Virtual_String := "" do
@@ -43,7 +46,6 @@ package body Prunt.Default_Modules.Fans is
    end Valid_Fan_Indices;
 
    function Valid_Fan_Names return Virtual_String is
-      Result : Virtual_String := "";
    begin
       return Result : Virtual_String := "" do
          for F in Fan_Name loop
@@ -119,6 +121,7 @@ package body Prunt.Default_Modules.Fans is
                Condition   => "")]];
    end Status_Schema;
 
+   overriding
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index) is
       pragma Unreferenced (Last_Command_Index);
    begin
