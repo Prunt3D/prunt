@@ -47,6 +47,24 @@ procedure Tests is
       pragma Annotate (Xcov, Dump_Buffers, "individual_test-" & Name);
       pragma Annotate (Xcov, Reset_Buffers);
    end Xcov_Dump;
+
+   function Is_Xcov_Dump return Boolean is
+     (Ada.Command_Line.Argument_Count >= 1 and then Ada.Command_Line.Argument (1) = "xcov_dump");
+
+   function Filter return String is
+   begin
+      if Is_Xcov_Dump then
+         if Ada.Command_Line.Argument_Count >= 2 then
+            return Ada.Command_Line.Argument (2);
+         else
+            return "";
+         end if;
+      elsif Ada.Command_Line.Argument_Count >= 1 then
+         return Ada.Command_Line.Argument (1);
+      else
+         return "";
+      end if;
+   end Filter;
 begin
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
@@ -63,12 +81,12 @@ begin
    Trendy_Test.Register (Prunt.Motion_Planner.Test.All_Tests);
    Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
 
-   if Ada.Command_Line.Argument_Count = 1 and then Ada.Command_Line.Argument (1) = "xcov_dump" then
+   if Is_Xcov_Dump then
       pragma Annotate (Xcov, Dump_Buffers, "individual_test-tests.(startup)");
       pragma Annotate (Xcov, Reset_Buffers);
-      Trendy_Test.Reports.Print_Basic_Report (Trendy_Test.Run (Xcov_Dump'Access));
+      Trendy_Test.Reports.Print_Basic_Report (Trendy_Test.Run (Xcov_Dump'Access, Filter));
    else
-      Trendy_Test.Reports.Print_Basic_Report (Trendy_Test.Run (null));
+      Trendy_Test.Reports.Print_Basic_Report (Trendy_Test.Run (Filter => Filter));
       pragma Annotate (Xcov, Dump_Buffers, "all_tests");
    end if;
 end Tests;

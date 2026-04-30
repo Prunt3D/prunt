@@ -23,8 +23,8 @@ rm -f gnatcov_out/*.css
 rm -f *.srctrace
 
 # Run the instrumented testsuite. This will produce at least one .srctrace file for the coverage analysis.
-[ "$PRUNT_XCOV_DUMP" = true ] && alr exec ./bin/tests -- xcov_dump
-[ "$PRUNT_XCOV_DUMP" = true ] || alr exec ./bin/tests
+[ "$PRUNT_XCOV_DUMP" = true ] && alr exec ./bin/tests -- xcov_dump "$@"
+[ "$PRUNT_XCOV_DUMP" = true ] || alr exec ./bin/tests -- "$@"
 
 # Run the GNATcov code coverage analysis on the trace files.
 # tests.gpr can be added below to check that all tests are being run.
