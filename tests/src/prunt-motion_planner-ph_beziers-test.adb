@@ -242,6 +242,28 @@ package body Prunt.Motion_Planner.PH_Beziers.Test is
       T.Assert (Inverse_Curvature (Bez) = Length'Last, "Collinear XYZE corner should report infinite radius");
    end Test_Collinear_XYZE_Corner;
 
+   procedure Test_Distance_At_T_Near_Endpoint_Accuracy (T : in out Trendy_Test.Operation'Class) is
+      Bez : constant PH_Bezier :=
+        Create_Bezier
+          (Make_Point (0.0 * mm, 0.0 * mm, 0.0 * mm, 0.0 * mm),
+           Make_Point (10.0 * mm, 0.0 * mm, 0.0 * mm, 0.0 * mm),
+           Make_Point (10.0 * mm, 10.0 * mm, 0.0 * mm, 0.0 * mm),
+           1.0 * mm);
+
+      Tiny              : constant Curve_Parameter := 1.0E-16;
+      L                 : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
+      Expected_Distance : constant Length := 15.0 * L * Tiny;
+      Actual_Distance   : constant Length := Distance_At_T (Bez, Tiny);
+   begin
+      T.Register;
+      T.Assert
+        (abs (Actual_Distance - Expected_Distance) <= 1.0E-12 * Expected_Distance,
+         "Near-endpoint distance "
+         & Actual_Distance'Image
+         & " vs "
+         & Expected_Distance'Image);
+   end Test_Distance_At_T_Near_Endpoint_Accuracy;
+
    procedure Test_Planar_XY_Non_Right_Angle_Corner (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -311,10 +333,12 @@ package body Prunt.Motion_Planner.PH_Beziers.Test is
          T);
    end Test_Zero_Length_Corner;
 
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
         [Test_Collinear_XYZE_Corner'Access,
+         Test_Distance_At_T_Near_Endpoint_Accuracy'Access,
          Test_Planar_XY_Non_Right_Angle_Corner'Access,
          Test_Planar_XY_Right_Angle_Corner'Access,
          Test_Spatial_XYZ_Corner'Access,

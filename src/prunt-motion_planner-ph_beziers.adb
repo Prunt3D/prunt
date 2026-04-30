@@ -32,24 +32,51 @@ package body Prunt.Motion_Planner.PH_Beziers is
       --  https://github.com/Prunt3D/prunt_notebooks/blob/master/Pythagorean-Hodograph%20Splines.ipynb
       L : constant Length := abs (Bez.Control_Points (0) - Bez.Control_Points (1));
       B : constant Length := abs (Bez.Control_Points (4) - Bez.Control_Points (5));
-      Z : constant Dimensionless := 2.0 * T - 1.0;
-      Y : constant Dimensionless := Z * Z;
-      D : constant Length := (if L = 0.0 * mm then 0.0 * mm else (B ** 2 - L ** 2) / L);
-      H : constant Dimensionless :=
-        (((((((-102_245.0 / 544_768.0) * Y + 70_785.0 / 38_912.0) * Y - 630_201.0 / 77_824.0) * Y
-            + 1_329_185.0 / 58_368.0)
-           * Y
-           - 3_374_085.0 / 77_824.0)
-          * Y
-          + 2_147_145.0 / 38_912.0)
-         * Y
-         - 3_578_575.0 / 77_824.0)
-        * Y
-        + 61_347.0 / 2_128.0;
 
-      Total_Length : constant Length := 15.0 * L + (5_005.0 / 228.0) * D;
+      Distance_Delta : constant Area := B ** 2 - L ** 2;
+
+      function P (U : Curve_Parameter) return Dimensionless;
+      function Distance_At_Upto_Half (U : Curve_Parameter) return Length;
+
+      function P (U : Curve_Parameter) return Dimensionless is
+         Acc : Dimensionless := -9_815_520.0;
+      begin
+         Acc := Acc * U + 73_616_400.0;
+         Acc := Acc * U - 233_873_640.0;
+         Acc := Acc * U + 403_663_260.0;
+         Acc := Acc * U - 400_071_672.0;
+         Acc := Acc * U + 216_432_216.0;
+         Acc := Acc * U - 50_100_050.0;
+         Acc := Acc * U - 920_205.0;
+         Acc := Acc * U + 3_680_820.0;
+         Acc := Acc * U - 5_153_148.0;
+         Acc := Acc * U + 2_576_574.0;
+
+         return U ** 4 * Acc;
+      end P;
+
+      function Distance_At_Upto_Half (U : Curve_Parameter) return Length is
+         X : constant Dimensionless := Dimensionless (U);
+      begin
+         return X * (15.0 * L) + (X * P (U) * Distance_Delta) / (1_596.0 * L);
+      end Distance_At_Upto_Half;
    begin
-      return Total_Length / 2.0 + Z * (15.0 * L / 2.0 + D * H);
+      if L = 0.0 * mm then
+         return 0.0 * mm;
+      end if;
+
+      declare
+         Total_Length : constant Length := 15.0 * L + (5_005.0 / 228.0) * (Distance_Delta / L);
+      begin
+         if T = 0.5 then
+            return 0.5 * Total_Length;
+         elsif T < 0.5 then
+            return Distance_At_Upto_Half (T);
+         else
+            --  Avoid evaluating the high-degree alternating polynomial near T = 1.0.
+            return Total_Length - Distance_At_Upto_Half (Curve_Parameter (1.0 - T));
+         end if;
+      end;
    end Distance_At_T;
 
    function T_At_Distance (Bez : PH_Bezier; Distance : Length) return Curve_Parameter is
