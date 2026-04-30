@@ -35,3 +35,5 @@ rm -f *.srctrace
 # alr exec -P2 -- /usr/local/gnat/bin/gnatcov coverage --annotate=cobertura --output-dir=gnatcov_out --level=stmt+mcdc+gexpr --projects=prunt.gpr --no-subprojects *.srctrace
 
 [ "$PRUNT_XCOV_DUMP" = true ] && alr exec -P2 -- python3 generate_coverage.py
+
+exit 0
