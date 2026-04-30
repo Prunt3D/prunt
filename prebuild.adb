@@ -225,18 +225,46 @@ procedure Prebuild is
    end Prepend_To_File;
 
    procedure Ensure_Submodules is
-      Uplot_Dist   : constant String := Join_Path ([Working_Dir, "html", "uplot", "dist"]);
-      Uplot_ESM_JS : constant String := Join_Path ([Uplot_Dist, "uPlot.esm.js"]);
-      Uplot_Types  : constant String := Join_Path ([Uplot_Dist, "uPlot.d.ts"]);
+      procedure Ensure_Submodule (Path : String; Required_Files : String_Vectors.Vector);
+
+      procedure Ensure_Submodule (Path : String; Required_Files : String_Vectors.Vector) is
+         Inputs_Present : Boolean := True;
+      begin
+         Run ("git", ["submodule", "update", "--init", Path]);
+      exception
+         when Program_Error =>
+            for F of Required_Files loop
+               if not Exists (F) then
+                  Inputs_Present := False;
+                  exit;
+               end if;
+            end loop;
+
+            if Inputs_Present then
+               Put_Line ("Ignoring " & Path & " submodule update failure because build inputs are already present.");
+            else
+               raise;
+            end if;
+      end Ensure_Submodule;
+
+      Uplot_Dist                 : constant String := Join_Path ([Working_Dir, "html", "uplot", "dist"]);
+      Uplot_ESM_JS               : constant String := Join_Path ([Uplot_Dist, "uPlot.esm.js"]);
+      Uplot_Types                : constant String := Join_Path ([Uplot_Dist, "uPlot.d.ts"]);
+      GNATCOLL_Modifications_Src : constant String := Join_Path ([Working_Dir, "gnatcoll_modifications_src"]);
+      Prunt_JSON_Spec            : constant String := Join_Path ([GNATCOLL_Modifications_Src, "prunt-json.ads"]);
+      Prunt_JSON_Body            : constant String := Join_Path ([GNATCOLL_Modifications_Src, "prunt-json.adb"]);
+      Prunt_LSP_Spec             : constant String :=
+        Join_Path ([GNATCOLL_Modifications_Src, "prunt-limited_shared_pointers.ads"]);
+      Prunt_LSP_Body             : constant String :=
+        Join_Path ([GNATCOLL_Modifications_Src, "prunt-limited_shared_pointers.adb"]);
    begin
-      Run ("git", ["submodule", "update", "--init", Join_Path (["html", "uplot"])]);
-   exception
-      when Program_Error =>
-         if Exists (Uplot_ESM_JS) and then Exists (Uplot_Types) then
-            Put_Line ("Ignoring html/uplot submodule update failure because build inputs are already present.");
-         else
-            raise;
-         end if;
+      Ensure_Submodule (Join_Path (["html", "uplot"]), [Uplot_ESM_JS, Uplot_Types]);
+      Ensure_Submodule
+        (Join_Path (["gnatcoll_modifications_src"]),
+         [Prunt_JSON_Spec,
+          Prunt_JSON_Body,
+          Prunt_LSP_Spec,
+          Prunt_LSP_Body]);
    end Ensure_Submodules;
 
    procedure Build_Html_Dist is
