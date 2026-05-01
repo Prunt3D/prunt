@@ -501,15 +501,20 @@ private
    function Unset_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector) return Boolean;
    --  Removes the object member addressed by Path from Root. Returns True only when a member was removed.
 
-   procedure Apply_Overrides_To_Config (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector);
+   procedure Apply_Overrides_To_Config
+     (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector);
    --  Applies Overrides to the live/effective configuration object. Override values are cloned into Config.
 
    function Prune_Overrides_From_Module_Config
-     (Owner : Virtual_String; Module_Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean;
+     (Owner         : Virtual_String;
+      Module_Config : JSON_Value;
+      Module_Schema : Config_Property_Maps.Map;
+      Overrides     : Config_Override_Vectors.Vector) return Boolean;
    --  Removes all overridden fields for Owner from Module_Config. Returns True when Module_Config changed.
 
    function Prune_Overrides_From_Config
-     (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean;
+     (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector)
+      return Boolean;
    --  Removes all overridden fields from the stored/UI configuration. Returns True when Config changed.
 
    function Prune_Overrides_From_Schemas
@@ -527,6 +532,20 @@ private
       Overrides : Config_Override_Vectors.Vector;
       Report    : access procedure (Path : Config_Data_Paths.Vector; Message : Virtual_String));
    --  Reports every overridden path touched by an untrusted patch for Owner.
+
+   function Path_Without_Last (Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector;
+
+   function Selected_Variant_Default
+     (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector; Default_Value : out JSON_Value)
+      return Boolean;
+
+   function Prune_Path_For_Override
+     (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector;
+
+   function Try_Get_JSON_Node
+     (Root : JSON_Value; Path : Config_Data_Paths.Vector; Result : out JSON_Value) return Boolean;
+
+   procedure Merge_Default_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Default_Value : JSON_Value);
 
    type Config_Data is record
       For_Migration    : Boolean := False;

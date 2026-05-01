@@ -1,0 +1,164 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f7f8;
+  --panel: #ffffff;
+  --text: #182026;
+  --muted: #60707a;
+  --line: #d8e0e5;
+  --accent: #116b5f;
+  --accent-strong: #0b4d45;
+  --danger: #a83c32;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 650;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+#sample-summary,
+.section-heading span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.command-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(520px, 100%);
+}
+
+.command-form input {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.command-form button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-strong);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.command-form button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+main {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.plot-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plot {
+  width: 100%;
+  min-height: 310px;
+}
+
+.xy-plot {
+  min-height: 430px;
+}
+
+.derivative-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.derivative-panel {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.derivative-panel h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.derivative-panel .plot {
+  min-height: 260px;
+}
+
+.uplot {
+  width: 100%;
+}
+
+@media (max-width: 860px) {
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .command-form {
+    min-width: 0;
+  }
+
+  .derivative-grid {
+    grid-template-columns: 1fr;
+  }
+}

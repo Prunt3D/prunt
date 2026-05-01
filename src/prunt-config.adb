@@ -368,97 +368,100 @@ package body Prunt.Config is
       Mapper (Config, Recursive_Validate'Access, Schema, []);
    end Validate_Module_Config_To_Schema;
 
-   function Create_Default_Module_Config (Schema : Config_Property_Maps.Map) return JSON_Value is
-      function Outer_Generate (Property : Config_Property_Parameters'Class) return JSON_Value;
+   function Create_Default_Property_Config (Property : Config_Property_Parameters'Class) return JSON_Value;
 
-      function Outer_Generate (Property : Config_Property_Parameters'Class) return JSON_Value is
-         function Generate (Property : Config_Property_Parameters_Boolean) return JSON_Value;
-         function Generate (Property : Config_Property_Parameters_Discrete) return JSON_Value;
-         function Generate (Property : Config_Property_Parameters_String) return JSON_Value;
-         function Generate (Property : Config_Property_Parameters_Integer) return JSON_Value;
-         function Generate (Property : Config_Property_Parameters_Float) return JSON_Value;
-         function Generate (Property : Config_Property_Parameters_Float_Ratio) return JSON_Value;
-         function Generate (Property : Config_Property_Parameters_Sequence) return JSON_Value;
-         function Generate (Property : Config_Property_Parameters_Variant) return JSON_Value;
+   function Create_Default_Property_Config (Property : Config_Property_Parameters'Class) return JSON_Value is
+      function Generate (Property : Config_Property_Parameters_Boolean) return JSON_Value;
+      function Generate (Property : Config_Property_Parameters_Discrete) return JSON_Value;
+      function Generate (Property : Config_Property_Parameters_String) return JSON_Value;
+      function Generate (Property : Config_Property_Parameters_Integer) return JSON_Value;
+      function Generate (Property : Config_Property_Parameters_Float) return JSON_Value;
+      function Generate (Property : Config_Property_Parameters_Float_Ratio) return JSON_Value;
+      function Generate (Property : Config_Property_Parameters_Sequence) return JSON_Value;
+      function Generate (Property : Config_Property_Parameters_Variant) return JSON_Value;
 
-         function Generate (Property : Config_Property_Parameters_Boolean) return JSON_Value is
-         begin
-            return Create (Property.Default);
-         end Generate;
-
-         function Generate (Property : Config_Property_Parameters_Discrete) return JSON_Value is
-         begin
-            return Create (Property.Default);
-         end Generate;
-
-         function Generate (Property : Config_Property_Parameters_String) return JSON_Value is
-         begin
-            return Create (Property.Default);
-         end Generate;
-
-         function Generate (Property : Config_Property_Parameters_Integer) return JSON_Value is
-         begin
-            return Create (Property.Default);
-         end Generate;
-
-         function Generate (Property : Config_Property_Parameters_Float) return JSON_Value is
-         begin
-            return Create (Long_Float (Property.Default));
-         end Generate;
-
-         function Generate (Property : Config_Property_Parameters_Float_Ratio) return JSON_Value is
-         begin
-            return Result : constant JSON_Value := Create_Object do
-               Set_Field (Result, "Numerator", Property.Default.Numerator);
-               Set_Field (Result, "Denominator", Property.Default.Denominator);
-            end return;
-         end Generate;
-
-         function Generate (Property : Config_Property_Parameters_Sequence) return JSON_Value is
-         begin
-            return Result : constant JSON_Value := Create_Object do
-               for C in Property.Children.Iterate loop
-                  Result.Set_Field (Config_Property_Maps.Key (C), Outer_Generate (Config_Property_Maps.Element (C)));
-               end loop;
-            end return;
-         end Generate;
-
-         function Generate (Property : Config_Property_Parameters_Variant) return JSON_Value is
-         begin
-            return Result : constant JSON_Value := Create_Object do
-               Result.Set_Field ("Selected", Property.Default);
-               Result.Set_Field ("Children", Create_Object);
-               for C in Property.Children.Iterate loop
-                  Result.Get ("Children").Set_Field
-                    (Config_Property_Maps.Key (C), Outer_Generate (Config_Property_Maps.Element (C)));
-               end loop;
-            end return;
-         end Generate;
+      function Generate (Property : Config_Property_Parameters_Boolean) return JSON_Value is
       begin
-         if Property in Config_Property_Parameters_Boolean then
-            return Generate (Config_Property_Parameters_Boolean (Property));
-         elsif Property in Config_Property_Parameters_Discrete then
-            return Generate (Config_Property_Parameters_Discrete (Property));
-         elsif Property in Config_Property_Parameters_String then
-            return Generate (Config_Property_Parameters_String (Property));
-         elsif Property in Config_Property_Parameters_Integer then
-            return Generate (Config_Property_Parameters_Integer (Property));
-         elsif Property in Config_Property_Parameters_Float then
-            return Generate (Config_Property_Parameters_Float (Property));
-         elsif Property in Config_Property_Parameters_Float_Ratio then
-            return Generate (Config_Property_Parameters_Float_Ratio (Property));
-         elsif Property in Config_Property_Parameters_Sequence then
-            return Generate (Config_Property_Parameters_Sequence (Property));
-         elsif Property in Config_Property_Parameters_Variant then
-            return Generate (Config_Property_Parameters_Variant (Property));
-         else
-            raise Constraint_Error with "Unhandled property type (" & Property'Tag'Image & ").";
-         end if;
-      end Outer_Generate;
+         return Create (Property.Default);
+      end Generate;
+
+      function Generate (Property : Config_Property_Parameters_Discrete) return JSON_Value is
+      begin
+         return Create (Property.Default);
+      end Generate;
+
+      function Generate (Property : Config_Property_Parameters_String) return JSON_Value is
+      begin
+         return Create (Property.Default);
+      end Generate;
+
+      function Generate (Property : Config_Property_Parameters_Integer) return JSON_Value is
+      begin
+         return Create (Property.Default);
+      end Generate;
+
+      function Generate (Property : Config_Property_Parameters_Float) return JSON_Value is
+      begin
+         return Create (Long_Float (Property.Default));
+      end Generate;
+
+      function Generate (Property : Config_Property_Parameters_Float_Ratio) return JSON_Value is
+      begin
+         return Result : constant JSON_Value := Create_Object do
+            Set_Field (Result, "Numerator", Property.Default.Numerator);
+            Set_Field (Result, "Denominator", Property.Default.Denominator);
+         end return;
+      end Generate;
+
+      function Generate (Property : Config_Property_Parameters_Sequence) return JSON_Value is
+      begin
+         return Result : constant JSON_Value := Create_Object do
+            for C in Property.Children.Iterate loop
+               Result.Set_Field
+                 (Config_Property_Maps.Key (C), Create_Default_Property_Config (Config_Property_Maps.Element (C)));
+            end loop;
+         end return;
+      end Generate;
+
+      function Generate (Property : Config_Property_Parameters_Variant) return JSON_Value is
+      begin
+         return Result : constant JSON_Value := Create_Object do
+            Result.Set_Field ("Selected", Property.Default);
+            Result.Set_Field ("Children", Create_Object);
+            for C in Property.Children.Iterate loop
+               Result.Get ("Children").Set_Field
+                 (Config_Property_Maps.Key (C), Create_Default_Property_Config (Config_Property_Maps.Element (C)));
+            end loop;
+         end return;
+      end Generate;
+   begin
+      if Property in Config_Property_Parameters_Boolean then
+         return Generate (Config_Property_Parameters_Boolean (Property));
+      elsif Property in Config_Property_Parameters_Discrete then
+         return Generate (Config_Property_Parameters_Discrete (Property));
+      elsif Property in Config_Property_Parameters_String then
+         return Generate (Config_Property_Parameters_String (Property));
+      elsif Property in Config_Property_Parameters_Integer then
+         return Generate (Config_Property_Parameters_Integer (Property));
+      elsif Property in Config_Property_Parameters_Float then
+         return Generate (Config_Property_Parameters_Float (Property));
+      elsif Property in Config_Property_Parameters_Float_Ratio then
+         return Generate (Config_Property_Parameters_Float_Ratio (Property));
+      elsif Property in Config_Property_Parameters_Sequence then
+         return Generate (Config_Property_Parameters_Sequence (Property));
+      elsif Property in Config_Property_Parameters_Variant then
+         return Generate (Config_Property_Parameters_Variant (Property));
+      else
+         raise Constraint_Error with "Unhandled property type (" & Property'Tag'Image & ").";
+      end if;
+   end Create_Default_Property_Config;
+
+   function Create_Default_Module_Config (Schema : Config_Property_Maps.Map) return JSON_Value is
    begin
       return Result : constant JSON_Value := Create_Object do
          for C in Schema.Iterate loop
-            Result.Set_Field (Config_Property_Maps.Key (C), Outer_Generate (Config_Property_Maps.Element (C)));
+            Result.Set_Field
+              (Config_Property_Maps.Key (C), Create_Default_Property_Config (Config_Property_Maps.Element (C)));
          end loop;
       end return;
    end Create_Default_Module_Config;
@@ -638,8 +641,154 @@ package body Prunt.Config is
       end if;
    end Unset_JSON_Node;
 
-   procedure Apply_Overrides_To_Config (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) is
+   function Path_Without_Last (Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector is
+      use type Ada.Containers.Count_Type;
+
+      Result : Config_Data_Paths.Vector;
    begin
+      if Path.Length < 2 then
+         return Result;
+      end if;
+
+      for I in Path.First_Index .. Path.Last_Index - 1 loop
+         Result.Append (Path.Element (I));
+      end loop;
+
+      return Result;
+   end Path_Without_Last;
+
+   function Selected_Variant_Default
+     (Schema        : Config_Property_Maps.Map;
+      Path          : Config_Data_Paths.Vector;
+      Default_Value : out JSON_Value) return Boolean
+   is
+      use type Ada.Containers.Count_Type;
+
+      Current_Schema : Config_Property_Maps.Map := Schema;
+      I              : Positive;
+   begin
+      Default_Value := JSON_Null;
+
+      if Path.Length < 2 or else Path.Last_Element /= "Selected" then
+         return False;
+      end if;
+
+      I := Path.First_Index;
+      while I < Path.Last_Index loop
+         if not Current_Schema.Contains (Path.Element (I)) then
+            return False;
+         end if;
+
+         declare
+            Property : constant Config_Property_Parameters'Class := Current_Schema.Element (Path.Element (I));
+         begin
+            if I = Path.Last_Index - 1 then
+               if Property in Config_Property_Parameters_Variant then
+                  Default_Value := Create_Default_Property_Config (Property);
+                  return True;
+               else
+                  return False;
+               end if;
+            elsif Property in Config_Property_Parameters_Sequence then
+               Current_Schema := Config_Property_Parameters_Sequence (Property).Children;
+               I := I + 1;
+            elsif Property in Config_Property_Parameters_Variant then
+               declare
+                  Variant : constant Config_Property_Parameters_Variant :=
+                    Config_Property_Parameters_Variant (Property);
+               begin
+                  if Path.Element (I + 1) /= "Children"
+                    or else I + 2 > Path.Last_Index - 1
+                    or else not Variant.Children.Contains (Path.Element (I + 2))
+                  then
+                     return False;
+                  end if;
+
+                  Current_Schema := Variant.Children;
+                  I := I + 2;
+               end;
+            else
+               return False;
+            end if;
+         end;
+      end loop;
+
+      return False;
+   end Selected_Variant_Default;
+
+   function Prune_Path_For_Override
+     (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector
+   is
+      Default_Value : JSON_Value;
+   begin
+      if Selected_Variant_Default (Schema, Path, Default_Value) then
+         return Path_Without_Last (Path);
+      else
+         return Path;
+      end if;
+   end Prune_Path_For_Override;
+
+   function Try_Get_JSON_Node
+     (Root : JSON_Value; Path : Config_Data_Paths.Vector; Result : out JSON_Value) return Boolean
+   is
+      Current_Node : JSON_Value := Root;
+   begin
+      Result := JSON_Null;
+
+      if Path.Is_Empty or else Current_Node.Kind /= JSON_Object_Type then
+         return False;
+      end if;
+
+      for Key of Path loop
+         if not Current_Node.Has_Field (Key) then
+            return False;
+         end if;
+
+         Current_Node := Current_Node.Get (Key);
+      end loop;
+
+      Result := Current_Node;
+      return True;
+   end Try_Get_JSON_Node;
+
+   procedure Merge_Default_JSON_Node
+     (Root : JSON_Value; Path : Config_Data_Paths.Vector; Default_Value : JSON_Value) is
+      Existing_Value : JSON_Value;
+   begin
+      if Try_Get_JSON_Node (Root, Path, Existing_Value) then
+         if Default_Value.Kind = JSON_Object_Type and then Existing_Value.Kind = JSON_Object_Type then
+            declare
+               Merged_Value : constant JSON_Value := Clone (Default_Value);
+            begin
+               Recursive_Left_Merge (Merged_Value, Existing_Value);
+               Set_JSON_Node (Root, Path, Merged_Value);
+            end;
+         end if;
+      else
+         Set_JSON_Node (Root, Path, Clone (Default_Value));
+      end if;
+   end Merge_Default_JSON_Node;
+
+   procedure Apply_Overrides_To_Config
+     (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector) is
+   begin
+      for Override of Overrides loop
+         if Schemas.Contains (Override.Owner) then
+            declare
+               Default_Value : JSON_Value;
+            begin
+               if Selected_Variant_Default
+                    (Schemas (Override.Owner).Element.Top_Level_Items, Override.Path, Default_Value)
+               then
+                  Merge_Default_JSON_Node
+                    (Config.Get ("Config").Get (Override.Owner).Get ("Config"),
+                     Path_Without_Last (Override.Path),
+                     Default_Value);
+               end if;
+            end;
+         end if;
+      end loop;
+
       for Override of Overrides loop
          Set_JSON_Node
            (Config.Get ("Config").Get (Override.Owner).Get ("Config"), Override.Path, Clone (Override.Value));
@@ -647,12 +796,17 @@ package body Prunt.Config is
    end Apply_Overrides_To_Config;
 
    function Prune_Overrides_From_Module_Config
-     (Owner : Virtual_String; Module_Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean
+     (Owner         : Virtual_String;
+      Module_Config : JSON_Value;
+      Module_Schema : Config_Property_Maps.Map;
+      Overrides     : Config_Override_Vectors.Vector) return Boolean
    is
       Changed : Boolean := False;
    begin
       for Override of Overrides loop
-         if Override.Owner = Owner and then Unset_JSON_Node (Module_Config, Override.Path) then
+         if Override.Owner = Owner
+           and then Unset_JSON_Node (Module_Config, Prune_Path_For_Override (Module_Schema, Override.Path))
+         then
             Changed := True;
          end if;
       end loop;
@@ -661,15 +815,19 @@ package body Prunt.Config is
    end Prune_Overrides_From_Module_Config;
 
    function Prune_Overrides_From_Config
-     (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean
+     (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector) return Boolean
    is
       Changed : Boolean := False;
    begin
       for Override of Overrides loop
          if Config.Get ("Config").Has_Field (Override.Owner)
+           and then Schemas.Contains (Override.Owner)
            and then
              Prune_Overrides_From_Module_Config
-               (Override.Owner, Config.Get ("Config").Get (Override.Owner).Get ("Config"), Overrides)
+               (Override.Owner,
+                Config.Get ("Config").Get (Override.Owner).Get ("Config"),
+                Schemas (Override.Owner).Element.Top_Level_Items,
+                Overrides)
          then
             Changed := True;
          end if;
@@ -988,7 +1146,9 @@ package body Prunt.Config is
                         New_Module_Config : constant JSON_Value :=
                           Create_Default_Module_Config (Module_Schema.Top_Level_Items);
                      begin
-                        if Prune_Overrides_From_Module_Config (Module_Name, Old_Module_Config, Overrides) then
+                        if Prune_Overrides_From_Module_Config
+                             (Module_Name, Old_Module_Config, Module_Schema.Top_Level_Items, Overrides)
+                        then
                            Write_Required := True;
                         end if;
                         Recursive_Left_Merge (Mid_Module_Config, Old_Module_Config);
@@ -1041,7 +1201,7 @@ package body Prunt.Config is
 
          Stored_Config := Live_Config.Clone;
 
-         if Prune_Overrides_From_Config (Stored_Config, Overrides) then
+         if Prune_Overrides_From_Config (Stored_Config, Schemas, Overrides) then
             Write_Required := True;
          end if;
 
@@ -1083,7 +1243,7 @@ package body Prunt.Config is
             Validate_Module (Stored_Config, Visible_Schemas);
 
             Live_Config := Stored_Config.Clone;
-            Apply_Overrides_To_Config (Live_Config, Overrides);
+            Apply_Overrides_To_Config (Live_Config, Schemas, Overrides);
             Validate_Module (Live_Config, Schemas);
          end;
 
@@ -1364,7 +1524,7 @@ package body Prunt.Config is
       begin
          Check_Ref_Count.all;
          Live_Config := Stored_Config.Clone;
-         Apply_Overrides_To_Config (Live_Config, Overrides);
+         Apply_Overrides_To_Config (Live_Config, Schemas, Overrides);
       end Reset_Live_To_Stored;
    end Config_File_Internal;
 

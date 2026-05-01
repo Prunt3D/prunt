@@ -1,0 +1,13 @@
+/obj/
+/bin/
+/alire/
+/config/
+/extras/dist/
+/generated_src_extras/
+/prebuild
+/b~prebuild.*
+/prebuild.ali
+/prebuild.o
+/prunt_simulator_config.json
+/prunt_simulator_config.json_backup_*
+/.dir-locals.el

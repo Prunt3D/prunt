@@ -2489,6 +2489,78 @@ package body Prunt.Config.Test is
       end;
    end Test_Config_Overrides_Reset_Reapplies_Overrides;
 
+   procedure Test_Config_Overrides_Variant_Selected_Rehydrates_Defaults (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
+        "{"
+        & """Prunt config version"": 1,"
+        & """Config"": {"
+        & "   ""M"": {"
+        & "      ""Version"": 1,"
+        & "      ""Config"": {}"
+        & "   }"
+        & "}"
+        & "}";
+      Schemas : constant Config_Schema_Maps.Map :=
+        ["M" =>
+           Versioned_Config_Schema'
+             (Version         => 1,
+              Top_Level_Items =>
+                ["v" =>
+                   Config_Property_Parameters_Variant'
+                     (Description => "",
+                      Default     => "a",
+                      Children    =>
+                        ["a" =>
+                           Config_Property_Parameters_Integer'
+                             (Description => "", Min => 0, Max => 10, Unit => "", Default => 1),
+                         "b" =>
+                           Config_Property_Parameters_Integer'
+                             (Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])];
+      Overrides : constant Config_Override_Vectors.Vector :=
+        [Config_Override'
+           (Owner => "M",
+            Path  => Config_Data_Paths.Vector'(["v", "Selected"]),
+            Value => Create (Conversions.To_Virtual_String ("b"))),
+         Config_Override'
+           (Owner => "M",
+            Path  => Config_Data_Paths.Vector'(["v", "Children", "b"]),
+            Value => Create (Long_Long_Integer'(6)))];
+
+      declare
+         F : Mockable.Text_IO.File_Type;
+      begin
+         Mockable.Text_IO.Create (F, Mockable.Text_IO.Out_File, Filename);
+         Mockable.Text_IO.Put_Line (F, Content);
+         Mockable.Text_IO.Close (F);
+      end;
+
+      declare
+         File : constant Config_File := Create (Filename, Schemas, Overrides);
+         Data : Config_Data := File.Get_Data ("M");
+
+         Stored_JSON : constant JSON_Value := Read (File.Get_Data_String);
+         Schema_JSON : constant JSON_Value := Read (File.Get_Schema_String);
+      begin
+         T.Assert (Data.Get (Config_Data_Paths.Vector'(["v", "Selected"])) = "b", "Variant selection not live");
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["v", "Children", "a"])) = Long_Long_Integer'(1),
+            "Variant defaults not rehydrated");
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["v", "Children", "b"])) = Long_Long_Integer'(6),
+            "Variant child override not live");
+         T.Assert
+           (not Stored_JSON.Get ("Config").Get ("M").Get ("Config").Has_Field ("v"),
+            "Stored config exposes override");
+         T.Assert
+           (not Schema_JSON.Get ("Config").Get ("M").Get ("Config").Has_Field ("v"),
+            "Schema exposes variant selected override");
+      end;
+   end Test_Config_Overrides_Variant_Selected_Rehydrates_Defaults;
+
    procedure Test_Config_Overrides_Invalid (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -2636,6 +2708,7 @@ package body Prunt.Config.Test is
          Test_Config_Overrides_Hidden_From_Stored_And_Schema'Access,
          Test_Config_Overrides_Reject_Writes'Access,
          Test_Config_Overrides_Reset_Reapplies_Overrides'Access,
+         Test_Config_Overrides_Variant_Selected_Rehydrates_Defaults'Access,
          Test_Config_Overrides_Invalid'Access];
    end All_Tests;
 

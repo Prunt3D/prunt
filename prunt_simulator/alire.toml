@@ -1,0 +1,37 @@
+name = "prunt_simulator"
+description = ""
+version = "0.1.0-dev"
+
+authors = ["Liam Powell"]
+maintainers = ["Liam Powell <liam@liampwll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "MIT"
+website = ""
+tags = []
+
+executables = ["prunt_simulator"]
+
+[build-switches]
+# Configured in GPR file.
+"*".optimization = []
+"*".debug_info = []
+"*".runtime_checks = []
+"*".compile_checks = []
+"*".contracts = []
+"*".style_checks = []
+"*".ada_version = []
+"*".source_encoding = []
+
+[[actions]]
+type = "pre-build"
+command = ["gnatmake", "-gnat2022", "-gnatW8", "-gnata", "-g", "prebuild.adb", "-o", "prebuild", "-bargs", "-Es"]
+
+[[actions]]
+type = "pre-build"
+command = ["./prebuild"]
+
+[[depends-on]]
+prunt = "*"
+
+[[pins]]
+prunt = { path='..' }

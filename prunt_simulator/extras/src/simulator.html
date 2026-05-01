@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Prunt Simulator</title>
+    <link rel="stylesheet" href="/extras/uPlot.min.css">
+    <link rel="stylesheet" href="/extras/simulator.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Prunt Simulator</h1>
+        <p id="sample-summary">Waiting for samples</p>
+      </div>
+      <form id="command-form" class="command-form">
+        <input id="command-input" name="command" value="G1 X50 Y30 F1800" autocomplete="off">
+        <button type="submit">Run</button>
+      </form>
+    </header>
+    <main>
+      <section class="plot-section">
+        <div class="section-heading">
+          <h2>XY Position</h2>
+          <span id="xy-summary"></span>
+        </div>
+        <div id="xy-plot" class="plot xy-plot"></div>
+      </section>
+      <section class="plot-section">
+        <div class="section-heading">
+          <h2>Axial Samples</h2>
+          <span>Position and derivatives</span>
+        </div>
+        <div id="derivative-plots" class="derivative-grid"></div>
+      </section>
+    </main>
+    <script type="module" src="/extras/simulator.js"></script>
+  </body>
+</html>
