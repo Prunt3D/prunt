@@ -834,7 +834,7 @@ package body Prunt.Controller is
                   --  There is no point trying to load the modules if there are errors when testing against the schema
                   --  as no patch is applied in that case.
                   My_Config_File             : constant Config.Config_File :=
-                    Config.Create (Config_Path, Active_Module_Config_Schemas);
+                    Config.Create (Config_Path, Active_Module_Config_Schemas, Config_Overrides);
                   Temporary_Module_Instances : Module_Instance_Maps.Map :=
                     Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File);
                begin

@@ -53,9 +53,9 @@ with Ada.Containers.Ordered_Sets;
 with Ada.Containers.Vectors;
 with Prunt.Generic_Lock;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
+with Prunt.JSON;
 
 private with Ada.Finalization;
-private with Prunt.JSON;
 private with Prunt.Limited_Shared_Pointers;
 private with VSS.String_Vectors;
 
@@ -64,6 +64,18 @@ package Prunt.Config is
    package Discrete_String_Sets is new Ada.Containers.Ordered_Sets (Virtual_String);
 
    package Config_Data_Paths is new Ada.Containers.Vectors (Positive, Virtual_String);
+
+   type Config_Override is record
+      Owner : Virtual_String;
+      Path  : Config_Data_Paths.Vector;
+      Value : JSON.JSON_Value;
+   end record;
+   --  Immutable replacement for one module-local configuration value.
+   --
+   --  Owner names the module, Path uses the same module-local path format as Config_Data.Get and Config_Data.Set,
+   --  and Value is the JSON value to place at that path in the live/effective configuration.
+
+   package Config_Override_Vectors is new Ada.Containers.Vectors (Positive, Config_Override);
 
    type Config_Error is record
       Path    : Config_Data_Paths.Vector;
@@ -287,7 +299,9 @@ package Prunt.Config is
 
    type Config_File (<>) is limited private;
 
-   function Create (File_Name : String; Schemas : Config_Schema_Maps.Map) return Config_File;
+   function Create
+     (File_Name : String; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector := [])
+      return Config_File;
    --  Initializes access to a configuration file.
    --
    --  Behaviour:
@@ -300,6 +314,9 @@ package Prunt.Config is
    --    - If missing in file, it is initialized with defaults.
    --  - If the file contains modules NOT in Schemas, Constraint_Error is raised.
    --  - If the file does not exist, it is created with default values for all modules in Schemas.
+   --  - Overrides are module-local paths and JSON values which are validated against Schemas at startup.
+   --  - Overrides are applied to the live configuration only. Overridden fields are removed from the stored
+   --    configuration and generated schema, and attempts to modify them are rejected.
 
    function Get_Data (This : Config_File; Module_Name : Virtual_String) return Config_Data;
    --  Retrieves the configuration data for a specific module.
@@ -393,17 +410,21 @@ private
       procedure Initialize
         (File_Name_In : String;
          Schemas_In   : Config_Schema_Maps.Map;
+         Overrides_In : Config_Override_Vectors.Vector;
          Migrate      :
            access function
              (Module : Virtual_String; Old_Version : Config_Schema_Version; Old_Config : JSON_Value) return JSON_Value;
          Lock         : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
-      --  Reads the configuration file, validates it, and performs migrations if necessary.
+      --  Reads the configuration file, validates it, performs migrations if necessary, and prepares the separate
+      --  stored/UI and live/effective configuration views.
 
       function Get (Owner : Virtual_String; Path : Config_Data_Paths.Vector) return JSON_Value;
       --  Gets a value from the live configuration. Owner specifies the module requesting the data.
 
       procedure Set (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Value : JSON_Value);
       --  Sets a value in the live configuration. Owner specifies the module setting the data.
+      --
+      --  Raises Constraint_Error if Path overlaps an override for Owner.
 
       procedure Save (Owner : Virtual_String; Lock : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Saves the current live configuration to the stored configuration and to disk for the relevant module only.
@@ -415,7 +436,7 @@ private
          Errors : out Config_Error_Vectors.Vector;
          Lock   : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Applies a JSON patch to the configuration. Checks for validation errors before applying and does not apply
-      --  any changes if validation fails.
+      --  any changes if validation fails. Patches which touch overridden fields are rejected.
 
       function Get_Stored_Config return Virtual_String;
       --  Returns the JSON string of the stored configuration.
@@ -427,18 +448,20 @@ private
       --  Returns the a counter value which is incremented every time the stored configuration is changed.
 
       procedure Reset_Live_To_Stored (Check_Ref_Count : access procedure);
-      --  Resets the live configuration to match the stored configuration. Check_Ref_Count is called immdiately upon
+      --  Resets the live configuration to match the stored configuration. Check_Ref_Count is called immediately upon
       --  entry and may be used to raise an exception if there are still references to the configuration file which
-      --  are not expecting the live configuration to change.
+      --  are not expecting the live configuration to change. Overrides are reapplied after the reset.
    private
       procedure Write_File;
-      File_Name      : Virtual_String := "";
-      Live_Config    : JSON_Value := JSON_Null;
-      Update_Deltas  : JSON_Delta_Maps.Map := [];
-      Stored_Config  : JSON_Value := JSON_Null;
-      Schemas        : Config_Schema_Maps.Map := [];
-      Cached_Schemas : Virtual_String := "";
-      Save_Count     : Save_Counter := 0;
+      File_Name       : Virtual_String := "";
+      Live_Config     : JSON_Value := JSON_Null;
+      Update_Deltas   : JSON_Delta_Maps.Map := [];
+      Stored_Config   : JSON_Value := JSON_Null;
+      Schemas         : Config_Schema_Maps.Map := [];
+      Cached_Schemas  : Virtual_String := "";
+      Save_Count      : Save_Counter := 0;
+      Overrides       : Config_Override_Vectors.Vector := [];
+      Visible_Schemas : Config_Schema_Maps.Map := [];
    end Config_File_Internal;
 
    package Config_File_Internal_Shared_Pointers is new Limited_Shared_Pointers (Config_File_Internal);
@@ -458,6 +481,52 @@ private
    function Get_JSON_Node
      (Root : JSON_Value; Path : Config_Data_Paths.Vector; Module : Virtual_String) return JSON_Value;
    procedure Set_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Value : JSON_Value);
+
+   function Is_Path_Prefix (Prefix : Config_Data_Paths.Vector; Path : Config_Data_Paths.Vector) return Boolean;
+   --  Returns True when Prefix is an initial segment of Path. The empty path is a prefix of every path.
+
+   function Paths_Overlap (Left : Config_Data_Paths.Vector; Right : Config_Data_Paths.Vector) return Boolean;
+   --  Returns True when either path is the other path or is inside the other path.
+
+   function Path_Equals_Override
+     (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Overrides : Config_Override_Vectors.Vector)
+      return Boolean;
+   --  Returns True when Overrides contains an entry for Owner with exactly Path.
+
+   function Path_Overlaps_Overrides
+     (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Overrides : Config_Override_Vectors.Vector)
+      return Boolean;
+   --  Returns True when Path matches, is inside, or contains an overridden path for Owner.
+
+   function Unset_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector) return Boolean;
+   --  Removes the object member addressed by Path from Root. Returns True only when a member was removed.
+
+   procedure Apply_Overrides_To_Config (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector);
+   --  Applies Overrides to the live/effective configuration object. Override values are cloned into Config.
+
+   function Prune_Overrides_From_Module_Config
+     (Owner : Virtual_String; Module_Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean;
+   --  Removes all overridden fields for Owner from Module_Config. Returns True when Module_Config changed.
+
+   function Prune_Overrides_From_Config
+     (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean;
+   --  Removes all overridden fields from the stored/UI configuration. Returns True when Config changed.
+
+   function Prune_Overrides_From_Schemas
+     (Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector) return Config_Schema_Maps.Map;
+   --  Returns a schema map suitable for the web UI, with overridden fields removed.
+
+   procedure Validate_Overrides (Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector);
+   --  Validates override owners, paths, overlap, value types, and schema constraints.
+   --
+   --  Raises Constraint_Error if any override is invalid.
+
+   procedure Validate_No_Overrides_In_Patch
+     (Owner     : Virtual_String;
+      Value     : JSON_Value;
+      Overrides : Config_Override_Vectors.Vector;
+      Report    : access procedure (Path : Config_Data_Paths.Vector; Message : Virtual_String));
+   --  Reports every overridden path touched by an untrusted patch for Owner.
 
    type Config_Data is record
       For_Migration    : Boolean := False;

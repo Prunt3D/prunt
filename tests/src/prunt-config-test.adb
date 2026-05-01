@@ -72,6 +72,47 @@ package body Prunt.Config.Test is
       return Error_Reported;
    end Reports_Error_Module_Config_To_Schema;
 
+   function Override_Test_Schemas return Config_Schema_Maps.Map is
+   begin
+      return
+        ["M" =>
+           Versioned_Config_Schema'
+             (Version         => 1,
+              Top_Level_Items =>
+                ["s" =>
+                   Config_Property_Parameters_Sequence'
+                     (Description => "",
+                      Tabbed      => False,
+                      Children    =>
+                        ["i" =>
+                           Config_Property_Parameters_Integer'
+                             (Description => "", Min => 0, Max => 10, Unit => "", Default => 1),
+                         "j" =>
+                           Config_Property_Parameters_Integer'
+                             (Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])];
+   end Override_Test_Schemas;
+
+   function Override_I return Config_Override_Vectors.Vector is
+   begin
+      return
+        Config_Override_Vectors.Vector'
+          ([Config_Override'
+              (Owner => "M", Path => Config_Data_Paths.Vector'(["s", "i"]), Value => Create (Long_Long_Integer'(7)))]);
+   end Override_I;
+
+   function Read_Test_File (Filename : String) return JSON_Value is
+      F       : Mockable.Text_IO.File_Type;
+      Content : Unbounded_String;
+   begin
+      Mockable.Text_IO.Open (F, Mockable.Text_IO.In_File, Filename);
+      while not Mockable.Text_IO.End_Of_File (F) loop
+         Append (Content, Mockable.Text_IO.Get_Line (F));
+      end loop;
+      Mockable.Text_IO.Close (F);
+
+      return Read (Conversions.To_Virtual_String (Content));
+   end Read_Test_File;
+
    procedure Test_Apply_Patch_Errors (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -2347,6 +2388,177 @@ package body Prunt.Config.Test is
       end;
    end Test_Set_Migration_Config_Not_Object;
 
+   procedure Test_Config_Overrides_Hidden_From_Stored_And_Schema (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
+        "{"
+        & """Prunt config version"": 1,"
+        & """Config"": {"
+        & "   ""M"": {"
+        & "      ""Version"": 1,"
+        & "      ""Config"": {""s"": {""i"": 3, ""j"": 4}}"
+        & "   }"
+        & "}"
+        & "}";
+
+      declare
+         F : Mockable.Text_IO.File_Type;
+      begin
+         Mockable.Text_IO.Create (F, Mockable.Text_IO.Out_File, Filename);
+         Mockable.Text_IO.Put_Line (F, Content);
+         Mockable.Text_IO.Close (F);
+      end;
+
+      File : constant Config_File := Create (Filename, Override_Test_Schemas, Override_I);
+      Data : Config_Data := File.Get_Data ("M");
+
+      Stored_JSON : constant JSON_Value := Read (File.Get_Data_String);
+      Schema_JSON : constant JSON_Value := Read (File.Get_Schema_String);
+      Disk_JSON : constant JSON_Value := Read_Test_File (Filename);
+
+      T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "i"])) = Long_Long_Integer'(7), "Override not live");
+      T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "j"])) = Long_Long_Integer'(4), "Stored value not kept");
+      T.Assert
+        (not Stored_JSON.Get ("Config").Get ("M").Get ("Config").Get ("s").Has_Field ("i"),
+         "Stored config exposes override");
+      T.Assert
+        (not Schema_JSON.Get ("Config").Get ("M").Get ("Config").Get ("s").Get ("Children").Has_Field ("i"),
+         "Schema exposes override");
+      T.Assert
+        (not Disk_JSON.Get ("Config").Get ("M").Get ("Config").Get ("s").Has_Field ("i"),
+         "Config file exposes override");
+   end Test_Config_Overrides_Hidden_From_Stored_And_Schema;
+
+   procedure Test_Config_Overrides_Reject_Writes (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Override_Test_Schemas, Override_I);
+      Data : Config_Data := File.Get_Data ("M");
+      Output : Virtual_String;
+      Errors : Config_Error_Vectors.Vector;
+
+      begin
+         Data.Set (Config_Data_Paths.Vector'(["s", "i"]), Long_Long_Integer'(8));
+         T.Fail ("Overridden value should reject Config_Data.Set.");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+
+      Data.Set (Config_Data_Paths.Vector'(["s", "j"]), Long_Long_Integer'(5));
+      Data.Save;
+      T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "i"])) = Long_Long_Integer'(7), "Override changed");
+      T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "j"])) = Long_Long_Integer'(5), "Normal value not saved");
+
+      File.Apply_Untrusted_Patch
+        ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": {""s"": {""i"": 9}}}}}",
+         Output,
+         Errors);
+      T.Assert (not Errors.Is_Empty, "Overridden value should reject web patch.");
+      T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "i"])) = Long_Long_Integer'(7), "Patch changed override");
+   end Test_Config_Overrides_Reject_Writes;
+
+   procedure Test_Config_Overrides_Reset_Reapplies_Overrides (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Override_Test_Schemas, Override_I);
+
+      declare
+         Data : Config_Data := File.Get_Data ("M");
+      begin
+         Data.Set (Config_Data_Paths.Vector'(["s", "j"]), Long_Long_Integer'(6));
+         T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "j"])) = Long_Long_Integer'(6));
+      end;
+
+      File.Reset_Live_To_Stored;
+
+      declare
+         Data : Config_Data := File.Get_Data ("M");
+      begin
+         T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "i"])) = Long_Long_Integer'(7), "Override not reapplied");
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["s", "j"])) = Long_Long_Integer'(2),
+            "Reset did not restore stored value");
+      end;
+   end Test_Config_Overrides_Reset_Reapplies_Overrides;
+
+   procedure Test_Config_Overrides_Invalid (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      begin
+         File : Config_File :=
+           Create
+             (Next_Test_Filename,
+              Override_Test_Schemas,
+              [Config_Override'
+                 (Owner => "Unknown",
+                  Path  => Config_Data_Paths.Vector'(["s", "i"]),
+                  Value => Create (Long_Long_Integer'(7)))])
+         with Unreferenced;
+         T.Fail ("Unknown override module should fail.");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+
+      begin
+         File : Config_File :=
+           Create
+             (Next_Test_Filename,
+              Override_Test_Schemas,
+              [Config_Override'
+                 (Owner => "M",
+                  Path  => Config_Data_Paths.Vector'(["s", "missing"]),
+                  Value => Create (Long_Long_Integer'(7)))])
+         with Unreferenced;
+         T.Fail ("Unknown override path should fail.");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+
+      begin
+         File : Config_File :=
+           Create
+             (Next_Test_Filename,
+              Override_Test_Schemas,
+              [Config_Override'
+                 (Owner => "M",
+                  Path  => Config_Data_Paths.Vector'(["s", "i"]),
+                  Value => Create (Long_Long_Integer'(99)))])
+         with Unreferenced;
+         T.Fail ("Out-of-range override should fail.");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+
+      begin
+         File : Config_File :=
+           Create
+             (Next_Test_Filename,
+              Override_Test_Schemas,
+              [Config_Override'(Owner => "M", Path => Config_Data_Paths.Vector'(["s"]), Value => Create_Object),
+               Config_Override'
+                 (Owner => "M",
+                  Path  => Config_Data_Paths.Vector'(["s", "i"]),
+                  Value => Create (Long_Long_Integer'(7)))])
+         with Unreferenced;
+         T.Fail ("Overlapping overrides should fail.");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+   end Test_Config_Overrides_Invalid;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
@@ -2420,7 +2632,11 @@ package body Prunt.Config.Test is
          Test_Apply_Untrusted_Patch_Really_Empty'Access,
          Test_Reset_Live_To_Stored_Ref_Count'Access,
          Test_Reset_Live_To_Stored_Success'Access,
-         Test_Set_Migration_Config_Not_Object'Access];
+         Test_Set_Migration_Config_Not_Object'Access,
+         Test_Config_Overrides_Hidden_From_Stored_And_Schema'Access,
+         Test_Config_Overrides_Reject_Writes'Access,
+         Test_Config_Overrides_Reset_Reapplies_Overrides'Access,
+         Test_Config_Overrides_Invalid'Access];
    end All_Tests;
 
 end Prunt.Config.Test;

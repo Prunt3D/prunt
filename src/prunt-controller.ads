@@ -100,6 +100,10 @@ generic
    Config_Path : String;
    --  Path of the printer configuration file.
 
+   Config_Overrides : Config.Config_Override_Vectors.Vector := [];
+   --  Immutable configuration values used by modules but hidden from the web interface and omitted from the
+   --  configuration file.
+
    with
      function Get_Extra_HTTP_Content (Name : Virtual_String) return access constant Ada.Streams.Stream_Element_Array;
    --  Get a file to be exposed via the built in web server under the extras/ path. This is intended to be used for
@@ -386,7 +390,8 @@ private
    Maximum_Motor_Delta : constant Motor_Position :=
      [for S in Motor_Name => Hardware.Motor_Hardware (S).Maximum_Delta_Per_Command];
 
-   Active_Config_File : constant Config.Config_File := Config.Create (Config_Path, Active_Module_Config_Schemas);
+   Active_Config_File : constant Config.Config_File :=
+     Config.Create (Config_Path, Active_Module_Config_Schemas, Config_Overrides);
 
    package My_Update_Checker is new Update_Checker (My_Logger, Update_Check);
 

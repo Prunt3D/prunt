@@ -556,10 +556,298 @@ package body Prunt.Config is
       return Write (Result);
    end Generate_Schemas_String;
 
+   function Is_Path_Prefix (Prefix : Config_Data_Paths.Vector; Path : Config_Data_Paths.Vector) return Boolean is
+      use type Ada.Containers.Count_Type;
+   begin
+      if Prefix.Length > Path.Length then
+         return False;
+      end if;
+
+      if Prefix.Is_Empty then
+         return True;
+      end if;
+
+      for Offset in 0 .. Natural (Prefix.Length) - 1 loop
+         if Prefix.Element (Prefix.First_Index + Offset) /= Path.Element (Path.First_Index + Offset) then
+            return False;
+         end if;
+      end loop;
+
+      return True;
+   end Is_Path_Prefix;
+
+   function Paths_Overlap (Left : Config_Data_Paths.Vector; Right : Config_Data_Paths.Vector) return Boolean is
+   begin
+      return Is_Path_Prefix (Left, Right) or else Is_Path_Prefix (Right, Left);
+   end Paths_Overlap;
+
+   function Path_Equals_Override
+     (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Overrides : Config_Override_Vectors.Vector)
+      return Boolean
+   is
+      use type Config_Data_Paths.Vector;
+   begin
+      for Override of Overrides loop
+         if Override.Owner = Owner and then Override.Path = Path then
+            return True;
+         end if;
+      end loop;
+
+      return False;
+   end Path_Equals_Override;
+
+   function Path_Overlaps_Overrides
+     (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Overrides : Config_Override_Vectors.Vector)
+      return Boolean is
+   begin
+      for Override of Overrides loop
+         if Override.Owner = Owner and then Paths_Overlap (Path, Override.Path) then
+            return True;
+         end if;
+      end loop;
+
+      return False;
+   end Path_Overlaps_Overrides;
+
+   function Unset_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector) return Boolean is
+      use Config_Data_Paths;
+
+      Current_Node : JSON_Value := Root;
+   begin
+      if Path.Is_Empty or else Root.Kind /= JSON_Object_Type then
+         return False;
+      end if;
+
+      for I in Path.First_Index .. Path.Last_Index - 1 loop
+         if not Current_Node.Has_Field (Path.Element (I)) then
+            return False;
+         end if;
+
+         Current_Node := Current_Node.Get (Path.Element (I));
+
+         if Current_Node.Kind /= JSON_Object_Type then
+            return False;
+         end if;
+      end loop;
+
+      if Current_Node.Has_Field (Path.Last_Element) then
+         Current_Node.Unset_Field (Path.Last_Element);
+         return True;
+      else
+         return False;
+      end if;
+   end Unset_JSON_Node;
+
+   procedure Apply_Overrides_To_Config (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) is
+   begin
+      for Override of Overrides loop
+         Set_JSON_Node
+           (Config.Get ("Config").Get (Override.Owner).Get ("Config"), Override.Path, Clone (Override.Value));
+      end loop;
+   end Apply_Overrides_To_Config;
+
+   function Prune_Overrides_From_Module_Config
+     (Owner : Virtual_String; Module_Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean
+   is
+      Changed : Boolean := False;
+   begin
+      for Override of Overrides loop
+         if Override.Owner = Owner and then Unset_JSON_Node (Module_Config, Override.Path) then
+            Changed := True;
+         end if;
+      end loop;
+
+      return Changed;
+   end Prune_Overrides_From_Module_Config;
+
+   function Prune_Overrides_From_Config
+     (Config : JSON_Value; Overrides : Config_Override_Vectors.Vector) return Boolean
+   is
+      Changed : Boolean := False;
+   begin
+      for Override of Overrides loop
+         if Config.Get ("Config").Has_Field (Override.Owner)
+           and then
+             Prune_Overrides_From_Module_Config
+               (Override.Owner, Config.Get ("Config").Get (Override.Owner).Get ("Config"), Overrides)
+         then
+            Changed := True;
+         end if;
+      end loop;
+
+      return Changed;
+   end Prune_Overrides_From_Config;
+
+   function Prune_Overrides_From_Schemas
+     (Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector) return Config_Schema_Maps.Map
+   is
+      Result : Config_Schema_Maps.Map := Schemas;
+
+      procedure Remove_From_Property
+        (Property : in out Config_Property_Parameters'Class; Path : Config_Data_Paths.Vector; Index : Positive);
+      --  Removes the schema subtree addressed by Path, starting at Index, from a nested property.
+
+      procedure Remove_From_Schema_Map
+        (Schema : in out Config_Property_Maps.Map; Path : Config_Data_Paths.Vector; Index : Positive);
+      --  Removes the schema entry addressed by Path, starting at Index, from a schema map.
+
+      procedure Remove_From_Property
+        (Property : in out Config_Property_Parameters'Class; Path : Config_Data_Paths.Vector; Index : Positive) is
+      begin
+         if Property in Config_Property_Parameters_Sequence then
+            Remove_From_Schema_Map (Config_Property_Parameters_Sequence (Property).Children, Path, Index);
+         elsif Property in Config_Property_Parameters_Variant then
+            declare
+               Variant : Config_Property_Parameters_Variant renames Config_Property_Parameters_Variant (Property);
+            begin
+               if Path.Element (Index) = "Selected" then
+                  Variant.Children := [];
+               elsif Path.Element (Index) = "Children" then
+                  if Index = Path.Last_Index then
+                     Variant.Children := [];
+                  elsif Variant.Children.Contains (Path.Element (Index + 1)) then
+                     if Index + 1 = Path.Last_Index then
+                        Variant.Children.Delete (Path.Element (Index + 1));
+                     else
+                        declare
+                           Child : Config_Property_Parameters'Class renames
+                             Variant.Children.Reference (Path.Element (Index + 1));
+                        begin
+                           Remove_From_Property (Child, Path, Index + 2);
+                        end;
+                     end if;
+                  end if;
+               end if;
+            end;
+         end if;
+      end Remove_From_Property;
+
+      procedure Remove_From_Schema_Map
+        (Schema : in out Config_Property_Maps.Map; Path : Config_Data_Paths.Vector; Index : Positive)
+      is
+         Key : constant Virtual_String := Path.Element (Index);
+      begin
+         if not Schema.Contains (Key) then
+            return;
+         end if;
+
+         if Index = Path.Last_Index then
+            Schema.Delete (Key);
+            return;
+         end if;
+
+         if Schema.Element (Key) in Config_Property_Parameters_Variant and then Path.Element (Index + 1) = "Selected"
+         then
+            Schema.Delete (Key);
+            return;
+         end if;
+
+         declare
+            Property : Config_Property_Parameters'Class renames Schema.Reference (Key);
+         begin
+            Remove_From_Property (Property, Path, Index + 1);
+         end;
+      end Remove_From_Schema_Map;
+   begin
+      for Override of Overrides loop
+         if Result.Contains (Override.Owner) and then not Override.Path.Is_Empty then
+            declare
+               Module_Schema : Versioned_Config_Schema'Class := Result.Element (Override.Owner);
+            begin
+               Remove_From_Schema_Map (Module_Schema.Top_Level_Items, Override.Path, Override.Path.First_Index);
+               Result.Replace (Override.Owner, Module_Schema);
+            end;
+         end if;
+      end loop;
+
+      return Result;
+   end Prune_Overrides_From_Schemas;
+
+   procedure Validate_Overrides (Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector) is
+      procedure Raise_Error (Path : Config_Data_Paths.Vector; Message : Virtual_String);
+      --  Raises Constraint_Error with a message identifying an invalid override value.
+
+      procedure Raise_Error (Path : Config_Data_Paths.Vector; Message : Virtual_String) is
+      begin
+         raise Constraint_Error
+           with "Invalid config override: " & Conversions.To_UTF_8_String (Message) & " (Path: " & Path'Image & ")";
+      end Raise_Error;
+   begin
+      for Override of Overrides loop
+         if Override.Path.Is_Empty then
+            raise Constraint_Error with "Invalid config override: path must not be empty.";
+         elsif not Schemas.Contains (Override.Owner) then
+            raise Constraint_Error
+              with "Invalid config override: unknown module " & Conversions.To_UTF_8_String (Override.Owner) & ".";
+         end if;
+      end loop;
+
+      if not Overrides.Is_Empty then
+         for I in Overrides.First_Index .. Overrides.Last_Index loop
+            for J in I + 1 .. Overrides.Last_Index loop
+               if Overrides.Element (I).Owner = Overrides.Element (J).Owner
+                 and then Paths_Overlap (Overrides.Element (I).Path, Overrides.Element (J).Path)
+               then
+                  raise Constraint_Error
+                    with
+                      "Invalid config override: overlapping paths for module "
+                      & Conversions.To_UTF_8_String (Overrides.Element (I).Owner)
+                      & ".";
+               end if;
+            end loop;
+         end loop;
+      end if;
+
+      for Override of Overrides loop
+         declare
+            Module_Config : constant JSON_Value :=
+              Create_Default_Module_Config (Schemas (Override.Owner).Element.Top_Level_Items);
+         begin
+            Set_JSON_Node (Module_Config, Override.Path, Clone (Override.Value));
+            Validate_Module_Config_To_Schema
+              (Module_Config,
+               Schemas (Override.Owner).Element.Top_Level_Items,
+               Raise_Error'Access,
+               Check_For_Missing_Fields => True);
+         end;
+      end loop;
+   end Validate_Overrides;
+
+   procedure Validate_No_Overrides_In_Patch
+     (Owner     : Virtual_String;
+      Value     : JSON_Value;
+      Overrides : Config_Override_Vectors.Vector;
+      Report    : access procedure (Path : Config_Data_Paths.Vector; Message : Virtual_String))
+   is
+      use Config_Data_Paths;
+
+      procedure Recursive_Check (Path : Config_Data_Paths.Vector; Node : JSON_Value);
+      --  Walks a patch subtree and reports any path which overlaps an override.
+
+      procedure Recursive_Check (Path : Config_Data_Paths.Vector; Node : JSON_Value) is
+         procedure Check_Child (Name : Virtual_String; Child : JSON_Value);
+         --  Continues the recursive patch check for one object member.
+
+         procedure Check_Child (Name : Virtual_String; Child : JSON_Value) is
+         begin
+            Recursive_Check (Path & Name, Child);
+         end Check_Child;
+      begin
+         if Node.Kind = JSON_Object_Type and then not Path_Equals_Override (Owner, Path, Overrides) then
+            Node.Map_JSON_Object (Check_Child'Access);
+         elsif Path_Overlaps_Overrides (Owner, Path, Overrides) then
+            Report (Path, "Field is overridden and cannot be changed.");
+         end if;
+      end Recursive_Check;
+   begin
+      Recursive_Check ([], Value);
+   end Validate_No_Overrides_In_Patch;
+
    protected body Config_File_Internal is
       procedure Initialize
         (File_Name_In : String;
          Schemas_In   : Config_Schema_Maps.Map;
+         Overrides_In : Config_Override_Vectors.Vector;
          Migrate      :
            access function
              (Module : Virtual_String; Old_Version : Config_Schema_Version; Old_Config : JSON_Value) return JSON_Value;
@@ -580,6 +868,9 @@ package body Prunt.Config is
       begin
          File_Name := Conversions.To_Virtual_String (File_Name_In);
          Schemas := Schemas_In;
+         Overrides := Overrides_In;
+         Validate_Overrides (Schemas, Overrides);
+         Visible_Schemas := Prune_Overrides_From_Schemas (Schemas, Overrides);
 
          declare
             Global_Schema : Config_Property_Maps.Map;
@@ -691,12 +982,15 @@ package body Prunt.Config is
                   then
                      declare
                         Old_Module_Config : constant JSON_Value :=
-                          Live_Config.Get ("Config").Get (Module_Name).Get ("Config");
+                          Clone (Live_Config.Get ("Config").Get (Module_Name).Get ("Config"));
                         Mid_Module_Config : constant JSON_Value :=
                           Create_Default_Module_Config (Module_Schema.Top_Level_Items);
                         New_Module_Config : constant JSON_Value :=
                           Create_Default_Module_Config (Module_Schema.Top_Level_Items);
                      begin
+                        if Prune_Overrides_From_Module_Config (Module_Name, Old_Module_Config, Overrides) then
+                           Write_Required := True;
+                        end if;
                         Recursive_Left_Merge (Mid_Module_Config, Old_Module_Config);
                         --  Adds any new fields in the schema with default values.
                         Live_Config.Get ("Config").Get (Module_Name).Set_Field ("Config", Mid_Module_Config);
@@ -728,11 +1022,6 @@ package body Prunt.Config is
                   Write_Required := True;
                end if;
 
-               Validate_Module_Config_To_Schema
-                 (Live_Config.Get ("Config").Get (Module_Name).Get ("Config"),
-                  Module_Schema.Top_Level_Items,
-                  Raise_Error_For_Module'Access,
-                  Check_For_Missing_Fields => True);
             end;
          end loop;
 
@@ -752,11 +1041,57 @@ package body Prunt.Config is
 
          Stored_Config := Live_Config.Clone;
 
+         if Prune_Overrides_From_Config (Stored_Config, Overrides) then
+            Write_Required := True;
+         end if;
+
+         declare
+            procedure Validate_Module (Config_To_Check : JSON_Value; Validation_Schemas : Config_Schema_Maps.Map);
+            --  Validates each module in Config_To_Check against the corresponding schema in Validation_Schemas.
+
+            procedure Validate_Module (Config_To_Check : JSON_Value; Validation_Schemas : Config_Schema_Maps.Map) is
+            begin
+               for M in Validation_Schemas.Iterate loop
+                  declare
+                     Module_Name   : constant Virtual_String := Config_Schema_Maps.Key (M);
+                     Module_Schema : constant Versioned_Config_Schema'Class := Config_Schema_Maps.Element (M);
+
+                     procedure Raise_Error_For_Module (Path : Config_Data_Paths.Vector; Message : Virtual_String);
+                     --  Raises a schema validation error with the module name prefixed onto Path.
+
+                     procedure Raise_Error_For_Module (Path : Config_Data_Paths.Vector; Message : Virtual_String) is
+                        use Config_Data_Paths;
+                     begin
+                        raise Constraint_Error
+                          with
+                            "Config file format error: "
+                            & Message'Image
+                            & " (Path: "
+                            & Vector'Image (["Config", Module_Name, "Config"] & Path)
+                            & ")";
+                     end Raise_Error_For_Module;
+                  begin
+                     Validate_Module_Config_To_Schema
+                       (Config_To_Check.Get ("Config").Get (Module_Name).Get ("Config"),
+                        Module_Schema.Top_Level_Items,
+                        Raise_Error_For_Module'Access,
+                        Check_For_Missing_Fields => True);
+                  end;
+               end loop;
+            end Validate_Module;
+         begin
+            Validate_Module (Stored_Config, Visible_Schemas);
+
+            Live_Config := Stored_Config.Clone;
+            Apply_Overrides_To_Config (Live_Config, Overrides);
+            Validate_Module (Live_Config, Schemas);
+         end;
+
          if Write_Required then
             Write_File;
          end if;
 
-         Cached_Schemas := Generate_Schemas_String (Schemas);
+         Cached_Schemas := Generate_Schemas_String (Visible_Schemas);
       end Initialize;
 
       function Get (Owner : Virtual_String; Path : Config_Data_Paths.Vector) return JSON_Value is
@@ -780,6 +1115,16 @@ package body Prunt.Config is
 
          if Path.Is_Empty then
             raise Constraint_Error with "Invalid path (error in module).";
+         end if;
+
+         if Path_Overlaps_Overrides (Owner, Path, Overrides) then
+            raise Constraint_Error
+              with
+                "Config field is overridden and cannot be changed (Module: "
+                & Conversions.To_UTF_8_String (Owner)
+                & ", Path: "
+                & Path'Image
+                & ").";
          end if;
 
          if not Update_Deltas.Contains (Owner) then
@@ -829,7 +1174,7 @@ package body Prunt.Config is
             Check_For_Missing_Fields => True);
          Validate_Module_Config_To_Schema
            (Stored_Config_Clone,
-            Schemas (Owner).Element.Top_Level_Items,
+            Visible_Schemas (Owner).Element.Top_Level_Items,
             Raise_Error_For_Module'Access,
             Check_For_Missing_Fields => True);
 
@@ -936,10 +1281,15 @@ package body Prunt.Config is
                   return;
                end if;
 
+               Validate_No_Overrides_In_Patch (Name, Value.Get ("Config"), Overrides, Report_Inner_Config'Access);
+               if Error_Reported_Inner then
+                  return;
+               end if;
+
                --  Workaround below for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=123185
                Validate_Module_Config_To_Schema
                  (Value.Get ("Config"),
-                  Schemas (Name).Element.Top_Level_Items,
+                  Visible_Schemas (Name).Element.Top_Level_Items,
                   Report_Inner_Config'Access,
                   Check_For_Missing_Fields => False);
             end Handle_Module;
@@ -1013,7 +1363,8 @@ package body Prunt.Config is
       procedure Reset_Live_To_Stored (Check_Ref_Count : access procedure) is
       begin
          Check_Ref_Count.all;
-         Live_Config := Stored_Config;
+         Live_Config := Stored_Config.Clone;
+         Apply_Overrides_To_Config (Live_Config, Overrides);
       end Reset_Live_To_Stored;
    end Config_File_Internal;
 
@@ -1047,7 +1398,10 @@ package body Prunt.Config is
       end if;
    end Finalize;
 
-   function Create (File_Name : String; Schemas : Config_Schema_Maps.Map) return Config_File is
+   function Create
+     (File_Name : String; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector := [])
+      return Config_File
+   is
       function Make_Config_File_Internal return Config_File_Internal;
 
       function Make_Config_File_Internal return Config_File_Internal is
@@ -1075,7 +1429,7 @@ package body Prunt.Config is
             end Migrate;
          begin
             Result.Internal.Set (Make_Config_File_Internal'Access);
-            Result.Internal.Get.Initialize (File_Name, Schemas, Migrate'Access);
+            Result.Internal.Get.Initialize (File_Name, Schemas, Overrides, Migrate'Access);
          end;
       end return;
    end Create;
