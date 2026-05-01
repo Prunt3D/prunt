@@ -5,7 +5,7 @@ version = "1.0.0"
 authors = ["Liam Powell"]
 maintainers = ["Liam Powell <liam@liampll.com>"]
 maintainers-logins = ["liampwll"]
-licenses = "GPL-3.0-or-later"
+licenses = "MIT"
 website = ""
 tags = []
 
