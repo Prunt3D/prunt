@@ -313,7 +313,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
             Deviation_Base_Length_Numerator   : constant Length := Deviation_Limit * 2.0 ** 14;
             Deviation_Base_Length_Denominator : constant Dimensionless :=
               Sine_Secondary_Angle
-              * (4_072_849.0 / 429.0 + 714.0 + 2.0 ** 14 * 1_225.0 / (858.0 * Cosine_Secondary_Angle));
+              * (4_072_894.0 / 429.0 + 714.0 + 2.0 ** 14 * 1_225.0 / (858.0 * Cosine_Secondary_Angle));
             Incoming_Limit                    : constant Length :=
               (0.49 * 858.0 * Incoming_Length * Cosine_Secondary_Angle) / (5_210.0 * Cosine_Secondary_Angle + 1_225.0);
             Outgoing_Limit                    : constant Length :=
