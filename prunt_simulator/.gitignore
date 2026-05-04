@@ -11,3 +11,4 @@
 /prunt_simulator_config.json
 /prunt_simulator_config.json_backup_*
 /.dir-locals.el
+/uploads
