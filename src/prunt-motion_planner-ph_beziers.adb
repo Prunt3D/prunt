@@ -201,7 +201,7 @@ package body Prunt.Motion_Planner.PH_Beziers is
       --  It is possible to compute the midpoint by multiplying the corner deviation by the unit bisector of the two
       --  vectors from the corner to the start/finish. The corner deviation may be computed by the following equation:
       --  Midpoint = (Sine_Secondary_Angle / 2.0**14) * Base_Length *
-      --    ((397.0 / 429.0) + 10_207.0 + (2.0**14 * 1_225.0) / (858.8 * Cosine_Secondary_Angle))
+      --    ((397.0 / 429.0) + 10_207.0 + (2.0**14 * 1_225.0) / (858.0 * Cosine_Secondary_Angle))
       --
       --  This method may be used if a speed improvement is needed.
    begin
