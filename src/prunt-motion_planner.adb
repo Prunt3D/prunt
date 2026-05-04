@@ -1068,8 +1068,7 @@ package body Prunt.Motion_Planner is
       end Solve_Distance_At_Time;
 
    begin
-      --!pp off
-      if Sm**2 < Jm * Cm then
+      if Sm ** 2 < Jm * Cm then
          if Am >= Jm * (Jm / Sm + Sm / Cm) then
             Region := Region_1;
             Cases :=
@@ -1082,14 +1081,14 @@ package body Prunt.Motion_Planner is
                2 => [Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D1.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
-         elsif Am >= 2.0 * Sm**3 / Cm**2 then
+         elsif Am >= 2.0 * Sm ** 3 / Cm ** 2 then
             Region := Region_2;
             Cases :=
               [
                --  Reachable: Sm, Am (Test Case D2.4)
-               4 => [Sm / Cm, (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s],
+               4 => [Sm / Cm, (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) ** (1 / 2) - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               3 => [Sm / Cm, (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s],
+               3 => [Sm / Cm, (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) ** (1 / 2) - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s],
                --  Reachable: Sm (Test Case D2.2)
                2 => [Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D2.1)
@@ -1099,25 +1098,25 @@ package body Prunt.Motion_Planner is
             Cases :=
               [
                --  Reachable: Am (Test Case D3.4)
-               4 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               4 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               3 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               3 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               2 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               2 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D3.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
          end if;
       else
-         if Am > 2.0 * Jm * (Jm / Cm)**(1 / 2) then
+         if Am > 2.0 * Jm * (Jm / Cm) ** (1 / 2) then
             Region := Region_4;
             Cases :=
               [
                --  Reachable: Jm, Am (Test Case D4.4)
-               4 => [(Jm / Cm)**(1 / 2), 0.0 * s, Am / Jm - 2.0 * (Jm / Cm)**(1 / 2), 0.0 * s],
+               4 => [(Jm / Cm) ** (1 / 2), 0.0 * s, Am / Jm - 2.0 * (Jm / Cm) ** (1 / 2), 0.0 * s],
                --  Reachable: Jm (Test Case D4.3)
-               3 => [(Jm / Cm)**(1 / 2), 0.0 * s, 0.0 * s, 0.0 * s],
+               3 => [(Jm / Cm) ** (1 / 2), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               2 => [(Jm / Cm)**(1 / 2), 0.0 * s, 0.0 * s, 0.0 * s],
+               2 => [(Jm / Cm) ** (1 / 2), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D4.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
          else
@@ -1125,16 +1124,15 @@ package body Prunt.Motion_Planner is
             Cases :=
               [
                --  Reachable: Am (Test Case D5.4)
-               4 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               4 => [(Am / (2.0 * Cm)) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               3 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               3 => [(Am / (2.0 * Cm)) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               2 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               2 => [(Am / (2.0 * Cm)) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D5.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
          end if;
       end if;
-      --!pp on
 
       for I in reverse Cases'Range loop
          if I = Cases'First or else D > Fast_Distance_At_Max_Time (Cases (I), Cm, Vs) then

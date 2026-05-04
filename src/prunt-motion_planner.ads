@@ -46,26 +46,81 @@ package Prunt.Motion_Planner is
 
       Tangential_Velocity_Max : Velocity := 0.0 * mm / s;
       Axial_Velocity_Maxes    : Axial_Velocities := [others => 0.0 * mm / s];
-      Acceleration_Max        : Acceleration := 0.0 * mm / s**2;
-      Jerk_Max                : Jerk := 0.0 * mm / s**3;
-      Snap_Max                : Snap := 0.0 * mm / s**4;
-      Crackle_Max             : Crackle := 0.0 * mm / s**5;
+      Acceleration_Max        : Acceleration := 0.0 * mm / s ** 2;
+      Jerk_Max                : Jerk := 0.0 * mm / s ** 3;
+      Snap_Max                : Snap := 0.0 * mm / s ** 4;
+      Crackle_Max             : Crackle := 0.0 * mm / s ** 5;
       Chord_Error_Max         : Length := 0.0 * mm;
       Axial_Scaler            : Position_Scale := [others => 1.0];
       Axial_Shapers           : Input_Shapers.Axial_Shaper_Parameters;
    end record;
 
-   type Max_Corners_Type is range 2 .. 2**63 - 1;
+   type Max_Corners_Type is range 2 .. 2 ** 63 - 1;
 
-   type Max_Corners_Extra_Data_Type is range 2 .. 2**63 - 1;
+   type Max_Corners_Extra_Data_Type is range 2 .. 2 ** 63 - 1;
 
    type Feedrate_Profile_Times_Index is range 1 .. 4;
    type Feedrate_Profile_Times is array (Feedrate_Profile_Times_Index) of Time;
    --  Represents the timings for segments in a 15-phase motion profile. Note that some times are used for multiple
-   --  segments. Refer to Crackle_At_Time to see where each of these times is used.
+   --  segments. The crackle profile represented by this array is as follows, where Tn represents an item of this array
+   --  and C is the set crackle value:
+   --
+   --  Stage:     1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+   --  Duration: T₁  T₂  T₁  T₃  T₁  T₂  T₁  T₄  T₁  T₂  T₁  T₃  T₁  T₂  T₁
+   --  Crackle:  +C   0  -C   0  -C   0  +C   0  -C   0  +C   0  +C   0  -C
+   --
+   --  The total time of a profile is therefore:
+   --
+   --     ΔT = 8 T₁ + 4 T₂ + 2 T₃ + T₄.
+   --
+   --  For an acceleration profile the crackle is positive and for a deceleration profile the crackle is negative.
+   --
+   --  Denote the time of any given stage as t and the crackle of that stage as c. If a stage starts with (s, j, a, v,
+   --  x) (crackle .. position) then after time t:
+   --
+   --     s⁺ = s + ct
+   --     j⁺ = j + st + ct²/2
+   --     a⁺ = a + jt + st²/2 + ct³/6
+   --     v⁺ = v + at + jt²/2 + st³/6 + ct⁴/24
+   --     x⁺ = x + vt + at²/2 + jt³/6 + st⁴/24 + ct⁵/25
+   --
+   --  Note that crackle through velocity all start at zero before any motions are executed. By repeatedly applying the
+   --  above over a full motion profile it may be observed that snap, jerk, and acceleration will be zero at the end of
+   --  a motion profile.
+   --
+   --  It may also be observed that:
+   --
+   --     - Maximum snap         = CT₁
+   --     - Maximum jerk         = CT₁(T₁ + T₂)
+   --     - Maximum acceleration = CT₁(T₁ + T₂)(2T₁ + T₂ + T₃)
+   --
+   --  Over the entire profile:
+   --
+   --     ΔV = CT₁(T₁ + T₂)(2T₁ + T₂ + T₃)(4T₁ + 2T₂ + T₃ + T₄)
+   --
+   --  Thus:
+   --
+   --     v(ΔT) = Vₛ + ΔV
+   --
+   --  This is the expression found in Fast_Velocity_At_Max_Time.
+   --
+   --  Because the acceleration profile is symmetrical around the middle of a profile, velocity has the identity:
+   --
+   --     v(t) + v(ΔT - t) = 2Vₛ + ΔV
+   --
+   --  Integrating over [0, ΔT] gives:
+   --
+   --     ΔX = (Vₛ + ΔV/2)ΔT
+   --
+   --  Substituting the above definitions of ΔV and ΔX into ΔX gives:
+   --
+   --     (Vₛ + CT₁(T₁ + T₂)(2T₁ + T₂ + T₃)(4T₁ + 2T₂ + T₃ + T₄) / 2)(8T₁ + 4T₂ + 2T₃ + T₄)
+   --
+   --  This is the expression found in Fast_Distance_At_Max_Time.
 
    type Feedrate_Profile is record
-      --  Represents the timings for segments in a 31-phase motion profile.
+      --  Represents the timings for segments in a 31-phase motion profile. Refer to the documentation on
+      --  Feedrate_Profile_Times for what the individual parts of this profile are.
 
       Accel : Feedrate_Profile_Times;
       Coast : Time;
