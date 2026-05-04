@@ -82,7 +82,7 @@ package Prunt.Motion_Planner is
    --     j⁺ = j + st + ct²/2
    --     a⁺ = a + jt + st²/2 + ct³/6
    --     v⁺ = v + at + jt²/2 + st³/6 + ct⁴/24
-   --     x⁺ = x + vt + at²/2 + jt³/6 + st⁴/24 + ct⁵/25
+   --     x⁺ = x + vt + at²/2 + jt³/6 + st⁴/24 + ct⁵/120
    --
    --  Note that crackle through velocity all start at zero before any motions are executed. By repeatedly applying the
    --  above over a full motion profile it may be observed that snap, jerk, and acceleration will be zero at the end of
