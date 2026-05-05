@@ -410,7 +410,8 @@ private
         Motor_Position                    => Motor_Position,
         Maximum_Motor_Delta               => Maximum_Motor_Delta,
         Log                               => My_Logger.Log,
-        Runner_CPU                        => Command_Line_Arguments.Motion_Planner_CPU);
+        Runner_CPU                        => Command_Line_Arguments.Motion_Planner_CPU,
+        Max_Corners                       => Command_Line_Arguments.Max_Planner_Block_Corners);
 
    procedure Start_Planner_Block
      (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index);
