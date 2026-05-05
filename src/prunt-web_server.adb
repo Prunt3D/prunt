@@ -553,7 +553,8 @@ package body Prunt.Web_Server is
                File_Name : constant String :=
                  Status.File (Status.File'First + String'("extras/")'Length .. Status.File'Last);
             begin
-               if Get_Extra_HTTP_Content (+File_Name) = null then
+               Client.Content.Array_Stream.Content := Get_Extra_HTTP_Content (+File_Name);
+               if Client.Content.Array_Stream.Content = null then
                   Reply_Text (Client, 404, "Not Found", "File not found.", Get);
                else
                   Send_Status_Line (Client, 200, "OK");
@@ -583,7 +584,6 @@ package body Prunt.Web_Server is
                      "Cache-Control: no-cache, no-store, must-revalidate" & Connection_State_Machine.HTTP_Server.CRLF);
                   Send (Client, "Pragma: no-cache" & Connection_State_Machine.HTTP_Server.CRLF);
                   Send (Client, "Expires: 0" & Connection_State_Machine.HTTP_Server.CRLF);
-                  Client.Content.Array_Stream.Content := Get_Extra_HTTP_Content (+File_Name);
                   Client.Content.Array_Stream.Position := Client.Content.Array_Stream.Content.all'First;
                   Client.Content.Array_Stream.Done := False;
                   Send_Body (Client, Client.Content.Array_Stream'Access, Get);
