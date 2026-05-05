@@ -25,7 +25,7 @@ project Tests is
             "-fstack-check", --  Enable stack overflow checks
             "-gnateF",       --  Check for all floating point overflow
             "-gnata",        --  Enable assertions and contracts
-            "-gnatVa",       --  Enable all validity checks
+            "-gnatVaIM",     --  Enable all validity checks except for parameters
             "-gnateV",       --  Enable validity checks of default parameters
             "-gnato11",      --  Strict overflow checking
             "-gnatwe");      --  Warnings as errors
@@ -38,7 +38,7 @@ project Tests is
             "-fstack-check", --  Enable stack overflow checks
             "-gnateF",       --  Check for all floating point overflow
             "-gnata",        --  Enable assertions and contracts
-            "-gnatVa",       --  Enable all validity checks
+            "-gnatVaIM",     --  Enable all validity checks except for parameters
             "-gnateV",       --  Enable validity checks of default parameters
             "-gnato11");     --  Strict overflow checking
    end case;
