@@ -24,7 +24,7 @@ executables = ["tests"]
 
 [[depends-on]]
 # aunit = "^25.0.0"
-# gnatcov = "^22.0.1"
+gnatcov = "^26.2.0"
 prunt = "~0.0.0"
 
 [[pins]]
@@ -41,7 +41,3 @@ trendy_test = { url = "https://github.com/Prunt3D/trendy_test.git" }
 
 [configuration.values]
 prunt.enable_test_mocks = true
-
-[environment]
-GPR_PROJECT_PATH.append = "/usr/local/gnat/share/gpr:/usr/local/gnat/share/gnatcoverage/gnatcov_rts"
-# TODO: We can remove this once we switch to GNATcov from Alire.

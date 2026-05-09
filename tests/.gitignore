@@ -4,3 +4,4 @@
 /config/
 /.dir-locals.el
 /gnatcov_out/
+/gnatcov_rts/
