@@ -52,7 +52,7 @@ package Prunt.Motion_Planner is
       Crackle_Max             : Crackle := 0.0 * mm / s ** 5;
       Chord_Error_Max         : Length := 0.0 * mm;
       Axial_Scaler            : Position_Scale := [others => 1.0];
-      Axial_Shapers           : Input_Shapers.Axial_Shaper_Parameters;
+      Axial_Shapers           : Input_Shapers.Axial_Shaper_Parameters := [others => (Kind => Input_Shapers.No_Shaper)];
    end record;
 
    type Max_Corners_Type is range 2 .. 2 ** 63 - 1;

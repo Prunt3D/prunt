@@ -17,22 +17,95 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Ada.Numerics.Generic_Elementary_Functions;
+with Prunt.Step_Generator.Block_Executor;
 with System.Pool_Local;
-with Prunt.Input_Shapers.Shapers;
-use type Prunt.Input_Shapers.Cycle_Count;
-use type Prunt.Input_Shapers.Axial_Shaper_Parameters;
 
 package body Prunt.Step_Generator is
 
    pragma Extensions_Allowed (On);
 
-   package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+   protected Reset_Control is
+      procedure Request;
+      --  Request that the runner stop at the next reset check. If the runner is idle, acknowledge immediately.
+
+      function Requested return Boolean;
+      --  True while an active runner has not yet acknowledged the current reset request.
+
+      procedure Mark_Running;
+      --  Mark the runner as active after setup has completed.
+
+      procedure Acknowledge;
+      --  Mark the runner as stopped and clear any pending reset request.
+
+      entry Wait_For_Acknowledgement;
+      --  Block until Request has been acknowledged or there was no active runner to reset.
+
+   private
+      Reset_Requested    : Boolean := False;
+      Reset_Acknowledged : Boolean := True;
+      Runner_Running     : Boolean := False;
+   end Reset_Control;
+
+   protected body Reset_Control is
+      procedure Request is
+      begin
+         if Runner_Running then
+            Reset_Requested := True;
+            Reset_Acknowledged := False;
+         else
+            Reset_Requested := False;
+            Reset_Acknowledged := True;
+         end if;
+      end Request;
+
+      function Requested return Boolean is
+      begin
+         return Reset_Requested;
+      end Requested;
+
+      procedure Mark_Running is
+      begin
+         Runner_Running := True;
+         Reset_Requested := False;
+         Reset_Acknowledged := True;
+      end Mark_Running;
+
+      procedure Acknowledge is
+      begin
+         Runner_Running := False;
+         Reset_Requested := False;
+         Reset_Acknowledged := True;
+      end Acknowledge;
+
+      entry Wait_For_Acknowledgement when Reset_Acknowledged is
+      begin
+         null;
+      end Wait_For_Acknowledgement;
+   end Reset_Control;
 
    Do_Pause : Boolean := False
    with Atomic, Volatile;
    Paused   : Boolean := False
    with Atomic, Volatile;
+
+   procedure Reset is
+   begin
+      Reset_Control.Request;
+
+      loop
+         select
+            Reset_Control.Wait_For_Acknowledgement;
+            exit;
+         or
+            delay 0.1;
+
+            if Runner'Terminated then
+               Reset_Control.Acknowledge;
+               exit;
+            end if;
+         end select;
+      end loop;
+   end Reset;
 
    procedure Pause is
    begin
@@ -49,11 +122,6 @@ package body Prunt.Step_Generator is
       return Paused;
    end Is_Paused;
 
-   function Pause_Slew_Interpolation_Time (Index : Pause_Slew_Index) return Time is
-   begin
-      return Math.Cos (Dimensionless (Index), 4.0 * Dimensionless (Pause_Slew_Index'Last)) * Interpolation_Time;
-   end Pause_Slew_Interpolation_Time;
-
    function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position is
       Ret : Motor_Position := [others => 0.0];
    begin
@@ -69,294 +137,205 @@ package body Prunt.Step_Generator is
       return Ret;
    end To_Motor_Position;
 
+   procedure Queue_Command
+     (State           : in out Command_State;
+      Pos             : Position;
+      Map             : Motor_Pos_Map;
+      Loop_Until_Hit  : Boolean;
+      Safe_Stop_After : Boolean;
+      Vel_Ratio       : Dimensionless) is
+   begin
+      State.Current_Command_Index := @ + 1;
+      State.Last_Queued_Position := Pos;
+      Enqueue_Command
+        (Pos             => Pos,
+         Motor_Pos       => To_Motor_Position (Pos, Map),
+         Index           => State.Current_Command_Index,
+         Loop_Until_Hit  => Loop_Until_Hit,
+         Safe_Stop_After => Safe_Stop_After,
+         Vel_Ratio       => Vel_Ratio);
+   end Queue_Command;
+
+   function No_Pause_Requested return Boolean is
+   begin
+      return False;
+   end No_Pause_Requested;
+
+   procedure No_Pause_Handler (Pause_Position : Position; Reset_Requested : out Boolean) is
+      pragma Unreferenced (Pause_Position);
+   begin
+      Reset_Requested := False;
+   end No_Pause_Handler;
+
    task body Runner is
-      Current_Command_Index : Command_Index := 0;
-      Current_Time          : Time;
-      Pos_Map               : Motor_Pos_Map;
-
-      type Homing_Move_When_Kind is (Not_Pending_Kind, This_Block_Kind, This_Move_Kind);
-      Homing_Move_When : Homing_Move_When_Kind;
-
-      type Pausing_State_Kind is (Running_Kind, Pausing_Kind, Paused_Kind, Resuming_Kind);
-      Pausing_State : Pausing_State_Kind;
-      Pause_Slew    : Pause_Slew_Index;
+      Commands : Command_State;
+      Pos_Map  : Motor_Pos_Map;
 
       type Block_Wrapper is record
          Block : aliased Execution_Block;
       end record;
 
+      type Pause_Block_Wrapper is record
+         Block : aliased Pause_Planner.Execution_Block;
+      end record;
+
       Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
 
       type Block_Wrapper_Access is access Block_Wrapper with Storage_Pool => Pool;
+      type Pause_Block_Wrapper_Access is access Pause_Block_Wrapper with Storage_Pool => Pool;
 
-      Working_Block_Wrapper : constant Block_Wrapper_Access := new Block_Wrapper;
+      Working_Block_Wrapper       : constant Block_Wrapper_Access := new Block_Wrapper;
       Block renames Working_Block_Wrapper.Block;
-
-      Current_Shapers : Input_Shapers.Shapers.Axial_Shapers;
-
-      Loop_Move_Offset        : Position_Offset;
-      Loop_Move_Command_Index : Command_Index;
-      Previous_Position       : Position;
+      Working_Pause_Block_Wrapper : constant Pause_Block_Wrapper_Access := new Pause_Block_Wrapper;
+      Pause_Block renames Working_Pause_Block_Wrapper.Block;
 
       Zero_Length : constant Length := 0.0 * mm;
 
-      procedure Process_Corner_Extra_Data (Data : in out Planner.Corner_Extra_Data_Type);
-      --  Forward corner extra data to the controller callback with the current command index.
+      procedure Check_Reset (Reset_Requested : out Boolean);
 
-      procedure Process_Corner_Extra_Data (Data : in out Planner.Corner_Extra_Data_Type) is
+      procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean);
+
+      procedure Log_Primary_Waiting_For_Step_Rate_Limiter;
+
+      procedure Log_Pause_Waiting_For_Step_Rate_Limiter;
+
+      function Primary_Pause_Requested return Boolean;
+
+      procedure Check_Reset (Reset_Requested : out Boolean) is
       begin
-         Start_Corner (Current_Command_Index, Data);
-      end Process_Corner_Extra_Data;
+         Reset_Requested := Reset_Control.Requested;
+      end Check_Reset;
+
+      procedure Log_Primary_Waiting_For_Step_Rate_Limiter is
+      begin
+         Log
+           ("The step command generator is waiting for the step rate limiter to complete. This can take "
+            & "a long time if the G-code contains multiple very long moves. In a future version this "
+            & "will be improved.");
+      end Log_Primary_Waiting_For_Step_Rate_Limiter;
+
+      procedure Log_Pause_Waiting_For_Step_Rate_Limiter is
+      begin
+         Log
+           ("The pause step command generator is waiting for the step rate limiter to complete. This can "
+            & "take a long time if the pause plan contains multiple very long moves. In a future version "
+            & "this will be improved.");
+      end Log_Pause_Waiting_For_Step_Rate_Limiter;
+
+      function Primary_Pause_Requested return Boolean is
+      begin
+         return Do_Pause;
+      end Primary_Pause_Requested;
+
+      package Primary_Block_Executor is new
+        Block_Executor
+          (Active_Planner            => Planner,
+           Allow_Homing              => True,
+           Check_Reset               => Check_Reset,
+           Step_Rate_Limiter_Stalled => Log_Primary_Waiting_For_Step_Rate_Limiter,
+           Start_Block_Callback      => Start_Planner_Block,
+           Start_Corner_Callback     => Start_Corner,
+           Finish_Block_Callback     => Finish_Planner_Block,
+           Pause_Requested           => Primary_Pause_Requested,
+           Handle_Pause              => Run_Pause_Cycle);
+
+      package Pause_Block_Executor is new
+        Block_Executor
+          (Active_Planner            => Pause_Planner,
+           Allow_Homing              => False,
+           Check_Reset               => Check_Reset,
+           Step_Rate_Limiter_Stalled => Log_Pause_Waiting_For_Step_Rate_Limiter,
+           Start_Block_Callback      => Start_Pause_Planner_Block,
+           Start_Corner_Callback     => Start_Pause_Corner,
+           Finish_Block_Callback     => Finish_Pause_Planner_Block);
+
+      procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean) is
+         procedure Execute_Pause_Plan (Resume_Plan : Boolean);
+         procedure Wait_For_Resume;
+
+         procedure Execute_Pause_Plan (Resume_Plan : Boolean) is
+         begin
+            if Resume_Plan then
+               Handle_Resume (Pause_Position, Commands.Current_Command_Index);
+            else
+               Handle_Pause (Pause_Position, Commands.Current_Command_Index);
+            end if;
+
+            loop
+               Pause_Block_Executor.Dequeue_Block (Pause_Block, Commands, Reset_Requested);
+               if Reset_Requested then
+                  return;
+               end if;
+               Pause_Block_Executor.Execute_Block (Pause_Block, Pos_Map, Commands, Reset_Requested);
+               if Reset_Requested then
+                  return;
+               end if;
+               exit when Is_Pause_Plan_Done (Pause_Planner.Flush_Resetting_Data (Pause_Block));
+            end loop;
+         end Execute_Pause_Plan;
+
+         procedure Wait_For_Resume is
+         begin
+            loop
+               Check_Reset (Reset_Requested);
+               if Reset_Requested then
+                  return;
+               end if;
+
+               exit when not Do_Pause;
+
+               delay 0.1;
+            end loop;
+         end Wait_For_Resume;
+      begin
+         Reset_Requested := False;
+         Paused := True;
+         Execute_Pause_Plan (Resume_Plan => False);
+         if Reset_Requested then
+            return;
+         end if;
+
+         Wait_For_Resume;
+         if Reset_Requested then
+            return;
+         end if;
+
+         Execute_Pause_Plan (Resume_Plan => True);
+         if Reset_Requested then
+            return;
+         end if;
+
+         if Commands.Last_Queued_Position /= Pause_Position then
+            raise Constraint_Error with "Pause resume plan did not return to the pause position.";
+         end if;
+
+         Paused := False;
+      exception
+         when others =>
+            Paused := False;
+            raise;
+      end Run_Pause_Cycle;
    begin
       loop
-         Current_Time := 0.0 * s;
-         Homing_Move_When := Not_Pending_Kind;
-         Pausing_State := Running_Kind;
-         Pause_Slew := Pause_Slew_Index'First;
          Paused := False;
          Do_Pause := False;
-         Previous_Position := [others => Zero_Length];
+         Reset_Control.Acknowledge;
+         Commands.Last_Queued_Position := [others => Zero_Length];
 
          accept Setup (Map : Motor_Pos_Map) do
             Pos_Map := Map;
+            Reset_Control.Mark_Running;
          end Setup;
 
          Main : loop
-            Loop_Move_Offset := [others => Zero_Length];
-            Loop_Move_Command_Index := 0;
-
             declare
-               Timed_Out                     : Boolean;
-               Waiting_For_Step_Rate_Limiter : Boolean;
+               Reset_Requested : Boolean;
             begin
-               loop
-                  Dequeue (Block, Timed_Out, Waiting_For_Step_Rate_Limiter);
+               Primary_Block_Executor.Dequeue_Block (Block, Commands, Reset_Requested);
+               exit Main when Reset_Requested;
 
-                  if Timed_Out and then Waiting_For_Step_Rate_Limiter then
-                     Log
-                       ("The step command generator is waiting for the step rate limiter to complete. This can take "
-                        & "a long time if the G-code contains multiple very long moves. In a future version this "
-                        & "will be improved.");
-                  end if;
-
-                  select
-                     accept Reset;
-                     exit Main;
-                  else
-                     null;
-                  end select;
-
-                  if Do_Pause then
-                     Paused := True;
-                     loop
-                        select
-                           accept Reset;
-                           exit Main;
-                        else
-                           null;
-                        end select;
-
-                        delay 0.1;
-
-                        exit when not Do_Pause;
-                     end loop;
-                     Paused := False;
-                  end if;
-                  Pausing_State := Running_Kind;
-                  Pause_Slew := Pause_Slew_Index'First;
-
-                  exit when not Timed_Out;
-               end loop;
-            end;
-
-            if Block.Is_Homing_Move then
-               if Block.N_Corners /= 2 then
-                  raise Constraint_Error with "Homing move must have exactly 2 corners.";
-               end if;
-               Homing_Move_When := This_Block_Kind;
-
-               --  Shapers are disabled during homing as the interpolation time changes in the middle of the block.
-               pragma
-                 Assert
-                   (Block.Block_Kinematic_Parameters.Axial_Shapers
-                    = Input_Shapers.Axial_Shaper_Parameters'(others => (Kind => Input_Shapers.No_Shaper)));
-            end if;
-
-            Current_Shapers :=
-              Input_Shapers.Shapers.Create
-                (Block.Block_Kinematic_Parameters.Axial_Shapers, Interpolation_Time, Block_Start_Pos (Block));
-
-            Start_Planner_Block (Block.Flush_Resetting_Data, Current_Command_Index);
-
-            Block.Corner_Extra_Data (Planner.Corners_Index'First, Process_Corner_Extra_Data'Access);
-
-            for I in 2 .. Block.N_Corners loop
-               Block.Corner_Extra_Data (I, Process_Corner_Extra_Data'Access);
-
-               loop
-                  Current_Command_Index := @ + 1;
-
-                  case Pausing_State is
-                     when Running_Kind  =>
-                        if Do_Pause and then Homing_Move_When = Not_Pending_Kind then
-                           Pausing_State := Pausing_Kind;
-                        end if;
-
-                     when Pausing_Kind  =>
-                        if Pause_Slew = Pause_Slew_Index'Last then
-                           Pausing_State := Paused_Kind;
-                        else
-                           Pause_Slew := @ + 1;
-                        end if;
-
-                     when Paused_Kind   =>
-                        Paused := True;
-                        loop
-                           select
-                              accept Reset;
-                              exit Main;
-                           else
-                              null;
-                           end select;
-
-                           delay 0.1;
-
-                           exit when not Do_Pause;
-                        end loop;
-                        Paused := False;
-                        Pausing_State := Resuming_Kind;
-
-                     when Resuming_Kind =>
-                        if Pause_Slew = Pause_Slew_Index'First then
-                           Pausing_State := Running_Kind;
-                        else
-                           Pause_Slew := @ - 1;
-                        end if;
-                  end case;
-
-                  if Current_Time <= Block.Segment_Time (I) then
-                     declare
-                        Is_Past_Accel_Part : Boolean;
-                        Unshaped_Pos       : constant Position :=
-                          Block.Segment_Pos_At_Time (I, Current_Time, Is_Past_Accel_Part);
-                        Shaped_Pos         : Position := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
-                        Vel_Ratio          : constant Dimensionless :=
-                          Block.Segment_Vel_Ratio_At_Time (I, Current_Time);
-                     begin
-                        if Pausing_State = Paused_Kind
-                          or else (I = Block.N_Corners and then Current_Time >= Block.Segment_Time (I))
-                        then
-                           declare
-                              Extra_Loops_Required : constant Input_Shapers.Cycle_Count :=
-                                Input_Shapers.Cycle_Count'Max
-                                  (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Current_Shapers));
-                           begin
-                              for J in 0 .. Extra_Loops_Required loop
-                                 if J /= 0 then
-                                    Current_Command_Index := @ + 1;
-                                 end if;
-
-                                 Enqueue_Command
-                                   (Pos             => Shaped_Pos,
-                                    Motor_Pos       => To_Motor_Position (Shaped_Pos, Pos_Map),
-                                    Index           => Current_Command_Index,
-                                    Loop_Until_Hit  => Homing_Move_When = This_Move_Kind and then J = 0,
-                                    Safe_Stop_After => J = Extra_Loops_Required,
-                                    Vel_Ratio       => Vel_Ratio);
-
-                                 if Homing_Move_When = This_Move_Kind and then J = 0 then
-                                    Loop_Move_Offset := Shaped_Pos - Previous_Position;
-                                 end if;
-
-                                 Shaped_Pos := Input_Shapers.Shapers.Do_Step (Current_Shapers, Unshaped_Pos);
-                              end loop;
-                           end;
-                        else
-                           if Homing_Move_When = This_Move_Kind then
-                              Loop_Move_Offset := Shaped_Pos - Previous_Position;
-                              Loop_Move_Command_Index := Current_Command_Index;
-                           end if;
-
-                           Enqueue_Command
-                             (Pos             => Shaped_Pos,
-                              Motor_Pos       => To_Motor_Position (Shaped_Pos, Pos_Map),
-                              Index           => Current_Command_Index,
-                              Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                              Safe_Stop_After => False,
-                              Vel_Ratio       => Vel_Ratio);
-                        end if;
-
-                        Previous_Position := Shaped_Pos;
-
-                        case Homing_Move_When is
-                           when This_Block_Kind  =>
-                              if Is_Past_Accel_Part then
-                                 Homing_Move_When := This_Move_Kind; --  Next loop iteration, not this one.
-
-                              end if;
-
-                           when Not_Pending_Kind =>
-                              null;
-
-                           when This_Move_Kind   =>
-                              Homing_Move_When := Not_Pending_Kind;
-                        end case;
-                     end;
-                  end if;
-
-                  if Homing_Move_When /= Not_Pending_Kind and then Current_Time >= Block.Segment_Time (I) then
-                     raise Constraint_Error with "Homing move queued but end of block reached before execution.";
-                  end if;
-
-                  if Current_Time /= Block.Segment_Time (I) then
-                     if Homing_Move_When = This_Move_Kind then
-                        Current_Time := Current_Time + Interpolation_Time;
-                     else
-                        Current_Time := Current_Time + Pause_Slew_Interpolation_Time (Pause_Slew);
-                     end if;
-                  end if;
-
-                  if I = Block.N_Corners and then Current_Time > Block.Segment_Time (I) then
-                     --  Ensure that the last corner is always enqueued from at least once and we always finish on the
-                     --  exact final position. Having the wrong interpolation time here is fine because the final bit
-                     --  of an execution block has very low velocity.
-                     Current_Time := Block.Segment_Time (I);
-                  else
-                     exit when Current_Time >= Block.Segment_Time (I);
-                  end if;
-               end loop;
-
-               Current_Time := Current_Time - Block.Segment_Time (I);
-            end loop;
-
-            declare
-               Loop_Move_Cycles : Dimensionless := 0.0;
-            begin
-               if Loop_Move_Command_Index /= 0 then
-                  loop
-                     select
-                        Loop_Cycle_Reporter.Wait (Loop_Move_Command_Index, Loop_Move_Cycles);
-                        exit;
-                     or
-                        delay 3.0;
-                     end select;
-
-                     select
-                        accept Reset;
-                        exit Main;
-                     or
-                        delay 0.1;
-                     end select;
-                  end loop;
-               end if;
-
-               Finish_Planner_Block
-                 (Resetting_Data       => Block.Flush_Resetting_Data,
-                  Next_Block_Pos       => To_Motor_Position (Block.Next_Block_Pos, Pos_Map),
-                  First_Accel_Distance =>
-                    Length'(if Block.N_Corners < 2 then Zero_Length else Segment_Accel_Distance (Block, 2)),
-                  Last_Command_Index   => Current_Command_Index,
-                  Loop_Move_Offset     => [for A in Axis_Name => Loop_Move_Offset (A) * Loop_Move_Cycles]);
+               Primary_Block_Executor.Execute_Block (Block, Pos_Map, Commands, Reset_Requested);
+               exit Main when Reset_Requested;
             end;
          end loop Main;
       end loop;

@@ -26,6 +26,7 @@ with Prunt.Controller_Generic_Types;
 with Prunt.Exception_Occurrence_Holders;
 
 private with Ada.Containers.Indefinite_Holders;
+private with Ada.Containers.Vectors;
 private with Prunt.Command_Line_Arguments;
 private with Prunt.Controller_Helpers;
 private with Prunt.Default_Modules;
@@ -387,6 +388,12 @@ private
    --  We need the insertion order here so we an start instances in the same order that they are initialised. This
    --  allows for all of an instances dependencies to start before it.
 
+   package Module_Instance_Vectors is new
+     Ada.Containers.Vectors
+       (Positive,
+        My_Modules.Module_Instance_Shared_Pointers.Ref,
+        "=" => My_Modules.Module_Instance_Shared_Pointers."=");
+
    Maximum_Motor_Delta : constant Motor_Position :=
      [for S in Motor_Name => Hardware.Motor_Hardware (S).Maximum_Delta_Per_Command];
 
@@ -413,6 +420,20 @@ private
         Runner_CPU                        => Command_Line_Arguments.Motion_Planner_CPU,
         Max_Corners                       => Command_Line_Arguments.Max_Planner_Block_Corners);
 
+   package My_Pause_Motion_Planner is new
+     Motion_Planner.Planner
+       (Flush_Resetting_Data_Type         => Extra_Block_Resetting_Data_Holders.Holder,
+        Flush_Resetting_Data_Type_Default =>
+          Extra_Block_Resetting_Data_Holders.To_Holder (Module_Types.Extra_Block_Resetting_Data'(null record)),
+        Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
+        Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
+        Interpolation_Time                => Interpolation_Time,
+        Motor_Name                        => Motor_Name,
+        Motor_Position                    => Motor_Position,
+        Maximum_Motor_Delta               => Maximum_Motor_Delta,
+        Log                               => My_Logger.Log,
+        Max_Corners                       => 100);
+
    procedure Start_Planner_Block
      (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index);
 
@@ -433,6 +454,12 @@ private
       Last_Command_Index   : Command_Index;
       Loop_Move_Offset     : Position_Offset);
 
+   procedure Handle_Pause (Pause_Position : Position; Last_Command_Index : Command_Index);
+
+   procedure Handle_Resume (Pause_Position : Position; Last_Command_Index : Command_Index);
+
+   function Is_Pause_Plan_Done (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder) return Boolean;
+
    protected Loop_Move_Cycles is new Loop_Cycle_Reporter_Interface with
       procedure Report (Index : Command_Index; Cycles : Dimensionless);
       --  Report the number of loops executed for a given loop move.
@@ -450,16 +477,23 @@ private
 
    package My_Step_Generator is new
      Step_Generator
-       (Planner              => My_Motion_Planner,
-        Motor_Name           => Motor_Name,
-        Motor_Position       => Motor_Position,
-        Start_Planner_Block  => Start_Planner_Block,
-        Enqueue_Command      => Enqueue_Command_Internal,
-        Start_Corner         => Start_Corner,
-        Finish_Planner_Block => Finish_Planner_Block,
-        Loop_Cycle_Reporter  => Loop_Move_Cycles'Access,
-        Interpolation_Time   => Interpolation_Time,
-        Runner_CPU           => Command_Line_Arguments.Step_Generator_CPU);
+       (Planner                    => My_Motion_Planner,
+        Pause_Planner              => My_Pause_Motion_Planner,
+        Motor_Name                 => Motor_Name,
+        Motor_Position             => Motor_Position,
+        Start_Planner_Block        => Start_Planner_Block,
+        Start_Pause_Planner_Block  => Start_Planner_Block,
+        Enqueue_Command            => Enqueue_Command_Internal,
+        Start_Corner               => Start_Corner,
+        Start_Pause_Corner         => Start_Corner,
+        Finish_Planner_Block       => Finish_Planner_Block,
+        Finish_Pause_Planner_Block => Finish_Planner_Block,
+        Is_Pause_Plan_Done         => Is_Pause_Plan_Done,
+        Handle_Pause               => Handle_Pause,
+        Handle_Resume              => Handle_Resume,
+        Loop_Cycle_Reporter        => Loop_Move_Cycles'Access,
+        Interpolation_Time         => Interpolation_Time,
+        Runner_CPU                 => Command_Line_Arguments.Step_Generator_CPU);
 
    My_Gcode_Queue : Gcode_Queues.Queue;
 
@@ -521,7 +555,15 @@ private
 
    Startup_Position : constant Position := [others => 0.0 * mm];
 
-   protected Planner_State is
+   protected Pause_Handler_Instances is
+      procedure Load (Instances : Module_Instance_Maps.Map);
+      procedure Clear;
+      procedure Snapshot (Result : out Module_Instance_Vectors.Vector);
+   private
+      Handlers : Module_Instance_Vectors.Vector;
+   end Pause_Handler_Instances;
+
+   protected type Planner_State_Type is
       procedure Reset;
       function Get_Last_Position return Position;
       function Get_Last_Kinematic_Parameters return Motion_Planner.Kinematic_Parameters;
@@ -530,11 +572,34 @@ private
    private
       Last_Position             : Position := [others => 0.0 * mm];
       Last_Kinematic_Parameters : Motion_Planner.Kinematic_Parameters := (others => <>);
-   end Planner_State;
+   end Planner_State_Type;
+
+   Primary_Planner_State : Planner_State_Type;
+   Pause_Planner_State   : Planner_State_Type;
+   Pause_Default_State   : Planner_State_Type;
+
+   type Planner_Target_Kind is (Primary_Planner_Target, Pause_Planner_Target);
 
    type Planner_Wrapper is new Planner_Interface with record
       Startup_Mode : Boolean := False;
+      Target       : Planner_Target_Kind := Primary_Planner_Target;
    end record;
+
+   type Pause_Plan_End_Event is new Module_Types.Extra_Block_Resetting_Data with null record;
+
+   overriding
+   procedure Process_After_Block (This : Pause_Plan_End_Event; Context : Block_End_Context'Class);
+
+   type Pause_Context_Data is new Pause_Context with record
+      Pause_Position     : Position;
+      Last_Command_Index : Command_Index;
+   end record;
+
+   overriding
+   function Get_Pause_Position (This : Pause_Context_Data) return Position;
+
+   overriding
+   function Get_Last_Command_Index (This : Pause_Context_Data) return Command_Index;
 
    type Planner_Block_End_Context is limited new Module_Types.Block_End_Context with record
       First_Accel_Distance : Length;

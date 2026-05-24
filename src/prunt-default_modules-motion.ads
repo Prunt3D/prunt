@@ -36,7 +36,7 @@ package Prunt.Default_Modules.Motion is
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
 
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Pause_Handler with private;
 
    overriding
    function Initialize
@@ -58,7 +58,47 @@ package Prunt.Default_Modules.Motion is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
 
+   overriding
+   procedure Handle_Pause
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+
+   overriding
+   procedure Handle_Resume
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+
 private
+
+   type User_Config_Pause_Park_Kind is (No_Park_Move, Relative_Park_Move) with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Pause_Park (Kind : User_Config_Pause_Park_Kind := No_Park_Move) is record
+      --  Configure the optional movement performed while the printer is paused.
+
+      case Kind is
+         when No_Park_Move =>
+            --  Do not move the toolhead while paused.
+            null;
+
+         when Relative_Park_Move =>
+            X_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Relative X movement from the pause position.
+
+            Y_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Relative Y movement from the pause position.
+
+            Z_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Relative Z movement from the pause position.
+
+            E_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Relative E movement from the pause position.
+
+            Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
+            --  Feedrate used for the pause park move.
+
+            Return_Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
+            --  Feedrate used to return to the pause position before resuming.
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Motion_Gcode is record
       --  This section contains settings which impact G-code commands contained within the motion module.
@@ -84,6 +124,9 @@ private
 
    type User_Config is record
       Motion_Gcode : User_Config_Motion_Gcode := (others => <>);
+
+      Pause_Park : User_Config_Pause_Park := (others => <>);
+      --  Movement to perform while paused before waiting for resume.
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 
@@ -248,7 +291,7 @@ private
    procedure Set_Flow_Percentage (This : Module_Instance; Planner : Planner_Interface'Class; S : Gcode_Optional_Float)
    with Annotate => (Prunt_Config, Gcode_Command, "M221");
 
-   protected type Module_Instance is new My_Modules.Module_Instance with
+   protected type Module_Instance is new My_Modules.Module_Instance and Pause_Handler with
       procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
 
       overriding

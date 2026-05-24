@@ -29,7 +29,30 @@ package body Prunt.Controller is
 
    pragma Extensions_Allowed (On);
 
-   protected body Planner_State is
+   protected body Pause_Handler_Instances is
+      procedure Load (Instances : Module_Instance_Maps.Map) is
+      begin
+         Handlers.Clear;
+
+         for Instance of Instances loop
+            if Instance.Get.Element.all in Pause_Handler'Class then
+               Handlers.Append (Instance);
+            end if;
+         end loop;
+      end Load;
+
+      procedure Clear is
+      begin
+         Handlers.Clear;
+      end Clear;
+
+      procedure Snapshot (Result : out Module_Instance_Vectors.Vector) is
+      begin
+         Result := Handlers;
+      end Snapshot;
+   end Pause_Handler_Instances;
+
+   protected body Planner_State_Type is
       procedure Reset is
       begin
          Last_Position := [others => 0.0 * mm];
@@ -55,20 +78,30 @@ package body Prunt.Controller is
       begin
          Last_Kinematic_Parameters := Params;
       end Set_Last_Kinematic_Parameters;
-   end Planner_State;
+   end Planner_State_Type;
 
    overriding
    function Get_Last_Position (This : Planner_Wrapper) return Position is
-      pragma Unreferenced (This);
    begin
-      return Planner_State.Get_Last_Position;
+      case This.Target is
+         when Primary_Planner_Target =>
+            return Primary_Planner_State.Get_Last_Position;
+
+         when Pause_Planner_Target   =>
+            return Pause_Planner_State.Get_Last_Position;
+      end case;
    end Get_Last_Position;
 
    overriding
    function Get_Last_Kinematic_Parameters (This : Planner_Wrapper) return Motion_Planner.Kinematic_Parameters is
-      pragma Unreferenced (This);
    begin
-      return Planner_State.Get_Last_Kinematic_Parameters;
+      case This.Target is
+         when Primary_Planner_Target =>
+            return Primary_Planner_State.Get_Last_Kinematic_Parameters;
+
+         when Pause_Planner_Target   =>
+            return Pause_Planner_State.Get_Last_Kinematic_Parameters;
+      end case;
    end Get_Last_Kinematic_Parameters;
 
    overriding
@@ -127,24 +160,42 @@ package body Prunt.Controller is
    is
       pragma Unreferenced (Require_Homed);
    begin
-      if This.Startup_Mode and then Pos /= Planner_State.Get_Last_Position then
+      if This.Startup_Mode and then Pos /= This.Get_Last_Position then
          raise Constraint_Error with "Motion not allowed during startup.";
       end if;
 
-      Planner_State.Set_Last_Position (Pos);
+      case This.Target is
+         when Primary_Planner_Target =>
+            Primary_Planner_State.Set_Last_Position (Pos);
 
-      My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
+            My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
 
-      if Corner_Data not in Extra_Corner_Data then
-         My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
-      end if;
+            if Corner_Data not in Extra_Corner_Data then
+               My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+            end if;
+
+         when Pause_Planner_Target   =>
+            Pause_Planner_State.Set_Last_Position (Pos);
+
+            My_Pause_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
+
+            if Corner_Data not in Extra_Corner_Data then
+               My_Pause_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+            end if;
+      end case;
    end Add_Corner;
 
    overriding
    procedure Add_Corner_Data (This : Planner_Wrapper; Corner_Data : Extra_Corner_Data'Class) is
    begin
       if Corner_Data not in Extra_Corner_Data then
-         My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+         case This.Target is
+            when Primary_Planner_Target =>
+               My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+
+            when Pause_Planner_Target   =>
+               My_Pause_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
+         end case;
       end if;
    end Add_Corner_Data;
 
@@ -152,12 +203,21 @@ package body Prunt.Controller is
    procedure Flush
      (This           : Planner_Wrapper;
       Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False)
-   is
-      pragma Unreferenced (This);
+      Is_Homing_Move : Boolean := False) is
    begin
-      My_Motion_Planner.Enqueue_Flush
-        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Is_Homing_Move => Is_Homing_Move);
+      if This.Target = Pause_Planner_Target and then Is_Homing_Move then
+         raise Constraint_Error with "Homing moves are not allowed in pause plans.";
+      end if;
+
+      case This.Target is
+         when Primary_Planner_Target =>
+            My_Motion_Planner.Enqueue_Flush
+              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Is_Homing_Move => Is_Homing_Move);
+
+         when Pause_Planner_Target   =>
+            My_Pause_Motion_Planner.Enqueue_Flush
+              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Is_Homing_Move => Is_Homing_Move);
+      end case;
    end Flush;
 
    overriding
@@ -165,14 +225,25 @@ package body Prunt.Controller is
      (This           : Planner_Wrapper;
       Params         : Motion_Planner.Kinematic_Parameters;
       Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False)
-   is
-      pragma Unreferenced (This);
+      Is_Homing_Move : Boolean := False) is
    begin
-      Planner_State.Set_Last_Kinematic_Parameters (Params);
+      if This.Target = Pause_Planner_Target and then Is_Homing_Move then
+         raise Constraint_Error with "Homing moves are not allowed in pause plans.";
+      end if;
 
-      My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
-        (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+      case This.Target is
+         when Primary_Planner_Target =>
+            Primary_Planner_State.Set_Last_Kinematic_Parameters (Params);
+
+            My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
+              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+
+         when Pause_Planner_Target   =>
+            Pause_Planner_State.Set_Last_Kinematic_Parameters (Params);
+
+            My_Pause_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
+              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+      end case;
    end Flush_And_Change_Kinematic_Parameters;
 
    overriding
@@ -180,16 +251,29 @@ package body Prunt.Controller is
      (This           : Planner_Wrapper;
       New_Position   : Position;
       Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False)
-   is
-      pragma Unreferenced (This);
+      Is_Homing_Move : Boolean := False) is
    begin
-      Planner_State.Set_Last_Position (New_Position);
+      if This.Target = Pause_Planner_Target and then Is_Homing_Move then
+         raise Constraint_Error with "Homing moves are not allowed in pause plans.";
+      end if;
 
-      My_Motion_Planner.Enqueue_Flush_And_Reset_Position
-        (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
-         Pos            => New_Position,
-         Is_Homing_Move => Is_Homing_Move);
+      case This.Target is
+         when Primary_Planner_Target =>
+            Primary_Planner_State.Set_Last_Position (New_Position);
+
+            My_Motion_Planner.Enqueue_Flush_And_Reset_Position
+              (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
+               Pos            => New_Position,
+               Is_Homing_Move => Is_Homing_Move);
+
+         when Pause_Planner_Target   =>
+            Pause_Planner_State.Set_Last_Position (New_Position);
+
+            My_Pause_Motion_Planner.Enqueue_Flush_And_Reset_Position
+              (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
+               Pos            => New_Position,
+               Is_Homing_Move => Is_Homing_Move);
+      end case;
    end Flush_And_Reset_Position;
 
    procedure Prompt_For_Update is
@@ -232,11 +316,15 @@ package body Prunt.Controller is
       begin
          if Pipeline_Is_Set_Up then
             My_Motion_Planner.Reset;
-            My_Step_Generator.Runner.Reset;
+            My_Pause_Motion_Planner.Reset;
+            My_Step_Generator.Pause;
+            My_Step_Generator.Reset;
             Pipeline_Is_Set_Up := False;
          end if;
 
-         Planner_State.Reset;
+         Primary_Planner_State.Reset;
+         Pause_Planner_State.Reset;
+         Pause_Default_State.Reset;
          Last_Command_Executed.Reset (Startup_Position);
          My_Gcode_Queue.Cancel_File;
          My_Gcode_Queue.Cancel_Command;
@@ -254,10 +342,17 @@ package body Prunt.Controller is
          My_Motion_Planner.Runner.Setup
            (Startup_Configuration.Parameters,
             My_Motion_Planner.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
+         My_Pause_Motion_Planner.Runner.Setup
+           (Startup_Configuration.Parameters,
+            My_Pause_Motion_Planner.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
          My_Step_Generator.Runner.Setup (My_Step_Generator.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
 
-         Planner_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
-         Planner_State.Set_Last_Position (Startup_Position);
+         Primary_Planner_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
+         Primary_Planner_State.Set_Last_Position (Startup_Position);
+         Pause_Planner_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
+         Pause_Planner_State.Set_Last_Position (Startup_Position);
+         Pause_Default_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
+         Pause_Default_State.Set_Last_Position (Startup_Position);
          Last_Command_Executed.Reset (Startup_Position);
          Reset_Position ([others => 0.0]);
          Pipeline_Is_Set_Up := True;
@@ -275,7 +370,7 @@ package body Prunt.Controller is
             Had_Error := True;
          end Report_Config_Error;
 
-         Startup_Planner : constant Planner_Wrapper := (Startup_Mode => True);
+         Startup_Planner : constant Planner_Wrapper := (Startup_Mode => True, Target => Primary_Planner_Target);
       begin
          Active_Module_Instances :=
            Recursive_Module_Initialization
@@ -287,6 +382,7 @@ package body Prunt.Controller is
             Started := False;
          else
             Setup_Runtime_Pipeline;
+            Pause_Handler_Instances.Load (Active_Module_Instances);
 
             for M of Active_Module_Instances loop
                My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
@@ -303,13 +399,14 @@ package body Prunt.Controller is
 
       procedure Clear_Active_Modules is
       begin
+         Pause_Handler_Instances.Clear;
          Active_Module_Instances.Reverse_Clear;
       end Clear_Active_Modules;
 
       procedure Process_Gcode_Queue is
          use type Gcode_Arguments.Argument_Kind;
 
-         Active_Planner : constant Planner_Wrapper := (Startup_Mode => False);
+         Active_Planner : constant Planner_Wrapper := (Startup_Mode => False, Target => Primary_Planner_Target);
 
          function Line_Is_Empty (Args : Gcode_Arguments.Arguments) return Boolean;
 
@@ -436,13 +533,14 @@ package body Prunt.Controller is
             My_Gcode_Queue.Stop_Waiting;
          end if;
 
+         Reset_Runtime_State;
+
          if Modules_Started then
             Clear_Active_Modules;
          end if;
 
          Exception_Occurrence_Holder.Reset;
          Active_Config_File.Reset_Live_To_Stored;
-         Reset_Runtime_State;
          Reset_Hardware;
          My_Web_Server.Reset;
       end Handle_Reload_Request;
@@ -455,11 +553,11 @@ package body Prunt.Controller is
             My_Gcode_Queue.Stop_Waiting;
          end if;
 
+         Reset_Runtime_State;
+
          if Modules_Started then
             Clear_Active_Modules;
          end if;
-
-         Reset_Runtime_State;
       end Handle_Fatal_Error;
 
       procedure Wait_For_Reload_Or_Fatal (Modules_Started : Boolean; Exit_Main : out Boolean) is
@@ -870,6 +968,69 @@ package body Prunt.Controller is
    begin
       null; --  TODO
    end Reload_Server;
+
+   overriding
+   procedure Process_After_Block (This : Pause_Plan_End_Event; Context : Block_End_Context'Class) is
+   begin
+      pragma Unreferenced (This, Context);
+      null;
+   end Process_After_Block;
+
+   overriding
+   function Get_Pause_Position (This : Pause_Context_Data) return Position is
+   begin
+      return This.Pause_Position;
+   end Get_Pause_Position;
+
+   overriding
+   function Get_Last_Command_Index (This : Pause_Context_Data) return Command_Index is
+   begin
+      return This.Last_Command_Index;
+   end Get_Last_Command_Index;
+
+   procedure Handle_Pause (Pause_Position : Position; Last_Command_Index : Command_Index) is
+      Pause_Planner : constant Planner_Wrapper := (Startup_Mode => False, Target => Pause_Planner_Target);
+      Context       : constant Pause_Context_Data :=
+        (Pause_Position => Pause_Position, Last_Command_Index => Last_Command_Index);
+      Params        : constant Motion_Planner.Kinematic_Parameters :=
+        Pause_Default_State.Get_Last_Kinematic_Parameters;
+      Handlers      : Module_Instance_Vectors.Vector;
+   begin
+      Pause_Planner.Flush_And_Change_Kinematic_Parameters (Params);
+      Pause_Planner.Flush_And_Reset_Position (Pause_Position);
+
+      Pause_Handler_Instances.Snapshot (Handlers);
+
+      for Instance of Handlers loop
+         Pause_Handler'Class (Instance.Get.Element.all).Handle_Pause (Pause_Planner, Context);
+      end loop;
+
+      Pause_Planner.Flush (Pause_Plan_End_Event'(null record));
+   end Handle_Pause;
+
+   procedure Handle_Resume (Pause_Position : Position; Last_Command_Index : Command_Index) is
+      Pause_Planner : constant Planner_Wrapper := (Startup_Mode => False, Target => Pause_Planner_Target);
+      Context       : constant Pause_Context_Data :=
+        (Pause_Position => Pause_Position, Last_Command_Index => Last_Command_Index);
+      Handlers      : Module_Instance_Vectors.Vector;
+   begin
+      Pause_Handler_Instances.Snapshot (Handlers);
+
+      for C in reverse Handlers.Iterate loop
+         declare
+            Instance : constant My_Modules.Module_Instance_Shared_Pointers.Ref := Module_Instance_Vectors.Element (C);
+         begin
+            Pause_Handler'Class (Instance.Get.Element.all).Handle_Resume (Pause_Planner, Context);
+         end;
+      end loop;
+
+      Pause_Planner.Flush (Pause_Plan_End_Event'(null record));
+   end Handle_Resume;
+
+   function Is_Pause_Plan_Done (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder) return Boolean is
+   begin
+      return not Resetting_Data.Is_Empty and then Resetting_Data.Element in Pause_Plan_End_Event;
+   end Is_Pause_Plan_Done;
 
    procedure Start_Planner_Block
      (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index) is

@@ -141,9 +141,22 @@ package Prunt.Module_Types is
 
    procedure Wait_For_Idle (This : Block_End_Context) is abstract;
 
-   procedure Process_After_Block
-     (This    : Extra_Block_Resetting_Data;
-      Context : Block_End_Context'Class)
+   procedure Process_After_Block (This : Extra_Block_Resetting_Data; Context : Block_End_Context'Class) is null;
+
+   type Pause_Context is abstract tagged null record;
+
+   function Get_Pause_Position (This : Pause_Context) return Position is abstract;
+
+   function Get_Last_Command_Index (This : Pause_Context) return Command_Index is abstract;
+
+   type Pause_Handler is synchronized interface;
+
+   procedure Handle_Pause
+     (This : in out Pause_Handler; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
+   is null;
+
+   procedure Handle_Resume
+     (This : in out Pause_Handler; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
    is null;
 
    procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;

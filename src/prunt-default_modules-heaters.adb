@@ -44,6 +44,76 @@ package body Prunt.Default_Modules.Heaters is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
+   function Pause_Action_Changes_Target (Action : User_Config_Heater_Pause_Action) return Boolean
+   is (Action.Kind in Set_Pause_Target);
+
+   function Pause_Target_For_Heater
+     (This : Module_Instance; Heater : Heater_Name; Action : User_Config_Heater_Pause_Action) return Temperature
+   with Pre => Pause_Action_Changes_Target (Action);
+
+   function Pause_Target_For_Heater
+     (This : Module_Instance; Heater : Heater_Name; Action : User_Config_Heater_Pause_Action) return Temperature is
+   begin
+      case Action.Kind is
+         when Keep_Target      =>
+            raise Program_Error with "Pause action does not change target.";
+
+         when Set_Pause_Target =>
+            return Action.Target;
+      end case;
+   end Pause_Target_For_Heater;
+
+   overriding
+   procedure Handle_Pause
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
+   is
+      pragma Unreferenced (Context);
+
+      Config : constant User_Config := This.Get_Config;
+   begin
+      This.Save_Pause_Targets;
+
+      for H in Heater_Name loop
+         if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
+         then
+            Planner.Add_Corner_Data
+              (This.Build_Target_Command (H, Pause_Target_For_Heater (This, H, Config.Heaters (H).Pause_Action)));
+         end if;
+      end loop;
+   end Handle_Pause;
+
+   overriding
+   procedure Handle_Resume
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
+   is
+      pragma Unreferenced (Context);
+
+      Config        : constant User_Config := This.Get_Config;
+      Pause_Targets : constant Heater_Target_Array := This.Get_Pause_Targets;
+   begin
+      for H in Heater_Name loop
+         if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
+         then
+            Planner.Add_Corner_Data (This.Build_Target_Command (H, Pause_Targets (H)));
+         end if;
+      end loop;
+
+      for H in Heater_Name loop
+         if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
+         then
+            Planner.Flush
+              (This.Build_Temperature_Wait
+                 (Heater               => H,
+                  Target               => Pause_Targets (H),
+                  Wait_Only_If_Heating => True,
+                  Ramp_Duration        => 0.0 * Prunt.s,
+                  Ramp_Only_If_Heating => True));
+         end if;
+      end loop;
+
+      This.Clear_Pause_Targets;
+   end Handle_Resume;
+
    function To_Heater_Parameters (Config : User_Config_Heater) return Heater_Parameters is
    begin
       if Config.Kind = Disabled then
@@ -97,6 +167,7 @@ package body Prunt.Default_Modules.Heaters is
    begin
       Heater_Hardware (This.Heater).Set_Temperature (This.Heater, This.Target);
       This.Target_Status.Set_Value (This.Target / celsius);
+      Module_Instance (This.Module_Instance_Ref.Get.Element.all).Record_Heater_Target (This.Heater, This.Target);
    end Process;
 
    procedure Process_After_Block (This : Heater_Temperature_Wait; Context : Block_End_Context'Class) is
@@ -112,6 +183,7 @@ package body Prunt.Default_Modules.Heaters is
       begin
          Heater_Hardware (This.Heater).Set_Temperature (This.Heater, Value);
          This.Target_Status.Set_Value (Value / celsius);
+         Heaters_Module_Instance.Record_Heater_Target (This.Heater, Value);
       end Set_Target;
    begin
 
@@ -188,12 +260,36 @@ package body Prunt.Default_Modules.Heaters is
               (Parsed_Config, Status_Emitter, Thermistors_Module_Instance_Ref, Blocking_Tracker_Module_Instance_Ref);
 
             for H in Heater_Name loop
-               if Parsed_Config.Heaters (H).Kind /= Disabled
-                 and then
-                   not Thermistors_Module_Instance.Thermistor_Is_Enabled_In_Config
-                         (Parsed_Config.Heaters (H).Thermistor)
-               then
-                  Report_Config_Error (["Heaters", +H'Image, "Thermistor"], "This thermistor is disabled.");
+               if Parsed_Config.Heaters (H).Kind /= Disabled then
+                  if not Thermistors_Module_Instance.Thermistor_Is_Enabled_In_Config
+                           (Parsed_Config.Heaters (H).Thermistor)
+                  then
+                     Report_Config_Error (["Heaters", +H'Image, "Thermistor"], "This thermistor is disabled.");
+                  elsif Parsed_Config.Heaters (H).Pause_Action.Kind = Set_Pause_Target then
+                     declare
+                        Thermistor_Params : constant Prunt.Thermistors.Thermistor_Parameters :=
+                          Thermistors_Module_Instance.Get_Thermistor_Parameters (Parsed_Config.Heaters (H).Thermistor);
+                        Target_Path       : constant Config.Config_Data_Paths.Vector :=
+                          ["Heaters",
+                           +H'Image,
+                           "Kind",
+                           "Children",
+                           "Enabled",
+                           "Pause_Action",
+                           "Kind",
+                           "Children",
+                           "Set_Pause_Target",
+                           "Target"];
+                     begin
+                        if Parsed_Config.Heaters (H).Pause_Action.Target < Thermistor_Params.Minimum_Temperature then
+                           Report_Config_Error (Target_Path, "This target is below the thermistor minimum.");
+                        end if;
+
+                        if Parsed_Config.Heaters (H).Pause_Action.Target > Thermistor_Params.Maximum_Temperature then
+                           Report_Config_Error (Target_Path, "This target is above the thermistor maximum.");
+                        end if;
+                     end;
+                  end if;
                end if;
             end loop;
 
@@ -278,6 +374,7 @@ package body Prunt.Default_Modules.Heaters is
                    else Config.Heaters (H).Thermistor));
                Heater_Hardware (H).Set_Temperature (H, Min_Temp);
                Target_Status_Setters (H).Set_Value (Min_Temp / celsius);
+               Current_Targets (H) := Min_Temp;
             end;
          end loop;
       end Start;
@@ -295,6 +392,31 @@ package body Prunt.Default_Modules.Heaters is
               Target_Status       => Target_Status_Setters (Heater),
               Target              => Target);
       end Build_Target_Command;
+
+      procedure Record_Heater_Target (Heater : Heater_Name; Target : Temperature) is
+      begin
+         Current_Targets (Heater) := Target;
+      end Record_Heater_Target;
+
+      procedure Save_Pause_Targets is
+      begin
+         Pause_Targets := Current_Targets;
+         Pause_Targets_Valid := True;
+      end Save_Pause_Targets;
+
+      function Get_Pause_Targets return Heater_Target_Array is
+      begin
+         if not Pause_Targets_Valid then
+            raise Constraint_Error with "Heater pause targets were not saved before resume.";
+         end if;
+
+         return Pause_Targets;
+      end Get_Pause_Targets;
+
+      procedure Clear_Pause_Targets is
+      begin
+         Pause_Targets_Valid := False;
+      end Clear_Pause_Targets;
 
       function Build_Temperature_Wait
         (Heater               : Heater_Name;

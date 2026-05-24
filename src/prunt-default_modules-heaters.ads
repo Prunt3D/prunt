@@ -65,7 +65,10 @@ package Prunt.Default_Modules.Heaters is
    function Get_Heater_Parameters (This : Module_Instance_Interface; Heater : Heater_Name) return Heater_Parameters
    is abstract;
 
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
+   type Module_Instance (<>) is synchronized
+     new My_Modules.Module_Instance
+     and Module_Instance_Interface
+     and Pause_Handler with private;
 
    overriding
    function Initialize
@@ -83,6 +86,14 @@ package Prunt.Default_Modules.Heaters is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+
+   overriding
+   procedure Handle_Pause
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+
+   overriding
+   procedure Handle_Resume
+     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
 
 private
 
@@ -130,6 +141,24 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
+   type User_Config_Heater_Pause_Action_Kind is (Keep_Target, Set_Pause_Target)
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Heater_Pause_Action (Kind : User_Config_Heater_Pause_Action_Kind := Keep_Target) is record
+      --  Select what happens to this heater while the printer is paused.
+
+      case Kind is
+         when Keep_Target =>
+            --  Leave the current heater target unchanged while paused.
+            null;
+
+         when Set_Pause_Target =>
+            Target : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 0.0 * celsius;
+            --  Heater target to use while paused.
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
    type User_Config_Heater (Kind : User_Config_Heater_Kind := Disabled) is record
       --  This section contains the configuration for a single heater.
 
@@ -158,6 +187,9 @@ private
 
             Control_Method : User_Config_Heater_Control_Method := (others => <>);
             --  Select the control method for this heater.
+
+            Pause_Action : User_Config_Heater_Pause_Action := (others => <>);
+            --  Select the target to use while paused. Targets changed for pause are restored during resume.
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -340,7 +372,9 @@ private
 
    type Dummy_Type is null record;
 
-   protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
+   protected type Module_Instance is new My_Modules.Module_Instance
+   and Module_Instance_Interface
+   and Pause_Handler with
       procedure Initialize
         (Config_In                           : User_Config;
          Status_Emitter_In                   : Status_Manager.Status_Emitter;
@@ -352,6 +386,14 @@ private
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       function Build_Target_Command (Heater : Heater_Name; Target : Temperature) return Heater_Target_Command;
+
+      procedure Record_Heater_Target (Heater : Heater_Name; Target : Temperature);
+
+      procedure Save_Pause_Targets;
+
+      function Get_Pause_Targets return Heater_Target_Array;
+
+      procedure Clear_Pause_Targets;
 
       --  TODO: PID and autotune.
 
@@ -386,6 +428,9 @@ private
       Thermistors_Module_Instance_Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Blocking_Tracker_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Target_Status_Setters                : Heater_Target_Status_Setters;
+      Current_Targets                      : Heater_Target_Array := [others => 0.0 * celsius];
+      Pause_Targets                        : Heater_Target_Array := [others => 0.0 * celsius];
+      Pause_Targets_Valid                  : Boolean := False;
    end Module_Instance;
 
 end Prunt.Default_Modules.Heaters;

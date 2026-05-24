@@ -24,6 +24,7 @@ with Prunt.Motion_Planner.Planner;
 
 generic
    with package Planner is new Motion_Planner.Planner (<>);
+   with package Pause_Planner is new Motion_Planner.Planner (<>);
 
    type Motor_Name is (<>);
 
@@ -32,6 +33,10 @@ generic
    with
      procedure Start_Planner_Block
        (Resetting_Data : Planner.Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
+
+   with
+     procedure Start_Pause_Planner_Block
+       (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
 
    with
      procedure Enqueue_Command
@@ -43,6 +48,8 @@ generic
         Vel_Ratio       : Dimensionless);
 
    with procedure Start_Corner (Last_Command_Index : Command_Index; Data : Planner.Corner_Extra_Data_Type);
+
+   with procedure Start_Pause_Corner (Last_Command_Index : Command_Index; Data : Pause_Planner.Corner_Extra_Data_Type);
    --  Called when we start moving towards a corner for each extra data element.
    --
    --  This is not included in Enqueue_Command as floating point inaccuracy could potentially cause a very short
@@ -55,13 +62,31 @@ generic
         First_Accel_Distance : Length;
         Last_Command_Index   : Command_Index;
         Loop_Move_Offset     : Position_Offset);
+
+   with
+     procedure Finish_Pause_Planner_Block
+       (Resetting_Data       : Pause_Planner.Flush_Resetting_Data_Type;
+        Next_Block_Pos       : Motor_Position;
+        First_Accel_Distance : Length;
+        Last_Command_Index   : Command_Index;
+        Loop_Move_Offset     : Position_Offset);
    --  First_Accel_Distance is the distance length of the acceleration part of the first move. This is used to
    --  determine the position after a homing move as the loop move starts as soon as possible after the acceleration
    --  part.
 
-   Loop_Cycle_Reporter : access Loop_Cycle_Reporter_Interface'Class;
+   with function Is_Pause_Plan_Done (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type) return Boolean;
 
+   with procedure Handle_Pause (Pause_Position : Position; Last_Command_Index : Command_Index);
+
+   with procedure Handle_Resume (Pause_Position : Position; Last_Command_Index : Command_Index);
+
+   pragma Warnings (Off, "formal object ""Loop_Cycle_Reporter"" is not referenced");
+   Loop_Cycle_Reporter : access Loop_Cycle_Reporter_Interface'Class;
+   pragma Warnings (On, "formal object ""Loop_Cycle_Reporter"" is not referenced");
+
+   pragma Warnings (Off, "formal object ""Interpolation_Time"" is not referenced");
    Interpolation_Time : Time;
+   pragma Warnings (On, "formal object ""Interpolation_Time"" is not referenced");
 
    Runner_CPU : System.Multiprocessors.CPU_Range;
 package Prunt.Step_Generator is
@@ -78,9 +103,10 @@ package Prunt.Step_Generator is
       entry Setup (Map : Motor_Pos_Map);
       --  Configure the step generator with the motor position map. This must be called before any steps can be
       --  generated.
-      entry Reset;
-      --  Reset the step generator state. This should be called when the machine is disabled or reset.
    end Runner;
+
+   procedure Reset;
+   --  Reset the step generator state. This should be called when the machine is disabled or reset.
 
    procedure Pause;
    --  Request the step generator to pause execution. This call is non-blocking. Use Is_Paused to check if the pause
@@ -92,13 +118,26 @@ package Prunt.Step_Generator is
 
 private
 
-   type Pause_Slew_Index is new Integer range 0 .. Integer (3.0 * s / Interpolation_Time);
-   --  Max at paused end of slew.
-
-   function Pause_Slew_Interpolation_Time (Index : Pause_Slew_Index) return Time;
-   --  Calculates the interpolation time scaling factor for the pause/resume slew.
+   type Command_State is record
+      Current_Command_Index : Command_Index := 0;
+      Last_Queued_Position  : Position := [others => 0.0 * mm];
+   end record;
+   --  Tracks the shared command-index stream and last queued position across primary and pause execution.
 
    function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position;
    --  Converts a cartesian position to motor positions using the provided map.
+
+   procedure Queue_Command
+     (State           : in out Command_State;
+      Pos             : Position;
+      Map             : Motor_Pos_Map;
+      Loop_Until_Hit  : Boolean;
+      Safe_Stop_After : Boolean;
+      Vel_Ratio       : Dimensionless);
+   --  Append one shaped command to the shared step queue and update State.
+
+   function No_Pause_Requested return Boolean;
+
+   procedure No_Pause_Handler (Pause_Position : Position; Reset_Requested : out Boolean);
 
 end Prunt.Step_Generator;
