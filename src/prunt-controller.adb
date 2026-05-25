@@ -1077,8 +1077,9 @@ package body Prunt.Controller is
    begin
       if not Resetting_Data.Is_Empty then
          Resetting_Data.Element.Process_After_Block (Context);
-         Reset_Position (Next_Block_Pos);
       end if;
+
+      Reset_Position (Next_Block_Pos);
    end Finish_Planner_Block;
 
    procedure Report_Last_Command_Executed (Index : Command_Index) is

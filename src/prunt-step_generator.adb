@@ -250,15 +250,18 @@ package body Prunt.Step_Generator is
            Finish_Block_Callback     => Finish_Pause_Planner_Block);
 
       procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean) is
+         Stable_Pause_Position : constant Position := Pause_Position;
+         --  Implicit pass-by-reference was a mistake.
+
          procedure Execute_Pause_Plan (Resume_Plan : Boolean);
          procedure Wait_For_Resume;
 
          procedure Execute_Pause_Plan (Resume_Plan : Boolean) is
          begin
             if Resume_Plan then
-               Handle_Resume (Pause_Position, Commands.Current_Command_Index);
+               Handle_Resume (Stable_Pause_Position, Commands.Current_Command_Index);
             else
-               Handle_Pause (Pause_Position, Commands.Current_Command_Index);
+               Handle_Pause (Stable_Pause_Position, Commands.Current_Command_Index);
             end if;
 
             loop
@@ -305,7 +308,7 @@ package body Prunt.Step_Generator is
             return;
          end if;
 
-         if Commands.Last_Queued_Position /= Pause_Position then
+         if Commands.Last_Queued_Position /= Stable_Pause_Position then
             raise Constraint_Error with "Pause resume plan did not return to the pause position.";
          end if;
 
