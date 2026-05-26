@@ -47,12 +47,10 @@ package body Prunt.Default_Modules.Heaters is
    function Pause_Action_Changes_Target (Action : User_Config_Heater_Pause_Action) return Boolean
    is (Action.Kind in Set_Pause_Target);
 
-   function Pause_Target_For_Heater
-     (This : Module_Instance; Heater : Heater_Name; Action : User_Config_Heater_Pause_Action) return Temperature
+   function Pause_Target_For_Heater (Action : User_Config_Heater_Pause_Action) return Temperature
    with Pre => Pause_Action_Changes_Target (Action);
 
-   function Pause_Target_For_Heater
-     (This : Module_Instance; Heater : Heater_Name; Action : User_Config_Heater_Pause_Action) return Temperature is
+   function Pause_Target_For_Heater (Action : User_Config_Heater_Pause_Action) return Temperature is
    begin
       case Action.Kind is
          when Keep_Target      =>
@@ -62,57 +60,6 @@ package body Prunt.Default_Modules.Heaters is
             return Action.Target;
       end case;
    end Pause_Target_For_Heater;
-
-   overriding
-   procedure Handle_Pause
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
-   is
-      pragma Unreferenced (Context);
-
-      Config : constant User_Config := This.Get_Config;
-   begin
-      This.Save_Pause_Targets;
-
-      for H in Heater_Name loop
-         if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
-         then
-            Planner.Add_Corner_Data
-              (This.Build_Target_Command (H, Pause_Target_For_Heater (This, H, Config.Heaters (H).Pause_Action)));
-         end if;
-      end loop;
-   end Handle_Pause;
-
-   overriding
-   procedure Handle_Resume
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
-   is
-      pragma Unreferenced (Context);
-
-      Config        : constant User_Config := This.Get_Config;
-      Pause_Targets : constant Heater_Target_Array := This.Get_Pause_Targets;
-   begin
-      for H in Heater_Name loop
-         if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
-         then
-            Planner.Add_Corner_Data (This.Build_Target_Command (H, Pause_Targets (H)));
-         end if;
-      end loop;
-
-      for H in Heater_Name loop
-         if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
-         then
-            Planner.Flush
-              (This.Build_Temperature_Wait
-                 (Heater               => H,
-                  Target               => Pause_Targets (H),
-                  Wait_Only_If_Heating => True,
-                  Ramp_Duration        => 0.0 * Prunt.s,
-                  Ramp_Only_If_Heating => True));
-         end if;
-      end loop;
-
-      This.Clear_Pause_Targets;
-   end Handle_Resume;
 
    function To_Heater_Parameters (Config : User_Config_Heater) return Heater_Parameters is
    begin
@@ -378,6 +325,48 @@ package body Prunt.Default_Modules.Heaters is
             end;
          end loop;
       end Start;
+
+      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+         pragma Unreferenced (Context);
+      begin
+         Save_Pause_Targets;
+
+         for H in Heater_Name loop
+            if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
+            then
+               Planner.Add_Corner_Data
+                 (Build_Target_Command (H, Pause_Target_For_Heater (Config.Heaters (H).Pause_Action)));
+            end if;
+         end loop;
+      end Handle_Pause;
+
+      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+         pragma Unreferenced (Context);
+
+         Saved_Pause_Targets : constant Heater_Target_Array := Get_Pause_Targets;
+      begin
+         for H in Heater_Name loop
+            if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
+            then
+               Planner.Add_Corner_Data (Build_Target_Command (H, Saved_Pause_Targets (H)));
+            end if;
+         end loop;
+
+         for H in Heater_Name loop
+            if Config.Heaters (H).Kind = Enabled and then Pause_Action_Changes_Target (Config.Heaters (H).Pause_Action)
+            then
+               Planner.Flush
+                 (Build_Temperature_Wait
+                    (Heater               => H,
+                     Target               => Saved_Pause_Targets (H),
+                     Wait_Only_If_Heating => True,
+                     Ramp_Duration        => 0.0 * Prunt.s,
+                     Ramp_Only_If_Heating => True));
+            end if;
+         end loop;
+
+         Clear_Pause_Targets;
+      end Handle_Resume;
 
       function Build_Target_Command (Heater : Heater_Name; Target : Temperature) return Heater_Target_Command is
          Self_Ref_Strong : My_Modules.Module_Instance_Shared_Pointers.Ref;

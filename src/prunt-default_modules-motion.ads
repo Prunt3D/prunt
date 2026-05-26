@@ -21,11 +21,14 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Default_Modules.Kinematics;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
+with Prunt.Motion_Planner;
 with Prunt.Status_Manager;
 
 generic
+   with package Kinematics_Module is new Default_Modules.Kinematics (<>);
 package Prunt.Default_Modules.Motion is
 
    type Module is new My_Modules.Module with null record;
@@ -58,17 +61,87 @@ package Prunt.Default_Modules.Motion is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
 
-   overriding
-   procedure Handle_Pause
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
-
-   overriding
-   procedure Handle_Resume
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
-
 private
 
-   type User_Config_Pause_Park_Kind is (No_Park_Move, Relative_Park_Move) with Annotate => (Prunt_Config, User_Config);
+   type User_Config_Pause_Park_Kind is (No_Park_Move, Relative_Park_Move, Absolute_Park_Move)
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Pause_Park_Out_Of_Bounds_Behavior is (Error_If_Out_Of_Bounds, Clip_To_Bounds)
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Pause_Park_Absolute_Z_Kind is (Absolute_Z_Position, Relative_Z_Offset)
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Pause_Park_Absolute_Z (Kind : User_Config_Pause_Park_Absolute_Z_Kind := Absolute_Z_Position) is
+   record
+      --  Select whether absolute park mode uses an absolute Z position or a relative Z movement from the pause
+      --  position.
+
+      case Kind is
+         when Absolute_Z_Position =>
+            Z_Position : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Absolute Z position to move to while paused.
+
+            Avoid_Lowering_Z : Boolean := True;
+            --  If the absolute Z target is below the pause Z position, leave Z at the pause position instead of
+            --  lowering it.
+
+         when Relative_Z_Offset =>
+            Z_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Relative Z movement from the pause position.
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Pause_Park_Relative_Park_Move is record
+      Out_Of_Bounds_Behavior : User_Config_Pause_Park_Out_Of_Bounds_Behavior := Clip_To_Bounds;
+      --  Select what happens if applying the relative pause offsets would place any axis outside the configured
+      --  position limits.
+
+      X_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Relative X movement from the pause position.
+
+      Y_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Relative Y movement from the pause position.
+
+      Z_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Relative Z movement from the pause position.
+
+      E_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Relative E movement from the pause position.
+
+      Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
+      --  Feedrate used for the pause park move.
+
+      Return_Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
+      --  Feedrate used to return to the pause position before resuming.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Pause_Park_Absolute_Park_Move is record
+      Out_Of_Bounds_Behavior : User_Config_Pause_Park_Out_Of_Bounds_Behavior := Clip_To_Bounds;
+      --  Select what happens if the runtime-dependent parts of the pause position would place any axis outside the
+      --  configured position limits.
+
+      X_Position : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Absolute X position to move to while paused.
+
+      Y_Position : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Absolute Y position to move to while paused.
+
+      Z_Target : User_Config_Pause_Park_Absolute_Z := (others => <>);
+      --  Z movement to perform while paused.
+
+      E_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Relative E movement from the pause position.
+
+      Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
+      --  Feedrate used for the pause park move.
+
+      Return_Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
+      --  Feedrate used to return to the pause position before resuming.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Pause_Park (Kind : User_Config_Pause_Park_Kind := No_Park_Move) is record
       --  Configure the optional movement performed while the printer is paused.
@@ -79,23 +152,12 @@ private
             null;
 
          when Relative_Park_Move =>
-            X_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
-            --  Relative X movement from the pause position.
+            Relative_Park_Move : User_Config_Pause_Park_Relative_Park_Move := (others => <>);
+            --  Relative movement to perform while paused.
 
-            Y_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
-            --  Relative Y movement from the pause position.
-
-            Z_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
-            --  Relative Z movement from the pause position.
-
-            E_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
-            --  Relative E movement from the pause position.
-
-            Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
-            --  Feedrate used for the pause park move.
-
-            Return_Feedrate : Velocity range 1.0E-100 * mm / s .. 1.0E100 * mm / s := 50.0 * mm / s;
-            --  Feedrate used to return to the pause position before resuming.
+         when Absolute_Park_Move =>
+            Absolute_Park_Move : User_Config_Pause_Park_Absolute_Park_Move := (others => <>);
+            --  Absolute movement to perform while paused.
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -135,6 +197,31 @@ private
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+
+   procedure Add_Corner_If_Moved
+     (Planner : Planner_Interface'Class; Current : in out Position; Target : Position; Feedrate : Velocity);
+   --  Add Target to Planner and update Current, but only if Target differs from Current.
+
+   function Bounds_Checked_Position
+     (Target             : Position;
+      Behavior           : User_Config_Pause_Park_Out_Of_Bounds_Behavior;
+      Target_Description : String;
+      Params             : Motion_Planner.Kinematic_Parameters) return Position;
+   --  Return Target clipped to Params bounds, or raise Constraint_Error if Behavior requires an error.
+
+   function Park_Position
+     (Config : User_Config_Pause_Park; Pause_Position : Position; Params : Motion_Planner.Kinematic_Parameters)
+      return Position
+   with Pre => Config.Kind in Relative_Park_Move | Absolute_Park_Move;
+   --  Resolve Config into the actual pause park target, including bounds handling and the Z lowering guard.
+
+   function Park_Feedrate (Config : User_Config_Pause_Park) return Velocity
+   with Pre => Config.Kind in Relative_Park_Move | Absolute_Park_Move;
+   --  Return the feedrate to use while moving from the pause position to the park position.
+
+   function Park_Return_Feedrate (Config : User_Config_Pause_Park) return Velocity
+   with Pre => Config.Kind in Relative_Park_Move | Absolute_Park_Move;
+   --  Return the feedrate to use while moving back from the park position to the pause position.
 
    procedure Rapid_Linear_Move
      (This    : Module_Instance;
@@ -297,6 +384,12 @@ private
       overriding
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+
+      overriding
+      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+
+      overriding
+      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
 
       function Get_Config return User_Config;
 

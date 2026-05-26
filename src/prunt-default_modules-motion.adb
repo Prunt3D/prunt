@@ -43,10 +43,56 @@ package body Prunt.Default_Modules.Motion is
       Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
-      return My_Modules.Module_Instance'Class is
+      return My_Modules.Module_Instance'Class
+   is
+      Parsed_Config                  : constant User_Config := Config_Data_To_User_Config (Config_Data);
+      Kinematics_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+        Get_Other_Instance (Kinematics_Module.Module_Instance'Tag);
+      Kinematics_Module_Instance     : Kinematics_Module.Module_Instance_Interface'Class renames
+        Kinematics_Module.Module_Instance_Interface'Class (Kinematics_Module_Instance_Ref.Get.Element.all);
+
+      procedure Report_If_Absolute_Park_Position_Out_Of_Bounds;
+
+      procedure Report_If_Absolute_Park_Position_Out_Of_Bounds is
+         use type Config.Config_Data_Paths.Vector;
+
+         Params : constant Motion_Planner.Kinematic_Parameters :=
+           Kinematics_Module_Instance.Get_Default_Motion_Planner_Configuration.Parameters;
+
+         procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Data_Paths.Vector) is
+         begin
+            if Value < Params.Lower_Pos_Limit (Axis) then
+               Report_Config_Error (Path, "This absolute position is below the configured lower position limit.");
+            end if;
+
+            if Value > Params.Upper_Pos_Limit (Axis) then
+               Report_Config_Error (Path, "This absolute position is above the configured upper position limit.");
+            end if;
+         end Check_Axis;
+      begin
+         if Parsed_Config.Pause_Park.Kind = Absolute_Park_Move then
+            declare
+               Move      : constant User_Config_Pause_Park_Absolute_Park_Move :=
+                 Parsed_Config.Pause_Park.Absolute_Park_Move;
+               Base_Path : constant Config.Config_Data_Paths.Vector :=
+                 ["Pause_Park", "Kind", "Children", "Absolute_Park_Move", "Absolute_Park_Move"];
+            begin
+               Check_Axis (X_Axis, Move.X_Position, Base_Path & ["X_Position"]);
+               Check_Axis (Y_Axis, Move.Y_Position, Base_Path & ["Y_Position"]);
+
+               if Move.Z_Target.Kind = Absolute_Z_Position then
+                  Check_Axis
+                    (Z_Axis,
+                     Move.Z_Target.Z_Position,
+                     Base_Path & ["Z_Target", "Kind", "Children", "Absolute_Z_Position", "Z_Position"]);
+               end if;
+            end;
+         end if;
+      end Report_If_Absolute_Park_Position_Out_Of_Bounds;
    begin
       return Result : Module_Instance do
-         Result.Initialize (Config_Data_To_User_Config (Config_Data), Status_Emitter);
+         Report_If_Absolute_Park_Position_Out_Of_Bounds;
+         Result.Initialize (Parsed_Config, Status_Emitter);
       end return;
    end Initialize;
 
@@ -69,6 +115,133 @@ package body Prunt.Default_Modules.Motion is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier) is separate;
+
+   procedure Add_Corner_If_Moved
+     (Planner : Planner_Interface'Class; Current : in out Position; Target : Position; Feedrate : Velocity) is
+   begin
+      if Target /= Current then
+         Planner.Add_Corner (Pos => Target, Feedrate => Feedrate);
+         Current := Target;
+      end if;
+   end Add_Corner_If_Moved;
+
+   function Bounds_Checked_Position
+     (Target             : Position;
+      Behavior           : User_Config_Pause_Park_Out_Of_Bounds_Behavior;
+      Target_Description : String;
+      Params             : Motion_Planner.Kinematic_Parameters) return Position
+   is
+      Result : Position := Target;
+   begin
+      for Axis in Axis_Name loop
+         if Result (Axis) < Params.Lower_Pos_Limit (Axis) then
+            case Behavior is
+               when Error_If_Out_Of_Bounds =>
+                  raise Constraint_Error
+                    with Target_Description & " is out of bounds (" & Axis'Image & " = " & Result (Axis)'Image & ").";
+
+               when Clip_To_Bounds         =>
+                  Result (Axis) := Params.Lower_Pos_Limit (Axis);
+            end case;
+         elsif Result (Axis) > Params.Upper_Pos_Limit (Axis) then
+            case Behavior is
+               when Error_If_Out_Of_Bounds =>
+                  raise Constraint_Error
+                    with Target_Description & " is out of bounds (" & Axis'Image & " = " & Result (Axis)'Image & ").";
+
+               when Clip_To_Bounds         =>
+                  Result (Axis) := Params.Upper_Pos_Limit (Axis);
+            end case;
+         end if;
+      end loop;
+
+      return Result;
+   end Bounds_Checked_Position;
+
+   function Park_Position
+     (Config : User_Config_Pause_Park; Pause_Position : Position; Params : Motion_Planner.Kinematic_Parameters)
+      return Position is
+   begin
+      case Config.Kind is
+         when Relative_Park_Move =>
+            declare
+               Move : constant User_Config_Pause_Park_Relative_Park_Move := Config.Relative_Park_Move;
+            begin
+               return
+                 Bounds_Checked_Position
+                   (Target             =>
+                      Pause_Position
+                      + Position_Offset'
+                          (X_Axis => Move.X_Offset,
+                           Y_Axis => Move.Y_Offset,
+                           Z_Axis => Move.Z_Offset,
+                           E_Axis => Move.E_Offset),
+                    Behavior           => Move.Out_Of_Bounds_Behavior,
+                    Target_Description => "Relative pause park target",
+                    Params             => Params);
+            end;
+
+         when Absolute_Park_Move =>
+            declare
+               Move   : constant User_Config_Pause_Park_Absolute_Park_Move := Config.Absolute_Park_Move;
+               Target : Position :=
+                 (X_Axis => Move.X_Position,
+                  Y_Axis => Move.Y_Position,
+                  Z_Axis => Pause_Position (Z_Axis),
+                  E_Axis => Pause_Position (E_Axis) + Move.E_Offset);
+            begin
+               case Move.Z_Target.Kind is
+                  when Absolute_Z_Position =>
+                     Target (Z_Axis) := Move.Z_Target.Z_Position;
+
+                     if Move.Z_Target.Avoid_Lowering_Z and then Target (Z_Axis) < Pause_Position (Z_Axis) then
+                        Target (Z_Axis) := Pause_Position (Z_Axis);
+                     end if;
+
+                  when Relative_Z_Offset   =>
+                     Target (Z_Axis) := Pause_Position (Z_Axis) + Move.Z_Target.Z_Offset;
+               end case;
+
+               return
+                 Bounds_Checked_Position
+                   (Target             => Target,
+                    Behavior           => Move.Out_Of_Bounds_Behavior,
+                    Target_Description => "Absolute pause park target",
+                    Params             => Params);
+            end;
+
+         when No_Park_Move       =>
+            raise Program_Error with "Park_Position called without a configured park move.";
+      end case;
+   end Park_Position;
+
+   function Park_Feedrate (Config : User_Config_Pause_Park) return Velocity is
+   begin
+      case Config.Kind is
+         when Relative_Park_Move =>
+            return Config.Relative_Park_Move.Feedrate;
+
+         when Absolute_Park_Move =>
+            return Config.Absolute_Park_Move.Feedrate;
+
+         when No_Park_Move       =>
+            raise Program_Error with "Park_Feedrate called without a configured park move.";
+      end case;
+   end Park_Feedrate;
+
+   function Park_Return_Feedrate (Config : User_Config_Pause_Park) return Velocity is
+   begin
+      case Config.Kind is
+         when Relative_Park_Move =>
+            return Config.Relative_Park_Move.Return_Feedrate;
+
+         when Absolute_Park_Move =>
+            return Config.Absolute_Park_Move.Return_Feedrate;
+
+         when No_Park_Move       =>
+            raise Program_Error with "Park_Return_Feedrate called without a configured park move.";
+      end case;
+   end Park_Return_Feedrate;
 
    protected body Module_Instance is
       procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter) is
@@ -100,6 +273,54 @@ package body Prunt.Default_Modules.Motion is
       begin
          Feedrate := Value;
       end Set_Feedrate;
+
+      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+         Pause_Position : constant Position := Context.Get_Pause_Position;
+      begin
+         if Config.Pause_Park.Kind in Relative_Park_Move | Absolute_Park_Move then
+            declare
+               Target  : constant Position :=
+                 Park_Position (Config.Pause_Park, Pause_Position, Planner.Get_Last_Kinematic_Parameters);
+               Feed    : constant Velocity := Park_Feedrate (Config.Pause_Park);
+               Current : Position := Pause_Position;
+               Next    : Position := Current;
+            begin
+               Next (E_Axis) := Target (E_Axis);
+               Add_Corner_If_Moved (Planner, Current, Next, Feed);
+
+               Next := Current;
+               Next (Z_Axis) := Target (Z_Axis);
+               Add_Corner_If_Moved (Planner, Current, Next, Feed);
+
+               Next := Target;
+               Add_Corner_If_Moved (Planner, Current, Next, Feed);
+            end;
+         end if;
+      end Handle_Pause;
+
+      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+         Pause_Position : constant Position := Context.Get_Pause_Position;
+      begin
+         if Config.Pause_Park.Kind in Relative_Park_Move | Absolute_Park_Move then
+            declare
+               Feed    : constant Velocity := Park_Return_Feedrate (Config.Pause_Park);
+               Current : Position := Planner.Get_Last_Position;
+               Next    : Position := Current;
+            begin
+               Next (X_Axis) := Pause_Position (X_Axis);
+               Next (Y_Axis) := Pause_Position (Y_Axis);
+               Add_Corner_If_Moved (Planner, Current, Next, Feed);
+
+               Next := Current;
+               Next (Z_Axis) := Pause_Position (Z_Axis);
+               Add_Corner_If_Moved (Planner, Current, Next, Feed);
+
+               Next := Current;
+               Next (E_Axis) := Pause_Position (E_Axis);
+               Add_Corner_If_Moved (Planner, Current, Next, Feed);
+            end;
+         end if;
+      end Handle_Resume;
    end Module_Instance;
 
    procedure Rapid_Linear_Move

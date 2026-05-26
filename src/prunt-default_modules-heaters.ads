@@ -87,14 +87,6 @@ package Prunt.Default_Modules.Heaters is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
 
-   overriding
-   procedure Handle_Pause
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
-
-   overriding
-   procedure Handle_Resume
-     (This : in out Module_Instance; Planner : Planner_Interface'Class; Context : Pause_Context'Class);
-
 private
 
    Wait_Period : constant Duration := 0.1;
@@ -384,6 +376,12 @@ private
       overriding
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+
+      overriding
+      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+
+      overriding
+      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
 
       function Build_Target_Command (Heater : Heater_Name; Target : Temperature) return Heater_Target_Command;
 

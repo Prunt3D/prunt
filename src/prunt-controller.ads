@@ -212,7 +212,6 @@ private
            Get_File_Name  => Get_Current_File_Name,
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused);
-      package Motion is new My_Default_Modules.Motion;
       package Input_Shapers is new My_Default_Modules.Input_Shapers (Config_Saving_Module => Config_Saving);
       package Fans is new
         My_Default_Modules.Fans (My_Controller_Generic_Types => Generic_Types, Fan_Hardware => Hardware.Fan_Hardware);
@@ -237,6 +236,7 @@ private
            Config_Saving_Module        => Config_Saving,
            Motor_Drivers_Module        => Motor_Drivers,
            Input_Shapers_Module        => Input_Shapers);
+      package Motion is new My_Default_Modules.Motion (Kinematics_Module => Kinematics);
       package Thermistors is new
         My_Default_Modules.Thermistors
           (My_Controller_Generic_Types => Generic_Types,
