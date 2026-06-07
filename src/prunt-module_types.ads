@@ -104,6 +104,50 @@ package Prunt.Module_Types is
       end case;
    end record;
 
+   type Gcode_Optional_Or_No_Value_Kind is (Gcode_Value_Not_Present, Gcode_No_Value_Present, Gcode_Value_Present);
+
+   type Gcode_Optional_Float_Or_No_Value (Kind : Gcode_Optional_Or_No_Value_Kind := Gcode_Value_Present) is record
+      case Kind is
+         when Gcode_Value_Not_Present | Gcode_No_Value_Present =>
+            null;
+
+         when Gcode_Value_Present =>
+            Value : Dimensionless;
+      end case;
+   end record;
+
+   type Gcode_Optional_Integer_Or_No_Value (Kind : Gcode_Optional_Or_No_Value_Kind := Gcode_Value_Present) is record
+      case Kind is
+         when Gcode_Value_Not_Present | Gcode_No_Value_Present =>
+            null;
+
+         when Gcode_Value_Present =>
+            Value : Gcode_Arguments.Argument_Integer;
+      end case;
+   end record;
+
+   type Gcode_Value_Or_No_Value_Kind is (Gcode_No_Value_Present, Gcode_Value_Present);
+
+   type Gcode_Float_Or_No_Value (Kind : Gcode_Value_Or_No_Value_Kind := Gcode_Value_Present) is record
+      case Kind is
+         when Gcode_No_Value_Present =>
+            null;
+
+         when Gcode_Value_Present =>
+            Value : Dimensionless;
+      end case;
+   end record;
+
+   type Gcode_Integer_Or_No_Value (Kind : Gcode_Value_Or_No_Value_Kind := Gcode_Value_Present) is record
+      case Kind is
+         when Gcode_No_Value_Present =>
+            null;
+
+         when Gcode_Value_Present =>
+            Value : Gcode_Arguments.Argument_Integer;
+      end case;
+   end record;
+
    type Gcode_No_Value is null record;
 
    function "<" (Left, Right : Gcode_Command_Identifier) return Boolean
@@ -117,6 +161,20 @@ package Prunt.Module_Types is
    is abstract;
    --  TODO: This should probably be changed to a set of procedures to update a particular field without reading all
    --  the kinematic limits so that there are less restrictions on the planner.
+
+   function Get_State_Anchor_Corner_ID (This : Planner_Interface) return Planner_Corner_ID is abstract;
+   --  Returns the primary corner ID that newly planned module state should be anchored to. If primary planner work is
+   --  already queued, this is the latest primary corner that must execute before the newly planned state becomes
+   --  committed. If no primary corner is pending, this is the already-executed/cancelled state anchor and the state
+   --  may be committed immediately. Pause planner motion does not create primary corner anchors, but may still observe
+   --  the current primary anchor for cancellation consistency.
+
+   function Get_Last_Executed_Corner_ID (This : Planner_Interface) return Planner_Corner_ID is abstract;
+   --  Returns the last primary planner corner that step generation has actually reached, including dummy corners used
+   --  to process primary extra corner data. Pause/park/resume motion does not advance this value. Modules use this to
+   --  catch committed state up to physical motion progress before reporting status or handling cancellation; it may
+   --  lag Get_State_Anchor_Corner_ID while primary motion is queued or after a cancellation barrier has been
+   --  established.
 
    type Extra_Corner_Data is tagged null record;
    --  Use this for non-blocking handlers with a low cost that should not interrupt motion. If this procedure takes too
@@ -159,6 +217,20 @@ package Prunt.Module_Types is
      (This : in out Pause_Handler; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
    is null;
 
+   type Planner_State_Handler is synchronized interface;
+
+   procedure Catch_Up_Planner_State (This : in out Planner_State_Handler; Executed_Corner_ID : Planner_Corner_ID)
+   is null;
+
+   type Cancellation_Handler is synchronized interface;
+
+   procedure Handle_Cancel
+     (This                    : in out Cancellation_Handler;
+      Executed_Corner_ID      : Planner_Corner_ID;
+      Cancellation_Barrier_ID : Planner_Corner_ID;
+      Current_Position        : Position)
+   is null;
+
    procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;
 
    procedure Mark_Axis_Unhomed (This : Planner_Interface; Axis : Axis_Name) is abstract;
@@ -170,8 +242,7 @@ package Prunt.Module_Types is
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True;
-      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
+      Require_Homed : Boolean := True)
    is abstract;
 
    procedure Add_Corner_Data (This : Planner_Interface; Corner_Data : Extra_Corner_Data'Class) is abstract;

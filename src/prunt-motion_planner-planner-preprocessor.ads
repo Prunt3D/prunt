@@ -37,9 +37,13 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
    --  position bounds checking is bypassed for this command (useful for homing operations). May block if the queue is
    --  full.
 
+   function Get_Last_Assigned_Corner_ID return Planner_Corner_ID;
+   --  Returns the highest corner ID assigned to accepted input. This value is monotonic and is not reset by Reset.
+
    procedure Reset;
    --  Cause Run to immediately return with Reset_Called set to True and resets the planner back to its initial
-   --  state. This clears the command queue and resets position tracking to the initial values.
+   --  state. This clears the command queue and resets position tracking to the initial values. Corner IDs are not
+   --  reset.
 
    procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
    --  Process queued commands and assemble them into an execution block. This procedure blocks until either a complete
@@ -65,20 +69,25 @@ private
       with Pre => (if Comm.Kind = Corner_Extra_Data_Kind then Extra /= null else Extra = null);
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean);
       function Dequeue_Extra_Data return Corner_Extra_Data_Type;
+      function Get_Last_Assigned_Corner_ID return Planner_Corner_ID;
+      function Next_Is_Corner_Extra_Data return Boolean;
       procedure Finish_Dequeue;
       procedure Cancel_Dequeue;
       procedure Reset;
    private
+      procedure Assign_Corner_ID (Kind : Command_Kind);
       procedure Append_To_Queue (Comm : Command);
 
-      Setup_Done            : Boolean := False;
-      In_Dequeue            : Boolean := False;
-      Is_Full               : Boolean := False;
-      Next_Read, Next_Write : Count_Type := Command_Queue_Array_Type'First;
-      Elements              : Command_Queue_Array_Type;
-      Current_Params        : Kinematic_Parameters;
-      Extra_Data_Storage    : Corner_Extra_Data_Queues.Queue;
-      Retry_High_Priority   : Boolean := True;
+      Setup_Done              : Boolean := False;
+      In_Dequeue              : Boolean := False;
+      Is_Full                 : Boolean := False;
+      Next_Read, Next_Write   : Count_Type := Command_Queue_Array_Type'First;
+      Elements                : Command_Queue_Array_Type;
+      Current_Params          : Kinematic_Parameters;
+      Extra_Data_Storage      : Corner_Extra_Data_Queues.Queue;
+      Retry_High_Priority     : Boolean := True;
+      Last_Assigned_Corner_ID : Planner_Corner_ID := 0;
+      Has_Current_Corner_ID   : Boolean := False;
    end Command_Queue;
 
    Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
@@ -93,10 +102,12 @@ private
    protected Runner is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
-      procedure Reset;
+      procedure Reset (Last_Assigned_ID : Planner_Corner_ID);
    private
       Setup_Done                     : Boolean := False;
       Last_Pos                       : Position := Initial_Position;
+      Last_Assigned_Corner_ID        : Planner_Corner_ID := 0;
+      Current_Input_Corner_ID        : Planner_Corner_ID := 0;
       Current_Params                 : Kinematic_Parameters;
       Corners                        : Block_Plain_Corners_Access := new Block_Plain_Corners (1 .. Corners_Index'Last);
       Corner_Dwell_Times             : Block_Corner_Dwell_Times_Access :=

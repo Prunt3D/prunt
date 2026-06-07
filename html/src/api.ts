@@ -50,6 +50,11 @@ export async function resumeMachine() {
     if (!res.ok) throw new Error("Failed to resume");
 }
 
+export async function cancelMachine() {
+    const res = await fetch(`${API_BASE}/cancel`, { method: "POST" });
+    if (!res.ok) throw new Error("Failed to cancel");
+}
+
 export async function runFile(filename: string) {
     const res = await fetch(`${API_BASE}/run-file`, {
         method: "POST",

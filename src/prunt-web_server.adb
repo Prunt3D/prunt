@@ -637,6 +637,17 @@ package body Prunt.Web_Server is
          elsif Status.File = "pause/resume" then
             Resume_Stepgen;
             Reply_Text (Client, 204, "No Content", "", True);
+         elsif Status.File = "cancel" then
+            declare
+               Succeeded : Boolean;
+            begin
+               Cancel_Gcode (Succeeded);
+               if Succeeded then
+                  Reply_Text (Client, 204, "No Content", "", True);
+               else
+                  Reply_Text (Client, 409, "Conflict", "Can not cancel G-code unless the machine is paused.", True);
+               end if;
+            end;
          elsif Status.File = "config/values" then
             Reply_JSON
               (Client,

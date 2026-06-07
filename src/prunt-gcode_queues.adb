@@ -49,8 +49,9 @@ package body Prunt.Gcode_Queues is
       begin
          if Current_File.Is_Open then
             Current_File.Close;
-            Current_File_Name := "";
          end if;
+         Current_File_Name := "";
+         Current_Line_Number := 0;
       end Cancel_File;
 
       procedure Try_Set_Command (Command : Virtual_String; Succeeded : out Boolean) is
@@ -67,6 +68,12 @@ package body Prunt.Gcode_Queues is
       begin
          Current_Command := "";
       end Cancel_Command;
+
+      procedure Cancel_All is
+      begin
+         Cancel_File;
+         Cancel_Command;
+      end Cancel_All;
 
       function Get_Current_File return Virtual_String is
       begin

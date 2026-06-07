@@ -29,16 +29,25 @@ package body Prunt.Controller is
 
    pragma Extensions_Allowed (On);
 
-   protected body Pause_Handler_Instances is
-      procedure Load (Instances : Module_Instance_Maps.Map) is
-      begin
-         Handlers.Clear;
+   Pipeline_Is_Set_Up         : Boolean := False;
+   Current_Motor_Position_Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map :=
+     [others => [others => Length'Last]];
+   --  Runtime setup state shared between Run and package-level callbacks such as G-code cancellation.
+   --  Pipeline_Is_Set_Up tracks whether the planners and step generator have accepted Setup and can therefore be reset
+   --  or reused safely. Current_Motor_Position_Map caches the active kinematics module's Motors_To_Position table
+   --  after startup; Cancel_Gcode resets the planners and step generator without rebuilding the module tree, so it
+   --  reuses this map to restart the same mechanical mapping at the current executed position.
+   --
+   --  Length'Last is the unused axis/motor sentinel consumed by To_Motor_Position. These invalid initial maps are
+   --  overwritten before Pipeline_Is_Set_Up is set True.
 
-         for Instance of Instances loop
-            if Instance.Get.Element.all in Pause_Handler'Class then
-               Handlers.Append (Instance);
-            end if;
-         end loop;
+   procedure Setup_Planner_Runners
+     (Params : Motion_Planner.Kinematic_Parameters; Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map);
+
+   protected body Handler_Instances is
+      procedure Load (New_Handlers : Module_Instance_Vectors.Vector) is
+      begin
+         Handlers := New_Handlers;
       end Load;
 
       procedure Clear is
@@ -50,7 +59,54 @@ package body Prunt.Controller is
       begin
          Result := Handlers;
       end Snapshot;
-   end Pause_Handler_Instances;
+   end Handler_Instances;
+
+   protected body Gcode_Cancellation_Barrier is
+      entry Start_Cancellation when not Cancellation_Active is
+      begin
+         Cancellation_Active := True;
+      end Start_Cancellation;
+
+      procedure Finish_Cancellation is
+      begin
+         Cancellation_Active := False;
+      end Finish_Cancellation;
+
+      entry Start_Submission when not Cancellation_Active is
+      begin
+         Active_Submissions := @ + 1;
+      end Start_Submission;
+
+      procedure Finish_Submission is
+      begin
+         Active_Submissions := @ - 1;
+      end Finish_Submission;
+
+      entry Start_Line when not Cancellation_Active is
+      begin
+         Processing_Line := True;
+      end Start_Line;
+
+      procedure Finish_Line is
+      begin
+         Processing_Line := False;
+      end Finish_Line;
+
+      entry Wait_Until_Not_Processing when not Processing_Line and then Active_Submissions = 0 is
+      begin
+         null;
+      end Wait_Until_Not_Processing;
+
+      entry Wait_Until_Not_Submitting when Active_Submissions = 0 is
+      begin
+         null;
+      end Wait_Until_Not_Submitting;
+
+      entry Wait_Until_Not_Cancelling when not Cancellation_Active is
+      begin
+         null;
+      end Wait_Until_Not_Cancelling;
+   end Gcode_Cancellation_Barrier;
 
    protected body Planner_State_Type is
       procedure Reset is
@@ -105,6 +161,25 @@ package body Prunt.Controller is
    end Get_Last_Kinematic_Parameters;
 
    overriding
+   function Get_State_Anchor_Corner_ID (This : Planner_Wrapper) return Planner_Corner_ID is
+   begin
+      case This.Target is
+         when Primary_Planner_Target =>
+            return My_Motion_Planner.Get_Last_Assigned_Corner_ID;
+
+         when Pause_Planner_Target   =>
+            return My_Step_Generator.Get_Last_Executed_Primary_Corner_ID;
+      end case;
+   end Get_State_Anchor_Corner_ID;
+
+   overriding
+   function Get_Last_Executed_Corner_ID (This : Planner_Wrapper) return Planner_Corner_ID is
+      pragma Unreferenced (This);
+   begin
+      return My_Step_Generator.Get_Last_Executed_Primary_Corner_ID;
+   end Get_Last_Executed_Corner_ID;
+
+   overriding
    procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name) is
    begin
       pragma Unreferenced (This, Axis); --  TODO
@@ -155,8 +230,7 @@ package body Prunt.Controller is
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True;
-      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record))
+      Require_Homed : Boolean := True)
    is
       pragma Unreferenced (Require_Homed);
    begin
@@ -170,18 +244,10 @@ package body Prunt.Controller is
 
             My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
 
-            if Corner_Data not in Extra_Corner_Data then
-               My_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
-            end if;
-
          when Pause_Planner_Target   =>
             Pause_Planner_State.Set_Last_Position (Pos);
 
             My_Pause_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
-
-            if Corner_Data not in Extra_Corner_Data then
-               My_Pause_Motion_Planner.Enqueue_Corner_Extra_Data (Corner_Data);
-            end if;
       end case;
    end Add_Corner;
 
@@ -281,9 +347,39 @@ package body Prunt.Controller is
       null; --  TODO
    end Prompt_For_Update;
 
+   procedure Setup_Planner_Runners
+     (Params : Motion_Planner.Kinematic_Parameters; Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map) is
+   begin
+      My_Motion_Planner.Runner.Setup (Params, My_Motion_Planner.Motor_Pos_Map (Map));
+      My_Pause_Motion_Planner.Runner.Setup (Params, My_Pause_Motion_Planner.Motor_Pos_Map (Map));
+      My_Step_Generator.Runner.Setup (My_Step_Generator.Motor_Pos_Map (Map));
+   end Setup_Planner_Runners;
+
+   procedure Catch_Up_Planner_State_Handlers (Executed_Corner_ID : Planner_Corner_ID) is
+      Handlers : Module_Instance_Vectors.Vector;
+   begin
+      Planner_State_Handler_Instances.Snapshot (Handlers);
+
+      for Instance of Handlers loop
+         Planner_State_Handler'Class (Instance.Get.Element.all).Catch_Up_Planner_State (Executed_Corner_ID);
+      end loop;
+   end Catch_Up_Planner_State_Handlers;
+
+   procedure Handle_Cancellation_Handlers
+     (Executed_Corner_ID : Planner_Corner_ID; Cancellation_Barrier_ID : Planner_Corner_ID; Current_Position : Position)
+   is
+      Handlers : Module_Instance_Vectors.Vector;
+   begin
+      Cancellation_Handler_Instances.Snapshot (Handlers);
+
+      for Instance of Handlers loop
+         Cancellation_Handler'Class (Instance.Get.Element.all).Handle_Cancel
+           (Executed_Corner_ID, Cancellation_Barrier_ID, Current_Position);
+      end loop;
+   end Handle_Cancellation_Handlers;
+
    procedure Run is
       Active_Module_Instances : Module_Instance_Maps.Map := [];
-      Pipeline_Is_Set_Up      : Boolean := False;
 
       procedure Reset_Runtime_State;
       --  Reset runtime queues, planner state, and execution tracking for a fresh controller run.
@@ -326,8 +422,7 @@ package body Prunt.Controller is
          Pause_Planner_State.Reset;
          Pause_Default_State.Reset;
          Last_Command_Executed.Reset (Startup_Position);
-         My_Gcode_Queue.Cancel_File;
-         My_Gcode_Queue.Cancel_Command;
+         My_Gcode_Queue.Cancel_All;
       end Reset_Runtime_State;
 
       procedure Setup_Runtime_Pipeline is
@@ -339,13 +434,8 @@ package body Prunt.Controller is
          Startup_Configuration   : constant My_Default_Modules_Children.Kinematics.Motion_Planner_Configuration :=
            Kinematics_Instance.Get_Default_Motion_Planner_Configuration;
       begin
-         My_Motion_Planner.Runner.Setup
-           (Startup_Configuration.Parameters,
-            My_Motion_Planner.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
-         My_Pause_Motion_Planner.Runner.Setup
-           (Startup_Configuration.Parameters,
-            My_Pause_Motion_Planner.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
-         My_Step_Generator.Runner.Setup (My_Step_Generator.Motor_Pos_Map (Startup_Configuration.Motors_To_Position));
+         Current_Motor_Position_Map := Startup_Configuration.Motors_To_Position;
+         Setup_Planner_Runners (Startup_Configuration.Parameters, Current_Motor_Position_Map);
 
          Primary_Planner_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
          Primary_Planner_State.Set_Last_Position (Startup_Position);
@@ -382,7 +472,22 @@ package body Prunt.Controller is
             Started := False;
          else
             Setup_Runtime_Pipeline;
-            Pause_Handler_Instances.Load (Active_Module_Instances);
+            Pause_Handler_Instances.Load
+              (Module_Instance_Vectors.Vector'
+                 [for Instance of Active_Module_Instances when Instance.Get.Element.all in Pause_Handler'Class =>
+                    Instance]);
+            Planner_State_Handler_Instances.Load
+              (Module_Instance_Vectors.Vector'
+                 [for Instance of
+                      Active_Module_Instances
+                      when Instance.Get.Element.all in Planner_State_Handler'Class =>
+                    Instance]);
+            Cancellation_Handler_Instances.Load
+              (Module_Instance_Vectors.Vector'
+                 [for Instance of
+                      Active_Module_Instances
+                      when Instance.Get.Element.all in Cancellation_Handler'Class =>
+                    Instance]);
 
             for M of Active_Module_Instances loop
                My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
@@ -400,6 +505,8 @@ package body Prunt.Controller is
       procedure Clear_Active_Modules is
       begin
          Pause_Handler_Instances.Clear;
+         Planner_State_Handler_Instances.Clear;
+         Cancellation_Handler_Instances.Clear;
          Active_Module_Instances.Reverse_Clear;
       end Clear_Active_Modules;
 
@@ -507,11 +614,26 @@ package body Prunt.Controller is
                return;
             end if;
 
-            Process_Gcode_Line (Line);
+            select
+               Gcode_Cancellation_Barrier.Start_Line;
+            else
+               Gcode_Cancellation_Barrier.Wait_Until_Not_Cancelling;
+               Stopped := False;
+               return;
+            end select;
 
-            if End_Of_Item then
-               Active_Planner.Flush;
-            end if;
+            begin
+               Process_Gcode_Line (Line);
+
+               if End_Of_Item then
+                  Active_Planner.Flush;
+               end if;
+               Gcode_Cancellation_Barrier.Finish_Line;
+            exception
+               when others =>
+                  Gcode_Cancellation_Barrier.Finish_Line;
+                  raise;
+            end;
             Stopped := False;
          end Process_Next_Gcode_Item;
       begin
@@ -576,7 +698,27 @@ package body Prunt.Controller is
       begin
          if Started then
             declare
+               protected Catch_Up_Stop is
+                  procedure Stop;
+                  function Stopped return Boolean;
+               private
+                  Stop_Requested : Boolean := False;
+               end Catch_Up_Stop;
+
+               protected body Catch_Up_Stop is
+                  procedure Stop is
+                  begin
+                     Stop_Requested := True;
+                  end Stop;
+
+                  function Stopped return Boolean is
+                  begin
+                     return Stop_Requested;
+                  end Stopped;
+               end Catch_Up_Stop;
+
                task Gcode_Processor;
+               task Planner_State_Catch_Up;
 
                task body Gcode_Processor is
                begin
@@ -586,8 +728,22 @@ package body Prunt.Controller is
                      Exception_Occurrence_Holder.all.Set_Fatal
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Gcode_Processor;
+
+               task body Planner_State_Catch_Up is
+               begin
+                  loop
+                     exit when Catch_Up_Stop.Stopped;
+                     Catch_Up_Planner_State_Handlers (My_Step_Generator.Get_Last_Executed_Primary_Corner_ID);
+                     delay 0.1;
+                  end loop;
+               exception
+                  when E : others =>
+                     Exception_Occurrence_Holder.all.Set_Fatal
+                       (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+               end Planner_State_Catch_Up;
             begin
                Wait_For_Reload_Or_Fatal (Modules_Started => True, Exit_Main => Exit_Main);
+               Catch_Up_Stop.Stop;
             end;
          else
             Wait_For_Reload_Or_Fatal (Modules_Started => False, Exit_Main => Exit_Main);
@@ -956,13 +1112,104 @@ package body Prunt.Controller is
 
    procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean) is
    begin
-      My_Gcode_Queue.Try_Set_Command (Command, Succeeded);
+      select
+         Gcode_Cancellation_Barrier.Start_Submission;
+      else
+         Succeeded := False;
+         return;
+      end select;
+
+      begin
+         My_Gcode_Queue.Try_Set_Command (Command, Succeeded);
+         Gcode_Cancellation_Barrier.Finish_Submission;
+      exception
+         when others =>
+            Gcode_Cancellation_Barrier.Finish_Submission;
+            raise;
+      end;
    end Submit_Gcode_Command;
 
    procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean) is
    begin
-      My_Gcode_Queue.Try_Set_File (Path, Succeeded);
+      select
+         Gcode_Cancellation_Barrier.Start_Submission;
+      else
+         Succeeded := False;
+         return;
+      end select;
+
+      begin
+         My_Gcode_Queue.Try_Set_File (Path, Succeeded);
+         Gcode_Cancellation_Barrier.Finish_Submission;
+      exception
+         when others =>
+            Gcode_Cancellation_Barrier.Finish_Submission;
+            raise;
+      end;
    end Submit_Gcode_File;
+
+   procedure Cancel_Gcode (Succeeded : out Boolean) is
+      Executed_Corner_ID      : Planner_Corner_ID;
+      Cancellation_Barrier_ID : Planner_Corner_ID;
+      Current_Position        : Position;
+      Params                  : Motion_Planner.Kinematic_Parameters;
+   begin
+      if not Pipeline_Is_Set_Up then
+         Succeeded := False;
+         return;
+      end if;
+
+      select
+         Gcode_Cancellation_Barrier.Start_Cancellation;
+      else
+         Succeeded := False;
+         return;
+      end select;
+
+      --  TODO: We need protection against a reload happening here.
+
+      while not My_Step_Generator.Is_Paused loop
+         My_Step_Generator.Pause;
+         delay 0.1;
+      end loop;
+
+      --  TODO: We need to stop the user from being able to unpause the step generator while we're trying to cancel.
+
+      begin
+         Gcode_Cancellation_Barrier.Wait_Until_Not_Submitting;
+         My_Gcode_Queue.Cancel_All;
+         Gcode_Cancellation_Barrier.Wait_Until_Not_Processing;
+
+         Executed_Corner_ID := My_Step_Generator.Get_Last_Executed_Primary_Corner_ID;
+         Cancellation_Barrier_ID := My_Motion_Planner.Get_Last_Assigned_Corner_ID;
+         Current_Position := Last_Command_Executed.Get_Current_Position;
+         Handle_Cancellation_Handlers (Executed_Corner_ID, Cancellation_Barrier_ID, Current_Position);
+
+         Params := Primary_Planner_State.Get_Last_Kinematic_Parameters;
+
+         My_Motion_Planner.Reset;
+         My_Pause_Motion_Planner.Reset;
+         My_Step_Generator.Reset;
+
+         Last_Command_Executed.Reset (Current_Position);
+
+         Setup_Planner_Runners (Params, Current_Motor_Position_Map);
+
+         Primary_Planner_State.Set_Last_Position (Current_Position);
+         Pause_Planner_State.Set_Last_Position (Current_Position);
+         Pause_Default_State.Set_Last_Position (Current_Position);
+         Reset_Position
+           (My_Step_Generator.To_Motor_Position
+              (Current_Position, My_Step_Generator.Motor_Pos_Map (Current_Motor_Position_Map)));
+
+         Succeeded := True;
+         Gcode_Cancellation_Barrier.Finish_Cancellation;
+      exception
+         when others =>
+            Gcode_Cancellation_Barrier.Finish_Cancellation;
+            raise;
+      end;
+   end Cancel_Gcode;
 
    procedure Reload_Server is
    begin

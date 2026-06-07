@@ -31,6 +31,8 @@ package Prunt is
 
    type Command_Index is range 0 .. 2 ** 63 - 2;
 
+   type Planner_Corner_ID is range 0 .. 2 ** 63 - 2;
+
    type Pin_State is (High_State, Low_State);
 
    --  You may notice a lot of math similar to 5.0**(1/2) here when using the below types. This may seem like it should

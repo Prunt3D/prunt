@@ -127,12 +127,15 @@ generic
    Max_Corners_Extra_Data_Count : Max_Corners_Extra_Data_Type := 1_000;
 
    Max_Corners_Extra_Data_Storage : System.Storage_Elements.Storage_Count := 1_000_000;
-   --  The maximum amount of data in storage elements that the vector of Corner_Extra_Data_Type for a block may use
-   --  for its backing storage. If a Corner_Extra_Data_Type does not fit in a corner then it will be forced to the
-   --  next block, along with the relevant corner. If a Corner_Extra_Data_Type does not fit in an empty block then an
-   --  error will be raised.
+   --  The maximum amount of data in storage elements that the vector of Corner_Extra_Data_Type for a block may use for
+   --  its backing storage. If a motion block runs out of space for extra data, the remaining data for the same corner
+   --  is emitted in one or more Extra_Data_Overflow_Block_Kind blocks. If a Corner_Extra_Data_Type does not fit in an
+   --  empty block then an error will be raised.
 
    Max_Corners_Extra_Data_Per_Corner : Max_Corners_Extra_Data_Type := 10;
+   --  The maximum amount of extra data that can be processed for a corner before forcing a motion block boundary.
+   --  Remaining extra data for the same corner is emitted through Extra_Data_Overflow_Block_Kind blocks after the
+   --  machine has reached the block's stopping point.
 
    Corner_Blender_Max_Computational_Error : Length := 0.001 * mm;
    --  The maximum allowed distance between a corner and a blended corner's Bézier curve midpoint when shifting of
@@ -157,6 +160,8 @@ package Prunt.Motion_Planner.Planner is
 
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
    subtype Finishing_Corners_Index is Corners_Index range 2 .. Corners_Index'Last;
+
+   type Execution_Block_Kind is (Motion_Block_Kind, Extra_Data_Overflow_Block_Kind);
 
    type Execution_Block (N_Corners : Corners_Index := 1) is private;
    --  N_Corners may be 1, in which case there are no segments.
@@ -207,12 +212,21 @@ package Prunt.Motion_Planner.Planner is
    with Pre => Finishing_Corner <= Block.N_Corners;
    --  Returns the length of the acceleration part of a segment.
 
+   function Block_Kind (Block : Execution_Block) return Execution_Block_Kind;
+
+   function Corner_ID (Block : Execution_Block; Corner : Corners_Index) return Planner_Corner_ID
+   with Pre => Corner <= Block.N_Corners;
+
    procedure Corner_Extra_Data
      (Block   : Execution_Block;
       Corner  : Corners_Index;
       Process : access procedure (Data : in out Corner_Extra_Data_Type))
    with Pre => Corner <= Block.N_Corners;
    --  Allows the caller to process the extra data for a corner.
+
+   function Has_Associated_Overflow_Block (Block : Execution_Block) return Boolean;
+   --  Returns True if this block's final corner has more extra data in a following overflow block, so its corner ID
+   --  publication must be delayed.
 
    function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters;
    --  Returns the kinematic parameters used for the given block.
@@ -223,8 +237,13 @@ package Prunt.Motion_Planner.Planner is
    procedure Enqueue_Move
      (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False);
 
+   function Get_Last_Assigned_Corner_ID return Planner_Corner_ID;
+   --  Returns the highest corner ID assigned to accepted planner input. This value is monotonic and is not reset by
+   --  Reset.
+
    procedure Enqueue_Corner_Extra_Data (Data : Corner_Extra_Data_Type);
-   --  This could be pushed to the next block if there is no space for the data.
+   --  This may be emitted in an Extra_Data_Overflow_Block_Kind block if the current motion block has no room for the
+   --  data.
 
    procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False);
 
@@ -336,6 +355,7 @@ private
       --  faster than the same code without discriminated types (refer to the no-discriminated-records branch).
 
       --  Preprocessor
+      Kind                           : Execution_Block_Kind := Motion_Block_Kind;
       Flush_Resetting_Data           : Flush_Resetting_Data_Type;
       Next_Block_Pos                 : Scaled_Position;
       Params                         : Kinematic_Parameters;
@@ -343,6 +363,8 @@ private
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices (1 .. N_Corners);
       Corners                        : Block_Plain_Corners (1 .. N_Corners);  --  Adjusted with scaler.
       Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
+      First_Corner_ID                : Planner_Corner_ID := 0;
+      Associated_Overflow_Block      : Boolean := False;
       Is_Homing_Move                 : Boolean;
       --  Adjusted with scaler in Kinematic_Limiter.
       Limited_Segment_Feedrates      : Block_Segment_Feedrates (2 .. N_Corners);

@@ -41,7 +41,7 @@ private generic
    with
      procedure Start_Corner_Callback
        (Last_Command_Index : Command_Index; Data : Active_Planner.Corner_Extra_Data_Type);
-   --  Handles corner extra data using the command index current at the time that corner becomes active.
+   --  Handles corner extra data using the command index current after that corner's final stepgen command is queued.
 
    with
      procedure Finish_Block_Callback
@@ -51,6 +51,9 @@ private generic
         Last_Command_Index   : Command_Index;
         Loop_Move_Offset     : Position_Offset);
    --  Runs after all commands for the block have been queued.
+
+   with procedure Publish_Corner_ID (Corner_ID : Planner_Corner_ID);
+   --  Publishes a corner after any motion and extra data associated with it has been queued or processed.
 
    with function Pause_Requested return Boolean is No_Pause_Requested;
    --  True when execution should slew to a stopped pause point.

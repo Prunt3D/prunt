@@ -18,7 +18,6 @@
 --------------------------------------------------
 
 with Prunt.Mockable.Text_IO;
-with VSS.Strings.Conversions;
 
 package body Prunt.Gcode_Queues.Test is
 
@@ -41,6 +40,32 @@ package body Prunt.Gcode_Queues.Test is
          null;
       end select;
    end Test_Barrier_False;
+
+   procedure Test_Cancel_All (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Succeeded : Boolean;
+      Filename : constant String := Prunt.Next_Test_Filename;
+      File : Mockable.Text_IO.File_Type;
+      Q : Queue;
+
+      Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
+      File.Put_Line ("G1 X1");
+      File.Close;
+
+      Q.Try_Set_File (+Filename, Succeeded);
+      T.Assert (Succeeded, "Failed to queue file");
+
+      Q.Cancel_All;
+      T.Assert (Q.Get_Current_File = "", "File not cancelled");
+      T.Assert (Q.Get_Current_Line_Number = 0, "Line number not reset");
+
+      Q.Try_Set_Command ("M112", Succeeded);
+      T.Assert (Succeeded, "Failed to queue command after cancelling file");
+      Q.Cancel_All;
+      T.Assert (Q.Get_Current_Command = "", "Command not cancelled");
+   end Test_Cancel_All;
 
    procedure Test_Cancel_Command (T : in out Trendy_Test.Operation'Class) is
    begin
@@ -340,6 +365,7 @@ package body Prunt.Gcode_Queues.Test is
    begin
       return
         [Test_Barrier_False'Unrestricted_Access,
+         Test_Cancel_All'Unrestricted_Access,
          Test_Cancel_Command'Unrestricted_Access,
          Test_Cancel_File'Unrestricted_Access,
          Test_Cancel_File_No_File'Unrestricted_Access,

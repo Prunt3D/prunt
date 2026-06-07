@@ -100,11 +100,22 @@ package body Prunt.Step_Generator.Block_Executor is
       Loop_Move_Command_Index : Command_Index := 0;
 
       procedure Process_Corner_Extra_Data (Data : in out Active_Planner.Corner_Extra_Data_Type);
+      procedure Publish_Block_Corner_ID (Corner : Active_Planner.Corners_Index);
 
       procedure Process_Corner_Extra_Data (Data : in out Active_Planner.Corner_Extra_Data_Type) is
       begin
          Start_Corner_Callback (Commands.Current_Command_Index, Data);
       end Process_Corner_Extra_Data;
+
+      procedure Publish_Block_Corner_ID (Corner : Active_Planner.Corners_Index) is
+         Corner_ID : constant Planner_Corner_ID := Active_Planner.Corner_ID (Block, Corner);
+      begin
+         if Corner = Block.N_Corners and then Active_Planner.Has_Associated_Overflow_Block (Block) then
+            return;
+         end if;
+
+         Publish_Corner_ID (Corner_ID);
+      end Publish_Block_Corner_ID;
    begin
       Reset_Requested := False;
 
@@ -137,13 +148,12 @@ package body Prunt.Step_Generator.Block_Executor is
       Start_Block_Callback (Active_Planner.Flush_Resetting_Data (Block), Commands.Current_Command_Index);
 
       Active_Planner.Corner_Extra_Data (Block, Active_Planner.Corners_Index'First, Process_Corner_Extra_Data'Access);
+      Publish_Block_Corner_ID (Active_Planner.Corners_Index'First);
 
       for I in 2 .. Block.N_Corners loop
          declare
             Finishing_Corner : constant Active_Planner.Finishing_Corners_Index := I;
          begin
-            Active_Planner.Corner_Extra_Data (Block, I, Process_Corner_Extra_Data'Access);
-
             loop
                case Pausing_State is
                   when Running_Kind  =>
@@ -275,6 +285,9 @@ package body Prunt.Step_Generator.Block_Executor is
                   end if;
                end;
             end loop;
+
+            Active_Planner.Corner_Extra_Data (Block, I, Process_Corner_Extra_Data'Access);
+            Publish_Block_Corner_ID (I);
 
             Current_Time := Current_Time - Active_Planner.Segment_Time (Block, Finishing_Corner);
          end;

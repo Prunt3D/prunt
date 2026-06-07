@@ -88,6 +88,9 @@ package body Prunt.Step_Generator is
    Paused   : Boolean := False
    with Atomic, Volatile;
 
+   Last_Executed_Primary_Corner_ID : Planner_Corner_ID := 0
+   with Atomic, Volatile;
+
    procedure Reset is
    begin
       Reset_Control.Request;
@@ -121,6 +124,11 @@ package body Prunt.Step_Generator is
    begin
       return Paused;
    end Is_Paused;
+
+   function Get_Last_Executed_Primary_Corner_ID return Planner_Corner_ID is
+   begin
+      return Last_Executed_Primary_Corner_ID;
+   end Get_Last_Executed_Primary_Corner_ID;
 
    function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position is
       Ret : Motor_Position := [others => 0.0];
@@ -201,6 +209,10 @@ package body Prunt.Step_Generator is
 
       function Primary_Pause_Requested return Boolean;
 
+      procedure Publish_Primary_Corner_ID (Corner_ID : Planner_Corner_ID);
+
+      procedure Ignore_Corner_ID_Publication (Corner_ID : Planner_Corner_ID);
+
       procedure Check_Reset (Reset_Requested : out Boolean) is
       begin
          Reset_Requested := Reset_Control.Requested;
@@ -227,6 +239,27 @@ package body Prunt.Step_Generator is
          return Do_Pause;
       end Primary_Pause_Requested;
 
+      procedure Publish_Primary_Corner_ID (Corner_ID : Planner_Corner_ID) is
+         Last_Executed : constant Planner_Corner_ID := Last_Executed_Primary_Corner_ID;
+      begin
+         if Corner_ID < Last_Executed then
+            raise Constraint_Error with
+              "Corner ID publication moved backwards from"
+              & Last_Executed'Image
+              & " to"
+              & Corner_ID'Image
+              & ".";
+         end if;
+
+         Last_Executed_Primary_Corner_ID := Corner_ID;
+      end Publish_Primary_Corner_ID;
+
+      procedure Ignore_Corner_ID_Publication (Corner_ID : Planner_Corner_ID) is
+         pragma Unreferenced (Corner_ID);
+      begin
+         null;
+      end Ignore_Corner_ID_Publication;
+
       package Primary_Block_Executor is new
         Block_Executor
           (Active_Planner            => Planner,
@@ -236,6 +269,7 @@ package body Prunt.Step_Generator is
            Start_Block_Callback      => Start_Planner_Block,
            Start_Corner_Callback     => Start_Corner,
            Finish_Block_Callback     => Finish_Planner_Block,
+           Publish_Corner_ID         => Publish_Primary_Corner_ID,
            Pause_Requested           => Primary_Pause_Requested,
            Handle_Pause              => Run_Pause_Cycle);
 
@@ -247,7 +281,8 @@ package body Prunt.Step_Generator is
            Step_Rate_Limiter_Stalled => Log_Pause_Waiting_For_Step_Rate_Limiter,
            Start_Block_Callback      => Start_Pause_Planner_Block,
            Start_Corner_Callback     => Start_Pause_Corner,
-           Finish_Block_Callback     => Finish_Pause_Planner_Block);
+           Finish_Block_Callback     => Finish_Pause_Planner_Block,
+           Publish_Corner_ID         => Ignore_Corner_ID_Publication);
 
       procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean) is
          Stable_Pause_Position : constant Position := Pause_Position;

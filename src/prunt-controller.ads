@@ -509,6 +509,8 @@ private
 
    Active_Module_Gcode_JSON_String : constant Virtual_String := Build_Gcode_JSON (Active_Modules).Write;
 
+   procedure Cancel_Gcode (Succeeded : out Boolean);
+
    package My_Web_Server is new
      Web_Server
        (Apply_Config_Patch          => Apply_Untrusted_Config_Patch,
@@ -518,6 +520,7 @@ private
         Submit_Gcode_File           => Submit_Gcode_File,
         Pause_Stepgen               => My_Step_Generator.Pause,
         Resume_Stepgen              => My_Step_Generator.Resume,
+        Cancel_Gcode                => Cancel_Gcode,
         Reload_Server               => Reload_Server,
         Get_Extra_HTTP_Content      => Get_Extra_HTTP_Content,
         Exception_Occurrence_Holder => Exception_Occurrence_Holder.all,
@@ -553,15 +556,71 @@ private
 
    procedure Signal_Reload;
 
+   procedure Catch_Up_Planner_State_Handlers (Executed_Corner_ID : Planner_Corner_ID);
+   --  Notify loaded planner-state handlers that all primary planner corners up to Executed_Corner_ID have executed.
+   --  Handlers should commit any speculative state anchored at or before this ID and leave later state pending.
+
+   procedure Handle_Cancellation_Handlers
+     (Executed_Corner_ID      : Planner_Corner_ID;
+      Cancellation_Barrier_ID : Planner_Corner_ID;
+      Current_Position        : Position);
+   --  Notify loaded cancellation handlers after G-code intake has been stopped and in-flight G-code processing has
+   --  drained. Executed_Corner_ID is the last primary planner corner executed before cancellation.
+   --  Cancellation_Barrier_ID is the last primary planner corner assigned before the pending planner work is flushed.
+   --  Current_Position is the physical position that planning will restart from.
+
    Startup_Position : constant Position := [others => 0.0 * mm];
 
-   protected Pause_Handler_Instances is
-      procedure Load (Instances : Module_Instance_Maps.Map);
+   protected type Handler_Instances is
+      procedure Load (New_Handlers : Module_Instance_Vectors.Vector);
       procedure Clear;
       procedure Snapshot (Result : out Module_Instance_Vectors.Vector);
    private
       Handlers : Module_Instance_Vectors.Vector;
-   end Pause_Handler_Instances;
+   end Handler_Instances;
+
+   Pause_Handler_Instances         : Handler_Instances;
+   Planner_State_Handler_Instances : Handler_Instances;
+   Cancellation_Handler_Instances  : Handler_Instances;
+   --  We use these wrappers because the instances need to be accessed from multiple threads.
+
+   protected Gcode_Cancellation_Barrier is
+      entry Start_Cancellation;
+      --  Begin a cancellation barrier. This entry is only open when no cancellation is active. Callers that should
+      --  reject duplicate cancellation requests must use a conditional entry call. This rejects new work but does
+      --  not wait for already-started submissions or line processing to finish.
+
+      procedure Finish_Cancellation;
+      --  End the active cancellation barrier and allow queued submissions and line processing to start again.
+
+      entry Start_Submission;
+      --  Register a G-code command or file submission. This entry is only open when no cancellation is active.
+      --  Successful calls must be paired with Finish_Submission.
+
+      procedure Finish_Submission;
+      --  Mark one active G-code submission as finished.
+
+      entry Start_Line;
+      --  Register processing of one dequeued G-code line. This entry is only open when no cancellation is active.
+      --  Successful calls must be paired with Finish_Line.
+
+      procedure Finish_Line;
+      --  Mark the current G-code line as finished.
+
+      entry Wait_Until_Not_Processing;
+      --  Wait until no G-code line is being processed and no command or file submission is active.
+
+      entry Wait_Until_Not_Submitting;
+      --  Wait until no command or file submission is active.
+
+      entry Wait_Until_Not_Cancelling;
+      --  Wait until the active cancellation barrier has finished.
+
+   private
+      Processing_Line     : Boolean := False;
+      Active_Submissions  : Natural := 0;
+      Cancellation_Active : Boolean := False;
+   end Gcode_Cancellation_Barrier;
 
    protected type Planner_State_Type is
       procedure Reset;
@@ -614,6 +673,12 @@ private
    function Get_Last_Kinematic_Parameters (This : Planner_Wrapper) return Motion_Planner.Kinematic_Parameters;
 
    overriding
+   function Get_State_Anchor_Corner_ID (This : Planner_Wrapper) return Planner_Corner_ID;
+
+   overriding
+   function Get_Last_Executed_Corner_ID (This : Planner_Wrapper) return Planner_Corner_ID;
+
+   overriding
    procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name);
 
    overriding
@@ -640,8 +705,7 @@ private
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True;
-      Corner_Data   : Extra_Corner_Data'Class := Extra_Corner_Data'(null record));
+      Require_Homed : Boolean := True);
 
    overriding
    procedure Add_Corner_Data (This : Planner_Wrapper; Corner_Data : Extra_Corner_Data'Class);

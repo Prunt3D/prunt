@@ -137,7 +137,6 @@ package body Prunt_Simulator_Config_Overrides is
       Add_Homing_Axis (Result, "X_AXIS");
       Add_Homing_Axis (Result, "Y_AXIS");
       Add_Homing_Axis (Result, "Z_AXIS");
-      Add_Homing_Axis (Result, "E_AXIS");
 
       Add_Motor (Result, "X_MOTOR");
       Add_Motor (Result, "Y_MOTOR");

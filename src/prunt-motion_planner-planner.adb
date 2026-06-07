@@ -49,6 +49,11 @@ package body Prunt.Motion_Planner.Planner is
         ((Kind => Move_Kind, Dwell_After => Dwell_After, Pos => Pos, Feedrate => Feedrate), Ignore_Bounds);
    end Enqueue_Move;
 
+   function Get_Last_Assigned_Corner_ID return Planner_Corner_ID is
+   begin
+      return My_Preprocessor.Get_Last_Assigned_Corner_ID;
+   end Get_Last_Assigned_Corner_ID;
+
    procedure Enqueue_Corner_Extra_Data (Data : Corner_Extra_Data_Type) is
       Data_Copy : aliased Corner_Extra_Data_Type := Data;
    begin
@@ -129,32 +134,34 @@ package body Prunt.Motion_Planner.Planner is
                exit;
             end if;
 
-            if Block.Is_Homing_Move and then Block.N_Corners /= 2 then
-               raise Constraint_Error with "Homing move must have exactly 2 corners.";
-            end if;
+            if Block.Kind /= Extra_Data_Overflow_Block_Kind then
+               if Block.Is_Homing_Move and then Block.N_Corners /= 2 then
+                  raise Constraint_Error with "Homing move must have exactly 2 corners.";
+               end if;
 
-            My_Corner_Blender.Run (Block);
-            My_Early_Kinematic_Limiter.Run (Block);
+               My_Corner_Blender.Run (Block);
+               My_Early_Kinematic_Limiter.Run (Block);
 
-            loop
                loop
-                  My_Kinematic_Limiter.Run (Block);
-                  My_Feedrate_Profile_Generator.Run (Block);
+                  loop
+                     My_Kinematic_Limiter.Run (Block);
+                     My_Feedrate_Profile_Generator.Run (Block);
 
-                  exit when
-                    (not Block.Is_Homing_Move)
-                    or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
+                     exit when
+                       (not Block.Is_Homing_Move)
+                       or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
 
-                  Block.Limited_Segment_Feedrates (2) := Block.Limited_Segment_Feedrates (2) * 0.9;
+                     Block.Limited_Segment_Feedrates (2) := Block.Limited_Segment_Feedrates (2) * 0.9;
+                  end loop;
+
+                  declare
+                     Needs_New_Profiles : Boolean;
+                  begin
+                     My_Step_Rate_Limiter.Run (Block, Needs_New_Profiles);
+                     exit when not Needs_New_Profiles;
+                  end;
                end loop;
-
-               declare
-                  Needs_New_Profiles : Boolean;
-               begin
-                  My_Step_Rate_Limiter.Run (Block, Needs_New_Profiles);
-                  exit when not Needs_New_Profiles;
-               end;
-            end loop;
+            end if;
 
             select
                accept Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block) do
@@ -298,6 +305,16 @@ package body Prunt.Motion_Planner.Planner is
            Start_Vel   => Block.Corner_Velocity_Limits (Finishing_Corner - 1));
    end Segment_Accel_Distance;
 
+   function Block_Kind (Block : Execution_Block) return Execution_Block_Kind is
+   begin
+      return Block.Kind;
+   end Block_Kind;
+
+   function Corner_ID (Block : Execution_Block; Corner : Corners_Index) return Planner_Corner_ID is
+   begin
+      return Block.First_Corner_ID + Planner_Corner_ID (Corner - Corners_Index'First);
+   end Corner_ID;
+
    procedure Corner_Extra_Data
      (Block   : Execution_Block;
       Corner  : Corners_Index;
@@ -310,6 +327,11 @@ package body Prunt.Motion_Planner.Planner is
          Block.Corners_Extra_Data_End_Indices (Corner),
          Process);
    end Corner_Extra_Data;
+
+   function Has_Associated_Overflow_Block (Block : Execution_Block) return Boolean is
+   begin
+      return Block.Associated_Overflow_Block;
+   end Has_Associated_Overflow_Block;
 
    function Block_Kinematic_Parameters (Block : Execution_Block) return Kinematic_Parameters is
    begin

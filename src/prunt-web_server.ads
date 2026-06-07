@@ -44,6 +44,7 @@ generic
    with procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
+   with procedure Cancel_Gcode (Succeeded : out Boolean);
    with procedure Reload_Server;
    with
      function Get_Extra_HTTP_Content (Name : Virtual_String) return access constant Ada.Streams.Stream_Element_Array;

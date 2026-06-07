@@ -50,7 +50,8 @@ generic
    with procedure Start_Corner (Last_Command_Index : Command_Index; Data : Planner.Corner_Extra_Data_Type);
 
    with procedure Start_Pause_Corner (Last_Command_Index : Command_Index; Data : Pause_Planner.Corner_Extra_Data_Type);
-   --  Called when we start moving towards a corner for each extra data element.
+   --  Called for each extra data element after the final stepgen command reaching that corner has been queued. For the
+   --  first corner in a block, this happens at block start because that corner is already reached.
    --
    --  This is not included in Enqueue_Command as floating point inaccuracy could potentially cause a very short
    --  segment to not contain any command even though segments have a minimum length.
@@ -116,6 +117,12 @@ package Prunt.Step_Generator is
    function Is_Paused return Boolean;
    --  Returns True if the step generator is currently fully paused.
 
+   function Get_Last_Executed_Primary_Corner_ID return Planner_Corner_ID;
+   --  Returns the last primary planner corner whose final stepgen command has been queued.
+
+   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position;
+   --  Converts a cartesian position to motor positions using the provided map.
+
 private
 
    type Command_State is record
@@ -123,9 +130,6 @@ private
       Last_Queued_Position  : Position := [others => 0.0 * mm];
    end record;
    --  Tracks the shared command-index stream and last queued position across primary and pause execution.
-
-   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position;
-   --  Converts a cartesian position to motor positions using the provided map.
 
    procedure Queue_Command
      (State           : in out Command_State;

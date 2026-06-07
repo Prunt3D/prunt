@@ -41,6 +41,9 @@ package Prunt.Gcode_Queues is
       procedure Cancel_Command;
       --  Cancel the currently enqueued command.
 
+      procedure Cancel_All;
+      --  Cancel all queued or running G-code and forget the current file.
+
       function Get_Current_File return Virtual_String;
       --  Get the name of the currently running file. Returns empty string if no file is running.
 
