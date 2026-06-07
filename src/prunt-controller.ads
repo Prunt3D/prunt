@@ -236,7 +236,10 @@ private
            Config_Saving_Module        => Config_Saving,
            Motor_Drivers_Module        => Motor_Drivers,
            Input_Shapers_Module        => Input_Shapers);
-      package Motion is new My_Default_Modules.Motion (Kinematics_Module => Kinematics);
+      package Motion is new
+        My_Default_Modules.Motion
+          (Kinematics_Module          => Kinematics,
+           Pending_State_Queue_Length => Command_Line_Arguments.Max_Planner_Block_Corners);
       package Thermistors is new
         My_Default_Modules.Thermistors
           (My_Controller_Generic_Types => Generic_Types,
@@ -571,6 +574,8 @@ private
 
    Startup_Position : constant Position := [others => 0.0 * mm];
 
+   type Cancellation_Generation_Type is mod 2 ** 64;
+
    protected type Handler_Instances is
       procedure Load (New_Handlers : Module_Instance_Vectors.Vector);
       procedure Clear;
@@ -616,10 +621,14 @@ private
       entry Wait_Until_Not_Cancelling;
       --  Wait until the active cancellation barrier has finished.
 
+      function Cancellation_Generation return Cancellation_Generation_Type;
+      --  Return a monotonic generation value which changes when cancellation starts.
+
    private
       Processing_Line     : Boolean := False;
       Active_Submissions  : Natural := 0;
       Cancellation_Active : Boolean := False;
+      Cancellation_Count  : Cancellation_Generation_Type := 0;
    end Gcode_Cancellation_Barrier;
 
    protected type Planner_State_Type is

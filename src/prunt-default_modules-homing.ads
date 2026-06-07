@@ -130,8 +130,7 @@ private
 
    type User_Config_Homing_Set_To_Value is record
       --  This homing method doesn't involve any physical movement. When the homing procedure is initiated, it simply
-      --  sets the current position of the axis to the specified value. This should generally only be used for the E
-      --  axis.
+      --  sets the current position of the axis to the specified value.
 
       Position : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
       --  The position to which the axis will be set when homed.
@@ -302,7 +301,9 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Homing_Prereq_Array is array (Axis_Name) of User_Config_Homing_Prereq
-   with Annotate => (Prunt_Config, Present_When, "Index_? /= Index_??"), Annotate => (Prunt_Config, User_Config);
+   with
+     Annotate => (Prunt_Config, Present_When, "Index_? /= Index_?? and then Index_? /= E_Axis"),
+     Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axis_Homing is record
       --  This section contains the homing procedure configuration for a single axis.
@@ -324,7 +325,10 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axis_Homing_Array is array (Axis_Name) of User_Config_Axis_Homing
-   with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
+   with
+     Annotate => (Prunt_Config, Tabbed),
+     Annotate => (Prunt_Config, Present_When, "Index_? /= E_Axis"),
+     Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
       Homing : User_Config_Axis_Homing_Array := [others => <>];
@@ -365,19 +369,15 @@ private
       --  If included then the X axis will be homed.
       Y        : Gcode_Optional_No_Value;
       --  If included then the Y axis will be homed.
-      Z        : Gcode_Optional_No_Value;
+      Z        : Gcode_Optional_No_Value
       --  If included then the Z axis will be homed.
-      E        : Gcode_Optional_No_Value
-      --  If included then the E axis will be homed.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "G28");
    --  Home the specified axes using the method and parameters specified in the configuration. If no axes are specified
-   --  then all axes are homed, including the E axis.
+   --  then all homing axes are homed.
    --
    --  The `ABCUVW` parameters from Marlin are not present as Prunt does not support these axes. The `LOR` parameters
    --  are not present but are planned for a future version. These parameters are present in Marlin.
-   --
-   --  The `E` parameter is not present in Marlin as Marlin does not homing of the E axis.
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config);

@@ -53,21 +53,33 @@ package body Config_Generator is
       function Uses_Gcode_Args return Boolean is
       begin
          for C in Data.Gcode_Commands.Iterate loop
-            for Variant of Gcode_Command_Maps.Element (C) loop
-               for Arg_C in Variant.Arguments.Iterate loop
-                  declare
-                     Arg_Name : constant Virtual_String := Gcode_Argument_Maps.Key (Arg_C);
-                  begin
-                     if Arg_Name /= "This" and then Arg_Name /= "Self_Ref" and then Arg_Name /= "Planner" then
-                        return True;
-                     end if;
-                  end;
-               end loop;
-            end loop;
+            if not Gcode_Command_Maps.Element (C).Is_Empty then
+               return True;
+            end if;
          end loop;
 
          return False;
       end Uses_Gcode_Args;
+
+      function No_User_Arguments_Condition return Virtual_String is
+         Result : Virtual_String;
+         First  : Boolean := True;
+      begin
+         for Arg in Character range 'A' .. 'Z' loop
+            if Arg not in 'G' | 'M' then
+               if not First then
+                  Result.Append (" and then ");
+               end if;
+
+               Result.Append ("Args.Kind ('");
+               Result.Append (Conversions.To_Virtual_String (String'(1 => Arg)));
+               Result.Append ("') = Gcode_Arguments.Non_Existent_Kind");
+               First := False;
+            end if;
+         end loop;
+
+         return Result;
+      end No_User_Arguments_Condition;
 
       procedure Emit
         (Text               : Virtual_String;
@@ -202,7 +214,7 @@ package body Config_Generator is
                            end loop;
 
                            if Conditions = "" then
-                              Conditions := "Standard.True";
+                              Conditions := No_User_Arguments_Condition;
                            end if;
 
                            Emit (Virtual_String'(if First_Var then "" else "els") & "if " & Conditions & " then");
@@ -227,7 +239,107 @@ package body Config_Generator is
                                        Args_Call.Append (", ");
                                     end if;
 
-                                    if Index (Type_Name_St, "Optional_Float") > 0 then
+                                    if Index (Type_Name_St, "Gcode_Float_Or_No_Value") > 0 then
+                                       Val_Expr :=
+                                         "(case Args.Kind ('"
+                                         & Arg_Name
+                                         & "') is when Gcode_Arguments.No_Value_Kind => "
+                                         & "(if Args.Consume_No_Value ('"
+                                         & Arg_Name
+                                         & "') then (Kind => Prunt.Module_Types.Gcode_No_Value_Present) "
+                                         & "else (Kind => Prunt.Module_Types.Gcode_No_Value_Present)), "
+                                         & "when others => "
+                                         & "(Kind => Prunt.Module_Types.Gcode_Value_Present, "
+                                         & "Value => Args.Consume_Float ('"
+                                         & Arg_Name
+                                         & "')))";
+                                       if Arg_Data.Default /= "" then
+                                          raise Constraint_Error
+                                            with
+                                              "Gcode_Float_Or_No_Value can not have default ("
+                                              & L'Image
+                                              & N'Image
+                                              & ": "
+                                              & Variant'Image
+                                              & ")";
+                                       end if;
+                                    elsif Index (Type_Name_St, "Gcode_Integer_Or_No_Value") > 0 then
+                                       Val_Expr :=
+                                         "(case Args.Kind ('"
+                                         & Arg_Name
+                                         & "') is when Gcode_Arguments.No_Value_Kind => "
+                                         & "(if Args.Consume_No_Value ('"
+                                         & Arg_Name
+                                         & "') then (Kind => Prunt.Module_Types.Gcode_No_Value_Present) "
+                                         & "else (Kind => Prunt.Module_Types.Gcode_No_Value_Present)), "
+                                         & "when others => "
+                                         & "(Kind => Prunt.Module_Types.Gcode_Value_Present, "
+                                         & "Value => Args.Consume_Integer ('"
+                                         & Arg_Name
+                                         & "')))";
+                                       if Arg_Data.Default /= "" then
+                                          raise Constraint_Error
+                                            with
+                                              "Gcode_Integer_Or_No_Value can not have default ("
+                                              & L'Image
+                                              & N'Image
+                                              & ": "
+                                              & Variant'Image
+                                              & ")";
+                                       end if;
+                                    elsif Index (Type_Name_St, "Optional_Float_Or_No_Value") > 0 then
+                                       Val_Expr :=
+                                         "(case Args.Kind ('"
+                                         & Arg_Name
+                                         & "') is when Gcode_Arguments.Non_Existent_Kind => "
+                                         & "(Kind => Prunt.Module_Types.Gcode_Value_Not_Present), "
+                                         & "when Gcode_Arguments.No_Value_Kind => "
+                                         & "(if Args.Consume_No_Value ('"
+                                         & Arg_Name
+                                         & "') then (Kind => Prunt.Module_Types.Gcode_No_Value_Present) "
+                                         & "else (Kind => Prunt.Module_Types.Gcode_No_Value_Present)), "
+                                         & "when others => "
+                                         & "(Kind => Prunt.Module_Types.Gcode_Value_Present, "
+                                         & "Value => Args.Consume_Float ('"
+                                         & Arg_Name
+                                         & "')))";
+                                       if Arg_Data.Default /= "" then
+                                          raise Constraint_Error
+                                            with
+                                              "Optional_Float_Or_No_Value can not have default ("
+                                              & L'Image
+                                              & N'Image
+                                              & ": "
+                                              & Variant'Image
+                                              & ")";
+                                       end if;
+                                    elsif Index (Type_Name_St, "Optional_Integer_Or_No_Value") > 0 then
+                                       Val_Expr :=
+                                         "(case Args.Kind ('"
+                                         & Arg_Name
+                                         & "') is when Gcode_Arguments.Non_Existent_Kind => "
+                                         & "(Kind => Prunt.Module_Types.Gcode_Value_Not_Present), "
+                                         & "when Gcode_Arguments.No_Value_Kind => "
+                                         & "(if Args.Consume_No_Value ('"
+                                         & Arg_Name
+                                         & "') then (Kind => Prunt.Module_Types.Gcode_No_Value_Present) "
+                                         & "else (Kind => Prunt.Module_Types.Gcode_No_Value_Present)), "
+                                         & "when others => "
+                                         & "(Kind => Prunt.Module_Types.Gcode_Value_Present, "
+                                         & "Value => Args.Consume_Integer ('"
+                                         & Arg_Name
+                                         & "')))";
+                                       if Arg_Data.Default /= "" then
+                                          raise Constraint_Error
+                                            with
+                                              "Optional_Integer_Or_No_Value can not have default ("
+                                              & L'Image
+                                              & N'Image
+                                              & ": "
+                                              & Variant'Image
+                                              & ")";
+                                       end if;
+                                    elsif Index (Type_Name_St, "Optional_Float") > 0 then
                                        Val_Expr :=
                                          "(if Args.Kind ('"
                                          & Arg_Name

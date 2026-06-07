@@ -43,9 +43,9 @@ package Prunt.Bounded_Indefinite_Queues is
    --  the future. Raises Program_Error if there will never be space for the element in the backing storage, this may
    --  occur after a previous call raises Out_Of_Space_Error.
 
-   function Can_Enqueue (This : in out Queue; New_Item : Element_Type) return Boolean;
-   --  Return True if Enqueue would currently succeed without changing queue contents. Program_Error is propagated if
-   --  New_Item can never fit in the backing storage.
+   function Can_Enqueue (This : in out Queue; New_Item : Element_Type; Count : Positive := 1) return Boolean;
+   --  Return True if Count calls to Enqueue with New_Item would currently succeed without changing queue contents.
+   --  Program_Error is propagated if New_Item can never fit in the backing storage.
 
    procedure Dequeue (This : in out Queue; Item : out Element_Type)
    with Pre => not This.Is_Empty;

@@ -112,7 +112,7 @@ package body Prunt.Default_Modules.Homing is
       return Result : Module_Instance do
          Result.Initialize (Parsed_Config);
 
-         for Axis in Axis_Name loop
+         for Axis in Axis_Name when Axis /= E_Axis loop
             if Parsed_Config.Homing (Axis).Homing_Method.Kind = Disabled then
                Report_Config_Error
                  (["Homing", +Axis'Image, "Homing_Method", "Kind"], "Homing is not configured for this axis.");
@@ -139,6 +139,8 @@ package body Prunt.Default_Modules.Homing is
 
             Axis_States : array (Axis_Name) of Axis_Homing_State := [others => Unvisited];
 
+            procedure Check_Axis (Axis : Axis_Name);
+
             procedure Check_Axis (Axis : Axis_Name) is
             begin
                if Axis_States (Axis) /= Unvisited then
@@ -147,7 +149,7 @@ package body Prunt.Default_Modules.Homing is
 
                Axis_States (Axis) := Visiting;
 
-               for Prereq_Axis in Axis_Name when Axis /= Prereq_Axis loop
+               for Prereq_Axis in Axis_Name when Axis /= Prereq_Axis and then Prereq_Axis /= E_Axis loop
                   --  Direct self-references are prevented by the schema.
 
                   if Parsed_Config.Homing (Axis).Prerequisites (Prereq_Axis).Kind /= No_Requirement then
@@ -170,7 +172,7 @@ package body Prunt.Default_Modules.Homing is
                Axis_States (Axis) := Done;
             end Check_Axis;
          begin
-            for Axis in Axis_Name loop
+            for Axis in Axis_Name when Axis /= E_Axis loop
                Axis_States := [others => Unvisited];
                Check_Axis (Axis);
             end loop;
@@ -214,31 +216,38 @@ package body Prunt.Default_Modules.Homing is
       end Subscribe_To_Homing;
 
       function Get_Homing_Parameters (Axis : Axis_Name) return Axis_Homing_Parameters is
-         Method : constant User_Config_Homing_Method := Config.Homing (Axis).Homing_Method;
       begin
-         case Method.Kind is
-            when Disabled | Set_To_Value =>
-               return (Kind => No_Axis_Homing_Parameters_Kind);
+         if Axis = E_Axis then
+            return (Kind => No_Axis_Homing_Parameters_Kind);
+         end if;
 
-            when Use_Input_Switch        =>
-               return (Kind => Use_Input_Switch_Kind, Switch => Method.Use_Input_Switch.Switch);
+         declare
+            Method : constant User_Config_Homing_Method := Config.Homing (Axis).Homing_Method;
+         begin
+            case Method.Kind is
+               when Disabled | Set_To_Value =>
+                  return (Kind => No_Axis_Homing_Parameters_Kind);
 
-            when Use_StallGuard2         =>
-               return
-                 (Kind            => Use_StallGuard2_Kind,
-                  Use_StallGuard2 =>
-                    (Motor         => Method.Use_StallGuard2.Motor,
-                     Threshold     => Method.Use_StallGuard2.Threshold,
-                     Enable_Filter => Method.Use_StallGuard2.Enable_Filter));
+               when Use_Input_Switch        =>
+                  return (Kind => Use_Input_Switch_Kind, Switch => Method.Use_Input_Switch.Switch);
 
-            when Use_StallGuard4         =>
-               return
-                 (Kind            => Use_StallGuard4_Kind,
-                  Use_StallGuard4 =>
-                    (Motor         => Method.Use_StallGuard4.Motor,
-                     Threshold     => Method.Use_StallGuard4.Threshold,
-                     Enable_Filter => Method.Use_StallGuard4.Enable_Filter));
-         end case;
+               when Use_StallGuard2         =>
+                  return
+                    (Kind            => Use_StallGuard2_Kind,
+                     Use_StallGuard2 =>
+                       (Motor         => Method.Use_StallGuard2.Motor,
+                        Threshold     => Method.Use_StallGuard2.Threshold,
+                        Enable_Filter => Method.Use_StallGuard2.Enable_Filter));
+
+               when Use_StallGuard4         =>
+                  return
+                    (Kind            => Use_StallGuard4_Kind,
+                     Use_StallGuard4 =>
+                       (Motor         => Method.Use_StallGuard4.Motor,
+                        Threshold     => Method.Use_StallGuard4.Threshold,
+                        Enable_Filter => Method.Use_StallGuard4.Enable_Filter));
+            end case;
+         end;
       end Get_Homing_Parameters;
 
       function Get_Config return User_Config is
@@ -253,17 +262,16 @@ package body Prunt.Default_Modules.Homing is
       Planner  : Planner_Interface'Class;
       X        : Gcode_Optional_No_Value;
       Y        : Gcode_Optional_No_Value;
-      Z        : Gcode_Optional_No_Value;
-      E        : Gcode_Optional_No_Value)
+      Z        : Gcode_Optional_No_Value)
    is
       Config : constant User_Config := This.Get_Config;
 
       type Axis_Homing_State is (Pending, Visiting, Done);
 
       Requested_Axes : constant array (Axis_Name) of Boolean :=
-        (if not (X.Present or else Y.Present or else Z.Present or else E.Present)
-         then [others => True]
-         else [X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present]);
+        (if not (X.Present or else Y.Present or else Z.Present)
+         then [X_Axis | Y_Axis | Z_Axis => True, E_Axis => False]
+         else [X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => False]);
 
       Axis_States : array (Axis_Name) of Axis_Homing_State :=
         [for A in Axis_Name => (if Requested_Axes (A) or else not Planner.Axis_Is_Homed (A) then Pending else Done)];
@@ -271,10 +279,14 @@ package body Prunt.Default_Modules.Homing is
       function Directed_Length (Move_Towards_Negative_Infinity : Boolean; Distance : Length) return Length
       is (if Move_Towards_Negative_Infinity then -Distance else Distance);
 
+      function Create_Homing_Event (Axis : Axis_Name; Kind : Homing_Event_Kind) return Homing_Event;
+
       function Create_Homing_Event (Axis : Axis_Name; Kind : Homing_Event_Kind) return Homing_Event is
       begin
          return Homing_Event'(Module_Instance_Ref => Self_Ref, Axis => Axis, Kind => Kind);
       end Create_Homing_Event;
+
+      procedure Home_Axis (Axis : Axis_Name);
 
       procedure Home_Axis (Axis : Axis_Name) is
          Axis_Config : constant User_Config_Axis_Homing := Config.Homing (Axis);
@@ -292,7 +304,7 @@ package body Prunt.Default_Modules.Homing is
 
          Axis_States (Axis) := Visiting;
 
-         for Prereq_Axis in Axis_Name loop
+         for Prereq_Axis in Axis_Name when Prereq_Axis /= E_Axis loop
             declare
                Prereq : User_Config_Homing_Prereq renames Axis_Config.Prerequisites (Prereq_Axis);
             begin
@@ -445,7 +457,7 @@ package body Prunt.Default_Modules.Homing is
          Axis_States (Axis) := Done;
       end Home_Axis;
    begin
-      for Axis in Axis_Name when Requested_Axes (Axis) loop
+      for Axis in Axis_Name when Axis /= E_Axis and then Requested_Axes (Axis) loop
          Home_Axis (Axis);
       end loop;
    end Auto_Home;

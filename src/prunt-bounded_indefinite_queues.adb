@@ -76,9 +76,13 @@ package body Prunt.Bounded_Indefinite_Queues is
       This.Tail := New_Node;
    end Enqueue;
 
-   function Can_Enqueue (This : in out Queue; New_Item : Element_Type) return Boolean is
-      New_Node                    : Node_Access := null;
-      New_Element                 : Element_Access := null;
+   function Can_Enqueue (This : in out Queue; New_Item : Element_Type; Count : Positive := 1) return Boolean is
+      type Node_Access_Array is array (Positive range <>) of Node_Access;
+      type Element_Access_Array is array (Positive range <>) of Element_Access;
+
+      New_Nodes                   : Node_Access_Array (1 .. Count) := [others => null];
+      New_Elements                : Element_Access_Array (1 .. Count) := [others => null];
+      Complete_Items              : Natural := 0;
       Old_Current_Free            : System.Address := System.Null_Address;
       Old_Last_Allocation_Address : System.Address := System.Null_Address;
 
@@ -86,8 +90,10 @@ package body Prunt.Bounded_Indefinite_Queues is
 
       procedure Roll_Back is
       begin
-         Free (New_Element);
-         Free (New_Node);
+         for I in reverse New_Nodes'Range loop
+            Free (New_Elements (I));
+            Free (New_Nodes (I));
+         end loop;
 
          This.Subpool.Current_Free := Old_Current_Free;
          This.Subpool.Last_Allocation_Address := Old_Last_Allocation_Address;
@@ -102,15 +108,19 @@ package body Prunt.Bounded_Indefinite_Queues is
       Old_Last_Allocation_Address := This.Subpool.Last_Allocation_Address;
 
       begin
-         New_Node := new (This.Subpool.all'Access) Node;
-         New_Element := new (This.Subpool.all'Access) Element_Type'(New_Item);
+         for I in New_Nodes'Range loop
+            New_Nodes (I) := new (This.Subpool.all'Access) Node;
+            New_Elements (I) := new (This.Subpool.all'Access) Element_Type'(New_Item);
+            Complete_Items := @ + 1;
+         end loop;
+
          Roll_Back;
          return True;
       exception
          when Out_Of_Space_Error =>
             Roll_Back;
 
-            if This.Is_Empty then
+            if This.Is_Empty and then Complete_Items = 0 then
                raise Program_Error with "Item too large for storage pool";
             else
                return False;

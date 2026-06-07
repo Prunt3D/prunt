@@ -170,6 +170,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
    end Test_Assign_Empty;
 
    procedure Test_Can_Enqueue (T : in out Trendy_Test.Operation'Class) is
+      package Small_Queues is new Prunt.Bounded_Indefinite_Queues (Element_Type => String, Storage_Size => 40);
    begin
       T.Register;
 
@@ -186,6 +187,20 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
       T.Assert (S = (1 .. 300 => 'A'));
       T.Assert (Q.Can_Enqueue ((1 .. 300 => 'C')));
       T.Assert (Q.Is_Empty);
+
+      Small_Q : Small_Queues.Queue;
+      Small_S : String (1 .. 1);
+
+      T.Assert (Small_Q.Can_Enqueue ("A", 2));
+      T.Assert (not Small_Q.Can_Enqueue ("A", 3));
+      T.Assert (Small_Q.Is_Empty);
+
+      Small_Q.Enqueue ("A");
+      T.Assert (Small_Q.Can_Enqueue ("B"));
+      T.Assert (not Small_Q.Can_Enqueue ("B", 2));
+      Small_Q.Dequeue (Small_S);
+      T.Assert (Small_S = "A");
+      T.Assert (Small_Q.Is_Empty);
    end Test_Can_Enqueue;
 
    procedure Test_Clear (T : in out Trendy_Test.Operation'Class) is

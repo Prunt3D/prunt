@@ -64,6 +64,7 @@ package body Prunt.Controller is
    protected body Gcode_Cancellation_Barrier is
       entry Start_Cancellation when not Cancellation_Active is
       begin
+         Cancellation_Count := @ + 1;
          Cancellation_Active := True;
       end Start_Cancellation;
 
@@ -106,6 +107,11 @@ package body Prunt.Controller is
       begin
          null;
       end Wait_Until_Not_Cancelling;
+
+      function Cancellation_Generation return Cancellation_Generation_Type is
+      begin
+         return Cancellation_Count;
+      end Cancellation_Generation;
    end Gcode_Cancellation_Barrier;
 
    protected body Planner_State_Type is
@@ -513,7 +519,9 @@ package body Prunt.Controller is
       procedure Process_Gcode_Queue is
          use type Gcode_Arguments.Argument_Kind;
 
-         Active_Planner : constant Planner_Wrapper := (Startup_Mode => False, Target => Primary_Planner_Target);
+         Active_Planner              : constant Planner_Wrapper :=
+           (Startup_Mode => False, Target => Primary_Planner_Target);
+         Gcode_Rejection_Retry_Delay : constant Duration := 0.1;
 
          function Line_Is_Empty (Args : Gcode_Arguments.Arguments) return Boolean;
 
@@ -601,10 +609,11 @@ package body Prunt.Controller is
          end Process_Gcode_Line;
 
          procedure Process_Next_Gcode_Item (Stopped : out Boolean) is
-            Line          : Virtual_String;
-            Item_Kind     : Gcode_Queues.Queue_Item_Kind;
-            End_Of_Item   : Boolean;
-            Queue_Stopped : Boolean;
+            Line                            : Virtual_String;
+            Item_Kind                       : Gcode_Queues.Queue_Item_Kind;
+            End_Of_Item                     : Boolean;
+            Queue_Stopped                   : Boolean;
+            Initial_Cancellation_Generation : Cancellation_Generation_Type;
          begin
             My_Gcode_Queue.Get_Next_Line (Line, Item_Kind, End_Of_Item, Queue_Stopped);
             pragma Unreferenced (Item_Kind);
@@ -614,26 +623,46 @@ package body Prunt.Controller is
                return;
             end if;
 
-            select
-               Gcode_Cancellation_Barrier.Start_Line;
-            else
-               Gcode_Cancellation_Barrier.Wait_Until_Not_Cancelling;
-               Stopped := False;
-               return;
-            end select;
+            Initial_Cancellation_Generation := Gcode_Cancellation_Barrier.Cancellation_Generation;
 
-            begin
-               Process_Gcode_Line (Line);
+            Retry_Line : loop
+               select
+                  Gcode_Cancellation_Barrier.Start_Line;
+               else
+                  Gcode_Cancellation_Barrier.Wait_Until_Not_Cancelling;
+                  Stopped := False;
+                  return;
+               end select;
 
-               if End_Of_Item then
-                  Active_Planner.Flush;
-               end if;
-               Gcode_Cancellation_Barrier.Finish_Line;
-            exception
-               when others =>
+               begin
+                  if Gcode_Cancellation_Barrier.Cancellation_Generation /= Initial_Cancellation_Generation then
+                     Gcode_Cancellation_Barrier.Finish_Line;
+                     Stopped := False;
+                     return;
+                  end if;
+
+                  Process_Gcode_Line (Line);
+
+                  if End_Of_Item then
+                     Active_Planner.Flush;
+                  end if;
+
                   Gcode_Cancellation_Barrier.Finish_Line;
-                  raise;
-            end;
+                  exit Retry_Line;
+               exception
+                  when Gcode_Temporarily_Rejected_Error =>
+                     --  The line was not accepted. Force already-accepted work toward execution, then retry after
+                     --  leaving the cancellation barrier so cancellation can interrupt the polling delay.
+                     Active_Planner.Flush;
+                     Gcode_Cancellation_Barrier.Finish_Line;
+                     delay Gcode_Rejection_Retry_Delay;
+
+                  when others =>
+                     Gcode_Cancellation_Barrier.Finish_Line;
+                     raise;
+               end;
+            end loop Retry_Line;
+
             Stopped := False;
          end Process_Next_Gcode_Item;
       begin

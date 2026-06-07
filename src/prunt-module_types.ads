@@ -55,6 +55,11 @@ package Prunt.Module_Types is
 
    Gcode_Bad_Inputs_Error : exception;
 
+   Gcode_Temporarily_Rejected_Error : exception;
+   --  Raised by a module when it cannot accept more G-code right now without exceeding a bounded internal queue. The
+   --  controller will flush already-accepted planner work and retry the same line later unless cancellation interrupts
+   --  the retry.
+
    type Gcode_Command_Identifier is record
       Argument : Gcode_Identifier_Argument_Index;
       Number   : Gcode_Arguments.Argument_Integer;
