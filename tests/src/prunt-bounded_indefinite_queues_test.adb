@@ -169,6 +169,25 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
       T.Assert (S = "New");
    end Test_Assign_Empty;
 
+   procedure Test_Can_Enqueue (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Q : Test_Queues.Queue;
+      S : String (1 .. 300);
+
+      T.Assert (Q.Can_Enqueue ("One"));
+      T.Assert (Q.Is_Empty);
+
+      Q.Enqueue ((1 .. 300 => 'A'));
+      T.Assert (not Q.Can_Enqueue ((1 .. 300 => 'B')));
+
+      Q.Dequeue (S);
+      T.Assert (S = (1 .. 300 => 'A'));
+      T.Assert (Q.Can_Enqueue ((1 .. 300 => 'C')));
+      T.Assert (Q.Is_Empty);
+   end Test_Can_Enqueue;
+
    procedure Test_Clear (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -406,6 +425,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
          Test_Alignment'Access,
          Test_Alignment_Collision'Access,
          Test_Assign_Empty'Access,
+         Test_Can_Enqueue'Access,
          Test_Clear'Access,
          Test_Empty_Operations'Access,
          Test_Enqueue_And_Dequeue'Access,

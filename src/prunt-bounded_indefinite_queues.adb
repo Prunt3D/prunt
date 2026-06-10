@@ -49,18 +49,18 @@ package body Prunt.Bounded_Indefinite_Queues is
          New_Element := new (This.Subpool.all'Access) Element_Type'(New_Item);
       exception
          when Out_Of_Space_Error =>
-         Free (New_Node);
-         This.Subpool.Current_Free := Old_Current_Free;
-         --  TODO: Could the initializer for New_Item do something here with the queue which would cause this to
-         --  be the wrong value to restore? Do we even care about that possibility?
+            Free (New_Node);
+            This.Subpool.Current_Free := Old_Current_Free;
+            --  TODO: Could the initializer for New_Item do something here with the queue which would cause this to be
+            --  the wrong value to restore? Do we even care about that possibility?
 
-         if This.Is_Empty then
-            --  The item may be smaller than Rounded_Storage_Size but not fit when there's already a node in the
-            --  pool.
-            raise Program_Error with "Item too large for storage pool";
-         else
-            raise;
-         end if;
+            if This.Is_Empty then
+               --  The item may be smaller than Rounded_Storage_Size but not fit when there's already a node in the
+               --  pool.
+               raise Program_Error with "Item too large for storage pool";
+            else
+               raise;
+            end if;
       end;
 
       New_Node.Element := New_Element;
@@ -75,6 +75,52 @@ package body Prunt.Bounded_Indefinite_Queues is
       end if;
       This.Tail := New_Node;
    end Enqueue;
+
+   function Can_Enqueue (This : in out Queue; New_Item : Element_Type) return Boolean is
+      New_Node                    : Node_Access := null;
+      New_Element                 : Element_Access := null;
+      Old_Current_Free            : System.Address := System.Null_Address;
+      Old_Last_Allocation_Address : System.Address := System.Null_Address;
+
+      procedure Roll_Back;
+
+      procedure Roll_Back is
+      begin
+         Free (New_Element);
+         Free (New_Node);
+
+         This.Subpool.Current_Free := Old_Current_Free;
+         This.Subpool.Last_Allocation_Address := Old_Last_Allocation_Address;
+      end Roll_Back;
+   begin
+      pragma Abort_Defer;
+      --  Exception handlers are an abort completion point.
+
+      This.Maybe_Initialize;
+
+      Old_Current_Free := This.Subpool.Current_Free;
+      Old_Last_Allocation_Address := This.Subpool.Last_Allocation_Address;
+
+      begin
+         New_Node := new (This.Subpool.all'Access) Node;
+         New_Element := new (This.Subpool.all'Access) Element_Type'(New_Item);
+         Roll_Back;
+         return True;
+      exception
+         when Out_Of_Space_Error =>
+            Roll_Back;
+
+            if This.Is_Empty then
+               raise Program_Error with "Item too large for storage pool";
+            else
+               return False;
+            end if;
+
+         when others =>
+            Roll_Back;
+            raise;
+      end;
+   end Can_Enqueue;
 
    procedure Dequeue (This : in out Queue; Item : out Element_Type) is
       Old_Head : Node_Access := This.Head;
