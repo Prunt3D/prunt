@@ -69,11 +69,16 @@ package body Config_Generator is
          return False;
       end Uses_Gcode_Args;
 
-      procedure Emit (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
+      procedure Emit
+        (Text               : Virtual_String;
+         Location           : String  := GNAT.Source_Info.Source_Location;
+         Trailing_Line_Feed : Boolean := True) is
       begin
          Current_Map_Out.Append (Text);
          Current_Map_Out.Append (" --  " & Conversions.To_Virtual_String (Location));
-         Current_Map_Out.Append (VSS.Characters.Latin.Line_Feed);
+         if Trailing_Line_Feed then
+            Current_Map_Out.Append (VSS.Characters.Latin.Line_Feed);
+         end if;
       end Emit;
 
    begin
@@ -89,6 +94,7 @@ package body Config_Generator is
       Emit ("pragma Warnings (On, ""unit * is not referenced"");");
       Emit ("pragma Warnings (On, ""no entities of * are referenced"");");
       Emit ("separate (" & Data.Name & ")");
+      Emit ("overriding");
       Emit
         ("procedure Gcode_Dispatch "
          & "(This : Module_Instance; Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; "
@@ -405,7 +411,8 @@ package body Config_Generator is
       Emit ("when others =>");
       Emit ("raise Constraint_Error with ""Unknown G-code command identifier."";");
       Emit ("end case;");
-      Emit ("end Gcode_Dispatch;");
+      Emit ("pragma Style_Checks (On);");
+      Emit (Text => "end Gcode_Dispatch;", Trailing_Line_Feed => False);
 
       Write_File
         (Ada.Directories.Compose
@@ -416,11 +423,16 @@ package body Config_Generator is
    procedure Generate_Gcode_Commands_List (Filename : String; Data : Module_Data) is
       Current_Map_Out : Virtual_String;
 
-      procedure Emit (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
+      procedure Emit
+        (Text               : Virtual_String;
+         Location           : String  := GNAT.Source_Info.Source_Location;
+         Trailing_Line_Feed : Boolean := True) is
       begin
          Current_Map_Out.Append (Text);
          Current_Map_Out.Append (" --  " & Conversions.To_Virtual_String (Location));
-         Current_Map_Out.Append (VSS.Characters.Latin.Line_Feed);
+         if Trailing_Line_Feed then
+            Current_Map_Out.Append (VSS.Characters.Latin.Line_Feed);
+         end if;
       end Emit;
    begin
       Emit ("pragma Style_Checks (Off);");
@@ -435,6 +447,7 @@ package body Config_Generator is
       Emit ("pragma Warnings (On, ""unit * is not referenced"");");
       Emit ("pragma Warnings (On, ""no entities of * are referenced"");");
       Emit ("separate (" & Data.Name & ")");
+      Emit ("overriding");
       Emit ("function Gcode_Commands (This : Module) return Prunt.Module_Types.Gcode_Command_Vectors.Vector is");
       Emit ("pragma Unsuppress (All_Checks);");
       Emit ("begin");
@@ -545,7 +558,8 @@ package body Config_Generator is
       end;
 
       Emit ("];");
-      Emit ("end Gcode_Commands;");
+      Emit ("pragma Style_Checks (On);");
+      Emit (Text => "end Gcode_Commands;", Trailing_Line_Feed => False);
 
       Write_File
         (Ada.Directories.Compose
@@ -600,25 +614,40 @@ package body Config_Generator is
          return Result;
       end Expand_Index_Level;
 
-      procedure Emit_Config_Map (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
+      procedure Emit_Config_Map
+        (Text               : Virtual_String;
+         Location           : String  := GNAT.Source_Info.Source_Location;
+         Trailing_Line_Feed : Boolean := True) is
       begin
          Config_Map_Out.Append (Text);
          Config_Map_Out.Append (" --  " & Conversions.To_Virtual_String (Location));
-         Config_Map_Out.Append (VSS.Characters.Latin.Line_Feed);
+         if Trailing_Line_Feed then
+            Config_Map_Out.Append (VSS.Characters.Latin.Line_Feed);
+         end if;
       end Emit_Config_Map;
 
-      procedure Emit_Reader (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
+      procedure Emit_Reader
+        (Text               : Virtual_String;
+         Location           : String  := GNAT.Source_Info.Source_Location;
+         Trailing_Line_Feed : Boolean := True) is
       begin
          Reader_Out.Append (Text);
          Reader_Out.Append (" --  " & Conversions.To_Virtual_String (Location));
-         Reader_Out.Append (VSS.Characters.Latin.Line_Feed);
+         if Trailing_Line_Feed then
+            Reader_Out.Append (VSS.Characters.Latin.Line_Feed);
+         end if;
       end Emit_Reader;
 
-      procedure Emit_Setter (Text : Virtual_String; Location : String := GNAT.Source_Info.Source_Location) is
+      procedure Emit_Setter
+        (Text               : Virtual_String;
+         Location           : String  := GNAT.Source_Info.Source_Location;
+         Trailing_Line_Feed : Boolean := True) is
       begin
          Setter_Out.Append (Text);
          Setter_Out.Append (" --  " & Conversions.To_Virtual_String (Location));
-         Setter_Out.Append (VSS.Characters.Latin.Line_Feed);
+         if Trailing_Line_Feed then
+            Setter_Out.Append (VSS.Characters.Latin.Line_Feed);
+         end if;
       end Emit_Setter;
 
       function Path_To_Vector_Access_String (Path : String_Vectors.Vector) return Virtual_String is
@@ -1467,13 +1496,16 @@ package body Config_Generator is
             Reader_Prefix => "Result",
             Ada_Prefix    => "Config");
 
-         Emit_Setter ("end User_Config_To_Config_Data;");
+         Emit_Setter ("pragma Style_Checks (On);");
+         Emit_Setter (Text => "end User_Config_To_Config_Data;", Trailing_Line_Feed => False);
 
          Emit_Reader ("end return;");
-         Emit_Reader ("end Config_Data_To_User_Config;");
+         Emit_Reader ("pragma Style_Checks (On);");
+         Emit_Reader (Text => "end Config_Data_To_User_Config;", Trailing_Line_Feed => False);
 
          Emit_Config_Map (".Children;");
-         Emit_Config_Map ("end Build_Schema;");
+         Emit_Config_Map ("pragma Style_Checks (On);");
+         Emit_Config_Map (Text => "end Build_Schema;", Trailing_Line_Feed => False);
 
 
          Write_File
