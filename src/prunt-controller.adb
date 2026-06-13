@@ -216,6 +216,19 @@ package body Prunt.Controller is
    end Wait_For_Idle;
 
    overriding
+   procedure Catch_Up_Planner_State (This : Planner_Block_End_Context) is
+   begin
+      Catch_Up_Planner_State_Handlers (This.State_Catch_Up_Corner_ID);
+   end Catch_Up_Planner_State;
+
+   overriding
+   procedure Prepare_Config_For_Save (This : Planner_Block_End_Context) is
+      pragma Unreferenced (This);
+   begin
+      Prepare_Config_For_Save_Handlers;
+   end Prepare_Config_For_Save;
+
+   overriding
    procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name) is
    begin
       pragma Unreferenced (This, Axis); --  TODO
@@ -370,6 +383,16 @@ package body Prunt.Controller is
       end loop;
    end Catch_Up_Planner_State_Handlers;
 
+   procedure Prepare_Config_For_Save_Handlers is
+      Handlers : Module_Instance_Vectors.Vector;
+   begin
+      Config_Save_Preparer_Instances.Snapshot (Handlers);
+
+      for Instance of Handlers loop
+         Config_Save_Preparer'Class (Instance.Get.Element.all).Prepare_Config_For_Save;
+      end loop;
+   end Prepare_Config_For_Save_Handlers;
+
    procedure Handle_Cancellation_Handlers
      (Executed_Corner_ID : Planner_Corner_ID; Cancellation_Barrier_ID : Planner_Corner_ID; Current_Position : Position)
    is
@@ -487,6 +510,12 @@ package body Prunt.Controller is
                       Active_Module_Instances
                       when Instance.Get.Element.all in Planner_State_Handler'Class =>
                     Instance]);
+            Config_Save_Preparer_Instances.Load
+              (Module_Instance_Vectors.Vector'
+                 [for Instance of
+                      Active_Module_Instances
+                      when Instance.Get.Element.all in Config_Save_Preparer'Class =>
+                    Instance]);
             Cancellation_Handler_Instances.Load
               (Module_Instance_Vectors.Vector'
                  [for Instance of
@@ -511,6 +540,7 @@ package body Prunt.Controller is
       begin
          Pause_Handler_Instances.Clear;
          Planner_State_Handler_Instances.Clear;
+         Config_Save_Preparer_Instances.Clear;
          Cancellation_Handler_Instances.Clear;
          Active_Module_Instances.Reverse_Clear;
       end Clear_Active_Modules;
@@ -1346,9 +1376,10 @@ package body Prunt.Controller is
       Loop_Move_Offset     : Position_Offset)
    is
       Context : constant Planner_Block_End_Context :=
-        (First_Accel_Distance => First_Accel_Distance,
-         Last_Command_Index   => Last_Command_Index,
-         Loop_Move_Offset     => Loop_Move_Offset);
+        (First_Accel_Distance     => First_Accel_Distance,
+         Last_Command_Index       => Last_Command_Index,
+         Loop_Move_Offset         => Loop_Move_Offset,
+         State_Catch_Up_Corner_ID => My_Step_Generator.Get_Last_Executed_Primary_Corner_ID);
    begin
       if not Resetting_Data.Is_Empty then
          Resetting_Data.Element.Process_After_Block (Context);

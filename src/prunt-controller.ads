@@ -238,7 +238,8 @@ private
            Input_Shapers_Module        => Input_Shapers);
       package Motion is new
         My_Default_Modules.Motion
-          (Kinematics_Module          => Kinematics,
+          (Config_Saving_Module       => Config_Saving,
+           Kinematics_Module          => Kinematics,
            Pending_State_Queue_Length => Command_Line_Arguments.Max_Planner_Block_Corners);
       package Thermistors is new
         My_Default_Modules.Thermistors
@@ -563,6 +564,10 @@ private
    --  Notify loaded planner-state handlers that all primary planner corners up to Executed_Corner_ID have executed.
    --  Handlers should commit any speculative state anchored at or before this ID and leave later state pending.
 
+   procedure Prepare_Config_For_Save_Handlers;
+   --  Notify loaded config-save preparers to copy their current runtime state into their registered Config_Data
+   --  handles before config saving persists those handles.
+
    procedure Handle_Cancellation_Handlers
      (Executed_Corner_ID      : Planner_Corner_ID;
       Cancellation_Barrier_ID : Planner_Corner_ID;
@@ -586,6 +591,7 @@ private
 
    Pause_Handler_Instances         : Handler_Instances;
    Planner_State_Handler_Instances : Handler_Instances;
+   Config_Save_Preparer_Instances  : Handler_Instances;
    Cancellation_Handler_Instances  : Handler_Instances;
    --  We use these wrappers because the instances need to be accessed from multiple threads.
 
@@ -670,9 +676,10 @@ private
    function Get_Last_Command_Index (This : Pause_Context_Data) return Command_Index;
 
    type Planner_Block_End_Context is limited new Module_Types.Block_End_Context with record
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset;
+      First_Accel_Distance     : Length;
+      Last_Command_Index       : Command_Index;
+      Loop_Move_Offset         : Position_Offset;
+      State_Catch_Up_Corner_ID : Planner_Corner_ID;
    end record;
 
    overriding
@@ -707,6 +714,12 @@ private
 
    overriding
    procedure Wait_For_Idle (This : Planner_Block_End_Context);
+
+   overriding
+   procedure Catch_Up_Planner_State (This : Planner_Block_End_Context);
+
+   overriding
+   procedure Prepare_Config_For_Save (This : Planner_Block_End_Context);
 
    overriding
    procedure Add_Corner

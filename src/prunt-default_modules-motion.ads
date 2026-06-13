@@ -21,6 +21,7 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Default_Modules.Config_Saving;
 with Prunt.Default_Modules.Kinematics;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
@@ -30,6 +31,7 @@ private with Prunt.Bounded_Indefinite_Queues;
 private with System.Storage_Elements;
 
 generic
+   with package Config_Saving_Module is new Default_Modules.Config_Saving;
    with package Kinematics_Module is new Default_Modules.Kinematics (<>);
    Pending_State_Queue_Length : Motion_Planner.Max_Corners_Type;
 package Prunt.Default_Modules.Motion is
@@ -46,6 +48,7 @@ package Prunt.Default_Modules.Motion is
      new My_Modules.Module_Instance
      and Pause_Handler
      and Planner_State_Handler
+     and Config_Save_Preparer
      and Cancellation_Handler with private;
 
    overriding
@@ -660,6 +663,8 @@ private
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M207");
    --  Set or report firmware retract settings. No arguments reports the current settings.
+   --
+   --  Saved by `M500`.
 
    procedure Recover_Settings
      (This     : Module_Instance;
@@ -672,6 +677,8 @@ private
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M208");
    --  Set or report firmware recover settings. No arguments reports the current settings.
+   --
+   --  Saved by `M500`.
 
    procedure Set_Auto_Retract
      (This     : Module_Instance;
@@ -735,8 +742,12 @@ private
    protected type Module_Instance is new My_Modules.Module_Instance
    and Pause_Handler
    and Planner_State_Handler
+   and Config_Save_Preparer
    and Cancellation_Handler with
-      procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
+      procedure Initialize
+        (Config_In         : User_Config;
+         Config_Data_In    : Prunt.Config.Config_Data;
+         Status_Emitter_In : Status_Manager.Status_Emitter);
 
       overriding
       procedure Start
@@ -750,6 +761,9 @@ private
 
       overriding
       procedure Catch_Up_Planner_State (Executed_Corner_ID : Planner_Corner_ID);
+
+      overriding
+      procedure Prepare_Config_For_Save;
 
       overriding
       procedure Handle_Cancel
@@ -857,7 +871,7 @@ private
       Pending_States                  : Pending_State_Queues.Queue;
       Pending_Stored_Position_Updates : Pending_Stored_Position_Update_Queues.Queue;
       Config                          : User_Config;
-      Self_Ref                        : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Config_Data                     : Prunt.Config.Config_Data;
       Status_Emitter                  : Status_Manager.Status_Emitter;
    end Module_Instance;
 

@@ -46,10 +46,12 @@ package body Prunt.Default_Modules.Config_Saving is
 
    overriding
    procedure Process_After_Block (This : Config_Save_Event; Context : Block_End_Context'Class) is
-      pragma Unreferenced (Context);
-
       Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
    begin
+      Context.Wait_For_Idle;
+      Context.Catch_Up_Planner_State;
+      Context.Prepare_Config_For_Save;
+
       case This.Save_All is
          when False =>
             Instance.Process_Save_Settings (This.Config_To_Save);

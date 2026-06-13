@@ -204,6 +204,10 @@ package Prunt.Module_Types is
 
    procedure Wait_For_Idle (This : Block_End_Context) is abstract;
 
+   procedure Catch_Up_Planner_State (This : Block_End_Context) is abstract;
+
+   procedure Prepare_Config_For_Save (This : Block_End_Context) is abstract;
+
    procedure Process_After_Block (This : Extra_Block_Resetting_Data; Context : Block_End_Context'Class) is null;
 
    type Pause_Context is abstract tagged null record;
@@ -226,6 +230,10 @@ package Prunt.Module_Types is
 
    procedure Catch_Up_Planner_State (This : in out Planner_State_Handler; Executed_Corner_ID : Planner_Corner_ID)
    is null;
+
+   type Config_Save_Preparer is synchronized interface;
+
+   procedure Prepare_Config_For_Save (This : in out Config_Save_Preparer) is null;
 
    type Cancellation_Handler is synchronized interface;
 

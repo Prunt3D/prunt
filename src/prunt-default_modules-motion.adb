@@ -51,11 +51,13 @@ package body Prunt.Default_Modules.Motion is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      Parsed_Config                  : constant User_Config := Config_Data_To_User_Config (Config_Data);
-      Kinematics_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+      Parsed_Config                     : constant User_Config := Config_Data_To_User_Config (Config_Data);
+      Kinematics_Module_Instance_Ref    : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Kinematics_Module.Module_Instance'Tag);
-      Kinematics_Module_Instance     : Kinematics_Module.Module_Instance_Interface'Class renames
+      Kinematics_Module_Instance        : Kinematics_Module.Module_Instance_Interface'Class renames
         Kinematics_Module.Module_Instance_Interface'Class (Kinematics_Module_Instance_Ref.Get.Element.all);
+      Config_Saving_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+        Get_Other_Instance (Config_Saving_Module.Module_Instance'Tag);
 
       procedure Report_If_Absolute_Park_Position_Out_Of_Bounds;
 
@@ -100,7 +102,9 @@ package body Prunt.Default_Modules.Motion is
    begin
       return Result : Module_Instance do
          Report_If_Absolute_Park_Position_Out_Of_Bounds;
-         Result.Initialize (Parsed_Config, Status_Emitter);
+         Config_Saving_Module.Config_Saver'Class (Config_Saving_Module_Instance_Ref.Get.Element.all)
+           .Register_For_Saving (Config_Data);
+         Result.Initialize (Parsed_Config, Config_Data, Status_Emitter);
       end return;
    end Initialize;
 
@@ -472,9 +476,13 @@ package body Prunt.Default_Modules.Motion is
    end Stored_Position_Update_Changes;
 
    protected body Module_Instance is
-      procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter) is
+      procedure Initialize
+        (Config_In         : User_Config;
+         Config_Data_In    : Prunt.Config.Config_Data;
+         Status_Emitter_In : Status_Manager.Status_Emitter) is
       begin
          Config := Config_In;
+         Config_Data := Config_Data_In;
          Status_Emitter := Status_Emitter_In;
          Planned_State :=
            (Feedrate              => Config.Motion_Gcode.Default_G1_Feedrate,
@@ -507,9 +515,8 @@ package body Prunt.Default_Modules.Motion is
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
       is
-         pragma Unreferenced (Planner);
+         pragma Unreferenced (Planner, Self_Ref_In);
       begin
-         Self_Ref := Self_Ref_In;
          Update_Status (Status_Emitter, Committed_State);
       end Start;
 
@@ -546,6 +553,17 @@ package body Prunt.Default_Modules.Motion is
 
          Update_Status (Status_Emitter, Committed_State);
       end Catch_Up_Planner_State;
+
+      procedure Prepare_Config_For_Save is
+      begin
+         Config.Motion_Gcode.Firmware_Retract_Length := Committed_State.Retract_Length;
+         Config.Motion_Gcode.Firmware_Retract_Feedrate := Committed_State.Retract_Feedrate;
+         Config.Motion_Gcode.Firmware_Retract_Z_Lift := Committed_State.Retract_Z_Lift;
+         Config.Motion_Gcode.Firmware_Recover_Extra_Length := Committed_State.Recover_Extra_Length;
+         Config.Motion_Gcode.Firmware_Recover_Feedrate := Committed_State.Recover_Feedrate;
+
+         User_Config_To_Config_Data (Config_Data, Config);
+      end Prepare_Config_For_Save;
 
       procedure Ensure_Can_Queue_Planned_State (Planner : Planner_Interface'Class; Pending_Snapshots : Positive := 1)
       is
