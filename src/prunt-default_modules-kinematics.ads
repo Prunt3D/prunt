@@ -29,8 +29,6 @@ with Prunt.Gcode_Arguments;
 with Prunt.Motion_Planner;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
-private with Ada.Containers.Ordered_Maps;
-
 generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    --  We need to pass in the whole package rather than just `Motor_Name` so codegen can properly resolve the types.
@@ -226,14 +224,12 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
-   function Velocity_Values_Equal (Left, Right : Velocity) return Boolean
-   is (Left = Right);
-
-   package Axial_Velocity_Update_Maps is new
-     Ada.Containers.Ordered_Maps (Axis_Name, Velocity, "=" => Velocity_Values_Equal);
+   type Axial_Velocity_Update_Set is array (Axis_Name) of Boolean;
+   type Axial_Velocity_Update_Values is array (Axis_Name) of Velocity;
 
    type Runtime_Kinematics_Updates is record
-      Axial_Velocity_Limits    : Axial_Velocity_Update_Maps.Map := [];
+      Has_Axial_Velocity_Limit : Axial_Velocity_Update_Set := [others => False];
+      Axial_Velocity_Limits    : Axial_Velocity_Update_Values := [others => 1.0E-6 * mm / s];
       Has_Maximum_Acceleration : Boolean := False;
       Maximum_Acceleration     : Acceleration := 1.0E-6 * mm / s ** 2;
       Has_Maximum_Jerk         : Boolean := False;
@@ -253,6 +249,12 @@ private
 
    overriding
    procedure Process_After_Block (This : Kinematics_Config_Update; Context : Block_End_Context'Class);
+
+   function Build_Motion_Planner_Configuration
+     (Config                        : User_Config;
+      Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class;
+      Input_Shapers_Module_Instance : Input_Shapers_Module.Module_Instance_Interface'Class)
+      return Motion_Planner_Configuration;
 
    procedure Set_Max_Feedrate
      (This     : Module_Instance;

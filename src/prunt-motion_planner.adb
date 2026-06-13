@@ -815,7 +815,7 @@ package body Prunt.Motion_Planner is
             if Stage >= 14 then
                Advance (State, T1, Cm);
             end if;
-            if Stage >= 15 then
+            if Stage = 15 then
                Advance (State, T2, 0.0 * mm / s ** 5);
             end if;
       end case;

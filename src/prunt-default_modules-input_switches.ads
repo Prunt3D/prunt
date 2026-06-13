@@ -131,6 +131,8 @@ private
 
    package Status_Updater_Wrapper_Pointers is new Limited_Shared_Pointers (Status_Updater_Wrapper);
 
+   function Switch_Is_Triggered (Config : User_Config; Switch : Input_Switch_Name) return Boolean;
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
 

@@ -176,6 +176,8 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
 
    protected body Module_Instance is
       procedure Initialize (Status_Emitter_In : Status_Manager.Status_Emitter) is
+         function Make_Updater_Task return Status_Updater_Wrapper;
+
          function Make_Updater_Task return Status_Updater_Wrapper is
          begin
             return Result : Status_Updater_Wrapper;

@@ -275,6 +275,8 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
 
+   function To_Thermistor_Parameters (Config : User_Config_Thermistor) return Prunt.Thermistors.Thermistor_Parameters;
+
    procedure Report_Temperatures
      (Planner : Planner_Interface'Class;
       R       : Gcode_Optional_No_Value;

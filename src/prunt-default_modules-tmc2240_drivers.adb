@@ -50,6 +50,10 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
       function TMC2240_Fields
         (Kind : Status_Manager.Status_Value_Kind; Unit : Virtual_String; Description : Virtual_String)
+         return Status_Manager.Status_Value_Maps.Map;
+
+      function TMC2240_Fields
+        (Kind : Status_Manager.Status_Value_Kind; Unit : Virtual_String; Description : Virtual_String)
          return Status_Manager.Status_Value_Maps.Map
       is
          Result : Status_Manager.Status_Value_Maps.Map;
@@ -142,6 +146,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       Motor               : My_Controller_Generic_Types.Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers
    is
+      procedure Report (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+
       procedure Report (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String) is
          use type Prunt.Config.Config_Data_Paths.Vector;
       begin
@@ -367,7 +373,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning.");
-               elsif Sum_Too_High_For_Full_Scale and Result.IHOLD_IRUN.I_Run = 31 then
+               elsif Sum_Too_High_For_Full_Scale and then Result.IHOLD_IRUN.I_Run = 31 then
                   Report
                     (["CHM", "SpreadCycle", "Derived"],
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
@@ -398,10 +404,10 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          --  off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but the maximum is
          --  probably actually 255.
          if Result.CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode
-           and
+           and then
              (Dimensionless (Result.CHOPCONF.HEND_OFFSET) - 3.0 + Dimensionless (Result.CHOPCONF.HSTRT_TFD210) + 1.0
               > 14.0)
-           and (Result.IHOLD_IRUN.I_Run = 31)
+           and then (Result.IHOLD_IRUN.I_Run = 31)
          then
             raise Constraint_Error with "Invalid config should have been caught earlier.";
          end if;
@@ -545,7 +551,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    end Disable_Motor;
 
    task body UART_Motor_Manager is
-      use type Ada.Real_TIme.Time;
+      use type Ada.Real_Time.Time;
 
       My_Regs        : TMC2240_Registers;
       My_Motor       : My_Controller_Generic_Types.Motor_Name;
@@ -735,6 +741,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       is
          Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames
            Motor_Drivers_Module.Module_Instance_Interface'Class (Motor_Drivers_Module_Instance_Ref.Get.Element.all);
+
+         function Create_UART_Manager return UART_Motor_Manager;
 
          function Create_UART_Manager return UART_Motor_Manager is
          begin

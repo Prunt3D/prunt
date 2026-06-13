@@ -364,6 +364,8 @@ private
 
    type Dummy_Type is null record;
 
+   function To_Heater_Parameters (Config : User_Config_Heater) return Heater_Parameters;
+
    protected type Module_Instance is new My_Modules.Module_Instance
    and Module_Instance_Interface
    and Pause_Handler with

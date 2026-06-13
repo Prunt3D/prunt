@@ -99,6 +99,10 @@ private
    overriding
    procedure Process_After_Block (This : Position_Auto_Report_Event; Context : Block_End_Context'Class);
 
+   function Current_Position_Report (Pos : Position) return Virtual_String;
+
+   procedure Log_Position;
+
    procedure Report_Current_Position (Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M114");
    --  Report the current position to the logger.

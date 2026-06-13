@@ -207,8 +207,10 @@ package body Prunt.Default_Modules.Kinematics is
 
       procedure Apply_Runtime_Config (Updates : Runtime_Kinematics_Updates) is
       begin
-         for Update in Updates.Axial_Velocity_Limits.Iterate loop
-            Config.Kinematics.Axial_Velocity_Limits (Update.Key) := Update.Element;
+         for Axis in Axis_Name loop
+            if Updates.Has_Axial_Velocity_Limit (Axis) then
+               Config.Kinematics.Axial_Velocity_Limits (Axis) := Updates.Axial_Velocity_Limits (Axis);
+            end if;
          end loop;
 
          if Updates.Has_Maximum_Acceleration then
@@ -267,6 +269,8 @@ package body Prunt.Default_Modules.Kinematics is
       New_Params : Motion_Planner.Kinematic_Parameters := Planner.Get_Last_Kinematic_Parameters;
       Updated    : Boolean := False;
 
+      procedure Handle_Axis (Axis : Axis_Name; Value : Gcode_Optional_Float);
+
       procedure Handle_Axis (Axis : Axis_Name; Value : Gcode_Optional_Float) is
          Limit : Velocity;
       begin
@@ -278,7 +282,8 @@ package body Prunt.Default_Modules.Kinematics is
                   raise Gcode_Bad_Inputs_Error with Axis'Image & " feedrate must be between 1.0E-6 and 1.0E100 mm/s.";
             end;
 
-            Updates.Axial_Velocity_Limits.Insert (Axis, Limit);
+            Updates.Has_Axial_Velocity_Limit (Axis) := True;
+            Updates.Axial_Velocity_Limits (Axis) := Limit;
             New_Params.Axial_Velocity_Maxes (Axis) := Limit;
             Updated := True;
          end if;

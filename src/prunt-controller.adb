@@ -18,7 +18,6 @@
 --------------------------------------------------
 
 with Ada.Containers.Ordered_Sets;
-with Ada.Containers.Vectors;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
@@ -594,8 +593,6 @@ package body Prunt.Controller is
                Args               => Args,
                Planner            => Active_Planner,
                Command_Identifier => Command_Identifier);
-
-            Gcode_Arguments.Validate_All_Consumed (Args);
          end Dispatch_Gcode_Command;
 
          procedure Process_Gcode_Line (Line : Virtual_String) is
@@ -606,6 +603,8 @@ package body Prunt.Controller is
             end if;
 
             Dispatch_Gcode_Command (Args);
+
+            Gcode_Arguments.Validate_All_Consumed (Args);
          end Process_Gcode_Line;
 
          procedure Process_Next_Gcode_Item (Stopped : out Boolean) is

@@ -142,7 +142,7 @@ private
       Circumference : Length range 1.0E-100 * mm .. 1.0E100 * mm := 1.0E100 * mm;
       --  This is the circumference of the pulley that drives the belt attached to the linearly moving part.
 
-      Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0)with
+      Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0) with
         Annotate => (Prunt_Config, Min, 1.0E-100),
         Annotate => (Prunt_Config, Max, 1.0E100);
       --  If there is a gear system between the motor and the pulley, specify the gear ratio here. The format is A:B,
@@ -162,7 +162,7 @@ private
       --  This is the distance between the centres of two adjacent teeth on the belt. Common belt pitches in 3D
       --  printers are 2mm (for GT2 belts) and 3mm (for GT3 belts).
 
-      Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0)with
+      Gear_Ratio : Dimensionless_Ratio := (1.0, 1.0) with
         Annotate => (Prunt_Config, Min, 1.0E-100),
         Annotate => (Prunt_Config, Max, 1.0E100);
       --  If there is a gear system between the motor and the pulley, specify the gear ratio here. The format is A:B,

@@ -88,7 +88,21 @@ package body Prunt.Default_Modules.Input_Shapers is
 
       type Field_Name_Array is array (Positive range <>) of Virtual_String;
 
+      procedure Validate_Object_Fields (Value : JSON.JSON_Value; Allowed : Field_Name_Array);
+
+      function Get_Dimensionless
+        (Value : JSON.JSON_Value; Name : Virtual_String; Minimum : Dimensionless; Maximum : Dimensionless)
+         return Dimensionless;
+
+      function Get_Integer
+        (Value : JSON.JSON_Value; Name : Virtual_String; Minimum : Long_Long_Integer; Maximum : Long_Long_Integer)
+         return Long_Long_Integer;
+
+      function Get_Boolean (Value : JSON.JSON_Value; Name : Virtual_String) return Boolean;
+
       procedure Validate_Object_Fields (Value : JSON.JSON_Value; Allowed : Field_Name_Array) is
+         procedure Check_Field (Name : Virtual_String; Field_Value : JSON.JSON_Value);
+
          procedure Check_Field (Name : Virtual_String; Field_Value : JSON.JSON_Value) is
             pragma Unreferenced (Field_Value);
          begin
@@ -288,7 +302,8 @@ package body Prunt.Default_Modules.Input_Shapers is
       end Initialize;
 
       procedure Start
-        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class) is
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
+      is
          pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
@@ -322,6 +337,8 @@ package body Prunt.Default_Modules.Input_Shapers is
       Updated         : Boolean := False;
       New_Shapers     : Prunt.Input_Shapers.Axial_Shaper_Parameters :=
         Planner.Get_Last_Kinematic_Parameters.Axial_Shapers;
+
+      procedure Handle_Axis (Axis : Axis_Name; Value : Gcode_Optional_String);
 
       procedure Handle_Axis (Axis : Axis_Name; Value : Gcode_Optional_String) is
          Method : User_Config_Input_Shaping_Method;

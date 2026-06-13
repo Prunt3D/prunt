@@ -109,6 +109,7 @@ package body Prunt.Default_Modules.Heaters is
                Condition   => "")]];
    end Status_Schema;
 
+   overriding
    procedure Process (This : Heater_Target_Command; Last_Command_Index : Command_Index) is
       pragma Unreferenced (Last_Command_Index);
    begin
@@ -117,6 +118,7 @@ package body Prunt.Default_Modules.Heaters is
       Module_Instance (This.Module_Instance_Ref.Get.Element.all).Record_Heater_Target (This.Heater, This.Target);
    end Process;
 
+   overriding
    procedure Process_After_Block (This : Heater_Temperature_Wait; Context : Block_End_Context'Class) is
       pragma Unreferenced (Context);
 
@@ -125,6 +127,8 @@ package body Prunt.Default_Modules.Heaters is
       Heaters_Module_Instance     : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
       Ramp_Start_Temperature      : constant Temperature :=
         Thermistors_Module_Instance.Get_Temperature (This.Assigned_Thermistor, Requires_Fresh => True);
+
+      procedure Set_Target (Value : Temperature);
 
       procedure Set_Target (Value : Temperature) is
       begin
@@ -241,6 +245,14 @@ package body Prunt.Default_Modules.Heaters is
             end loop;
 
             declare
+               procedure Validate_Default (Name : Virtual_String; Selection : User_Config_Default_Heater);
+
+               procedure Check_Overlap
+                 (Left_Name       : Virtual_String;
+                  Left_Selection  : User_Config_Default_Heater;
+                  Right_Name      : Virtual_String;
+                  Right_Selection : User_Config_Default_Heater);
+
                procedure Validate_Default (Name : Virtual_String; Selection : User_Config_Default_Heater) is
                begin
                   if Selection.Kind = Enabled and then Parsed_Config.Heaters (Selection.Heater).Kind = Disabled then

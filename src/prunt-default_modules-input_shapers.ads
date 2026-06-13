@@ -172,6 +172,11 @@ private
    overriding
    procedure Process_After_Block (This : Input_Shaping_Config_Update; Context : Block_End_Context'Class);
 
+   function Build_Shaper_Parameters
+     (Method : User_Config_Input_Shaping_Method) return Prunt.Input_Shapers.Shaper_Parameters;
+
+   function Parse_Axial_Shaper_Config (Value : Virtual_String) return User_Config_Input_Shaping_Method;
+
    procedure Configure_Input_Shaping
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Planner  : Planner_Interface'Class;
