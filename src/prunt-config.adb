@@ -674,7 +674,7 @@ package body Prunt.Config is
       end if;
 
       I := Path.First_Index;
-      while I < Path.Last_Index loop
+      loop
          if not Current_Schema.Contains (Path.Element (I)) then
             return False;
          end if;
@@ -712,8 +712,6 @@ package body Prunt.Config is
             end if;
          end;
       end loop;
-
-      return False;
    end Selected_Variant_Default;
 
    function Prune_Path_For_Override

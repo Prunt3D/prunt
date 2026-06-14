@@ -20,6 +20,7 @@
 with Ada.Exceptions;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
+with Ada.Text_IO;
 with System.Assertions;
 with Trendy_Test; use Trendy_Test;
 
@@ -192,6 +193,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
 
       Holder.Set_Fatal
         (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, First_Occurrence);
+      Ada.Text_IO.Put_Line ("Exception trace output is expected.");
       Holder.Set_Fatal
         (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Second_Occurrence);
       Holder.Get (Result, Is_Fatal);
@@ -274,6 +276,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
 
       Holder.Set_Recoverable
         (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, First_Occurrence);
+      Ada.Text_IO.Put_Line ("Exception trace output is expected.");
       Holder.Set_Recoverable
         (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Second_Occurrence);
       Holder.Get (Result, Is_Fatal);

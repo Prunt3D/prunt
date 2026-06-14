@@ -44,9 +44,9 @@ package body Prunt.Exception_Occurrence_Holders is
          if Ada.Exceptions.Is_Null_Occurrence (Data) or else not Fatal_Occurrence_Stored then
             Ada.Exceptions.Save_Occurrence (Data, Occurrence);
             Fatal_Occurrence_Stored := True;
+         else
+            Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
          end if;
-
-         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
       end Set_Fatal;
 
       procedure Set_Recoverable
@@ -69,9 +69,9 @@ package body Prunt.Exception_Occurrence_Holders is
 
          if Ada.Exceptions.Is_Null_Occurrence (Data) then
             Ada.Exceptions.Save_Occurrence (Data, Occurrence);
+         else
+            Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
          end if;
-
-         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Information (Occurrence));
       end Set_Recoverable;
 
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence; Is_Fatal : out Boolean)

@@ -123,6 +123,20 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
       T.Assert (not Has_Element (M.Last));
    end Test_Empty;
 
+   procedure Test_Exclude_Missing (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      M : Map;
+
+      M.Insert (1, "A");
+      M.Exclude (2);
+
+      T.Assert (M.Length = 1);
+      T.Assert (M.Contains (1));
+      T.Assert (not M.Contains (2));
+   end Test_Exclude_Missing;
+
    procedure Test_Find (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -388,6 +402,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
          Test_Contains'Access,
          Test_Delete'Access,
          Test_Empty'Access,
+         Test_Exclude_Missing'Access,
          Test_Find'Access,
          Test_First_Last'Access,
          Test_Insert_And_Element'Access,

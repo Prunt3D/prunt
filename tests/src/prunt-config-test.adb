@@ -1071,6 +1071,39 @@ package body Prunt.Config.Test is
       end;
    end Test_Initialize_With_Invalid_Module_Config;
 
+   procedure Test_Initialize_With_Invalid_Module_Data (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Schemas : constant Config_Schema_Maps.Map :=
+        ["M" =>
+           Versioned_Config_Schema'
+             (Version         => 1,
+              Top_Level_Items =>
+                ["i" =>
+                   Config_Property_Parameters_Integer'
+                     (Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
+      File_Name : constant String := Next_Test_Filename;
+
+      declare
+         F : Mockable.Text_IO.File_Type;
+      begin
+         Mockable.Text_IO.Create (F, Mockable.Text_IO.Out_File, File_Name);
+         Mockable.Text_IO.Put_Line
+           (F, "{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": {""i"": 99}}}}");
+         Mockable.Text_IO.Close (F);
+      end;
+
+      begin
+         File : Config_File := Create (File_Name, Schemas)
+         with Unreferenced;
+         T.Fail ("Should have raised Constraint_Error for invalid module data");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+   end Test_Initialize_With_Invalid_Module_Data;
+
    procedure Test_Invalid_Module_Calls (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -1759,6 +1792,21 @@ package body Prunt.Config.Test is
         (Reports_Error_Module_Config_To_Schema ("{""a"": 1}", Schema, Check_For_Missing_Fields => True),
          "Extra field.");
    end Test_Validate_Module_Config_To_Schema_Empty;
+
+   procedure Test_Validate_Module_Config_To_Schema_String (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Schema : constant Config_Property_Maps.Map :=
+        ["s" => Config_Property_Parameters_String'(Description => "", Default => "default")];
+
+      T.Assert
+        (Reports_Error_Module_Config_To_Schema ("{""s"": 1}", Schema, Check_For_Missing_Fields => True),
+         "String wrong type.");
+      T.Assert
+        (not Reports_Error_Module_Config_To_Schema ("{""s"": ""value""}", Schema, Check_For_Missing_Fields => True),
+         "Valid object should not cause error.");
+   end Test_Validate_Module_Config_To_Schema_String;
 
    procedure Test_Validate_Module_Config_To_Schema_Float (T : in out Trendy_Test.Operation'Class) is
    begin
@@ -2631,6 +2679,328 @@ package body Prunt.Config.Test is
       end;
    end Test_Config_Overrides_Invalid;
 
+   procedure Test_Config_Overrides_Prune_During_Migration (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Base_Schemas : constant Config_Schema_Maps.Map := Override_Test_Schemas;
+      Schemas : constant Config_Schema_Maps.Map :=
+        ["M" =>
+           Versioned_Config_Schema'
+             (Version => 2, Top_Level_Items => Base_Schemas.Element ("M").Top_Level_Items)];
+      Filename : constant String := Next_Test_Filename;
+      Content : constant String :=
+        "{"
+        & """Prunt config version"": 1,"
+        & """Config"": {"
+        & "   ""M"": {"
+        & "      ""Version"": 1,"
+        & "      ""Config"": {""s"": {""i"": 3, ""j"": 4}}"
+        & "   }"
+        & "}"
+        & "}";
+
+      declare
+         F : Mockable.Text_IO.File_Type;
+      begin
+         Mockable.Text_IO.Create (F, Mockable.Text_IO.Out_File, Filename);
+         Mockable.Text_IO.Put_Line (F, Content);
+         Mockable.Text_IO.Close (F);
+      end;
+
+      File : constant Config_File := Create (Filename, Schemas, Override_I);
+      Data : Config_Data := File.Get_Data ("M");
+      Disk_JSON : constant JSON_Value := Read_Test_File (Filename);
+
+      T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "i"])) = Long_Long_Integer'(7), "Override not live");
+      T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "j"])) = Long_Long_Integer'(4), "Stored value lost");
+      T.Assert (Disk_JSON.Get ("Config").Get ("M").Get ("Version").Get = Long_Long_Integer'(2), "Version not migrated");
+      T.Assert
+        (not Disk_JSON.Get ("Config").Get ("M").Get ("Config").Get ("s").Has_Field ("i"),
+         "Migrated file exposes override");
+   end Test_Config_Overrides_Prune_During_Migration;
+
+   procedure Test_Config_Override_Helper_Edges (T : in out Trendy_Test.Operation'Class) is
+      Helper_Schemas : constant Config_Schema_Maps.Map :=
+        ["M" =>
+           Versioned_Config_Schema'
+             (Version         => 1,
+              Top_Level_Items =>
+                ["i" =>
+                   Config_Property_Parameters_Integer'
+                     (Description => "", Min => 0, Max => 10, Unit => "", Default => 0),
+                 "s" =>
+                   Config_Property_Parameters_Sequence'
+                     (Description => "",
+                      Tabbed      => False,
+                      Children    =>
+                        ["v" =>
+                           Config_Property_Parameters_Variant'
+                             (Description => "",
+                              Default     => "a",
+                              Children    =>
+                                ["a" =>
+                                   Config_Property_Parameters_Integer'
+                                     (Description => "", Min => 0, Max => 10, Unit => "", Default => 1)])]),
+                 "v" =>
+                   Config_Property_Parameters_Variant'
+                     (Description => "",
+                      Default     => "a",
+                      Children    =>
+                        ["a" =>
+                           Config_Property_Parameters_Integer'
+                             (Description => "", Min => 0, Max => 10, Unit => "", Default => 1),
+                         "child" =>
+                           Config_Property_Parameters_Variant'
+                             (Description => "",
+                              Default     => "leaf",
+                              Children    =>
+                                ["leaf" =>
+                                   Config_Property_Parameters_Integer'
+                                     (Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])])];
+      Helper_Schema : constant Config_Property_Maps.Map := Helper_Schemas.Element ("M").Top_Level_Items;
+      Default_Value : JSON_Value;
+      Reported      : Boolean := False;
+      Reported_Path : Config_Data_Paths.Vector;
+      use type Config_Data_Paths.Vector;
+
+      procedure Report (Path : Config_Data_Paths.Vector; Message : Virtual_String) is
+         pragma Unreferenced (Message);
+      begin
+         Reported := True;
+         Reported_Path := Path;
+      end Report;
+   begin
+      T.Register;
+
+      T.Assert (Is_Path_Prefix (Config_Data_Paths.Empty_Vector, Config_Data_Paths.Vector'([1 => "a"])));
+      T.Assert (Paths_Overlap (Config_Data_Paths.Vector'(["a", "b"]), Config_Data_Paths.Vector'([1 => "a"])));
+      T.Assert (not Paths_Overlap (Config_Data_Paths.Vector'([1 => "a"]), Config_Data_Paths.Vector'([1 => "b"])));
+      T.Assert (Path_Equals_Override ("M", Config_Data_Paths.Vector'(["s", "i"]), Override_I));
+      T.Assert (not Path_Equals_Override ("N", Config_Data_Paths.Vector'(["s", "i"]), Override_I));
+
+      declare
+         Root : JSON_Value := Read ("{""s"": {""i"": 1}, ""n"": 1}");
+      begin
+         T.Assert (not Unset_JSON_Node (Root, Config_Data_Paths.Empty_Vector));
+         T.Assert (not Unset_JSON_Node (Root.Get ("n"), Config_Data_Paths.Vector'([1 => "x"])));
+         T.Assert (not Unset_JSON_Node (Root, Config_Data_Paths.Vector'(["n", "x"])));
+         T.Assert (Unset_JSON_Node (Root, Config_Data_Paths.Vector'(["s", "i"])));
+         T.Assert (not Root.Get ("s").Has_Field ("i"));
+      end;
+
+      T.Assert (Path_Without_Last (Config_Data_Paths.Vector'([1 => "x"])).Is_Empty);
+      T.Assert
+        (Path_Without_Last (Config_Data_Paths.Vector'(["x", "y"])) = Config_Data_Paths.Vector'([1 => "x"]));
+
+      T.Assert (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'([1 => "Selected"]), Default_Value));
+      T.Assert (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["v", "Wrong"]), Default_Value));
+      T.Assert
+        (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["missing", "Selected"]), Default_Value));
+      T.Assert (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["s", "Selected"]), Default_Value));
+      T.Assert
+        (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["i", "child", "Selected"]), Default_Value));
+      T.Assert
+        (not Selected_Variant_Default
+               (Helper_Schema, Config_Data_Paths.Vector'(["v", "Wrong", "child", "Selected"]), Default_Value));
+      T.Assert
+        (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["v", "Children", "Selected"]), Default_Value));
+      T.Assert
+        (not Selected_Variant_Default
+               (Helper_Schema, Config_Data_Paths.Vector'(["v", "Children", "missing", "Selected"]), Default_Value));
+      T.Assert (Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["v", "Selected"]), Default_Value));
+      T.Assert (Default_Value.Get ("Selected").Get = "a");
+      T.Assert (Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["s", "v", "Selected"]), Default_Value));
+      T.Assert (Default_Value.Get ("Selected").Get = "a");
+      T.Assert
+        (Selected_Variant_Default
+           (Helper_Schema, Config_Data_Paths.Vector'(["v", "Children", "child", "Selected"]), Default_Value));
+      T.Assert (Default_Value.Get ("Selected").Get = "leaf");
+
+      declare
+         Root   : JSON_Value := Read ("{""v"": {""Selected"": ""b"", ""Children"": {""b"": 6}}, ""leaf"": 1}");
+         Result : JSON_Value;
+      begin
+         T.Assert (not Try_Get_JSON_Node (Root, Config_Data_Paths.Empty_Vector, Result));
+         T.Assert (not Try_Get_JSON_Node (Root.Get ("leaf"), Config_Data_Paths.Vector'([1 => "x"]), Result));
+         T.Assert (Try_Get_JSON_Node (Root, Config_Data_Paths.Vector'([1 => "v"]), Result));
+         T.Assert (Result.Get ("Selected").Get = "b");
+
+         Merge_Default_JSON_Node
+           (Root,
+            Config_Data_Paths.Vector'([1 => "v"]),
+            Read ("{""Selected"": ""a"", ""Children"": {""a"": 1, ""b"": 2}}"));
+         T.Assert (Root.Get ("v").Get ("Selected").Get = "b");
+         T.Assert (Root.Get ("v").Get ("Children").Get ("a").Get = Long_Long_Integer'(1));
+         T.Assert (Root.Get ("v").Get ("Children").Get ("b").Get = Long_Long_Integer'(6));
+      end;
+
+      declare
+         Root : JSON_Value := Read ("{""v"": 1}");
+      begin
+         Merge_Default_JSON_Node (Root, Config_Data_Paths.Vector'([1 => "v"]), Create (Long_Long_Integer'(2)));
+         T.Assert (Root.Get ("v").Get = Long_Long_Integer'(1));
+
+         Merge_Default_JSON_Node (Root, Config_Data_Paths.Vector'([1 => "v"]), Read ("{""x"": 2}"));
+         T.Assert (Root.Get ("v").Get = Long_Long_Integer'(1));
+      end;
+
+      declare
+         Config : JSON_Value := Read ("{""Config"": {""U"": {""Version"": 1, ""Config"": {}}}}");
+      begin
+         Apply_Overrides_To_Config
+           (Config,
+            Helper_Schemas,
+            [Config_Override'
+               (Owner => "U", Path => Config_Data_Paths.Vector'([1 => "x"]), Value => Create (Long_Long_Integer'(1)))]);
+         T.Assert (Config.Get ("Config").Get ("U").Get ("Config").Get ("x").Get = Long_Long_Integer'(1));
+      end;
+
+      declare
+         Config : JSON_Value := Read ("{""Config"": {}}");
+      begin
+         T.Assert (not Prune_Overrides_From_Config (Config, Helper_Schemas, Override_I));
+      end;
+
+      declare
+         Config : JSON_Value := Read ("{""Config"": {""M"": {""Version"": 1, ""Config"": {""s"": {}}}}}");
+         Empty_Schemas : constant Config_Schema_Maps.Map := [];
+      begin
+         T.Assert (not Prune_Overrides_From_Config (Config, Empty_Schemas, Override_I));
+      end;
+
+      declare
+         Config : JSON_Value := Read ("{""Config"": {""M"": {""Version"": 1, ""Config"": {""s"": {}}}}}");
+      begin
+         T.Assert (not Prune_Overrides_From_Config (Config, Override_Test_Schemas, Override_I));
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'
+                 (Owner => "Unknown",
+                  Path  => Config_Data_Paths.Vector'([1 => "x"]),
+                  Value => Create (Long_Long_Integer'(1)))]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'
+                 (Owner => "M", Path => Config_Data_Paths.Vector'(["i", "x"]), Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'(Owner => "M", Path => Config_Data_Paths.Empty_Vector, Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'
+                 (Owner => "M", Path => Config_Data_Paths.Vector'(["v", "Children"]), Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'(Owner => "M", Path => Config_Data_Paths.Vector'(["v", "Bad"]), Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'
+                 (Owner => "M",
+                  Path  => Config_Data_Paths.Vector'(["v", "Children", "missing"]),
+                  Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'
+                 (Owner => "M",
+                  Path  => Config_Data_Paths.Vector'(["v", "Children", "child"]),
+                  Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'
+                 (Owner => "M",
+                  Path  => Config_Data_Paths.Vector'(["v", "Children", "child", "Children"]),
+                  Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      declare
+         Result : Config_Schema_Maps.Map :=
+           Prune_Overrides_From_Schemas
+             (Helper_Schemas,
+              [Config_Override'
+                 (Owner => "M",
+                  Path  => Config_Data_Paths.Vector'(["v", "Children", "child", "Selected"]),
+                  Value => Create_Object)]);
+         pragma Unreferenced (Result);
+      begin
+         null;
+      end;
+
+      begin
+         Validate_Overrides
+           (Helper_Schemas,
+            [Config_Override'(Owner => "M", Path => Config_Data_Paths.Empty_Vector, Value => Create_Object)]);
+         T.Fail ("Empty override path should fail validation.");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+
+      Validate_No_Overrides_In_Patch
+        ("M",
+         Read ("{""s"": {""i"": 1}}"),
+         [Config_Override'(Owner => "M", Path => Config_Data_Paths.Vector'([1 => "s"]), Value => Create_Object)],
+         Report'Access);
+      T.Assert (Reported);
+      T.Assert (Reported_Path = Config_Data_Paths.Vector'([1 => "s"]));
+   end Test_Config_Override_Helper_Edges;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
@@ -2667,6 +3037,7 @@ package body Prunt.Config.Test is
          Test_Initialize_No_Config'Access,
          Test_Initialize_Unknown_Module'Access,
          Test_Initialize_With_Invalid_Module_Config'Access,
+         Test_Initialize_With_Invalid_Module_Data'Access,
          Test_Invalid_Module_Calls'Access,
          Test_Last_Save_Increment'Access,
          Test_Merge_Schemas'Access,
@@ -2691,6 +3062,7 @@ package body Prunt.Config.Test is
          Test_Validate_Module_Config_To_Schema_Check_Missing_Fields'Access,
          Test_Validate_Module_Config_To_Schema_Discrete'Access,
          Test_Validate_Module_Config_To_Schema_Empty'Access,
+         Test_Validate_Module_Config_To_Schema_String'Access,
          Test_Validate_Module_Config_To_Schema_Float'Access,
          Test_Validate_Module_Config_To_Schema_Float_Ratio'Access,
          Test_Validate_Module_Config_To_Schema_Integer'Access,
@@ -2709,7 +3081,9 @@ package body Prunt.Config.Test is
          Test_Config_Overrides_Reject_Writes'Access,
          Test_Config_Overrides_Reset_Reapplies_Overrides'Access,
          Test_Config_Overrides_Variant_Selected_Rehydrates_Defaults'Access,
-         Test_Config_Overrides_Invalid'Access];
+         Test_Config_Overrides_Invalid'Access,
+         Test_Config_Overrides_Prune_During_Migration'Access,
+         Test_Config_Override_Helper_Edges'Access];
    end All_Tests;
 
 end Prunt.Config.Test;

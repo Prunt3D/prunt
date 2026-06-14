@@ -418,6 +418,83 @@ package body Prunt.Gcode_Arguments.Test is
       T.Assert (not Val);
    end Test_Consume_No_Value_Or_False_Non_Existent;
 
+   procedure Test_Consume_No_Value (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      declare
+         Args : Arguments := Parse_Arguments ("A");
+      begin
+         T.Assert (Consume_No_Value (Args, 'A'));
+
+         begin
+            if Consume_No_Value (Args, 'A') then
+               null;
+            end if;
+            T.Fail ("Consuming a no-value argument twice should raise Constraint_Error.");
+         exception
+            when Constraint_Error =>
+               null;
+         end;
+      end;
+
+      declare
+         Args : Arguments := Parse_Arguments ("Y1");
+      begin
+         begin
+            if Consume_No_Value (Args, 'X') then
+               null;
+            end if;
+            T.Fail ("Missing no-value argument should raise Parse_Error.");
+         exception
+            when Parse_Error =>
+               null;
+         end;
+      end;
+
+      declare
+         Args : Arguments := Parse_Arguments ("H1");
+      begin
+         begin
+            if Consume_No_Value (Args, 'H') then
+               null;
+            end if;
+            T.Fail ("Integer-valued argument should raise Parse_Error.");
+         exception
+            when Parse_Error =>
+               null;
+         end;
+      end;
+
+      declare
+         Args : Arguments := Parse_Arguments ("H1.0");
+      begin
+         begin
+            if Consume_No_Value (Args, 'H') then
+               null;
+            end if;
+            T.Fail ("Float-valued argument should raise Parse_Error.");
+         exception
+            when Parse_Error =>
+               null;
+         end;
+      end;
+
+      declare
+         Args : Arguments := Parse_Arguments ("H""a""");
+      begin
+         begin
+            if Consume_No_Value (Args, 'H') then
+               null;
+            end if;
+            T.Fail ("String-valued argument should raise Parse_Error.");
+         exception
+            when Parse_Error =>
+               null;
+         end;
+      end;
+   end Test_Consume_No_Value;
+
    procedure Test_Consume_String_Error_Float_Kind (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -939,6 +1016,7 @@ package body Prunt.Gcode_Arguments.Test is
          Test_Consume_No_Value_Or_False_Error_Integer_Kind'Access,
          Test_Consume_No_Value_Or_False_Error_String_Kind'Access,
          Test_Consume_No_Value_Or_False_Non_Existent'Access,
+         Test_Consume_No_Value'Access,
          Test_Consume_String_Error_Float_Kind'Access,
          Test_Consume_String_Error_Integer_Kind'Access,
          Test_Consume_String_Error_No_Value'Access,

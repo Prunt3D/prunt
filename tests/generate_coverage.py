@@ -9,6 +9,7 @@ import concurrent.futures
 
 OUTPUT_DIR = "gnatcov_out"
 REPORT_DIR = os.path.join(OUTPUT_DIR, "report")
+GNATCOV = os.environ.get("GNATCOV") or shutil.which("gnatcov") or "gnatcov"
 
 def ensure_dir(path):
     if not os.path.exists(path):
@@ -22,7 +23,7 @@ def run_gnatcov_for_trace(payload):
     ensure_dir(trace_out_dir)
 
     cmd = [
-        "/usr/local/gnat/bin/gnatcov",
+        GNATCOV,
         "coverage"
     ] + extra_args + [
         "--annotate=xcov+",
@@ -218,7 +219,7 @@ def main():
     ensure_dir(global_out_dir)
 
     cmd = [
-        "/usr/local/gnat/bin/gnatcov",
+        GNATCOV,
         "coverage"
     ] + sys.argv[1:] + [
         "--annotate=xcov+",

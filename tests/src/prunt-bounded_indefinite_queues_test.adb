@@ -201,7 +201,73 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
       Small_Q.Dequeue (Small_S);
       T.Assert (Small_S = "A");
       T.Assert (Small_Q.Is_Empty);
+
+      begin
+         if Small_Q.Can_Enqueue ((1 .. 70 => 'A')) then
+            null;
+         end if;
+         T.Fail ("Can_Enqueue should raise Program_Error for items that cannot fit into an empty queue.");
+      exception
+         when Program_Error =>
+            null;
+      end;
    end Test_Can_Enqueue;
+
+   procedure Test_Can_Enqueue_Rolls_Back_Unexpected_Exception (T : in out Trendy_Test.Operation'Class) is
+      package Raising_Adjust_Checks is
+         Adjust_Error : exception;
+
+         type Test_Item is new Ada.Finalization.Controlled with record
+            Raise_On_Adjust : Boolean := False;
+            Value           : Integer := 0;
+         end record;
+
+         overriding
+         procedure Adjust (Object : in out Test_Item);
+      end Raising_Adjust_Checks;
+
+      package body Raising_Adjust_Checks is
+         overriding
+         procedure Adjust (Object : in out Test_Item) is
+         begin
+            if Object.Raise_On_Adjust then
+               raise Adjust_Error;
+            end if;
+         end Adjust;
+      end Raising_Adjust_Checks;
+
+      package Raising_Queues is new
+        Prunt.Bounded_Indefinite_Queues (Element_Type => Raising_Adjust_Checks.Test_Item, Storage_Size => 512);
+
+      use Raising_Adjust_Checks;
+   begin
+      T.Register;
+
+      Q : Raising_Queues.Queue;
+
+      declare
+         Bad_Item : constant Test_Item := (Ada.Finalization.Controlled with Raise_On_Adjust => True, Value => 1);
+      begin
+         begin
+            if Q.Can_Enqueue (Bad_Item) then
+               null;
+            end if;
+            T.Fail ("Can_Enqueue should propagate exceptions raised while copying the item.");
+         exception
+            when Adjust_Error =>
+               null;
+         end;
+      exception
+         when Adjust_Error =>
+            T.Fail ("Test item setup should not raise Adjust_Error.");
+      end;
+
+      T.Assert (Q.Is_Empty);
+
+      Good_Item : Test_Item := (Ada.Finalization.Controlled with Raise_On_Adjust => False, Value => 2);
+      T.Assert (Q.Can_Enqueue (Good_Item));
+      T.Assert (Q.Is_Empty);
+   end Test_Can_Enqueue_Rolls_Back_Unexpected_Exception;
 
    procedure Test_Clear (T : in out Trendy_Test.Operation'Class) is
    begin
@@ -441,6 +507,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
          Test_Alignment_Collision'Access,
          Test_Assign_Empty'Access,
          Test_Can_Enqueue'Access,
+         Test_Can_Enqueue_Rolls_Back_Unexpected_Exception'Access,
          Test_Clear'Access,
          Test_Empty_Operations'Access,
          Test_Enqueue_And_Dequeue'Access,

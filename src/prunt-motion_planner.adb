@@ -990,7 +990,10 @@ package body Prunt.Motion_Planner is
 
          loop
             Result (Variable) := Cast_Time (Cast_Time (Lower) + (Cast_Time (Upper) - Cast_Time (Lower)) / 2);
+            pragma
+              Annotate (Xcov, Exempt_On, "Binary search convergence depends on floating-point rounding direction.");
             exit when Lower = Result (Variable) or else Upper = Result (Variable);
+            pragma Annotate (Xcov, Exempt_Off);
             if Fast_Distance_At_Max_Time (Result, Cm, Vs) <= D then
                Lower := Result (Variable);
             else
@@ -1134,7 +1137,10 @@ package body Prunt.Motion_Planner is
 
          loop
             Result (Variable) := Cast_Time (Cast_Time (Lower) + (Cast_Time (Upper) - Cast_Time (Lower)) / 2);
+            pragma
+              Annotate (Xcov, Exempt_On, "Binary search convergence depends on floating-point rounding direction.");
             exit when Lower = Result (Variable) or else Upper = Result (Variable);
+            pragma Annotate (Xcov, Exempt_Off);
             if Fast_Velocity_At_Max_Time (Result, Cm, 0.0 * mm / s) <= Target then
                Lower := Result (Variable);
             else
@@ -1335,7 +1341,11 @@ package body Prunt.Motion_Planner is
 
                loop
                   Mid := Cast_Vel (Cast_Vel (Lower) + (Cast_Vel (Upper) - Cast_Vel (Lower)) / 2);
+                  pragma
+                    Annotate
+                      (Xcov, Exempt_On, "Binary search convergence depends on floating-point rounding direction.");
                   exit when Lower = Mid or else Upper = Mid;
+                  pragma Annotate (Xcov, Exempt_Off);
 
                   Profile.Accel :=
                     Optimal_Profile_For_Delta_V (Start_Vel - Mid, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
