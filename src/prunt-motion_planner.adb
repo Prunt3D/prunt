@@ -832,7 +832,12 @@ package body Prunt.Motion_Planner is
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
          return 0.0 * mm / s ** 5;
       else
-         return Crackle_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         declare
+            Decel_T : constant Time :=
+              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
+         begin
+            return Crackle_At_Time (Profile.Decel, Decel_T, -Max_Crackle);
+         end;
       end if;
    end Crackle_At_Time;
 
@@ -846,7 +851,12 @@ package body Prunt.Motion_Planner is
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
          return 0.0 * mm / s ** 4;
       else
-         return Snap_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         declare
+            Decel_T : constant Time :=
+              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
+         begin
+            return Snap_At_Time (Profile.Decel, Decel_T, -Max_Crackle);
+         end;
       end if;
    end Snap_At_Time;
 
@@ -859,7 +869,12 @@ package body Prunt.Motion_Planner is
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
          return 0.0 * mm / s ** 3;
       else
-         return Jerk_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         declare
+            Decel_T : constant Time :=
+              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
+         begin
+            return Jerk_At_Time (Profile.Decel, Decel_T, -Max_Crackle);
+         end;
       end if;
    end Jerk_At_Time;
 
@@ -872,7 +887,12 @@ package body Prunt.Motion_Planner is
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
          return 0.0 * mm / s ** 2;
       else
-         return Acceleration_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle);
+         declare
+            Decel_T : constant Time :=
+              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
+         begin
+            return Acceleration_At_Time (Profile.Decel, Decel_T, -Max_Crackle);
+         end;
       end if;
    end Acceleration_At_Time;
 
@@ -889,8 +909,12 @@ package body Prunt.Motion_Planner is
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
          return Mid_Vel;
       else
-         return
-           Velocity_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
+         declare
+            Decel_T : constant Time :=
+              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
+         begin
+            return Velocity_At_Time (Profile.Decel, Decel_T, -Max_Crackle, Mid_Vel);
+         end;
       end if;
    end Velocity_At_Time;
 
@@ -910,10 +934,12 @@ package body Prunt.Motion_Planner is
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
          return Accel_Dist + Mid_Vel * (T - Total_Time (Profile.Accel));
       else
-         return
-           Accel_Dist
-           + Mid_Dist
-           + Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
+         declare
+            Decel_T : constant Time :=
+              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
+         begin
+            return Accel_Dist + Mid_Dist + Distance_At_Time (Profile.Decel, Decel_T, -Max_Crackle, Mid_Vel);
+         end;
       end if;
    end Distance_At_Time;
 
@@ -940,10 +966,12 @@ package body Prunt.Motion_Planner is
          return Accel_Dist + Mid_Vel * (T - Total_Time (Profile.Accel));
       else
          Is_Past_Accel_Part := True;
-         return
-           Accel_Dist
-           + Mid_Dist
-           + Distance_At_Time (Profile.Decel, T - (Total_Time (Profile.Accel) + Profile.Coast), -Max_Crackle, Mid_Vel);
+         declare
+            Decel_T : constant Time :=
+              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
+         begin
+            return Accel_Dist + Mid_Dist + Distance_At_Time (Profile.Decel, Decel_T, -Max_Crackle, Mid_Vel);
+         end;
       end if;
    end Distance_At_Time;
 

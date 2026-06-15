@@ -1,0 +1,18 @@
+{
+  "description": "Exercise firmware retract with Z lift but zero E movement.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M207 S0 F600 Z0.5" },
+    { "kind": "submit_gcode", "command": "M208 S0 F300" },
+    { "kind": "submit_gcode", "command": "G10 S0" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 0.0, "Y": 0.0, "Z": 0.5, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "sample_position_reaches": { "Z": 0.45 },
+    "min_samples": 1
+  }
+}

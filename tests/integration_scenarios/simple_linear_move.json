@@ -1,0 +1,17 @@
+{
+  "description": "Submit one linear move and verify that deterministic execution reaches the target.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G1 X10 Y5 F600" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 10.0, "Y": 5.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1,
+    "event_counts": { "gcode": 1 },
+    "event_order": [
+      { "kind": "gcode", "label": "submit_gcode", "value": "G1 X10 Y5 F600" }
+    ]
+  }
+}

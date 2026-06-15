@@ -375,7 +375,7 @@ private
       Behavior           : User_Config_Pause_Park_Out_Of_Bounds_Behavior;
       Target_Description : String;
       Params             : Motion_Planner.Kinematic_Parameters) return Position;
-   --  Return Target clipped to Params bounds, or raise Constraint_Error if Behavior requires an error.
+   --  Return Target clipped to Params bounds, or raise if Behavior requires an error.
 
    function Park_Position
      (Config : User_Config_Pause_Park; Pause_Position : Position; Params : Motion_Planner.Kinematic_Parameters)
@@ -825,7 +825,7 @@ private
       procedure Apply_Recover_Settings
         (Planner : Planner_Interface'Class; F : Gcode_Optional_Float; S : Gcode_Optional_Float);
 
-      procedure Set_Auto_Retract_State (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer);
+      procedure Set_Auto_Retract_State (Planner : Planner_Interface'Class; S : Gcode_Arguments.Argument_Integer);
 
       procedure Apply_Set_Feedrate_Percentage (Planner : Planner_Interface'Class; S : Dimensionless);
 

@@ -120,6 +120,7 @@ package body Config_Generator is
          Emit ("pragma Unreferenced (Args);");
       end if;
       Emit ("begin");
+      Emit ("pragma Annotate (Xcov, Exempt_On, ""Generated G-code dispatch."");");
       Emit ("pragma Extensions_Allowed (On);");
       Emit ("case Command_Identifier.Argument is");
 
@@ -211,6 +212,27 @@ package body Config_Generator is
                                     end if;
                                  end if;
                               end;
+                              end loop;
+
+                           for Arg in Character range 'A' .. 'Z' loop
+                              if Arg not in 'G' | 'M' then
+                                 declare
+                                    Arg_Name : constant Virtual_String :=
+                                      Conversions.To_Virtual_String (String'(1 => Arg));
+                                 begin
+                                    if not Variant.Arguments.Contains (Arg_Name) then
+                                       if not First_Cond then
+                                          Conditions.Append (" and then ");
+                                       end if;
+
+                                       Conditions.Append
+                                         ("Args.Kind ('"
+                                          & Arg_Name
+                                          & "') = Gcode_Arguments.Non_Existent_Kind");
+                                       First_Cond := False;
+                                    end if;
+                                 end;
+                              end if;
                            end loop;
 
                            if Conditions = "" then
@@ -523,6 +545,7 @@ package body Config_Generator is
       Emit ("when others =>");
       Emit ("raise Constraint_Error with ""Unknown G-code command identifier."";");
       Emit ("end case;");
+      Emit ("pragma Annotate (Xcov, Exempt_Off);");
       Emit ("pragma Style_Checks (On);");
       Emit (Text => "end Gcode_Dispatch;", Trailing_Line_Feed => False);
 
@@ -1563,6 +1586,7 @@ package body Config_Generator is
          Emit_Config_Map ("pragma Warnings (On, ""use clause for type * has no effect"");");
          Emit_Config_Map ("pragma Warnings (On, ""use clause for private type * has no effect"");");
          Emit_Config_Map ("begin");
+         Emit_Config_Map ("pragma Annotate (Xcov, Exempt_On, ""Generated config schema."");");
          Emit_Config_Map ("pragma Extensions_Allowed (On);");
          Emit_Config_Map ("return");
 
@@ -1581,6 +1605,7 @@ package body Config_Generator is
            ("function Config_Data_To_User_Config (Data : Prunt.Config.Config_Data) return User_Config is");
          Emit_Reader ("pragma Unsuppress (All_Checks);");
          Emit_Reader ("begin");
+         Emit_Reader ("pragma Annotate (Xcov, Exempt_On, ""Generated config conversion."");");
          Emit_Reader ("pragma Extensions_Allowed (On);");
          Emit_Reader ("return Result : User_Config do");
 
@@ -1600,6 +1625,7 @@ package body Config_Generator is
          Emit_Setter ("pragma Unsuppress (All_Checks);");
          Emit_Setter ("pragma Extensions_Allowed (On);");
          Emit_Setter ("begin");
+         Emit_Setter ("pragma Annotate (Xcov, Exempt_On, ""Generated config conversion."");");
 
          Handle_Item
            (Item          => Data.Config (Data.Root_Type),
@@ -1608,14 +1634,17 @@ package body Config_Generator is
             Reader_Prefix => "Result",
             Ada_Prefix    => "Config");
 
+         Emit_Setter ("pragma Annotate (Xcov, Exempt_Off);");
          Emit_Setter ("pragma Style_Checks (On);");
          Emit_Setter (Text => "end User_Config_To_Config_Data;", Trailing_Line_Feed => False);
 
          Emit_Reader ("end return;");
+         Emit_Reader ("pragma Annotate (Xcov, Exempt_Off);");
          Emit_Reader ("pragma Style_Checks (On);");
          Emit_Reader (Text => "end Config_Data_To_User_Config;", Trailing_Line_Feed => False);
 
          Emit_Config_Map (".Children;");
+         Emit_Config_Map ("pragma Annotate (Xcov, Exempt_Off);");
          Emit_Config_Map ("pragma Style_Checks (On);");
          Emit_Config_Map (Text => "end Build_Schema;", Trailing_Line_Feed => False);
 

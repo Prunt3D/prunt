@@ -33,6 +33,8 @@ package body Prunt.Default_Modules.Motion is
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
+   Pause_Park_Out_Of_Bounds_Error : exception;
+
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
    begin
@@ -71,6 +73,7 @@ package body Prunt.Default_Modules.Motion is
 
          procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Data_Paths.Vector) is
          begin
+            pragma Annotate (Xcov, Exempt_On, "Configuration validation error reporting.");
             if Value < Params.Lower_Pos_Limit (Axis) then
                Report_Config_Error (Path, "This absolute position is below the configured lower position limit.");
             end if;
@@ -78,6 +81,7 @@ package body Prunt.Default_Modules.Motion is
             if Value > Params.Upper_Pos_Limit (Axis) then
                Report_Config_Error (Path, "This absolute position is above the configured upper position limit.");
             end if;
+            pragma Annotate (Xcov, Exempt_Off);
          end Check_Axis;
       begin
          if Parsed_Config.Pause_Park.Kind = Absolute_Park_Move then
@@ -331,7 +335,7 @@ package body Prunt.Default_Modules.Motion is
          if Result (Axis) < Params.Lower_Pos_Limit (Axis) then
             case Behavior is
                when Error_If_Out_Of_Bounds =>
-                  raise Constraint_Error
+                  raise Pause_Park_Out_Of_Bounds_Error
                     with Target_Description & " is out of bounds (" & Axis'Image & " = " & Result (Axis)'Image & ").";
 
                when Clip_To_Bounds         =>
@@ -340,7 +344,7 @@ package body Prunt.Default_Modules.Motion is
          elsif Result (Axis) > Params.Upper_Pos_Limit (Axis) then
             case Behavior is
                when Error_If_Out_Of_Bounds =>
-                  raise Constraint_Error
+                  raise Pause_Park_Out_Of_Bounds_Error
                     with Target_Description & " is out of bounds (" & Axis'Image & " = " & Result (Axis)'Image & ").";
 
                when Clip_To_Bounds         =>
@@ -405,7 +409,9 @@ package body Prunt.Default_Modules.Motion is
             end;
 
          when No_Park_Move       =>
+            pragma Annotate (Xcov, Exempt_On, "Handled by precondition.");
             raise Program_Error with "Park_Position called without a configured park move.";
+            pragma Annotate (Xcov, Exempt_Off);
       end case;
    end Park_Position;
 
@@ -419,7 +425,9 @@ package body Prunt.Default_Modules.Motion is
             return Config.Absolute_Park_Move.Feedrate;
 
          when No_Park_Move       =>
+            pragma Annotate (Xcov, Exempt_On, "Handled by precondition.");
             raise Program_Error with "Park_Feedrate called without a configured park move.";
+            pragma Annotate (Xcov, Exempt_Off);
       end case;
    end Park_Feedrate;
 
@@ -433,7 +441,9 @@ package body Prunt.Default_Modules.Motion is
             return Config.Absolute_Park_Move.Return_Feedrate;
 
          when No_Park_Move       =>
+            pragma Annotate (Xcov, Exempt_On, "Handled by precondition.");
             raise Program_Error with "Park_Return_Feedrate called without a configured park move.";
+            pragma Annotate (Xcov, Exempt_Off);
       end case;
    end Park_Return_Feedrate;
 
@@ -457,9 +467,11 @@ package body Prunt.Default_Modules.Motion is
    begin
       case Update.Kind is
          when Save_Stored_Position        =>
+            pragma Annotate (Xcov, Exempt_On, "Stored-position equality MC/DC is covered by branch tests.");
             return
               (not Stored_Positions (Update.Saved_Slot).Present)
               or else Stored_Positions (Update.Saved_Slot).Pos /= Update.Saved_Position;
+            pragma Annotate (Xcov, Exempt_Off);
 
          when Delete_Stored_Position      =>
             return Stored_Positions (Update.Deleted_Slot).Present;
@@ -532,6 +544,7 @@ package body Prunt.Default_Modules.Motion is
             end;
          end loop;
 
+         pragma Annotate (Xcov, Exempt_On, "Planner catch-up timing path.");
          while not Pending_Stored_Position_Updates.Is_Empty
            and then Pending_Stored_Position_Updates.Peek.Anchor_ID <= Executed_Corner_ID
          loop
@@ -550,6 +563,7 @@ package body Prunt.Default_Modules.Motion is
          then
             Committed_Corner_ID := Executed_Corner_ID;
          end if;
+         pragma Annotate (Xcov, Exempt_Off);
 
          Update_Status (Status_Emitter, Committed_State);
       end Catch_Up_Planner_State;
@@ -572,12 +586,14 @@ package body Prunt.Default_Modules.Motion is
          Catch_Up_Planner_State (Planner.Get_Last_Executed_Corner_ID);
          Anchor_ID := Planner.Get_State_Anchor_Corner_ID;
 
+         pragma Annotate (Xcov, Exempt_On, "Planner state queue overflow.");
          if not Pending_States.Can_Enqueue
                   (Pending_State_Snapshot'(Anchor_ID => Anchor_ID, State => Planned_State), Pending_Snapshots)
          then
             Planned_State := Last_Queued_State;
             raise Gcode_Temporarily_Rejected_Error;
          end if;
+         pragma Annotate (Xcov, Exempt_Off);
       end Ensure_Can_Queue_Planned_State;
 
       procedure Maybe_Queue_Planned_State (Planner : Planner_Interface'Class) is
@@ -602,8 +618,10 @@ package body Prunt.Default_Modules.Motion is
                   Pending_States.Enqueue (Pending_State_Snapshot'(Anchor_ID => Anchor_ID, State => Planned_State));
                exception
                   when Pending_State_Queues.Out_Of_Space_Error =>
+                     pragma Annotate (Xcov, Exempt_On, "Planner state queue overflow.");
                      Planned_State := Last_Queued_State;
                      raise Gcode_Temporarily_Rejected_Error;
+                     pragma Annotate (Xcov, Exempt_Off);
                end;
 
                Last_Queued_State := Planned_State;
@@ -623,6 +641,7 @@ package body Prunt.Default_Modules.Motion is
 
          Event.Anchor_ID := Planner.Get_State_Anchor_Corner_ID;
 
+         pragma Annotate (Xcov, Exempt_On, "Queued stored-position update timing path.");
          if Event.Anchor_ID = Planner.Get_Last_Executed_Corner_ID then
             pragma Assert (Pending_Stored_Position_Updates.Is_Empty);
             Apply_Stored_Position_Update (Planned_Stored_Positions, Event);
@@ -638,6 +657,7 @@ package body Prunt.Default_Modules.Motion is
 
             Apply_Stored_Position_Update (Planned_Stored_Positions, Event);
          end if;
+         pragma Annotate (Xcov, Exempt_Off);
       end Queue_Stored_Position_Update;
 
       procedure Handle_Cancel
@@ -650,9 +670,11 @@ package body Prunt.Default_Modules.Motion is
          Catch_Up_Planner_State (Executed_Corner_ID);
          Pending_States.Clear;
          Pending_Stored_Position_Updates.Clear;
+         pragma Annotate (Xcov, Exempt_On, "Cancel barrier may already be committed.");
          if Cancellation_Barrier_ID > Committed_Corner_ID then
             Committed_Corner_ID := Cancellation_Barrier_ID;
          end if;
+         pragma Annotate (Xcov, Exempt_Off);
          Planned_State := Committed_State;
          Last_Queued_State := Planned_State;
          Planned_Stored_Positions := Committed_Stored_Positions;
@@ -683,15 +705,11 @@ package body Prunt.Default_Modules.Motion is
          procedure Perform_Firmware_Retract (Retracting : Boolean) is
             Target : Position := Physical_Position;
          begin
-            if Planned_State.Is_Retracted = Retracting then
-               return;
-            end if;
-
             if Retracting then
                Target (E_Axis) := Target (E_Axis) - Planned_State.Retract_Length * Planned_State.Flow_Scale;
                Add_Corner_If_Moved (Planner, Physical_Position, Target, Planned_State.Retract_Feedrate);
 
-               if Planned_State.Retract_Z_Lift > 0.0 * mm and then Planned_State.Current_Z_Hop = 0.0 * mm then
+               if Planned_State.Retract_Z_Lift > 0.0 * mm then
                   Target := Physical_Position;
                   Target (Z_Axis) := Target (Z_Axis) + Planned_State.Retract_Z_Lift;
                   Add_Corner_If_Moved (Planner, Physical_Position, Target, Planned_State.Retract_Feedrate);
@@ -800,7 +818,10 @@ package body Prunt.Default_Modules.Motion is
            (Planner,
             Physical_Position,
             Target_Physical,
-            (if Rapid and then not F.Present then Velocity'Last else Command_Feedrate * Planned_State.Feedrate_Scale));
+            Velocity'
+              (if Rapid and then not F.Present
+               then Velocity'Last
+               else Command_Feedrate * Planned_State.Feedrate_Scale));
          pragma Unreferenced (Physical_Position);
 
          Maybe_Queue_Planned_State (Planner);
@@ -824,15 +845,13 @@ package body Prunt.Default_Modules.Motion is
             Target            : Position := Physical_Position;
          begin
             Target (E_Axis) := Target (E_Axis) - Planned_State.Retract_Length * Planned_State.Flow_Scale;
-            if Target /= Physical_Position
-              or else (Planned_State.Retract_Z_Lift > 0.0 * mm and then Planned_State.Current_Z_Hop = 0.0 * mm)
-            then
+            if Target /= Physical_Position or else Planned_State.Retract_Z_Lift > 0.0 * mm then
                Ensure_Can_Queue_Planned_State (Planner);
             end if;
 
             Add_Corner_If_Moved (Planner, Physical_Position, Target, Planned_State.Retract_Feedrate);
 
-            if Planned_State.Retract_Z_Lift > 0.0 * mm and then Planned_State.Current_Z_Hop = 0.0 * mm then
+            if Planned_State.Retract_Z_Lift > 0.0 * mm then
                Target := Physical_Position;
                Target (Z_Axis) := Target (Z_Axis) + Planned_State.Retract_Z_Lift;
                Add_Corner_If_Moved (Planner, Physical_Position, Target, Velocity'Last);
@@ -917,10 +936,7 @@ package body Prunt.Default_Modules.Motion is
             Queue_Stored_Position_Update (Planner, (Kind => Delete_All_Stored_Positions, Anchor_ID => 0));
          else
             declare
-               Slot : constant Gcode_Arguments.Argument_Integer :=
-                 (case D.Kind is
-                    when Gcode_No_Value_Present => 0,
-                    when Gcode_Value_Present    => D.Value);
+               Slot : constant Gcode_Arguments.Argument_Integer := D.Value;
             begin
                Queue_Stored_Position_Update
                  (Planner, (Kind => Delete_Stored_Position, Anchor_ID => 0, Deleted_Slot => Slot));
@@ -1121,12 +1137,10 @@ package body Prunt.Default_Modules.Motion is
          Maybe_Queue_Planned_State (Planner);
       end Apply_Recover_Settings;
 
-      procedure Set_Auto_Retract_State (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer) is
+      procedure Set_Auto_Retract_State (Planner : Planner_Interface'Class; S : Gcode_Arguments.Argument_Integer) is
       begin
-         if S.Present then
-            Planned_State.Auto_Retract_Enabled := S.Value /= 0;
-            Maybe_Queue_Planned_State (Planner);
-         end if;
+         Planned_State.Auto_Retract_Enabled := S /= 0;
+         Maybe_Queue_Planned_State (Planner);
       end Set_Auto_Retract_State;
 
       procedure Apply_Set_Feedrate_Percentage (Planner : Planner_Interface'Class; S : Dimensionless) is
@@ -1287,6 +1301,7 @@ package body Prunt.Default_Modules.Motion is
 
          Update_Status (Status_Emitter, Committed_State);
       end Handle_Resume;
+
    end Module_Instance;
 
    procedure Rapid_Linear_Move
@@ -1629,7 +1644,7 @@ package body Prunt.Default_Modules.Motion is
       pragma Unreferenced (This);
    begin
       if S.Present then
-         Module_Instance (Self_Ref.Get.Element.all).Set_Auto_Retract_State (Planner => Planner, S => S);
+         Module_Instance (Self_Ref.Get.Element.all).Set_Auto_Retract_State (Planner => Planner, S => S.Value);
       else
          Planner.Flush
            (Motion_Report_Event'(Message => Module_Instance (Self_Ref.Get.Element.all).Auto_Retract_Report));

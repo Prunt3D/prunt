@@ -1,0 +1,103 @@
+{
+  "description": "Exercise dynamic fan G-code against fixed, low-side, and high-side dummy fan hardware.",
+  "config": {
+    "Fans": {
+      "Fans": {
+        "DUMMY_FAN": {
+          "Control_Method": {
+            "Kind": {
+              "Selected": "Dynamic_Duty_Cycle",
+              "Children": {
+                "Dynamic_Duty_Cycle": {
+                  "Dynamic_Duty_Cycle": {
+                    "Disable_Below": 0.25,
+                    "Maximum_Duty_Cycle": 0.8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "LOW_SIDE_DUMMY_FAN": {
+          "Control_Method": {
+            "Kind": {
+              "Selected": "Dynamic_Duty_Cycle",
+              "Children": {
+                "Dynamic_Duty_Cycle": {
+                  "Dynamic_Duty_Cycle": {
+                    "Disable_Below": 0.0,
+                    "Maximum_Duty_Cycle": 0.5
+                  }
+                }
+              }
+            }
+          }
+        },
+        "HIGH_SIDE_DUMMY_FAN": {
+          "Invert_PWM_Output": true,
+          "Low_Or_High_Side_Switching": {
+            "Kind": {
+              "Selected": "High_Side_Switching",
+              "Children": {
+                "High_Side_Switching": {
+                  "High_Side_Switching": {
+                    "PWM_Frequency": 12000.0
+                  }
+                }
+              }
+            }
+          },
+          "Control_Method": {
+            "Kind": {
+              "Selected": "Dynamic_Duty_Cycle",
+              "Children": {
+                "Dynamic_Duty_Cycle": {
+                  "Dynamic_Duty_Cycle": {
+                    "Disable_Below": 0.0,
+                    "Maximum_Duty_Cycle": 1.0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "M106 S10" },
+    { "kind": "submit_gcode", "command": "M106 S128" },
+    { "kind": "submit_gcode", "command": "M107" },
+    { "kind": "submit_gcode", "command": "M106 P1 S255" },
+    { "kind": "submit_gcode", "command": "M107 P1" },
+    { "kind": "submit_gcode", "command": "M106 P\"HIGH_SIDE_DUMMY_FAN\" S64" },
+    { "kind": "submit_gcode", "command": "M107 P\"HIGH_SIDE_DUMMY_FAN\"" },
+    { "kind": "submit_gcode", "command": "M106 S-1" },
+    { "kind": "submit_gcode", "command": "M106 S256" },
+    { "kind": "submit_gcode", "command": "M106 P99 S1" },
+    { "kind": "submit_gcode", "command": "M106 P\"MISSING_FAN\" S1" },
+    { "kind": "submit_gcode", "command": "M107 P99" },
+    { "kind": "submit_gcode", "command": "M107 P\"MISSING_FAN\"" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "event_counts": { "gcode": 13, "fan": 7 },
+    "events": [
+      { "kind": "fan", "label": "set_duty_cycle", "target": "DUMMY_FAN", "value": "0.00000000000000E+00", "count": 2 },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "DUMMY_FAN", "value": "4.01568627450980E-01" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "LOW_SIDE_DUMMY_FAN", "value": "5.00000000000000E-01" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "LOW_SIDE_DUMMY_FAN", "value": "0.00000000000000E+00" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "HIGH_SIDE_DUMMY_FAN", "value": "7.49019607843137E-01" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "HIGH_SIDE_DUMMY_FAN", "value": "1.00000000000000E+00" }
+    ],
+    "event_order": [
+      { "kind": "fan", "label": "set_duty_cycle", "target": "DUMMY_FAN", "value": "0.00000000000000E+00" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "DUMMY_FAN", "value": "4.01568627450980E-01" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "DUMMY_FAN", "value": "0.00000000000000E+00" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "LOW_SIDE_DUMMY_FAN", "value": "5.00000000000000E-01" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "LOW_SIDE_DUMMY_FAN", "value": "0.00000000000000E+00" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "HIGH_SIDE_DUMMY_FAN", "value": "7.49019607843137E-01" },
+      { "kind": "fan", "label": "set_duty_cycle", "target": "HIGH_SIDE_DUMMY_FAN", "value": "1.00000000000000E+00" }
+    ]
+  }
+}

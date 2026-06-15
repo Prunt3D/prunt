@@ -1,0 +1,58 @@
+{
+  "description": "Exercise relative pause-park config loading and save conversion.",
+  "config": {
+    "Motion": {
+      "Pause_Park": {
+        "Kind": {
+          "Selected": "Relative_Park_Move",
+          "Children": {
+            "Relative_Park_Move": {
+              "Relative_Park_Move": {
+                "Out_Of_Bounds_Behavior": "CLIP_TO_BOUNDS",
+                "X_Offset": -50.0,
+                "Y_Offset": 500.0,
+                "Z_Offset": 1.0,
+                "E_Offset": -0.5,
+                "Feedrate": 80.0,
+                "Return_Feedrate": 80.0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G1 X60 Y30 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "advance_to_s", "time_s": 1.0 },
+    { "kind": "pause" },
+    { "kind": "advance_by_s", "duration_s": 8.0 },
+    { "kind": "resume" },
+    { "kind": "wait_idle", "timeout_s": 30.0 },
+    { "kind": "submit_gcode", "command": "M500" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 60.0, "Y": 30.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "sample_position_reaches": { "Y": 299.95, "Z": 0.95 },
+    "sample_position_drops_below": { "E": -0.45 },
+    "min_samples": 1,
+    "event_counts": { "pause": 4 },
+    "events": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ],
+    "event_order": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ]
+  }
+}

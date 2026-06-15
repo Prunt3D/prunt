@@ -1,0 +1,31 @@
+{
+  "description": "Exercise runtime pause and resume with no park move configured.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G1 X60 Y30 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "advance_to_s", "time_s": 1.0 },
+    { "kind": "pause" },
+    { "kind": "advance_by_s", "duration_s": 2.0 },
+    { "kind": "resume" },
+    { "kind": "wait_idle", "timeout_s": 30.0 }
+  ],
+  "expect": {
+    "min_samples": 1,
+    "event_counts": { "pause": 4 },
+    "events": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ],
+    "event_order": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ]
+  }
+}

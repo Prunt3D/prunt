@@ -28,6 +28,28 @@ rm -f *.srctrace
 [ "$PRUNT_XCOV_DUMP" = true ] && alr exec ./bin/tests -- xcov_dump "$@"
 [ "$PRUNT_XCOV_DUMP" = true ] || alr exec ./bin/tests -- "$@"
 
+if [ "$PRUNT_SKIP_INTEGRATION" != true ]; then
+   PRUNT_INTEGRATION_JOBS=${PRUNT_INTEGRATION_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')}
+   case "$PRUNT_INTEGRATION_JOBS" in
+      ''|*[!0-9]*|0) PRUNT_INTEGRATION_JOBS=1 ;;
+   esac
+   export PRUNT_XCOV_DUMP
+
+   integration_scenarios=$(alr exec ./bin/integration_tests -- --list "$@")
+   if [ -n "$integration_scenarios" ]; then
+      printf '%s\n' "$integration_scenarios" |
+         xargs -n 1 -P "$PRUNT_INTEGRATION_JOBS" sh -c '
+            scenario=$1
+
+            if [ "$PRUNT_XCOV_DUMP" = true ]; then
+               alr exec ./bin/integration_scenario_runner -- xcov_dump --scenario="$scenario" --prunt-web-server-port=0
+            else
+               alr exec ./bin/integration_scenario_runner -- --scenario="$scenario" --prunt-web-server-port=0
+            fi
+         ' sh
+   fi
+fi
+
 # Run the GNATcov code coverage analysis on the trace files.
 # tests.gpr can be added below to check that all tests are being run.
 [ "$PRUNT_DO_GNATCOV" = true ] && alr exec -P2 -- gnatcov coverage --annotate=report --output-dir=gnatcov_out --level=stmt+mcdc+gexpr --projects=prunt.gpr --no-subprojects *.srctrace

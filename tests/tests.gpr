@@ -5,7 +5,7 @@ project Tests is
    for Object_Dir use "obj/" & Tests_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
    for Exec_Dir use "bin";
-   for Main use ("tests.adb");
+   for Main use ("tests.adb", "integration_tests.adb", "integration_scenario_runner.adb");
 
    Tests_Extra_Ada_Compiler_Switches := ();
    case Tests_Config.Build_Profile is

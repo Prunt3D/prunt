@@ -1,0 +1,16 @@
+{
+  "description": "Exercise rapid G0 motion with and without an explicit feedrate.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G0 X2 Y3" },
+    { "kind": "submit_gcode", "command": "G0 X4 F1200" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 4.0, "Y": 3.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1
+  }
+}

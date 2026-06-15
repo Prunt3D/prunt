@@ -1,0 +1,34 @@
+{
+  "description": "Exercise always-on fan configuration and non-dynamic fan G-code rejection.",
+  "config": {
+    "Fans": {
+      "Fans": {
+        "HIGH_SIDE_DUMMY_FAN": {
+          "Invert_PWM_Output": true,
+          "Control_Method": {
+            "Kind": {
+              "Selected": "Always_On",
+              "Children": {
+                "Always_On": {
+                  "Always_On": {
+                    "Duty_Cycle": 0.25
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "M106 S1" },
+    { "kind": "submit_gcode", "command": "M107 P1" },
+    { "kind": "submit_gcode", "command": "M107 P99" },
+    { "kind": "submit_gcode", "command": "M107 P\"MISSING_FAN\"" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "event_counts": { "gcode": 4, "fan": 0 }
+  }
+}

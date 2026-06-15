@@ -1,0 +1,41 @@
+{
+  "description": "Exercise automatic firmware retract and recover from E-only moves.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M83" },
+    { "kind": "submit_gcode", "command": "M207 S2 F600 Z0.5" },
+    { "kind": "submit_gcode", "command": "M208 S0 F300" },
+    { "kind": "submit_gcode", "command": "M209 S1" },
+    { "kind": "submit_gcode", "command": "G1 X10 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 },
+    { "kind": "submit_gcode", "command": "G1 X20 E0.1 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 },
+    { "kind": "submit_gcode", "command": "G1 Y10 E0.1 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 },
+    { "kind": "submit_gcode", "command": "G1 Z1 E0.1 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 },
+    { "kind": "submit_gcode", "command": "G1 E0.01" },
+    { "kind": "submit_gcode", "command": "G1 E11" },
+    { "kind": "submit_gcode", "command": "G1 E-2 F700" },
+    { "kind": "submit_gcode", "command": "G1 E-2" },
+    { "kind": "submit_gcode", "command": "G1 E2" },
+    { "kind": "submit_gcode", "command": "G1 E2" },
+    { "kind": "submit_gcode", "command": "M207 S2 F600 Z0" },
+    { "kind": "submit_gcode", "command": "G1 E-2" },
+    { "kind": "submit_gcode", "command": "G1 E2" },
+    { "kind": "submit_gcode", "command": "G1 X40 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 15.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 40.0, "Y": 10.0, "Z": 1.0, "E": 11.31 },
+    "position_tolerance": 0.05,
+    "min_samples": 1
+  }
+}

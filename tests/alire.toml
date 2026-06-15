@@ -9,7 +9,7 @@ licenses = "GPL-3.0-or-later"
 website = ""
 tags = []
 
-executables = ["tests"]
+executables = ["tests", "integration_tests", "integration_scenario_runner"]
 
 [build-switches]
 # Configured in GPR file.

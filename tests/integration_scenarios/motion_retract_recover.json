@@ -1,0 +1,27 @@
+{
+  "description": "Exercise explicit G11 recover, including the no-op case before a retract.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M207 S2 F600 Z0.5" },
+    { "kind": "submit_gcode", "command": "M208 S0 F300" },
+    { "kind": "submit_gcode", "command": "G11" },
+    { "kind": "submit_gcode", "command": "G1 X10 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 },
+    { "kind": "submit_gcode", "command": "G10" },
+    { "kind": "submit_gcode", "command": "G1 X20 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 },
+    { "kind": "submit_gcode", "command": "G11" },
+    { "kind": "submit_gcode", "command": "G1 X30 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 15.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 30.0, "Y": 0.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1
+  }
+}

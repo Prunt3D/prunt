@@ -1,0 +1,25 @@
+{
+  "description": "Exercise no-op, seconds, milliseconds, and rejected negative dwell commands.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G4" },
+    { "kind": "submit_gcode", "command": "G4 S0.02" },
+    { "kind": "submit_gcode", "command": "G4 P5" },
+    { "kind": "submit_gcode", "command": "G4 S-1" },
+    { "kind": "submit_gcode", "command": "G1 X1 F600" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 1.0, "Y": 0.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1,
+    "event_counts": { "gcode": 5 },
+    "event_order": [
+      { "kind": "gcode", "label": "submit_gcode", "value": "G4" },
+      { "kind": "gcode", "label": "submit_gcode", "value": "G4 S0.02" },
+      { "kind": "gcode", "label": "submit_gcode", "value": "G4 P5" },
+      { "kind": "gcode", "label": "submit_gcode", "value": "G4 S-1" },
+      { "kind": "gcode", "label": "submit_gcode", "value": "G1 X1 F600" }
+    ]
+  }
+}

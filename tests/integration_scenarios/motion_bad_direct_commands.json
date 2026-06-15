@@ -1,0 +1,48 @@
+{
+  "description": "Reject bad motion G-code submitted as direct commands while keeping the processor alive.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M82" },
+    { "kind": "submit_gcode", "command": "M207 S2 F600 Z0.5" },
+    { "kind": "submit_gcode", "command": "M208 S0.5 F300" },
+    { "kind": "submit_gcode", "command": "M220 S100" },
+    { "kind": "submit_gcode", "command": "M221 S100" },
+    { "kind": "submit_gcode", "command": "G60 S" },
+    { "kind": "submit_gcode", "command": "G1 X99 F0" },
+    { "kind": "submit_gcode", "command": "G10 S1" },
+    { "kind": "submit_gcode", "command": "G61 S99 F1200" },
+    { "kind": "submit_gcode", "command": "G61 S0 F0" },
+    { "kind": "submit_gcode", "command": "M207 F0" },
+    { "kind": "submit_gcode", "command": "M207 S-1" },
+    { "kind": "submit_gcode", "command": "M207 Z-1" },
+    { "kind": "submit_gcode", "command": "M208 F0" },
+    { "kind": "submit_gcode", "command": "M220 S0" },
+    { "kind": "submit_gcode", "command": "M221 S0" },
+    { "kind": "submit_gcode", "command": "G2 I0 J0" },
+    { "kind": "submit_gcode", "command": "G2 R1" },
+    { "kind": "submit_gcode", "command": "G3 I0 J0" },
+    { "kind": "submit_gcode", "command": "G3 R1" },
+    {
+      "kind": "submit_gcode_file",
+      "commands": [
+        "G1 X2 F600",
+        "G1 X50 F0",
+        "G1 X75 F600"
+      ]
+    },
+    { "kind": "submit_gcode", "command": "G1 X1 E1 F600" },
+    { "kind": "advance_to_s", "time_s": 1.0 },
+    { "kind": "submit_gcode", "command": "G10" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 1.0, "Y": 0.0, "Z": 0.5, "E": -1.0 },
+    "position_tolerance": 0.05,
+    "max_position": { "X": 2.05 },
+    "sample_position_reaches": { "Z": 0.45 },
+    "sample_position_drops_below": { "E": -0.95 },
+    "min_samples": 1
+  }
+}

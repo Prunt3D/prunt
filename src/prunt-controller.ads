@@ -158,6 +158,9 @@ package Prunt.Controller is
    procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True);
    --  Report an error to Prunt and cause the printer to halt.
 
+   function Last_Error_Message return String;
+   --  Return the stored controller error message, or an empty string if no error has been stored.
+
    procedure Log (Message : String);
    --  Log a message for the user.
 
@@ -166,6 +169,31 @@ package Prunt.Controller is
 
    procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
    --  Queue a G-code file for execution.
+
+   procedure Cancel_Gcode (Succeeded : out Boolean);
+   --  Cancel all pending G-code and reset the runtime planners around the last executed physical position.
+
+   procedure Pause_Stepgen;
+   --  Request runtime pause handling.
+
+   procedure Resume_Stepgen;
+   --  Request runtime resume handling.
+
+   function Stepgen_Paused return Boolean;
+   --  Return True while the step generator is paused.
+
+   function Ready_For_Gcode return Boolean;
+   --  Return True once the G-code processor task is running and ready to consume queued commands/files.
+
+   procedure Apply_Untrusted_Config_Patch
+     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
+   --  Apply the same validated configuration patch format used by the web UI.
+
+   function Get_Config_Schema_String return Virtual_String;
+   --  Return the JSON configuration schema currently used by this controller instance.
+
+   procedure Reset_Live_Config_To_Stored;
+   --  Replace the live configuration with the stored configuration values.
 
 private
 
@@ -183,8 +211,6 @@ private
    function Get_Current_File_Name return Virtual_String;
 
    function Get_Current_File_Line return File_Line_Count;
-
-   function Stepgen_Paused return Boolean;
 
    package My_Default_Modules_Children is
       package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
@@ -501,9 +527,6 @@ private
 
    My_Gcode_Queue : Gcode_Queues.Queue;
 
-   procedure Apply_Untrusted_Config_Patch
-     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
-
    procedure Reload_Server;
 
    function Get_Status_Values_String return Virtual_String
@@ -512,8 +535,6 @@ private
    Active_Module_Gcode_Dispatch_Map : constant Gcode_Dispatch_Maps.Map := Build_Gcode_Dispatch_Map (Active_Modules);
 
    Active_Module_Gcode_JSON_String : constant Virtual_String := Build_Gcode_JSON (Active_Modules).Write;
-
-   procedure Cancel_Gcode (Succeeded : out Boolean);
 
    package My_Web_Server is new
      Web_Server

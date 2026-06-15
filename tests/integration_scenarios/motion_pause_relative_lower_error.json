@@ -1,0 +1,36 @@
+{
+  "description": "Exercise relative pause-park lower-bound rejection.",
+  "config": {
+    "Motion": {
+      "Pause_Park": {
+        "Kind": {
+          "Selected": "Relative_Park_Move",
+          "Children": {
+            "Relative_Park_Move": {
+              "Relative_Park_Move": {
+                "Out_Of_Bounds_Behavior": "ERROR_IF_OUT_OF_BOUNDS",
+                "X_Offset": -1000.0,
+                "Y_Offset": 0.0,
+                "Z_Offset": 0.0,
+                "E_Offset": 0.0,
+                "Feedrate": 120.0,
+                "Return_Feedrate": 120.0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G1 X60 Y30 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "advance_to_s", "time_s": 1.0 },
+    { "kind": "pause_until_controller_stops" }
+  ],
+  "expect": {
+    "controller_failure_contains": "Relative pause park target is out of bounds (X_AXIS ="
+  }
+}

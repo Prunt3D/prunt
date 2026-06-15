@@ -1,0 +1,50 @@
+{
+  "description": "Enable the dummy bed heater, submit a bed-temperature command, and record heater annotations.",
+  "config": {
+    "Thermistors": {
+      "Thermistors": {
+        "DUMMY_THERMISTOR": {
+          "Sensor_Model": {
+            "Kind": { "Selected": "Generic_3950" }
+          }
+        }
+      }
+    },
+    "Heaters": {
+      "Heaters": {
+        "DUMMY_HEATER": {
+          "Kind": {
+            "Selected": "Enabled",
+            "Children": {
+              "Enabled": { "Thermistor": "DUMMY_THERMISTOR" }
+            }
+          }
+        }
+      },
+      "Gcode_Defaults": {
+        "Bed": {
+          "Kind": {
+            "Selected": "Enabled",
+            "Children": {
+              "Enabled": { "Heater": "DUMMY_HEATER" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "M140 S60" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "event_counts": { "gcode": 1, "heater": 1 },
+    "events": [
+      { "kind": "heater", "label": "set_temperature", "target": "DUMMY_HEATER", "value": "6.00000000000000E+01" }
+    ],
+    "event_order": [
+      { "kind": "gcode", "label": "submit_gcode", "value": "M140 S60" },
+      { "kind": "heater", "label": "set_temperature", "target": "DUMMY_HEATER", "value": "6.00000000000000E+01" }
+    ]
+  }
+}

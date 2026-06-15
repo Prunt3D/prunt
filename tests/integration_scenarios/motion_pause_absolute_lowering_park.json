@@ -1,0 +1,64 @@
+{
+  "description": "Exercise absolute pause-park Z lowering when lowering is explicitly allowed.",
+  "config": {
+    "Motion": {
+      "Pause_Park": {
+        "Kind": {
+          "Selected": "Absolute_Park_Move",
+          "Children": {
+            "Absolute_Park_Move": {
+              "Absolute_Park_Move": {
+                "Out_Of_Bounds_Behavior": "CLIP_TO_BOUNDS",
+                "X_Position": 20.0,
+                "Y_Position": 0.0,
+                "Z_Target": {
+                  "Kind": {
+                    "Selected": "Absolute_Z_Position",
+                    "Children": {
+                      "Absolute_Z_Position": {
+                        "Z_Position": 0.0,
+                        "Avoid_Lowering_Z": false
+                      }
+                    }
+                  }
+                },
+                "E_Offset": 0.0,
+                "Feedrate": 300.0,
+                "Return_Feedrate": 300.0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G1 X20 Z1 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "advance_to_s", "time_s": 1.0 },
+    { "kind": "pause" },
+    { "kind": "advance_by_s", "duration_s": 3.0 },
+    { "kind": "resume" },
+    { "kind": "wait_idle", "timeout_s": 20.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 20.0, "Y": 0.0, "Z": 1.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1,
+    "event_counts": { "pause": 4 },
+    "events": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ],
+    "event_order": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ]
+  }
+}

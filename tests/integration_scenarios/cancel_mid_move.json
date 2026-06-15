@@ -1,0 +1,29 @@
+{
+  "description": "Cancel a running G-code file during a long move and verify that pause slew stops before the move target.",
+  "config": {},
+  "actions": [
+    {
+      "kind": "submit_gcode_file",
+      "commands": [
+        "G1 X200 F1200",
+        "G1 Y20 F1200"
+      ]
+    },
+    { "kind": "cancel_at_s", "time_s": 0.02 },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "max_position": { "X": 80.0, "Y": 1.0 },
+    "max_sample_position": { "X": 80.0, "Y": 1.0 },
+    "min_samples": 1,
+    "event_counts": { "gcode": 3, "cancel": 2 },
+    "events": [
+      { "kind": "cancel", "label": "cancel_requested" },
+      { "kind": "cancel", "label": "cancel_completed" }
+    ],
+    "event_order": [
+      { "kind": "cancel", "label": "cancel_requested" },
+      { "kind": "cancel", "label": "cancel_completed" }
+    ]
+  }
+}

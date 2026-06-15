@@ -1,0 +1,34 @@
+{
+  "description": "Exercise motion modal state transitions: G20/G21, G90/G91, M82/M83, and G92 offsets.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G0 X20 Y10 F1200" },
+    { "kind": "wait_idle", "timeout_s": 20.0 },
+    { "kind": "submit_gcode", "command": "G92 X0 Y0" },
+    { "kind": "submit_gcode", "command": "G91" },
+    { "kind": "submit_gcode", "command": "G0 X10 Y5 F1200" },
+    { "kind": "wait_idle", "timeout_s": 20.0 },
+    { "kind": "submit_gcode", "command": "M82" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M83" },
+    { "kind": "submit_gcode", "command": "G0 X20 Y10 E5 F1200" },
+    { "kind": "wait_idle", "timeout_s": 20.0 },
+    { "kind": "submit_gcode", "command": "G20" },
+    { "kind": "submit_gcode", "command": "G0 X1.25 Y0.625" },
+    { "kind": "wait_idle", "timeout_s": 20.0 },
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G0 X80 Y40 F1200" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 20.0 },
+    { "kind": "submit_gcode", "command": "G0 X80 Y40 F1200" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 100.0, "Y": 50.0, "Z": 0.0, "E": 5.0 },
+    "position_tolerance": 0.05,
+    "sample_position_reaches": { "E": 4.95 },
+    "min_samples": 1
+  }
+}

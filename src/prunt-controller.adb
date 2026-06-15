@@ -29,6 +29,8 @@ package body Prunt.Controller is
    pragma Extensions_Allowed (On);
 
    Pipeline_Is_Set_Up         : Boolean := False;
+   Gcode_Processor_Is_Running : Boolean := False
+   with Atomic, Volatile;
    Current_Motor_Position_Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map :=
      [others => [others => Length'Last]];
    --  Runtime setup state shared between Run and package-level callbacks such as G-code cancellation.
@@ -446,6 +448,7 @@ package body Prunt.Controller is
             Pipeline_Is_Set_Up := False;
          end if;
 
+         Gcode_Processor_Is_Running := False;
          Primary_Planner_State.Reset;
          Pause_Planner_State.Reset;
          Pause_Default_State.Reset;
@@ -492,7 +495,7 @@ package body Prunt.Controller is
       begin
          Active_Module_Instances :=
            Recursive_Module_Initialization
-             (Report_Config_Error'Access, Active_Config_File, Log_Dependency_Tree => True);
+             (Report_Config_Error'Access, Active_Config_File, Log_Dependency_Tree => False);
 
          if Had_Error then
             My_Logger.Log ("Prunt could not start due to configuration errors.");
@@ -638,6 +641,8 @@ package body Prunt.Controller is
          end Process_Gcode_Line;
 
          procedure Process_Next_Gcode_Item (Stopped : out Boolean) is
+            use type Gcode_Queues.Queue_Item_Kind;
+
             Line                            : Virtual_String;
             Item_Kind                       : Gcode_Queues.Queue_Item_Kind;
             End_Of_Item                     : Boolean;
@@ -645,7 +650,6 @@ package body Prunt.Controller is
             Initial_Cancellation_Generation : Cancellation_Generation_Type;
          begin
             My_Gcode_Queue.Get_Next_Line (Line, Item_Kind, End_Of_Item, Queue_Stopped);
-            pragma Unreferenced (Item_Kind);
 
             if Queue_Stopped then
                Stopped := True;
@@ -685,6 +689,20 @@ package body Prunt.Controller is
                      Active_Planner.Flush;
                      Gcode_Cancellation_Barrier.Finish_Line;
                      delay Gcode_Rejection_Retry_Delay;
+
+                  when E : Gcode_Bad_Inputs_Error =>
+                     My_Logger.Log
+                       (Conversions.To_Virtual_String ("Rejected G-code line: ")
+                        & Line
+                        & Conversions.To_Virtual_String (" (")
+                        & Conversions.To_Virtual_String (Ada.Exceptions.Exception_Message (E))
+                        & Conversions.To_Virtual_String (")"));
+                     if Item_Kind = Gcode_Queues.File_Item then
+                        My_Gcode_Queue.Cancel_File;
+                        Active_Planner.Flush;
+                     end if;
+                     Gcode_Cancellation_Barrier.Finish_Line;
+                     exit Retry_Line;
 
                   when others =>
                      Gcode_Cancellation_Barrier.Finish_Line;
@@ -780,9 +798,12 @@ package body Prunt.Controller is
 
                task body Gcode_Processor is
                begin
+                  Gcode_Processor_Is_Running := True;
                   Process_Gcode_Queue;
+                  Gcode_Processor_Is_Running := False;
                exception
                   when E : others =>
+                     Gcode_Processor_Is_Running := False;
                      Exception_Occurrence_Holder.all.Set_Fatal
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Gcode_Processor;
@@ -845,6 +866,19 @@ package body Prunt.Controller is
            (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
       end if;
    end Report_External_Error;
+
+   function Last_Error_Message return String is
+      Occurrence : Ada.Exceptions.Exception_Occurrence;
+      Is_Fatal   : Boolean;
+      pragma Unreferenced (Is_Fatal);
+   begin
+      if not Exception_Occurrence_Holder.all.Is_Set then
+         return "";
+      end if;
+
+      Exception_Occurrence_Holder.all.Get (Occurrence, Is_Fatal);
+      return Ada.Exceptions.Exception_Information (Occurrence);
+   end Last_Error_Message;
 
    procedure Log (Message : String) is
    begin
@@ -1168,6 +1202,16 @@ package body Prunt.Controller is
       Patch_Processor.Apply (Patch, Result, Errors);
    end Apply_Untrusted_Config_Patch;
 
+   function Get_Config_Schema_String return Virtual_String is
+   begin
+      return Active_Config_File.Get_Schema_String;
+   end Get_Config_Schema_String;
+
+   procedure Reset_Live_Config_To_Stored is
+   begin
+      Active_Config_File.Reset_Live_To_Stored;
+   end Reset_Live_Config_To_Stored;
+
    procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean) is
    begin
       select
@@ -1245,9 +1289,9 @@ package body Prunt.Controller is
 
          Params := Primary_Planner_State.Get_Last_Kinematic_Parameters;
 
+         My_Step_Generator.Reset;
          My_Motion_Planner.Reset;
          My_Pause_Motion_Planner.Reset;
-         My_Step_Generator.Reset;
 
          Last_Command_Executed.Reset (Current_Position);
 
@@ -1268,6 +1312,21 @@ package body Prunt.Controller is
             raise;
       end;
    end Cancel_Gcode;
+
+   procedure Pause_Stepgen is
+   begin
+      My_Step_Generator.Pause;
+   end Pause_Stepgen;
+
+   procedure Resume_Stepgen is
+   begin
+      My_Step_Generator.Resume;
+   end Resume_Stepgen;
+
+   function Ready_For_Gcode return Boolean is
+   begin
+      return Gcode_Processor_Is_Running;
+   end Ready_For_Gcode;
 
    procedure Reload_Server is
    begin

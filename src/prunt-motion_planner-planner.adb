@@ -98,7 +98,7 @@ package body Prunt.Motion_Planner.Planner is
          Timed_Out := False;
          Waiting_For_Step_Rate_Limiter := False;
          return;
-      then abort
+      or
          delay 1.0;
       end select;
       Timed_Out := True;
