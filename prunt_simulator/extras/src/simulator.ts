@@ -115,6 +115,63 @@ function xyData(data: SampleResponse): any[] {
   return [null, [data.position[0] ?? [], data.position[1] ?? []]];
 }
 
+function orderedXYPath(plot: any, seriesIndex: number, idx0: number, idx1: number) {
+  return uPlot.orient(
+    plot,
+    seriesIndex,
+    (
+      series: any,
+      dataX: Array<number | null>,
+      dataY: Array<number | null>,
+      scaleX: any,
+      scaleY: any,
+      valToPosX: (value: number, scale: any, dim: number, off: number) => number,
+      valToPosY: (value: number, scale: any, dim: number, off: number) => number,
+      xOff: number,
+      yOff: number,
+      xDim: number,
+      yDim: number,
+      moveTo: (path: Path2D, x: number, y: number) => void,
+      lineTo: (path: Path2D, x: number, y: number) => void,
+    ) => {
+      const path = new Path2D();
+      const pxRound =
+        typeof series.pxRound === "function" ? series.pxRound : (value: number) => value;
+      const first = Math.max(0, idx0);
+      const last = Math.min(idx1, dataX.length - 1, dataY.length - 1);
+      let hasPreviousPoint = false;
+
+      // uPlot's default line path decimates under a sorted-X assumption; toolpaths are parametric.
+      for (let index = first; index <= last; index += 1) {
+        const xValue = dataX[index];
+        const yValue = dataY[index];
+
+        if (
+          typeof xValue !== "number" ||
+          typeof yValue !== "number" ||
+          !Number.isFinite(xValue) ||
+          !Number.isFinite(yValue)
+        ) {
+          hasPreviousPoint = false;
+          continue;
+        }
+
+        const x = pxRound(valToPosX(xValue, scaleX, xDim, xOff));
+        const y = pxRound(valToPosY(yValue, scaleY, yDim, yOff));
+
+        if (hasPreviousPoint) {
+          lineTo(path, x, y);
+        } else {
+          moveTo(path, x, y);
+          hasPreviousPoint = true;
+        }
+      }
+
+      return { stroke: path, fill: null, clip: null, band: null, gaps: null, flags: 0 };
+    },
+  );
+}
+
 function updateXYPlot(data: SampleResponse) {
   if (!xyPlot) {
     xyPlot = makeXYPlot(data);
@@ -172,6 +229,7 @@ function makeXYPlot(data: SampleResponse) {
           label: "Y",
           stroke: axisColors[1],
           width: 2,
+          paths: orderedXYPath,
           points: { show: false },
         },
       ],
