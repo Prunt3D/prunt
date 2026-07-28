@@ -45,9 +45,6 @@ utilada = "^2.8.0"
 [[depends-on]]
 utilada_curl = "^2.8.0"
 
-[[pins]]
-simple_components = { url = "https://github.com/Prunt3D/dak_simple_components.git" }
-
 [configuration.variables]
 Enable_Test_Mocks = {type = "Boolean", default = false}
 
@@ -56,3 +53,15 @@ vss_text = "^26.0.0"
 
 [[depends-on]]
 vss_extra = "^26.0.0"
+
+[[pins]]
+simple_components = { url = "https://github.com/Prunt3D/dak_simple_components.git", commit = "a0993c00170596a2c21a8e50f5bfc8defd9c9274" }
+gnat_native = "15.2.1002"
+gnat = "15.2.1002"
+gnatcoll = "25.0.0"
+libgpr = "25.0.0"
+xmlada = "25.0.0"
+utilada = "2.9.0"
+utilada_curl = "2.9.0"
+vss_extra = "26.2.0"
+vss_text = "26.2.0"
