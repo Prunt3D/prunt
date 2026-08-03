@@ -29,6 +29,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
 
          Current_Params := Initial_Parameters;
+         Queued_Position := Initial_Position;
 
          Setup_Done := True;
       end Setup;
@@ -36,11 +37,11 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       procedure Assign_Corner_ID (Kind : Command_Kind) is
       begin
          case Kind is
-            when Move_Kind =>
+            when Move_Kind | Helix_Move_Kind                                                   =>
                Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                Has_Current_Corner_ID := True;
 
-            when Corner_Extra_Data_Kind =>
+            when Corner_Extra_Data_Kind                                                        =>
                if not Has_Current_Corner_ID then
                   Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                   Has_Current_Corner_ID := True;
@@ -58,8 +59,8 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       begin
          Elements (Next_Write) := Comm;
 
-         if Next_Write = Elements'Last then
-            Next_Write := Elements'First;
+         if Next_Write = Elements.all'Last then
+            Next_Write := Elements.all'First;
          else
             Next_Write := @ + 1;
          end if;
@@ -90,7 +91,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
             when Corner_Extra_Data_Kind           =>
                begin
-                  Extra_Data_Storage.Enqueue (Extra.all);
+                  Extra_Data_Storage.all.Enqueue (Extra.all);
                exception
                   when Corner_Extra_Data_Queues.Out_Of_Space_Error =>
                      requeue High_Priority_Enqueue;
@@ -123,10 +124,37 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                Assign_Corner_ID (Comm.Kind);
 
+            when Helix_Move_Kind                  =>
+               if not Ignore_Bounds then
+                  Check_Bounds (Comm.Pos, Current_Params);
+                  Check_Helix_Bounds (Queued_Position, Comm.Pos, Comm.Center, Comm.Clockwise, Current_Params);
+               end if;
+
+               if Comm.Dwell_After < 0.0 * s then
+                  raise Constraint_Error with "Negative dwell times are not allowed.";
+               end if;
+
+               if Comm.Feedrate <= 0.0 * mm / s then
+                  raise Constraint_Error with "Feedrate must be positive.";
+               end if;
+
+               Assign_Corner_ID (Comm.Kind);
+
          end case;
          --  Checking happens here so we can provide instant feedback to the user when g-code is typed in manually.
 
          Append_To_Queue (Comm);
+
+         case Comm.Kind is
+            when Move_Kind | Helix_Move_Kind   =>
+               Queued_Position := Comm.Pos;
+
+            when Flush_And_Reset_Position_Kind =>
+               Queued_Position := Comm.Reset_Pos;
+
+            when others                        =>
+               null;
+         end case;
       end Enqueue;
 
       entry High_Priority_Enqueue
@@ -143,7 +171,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          case Comm.Kind is
             when Corner_Extra_Data_Kind =>
                begin
-                  Extra_Data_Storage.Enqueue (Extra.all);
+                  Extra_Data_Storage.all.Enqueue (Extra.all);
                exception
                   when Corner_Extra_Data_Queues.Out_Of_Space_Error =>
                      requeue High_Priority_Enqueue;
@@ -179,7 +207,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       function Dequeue_Extra_Data return Corner_Extra_Data_Type is
       begin
-         return Extra_Data_Storage.Peek;
+         return Extra_Data_Storage.all.Peek;
       end Dequeue_Extra_Data;
 
       function Get_Last_Assigned_Corner_ID return Planner_Corner_ID is
@@ -204,11 +232,11 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
 
          if Current_Comm.Kind = Corner_Extra_Data_Kind then
-            Extra_Data_Storage.Dequeue;
+            Extra_Data_Storage.all.Dequeue;
          end if;
 
-         if Next_Read = Elements'Last then
-            Next_Read := Elements'First;
+         if Next_Read = Elements.all'Last then
+            Next_Read := Elements.all'First;
          else
             Next_Read := @ + 1;
          end if;
@@ -232,9 +260,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          In_Dequeue := False;
          Next_Read := Command_Queue_Array_Type'First;
          Next_Write := Command_Queue_Array_Type'First;
-         Extra_Data_Storage.Clear;
+         Extra_Data_Storage.all.Clear;
          Retry_High_Priority := True;
          Has_Current_Corner_ID := False;
+         Queued_Position := Initial_Position;
       end Reset;
    end Command_Queue;
 
@@ -309,12 +338,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
             --  TODO: We should probably try to combine this with the enqueue logic to lower the risk of a mismatch.
             case Kind is
-               when Move_Kind =>
+               when Move_Kind | Helix_Move_Kind                                                   =>
                   Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                   Current_Input_Corner_ID := Last_Assigned_Corner_ID;
                   Corner_ID := Current_Input_Corner_ID;
 
-               when Corner_Extra_Data_Kind =>
+               when Corner_Extra_Data_Kind                                                        =>
                   if Current_Input_Corner_ID = 0 then
                      Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                      Current_Input_Corner_ID := Last_Assigned_Corner_ID;
@@ -348,6 +377,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                Command_Queue.Cancel_Dequeue;
                return False;
          end Try_Append_Extra_Data;
+
       begin
          Reset_Called := False;
 
@@ -359,7 +389,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
          Next_Params := Current_Params;
 
-         Corners (1) := Last_Pos / Current_Params.Axial_Scaler;
+         Corners (1) := Last_Pos;
          Corners_Extra_Data_End_Indices (1) := Corners_Extra_Data.Last_Index;
          --  All other arrays start from the second corner.
 
@@ -461,7 +491,28 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                         Extra_Data_This_Corner := 0;
                         Current_Corner_ID := Accepted_Corner_ID;
                         Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data.Last_Index;
-                        Corners (N_Corners) := Next_Command.Pos / Current_Params.Axial_Scaler;
+                        Corners (N_Corners) := Next_Command.Pos;
+                        Primitives (N_Corners) := Make_Line_Primitive;
+                        Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
+                        Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
+
+                        Last_Pos := Next_Command.Pos;
+
+                        exit Read_In_Commands when N_Corners = Corners_Index'Last;
+
+                     when Helix_Move_Kind                  =>
+                        Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
+                        N_Corners := N_Corners + 1;
+                        Extra_Data_This_Corner := 0;
+                        Current_Corner_ID := Accepted_Corner_ID;
+                        Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data.Last_Index;
+                        Corners (N_Corners) := Next_Command.Pos;
+                        Primitives (N_Corners) :=
+                          Make_Helix_Primitive
+                            (Corners (N_Corners - 1),
+                             Corners (N_Corners),
+                             Next_Command.Center,
+                             Next_Command.Clockwise);
                         Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
                         Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
 
@@ -492,6 +543,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Kind := (if Is_Extra_Data_Overflow_Block then Extra_Data_Overflow_Block_Kind else Motion_Block_Kind);
          Block.Corners_Extra_Data := Corners_Extra_Data.all;
          Block.Corners := Corners (1 .. N_Corners);
+         for I in Block.Corner_Transitions'Range loop
+            Block.Corner_Transitions (I) := To_Evaluator (Stop_At (Block.Corners (I)));
+         end loop;
+         Block.Primitives := Primitives (2 .. N_Corners);
          Block.Corners_Extra_Data_End_Indices := Corners_Extra_Data_End_Indices (1 .. N_Corners);
          Block.Original_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
          Block.First_Corner_ID :=
@@ -501,7 +556,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Corner_Dwell_Times := Corner_Dwell_Times (2 .. N_Corners);
          Block.Flush_Resetting_Data := Flush_Resetting_Data;
          Block.Params := Current_Params;
-         Block.Next_Block_Pos := Last_Pos / Next_Params.Axial_Scaler;
+         Block.Next_Block_Pos := Last_Pos;
          Block.Is_Homing_Move := Is_Homing_Move;
 
          if Is_Homing_Move then
@@ -526,11 +581,168 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters) is
    begin
       for I in Axis_Name loop
-         if Pos (I) < Params.Lower_Pos_Limit (I) or else Pos (I) > Params.Upper_Pos_Limit (I) then
+         if not (Pos (I) >= Params.Lower_Pos_Limit (I) and then Pos (I) <= Params.Upper_Pos_Limit (I)) then
             raise Out_Of_Bounds_Error with "Position is out of bounds (" & I'Image & " = " & Pos (I)'Image & ").";
          end if;
       end loop;
    end Check_Bounds;
+
+   procedure Check_Helix_Bounds
+     (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean; Params : Kinematic_Parameters)
+   is
+      Two_Pi           : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
+      Radius_Tolerance : constant Length := 1.0E-6 * mm;
+
+      function Is_Finite (Value : Dimensionless) return Boolean
+      is (Value >= -Dimensionless'Last and then Value <= Dimensionless'Last);
+
+      function Safe_Hypot (DX, DY : Length; Success : out Boolean) return Length;
+
+      procedure Check_Axis (Axis : Axis_Name; Value : Length);
+
+      function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean;
+
+      function Safe_Hypot (DX, DY : Length; Success : out Boolean) return Length is
+         X     : constant Dimensionless := Dimensionless (DX / mm);
+         Y     : constant Dimensionless := Dimensionless (DY / mm);
+         Scale : constant Dimensionless := Dimensionless'Max (abs X, abs Y);
+      begin
+         if not Is_Finite (X) or else not Is_Finite (Y) then
+            Success := False;
+            return 0.0 * mm;
+         elsif Scale = 0.0 then
+            Success := True;
+            return 0.0 * mm;
+         end if;
+
+         declare
+            Raw : constant Dimensionless := Scale * Dimensionless_Math.Sqrt ((X / Scale) ** 2 + (Y / Scale) ** 2);
+         begin
+            Success := Is_Finite (Raw) and then Raw <= Dimensionless (Length'Last / mm);
+            return (if Success then Raw * mm else 0.0 * mm);
+         end;
+      exception
+         when Constraint_Error =>
+            Success := False;
+            return 0.0 * mm;
+      end Safe_Hypot;
+
+      procedure Check_Axis (Axis : Axis_Name; Value : Length) is
+      begin
+         if not (Value >= Params.Lower_Pos_Limit (Axis) and then Value <= Params.Upper_Pos_Limit (Axis)) then
+            raise Out_Of_Bounds_Error with "Helix is out of bounds (" & Axis'Image & " = " & Value'Image & ").";
+         end if;
+      end Check_Axis;
+
+      function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean is
+         Progress  : Dimensionless := (if Theta_Delta > 0.0 then Phase - Theta_Start else Theta_Start - Phase);
+         Magnitude : constant Dimensionless := abs Theta_Delta;
+         Tolerance : constant Dimensionless :=
+           64.0
+           * Dimensionless'Model_Epsilon
+           * (1.0 + Dimensionless'Max (abs Phase, Dimensionless'Max (abs Theta_Start, Magnitude)));
+      begin
+         if Progress < 0.0 then
+            Progress := Progress + Two_Pi;
+         end if;
+         return Progress <= Magnitude + Tolerance;
+      end Phase_Is_On_Arc;
+
+      Start_DX, Start_DY   : Length;
+      Finish_DX, Finish_DY : Length;
+      Start_Radius         : Length;
+      Finish_Radius        : Length;
+      Start_Radius_OK      : Boolean;
+      Finish_Radius_OK     : Boolean;
+   begin
+      --  The axial coordinates of a helix are affine in phase, so checking both endpoints encloses all Z/E values.
+      Check_Bounds (Start_Pos, Params);
+      Check_Bounds (Finish_Pos, Params);
+
+      Start_DX := Start_Pos (X_Axis) - Center (X_Axis);
+      Start_DY := Start_Pos (Y_Axis) - Center (Y_Axis);
+      Finish_DX := Finish_Pos (X_Axis) - Center (X_Axis);
+      Finish_DY := Finish_Pos (Y_Axis) - Center (Y_Axis);
+      Start_Radius := Safe_Hypot (Start_DX, Start_DY, Start_Radius_OK);
+      Finish_Radius := Safe_Hypot (Finish_DX, Finish_DY, Finish_Radius_OK);
+
+      if not Start_Radius_OK or else not Finish_Radius_OK then
+         raise Out_Of_Bounds_Error with "Helix geometry is outside the supported numeric range.";
+      end if;
+
+      --  Derive_Path_Primitive deliberately converts a zero-radius or materially mismatched helix to a line. The two
+      --  endpoint checks above are sufficient for that convex path.
+      if Start_Radius <= 0.0 * mm or else abs (Start_Radius - Finish_Radius) > Radius_Tolerance then
+         return;
+      end if;
+
+      declare
+         Theta_Start   : constant Dimensionless := Dimensionless_Math.Arctan (Start_DY / mm, Start_DX / mm);
+         Offset_Scale  : constant Length :=
+           Length'Max (abs Start_DX, Length'Max (abs Start_DY, Length'Max (abs Finish_DX, abs Finish_DY)));
+         Coincident_XY : constant Boolean := Start_DX = Finish_DX and then Start_DY = Finish_DY;
+         Theta_Delta   : Dimensionless := 0.0;
+
+         procedure Check_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length);
+
+         procedure Check_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length) is
+         begin
+            if Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta) then
+               Check_Axis (Axis, Value);
+            end if;
+         end Check_Cardinal;
+      begin
+         if Coincident_XY then
+            Theta_Delta := (if Clockwise then -Two_Pi else Two_Pi);
+         else
+            declare
+               Start_X  : constant Dimensionless := Start_DX / Offset_Scale;
+               Start_Y  : constant Dimensionless := Start_DY / Offset_Scale;
+               Finish_X : constant Dimensionless := Finish_DX / Offset_Scale;
+               Finish_Y : constant Dimensionless := Finish_DY / Offset_Scale;
+               Cross    : constant Dimensionless := Start_X * Finish_Y - Start_Y * Finish_X;
+               Dot      : constant Dimensionless := Start_X * Finish_X + Start_Y * Finish_Y;
+            begin
+               Theta_Delta := Dimensionless_Math.Arctan (Cross, Dot);
+            end;
+
+            --  Match Derive_Path_Primitive: distinct radial points whose relative angle rounds to zero execute as a
+            --  line, while exact coincident points above execute as a full circle.
+            if Theta_Delta = 0.0 then
+               return;
+            elsif Clockwise and then Theta_Delta > 0.0 then
+               Theta_Delta := Theta_Delta - Two_Pi;
+            elsif not Clockwise and then Theta_Delta < 0.0 then
+               Theta_Delta := Theta_Delta + Two_Pi;
+            end if;
+         end if;
+
+         --  Between endpoints, a circular X/Y coordinate can attain a new extremum only at a cardinal phase.
+         Check_Cardinal (0.0, X_Axis, Center (X_Axis) + Start_Radius);
+         Check_Cardinal (Ada.Numerics.Pi, X_Axis, Center (X_Axis) - Start_Radius);
+         Check_Cardinal (0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) + Start_Radius);
+         Check_Cardinal (-0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) - Start_Radius);
+
+         --  A radius mismatch inside the primitive tolerance still executes on Start_Radius. Check the projected end,
+         --  not only the requested corner, so the tolerance cannot hide a sub-micrometre boundary crossing.
+         if Finish_Radius > 0.0 * mm then
+            declare
+               Scale : constant Dimensionless := Start_Radius / Finish_Radius;
+            begin
+               Check_Axis (X_Axis, Center (X_Axis) + Scale * Finish_DX);
+               Check_Axis (Y_Axis, Center (Y_Axis) + Scale * Finish_DY);
+            end;
+         else
+            Check_Axis (X_Axis, Center (X_Axis) + Start_Radius);
+            Check_Axis (X_Axis, Center (X_Axis) - Start_Radius);
+            Check_Axis (Y_Axis, Center (Y_Axis) + Start_Radius);
+            Check_Axis (Y_Axis, Center (Y_Axis) - Start_Radius);
+         end if;
+      end;
+   exception
+      when Constraint_Error =>
+         raise Out_Of_Bounds_Error with "Helix geometry is outside the supported numeric range.";
+   end Check_Helix_Bounds;
 
    function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters is
       New_Params : Kinematic_Parameters := Params;
@@ -538,11 +750,19 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       New_Params.Tangential_Velocity_Max :=
         Velocity'Min (New_Params.Tangential_Velocity_Max, 299_792_458_000.1 * mm / s);
 
-      New_Params.Acceleration_Max :=
-        Acceleration'Min (New_Params.Acceleration_Max, New_Params.Tangential_Velocity_Max / Interpolation_Time);
-      New_Params.Jerk_Max := Jerk'Min (New_Params.Jerk_Max, New_Params.Acceleration_Max / Interpolation_Time);
-      New_Params.Snap_Max := Snap'Min (New_Params.Snap_Max, New_Params.Jerk_Max / Interpolation_Time);
-      New_Params.Crackle_Max := Crackle'Min (New_Params.Crackle_Max, New_Params.Snap_Max / Interpolation_Time);
+      for Axis in Axis_Name loop
+         New_Params.Axial_Acceleration_Maxes (Axis) :=
+           Acceleration'Min
+             (New_Params.Axial_Acceleration_Maxes (Axis), New_Params.Axial_Velocity_Maxes (Axis) / Interpolation_Time);
+         New_Params.Axial_Jerk_Maxes (Axis) :=
+           Jerk'Min
+             (New_Params.Axial_Jerk_Maxes (Axis), New_Params.Axial_Acceleration_Maxes (Axis) / Interpolation_Time);
+         New_Params.Axial_Snap_Maxes (Axis) :=
+           Snap'Min (New_Params.Axial_Snap_Maxes (Axis), New_Params.Axial_Jerk_Maxes (Axis) / Interpolation_Time);
+         New_Params.Axial_Crackle_Maxes (Axis) :=
+           Crackle'Min
+             (New_Params.Axial_Crackle_Maxes (Axis), New_Params.Axial_Snap_Maxes (Axis) / Interpolation_Time);
+      end loop;
 
       return New_Params;
    end Limit_Higher_Order_Params;

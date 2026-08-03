@@ -1,3 +1,4 @@
+with "libadalang.gpr";
 with "config/config_codegen_config.gpr";
 project Config_Codegen is
 
@@ -5,7 +6,7 @@ project Config_Codegen is
    for Object_Dir use "obj/" & Config_Codegen_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
    for Exec_Dir use "bin";
-   for Main use ("config_codegen.adb");
+   for Main use ("config_codegen.adb", "package_subprogram_audit.adb");
 
    package Compiler is
             for Default_Switches ("Ada") use Config_Codegen_Config.Ada_Compiler_Switches &

@@ -33,12 +33,15 @@ package Prunt.Default_Modules.Machine_Name is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
@@ -50,6 +53,7 @@ package Prunt.Default_Modules.Machine_Name is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -58,6 +62,7 @@ package Prunt.Default_Modules.Machine_Name is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -75,10 +80,13 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    type Machine_Name_Update is new Extra_Block_Resetting_Data with record
       Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -87,6 +95,7 @@ private
 
    overriding
    procedure Process_After_Block (This : Machine_Name_Update; Context : Block_End_Context'Class);
+   --  Apply a machine-name change.
 
    type Machine_Name_Report_Event is new Extra_Block_Resetting_Data with record
       Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -94,6 +103,7 @@ private
 
    overriding
    procedure Process_After_Block (This : Machine_Name_Report_Event; Context : Block_End_Context'Class);
+   --  Log the machine name.
 
    procedure Expected_Printer_Check
      (This    : Module_Instance;

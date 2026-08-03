@@ -36,9 +36,11 @@ package Prunt.Default_Modules.Motor_Drivers is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    overriding
    function Initialize
@@ -48,6 +50,7 @@ package Prunt.Default_Modules.Motor_Drivers is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    type Motor_Configuration is record
       Microsteps : Dimensionless range 1.0 .. 1.0E100 := 1.0;
@@ -76,6 +79,7 @@ package Prunt.Default_Modules.Motor_Drivers is
       Configuration : Motor_Configuration;
       Handler       : Motor_Handler'Class)
    is abstract;
+   --  Register a motor handler.
 
    function Motor_Is_Enabled_In_Config (This : Module_Instance_Interface; Motor : Motor_Name) return Boolean
    is abstract;
@@ -103,6 +107,7 @@ package Prunt.Default_Modules.Motor_Drivers is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -225,10 +230,13 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    type Motor_Configuration_Array is array (Motor_Name) of Motor_Configuration;
    type Motor_Configuration_Provided_Array is array (Motor_Name) of Boolean;

@@ -51,6 +51,7 @@ package Prunt.Default_Modules.Idle_Emitter is
      (This     : in out Idle_Notification_Emitter;
       Receiver : not null access function return Idle_Notification_Receiver'Class)
    is abstract;
+   --  Register an idle-state receiver.
 
    type Module_Instance (<>) is synchronized
      new My_Modules.Module_Instance
@@ -65,6 +66,7 @@ package Prunt.Default_Modules.Idle_Emitter is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
 private
 
@@ -74,6 +76,7 @@ private
    function Return_False
      (Left, Right : Idle_Notification_Receiver_Shared_Pointers.Ref with Unreferenced) return Boolean
    is (False);
+   --  Return False.
 
    package Idle_Notification_Receiver_Vectors is new
      Ada.Containers.Vectors (Positive, Idle_Notification_Receiver_Shared_Pointers.Ref, "=" => Return_False);
@@ -85,6 +88,7 @@ private
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Reject G-code dispatch.
 
    protected type Module_Instance is new My_Modules.Module_Instance
    and Idle_Notification_Emitter

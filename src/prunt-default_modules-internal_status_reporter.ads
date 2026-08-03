@@ -39,6 +39,7 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
@@ -50,9 +51,11 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    overriding
    procedure Gcode_Dispatch
@@ -61,6 +64,7 @@ package Prunt.Default_Modules.Internal_Status_Reporter is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -78,6 +82,7 @@ private
 
    overriding
    procedure Finalize (Object : in out Status_Updater_Wrapper);
+   --  Stop the status updater.
 
    package Status_Updater_Wrapper_Pointers is new Limited_Shared_Pointers (Status_Updater_Wrapper);
    --  TODO: GCC bug in comment below?
@@ -90,6 +95,7 @@ private
 
    overriding
    procedure Process_After_Block (This : Position_Report_Event; Context : Block_End_Context'Class);
+   --  Log the current position.
 
    type Position_Auto_Report_Event is new Extra_Block_Resetting_Data with record
       Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -98,10 +104,13 @@ private
 
    overriding
    procedure Process_After_Block (This : Position_Auto_Report_Event; Context : Block_End_Context'Class);
+   --  Update periodic position reporting.
 
    function Current_Position_Report (Pos : Position) return Virtual_String;
+   --  Format a position report.
 
    procedure Log_Position;
+   --  Log the current position.
 
    procedure Report_Current_Position (Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M114");

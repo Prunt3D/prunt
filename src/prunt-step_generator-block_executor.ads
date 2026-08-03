@@ -30,9 +30,6 @@ private generic
    with procedure Check_Reset (Reset_Requested : out Boolean);
    --  Report whether the step generator has been asked to reset.
 
-   with procedure Step_Rate_Limiter_Stalled;
-   --  Called during dequeue timeouts while the step-rate limiter is preventing a block from becoming ready.
-
    with
      procedure Start_Block_Callback
        (Resetting_Data : Active_Planner.Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
@@ -69,10 +66,18 @@ is
    --  Wait for a planner block to become available while polling reset and between-block policy hooks.
 
    procedure Execute_Block
-     (Block           : Active_Planner.Execution_Block;
+     (Block           : access constant Active_Planner.Execution_Block;
       Map             : Motor_Pos_Map;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean);
    --  Queue all step-generator commands for Block unless reset is requested.
+
+private
+
+   type Pause_Slew_Index is new Integer range 0 .. Integer (3.0 * s / Interpolation_Time);
+   --  Index into the pause slew curve. The first index uses the normal interpolation period and the last is stopped.
+
+   function Pause_Slew_Interpolation_Time (Value : Pause_Slew_Index) return Time;
+   --  Return the interpolation period selected by Value on the smooth pause or resume slew curve.
 
 end Prunt.Step_Generator.Block_Executor;

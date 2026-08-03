@@ -24,9 +24,12 @@ with Ada.Directories;
 package Prunt.Mockable.Directories is
 
    function Exists (Name : String) return Boolean renames Ada.Directories.Exists;
+   --  Return True when the host filesystem contains an entry named Name.
 
    procedure Delete_File (Name : String) renames Ada.Directories.Delete_File;
+   --  Delete the named file from the host filesystem.
 
    procedure Rename (Old_Name, New_Name : String) renames Ada.Directories.Rename;
+   --  Rename a host file from Old_Name to New_Name.
 
 end Prunt.Mockable.Directories;

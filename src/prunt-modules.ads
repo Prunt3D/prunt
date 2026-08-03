@@ -35,12 +35,15 @@ package Prunt.Modules is
 
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema
    is (Version => 1, Top_Level_Items => []);
+   --  Return this module's versioned configuration schema, or an empty version-one schema by default.
 
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector
    is ([]);
+   --  Return the G-code commands implemented by this module, or an empty vector by default.
 
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map
    is ([]);
+   --  Return the status groups emitted by this module, or an empty map by default.
 
    type Module_Instance_Parent is synchronized interface;
 

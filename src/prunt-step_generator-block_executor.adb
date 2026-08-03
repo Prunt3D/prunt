@@ -25,12 +25,7 @@ package body Prunt.Step_Generator.Block_Executor is
 
    use type Active_Planner.Corners_Index;
    use type Input_Shapers.Cycle_Count;
-
-   type Pause_Slew_Index is new Integer range 0 .. Integer (3.0 * s / Interpolation_Time);
-   --  First index is full-speed.
-
-   function Pause_Slew_Interpolation_Time (Value : Pause_Slew_Index) return Time;
-   --  Interpolation period to use while slewing into or out of pause.
+   use type Input_Shapers.Shaper_Kind;
 
    function Pause_Slew_Interpolation_Time (Value : Pause_Slew_Index) return Time is
    begin
@@ -56,17 +51,12 @@ package body Prunt.Step_Generator.Block_Executor is
    procedure Dequeue_Block
      (Block : out Active_Planner.Execution_Block; Commands : in out Command_State; Reset_Requested : out Boolean)
    is
-      Timed_Out                     : Boolean;
-      Waiting_For_Step_Rate_Limiter : Boolean;
+      Timed_Out : Boolean;
    begin
       Reset_Requested := False;
 
       loop
-         Active_Planner.Dequeue (Block, Timed_Out, Waiting_For_Step_Rate_Limiter);
-
-         if Timed_Out and then Waiting_For_Step_Rate_Limiter then
-            Step_Rate_Limiter_Stalled;
-         end if;
+         Active_Planner.Dequeue (Block, Timed_Out);
 
          Check_Reset (Reset_Requested);
          if Reset_Requested then
@@ -85,7 +75,7 @@ package body Prunt.Step_Generator.Block_Executor is
    end Dequeue_Block;
 
    procedure Execute_Block
-     (Block           : Active_Planner.Execution_Block;
+     (Block           : access constant Active_Planner.Execution_Block;
       Map             : Motor_Pos_Map;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean)
@@ -98,6 +88,7 @@ package body Prunt.Step_Generator.Block_Executor is
       Homing_Move_When        : Homing_Move_When_Kind := Not_Pending_Kind;
       Loop_Move_Offset        : Position_Offset := [others => Zero_Length];
       Loop_Move_Command_Index : Command_Index := 0;
+      Catch_Up_Axes           : Catch_Up_Axis_Set := [others => False];
 
       procedure Process_Corner_Extra_Data (Data : in out Active_Planner.Corner_Extra_Data_Type);
       procedure Publish_Block_Corner_ID (Corner : Active_Planner.Corners_Index);
@@ -118,6 +109,7 @@ package body Prunt.Step_Generator.Block_Executor is
       end Publish_Block_Corner_ID;
    begin
       Reset_Requested := False;
+      Commands.Last_Queued_Position := Active_Planner.Block_Start_Pos (Block);
 
       if Active_Planner.Is_Homing_Move (Block) then
          if not Allow_Homing then
@@ -137,6 +129,14 @@ package body Prunt.Step_Generator.Block_Executor is
              (Active_Planner.Block_Kinematic_Parameters (Block).Axial_Shapers,
               Interpolation_Time,
               Active_Planner.Block_Start_Pos (Block));
+
+         for A in Axis_Name loop
+            if Active_Planner.Block_Kinematic_Parameters (Block).Axial_Shapers (A).Kind
+              = Input_Shapers.Pressure_Advance
+            then
+               Catch_Up_Axes (A) := True;
+            end if;
+         end loop;
       else
          Shapers :=
            Input_Shapers.Shapers.Create
@@ -220,7 +220,8 @@ package body Prunt.Step_Generator.Block_Executor is
                                     Map             => Map,
                                     Loop_Until_Hit  => False,
                                     Safe_Stop_After => J = Extra_Loops_Required,
-                                    Vel_Ratio       => Vel_Ratio);
+                                    Vel_Ratio       => Vel_Ratio,
+                                    Catch_Up_Axes   => Catch_Up_Axes);
 
                                  Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
                               end loop;
@@ -237,7 +238,8 @@ package body Prunt.Step_Generator.Block_Executor is
                               Map             => Map,
                               Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
                               Safe_Stop_After => At_Stop,
-                              Vel_Ratio       => Vel_Ratio);
+                              Vel_Ratio       => Vel_Ratio,
+                              Catch_Up_Axes   => Catch_Up_Axes);
 
                            case Homing_Move_When is
                               when This_Block_Kind  =>

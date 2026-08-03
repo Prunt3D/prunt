@@ -368,8 +368,6 @@ package body Prunt.Config is
       Mapper (Config, Recursive_Validate'Access, Schema, []);
    end Validate_Module_Config_To_Schema;
 
-   function Create_Default_Property_Config (Property : Config_Property_Parameters'Class) return JSON_Value;
-
    function Create_Default_Property_Config (Property : Config_Property_Parameters'Class) return JSON_Value is
       function Generate (Property : Config_Property_Parameters_Boolean) return JSON_Value;
       function Generate (Property : Config_Property_Parameters_Discrete) return JSON_Value;

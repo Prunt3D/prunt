@@ -1,0 +1,28 @@
+{
+  "description": "Verify planner-enforced Maximum_Delta_Per_Command limits command deltas without a post-planner limiter.",
+  "config": {
+    "Basic Motor Drivers": {
+      "Motors": {
+        "X_MOTOR": {
+          "Basic_Parameters": {
+            "Microsteps": 100.0
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G1 X100 F1200000" },
+    { "kind": "wait_idle", "timeout_s": 10.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 10000.0, "Y": 0.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "max_sample_delta": { "X": 1.000001 },
+    "sample_delta_reaches": { "X": 0.95 },
+    "min_samples": 20,
+    "event_counts": { "gcode": 3 }
+  }
+}

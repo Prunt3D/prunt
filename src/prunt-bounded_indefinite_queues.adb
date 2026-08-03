@@ -18,15 +18,10 @@
 --------------------------------------------------
 
 with Ada.Unchecked_Deallocate_Subpool;
-with Ada.Unchecked_Deallocation;
 
 package body Prunt.Bounded_Indefinite_Queues is
 
    pragma Extensions_Allowed (On);
-
-   procedure Free is new Ada.Unchecked_Deallocation (Queue_Elements_Subpool, Pooled_Subpool_Handle);
-   procedure Free is new Ada.Unchecked_Deallocation (Element_Type, Element_Access);
-   procedure Free is new Ada.Unchecked_Deallocation (Node, Node_Access);
 
    use type System.Address;
 

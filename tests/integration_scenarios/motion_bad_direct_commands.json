@@ -22,8 +22,12 @@
     { "kind": "submit_gcode", "command": "M221 S0" },
     { "kind": "submit_gcode", "command": "G2 I0 J0" },
     { "kind": "submit_gcode", "command": "G2 R1" },
+    { "kind": "submit_gcode", "command": "G2" },
+    { "kind": "submit_gcode", "command": "G2 X1 I1 R1" },
     { "kind": "submit_gcode", "command": "G3 I0 J0" },
     { "kind": "submit_gcode", "command": "G3 R1" },
+    { "kind": "submit_gcode", "command": "G3" },
+    { "kind": "submit_gcode", "command": "G3 X1 J1 R1" },
     {
       "kind": "submit_gcode_file",
       "commands": [

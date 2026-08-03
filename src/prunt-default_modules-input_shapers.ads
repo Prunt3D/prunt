@@ -22,6 +22,7 @@ pragma Extensions_Allowed (On);
 with Ada.Tags;
 with Prunt.Config;
 with Prunt.Default_Modules.Config_Saving;
+with Prunt.Default_Modules.Kinematics;
 with Prunt.Gcode_Arguments;
 with Prunt.Input_Shapers;
 with Prunt.Module_Types; use Prunt.Module_Types;
@@ -30,21 +31,25 @@ private with Ada.Containers.Ordered_Maps;
 
 generic
    with package Config_Saving_Module is new Default_Modules.Config_Saving;
+   with package Kinematics_Module is new Default_Modules.Kinematics (others => <>);
 package Prunt.Default_Modules.Input_Shapers is
 
    type Module is new My_Modules.Module with null record;
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Module_Instance_Interface is synchronized interface;
 
    function Get_Current_Axial_Shapers
      (This : Module_Instance_Interface) return Prunt.Input_Shapers.Axial_Shaper_Parameters
    is abstract;
+   --  Return the active shaper parameters.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -56,6 +61,7 @@ package Prunt.Default_Modules.Input_Shapers is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -64,6 +70,7 @@ package Prunt.Default_Modules.Input_Shapers is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -110,6 +117,11 @@ private
 
    type User_Config_Input_Shaping_Pressure_Advance is record
       --  Apply pressure advance with optional smoothing.
+      --
+      --  Pressure advance requires an independently mapped axis and cannot be used on CoreXY X or Y. This is due to
+      --  the fact that pressure advance uses a catch-up mechanism when a motor speed limit would be exceeded rather
+      --  than slowing down other axes, which would require extra code to handle. If you really need pressure advance
+      --  on the X or Y axis on CoreXY then contact us and we can add support for it.
 
       Pressure_Advance_Time : Time range -1.0E100 * s .. 1.0E100 * s := 0.0 * s;
       --  Advance time added based on this axis velocity.
@@ -157,10 +169,15 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
+
+   type Pressure_Advance_Axis_Set is array (Axis_Name) of Boolean;
 
    package Input_Shaping_Update_Maps is new Ada.Containers.Ordered_Maps (Axis_Name, User_Config_Input_Shaping_Method);
 
@@ -171,11 +188,14 @@ private
 
    overriding
    procedure Process_After_Block (This : Input_Shaping_Config_Update; Context : Block_End_Context'Class);
+   --  Apply shaper changes.
 
    function Build_Shaper_Parameters
      (Method : User_Config_Input_Shaping_Method) return Prunt.Input_Shapers.Shaper_Parameters;
+   --  Convert a shaping configuration.
 
    function Parse_Axial_Shaper_Config (Value : Virtual_String) return User_Config_Input_Shaping_Method;
+   --  Parse an axis configuration.
 
    procedure Configure_Input_Shaping
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -210,7 +230,10 @@ private
    --  `Shaper_Frequency` is in hertz and all time values are in seconds. Changes can be saved with `M500`.
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
-      procedure Initialize (Config_In : User_Config; Config_Data_In : Prunt.Config.Config_Data);
+      procedure Initialize
+        (Config_In                        : User_Config;
+         Config_Data_In                   : Prunt.Config.Config_Data;
+         Pressure_Advance_Allowed_Axes_In : Pressure_Advance_Axis_Set);
 
       overriding
       procedure Start
@@ -220,10 +243,13 @@ private
 
       overriding
       function Get_Current_Axial_Shapers return Prunt.Input_Shapers.Axial_Shaper_Parameters;
+
+      function Pressure_Advance_Is_Allowed (Axis : Axis_Name) return Boolean;
    private
-      Config      : User_Config;
-      Config_Data : Prunt.Config.Config_Data;
-      Self_Ref    : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Config                        : User_Config;
+      Config_Data                   : Prunt.Config.Config_Data;
+      Pressure_Advance_Allowed_Axes : Pressure_Advance_Axis_Set := [others => False];
+      Self_Ref                      : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 
 end Prunt.Default_Modules.Input_Shapers;

@@ -47,9 +47,6 @@ package body Prunt.Default_Modules.Heaters is
    function Pause_Action_Changes_Target (Action : User_Config_Heater_Pause_Action) return Boolean
    is (Action.Kind in Set_Pause_Target);
 
-   function Pause_Target_For_Heater (Action : User_Config_Heater_Pause_Action) return Temperature
-   with Pre => Pause_Action_Changes_Target (Action);
-
    function Pause_Target_For_Heater (Action : User_Config_Heater_Pause_Action) return Temperature is
    begin
       case Action.Kind is

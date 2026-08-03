@@ -199,6 +199,261 @@ package body Prunt.Motion_Planner.Test is
          "Distance in Coast should be > Accel distance");
    end Test_Distance_At_Time_Phases;
 
+   procedure Test_Mixed_Derivative_Straight_Line (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Result : Mixed_Derivative_Limit_Result;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E9 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E9 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E9 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E9 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E9 * mm / s ** 5];
+      Params.Axial_Velocity_Maxes (X_Axis) := 100.0 * mm / s;
+      Params.Axial_Acceleration_Maxes (X_Axis) := 200.0 * mm / s ** 2;
+      Params.Axial_Jerk_Maxes (X_Axis) := 300.0 * mm / s ** 3;
+      Params.Axial_Snap_Maxes (X_Axis) := 400.0 * mm / s ** 4;
+      Params.Axial_Crackle_Maxes (X_Axis) := 500.0 * mm / s ** 5;
+      Bounds.Velocity (X_Axis) := 1.0;
+
+      Result := Mixed_Derivative_Limits (Params, Bounds, 1.0E6 * mm / s);
+
+      T.Assert (Result.Valid, "Straight-line mixed derivative result should be valid");
+      T.Assert (abs (Result.Max_Vel - 99.9 * mm / s) <= 1.0E-9 * mm / s, "Straight-line velocity limit");
+      T.Assert
+        (abs (Result.Limits.Acceleration_Max - 199.8 * mm / s ** 2) <= 1.0E-9 * mm / s ** 2,
+         "Straight-line acceleration limit");
+      T.Assert
+        (abs (Result.Limits.Jerk_Max - 299.7 * mm / s ** 3) <= 1.0E-9 * mm / s ** 3,
+         "Straight-line jerk limit");
+      T.Assert
+        (abs (Result.Limits.Snap_Max - 399.6 * mm / s ** 4) <= 1.0E-9 * mm / s ** 4,
+         "Straight-line snap limit");
+      T.Assert
+        (abs (Result.Limits.Crackle_Max - 499.5 * mm / s ** 5) <= 1.0E-9 * mm / s ** 5,
+         "Straight-line crackle limit");
+   end Test_Mixed_Derivative_Straight_Line;
+
+   procedure Test_Constant_Speed_Axial_Ceiling (T : in out Trendy_Test.Operation'Class) is
+      Params   : Kinematic_Parameters;
+      Bounds   : Unit_Speed_Axial_Derivative_Bounds;
+      Ceiling  : Velocity;
+      Expected : Velocity;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E9 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E9 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E9 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E9 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E9 * mm / s ** 5];
+      Params.Axial_Velocity_Maxes (X_Axis) := 120.0 * mm / s;
+      Params.Axial_Acceleration_Maxes (X_Axis) := 800.0 * mm / s ** 2;
+      Params.Axial_Jerk_Maxes (X_Axis) := 6_000.0 * mm / s ** 3;
+      Params.Axial_Snap_Maxes (X_Axis) := 80_000.0 * mm / s ** 4;
+      Params.Axial_Crackle_Maxes (X_Axis) := 2_000_000.0 * mm / s ** 5;
+      Bounds.Velocity (X_Axis) := 0.5;
+      Bounds.Acceleration (X_Axis) := 0.25 / mm;
+      Bounds.Jerk (X_Axis) := 0.05 / mm ** 2;
+      Bounds.Snap (X_Axis) := 0.01 / mm ** 3;
+      Bounds.Crackle (X_Axis) := 0.002 / mm ** 4;
+
+      Expected :=
+        Velocity'Min
+          (0.999 * Params.Axial_Velocity_Maxes (X_Axis) / Bounds.Velocity (X_Axis),
+           Velocity'Min
+             (0.999 * (Params.Axial_Acceleration_Maxes (X_Axis) / Bounds.Acceleration (X_Axis)) ** (1 / 2),
+              Velocity'Min
+                (0.999 * (Params.Axial_Jerk_Maxes (X_Axis) / Bounds.Jerk (X_Axis)) ** (1 / 3),
+                 Velocity'Min
+                   (0.999 * (Params.Axial_Snap_Maxes (X_Axis) / Bounds.Snap (X_Axis)) ** (1 / 4),
+                    0.999
+                    * (Params.Axial_Crackle_Maxes (X_Axis) / Bounds.Crackle (X_Axis)) ** (1 / 5)))));
+
+      Ceiling := Constant_Speed_Axial_Ceiling (Params, Bounds, 1.0E6 * mm / s);
+
+      T.Assert
+        (abs (Ceiling - Expected) <= 1.0E-9 * Expected,
+         "Constant-speed ceiling should be the minimum v^n derivative limit");
+   end Test_Constant_Speed_Axial_Ceiling;
+
+   procedure Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios (T : in out Trendy_Test.Operation'Class) is
+      Params   : Kinematic_Parameters;
+      Bounds   : Unit_Speed_Axial_Derivative_Bounds;
+      Ceiling  : Velocity;
+      Expected : Velocity;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E100 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E100 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E100 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E100 * mm / s ** 5];
+
+      Bounds.Crackle (X_Axis) := 1.0E-300 / mm ** 4;
+      Expected := 0.999E80 * mm / s;
+      Ceiling := Constant_Speed_Axial_Ceiling (Params, Bounds, 1.0E90 * mm / s);
+      T.Assert
+        (abs (Ceiling - Expected) <= 1.0E-12 * Expected,
+         "Constant-speed ceiling should take the root without overflowing the ratio");
+
+      Bounds := (others => <>);
+      Params.Axial_Crackle_Maxes (X_Axis) := 1.0E-300 * mm / s ** 5;
+      Bounds.Crackle (X_Axis) := 1.0E100 / mm ** 4;
+      Expected := 0.999E-80 * mm / s;
+      Ceiling := Constant_Speed_Axial_Ceiling (Params, Bounds, 1.0 * mm / s);
+      T.Assert
+        (abs (Ceiling - Expected) <= 1.0E-12 * Expected,
+         "Constant-speed ceiling should take the root without underflowing the ratio");
+   end Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios;
+
+   procedure Test_Mixed_Derivative_Does_Not_Floor_Residual (T : in out Trendy_Test.Operation'Class) is
+      Params   : Kinematic_Parameters;
+      Bounds   : Unit_Speed_Axial_Derivative_Bounds;
+      Result   : Mixed_Derivative_Limit_Result;
+      Expected : constant Acceleration := 1.997_001E-9 * mm / s ** 2;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E100 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E100 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E100 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E100 * mm / s ** 5];
+      Params.Axial_Acceleration_Maxes (X_Axis) := 1.0E-6 * mm / s ** 2;
+      Bounds.Velocity (X_Axis) := 1.0;
+      Bounds.Acceleration (X_Axis) := 1.0 / mm;
+
+      Result := Mixed_Derivative_Limits (Params, Bounds, 1.0 * mm / s);
+
+      T.Assert (Result.Valid, "Small residual derivative budget should remain valid");
+      T.Assert
+        (abs (Result.Limits.Acceleration_Max - Expected) <= 1.0E-9 * Expected,
+         "Small residual acceleration budget must not be rounded up to a fixed floor");
+      T.Assert
+        (Bounds.Acceleration (X_Axis) * Result.Max_Vel ** 2
+           + Bounds.Velocity (X_Axis) * Result.Limits.Acceleration_Max
+         <= Params.Axial_Acceleration_Maxes (X_Axis),
+         "Returned acceleration limit must fit the axial acceleration budget");
+   end Test_Mixed_Derivative_Does_Not_Floor_Residual;
+
+   procedure Test_Mixed_Derivative_Stable_Snap_Quadratic (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Result : Mixed_Derivative_Limit_Result;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E100 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E100 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E100 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E100 * mm / s ** 5];
+      Params.Axial_Acceleration_Maxes (X_Axis) := 1.0E12 * mm / s ** 2;
+      Params.Axial_Jerk_Maxes (X_Axis) := 1.0E4 * mm / s ** 3;
+      Params.Axial_Snap_Maxes (X_Axis) := 1.0 * mm / s ** 4;
+      Bounds.Velocity (X_Axis) := 1.0;
+      Bounds.Acceleration (X_Axis) := (1.0 / 3.0E24) / mm;
+      Bounds.Jerk (X_Axis) := (5_000.0 / 3.0) / mm ** 2;
+
+      Result := Mixed_Derivative_Limits (Params, Bounds, 1.0 * mm / s);
+
+      T.Assert (Result.Valid, "Cancellation-stressed snap quadratic should remain valid");
+      T.Assert
+        (Result.Limits.Acceleration_Max > 9.98E-5 * mm / s ** 2
+           and then Result.Limits.Acceleration_Max < 1.0E-4 * mm / s ** 2,
+         "Snap quadratic should retain the positive root near 1e-16");
+   end Test_Mixed_Derivative_Stable_Snap_Quadratic;
+
+   procedure Test_Mixed_Derivative_Stable_Crackle_Quadratic (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Result : Mixed_Derivative_Limit_Result;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E100 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E100 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E100 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E100 * mm / s ** 5];
+      Params.Axial_Acceleration_Maxes (X_Axis) := 1.0E12 * mm / s ** 2;
+      Params.Axial_Jerk_Maxes (X_Axis) := 1.0E4 * mm / s ** 3;
+      Params.Axial_Snap_Maxes (X_Axis) := 1.0E4 * mm / s ** 4;
+      Params.Axial_Crackle_Maxes (X_Axis) := 1.0 * mm / s ** 5;
+      Bounds.Velocity (X_Axis) := 1.0;
+      Bounds.Jerk (X_Axis) := (1.0 / 15.0E24) / mm ** 2;
+      Bounds.Snap (X_Axis) := 1_000.0 / mm ** 3;
+
+      Result := Mixed_Derivative_Limits (Params, Bounds, 1.0 * mm / s);
+
+      T.Assert (Result.Valid, "Cancellation-stressed crackle quadratic should remain valid");
+      T.Assert
+        (Result.Limits.Acceleration_Max > 9.98E-5 * mm / s ** 2
+           and then Result.Limits.Acceleration_Max < 1.0E-4 * mm / s ** 2,
+         "Crackle quadratic should retain the positive root near 1e-16");
+   end Test_Mixed_Derivative_Stable_Crackle_Quadratic;
+
+   procedure Test_Mixed_Derivative_Scaled_Powers (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Result : Mixed_Derivative_Limit_Result;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E100 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E100 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E100 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E100 * mm / s ** 5];
+
+      Result := Mixed_Derivative_Limits (Params, Bounds, 1.0E80 * mm / s);
+      T.Assert (Result.Valid, "Zero derivative coefficients must suppress otherwise overflowing velocity powers");
+      T.Assert (Result.Max_Vel = 1.0E80 * mm / s, "Zero derivative bounds should not reduce velocity");
+
+      Bounds.Crackle (X_Axis) := 1.0E-300 / mm ** 4;
+      Result := Mixed_Derivative_Limits (Params, Bounds, 1.0E90 * mm / s);
+      T.Assert (Result.Valid, "A finite coefficient times an unrepresentable raw velocity power should remain valid");
+      T.Assert
+        (abs (Result.Max_Vel - 0.999E80 * mm / s) <= 1.0E-12 * Result.Max_Vel,
+         "Scaled fifth-power constraint should preserve its finite result");
+   end Test_Mixed_Derivative_Scaled_Powers;
+
+   procedure Test_Mixed_Derivative_Curved_Window_Reduces_Limits (T : in out Trendy_Test.Operation'Class) is
+      Params          : Kinematic_Parameters;
+      Straight_Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Curved_Bounds   : Unit_Speed_Axial_Derivative_Bounds;
+      Straight_Result : Mixed_Derivative_Limit_Result;
+      Curved_Result   : Mixed_Derivative_Limit_Result;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E9 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E9 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E6 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E12 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E18 * mm / s ** 5];
+      Params.Axial_Acceleration_Maxes (X_Axis) := 200.0 * mm / s ** 2;
+      Straight_Bounds.Velocity (X_Axis) := 1.0;
+      Curved_Bounds := Straight_Bounds;
+      Curved_Bounds.Acceleration (X_Axis) := 0.5 / mm;
+
+      Straight_Result := Mixed_Derivative_Limits (Params, Straight_Bounds, 10.0 * mm / s);
+      Curved_Result := Mixed_Derivative_Limits (Params, Curved_Bounds, 10.0 * mm / s);
+
+      T.Assert (Straight_Result.Valid, "Straight mixed derivative result should be valid");
+      T.Assert (Curved_Result.Valid, "Curved mixed derivative result should be valid");
+      T.Assert
+        (Curved_Result.Limits.Acceleration_Max < Straight_Result.Limits.Acceleration_Max,
+         "Curved window should reserve axial acceleration budget");
+      T.Assert
+        (abs (Curved_Result.Limits.Acceleration_Max - 149.85 * mm / s ** 2) <= 1.0E-6 * mm / s ** 2,
+         "Curved acceleration limit should account for x2*v^2");
+   end Test_Mixed_Derivative_Curved_Window_Reduces_Limits;
+
    procedure Test_Fast_Vs_Slow (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -218,7 +473,6 @@ package body Prunt.Motion_Planner.Test is
 
       Fast_Vel : constant Velocity := Fast_Velocity_At_Max_Time (Profile, Cm, Start_Vel);
       Slow_Vel : constant Velocity := Velocity_At_Time (Profile, Total_T, Cm, Start_Vel);
-
 
       T.Assert
         (abs (Fast_Dist - Slow_Dist) < 0.001 * mm,
@@ -564,6 +818,48 @@ package body Prunt.Motion_Planner.Test is
 
       Check_Full_Profile (Vs, Vm, Ve, Dist, Am, Jm, Sm, Cm, "Triangle", T);
    end Test_Optimal_Full_Profile_Triangle;
+
+   procedure Test_Optimal_Full_Profile_Short_Triangle_Distance_Closure (T : in out Trendy_Test.Operation'Class) is
+      procedure Check
+        (Start_Vel : Velocity;
+         Max_Vel   : Velocity;
+         End_Vel   : Velocity;
+         Distance  : Length;
+         Name      : String);
+
+      Am : constant Acceleration := 5_000.0 * mm / s ** 2;
+      Jm : constant Jerk := 500_000.0 * mm / s ** 3;
+      Sm : constant Snap := 500_000_000.0 * mm / s ** 4;
+      Cm : constant Crackle := 500_000_000_000.0 * mm / s ** 5;
+
+      procedure Check
+        (Start_Vel : Velocity;
+         Max_Vel   : Velocity;
+         End_Vel   : Velocity;
+         Distance  : Length;
+         Name      : String)
+      is
+         Profile : constant Feedrate_Profile :=
+           Optimal_Full_Profile (Start_Vel, Max_Vel, End_Vel, Distance, Am, Jm, Sm, Cm);
+         Actual  : constant Length := Distance_At_Time (Profile, Total_Time (Profile), Cm, Start_Vel);
+         Error   : constant Length := Actual - Distance;
+      begin
+         T.Assert
+           (abs Error <= 1.0E-9 * mm,
+            Name & ": distance closure error " & Error'Image);
+      end Check;
+   begin
+      T.Register;
+
+      Check
+        (26.929_5 * mm / s,
+         250.0 * mm / s,
+         26.801_9 * mm / s,
+         0.50 * mm,
+         "benchy-like nonzero speeds");
+      Check (80.0 * mm / s, 250.0 * mm / s, 20.0 * mm / s, 5.0 * mm, "asymmetric decel");
+      Check (0.0 * mm / s, 250.0 * mm / s, 0.0 * mm / s, 0.20 * mm, "short zero-end triangle");
+   end Test_Optimal_Full_Profile_Short_Triangle_Distance_Closure;
 
    procedure Test_Optimal_Profile_For_Delta_V_Case_V1_1 (T : in out Trendy_Test.Operation'Class) is
    begin
@@ -1804,6 +2100,14 @@ package body Prunt.Motion_Planner.Test is
       return
         [Test_Distance_At_Time_Is_Past_Accel'Access,
          Test_Distance_At_Time_Phases'Access,
+         Test_Mixed_Derivative_Straight_Line'Access,
+         Test_Constant_Speed_Axial_Ceiling'Access,
+         Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios'Access,
+         Test_Mixed_Derivative_Does_Not_Floor_Residual'Access,
+         Test_Mixed_Derivative_Stable_Snap_Quadratic'Access,
+         Test_Mixed_Derivative_Stable_Crackle_Quadratic'Access,
+         Test_Mixed_Derivative_Scaled_Powers'Access,
+         Test_Mixed_Derivative_Curved_Window_Reduces_Limits'Access,
          Test_Fast_Vs_Slow'Access,
          Test_Integration_Acceleration_To_Velocity'Access,
          Test_Integration_Crackle_To_Snap'Access,
@@ -1816,6 +2120,7 @@ package body Prunt.Motion_Planner.Test is
          Test_Optimal_Full_Profile_Reach_Max_Vel'Access,
          Test_Optimal_Full_Profile_Start_End_Constraints'Access,
          Test_Optimal_Full_Profile_Triangle'Access,
+         Test_Optimal_Full_Profile_Short_Triangle_Distance_Closure'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_1'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_2'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_3'Access,

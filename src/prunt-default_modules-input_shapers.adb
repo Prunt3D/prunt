@@ -280,25 +280,46 @@ package body Prunt.Default_Modules.Input_Shapers is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      pragma Unreferenced (This, Report_Config_Error, Status_Emitter);
+      pragma Unreferenced (This, Status_Emitter);
 
       Parsed_Config                     : constant User_Config := Config_Data_To_User_Config (Config_Data);
       Config_Saving_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Config_Saving_Module.Module_Instance'Tag);
       Config_Saver                      : Config_Saving_Module.Config_Saver'Class renames
         Config_Saving_Module.Config_Saver'Class (Config_Saving_Module_Instance_Ref.Get.Element.all);
+      Kinematics_Module_Instance_Ref    : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+        Get_Other_Instance (Kinematics_Module.Module_Instance'Tag);
+      Kinematics_Module_Instance        : Kinematics_Module.Module_Instance_Interface'Class renames
+        Kinematics_Module.Module_Instance_Interface'Class (Kinematics_Module_Instance_Ref.Get.Element.all);
+      Pressure_Advance_Allowed_Axes     : Pressure_Advance_Axis_Set;
    begin
+      for Axis in Axis_Name loop
+         Pressure_Advance_Allowed_Axes (Axis) := Kinematics_Module_Instance.Axis_Is_Motor_Separable (Axis);
+
+         if Parsed_Config.Input_Shaping (Axis).Kind = Pressure_Advance
+           and then not Pressure_Advance_Allowed_Axes (Axis)
+         then
+            Report_Config_Error
+              (["Input_Shaping", +Axis'Image, "Kind"],
+               "Pressure advance is not supported on an axis that shares a motor with another axis.");
+         end if;
+      end loop;
+
       return Result : Module_Instance do
          Config_Saver.Register_For_Saving (Config_Data);
-         Result.Initialize (Parsed_Config, Config_Data);
+         Result.Initialize (Parsed_Config, Config_Data, Pressure_Advance_Allowed_Axes);
       end return;
    end Initialize;
 
    protected body Module_Instance is
-      procedure Initialize (Config_In : User_Config; Config_Data_In : Prunt.Config.Config_Data) is
+      procedure Initialize
+        (Config_In                        : User_Config;
+         Config_Data_In                   : Prunt.Config.Config_Data;
+         Pressure_Advance_Allowed_Axes_In : Pressure_Advance_Axis_Set) is
       begin
          Config := Config_In;
          Config_Data := Config_Data_In;
+         Pressure_Advance_Allowed_Axes := Pressure_Advance_Allowed_Axes_In;
       end Initialize;
 
       procedure Start
@@ -322,6 +343,11 @@ package body Prunt.Default_Modules.Input_Shapers is
       begin
          return [for Axis in Axis_Name => Build_Shaper_Parameters (Config.Input_Shaping (Axis))];
       end Get_Current_Axial_Shapers;
+
+      function Pressure_Advance_Is_Allowed (Axis : Axis_Name) return Boolean is
+      begin
+         return Pressure_Advance_Allowed_Axes (Axis);
+      end Pressure_Advance_Is_Allowed;
    end Module_Instance;
 
    procedure Configure_Input_Shaping
@@ -337,6 +363,7 @@ package body Prunt.Default_Modules.Input_Shapers is
       Updated         : Boolean := False;
       New_Shapers     : Prunt.Input_Shapers.Axial_Shaper_Parameters :=
         Planner.Get_Last_Kinematic_Parameters.Axial_Shapers;
+      Instance        : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
 
       procedure Handle_Axis (Axis : Axis_Name; Value : Gcode_Optional_String);
 
@@ -345,6 +372,10 @@ package body Prunt.Default_Modules.Input_Shapers is
       begin
          if Value.Present then
             Method := Parse_Axial_Shaper_Config (Value.Value);
+            if Method.Kind = Pressure_Advance and then not Instance.Pressure_Advance_Is_Allowed (Axis) then
+               raise Gcode_Bad_Inputs_Error
+                 with "Pressure advance is not supported on an axis that shares a motor with another axis.";
+            end if;
             Updated_Configs.Insert (Axis, Method);
             New_Shapers (Axis) := Build_Shaper_Parameters (Method);
             Updated := True;

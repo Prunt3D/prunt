@@ -242,10 +242,20 @@ package Prunt.Config is
    --  TODO: Enforce the above by making Config_Data a controlled type or giving it a controlled member.
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Boolean;
+   --  Retrieve the Boolean configuration value at Path.
+
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Long_Float;
+   --  Retrieve the Long_Float configuration value at Path.
+
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Dimensionless;
+   --  Retrieve the dimensionless configuration value at Path.
+
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Long_Long_Integer;
+   --  Retrieve the integer configuration value at Path.
+
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Virtual_String;
+   --  Retrieve the string configuration value at Path.
+
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Dimensionless_Ratio;
    --  Retrieves a value from the configuration.
    --
@@ -257,10 +267,20 @@ package Prunt.Config is
    --  - The Path structure is invalid for the types traversed (e.g., requesting a field of a scalar).
 
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Boolean);
+   --  Replace the Boolean configuration value at Path.
+
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Float);
+   --  Replace the Long_Float configuration value at Path.
+
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless);
+   --  Replace the dimensionless configuration value at Path.
+
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Long_Integer);
+   --  Replace the integer configuration value at Path.
+
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Virtual_String);
+   --  Replace the string configuration value at Path.
+
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless_Ratio);
    --  Updates a value in the configuration.
    --
@@ -369,6 +389,9 @@ private
 
    package JSON_Delta_Maps is new Ada.Containers.Indefinite_Ordered_Maps (Virtual_String, JSON_Value);
 
+   function Create_Default_Property_Config (Property : Config_Property_Parameters'Class) return JSON_Value;
+   --  Build the configuration JSON value described by Property's defaults, recursively for composite properties.
+
    procedure Validate_Field_Names
      (Val            : JSON_Value;
       Allowed_Fields : VSS.String_Vectors.Virtual_String_Vector;
@@ -377,6 +400,7 @@ private
    --  Validates that all fields in Val are present in Allowed_Fields. Calls Report for any unknown fields found.
 
    procedure Set_Field (Val : JSON_Value; Field : Virtual_String; Value : Dimensionless);
+   --  Store Value in Field using the JSON floating-point representation used for dimensionless values.
 
    procedure Validate_Outer_Config_Structure
      (Config : JSON_Value; Report : access procedure (Path : Config_Data_Paths.Vector; Message : Virtual_String));
@@ -392,10 +416,13 @@ private
       Schema                   : Config_Property_Maps.Map;
       Report                   : access procedure (Path : Config_Data_Paths.Vector; Message : Virtual_String);
       Check_For_Missing_Fields : Boolean);
+   --  Report values in Config that do not conform to Schema, optionally including missing fields.
 
    function Create_Default_Module_Config (Schema : Config_Property_Maps.Map) return JSON_Value;
+   --  Build a module configuration object populated with every default in Schema.
 
    function Generate_Schemas_String (Schemas : Config_Schema_Maps.Map) return Virtual_String;
+   --  Serialize Schemas in the JSON format consumed by the configuration user interface.
 
    procedure Recursive_Left_Merge (Left : JSON_Value; Right : JSON_Value; Full_Join : Boolean := True);
    --  Takes the content of the Right JSON object and places it into Left. Objects are recursively merged rather
@@ -480,7 +507,10 @@ private
 
    function Get_JSON_Node
      (Root : JSON_Value; Path : Config_Data_Paths.Vector; Module : Virtual_String) return JSON_Value;
+   --  Return the node at Path, raising Constraint_Error with Module context when a path component is absent.
+
    procedure Set_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Value : JSON_Value);
+   --  Store Value at Path, creating missing intermediate JSON objects.
 
    function Is_Path_Prefix (Prefix : Config_Data_Paths.Vector; Path : Config_Data_Paths.Vector) return Boolean;
    --  Returns True when Prefix is an initial segment of Path. The empty path is a prefix of every path.
@@ -534,18 +564,23 @@ private
    --  Reports every overridden path touched by an untrusted patch for Owner.
 
    function Path_Without_Last (Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector;
+   --  Return Path without its final component, or an empty path when Path has fewer than two components.
 
    function Selected_Variant_Default
      (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector; Default_Value : out JSON_Value)
       return Boolean;
+   --  Return True and the enclosing variant's default object when Path selects that variant's Selected field.
 
    function Prune_Path_For_Override
      (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector;
+   --  Return the schema path whose complete value must be hidden when Path is overridden.
 
    function Try_Get_JSON_Node
      (Root : JSON_Value; Path : Config_Data_Paths.Vector; Result : out JSON_Value) return Boolean;
+   --  Look up Path without raising, returning False and JSON_Null when it cannot be traversed.
 
    procedure Merge_Default_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Default_Value : JSON_Value);
+   --  Ensure Path contains Default_Value's structure while preserving any compatible existing object members.
 
    type Config_Data is record
       For_Migration    : Boolean := False;

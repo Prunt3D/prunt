@@ -42,9 +42,6 @@ package body Prunt.Controller is
    --  Length'Last is the unused axis/motor sentinel consumed by To_Motor_Position. These invalid initial maps are
    --  overwritten before Pipeline_Is_Set_Up is set True.
 
-   procedure Setup_Planner_Runners
-     (Params : Motion_Planner.Kinematic_Parameters; Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map);
-
    protected body Handler_Instances is
       procedure Load (New_Handlers : Module_Instance_Vectors.Vector) is
       begin
@@ -260,16 +257,43 @@ package body Prunt.Controller is
 
       case This.Target is
          when Primary_Planner_Target =>
+            My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
             Primary_Planner_State.Set_Last_Position (Pos);
 
-            My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
-
          when Pause_Planner_Target   =>
-            Pause_Planner_State.Set_Last_Position (Pos);
-
             My_Pause_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
+            Pause_Planner_State.Set_Last_Position (Pos);
       end case;
    end Add_Corner;
+
+   overriding
+   procedure Add_Helix
+     (This          : Planner_Wrapper;
+      Center        : Position;
+      Pos           : Position;
+      Clockwise     : Boolean;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True)
+   is
+      pragma Unreferenced (Require_Homed);
+   begin
+      if This.Startup_Mode and then Pos /= This.Get_Last_Position then
+         raise Constraint_Error with "Motion not allowed during startup.";
+      end if;
+
+      case This.Target is
+         when Primary_Planner_Target =>
+            My_Motion_Planner.Enqueue_Helix
+              (Pos => Pos, Center => Center, Clockwise => Clockwise, Feedrate => Feedrate, Dwell_After => Dwell_After);
+            Primary_Planner_State.Set_Last_Position (Pos);
+
+         when Pause_Planner_Target   =>
+            My_Pause_Motion_Planner.Enqueue_Helix
+              (Pos => Pos, Center => Center, Clockwise => Clockwise, Feedrate => Feedrate, Dwell_After => Dwell_After);
+            Pause_Planner_State.Set_Last_Position (Pos);
+      end case;
+   end Add_Helix;
 
    overriding
    procedure Add_Corner_Data (This : Planner_Wrapper; Corner_Data : Extra_Corner_Data'Class) is
@@ -319,16 +343,14 @@ package body Prunt.Controller is
 
       case This.Target is
          when Primary_Planner_Target =>
-            Primary_Planner_State.Set_Last_Kinematic_Parameters (Params);
-
             My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
               (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+            Primary_Planner_State.Set_Last_Kinematic_Parameters (Params);
 
          when Pause_Planner_Target   =>
-            Pause_Planner_State.Set_Last_Kinematic_Parameters (Params);
-
             My_Pause_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
               (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+            Pause_Planner_State.Set_Last_Kinematic_Parameters (Params);
       end case;
    end Flush_And_Change_Kinematic_Parameters;
 
@@ -345,20 +367,18 @@ package body Prunt.Controller is
 
       case This.Target is
          when Primary_Planner_Target =>
-            Primary_Planner_State.Set_Last_Position (New_Position);
-
             My_Motion_Planner.Enqueue_Flush_And_Reset_Position
               (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
                Pos            => New_Position,
                Is_Homing_Move => Is_Homing_Move);
+            Primary_Planner_State.Set_Last_Position (New_Position);
 
          when Pause_Planner_Target   =>
-            Pause_Planner_State.Set_Last_Position (New_Position);
-
             My_Pause_Motion_Planner.Enqueue_Flush_And_Reset_Position
               (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
                Pos            => New_Position,
                Is_Homing_Move => Is_Homing_Move);
+            Pause_Planner_State.Set_Last_Position (New_Position);
       end case;
    end Flush_And_Reset_Position;
 
@@ -370,8 +390,8 @@ package body Prunt.Controller is
    procedure Setup_Planner_Runners
      (Params : Motion_Planner.Kinematic_Parameters; Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map) is
    begin
-      My_Motion_Planner.Runner.Setup (Params, My_Motion_Planner.Motor_Pos_Map (Map));
-      My_Pause_Motion_Planner.Runner.Setup (Params, My_Pause_Motion_Planner.Motor_Pos_Map (Map));
+      My_Motion_Planner.Runner.Setup (Params, Map);
+      My_Pause_Motion_Planner.Runner.Setup (Params, Map);
       My_Step_Generator.Runner.Setup (My_Step_Generator.Motor_Pos_Map (Map));
    end Setup_Planner_Runners;
 
@@ -457,22 +477,30 @@ package body Prunt.Controller is
       end Reset_Runtime_State;
 
       procedure Setup_Runtime_Pipeline is
-         Kinematics_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+         Kinematics_Instance_Ref    : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
            Active_Module_Instances ("Kinematics");
-         Kinematics_Instance     : My_Default_Modules_Children.Kinematics.Module_Instance_Interface'Class renames
+         Kinematics_Instance        : My_Default_Modules_Children.Kinematics.Module_Instance_Interface'Class renames
            My_Default_Modules_Children.Kinematics.Module_Instance_Interface'Class
              (Kinematics_Instance_Ref.Get.Element.all);
-         Startup_Configuration   : constant My_Default_Modules_Children.Kinematics.Motion_Planner_Configuration :=
+         Input_Shapers_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+           Active_Module_Instances ("Input Shapers");
+         Input_Shapers_Instance     : My_Default_Modules_Children.Input_Shapers.Module_Instance_Interface'Class renames
+           My_Default_Modules_Children.Input_Shapers.Module_Instance_Interface'Class
+             (Input_Shapers_Instance_Ref.Get.Element.all);
+         Startup_Configuration      : constant My_Default_Modules_Children.Kinematics.Motion_Planner_Configuration :=
            Kinematics_Instance.Get_Default_Motion_Planner_Configuration;
+         Startup_Parameters         : constant Motion_Planner.Kinematic_Parameters :=
+           (Startup_Configuration.Parameters
+            with delta Axial_Shapers => Input_Shapers_Instance.Get_Current_Axial_Shapers);
       begin
          Current_Motor_Position_Map := Startup_Configuration.Motors_To_Position;
-         Setup_Planner_Runners (Startup_Configuration.Parameters, Current_Motor_Position_Map);
+         Setup_Planner_Runners (Startup_Parameters, Current_Motor_Position_Map);
 
-         Primary_Planner_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
+         Primary_Planner_State.Set_Last_Kinematic_Parameters (Startup_Parameters);
          Primary_Planner_State.Set_Last_Position (Startup_Position);
-         Pause_Planner_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
+         Pause_Planner_State.Set_Last_Kinematic_Parameters (Startup_Parameters);
          Pause_Planner_State.Set_Last_Position (Startup_Position);
-         Pause_Default_State.Set_Last_Kinematic_Parameters (Startup_Configuration.Parameters);
+         Pause_Default_State.Set_Last_Kinematic_Parameters (Startup_Parameters);
          Pause_Default_State.Set_Last_Position (Startup_Position);
          Last_Command_Executed.Reset (Startup_Position);
          Reset_Position ([others => 0.0]);

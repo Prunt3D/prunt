@@ -17,12 +17,12 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-pragma Extensions_Allowed (On);
-
 with Trendy_Test;
 
-package Prunt.Motion_Planner.PH_Beziers.Test is
+generic
+package Prunt.Default_Modules.Kinematics.Test is
 
    function All_Tests return Trendy_Test.Test_Group;
+   --  Return tests for the generated version-one cornering schema and M205 command metadata.
 
-end Prunt.Motion_Planner.PH_Beziers.Test;
+end Prunt.Default_Modules.Kinematics.Test;

@@ -161,6 +161,7 @@ package Prunt is
    subtype Curvature_To_2 is Dimensioned_Float with Dimension => (Symbol => "mm**(-2)", Millimeter => -2, others => 0);
    subtype Curvature_To_3 is Dimensioned_Float with Dimension => (Symbol => "mm**(-3)", Millimeter => -3, others => 0);
    subtype Curvature_To_4 is Dimensioned_Float with Dimension => (Symbol => "mm**(-4)", Millimeter => -4, others => 0);
+   subtype Curvature_To_5 is Dimensioned_Float with Dimension => (Symbol => "mm**(-5)", Millimeter => -5, others => 0);
 
    subtype Heat_Flux is Dimensioned_Float
    with Dimension => (Symbol => "mW/mm**2", Gram => 1, Second => -3, others => 0);
@@ -187,46 +188,85 @@ package Prunt is
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis) with Annotate => (Prunt_Config, User_Config);
 
    type Position is array (Axis_Name) of Length;
-   type Scaled_Position is new Position;
-   --  A Scaled_Position is any absolute position that does not represent real machine coordinates.
    type Position_Offset is new Position;
-   type Scaled_Position_Offset is new Position;
-   --  Using the same root type for all these types avoids some copies, see RM 4.6(58.5/5).
    type Position_Scale is array (Axis_Name) of Dimensionless;
    type Axial_Velocities is array (Axis_Name) of Velocity;
+   type Axial_Accelerations is array (Axis_Name) of Acceleration;
+   type Axial_Jerks is array (Axis_Name) of Jerk;
+   type Axial_Snaps is array (Axis_Name) of Snap;
+   type Axial_Crackles is array (Axis_Name) of Crackle;
 
-   function "*" (Left : Position; Right : Position_Scale) return Scaled_Position;
+   function "*" (Left : Position; Right : Position_Scale) return Position;
+   --  Multiply each axis of Left by the corresponding scale in Right.
+
    function "*" (Left : Position_Offset; Right : Position_Scale) return Position_Offset;
+   --  Multiply each axis offset in Left by the corresponding scale in Right.
+
    function "*" (Left : Position_Scale; Right : Dimensionless) return Position_Scale;
-   function "*" (Left : Position_Scale; Right : Length) return Scaled_Position_Offset;
+   --  Multiply every axis scale in Left by the scalar Right.
+
+   function "*" (Left : Position_Scale; Right : Length) return Position_Offset;
+   --  Scale each axis proportion in Left by the physical length Right.
+
    function "*" (Left : Position_Scale; Right : Velocity) return Axial_Velocities;
-   function "*" (Left : Scaled_Position; Right : Position_Scale) return Scaled_Position;
-   function "*" (Left : Scaled_Position; Right : Dimensionless) return Scaled_Position;
-   function "*" (Left : Scaled_Position_Offset; Right : Position_Scale) return Scaled_Position_Offset;
-   function "*" (Left : Scaled_Position_Offset; Right : Dimensionless) return Scaled_Position_Offset;
-   function "+" (Left : Scaled_Position; Right : Scaled_Position_Offset) return Scaled_Position;
+   --  Resolve scalar velocity Right into per-axis velocities using Left.
+
+   function "*" (Left : Position; Right : Dimensionless) return Position;
+   --  Multiply every coordinate in Left by the scalar Right.
+
+   function "*" (Left : Position_Offset; Right : Dimensionless) return Position_Offset;
+   --  Multiply every axis offset in Left by the scalar Right.
+
    function "+" (Left, Right : Position_Scale) return Position_Scale;
+   --  Add corresponding axis scales from Left and Right.
+
    function "+" (Left : Position; Right : Position_Offset) return Position;
+   --  Translate Left by the per-axis offset Right.
+
    function "-" (Left, Right : Position) return Position_Offset;
+   --  Return the per-axis offset from Right to Left.
+
    function "-" (Left, Right : Position_Scale) return Position_Scale;
-   function "-" (Left, Right : Scaled_Position) return Scaled_Position_Offset;
-   function "-" (Left, Right : Scaled_Position_Offset) return Scaled_Position_Offset;
-   function "-" (Left : Scaled_Position; Right : Scaled_Position_Offset) return Scaled_Position;
+   --  Subtract corresponding axis scales in Right from Left.
+
+   function "-" (Left, Right : Position_Offset) return Position_Offset;
+   --  Subtract corresponding axis offsets in Right from Left.
+
    function "-" (Left : Position; Right : Position_Offset) return Position;
+   --  Translate Left by the negative of the per-axis offset Right.
+
    function "/" (Left : Axial_Velocities; Right : Position_Scale) return Axial_Velocities;
+   --  Divide each axial velocity in Left by the corresponding scale in Right.
+
    function "/" (Left : Position_Offset; Right : Length) return Position_Scale;
+   --  Normalize each axis offset in Left by the physical length Right.
+
    function "/" (Left : Position_Scale; Right : Dimensionless) return Position_Scale;
-   function "/" (Left : Scaled_Position_Offset; Right : Length) return Position_Scale;
-   function "/" (Left : Scaled_Position; Right : Dimensionless) return Scaled_Position;
-   function "/" (Left : Scaled_Position; Right : Position_Scale) return Scaled_Position;
-   function "/" (Left : Position; Right : Position_Scale) return Scaled_Position;
-   function "/" (Left : Scaled_Position_Offset; Right : Position_Scale) return Scaled_Position_Offset;
+   --  Divide every axis scale in Left by the scalar Right.
+
+   function "/" (Left : Position; Right : Dimensionless) return Position;
+   --  Divide every coordinate in Left by the scalar Right.
+
+   function "/" (Left : Position; Right : Position_Scale) return Position;
+   --  Divide each coordinate in Left by the corresponding scale in Right.
+
+   function "/" (Left : Position_Offset; Right : Position_Scale) return Position_Offset;
+   --  Divide each axis offset in Left by the corresponding scale in Right.
+
    function "abs" (Left : Position_Offset) return Length;
+   --  Return the Euclidean magnitude of the four-axis physical offset Left.
+
    function "abs" (Left : Position_Scale) return Dimensionless;
-   function "abs" (Left : Scaled_Position_Offset) return Length;
+   --  Return the Euclidean magnitude of the four-axis dimensionless vector Left.
+
    function Dot (Left, Right : Position_Scale) return Dimensionless;
-   function Dot (Left : Scaled_Position_Offset; Right : Position_Scale) return Length;
-   function Dot (Left, Right : Scaled_Position_Offset) return Area;
+   --  Return the Euclidean dot product of two dimensionless axis vectors.
+
+   function Dot (Left : Position_Offset; Right : Position_Scale) return Length;
+   --  Return the Euclidean dot product of a physical offset and a dimensionless axis vector.
+
+   function Dot (Left, Right : Position_Offset) return Area;
+   --  Return the Euclidean dot product of two physical axis offsets.
 
    TMC_UART_Error : exception;
 
@@ -284,9 +324,13 @@ package Prunt is
    type Fan_Hardware_Kind is (Fixed_Switching_Kind, Low_Or_High_Side_Switching_Kind);
 
    function "+" (Left : String) return Virtual_String renames Conversions.To_Virtual_String;
+   --  Convert a UTF-8 String to Virtual_String.
 
    function Next_Test_Filename return String;
+   --  Return a process-unique temporary test-file path encoded as a UTF-8 String.
+
    function Next_Test_Filename return Virtual_String;
+   --  Return a process-unique temporary test-file path as a Virtual_String.
 
    protected Test_File_Name_Generator is
       procedure Get_Next (Name : out Virtual_String);
@@ -298,5 +342,6 @@ package Prunt is
 
    procedure Wait (Reporter : in out Loop_Cycle_Reporter_Interface; Index : Command_Index; Cycles : out Dimensionless)
    is abstract;
+   --  Wait for the loop move identified by Index to report completion and return its executed cycle count.
 
 end Prunt;

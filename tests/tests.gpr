@@ -5,18 +5,35 @@ project Tests is
    for Object_Dir use "obj/" & Tests_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
    for Exec_Dir use "bin";
-   for Main use ("tests.adb", "integration_tests.adb", "integration_scenario_runner.adb");
+   for Main use
+     ("tests.adb",
+      "integration_tests.adb",
+      "integration_scenario_runner.adb",
+      "benchy_planner_time.adb");
+
+   type Benchmark_Mode_Type is ("disabled", "enabled");
+   Benchmark_Mode : Benchmark_Mode_Type := external ("PRUNT_BENCHMARK_MODE", "disabled");
+
+   Tests_Release_Ada_Compiler_Switches :=
+     (--  TODO: Benchmark with -gnatp (disable all runtime checks)
+      "-flto=auto",
+      "-fuse-linker-plugin",
+      "-ffat-lto-objects",
+      "-gnatn", --  Enable inlining
+      "-O2");   --  TODO: Benchmark with O2 vs O3
+
+   case Benchmark_Mode is
+      when "disabled" =>
+         null;
+      when "enabled" =>
+         Tests_Release_Ada_Compiler_Switches :=
+           external_as_list ("PRUNT_BENCHMARK_COMPILER_SWITCHES", ",");
+   end case;
 
    Tests_Extra_Ada_Compiler_Switches := ();
    case Tests_Config.Build_Profile is
       when "release" =>
-         Tests_Extra_Ada_Compiler_Switches :=
-           (--  TODO: Benchmark with -gnatp (disable all runtime checks)
-            "-flto=auto",
-            "-fuse-linker-plugin",
-            "-ffat-lto-objects",
-            "-gnatn", --  Enable inlining
-            "-O2");   --  TODO: Benchmark with O2 vs O3
+         Tests_Extra_Ada_Compiler_Switches := Tests_Release_Ada_Compiler_Switches;
 
       when "validation" =>
          Tests_Extra_Ada_Compiler_Switches :=
@@ -119,7 +136,7 @@ project Tests is
          when "release" =>
             for Switches ("Ada") use
               ("-flto=auto", --  Link time optimization
-               "-Wl,--gc-sections", "--gc-sections"); --  Delete unreferenced sections
+               "-Wl,--gc-sections"); --  Delete unreferenced sections
          when "validation" =>
             null;
          when "development" =>

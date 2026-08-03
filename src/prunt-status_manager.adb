@@ -305,6 +305,9 @@ package body Prunt.Status_Manager is
             Value.Set (Get_Data'Access);
             Group_Refs.Insert (Key, Value);
          end if;
+
+         Module_Refs.Replace (Group, Group_Refs);
+         Lock_Free_Dimensionless_Refs.Replace (Module, Module_Refs);
       end Get_Lock_Free_Setter;
 
       procedure Get_Lock_Free_Setter
@@ -343,6 +346,9 @@ package body Prunt.Status_Manager is
             Value.Set (Get_Data'Access);
             Group_Refs.Insert (Key, Value);
          end if;
+
+         Module_Refs.Replace (Group, Group_Refs);
+         Lock_Free_Boolean_Refs.Replace (Module, Module_Refs);
       end Get_Lock_Free_Setter;
 
       function JSON_Schema return Virtual_String is

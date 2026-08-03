@@ -24,7 +24,70 @@ pragma Extensions_Allowed (On);
 
 with Prunt.Input_Shapers;
 
+private with Ada.Numerics.Generic_Elementary_Functions;
+
 package Prunt.Motion_Planner is
+
+   type Axial_Deviation_Limits is array (Axis_Name) of Length range 0.0 * mm .. Length'Last;
+
+   type Cornering_Kind is (Stereographic, Circular, Parabolic, Biarc, Sharp_SCV);
+
+   type Stereographic_Corner_Parameters is record
+      Axial_Deviation_Maxes    : Axial_Deviation_Limits := [others => 0.1 * mm];
+      Corner_Miss_Distance_Max : Length := 0.1 * mm;
+      Shape_Bias               : Dimensionless range -1.0 .. 1.0 := 0.0;
+      Circularity              : Dimensionless range 0.0 .. 1.0 := 0.0;
+   end record;
+
+   type Circular_Corner_Parameters is record
+      Axial_Deviation_Maxes    : Axial_Deviation_Limits := [others => 0.1 * mm];
+      Corner_Miss_Distance_Max : Length := 0.1 * mm;
+      Radius_Max               : Length := 1.0E100 * mm;
+   end record;
+
+   type Parabolic_Corner_Parameters is record
+      Axial_Deviation_Maxes    : Axial_Deviation_Limits := [others => 0.1 * mm];
+      Corner_Miss_Distance_Max : Length := 0.1 * mm;
+      Shape_Bias               : Dimensionless range -1.0 .. 1.0 := 0.0;
+      Trim_Max                 : Length := 1.0E100 * mm;
+   end record;
+
+   type Biarc_Corner_Parameters is record
+      Axial_Deviation_Maxes    : Axial_Deviation_Limits := [others => 0.1 * mm];
+      Corner_Miss_Distance_Max : Length := 0.1 * mm;
+      Shape_Bias               : Dimensionless range -1.0 .. 1.0 := 0.0;
+      Trim_Max                 : Length := 1.0E100 * mm;
+   end record;
+
+   type Sharp_SCV_Corner_Parameters is record
+      Square_Corner_Velocity : Velocity := 5.0 * mm / s;
+   end record;
+
+   type Cornering_Parameters (Kind : Cornering_Kind := Stereographic) is record
+      case Kind is
+         when Stereographic =>
+            Stereographic_Params : Stereographic_Corner_Parameters;
+
+         when Circular =>
+            Circular_Params : Circular_Corner_Parameters;
+
+         when Parabolic =>
+            Parabolic_Params : Parabolic_Corner_Parameters;
+
+         when Biarc =>
+            Biarc_Params : Biarc_Corner_Parameters;
+
+         when Sharp_SCV =>
+            Sharp_SCV_Params : Sharp_SCV_Corner_Parameters;
+      end case;
+   end record;
+   --  Selects one corner-transition construction and contains only the parameters meaningful to that construction.
+   --  Stereographic supports the existing line/helix combinations and matches position through its fourth distance
+   --  derivative at each endpoint. Circular and Parabolic are C1 line-to-line transitions; their endpoint jerk, snap,
+   --  and crackle limits are waived. Biarc is C1 for certifiable line/helix corners and has the same waiver at both
+   --  endpoints and its internal splice. Sharp_SCV is C0 for primitives with usable tangents, so acceleration and
+   --  every higher derivative limit are waived at its junction. Unsupported or uncertifiable geometry becomes a hard
+   --  stop.
 
    type Kinematic_Parameters is record
       Lower_Pos_Limit : Position := [others => 0.0 * mm];
@@ -39,21 +102,63 @@ package Prunt.Motion_Planner is
       --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
       --  planners do.
 
-      Shift_Blended_Corners : Boolean := False;
-      --  When True, the corner blending algorithm will attempt to shift the virtual corner points so that the midpoint
-      --  of the generated Bézier curve falls on the original corner's location. This allows for the blended paths to
-      --  more closely match the original model that the g-code was generated from in some cases.
-
-      Tangential_Velocity_Max : Velocity := 0.0 * mm / s;
-      Axial_Velocity_Maxes    : Axial_Velocities := [others => 0.0 * mm / s];
-      Acceleration_Max        : Acceleration := 0.0 * mm / s ** 2;
-      Jerk_Max                : Jerk := 0.0 * mm / s ** 3;
-      Snap_Max                : Snap := 0.0 * mm / s ** 4;
-      Crackle_Max             : Crackle := 0.0 * mm / s ** 5;
-      Chord_Error_Max         : Length := 0.0 * mm;
-      Axial_Scaler            : Position_Scale := [others => 1.0];
-      Axial_Shapers           : Input_Shapers.Axial_Shaper_Parameters := [others => (Kind => Input_Shapers.No_Shaper)];
+      Tangential_Velocity_Max  : Velocity := 0.0 * mm / s;
+      Axial_Velocity_Maxes     : Axial_Velocities := [others => 0.0 * mm / s];
+      Axial_Acceleration_Maxes : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
+      Axial_Jerk_Maxes         : Axial_Jerks := [others => 0.0 * mm / s ** 3];
+      Axial_Snap_Maxes         : Axial_Snaps := [others => 0.0 * mm / s ** 4];
+      Axial_Crackle_Maxes      : Axial_Crackles := [others => 0.0 * mm / s ** 5];
+      Cornering                : Cornering_Parameters := (others => <>);
+      Axial_Shapers            : Input_Shapers.Axial_Shaper_Parameters :=
+        [others => (Kind => Input_Shapers.No_Shaper)];
    end record;
+
+   type Unit_Speed_Axial_Velocity_Bounds is array (Axis_Name) of Dimensionless;
+   type Unit_Speed_Axial_Acceleration_Bounds is array (Axis_Name) of Curvature;
+   type Unit_Speed_Axial_Jerk_Bounds is array (Axis_Name) of Curvature_To_2;
+   type Unit_Speed_Axial_Snap_Bounds is array (Axis_Name) of Curvature_To_3;
+   type Unit_Speed_Axial_Crackle_Bounds is array (Axis_Name) of Curvature_To_4;
+
+   type Unit_Speed_Axial_Derivative_Bounds is record
+      Velocity     : Unit_Speed_Axial_Velocity_Bounds := [others => 0.0];
+      Acceleration : Unit_Speed_Axial_Acceleration_Bounds := [others => 0.0 / mm];
+      Jerk         : Unit_Speed_Axial_Jerk_Bounds := [others => 0.0 / mm ** 2];
+      Snap         : Unit_Speed_Axial_Snap_Bounds := [others => 0.0 / mm ** 3];
+      Crackle      : Unit_Speed_Axial_Crackle_Bounds := [others => 0.0 / mm ** 4];
+   end record;
+   --  Component-wise bounds for |d^n x / ds^n| on a unit-speed path in scaled coordinates.
+
+   type Scalar_Derivative_Limits is record
+      Acceleration_Max : Acceleration := 1.0E100 * mm / s ** 2;
+      Jerk_Max         : Jerk := 1.0E100 * mm / s ** 3;
+      Snap_Max         : Snap := 1.0E100 * mm / s ** 4;
+      Crackle_Max      : Crackle := 1.0E100 * mm / s ** 5;
+   end record;
+
+   type Mixed_Derivative_Limit_Result is record
+      Valid   : Boolean := False;
+      Limits  : Scalar_Derivative_Limits;
+      Max_Vel : Velocity := 0.0 * mm / s;
+   end record;
+
+   function Nth_Root_Ratio (Numerator, Denominator : Dimensionless; Degree : Positive) return Dimensionless;
+   --  Return (Numerator / Denominator) raised to 1 / Degree without first forming the potentially overflowing or
+   --  underflowing quotient. A nonpositive Numerator returns zero; a nonpositive Denominator returns
+   --  Dimensionless'Last.
+
+   function Constant_Speed_Axial_Ceiling
+     (Params  : Kinematic_Parameters;
+      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel : Velocity;
+      Safety  : Dimensionless := 0.999) return Velocity;
+   --  Return the maximum constant tangential speed that keeps velocity through crackle within axial limits.
+
+   function Mixed_Derivative_Limits
+     (Params  : Kinematic_Parameters;
+      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel : Velocity;
+      Safety  : Dimensionless := 0.999) return Mixed_Derivative_Limit_Result;
+   --  Return scalar tangential limits after reserving axial derivative budget for unit-speed path curvature terms.
 
    type Max_Corners_Type is range 2 .. 2 ** 63 - 1;
 
@@ -270,6 +375,8 @@ package Prunt.Motion_Planner is
 
 private
 
+   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+
    type Constraint_Region is (Region_1, Region_2, Region_3, Region_4, Region_5);
 
    type Internal_Profile_Result is record
@@ -285,9 +392,11 @@ private
       Jerk_Max         : Jerk;
       Snap_Max         : Snap;
       Crackle_Max      : Crackle) return Internal_Profile_Result;
+   --  Solve the minimum-time zero-endpoint-velocity profile for Distance and retain its active constraint region.
 
    function Optimal_Profile_For_Delta_V_Internal
      (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
       return Internal_Profile_Result;
+   --  Solve the minimum-time derivative-limited transition for Delta_V and retain its active constraint region.
 
 end Prunt.Motion_Planner;

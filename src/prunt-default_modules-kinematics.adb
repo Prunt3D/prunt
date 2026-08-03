@@ -21,6 +21,21 @@ package body Prunt.Default_Modules.Kinematics is
 
    pragma Extensions_Allowed (On);
 
+   function Map_Axis_Is_Motor_Separable (Map : Motor_Position_Map; Axis : Axis_Name) return Boolean is
+   begin
+      for Motor in Motor_Name loop
+         if Map (Axis, Motor) /= Length'Last then
+            for Other_Axis in Axis_Name loop
+               if Other_Axis /= Axis and then Map (Other_Axis, Motor) /= Length'Last then
+                  return False;
+               end if;
+            end loop;
+         end if;
+      end loop;
+
+      return True;
+   end Map_Axis_Is_Motor_Separable;
+
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;
@@ -47,28 +62,70 @@ package body Prunt.Default_Modules.Kinematics is
       Instance.Apply_Runtime_Config (This.Updates);
    end Process_After_Block;
 
+   function Build_Cornering_Parameters (Cornering : User_Config_Cornering) return Motion_Planner.Cornering_Parameters
+   is
+   begin
+      case Cornering.Kind is
+         when Stereographic =>
+            return
+              (Kind                 => Motion_Planner.Stereographic,
+               Stereographic_Params =>
+                 (Axial_Deviation_Maxes    => [for X of Cornering.Stereographic_Params.Axial_Deviation_Limits => X],
+                  Corner_Miss_Distance_Max => Cornering.Stereographic_Params.Maximum_Corner_Miss_Distance,
+                  Shape_Bias               => Cornering.Stereographic_Params.Shape_Bias,
+                  Circularity              => Cornering.Stereographic_Params.Circularity));
+
+         when Circular      =>
+            return
+              (Kind            => Motion_Planner.Circular,
+               Circular_Params =>
+                 (Axial_Deviation_Maxes    => [for X of Cornering.Circular_Params.Axial_Deviation_Limits => X],
+                  Corner_Miss_Distance_Max => Cornering.Circular_Params.Maximum_Corner_Miss_Distance,
+                  Radius_Max               => Cornering.Circular_Params.Maximum_Radius));
+
+         when Parabolic     =>
+            return
+              (Kind             => Motion_Planner.Parabolic,
+               Parabolic_Params =>
+                 (Axial_Deviation_Maxes    => [for X of Cornering.Parabolic_Params.Axial_Deviation_Limits => X],
+                  Corner_Miss_Distance_Max => Cornering.Parabolic_Params.Maximum_Corner_Miss_Distance,
+                  Shape_Bias               => Cornering.Parabolic_Params.Shape_Bias,
+                  Trim_Max                 => Cornering.Parabolic_Params.Maximum_Trim));
+
+         when Biarc         =>
+            return
+              (Kind         => Motion_Planner.Biarc,
+               Biarc_Params =>
+                 (Axial_Deviation_Maxes    => [for X of Cornering.Biarc_Params.Axial_Deviation_Limits => X],
+                  Corner_Miss_Distance_Max => Cornering.Biarc_Params.Maximum_Corner_Miss_Distance,
+                  Shape_Bias               => Cornering.Biarc_Params.Shape_Bias,
+                  Trim_Max                 => Cornering.Biarc_Params.Maximum_Trim));
+
+         when Sharp_SCV     =>
+            return
+              (Kind             => Motion_Planner.Sharp_SCV,
+               Sharp_SCV_Params => (Square_Corner_Velocity => Cornering.Sharp_SCV_Params.Square_Corner_Velocity));
+      end case;
+   end Build_Cornering_Parameters;
+
    function Build_Motion_Planner_Configuration
-     (Config                        : User_Config;
-      Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class;
-      Input_Shapers_Module_Instance : Input_Shapers_Module.Module_Instance_Interface'Class)
+     (Config : User_Config; Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class)
       return Motion_Planner_Configuration
    is
       Result : Motion_Planner_Configuration :=
         (Parameters         =>
            Motion_Planner.Kinematic_Parameters'
-             (Lower_Pos_Limit         => [for X of Config.Kinematics.Lower_Position_Limit => X],
-              Upper_Pos_Limit         => [for X of Config.Kinematics.Upper_Position_Limit => X],
-              Ignore_E_In_XYZE        => Config.Kinematics.Ignore_E_In_XYZE,
-              Shift_Blended_Corners   => Config.Kinematics.Shift_Blended_Corners,
-              Tangential_Velocity_Max => Config.Kinematics.Maximum_Tangential_Velocity,
-              Axial_Velocity_Maxes    => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
-              Acceleration_Max        => Config.Kinematics.Maximum_Acceleration,
-              Jerk_Max                => Config.Kinematics.Maximum_Jerk,
-              Snap_Max                => Config.Kinematics.Maximum_Snap,
-              Crackle_Max             => Config.Kinematics.Maximum_Crackle,
-              Chord_Error_Max         => Config.Kinematics.Maximum_Chord_Error,
-              Axial_Scaler            => [for X of Config.Kinematics.Axial_Scaler => X],
-              Axial_Shapers           => Input_Shapers_Module_Instance.Get_Current_Axial_Shapers),
+             (Lower_Pos_Limit          => [for X of Config.Kinematics.Lower_Position_Limit => X],
+              Upper_Pos_Limit          => [for X of Config.Kinematics.Upper_Position_Limit => X],
+              Ignore_E_In_XYZE         => Config.Kinematics.Ignore_E_In_XYZE,
+              Tangential_Velocity_Max  => Config.Kinematics.Maximum_Tangential_Velocity,
+              Axial_Velocity_Maxes     => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
+              Axial_Acceleration_Maxes => [for X of Config.Kinematics.Axial_Acceleration_Limits => X],
+              Axial_Jerk_Maxes         => [for X of Config.Kinematics.Axial_Jerk_Limits => X],
+              Axial_Snap_Maxes         => [for X of Config.Kinematics.Axial_Snap_Limits => X],
+              Axial_Crackle_Maxes      => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
+              Cornering                => Build_Cornering_Parameters (Config.Kinematics.Cornering),
+              Axial_Shapers            => <>),
          Motors_To_Position => [others => [others => Length'Last]]);
    begin
       for M in Motor_Name loop
@@ -142,8 +199,6 @@ package body Prunt.Default_Modules.Kinematics is
         Get_Other_Instance (Config_Saving_Module.Module_Instance'Tag);
       Motor_Drivers_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Get_Other_Instance (Motor_Drivers_Module.Module_Instance'Tag);
-      Input_Shapers_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
-        Get_Other_Instance (Input_Shapers_Module.Module_Instance'Tag);
    begin
       return Result : Module_Instance do
          declare
@@ -156,8 +211,7 @@ package body Prunt.Default_Modules.Kinematics is
             Result.Initialize
               (Config_In                            => Parsed_Config,
                Config_Data_In                       => Config_Data,
-               Motor_Drivers_Module_Instance_Ref_In => Motor_Drivers_Module_Instance_Ref,
-               Input_Shapers_Module_Instance_Ref_In => Input_Shapers_Module_Instance_Ref);
+               Motor_Drivers_Module_Instance_Ref_In => Motor_Drivers_Module_Instance_Ref);
 
             case Parsed_Config.Kinematics.Kinematics_Kind.Kind is
                when Cartesian =>
@@ -190,13 +244,11 @@ package body Prunt.Default_Modules.Kinematics is
       procedure Initialize
         (Config_In                            : User_Config;
          Config_Data_In                       : Prunt.Config.Config_Data;
-         Motor_Drivers_Module_Instance_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Ref;
-         Input_Shapers_Module_Instance_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Ref) is
+         Motor_Drivers_Module_Instance_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Ref) is
       begin
          Config := Config_In;
          Config_Data := Config_Data_In;
          Motor_Drivers_Module_Instance_Ref := Motor_Drivers_Module_Instance_Ref_In;
-         Input_Shapers_Module_Instance_Ref := Input_Shapers_Module_Instance_Ref_In;
       end Initialize;
 
       procedure Start
@@ -211,27 +263,23 @@ package body Prunt.Default_Modules.Kinematics is
             if Updates.Has_Axial_Velocity_Limit (Axis) then
                Config.Kinematics.Axial_Velocity_Limits (Axis) := Updates.Axial_Velocity_Limits (Axis);
             end if;
+
+            if Updates.Has_Axial_Acceleration_Limit (Axis) then
+               Config.Kinematics.Axial_Acceleration_Limits (Axis) := Updates.Axial_Acceleration_Limits (Axis);
+            end if;
+
+            if Updates.Has_Axial_Jerk_Limit (Axis) then
+               Config.Kinematics.Axial_Jerk_Limits (Axis) := Updates.Axial_Jerk_Limits (Axis);
+            end if;
+
+            if Updates.Has_Axial_Snap_Limit (Axis) then
+               Config.Kinematics.Axial_Snap_Limits (Axis) := Updates.Axial_Snap_Limits (Axis);
+            end if;
+
+            if Updates.Has_Axial_Crackle_Limit (Axis) then
+               Config.Kinematics.Axial_Crackle_Limits (Axis) := Updates.Axial_Crackle_Limits (Axis);
+            end if;
          end loop;
-
-         if Updates.Has_Maximum_Acceleration then
-            Config.Kinematics.Maximum_Acceleration := Updates.Maximum_Acceleration;
-         end if;
-
-         if Updates.Has_Maximum_Jerk then
-            Config.Kinematics.Maximum_Jerk := Updates.Maximum_Jerk;
-         end if;
-
-         if Updates.Has_Maximum_Snap then
-            Config.Kinematics.Maximum_Snap := Updates.Maximum_Snap;
-         end if;
-
-         if Updates.Has_Maximum_Crackle then
-            Config.Kinematics.Maximum_Crackle := Updates.Maximum_Crackle;
-         end if;
-
-         if Updates.Has_Maximum_Chord_Error then
-            Config.Kinematics.Maximum_Chord_Error := Updates.Maximum_Chord_Error;
-         end if;
 
          User_Config_To_Config_Data (Config_Data, Config);
       end Apply_Runtime_Config;
@@ -239,12 +287,14 @@ package body Prunt.Default_Modules.Kinematics is
       function Get_Default_Motion_Planner_Configuration return Motion_Planner_Configuration is
          Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames
            Motor_Drivers_Module.Module_Instance_Interface'Class (Motor_Drivers_Module_Instance_Ref.Get.Element.all);
-         Input_Shapers_Module_Instance : Input_Shapers_Module.Module_Instance_Interface'Class renames
-           Input_Shapers_Module.Module_Instance_Interface'Class (Input_Shapers_Module_Instance_Ref.Get.Element.all);
       begin
-         return
-           Build_Motion_Planner_Configuration (Config, Motor_Drivers_Module_Instance, Input_Shapers_Module_Instance);
+         return Build_Motion_Planner_Configuration (Config, Motor_Drivers_Module_Instance);
       end Get_Default_Motion_Planner_Configuration;
+
+      function Axis_Is_Motor_Separable (Axis : Axis_Name) return Boolean is
+      begin
+         return Map_Axis_Is_Motor_Separable (Get_Default_Motion_Planner_Configuration.Motors_To_Position, Axis);
+      end Axis_Is_Motor_Separable;
 
       function Get_Config return User_Config is
       begin
@@ -311,8 +361,7 @@ package body Prunt.Default_Modules.Kinematics is
       A        : Gcode_Optional_Float;
       J        : Gcode_Optional_Float;
       S        : Gcode_Optional_Float;
-      C        : Gcode_Optional_Float;
-      D        : Gcode_Optional_Float)
+      C        : Gcode_Optional_Float)
    is
       pragma Unsuppress (All_Checks);
       --  Required so we get a Constraint_Error when we try to set an invalid value.
@@ -328,66 +377,53 @@ package body Prunt.Default_Modules.Kinematics is
 
       if A.Present then
          begin
-            Updates.Maximum_Acceleration := A.Value * mm / Prunt.s ** 2;
+            Updates.Axial_Acceleration_Limits := [others => A.Value * mm / Prunt.s ** 2];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Acceleration limit must be between 1.0E-6 and 1.0E100 mm/s^2.";
          end;
 
-         Updates.Has_Maximum_Acceleration := True;
-         New_Params.Acceleration_Max := Updates.Maximum_Acceleration;
+         Updates.Has_Axial_Acceleration_Limit := [others => True];
+         New_Params.Axial_Acceleration_Maxes := Updates.Axial_Acceleration_Limits;
          Updated := True;
       end if;
 
       if J.Present then
          begin
-            Updates.Maximum_Jerk := J.Value * mm / Prunt.s ** 3;
+            Updates.Axial_Jerk_Limits := [others => J.Value * mm / Prunt.s ** 3];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Jerk limit must be between 1.0E-6 and 1.0E100 mm/s^3.";
          end;
 
-         Updates.Has_Maximum_Jerk := True;
-         New_Params.Jerk_Max := Updates.Maximum_Jerk;
+         Updates.Has_Axial_Jerk_Limit := [others => True];
+         New_Params.Axial_Jerk_Maxes := Updates.Axial_Jerk_Limits;
          Updated := True;
       end if;
 
       if S.Present then
          begin
-            Updates.Maximum_Snap := S.Value * mm / Prunt.s ** 4;
+            Updates.Axial_Snap_Limits := [others => S.Value * mm / Prunt.s ** 4];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Snap limit must be between 1.0E-6 and 1.0E100 mm/s^4.";
          end;
 
-         Updates.Has_Maximum_Snap := True;
-         New_Params.Snap_Max := Updates.Maximum_Snap;
+         Updates.Has_Axial_Snap_Limit := [others => True];
+         New_Params.Axial_Snap_Maxes := Updates.Axial_Snap_Limits;
          Updated := True;
       end if;
 
       if C.Present then
          begin
-            Updates.Maximum_Crackle := C.Value * mm / Prunt.s ** 5;
+            Updates.Axial_Crackle_Limits := [others => C.Value * mm / Prunt.s ** 5];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Crackle limit must be between 1.0E-6 and 1.0E100 mm/s^5.";
          end;
 
-         Updates.Has_Maximum_Crackle := True;
-         New_Params.Crackle_Max := Updates.Maximum_Crackle;
-         Updated := True;
-      end if;
-
-      if D.Present then
-         begin
-            Updates.Maximum_Chord_Error := D.Value * mm;
-         exception
-            when Constraint_Error =>
-               raise Gcode_Bad_Inputs_Error with "Path deviation must be between 0 and 1.0E100 mm.";
-         end;
-
-         Updates.Has_Maximum_Chord_Error := True;
-         New_Params.Chord_Error_Max := Updates.Maximum_Chord_Error;
+         Updates.Has_Axial_Crackle_Limit := [others => True];
+         New_Params.Axial_Crackle_Maxes := Updates.Axial_Crackle_Limits;
          Updated := True;
       end if;
 

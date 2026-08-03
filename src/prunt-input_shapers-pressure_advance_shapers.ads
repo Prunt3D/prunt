@@ -45,9 +45,11 @@ package Prunt.Input_Shapers.Pressure_Advance_Shapers is
      (Parameters : Shaper_Parameters; Interpolation_Time : Time; Start_Position : Length)
       return Pressure_Advance_Shaper
    with Pre => Parameters.Kind in Pressure_Advance;
+   --  Construct a pressure-advance shaper and smoothing filter initialized to Start_Position.
 
    overriding
    function Do_Step (This : in out Pressure_Advance_Shaper; Step : Length) return Length;
+   --  Apply velocity-based pressure advance and smoothing to the next commanded position Step.
 
 private
 

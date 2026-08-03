@@ -40,9 +40,11 @@ package Prunt.Default_Modules.Motion is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Module_Instance (<>) is synchronized
      new My_Modules.Module_Instance
@@ -59,9 +61,11 @@ package Prunt.Default_Modules.Motion is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    overriding
    procedure Gcode_Dispatch
@@ -70,6 +74,7 @@ package Prunt.Default_Modules.Motion is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -264,10 +269,13 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    type Saved_Position is record
       Present : Boolean := False;
@@ -366,6 +374,33 @@ private
    procedure Update_Status (Status_Emitter : Status_Manager.Status_Emitter; State : Motion_State);
    --  Publish all committed motion state values through Status_Emitter.
 
+   type Axis_Dimensionless_Status_Setters is array (Axis_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
+
+   type Motion_Status_Setters is record
+      G92_Offset            : Axis_Dimensionless_Status_Setters;
+      Stored_Feedrate       : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Feedrate_Scale        : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Backup_Feedrate_Scale : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Effective_Feedrate    : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Flow_Scale            : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Retract_Length        : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Retract_Feedrate      : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Retract_Z_Lift        : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Recover_Extra_Length  : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Recover_Feedrate      : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Current_Z_Hop         : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Auto_Retract_Enabled  : Status_Manager.Lock_Free_Boolean_Setter;
+      Is_Retracted          : Status_Manager.Lock_Free_Boolean_Setter;
+   end record;
+
+   procedure Initialize_Status_Setters
+     (Setters : out Motion_Status_Setters; Status_Emitter : Status_Manager.Status_Emitter);
+   --  Cache direct setters for high-frequency numeric/boolean status values.
+
+   procedure Update_Status
+     (Setters : Motion_Status_Setters; Status_Emitter : Status_Manager.Status_Emitter; State : Motion_State);
+   --  Publish committed motion state, using direct setters for high-frequency fields.
+
    function Logical_Position_From_Physical
      (Physical_Position : Position; G92_Offset : Position_Offset; Current_Z_Hop : Length) return Position;
    --  Convert a planner-space physical position to logical g-code space.
@@ -392,6 +427,7 @@ private
    --  Return the feedrate to use while moving back from the park position to the pause position.
 
    function Position_Report (Prefix : String; Pos : Position; Units : Linear_Units_Mode) return Virtual_String;
+   --  Format a position report.
 
    type Motion_Report_Event is new Extra_Block_Resetting_Data with record
       Message : Virtual_String;
@@ -399,6 +435,7 @@ private
 
    overriding
    procedure Process_After_Block (This : Motion_Report_Event; Context : Block_End_Context'Class);
+   --  Log a motion report.
 
    procedure Rapid_Linear_Move
      (This     : Module_Instance;
@@ -459,50 +496,154 @@ private
    --  as laser tools are not yet supported. These parameters are present in Marlin.
 
    procedure Clockwise_Arc_Move_Offset_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      I       : Dimensionless;
-      J       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      --  Absolute or relative X endpoint in the current units.
+      Y        : Gcode_Optional_Float;
+      --  Absolute or relative Y endpoint in the current units.
+      Z        : Gcode_Optional_Float;
+      --  Absolute or relative Z endpoint in the current units.
+      E        : Gcode_Optional_Float;
+      --  Absolute or relative E endpoint in the current units.
+      F        : Gcode_Optional_Float;
+      --  Feedrate in current units per minute.
+      I        : Gcode_Optional_Float;
+      --  Optional X offset from the starting point to the arc center, in the current units.
+      J        : Gcode_Optional_Float
+      --  Optional Y offset from the starting point to the arc center, in the current units.
+      )
    with Annotate => (Prunt_Config, Gcode_Command, "G2");
+   --  Perform a clockwise circular or helical move in the XY plane. Axes whose endpoints are omitted do not move, and
+   --  the stored feedrate is used when F is omitted.
+   --
+   --  I and J are center offsets from the starting XY position in the current units and remain relative in absolute
+   --  positioning mode. An omitted component is zero. At least one must be supplied and their combined offset must be
+   --  nonzero. Violating either requirement raises an error before motion is queued or the stored feedrate is changed.
+   --
+   --  If the resolved endpoint XY equals the starting XY, including when X and Y are both omitted, the command makes
+   --  one full revolution. Any Z or E change is interpolated over that full helix.
+   --
+   --  A distinct endpoint at the center, or exactly on the same radial ray from the center as the start, has no
+   --  angular travel and is queued as one linear move to the exact XYZE endpoint.
+   --
+   --  Every other endpoint selects the arc's finishing angle. A start/end radius difference of at most 1.0E-6 mm is
+   --  accepted as circular. For a larger difference, Prunt first follows the starting-radius helix to the requested
+   --  finishing angle, then adds a radial line to the exact endpoint. An endpoint on the opposite radial ray therefore
+   --  produces a 180-degree arc, followed by a radial correction when its radius differs. Z and E reach their final
+   --  values during the helix and remain fixed during the correction.
+   --
+   --  TODO: Document handling of out-of-bounds conditions.
 
    procedure Clockwise_Arc_Move_Radius_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      R       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      --  Absolute or relative X endpoint in the current units.
+      Y        : Gcode_Optional_Float;
+      --  Absolute or relative Y endpoint in the current units.
+      Z        : Gcode_Optional_Float;
+      --  Absolute or relative Z endpoint in the current units.
+      E        : Gcode_Optional_Float;
+      --  Absolute or relative E endpoint in the current units.
+      F        : Gcode_Optional_Float;
+      --  Feedrate in current units per minute.
+      R        : Dimensionless
+      --  Signed radius in the current units. Positive values select the minor arc; negative values select the major
+      --  arc.
+      )
    with Annotate => (Prunt_Config, Gcode_Command, "G2");
+   --  Perform a clockwise circular or helical move in the XY plane. Axes whose endpoints are omitted do not move, and
+   --  the stored feedrate is used when F is omitted.
+   --
+   --  R must be nonzero, at least one of X and Y must be supplied, and the resolved XY endpoint must differ from the
+   --  start. Violating any of these requirements raises an error before motion is queued or the stored feedrate is
+   --  changed. The distinct-XY requirement applies even when the command contains a Z or E change, so radius form
+   --  cannot produce a full circle or a pure Z/E move.
+   --
+   --  When the absolute value of R exceeds half the endpoint chord, positive R selects the minor arc and negative R
+   --  selects the major arc. When it is no greater than half the chord, Prunt uses the chord midpoint and an effective
+   --  radius of half the chord, producing a semicircle. R's sign has no effect in that case.
+   --
+   --  TODO: Document handling of out-of-bounds conditions.
 
    procedure Counter_Clockwise_Arc_Move_Offset_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      I       : Dimensionless;
-      J       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      --  Absolute or relative X endpoint in the current units.
+      Y        : Gcode_Optional_Float;
+      --  Absolute or relative Y endpoint in the current units.
+      Z        : Gcode_Optional_Float;
+      --  Absolute or relative Z endpoint in the current units.
+      E        : Gcode_Optional_Float;
+      --  Absolute or relative E endpoint in the current units.
+      F        : Gcode_Optional_Float;
+      --  Feedrate in current units per minute. A positive value updates the stored feedrate when the command is
+      --  accepted.
+      I        : Gcode_Optional_Float;
+      --  Optional X offset from the starting point to the arc center, in the current units.
+      J        : Gcode_Optional_Float
+      --  Optional Y offset from the starting point to the arc center, in the current units.
+      )
    with Annotate => (Prunt_Config, Gcode_Command, "G3");
+   --  Perform a counter-clockwise circular or helical move in the XY plane. Axes whose endpoints are omitted do not
+   --  move, and the stored feedrate is used when F is omitted.
+   --
+   --  I and J are center offsets from the starting XY position in the current units and remain relative in absolute
+   --  positioning mode. An omitted component is zero. At least one must be supplied and their combined offset must be
+   --  nonzero. Violating either requirement raises an error before motion is queued or the stored feedrate is changed.
+   --
+   --  If the resolved endpoint XY equals the starting XY, including when X and Y are both omitted, the command makes
+   --  one full revolution. Any Z or E change is interpolated over that full helix.
+   --
+   --  A distinct endpoint at the center, or exactly on the same radial ray from the center as the start, has no
+   --  angular travel and is queued as one linear move to the exact XYZE endpoint.
+   --
+   --  Every other endpoint selects the arc's finishing angle. A start/end radius difference of at most 1.0E-6 mm is
+   --  accepted as circular. For a larger difference, Prunt first follows the starting-radius helix to the requested
+   --  finishing angle, then adds a radial line to the exact endpoint. An endpoint on the opposite radial ray therefore
+   --  produces a 180-degree arc, followed by a radial correction when its radius differs. Z and E reach their final
+   --  values during the helix and remain fixed during the correction.
+   --
+   --  TODO: Document handling of out-of-bounds conditions.
 
    procedure Counter_Clockwise_Arc_Move_Radius_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      R       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      --  Absolute or relative X endpoint in the current units.
+      Y        : Gcode_Optional_Float;
+      --  Absolute or relative Y endpoint in the current units.
+      Z        : Gcode_Optional_Float;
+      --  Absolute or relative Z endpoint in the current units.
+      E        : Gcode_Optional_Float;
+      --  Absolute or relative E endpoint in the current units.
+      F        : Gcode_Optional_Float;
+      --  Feedrate in current units per minute. A positive value updates the stored feedrate when the command is
+      --  accepted.
+      R        : Dimensionless
+      --  Signed radius in the current units. Positive values select the minor arc; negative values select the major
+      --  arc.
+      )
    with Annotate => (Prunt_Config, Gcode_Command, "G3");
+   --  Perform a counter-clockwise circular or helical move in the XY plane. Axes whose endpoints are omitted do not
+   --  move, and the stored feedrate is used when F is omitted.
+   --
+   --  R must be nonzero, at least one of X and Y must be supplied, and the resolved XY endpoint must differ from the
+   --  start. Violating any of these requirements raises an error before motion is queued or the stored feedrate is
+   --  changed. The distinct-XY requirement applies even when the command contains a Z or E change, so radius form
+   --  cannot produce a full circle or a pure Z/E move.
+   --
+   --  When the absolute value of R exceeds half the endpoint chord, positive R selects the minor arc and negative R
+   --  selects the major arc. When it is no greater than half the chord, Prunt uses the chord midpoint and an effective
+   --  radius of half the chord, producing a semicircle. R's sign has no effect in that case.
+   --
+   --  TODO: Document handling of out-of-bounds conditions.
 
    procedure Retract
      (This     : Module_Instance;
@@ -780,6 +921,19 @@ private
          F       : Gcode_Optional_Float;
          Rapid   : Boolean);
 
+      procedure Execute_Arc_Move
+        (Planner     : Planner_Interface'Class;
+         X           : Gcode_Optional_Float;
+         Y           : Gcode_Optional_Float;
+         Z           : Gcode_Optional_Float;
+         E           : Gcode_Optional_Float;
+         F           : Gcode_Optional_Float;
+         Clockwise   : Boolean;
+         Offset_Form : Boolean;
+         I           : Gcode_Optional_Float := (Present => False);
+         J           : Gcode_Optional_Float := (Present => False);
+         R           : Dimensionless := 0.0);
+
       procedure Execute_Retract (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer);
 
       procedure Execute_Recover (Planner : Planner_Interface'Class);
@@ -873,6 +1027,7 @@ private
       Config                          : User_Config;
       Config_Data                     : Prunt.Config.Config_Data;
       Status_Emitter                  : Status_Manager.Status_Emitter;
+      Status_Setters                  : Motion_Status_Setters;
    end Module_Instance;
 
 end Prunt.Default_Modules.Motion;

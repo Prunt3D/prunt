@@ -1,0 +1,35 @@
+{
+  "description": "Exercise G2/G3 offset and radius forms, including degenerate-arc line fallback.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M82" },
+    { "kind": "submit_gcode", "command": "G1 X20 Y20 F6000" },
+    { "kind": "submit_gcode", "command": "G91" },
+    { "kind": "submit_gcode", "command": "M83" },
+    { "kind": "submit_gcode", "command": "G2 I5 Z1 E1 F6000" },
+    { "kind": "submit_gcode", "command": "G3 J-5 Z1 E1 F6000" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M82" },
+    { "kind": "submit_gcode", "command": "G1 X280 Y20 F6000" },
+    { "kind": "submit_gcode", "command": "G2 X286 Y20 R5 F6000" },
+    { "kind": "submit_gcode", "command": "G1 X30 Y4 F6000" },
+    { "kind": "submit_gcode", "command": "G3 X40 Y4 R2 F6000" },
+    { "kind": "submit_gcode", "command": "G1 X200 Y200 F6000" },
+    { "kind": "submit_gcode", "command": "G2 X198 Y203 I-5 F6000" },
+    { "kind": "submit_gcode", "command": "G2 X200 Y203 Z3 E3 I-5 F6000" },
+    { "kind": "submit_gcode", "command": "G3 X195 Y203 Z4 E4 I-5 F6000" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 20.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 195.0, "Y": 203.0, "Z": 4.0, "E": 4.0 },
+    "position_tolerance": 0.05,
+    "max_sample_position": { "X": 286.75 },
+    "sample_position_reaches": { "Y": 204.5, "Z": 3.95, "E": 3.95 },
+    "sample_position_drops_below": { "Y": -0.5 },
+    "min_samples": 1,
+    "event_counts": { "gcode": 18 }
+  }
+}

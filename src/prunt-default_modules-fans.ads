@@ -36,9 +36,11 @@ package Prunt.Default_Modules.Fans is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
@@ -50,9 +52,11 @@ package Prunt.Default_Modules.Fans is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    overriding
    procedure Gcode_Dispatch
@@ -61,6 +65,7 @@ package Prunt.Default_Modules.Fans is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -169,6 +174,9 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
+   function PWM_Frequency (Config : User_Config_Fan) return Frequency;
+   --  Return Config's PWM frequency.
+
    type User_Config_Fan_Array is array (Fan_Name) of User_Config_Fan
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
@@ -186,10 +194,13 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    type Fan_Speed_Status_Setters is array (Fan_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
 
@@ -202,10 +213,13 @@ private
 
    overriding
    procedure Process (This : Fan_Speed_Change; Last_Command_Index : Command_Index);
+   --  Apply a fan-speed change.
 
    function Valid_Fan_Indices return Virtual_String;
+   --  List valid fan indices.
 
    function Valid_Fan_Names return Virtual_String;
+   --  List valid fan names.
 
    procedure Set_Fan_Speed_For_Default_Fan
      (This    : Module_Instance;

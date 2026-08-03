@@ -785,11 +785,44 @@ package body Prunt.Integration_Test_Harness is
       Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "Y_AXIS"], Create (Long_Float'(250.0)));
       Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "Z_AXIS"], Create (Long_Float'(25.0)));
       Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "E_AXIS"], Create (Long_Float'(80.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Maximum_Chord_Error"], Create (Long_Float'(0.02)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Maximum_Acceleration"], Create (Long_Float'(5_000.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Maximum_Jerk"], Create (Long_Float'(500_000.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Maximum_Snap"], Create (Long_Float'(500_000_000.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Maximum_Crackle"], Create (Long_Float'(500_000_000_000.0)));
+      for Axis of Axes loop
+         Add_Override
+           (Result,
+            "Kinematics",
+            ["Kinematics",
+             "Cornering",
+             "Kind",
+             "Children",
+             "Stereographic",
+             "Stereographic_Params",
+             "Axial_Deviation_Limits",
+             Axis],
+            Create (Long_Float'(0.02)));
+      end loop;
+      Add_Override
+        (Result,
+         "Kinematics",
+         ["Kinematics",
+          "Cornering",
+          "Kind",
+          "Children",
+          "Stereographic",
+          "Stereographic_Params",
+          "Maximum_Corner_Miss_Distance"],
+         Create (Long_Float'(0.02)));
+      for Axis of Axes loop
+         Add_Override
+           (Result, "Kinematics", ["Kinematics", "Axial_Acceleration_Limits", Axis], Create (Long_Float'(5_000.0)));
+         Add_Override
+           (Result, "Kinematics", ["Kinematics", "Axial_Jerk_Limits", Axis], Create (Long_Float'(500_000.0)));
+         Add_Override
+           (Result, "Kinematics", ["Kinematics", "Axial_Snap_Limits", Axis], Create (Long_Float'(500_000_000.0)));
+         Add_Override
+           (Result,
+            "Kinematics",
+            ["Kinematics", "Axial_Crackle_Limits", Axis],
+            Create (Long_Float'(500_000_000_000.0)));
+      end loop;
       Add_Override
         (Result,
          "Kinematics",
@@ -1232,6 +1265,92 @@ package body Prunt.Integration_Test_Harness is
             Machine.Snapshot (Samples, Events);
             pragma Unreferenced (Events);
             Expect.Get ("sample_position_drops_below").Map_JSON_Object (Check_Axis'Access);
+         end;
+      end if;
+
+      if Expect.Has_Field ("max_sample_delta") then
+         declare
+            Samples : Sample_Vectors.Vector;
+            Events  : Event_Vectors.Vector;
+
+            procedure Check_Axis (Name : Virtual_String; Value : JSON_Value);
+
+            procedure Check_Axis (Name : Virtual_String; Value : JSON_Value) is
+               Name_String : constant String := VSS.Strings.Conversions.To_UTF_8_String (Name);
+               Max_Value   : constant Long_Float := Value.Get;
+               Actual      : Long_Float := 0.0;
+               Previous    : Long_Float := 0.0;
+               First       : Boolean := True;
+            begin
+               for S of Samples loop
+                  declare
+                     Current : constant Long_Float := Axis_Value (S.Position, Name_String);
+                  begin
+                     if First then
+                        First := False;
+                     else
+                        Actual := Long_Float'Max (Actual, abs (Current - Previous));
+                     end if;
+                     Previous := Current;
+                  end;
+               end loop;
+
+               Assert
+                 (Actual <= Max_Value,
+                  "Axis "
+                  & Name_String
+                  & " sampled delta exceeded "
+                  & Image (Max_Value)
+                  & ": "
+                  & Image (Actual));
+            end Check_Axis;
+         begin
+            Machine.Snapshot (Samples, Events);
+            pragma Unreferenced (Events);
+            Expect.Get ("max_sample_delta").Map_JSON_Object (Check_Axis'Access);
+         end;
+      end if;
+
+      if Expect.Has_Field ("sample_delta_reaches") then
+         declare
+            Samples : Sample_Vectors.Vector;
+            Events  : Event_Vectors.Vector;
+
+            procedure Check_Axis (Name : Virtual_String; Value : JSON_Value);
+
+            procedure Check_Axis (Name : Virtual_String; Value : JSON_Value) is
+               Name_String : constant String := VSS.Strings.Conversions.To_UTF_8_String (Name);
+               Min_Value   : constant Long_Float := Value.Get;
+               Actual      : Long_Float := 0.0;
+               Previous    : Long_Float := 0.0;
+               First       : Boolean := True;
+            begin
+               for S of Samples loop
+                  declare
+                     Current : constant Long_Float := Axis_Value (S.Position, Name_String);
+                  begin
+                     if First then
+                        First := False;
+                     else
+                        Actual := Long_Float'Max (Actual, abs (Current - Previous));
+                     end if;
+                     Previous := Current;
+                  end;
+               end loop;
+
+               Assert
+                 (Actual >= Min_Value,
+                  "Axis "
+                  & Name_String
+                  & " sampled delta did not reach "
+                  & Image (Min_Value)
+                  & ": "
+                  & Image (Actual));
+            end Check_Axis;
+         begin
+            Machine.Snapshot (Samples, Events);
+            pragma Unreferenced (Events);
+            Expect.Get ("sample_delta_reaches").Map_JSON_Object (Check_Axis'Access);
          end;
       end if;
 

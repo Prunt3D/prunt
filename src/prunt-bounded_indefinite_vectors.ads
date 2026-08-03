@@ -22,6 +22,7 @@ pragma Extensions_Allowed (On);
 with System.Storage_Elements;
 
 private with Ada.Finalization;
+private with Ada.Unchecked_Deallocation;
 private with System;
 private with System.Storage_Pools.Subpools;
 private with Prunt.Dummy_Allocator;
@@ -48,6 +49,7 @@ package Prunt.Bounded_Indefinite_Vectors is
    --  occur after a previous call raises Out_Of_Space_Error.
 
    procedure Clear (This : in out Vector);
+   --  Remove every element from This and release its space for reuse.
 
    procedure Process_Range
      (This   : Vector;
@@ -55,13 +57,17 @@ package Prunt.Bounded_Indefinite_Vectors is
       Finish : Extended_Index;
       Action : not null access procedure (Item : in out Element_Type))
    with Pre => Start > Finish or else Finish <= This.Last_Index;
+   --  Call Action once for each mutable element in the inclusive Start .. Finish range.
 
    function Last_Index (This : Vector) return Extended_Index;
+   --  Return the index of the last element, or Extended_Index'First when This is empty.
 
    function Element (This : Vector; Index : Index_Type) return Element_Type
    with Pre => Index <= This.Last_Index;
+   --  Return the element stored at Index.
 
    function Is_Empty (This : Vector) return Boolean;
+   --  Return True when This contains no elements.
 
 private
 
@@ -70,6 +76,7 @@ private
 
    function Round_Up_Size (Size : Storage_Count; Alignment : Storage_Count) return Storage_Count
    is (Size + ((Alignment - (Size mod Alignment)) mod Alignment));
+   --  Return the smallest multiple of Alignment that is not less than Size.
 
    Rounded_Storage_Size : constant Storage_Count := Round_Up_Size (Storage_Size, Standard'Maximum_Alignment);
 
@@ -138,6 +145,10 @@ private
    --  This is copied from GNAT's Bounded_Indefinite_Holder implementation. It does not appear that it is actually
    --  required, but there should be no harm in keeping it.
 
+   procedure Free is new Ada.Unchecked_Deallocation (Element_Type, Element_Access);
+
+   procedure Free is new Ada.Unchecked_Deallocation (Vector_Elements_Subpool, Pooled_Subpool_Handle);
+
    type Element_Array is array (Extended_Index) of Element_Access;
    --  We use Extended_Index here to help catch any user errors in the Element function without requiring an extra
    --  check.
@@ -169,7 +180,10 @@ private
    --  initialization when Subpool = null inside a procedure which makes use of it.
    overriding
    procedure Adjust (This : in out Vector);
+   --  Rebuild a copied vector so its elements reside in the copy's embedded storage.
+
    overriding
    procedure Finalize (This : in out Vector);
+   --  Finalize the elements and release the embedded subpool bookkeeping object.
 
 end Prunt.Bounded_Indefinite_Vectors;

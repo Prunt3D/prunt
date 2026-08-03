@@ -41,6 +41,7 @@ package Prunt.Moving_Averages is
    --  reduced to suit the number of layers specified.
 
    function Do_Step (CMA : in out Cascading_Moving_Average; Input : Number) return Number;
+   --  Feed Input through each moving-average level, update the filter state, and return the filtered value.
 
 private
 

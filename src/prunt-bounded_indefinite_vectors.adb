@@ -18,14 +18,10 @@
 --------------------------------------------------
 
 with Ada.Unchecked_Deallocate_Subpool;
-with Ada.Unchecked_Deallocation;
 
 package body Prunt.Bounded_Indefinite_Vectors is
 
    pragma Extensions_Allowed (On);
-
-   procedure Free is new Ada.Unchecked_Deallocation (Element_Type, Element_Access);
-   procedure Free is new Ada.Unchecked_Deallocation (Vector_Elements_Subpool, Pooled_Subpool_Handle);
 
    procedure Append (This : in out Vector; New_Item : Element_Type) is
    begin

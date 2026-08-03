@@ -26,9 +26,6 @@ package body Prunt.Default_Modules.Fans is
 
    use type Gcode_Arguments.Argument_Integer;
 
-   function PWM_Frequency (Config : User_Config_Fan) return Frequency;
-   --  Return the configured PWM frequency for the fan hardware kind selected by Config.
-
    function Valid_Fan_Indices return Virtual_String is
    begin
       return Result : Virtual_String := "" do

@@ -38,9 +38,11 @@ package Prunt.Default_Modules.Basic_Motor_Drivers is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
@@ -52,6 +54,7 @@ package Prunt.Default_Modules.Basic_Motor_Drivers is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -60,6 +63,7 @@ package Prunt.Default_Modules.Basic_Motor_Drivers is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -91,10 +95,13 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    type Basic_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record
       Motor : My_Controller_Generic_Types.Motor_Name;
@@ -102,9 +109,11 @@ private
 
    overriding
    procedure Enable_Motor (This : in out Basic_Motor_Handler);
+   --  Enable the driver.
 
    overriding
    procedure Disable_Motor (This : in out Basic_Motor_Handler);
+   --  Disable the driver.
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       procedure Initialize

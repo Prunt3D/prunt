@@ -33,11 +33,14 @@ package Prunt.Default_Modules.Blocking_Tracker is
    type Module_Instance_Interface is synchronized interface;
 
    procedure Set_Blocker (This : in out Module_Instance_Interface; Value : Virtual_String) is abstract;
+   --  Set the blocking reason.
 
    procedure Clear_Blocker (This : in out Module_Instance_Interface) is abstract;
+   --  Clear the blocking reason.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -49,6 +52,7 @@ package Prunt.Default_Modules.Blocking_Tracker is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
 private
 
@@ -59,6 +63,7 @@ private
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Reject G-code dispatch.
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Status_Emitter_In : Status_Manager.Status_Emitter);

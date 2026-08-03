@@ -25,6 +25,447 @@ package body Prunt.Motion_Planner is
 
    type Feedrate_Profile_Stage_Index is range 1 .. 15;
 
+   function Nth_Root_Ratio (Numerator, Denominator : Dimensionless; Degree : Positive) return Dimensionless is
+      Exponent_Difference : Integer;
+      Root_Exponent       : Integer;
+      Exponent_Remainder  : Integer;
+   begin
+      if Numerator <= 0.0 then
+         return 0.0;
+      elsif Denominator <= 0.0 then
+         return Dimensionless'Last;
+      end if;
+
+      Exponent_Difference := Dimensionless'Exponent (Numerator) - Dimensionless'Exponent (Denominator);
+      Root_Exponent := Exponent_Difference / Degree;
+      Exponent_Remainder := Exponent_Difference rem Degree;
+      if Exponent_Remainder < 0 then
+         Exponent_Remainder := @ + Degree;
+         Root_Exponent := @ - 1;
+      end if;
+
+      declare
+         Radicand : constant Dimensionless :=
+           Dimensionless'Fraction (Numerator)
+           / Dimensionless'Fraction (Denominator)
+           * Dimensionless (Dimensionless'Machine_Radix ** Exponent_Remainder);
+         Mantissa : constant Dimensionless :=
+           (if Degree = 1 then Radicand else Dimensionless_Math."**" (Radicand, 1.0 / Dimensionless (Degree)));
+      begin
+         return Dimensionless'Scaling (Mantissa, Root_Exponent);
+      exception
+         when Constraint_Error =>
+            return (if Root_Exponent > 0 then Dimensionless'Last else 0.0);
+      end;
+   end Nth_Root_Ratio;
+
+   function Constant_Speed_Axial_Ceiling
+     (Params  : Kinematic_Parameters;
+      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel : Velocity;
+      Safety  : Dimensionless := 0.999) return Velocity
+   is
+      Result : Velocity := Max_Vel;
+
+      procedure Apply_Power_Ceiling (Numerator, Denominator : Dimensionless; Degree : Positive);
+
+      procedure Apply_Power_Ceiling (Numerator, Denominator : Dimensionless; Degree : Positive) is
+         Root      : Dimensionless;
+         Candidate : Dimensionless;
+      begin
+         if Denominator <= 0.0 or else Result <= 0.0 * mm / s then
+            return;
+         elsif Numerator <= 0.0 or else Safety <= 0.0 then
+            Result := 0.0 * mm / s;
+            return;
+         end if;
+
+         Root := Nth_Root_Ratio (Numerator, Denominator, Degree);
+         if Safety <= 1.0 or else Root <= Dimensionless'Last / Safety then
+            Candidate := Safety * Root;
+         else
+            Candidate := Dimensionless'Last;
+         end if;
+         Result := Velocity'Min (Result, Candidate * mm / s);
+      end Apply_Power_Ceiling;
+   begin
+      for A in Axis_Name loop
+         if Bounds.Velocity (A) > 0.0 then
+            Apply_Power_Ceiling (Dimensionless (Params.Axial_Velocity_Maxes (A) / (mm / s)), Bounds.Velocity (A), 1);
+         end if;
+
+         if Bounds.Acceleration (A) > 0.0 / mm then
+            Apply_Power_Ceiling
+              (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s ** 2)),
+               Dimensionless (Bounds.Acceleration (A) / (1.0 / mm)),
+               2);
+         end if;
+
+         if Bounds.Jerk (A) > 0.0 / mm ** 2 then
+            Apply_Power_Ceiling
+              (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s ** 3)),
+               Dimensionless (Bounds.Jerk (A) / (1.0 / mm ** 2)),
+               3);
+         end if;
+
+         if Bounds.Snap (A) > 0.0 / mm ** 3 then
+            Apply_Power_Ceiling
+              (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s ** 4)),
+               Dimensionless (Bounds.Snap (A) / (1.0 / mm ** 3)),
+               4);
+         end if;
+
+         if Bounds.Crackle (A) > 0.0 / mm ** 4 then
+            Apply_Power_Ceiling
+              (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s ** 5)),
+               Dimensionless (Bounds.Crackle (A) / (1.0 / mm ** 4)),
+               5);
+         end if;
+      end loop;
+
+      return Velocity'Max (0.0 * mm / s, Result);
+   end Constant_Speed_Axial_Ceiling;
+
+   function Mixed_Derivative_Limits
+     (Params  : Kinematic_Parameters;
+      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel : Velocity;
+      Safety  : Dimensionless := 0.999) return Mixed_Derivative_Limit_Result
+   is
+      Base : Scalar_Derivative_Limits :=
+        (Acceleration_Max => 1.0E100 * mm / s ** 2,
+         Jerk_Max         => 1.0E100 * mm / s ** 3,
+         Snap_Max         => 1.0E100 * mm / s ** 4,
+         Crackle_Max      => 1.0E100 * mm / s ** 5);
+
+      Result : Mixed_Derivative_Limit_Result :=
+        (Valid => True, Limits => Base, Max_Vel => Constant_Speed_Axial_Ceiling (Params, Bounds, Max_Vel, Safety));
+
+      Limit_Scale : Dimensionless := 1.0;
+
+      type Dimensionless_Factor_Array is array (Positive range <>) of Dimensionless;
+
+      type Scaled_Nonnegative is record
+         Fraction : Dimensionless := 0.0;
+         Exponent : Integer := 0;
+      end record;
+
+      type Scaled_Nonnegative_Array is array (Positive range <>) of Scaled_Nonnegative;
+
+      Zero : constant Scaled_Nonnegative := (Fraction => 0.0, Exponent => 0);
+      One  : constant Scaled_Nonnegative :=
+        (Fraction => Dimensionless'Fraction (1.0), Exponent => Dimensionless'Exponent (1.0));
+
+      function To_Scaled (Value : Dimensionless) return Scaled_Nonnegative;
+      function Scaled_Product (Left, Right : Scaled_Nonnegative) return Scaled_Nonnegative;
+      function Scaled_Product (Factors : Dimensionless_Factor_Array) return Scaled_Nonnegative;
+      function Aligned_Fraction (Value : Scaled_Nonnegative; Exponent : Integer) return Dimensionless;
+      function Scaled_Add (Left, Right : Scaled_Nonnegative) return Scaled_Nonnegative;
+      function Scaled_Sum (Values : Scaled_Nonnegative_Array) return Scaled_Nonnegative;
+      function Scaled_Less_Than (Left, Right : Scaled_Nonnegative) return Boolean;
+      function Scaled_Less_Or_Equal (Left, Right : Scaled_Nonnegative) return Boolean;
+      function Scaled_Subtract (Left, Right : Scaled_Nonnegative) return Scaled_Nonnegative;
+      function Scaled_Square_Root (Value : Scaled_Nonnegative) return Scaled_Nonnegative;
+      function Scaled_Ratio (Numerator, Denominator : Scaled_Nonnegative) return Dimensionless;
+      function Positive_Quadratic_Scale (Remainder, Linear, Quadratic : Scaled_Nonnegative) return Dimensionless;
+
+      procedure Apply_Linear_Constraint (Maximum, Fixed, Linear : Scaled_Nonnegative);
+      procedure Apply_Quadratic_Constraint (Maximum, Fixed, Linear, Quadratic : Scaled_Nonnegative);
+
+      function To_Scaled (Value : Dimensionless) return Scaled_Nonnegative is
+      begin
+         if Value <= 0.0 then
+            return Zero;
+         else
+            return (Fraction => Dimensionless'Fraction (Value), Exponent => Dimensionless'Exponent (Value));
+         end if;
+      end To_Scaled;
+
+      function Scaled_Product (Left, Right : Scaled_Nonnegative) return Scaled_Nonnegative is
+      begin
+         if Left.Fraction = 0.0 or else Right.Fraction = 0.0 then
+            return Zero;
+         end if;
+
+         declare
+            Product         : constant Dimensionless := Left.Fraction * Right.Fraction;
+            Exponent_Change : constant Integer := Dimensionless'Exponent (Product);
+         begin
+            return
+              (Fraction => Dimensionless'Fraction (Product),
+               Exponent => Left.Exponent + Right.Exponent + Exponent_Change);
+         end;
+      end Scaled_Product;
+
+      function Scaled_Product (Factors : Dimensionless_Factor_Array) return Scaled_Nonnegative is
+         Product : Scaled_Nonnegative := One;
+      begin
+         for Factor of Factors loop
+            if Factor <= 0.0 then
+               return Zero;
+            end if;
+            Product := Scaled_Product (Product, To_Scaled (Factor));
+         end loop;
+         return Product;
+      end Scaled_Product;
+
+      function Aligned_Fraction (Value : Scaled_Nonnegative; Exponent : Integer) return Dimensionless is
+      begin
+         if Value.Fraction = 0.0 then
+            return 0.0;
+         else
+            return Dimensionless'Scaling (Value.Fraction, Value.Exponent - Exponent);
+         end if;
+      exception
+         when Constraint_Error =>
+            return 0.0;
+      end Aligned_Fraction;
+
+      function Scaled_Add (Left, Right : Scaled_Nonnegative) return Scaled_Nonnegative is
+      begin
+         if Left.Fraction = 0.0 then
+            return Right;
+         elsif Right.Fraction = 0.0 then
+            return Left;
+         end if;
+
+         declare
+            Common_Exponent : constant Integer := Integer'Max (Left.Exponent, Right.Exponent);
+            Sum             : constant Dimensionless :=
+              Aligned_Fraction (Left, Common_Exponent) + Aligned_Fraction (Right, Common_Exponent);
+            Exponent_Change : constant Integer := Dimensionless'Exponent (Sum);
+         begin
+            return (Fraction => Dimensionless'Fraction (Sum), Exponent => Common_Exponent + Exponent_Change);
+         end;
+      end Scaled_Add;
+
+      function Scaled_Sum (Values : Scaled_Nonnegative_Array) return Scaled_Nonnegative is
+         Sum : Scaled_Nonnegative := Zero;
+      begin
+         for Value of Values loop
+            Sum := Scaled_Add (Sum, Value);
+         end loop;
+         return Sum;
+      end Scaled_Sum;
+
+      function Scaled_Less_Than (Left, Right : Scaled_Nonnegative) return Boolean is
+      begin
+         if Left.Fraction = 0.0 then
+            return Right.Fraction /= 0.0;
+         elsif Right.Fraction = 0.0 then
+            return False;
+         elsif Left.Exponent /= Right.Exponent then
+            return Left.Exponent < Right.Exponent;
+         else
+            return Left.Fraction < Right.Fraction;
+         end if;
+      end Scaled_Less_Than;
+
+      function Scaled_Less_Or_Equal (Left, Right : Scaled_Nonnegative) return Boolean is
+      begin
+         return not Scaled_Less_Than (Left => Right, Right => Left);
+      end Scaled_Less_Or_Equal;
+
+      function Scaled_Subtract (Left, Right : Scaled_Nonnegative) return Scaled_Nonnegative is
+      begin
+         if Right.Fraction = 0.0 then
+            return Left;
+         elsif not Scaled_Less_Or_Equal (Left => Right, Right => Left) then
+            return Zero;
+         end if;
+
+         declare
+            Difference      : constant Dimensionless := Left.Fraction - Aligned_Fraction (Right, Left.Exponent);
+            Exponent_Change : Integer;
+         begin
+            if Difference <= 0.0 then
+               return Zero;
+            end if;
+            Exponent_Change := Dimensionless'Exponent (Difference);
+            return (Fraction => Dimensionless'Fraction (Difference), Exponent => Left.Exponent + Exponent_Change);
+         end;
+      end Scaled_Subtract;
+
+      function Scaled_Square_Root (Value : Scaled_Nonnegative) return Scaled_Nonnegative is
+      begin
+         if Value.Fraction = 0.0 then
+            return Zero;
+         end if;
+
+         declare
+            Exponent_Remainder : constant Integer := Value.Exponent mod 2;
+            Half_Exponent      : constant Integer := (Value.Exponent - Exponent_Remainder) / 2;
+            Root               : constant Scaled_Nonnegative :=
+              To_Scaled (Dimensionless_Math.Sqrt (Dimensionless'Scaling (Value.Fraction, Exponent_Remainder)));
+         begin
+            return (Fraction => Root.Fraction, Exponent => Root.Exponent + Half_Exponent);
+         end;
+      end Scaled_Square_Root;
+
+      function Scaled_Ratio (Numerator, Denominator : Scaled_Nonnegative) return Dimensionless is
+      begin
+         if Numerator.Fraction = 0.0 then
+            return 0.0;
+         elsif Denominator.Fraction = 0.0 or else not Scaled_Less_Or_Equal (Numerator, Denominator) then
+            return 1.0;
+         end if;
+
+         declare
+            Fraction_Ratio  : constant Dimensionless := Numerator.Fraction / Denominator.Fraction;
+            Exponent_Change : constant Integer := Dimensionless'Exponent (Fraction_Ratio);
+            Exponent        : constant Integer := Numerator.Exponent - Denominator.Exponent + Exponent_Change;
+         begin
+            return Dimensionless'Scaling (Dimensionless'Fraction (Fraction_Ratio), Exponent);
+         exception
+            when Constraint_Error =>
+               return 0.0;
+         end;
+      end Scaled_Ratio;
+
+      function Positive_Quadratic_Scale (Remainder, Linear, Quadratic : Scaled_Nonnegative) return Dimensionless is
+      begin
+         if Remainder.Fraction = 0.0 then
+            return (if Linear.Fraction = 0.0 and then Quadratic.Fraction = 0.0 then 1.0 else 0.0);
+         elsif Scaled_Less_Or_Equal (Scaled_Sum ([Linear, Quadratic]), Remainder) then
+            return 1.0;
+         elsif Quadratic.Fraction = 0.0 then
+            return Scaled_Ratio (Remainder, Linear);
+         end if;
+
+         declare
+            --  This is the cancellation-free conjugate root
+            --  2R / (L + sqrt (L**2 + 4QR)), evaluated without forming overflowing products or ratios.
+            Discriminant : constant Scaled_Nonnegative :=
+              Scaled_Sum
+                ([Scaled_Product (Linear, Linear),
+                  Scaled_Product (To_Scaled (4.0), Scaled_Product (Quadratic, Remainder))]);
+            Denominator  : constant Scaled_Nonnegative := Scaled_Sum ([Linear, Scaled_Square_Root (Discriminant)]);
+         begin
+            return Scaled_Ratio (Scaled_Product (To_Scaled (2.0), Remainder), Denominator);
+         end;
+      end Positive_Quadratic_Scale;
+
+      procedure Apply_Linear_Constraint (Maximum, Fixed, Linear : Scaled_Nonnegative) is
+      begin
+         if Scaled_Less_Than (Maximum, Fixed) then
+            Result.Valid := False;
+         elsif Linear.Fraction /= 0.0 then
+            Limit_Scale := Dimensionless'Min (Limit_Scale, Scaled_Ratio (Scaled_Subtract (Maximum, Fixed), Linear));
+         end if;
+      end Apply_Linear_Constraint;
+
+      procedure Apply_Quadratic_Constraint (Maximum, Fixed, Linear, Quadratic : Scaled_Nonnegative) is
+      begin
+         if Scaled_Less_Than (Maximum, Fixed) then
+            Result.Valid := False;
+         else
+            Limit_Scale :=
+              Dimensionless'Min
+                (Limit_Scale, Positive_Quadratic_Scale (Scaled_Subtract (Maximum, Fixed), Linear, Quadratic));
+         end if;
+      end Apply_Quadratic_Constraint;
+
+      Base_Acceleration_Raw : Dimensionless := 1.0E100;
+      Base_Jerk_Raw         : Dimensionless := 1.0E100;
+      Base_Snap_Raw         : Dimensionless := 1.0E100;
+      Base_Crackle_Raw      : Dimensionless := 1.0E100;
+   begin
+      for A in Axis_Name loop
+         declare
+            X1 : constant Dimensionless := Bounds.Velocity (A);
+         begin
+            if X1 > 0.0 then
+               Base_Acceleration_Raw :=
+                 Dimensionless'Min
+                   (Base_Acceleration_Raw,
+                    Nth_Root_Ratio (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s ** 2)), X1, 1));
+               Base_Jerk_Raw :=
+                 Dimensionless'Min
+                   (Base_Jerk_Raw,
+                    Nth_Root_Ratio (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s ** 3)), X1, 1));
+               Base_Snap_Raw :=
+                 Dimensionless'Min
+                   (Base_Snap_Raw,
+                    Nth_Root_Ratio (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s ** 4)), X1, 1));
+               Base_Crackle_Raw :=
+                 Dimensionless'Min
+                   (Base_Crackle_Raw,
+                    Nth_Root_Ratio (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s ** 5)), X1, 1));
+            end if;
+         end;
+      end loop;
+
+      Base :=
+        (Acceleration_Max => Base_Acceleration_Raw * mm / s ** 2,
+         Jerk_Max         => Base_Jerk_Raw * mm / s ** 3,
+         Snap_Max         => Base_Snap_Raw * mm / s ** 4,
+         Crackle_Max      => Base_Crackle_Raw * mm / s ** 5);
+      Result.Limits := Base;
+
+      for A in Axis_Name loop
+         declare
+            V  : constant Dimensionless := Dimensionless (Result.Max_Vel / (mm / s));
+            X1 : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Velocity (A));
+            X2 : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Acceleration (A) / (1.0 / mm));
+            X3 : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm ** 2));
+            X4 : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm ** 3));
+            X5 : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm ** 4));
+
+            Acceleration_Maximum : constant Scaled_Nonnegative :=
+              To_Scaled (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s ** 2)));
+            Jerk_Maximum         : constant Scaled_Nonnegative :=
+              To_Scaled (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s ** 3)));
+            Snap_Maximum         : constant Scaled_Nonnegative :=
+              To_Scaled (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s ** 4)));
+            Crackle_Maximum      : constant Scaled_Nonnegative :=
+              To_Scaled (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s ** 5)));
+         begin
+            Apply_Linear_Constraint
+              (Acceleration_Maximum, Scaled_Product ([X2, V, V]), Scaled_Product ([X1, Base_Acceleration_Raw]));
+            Apply_Linear_Constraint
+              (Jerk_Maximum,
+               Scaled_Product ([X3, V, V, V]),
+               Scaled_Sum
+                 ([Scaled_Product ([3.0, X2, V, Base_Acceleration_Raw]), Scaled_Product ([X1, Base_Jerk_Raw])]));
+            Apply_Quadratic_Constraint
+              (Snap_Maximum,
+               Scaled_Product ([X4, V, V, V, V]),
+               Scaled_Sum
+                 ([Scaled_Product ([6.0, X3, V, V, Base_Acceleration_Raw]),
+                   Scaled_Product ([4.0, X2, V, Base_Jerk_Raw]),
+                   Scaled_Product ([X1, Base_Snap_Raw])]),
+               Scaled_Product ([3.0, X2, Base_Acceleration_Raw, Base_Acceleration_Raw]));
+            Apply_Quadratic_Constraint
+              (Crackle_Maximum,
+               Scaled_Product ([X5, V, V, V, V, V]),
+               Scaled_Sum
+                 ([Scaled_Product ([10.0, X4, V, V, V, Base_Acceleration_Raw]),
+                   Scaled_Product ([10.0, X3, V, V, Base_Jerk_Raw]),
+                   Scaled_Product ([5.0, X2, V, Base_Snap_Raw]),
+                   Scaled_Product ([X1, Base_Crackle_Raw])]),
+               Scaled_Sum
+                 ([Scaled_Product ([15.0, X3, V, Base_Acceleration_Raw, Base_Acceleration_Raw]),
+                   Scaled_Product ([10.0, X2, Base_Acceleration_Raw, Base_Jerk_Raw])]));
+
+            exit when not Result.Valid;
+         end;
+      end loop;
+
+      if not Result.Valid or else Limit_Scale < 0.0 then
+         Result.Valid := False;
+         return Result;
+      end if;
+
+      Limit_Scale := Safety * Dimensionless'Min (1.0, Limit_Scale);
+      Result.Limits :=
+        (Acceleration_Max => Limit_Scale * Base.Acceleration_Max,
+         Jerk_Max         => Limit_Scale * Base.Jerk_Max,
+         Snap_Max         => Limit_Scale * Base.Snap_Max,
+         Crackle_Max      => Limit_Scale * Base.Crackle_Max);
+
+      return Result;
+   end Mixed_Derivative_Limits;
+
    function Fast_Distance_At_Max_Time
      (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Length
    is
@@ -1381,7 +1822,7 @@ package body Prunt.Motion_Planner is
                     Optimal_Profile_For_Delta_V (End_Vel - Mid, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
 
                   Accel_Distance := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
-                  Decel_Distance := Fast_Distance_At_Max_Time (Profile.Decel, Crackle_Max, End_Vel);
+                  Decel_Distance := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Mid);
 
                   if Accel_Distance + Decel_Distance <= Distance then
                      Lower := Mid;
@@ -1389,6 +1830,18 @@ package body Prunt.Motion_Planner is
                      Upper := Mid;
                   end if;
                end loop;
+
+               Profile.Accel :=
+                 Optimal_Profile_For_Delta_V (Start_Vel - Lower, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
+               Profile.Decel :=
+                 Optimal_Profile_For_Delta_V (End_Vel - Lower, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
+
+               Accel_Distance := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
+               Decel_Distance := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Lower);
+
+               if Lower > 0.0 * mm / s and then Accel_Distance + Decel_Distance < Distance then
+                  Profile.Coast := (Distance - Accel_Distance - Decel_Distance) / Lower;
+               end if;
             end;
          end if;
       end;

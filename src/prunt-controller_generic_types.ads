@@ -61,6 +61,7 @@ package Prunt.Controller_Generic_Types is
 
    function Return_False (Left, Right : My_Modules.Module'Class with Unreferenced) return Boolean
    is (False);
+   --  Treat all module values as unequal when instantiating containers that require an equality function.
 
    package Module_Maps is new
      Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, My_Modules.Module'Class, "=" => Return_False);

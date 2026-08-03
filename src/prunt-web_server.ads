@@ -57,15 +57,30 @@ generic
 package Prunt.Web_Server is
 
    procedure Wait_For_User_To_Allow_Update;
+   --  Mark a firmware update as required and block until the web client explicitly allows it.
+
    procedure Notify_Startup_Done;
+   --  Publish that controller startup has completed so the web UI can leave its startup state.
+
    procedure Task_Termination_Set_Specific_Handler (Handler : Ada.Task_Termination.Termination_Handler);
+   --  Install Handler as the termination handler for the package's server task.
+
    procedure Reset;
+   --  Clear the startup-complete flag and restart the server uptime counter.
 
 private
 
    function Trim (S : String) return String;
+   --  Return S without leading or trailing whitespace.
+
    function Ends_With (Source, Pattern : String) return Boolean;
+   --  Return True when Pattern is a suffix of Source.
+
    function Starts_With (Source, Pattern : String) return Boolean;
+   --  Return True when Pattern is a prefix of Source.
+
+   function Patch_Config_Values (Patch : String) return Virtual_String;
+   --  Apply a JSON configuration patch and return the resulting values together with any validation errors as JSON.
 
    protected Startup_Manager is
       entry Wait_For_Update_Allowed;
@@ -94,8 +109,11 @@ private
 
    overriding
    procedure Commit (Destination : in out Post_Body_Destination);
+   --  Complete a buffered POST body after all chunks have already been accumulated by Put.
+
    overriding
    procedure Put (Destination : in out Post_Body_Destination; Data : String);
+   --  Append one received request-body chunk to Destination's bounded buffer.
 
    type Virtual_String_Source is new Content_Source with record
       Content    : Virtual_String;
@@ -107,6 +125,7 @@ private
 
    overriding
    function Get (Source : access Virtual_String_Source) return String;
+   --  Return the next bounded UTF-8 chunk of Source.Content and advance its cursor.
 
    type Array_Stream_Type is new Root_Stream_Type with record
       Content  : access constant Ada.Streams.Stream_Element_Array;
@@ -117,9 +136,11 @@ private
    overriding
    procedure Read
      (Stream : in out Array_Stream_Type; Item : out Stream_Element_Array; Last : out Stream_Element_Offset);
+   --  Copy the next bytes from Stream.Content into Item and report an empty read after the content is exhausted.
 
    overriding
    procedure Write (Stream : in out Array_Stream_Type; Item : Stream_Element_Array);
+   --  Reject writes because Array_Stream_Type is a read-only view of embedded content.
 
    type Prunt_HTTP_Factory
      (Request_Length  : Positive;
@@ -133,6 +154,7 @@ private
    type Prunt_Client_Access is access Prunt_Client;
 
    function "<" (Left, Right : Prunt_Client_Access) return Boolean;
+   --  Order distinct client pointers by address, with null before every non-null client.
 
    type Put_Fail_Reason_Kind is
      (No_Failure_Kind,
@@ -152,8 +174,11 @@ private
 
    overriding
    function Get (Source : access Directory_Content) return String;
+   --  Emit the next chunk of a JSON array containing upload-directory entry names.
+
    overriding
    procedure Finalize (Source : in out Directory_Content);
+   --  Finalize the inherited content-source state after directory streaming completes or is abandoned.
 
    type Extra_Client_Content is record
       Self_Access               : Prunt_Client_Access := null;
@@ -214,44 +239,80 @@ private
 
    procedure Reply_JSON
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : String; Get : Boolean := True);
+   --  Send a non-cacheable JSON response from a String, omitting its body when Get is False.
 
    procedure Reply_JSON
      (Client : in out Prunt_Client; Code : Positive; Reason : String; Message : Virtual_String; Get : Boolean := True);
+   --  Stream a non-cacheable JSON response from a Virtual_String, omitting its body when Get is False.
 
    overriding
    procedure Body_Received (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class);
+   --  Close any upload file after its request body has been received, recording close failures on Client.
+
    overriding
    procedure Body_Sent (Client : in out Prunt_Client; Stream : in out Root_Stream_Type'Class; Get : Boolean);
+   --  Close any file used to stream a completed response body.
+
    overriding
    procedure Body_Error
      (Client : in out Prunt_Client; Content : in out Content_Destination'Class; Error : Exception_Occurrence);
+   --  Save a body-transfer exception and mark both POST and PUT handling so the request receives an error response.
+
    overriding
    procedure Do_Get (Client : in out Prunt_Client);
+   --  Dispatch a GET request and include the selected response body.
+
    overriding
    procedure Do_Head (Client : in out Prunt_Client);
+   --  Dispatch a HEAD request using GET routing while suppressing the response body.
+
    overriding
    procedure Do_Post (Client : in out Prunt_Client);
+   --  Dispatch controller actions and configuration or G-code submissions carried by a POST request.
+
    overriding
    procedure Do_Put (Client : in out Prunt_Client);
+   --  Reply to an upload PUT according to the validation or transfer result recorded while receiving its body.
+
    overriding
    procedure Do_Body (Client : in out Prunt_Client);
+   --  Select and initialize the body destination for POST buffering or a validated upload PUT.
+
    overriding
    procedure Initialize (Client : in out Prunt_Client);
+   --  Initialize the base HTTP client and record the start time used by long-poll request timeouts.
+
    overriding
    procedure Finalize (Client : in out Prunt_Client);
+   --  Release open files, buffered content, directory searches, and inherited HTTP client state.
+
    overriding
    procedure Connected (Client : in out Prunt_Client);
+   --  Configure TCP keepalive on a new client socket before running the inherited connection hook.
+
    overriding
    function Create
      (Factory : access Prunt_HTTP_Factory; Listener : access Connections_Server'Class; From : Sock_Addr_Type)
       return Connection_Ptr;
+   --  Allocate a Prunt client while the listener is below Factory.Max_Connections, otherwise return null.
+
+   procedure Do_Get_Head (Client : in out Prunt_Client; Get : Boolean);
+   --  Process a GET or HEAD request, emitting a response body only when Get is True.
+
    overriding
    function WebSocket_Open (Client : access Prunt_Client) return WebSocket_Accept;
+   --  Accept the combined status-and-log WebSocket endpoint and reject every other request target.
+
    overriding
    procedure WebSocket_Received (Client : in out Prunt_Client; Message : String);
+   --  Interpret Message as the requested status-send divisor, retaining the previous value when it is invalid.
+
    overriding
    procedure WebSocket_Initialize (Client : in out Prunt_Client);
+   --  Configure bounded WebSocket send behavior and register Client to receive status and log broadcasts.
+
    overriding
    procedure WebSocket_Finalize (Client : in out Prunt_Client);
+   --  Unregister Client from status and log broadcasts when its WebSocket closes.
 
 end Prunt.Web_Server;

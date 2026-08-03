@@ -22,7 +22,30 @@ pragma Extensions_Allowed (On);
 private generic
 package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
-   procedure Run (Block : in out Execution_Block);
+   procedure Run
+     (Block     : aliased in out Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace : not null access constant Planning_Workspace);
    --  Fills Block.Feedrate_Profiles with profiles based on Block.Corner_Velocity_Limits and Block.Params.
+
+private
+
+   function Profile_Window_Time
+     (Start_Vel       : Velocity;
+      End_Vel         : Velocity;
+      Distance        : Length;
+      Max_Vel         : Velocity;
+      Limits          : Scalar_Derivative_Limits;
+      Prefix_Distance : Length;
+      Suffix_Distance : Length) return Time;
+   --  Compute the total traversal time for a profile-window candidate with the full profile solver. Returns a large
+   --  sentinel value when no feasible profile can be generated.
+
+   procedure Select_Feedrate_Profile_Window
+     (Block            : not null access Execution_Block;
+      Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace        : not null access constant Planning_Workspace;
+      Finishing_Corner : Finishing_Corners_Index);
+   --  Select and store the first feasible fixed profile-window candidate in profile-time order.
 
 end Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;

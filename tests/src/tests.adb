@@ -21,6 +21,12 @@ with Ada.Command_Line;
 with Prunt.Bounded_Indefinite_Queues_Test;
 with Prunt.Bounded_Indefinite_Vectors_Test;
 with Prunt.Config.Test;
+with Prunt.Controller_Generic_Types;
+with Prunt.Default_Modules;
+with Prunt.Default_Modules.Config_Saving;
+with Prunt.Default_Modules.Kinematics;
+with Prunt.Default_Modules.Kinematics.Test;
+with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Dummy_Allocator.Test;
 with Prunt.Exception_Occurrence_Holders.Test;
 with Prunt.Gcode_Arguments.Test;
@@ -28,13 +34,46 @@ with Prunt.Gcode_Queues.Test;
 with Prunt.Generic_Lock.Test;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test;
 with Prunt.Integration_Config_Overlays.Test;
+with Prunt.Logger;
+with Prunt.Logger.Test_Control;
+with Prunt.Motion_Planner.Corner_Transitions.Test;
 with Prunt.Motion_Planner.Test;
-with Prunt.Motion_Planner.PH_Beziers.Test;
+with Prunt.Motion_Planner.Stereographic_Curves.Test;
+with Prunt.Motion_Planner.Planner_Primitive_Jet_Test;
 with Prunt.Moving_Averages.Test;
 with Prunt.Thermistors.Test;
 with Trendy_Test.Reports;
 
 procedure Tests is
+   type Kinematics_Test_Name is (Only_Item);
+   pragma Unreferenced (Only_Item);
+
+   package Kinematics_Test_Controller_Types is new
+     Prunt.Controller_Generic_Types
+       (Motor_Name                   => Kinematics_Test_Name,
+        Heater_Name                  => Kinematics_Test_Name,
+        Thermistor_Name              => Kinematics_Test_Name,
+        Board_Temperature_Probe_Name => Kinematics_Test_Name,
+        Fan_Name                     => Kinematics_Test_Name,
+        Tachometer_Name              => Kinematics_Test_Name,
+        Input_Switch_Name            => Kinematics_Test_Name);
+   package Kinematics_Test_Logger is new Prunt.Logger;
+   package Kinematics_Test_Logger_Control is new Kinematics_Test_Logger.Test_Control;
+   package Kinematics_Test_Default_Modules is new
+     Prunt.Default_Modules
+       (My_Modules => Kinematics_Test_Controller_Types.My_Modules,
+        My_Logger  => Kinematics_Test_Logger);
+   package Kinematics_Test_Config_Saving is new Kinematics_Test_Default_Modules.Config_Saving;
+   package Kinematics_Test_Motor_Drivers is new
+     Kinematics_Test_Default_Modules.Motor_Drivers
+       (My_Controller_Generic_Types => Kinematics_Test_Controller_Types);
+   package Kinematics_Test_Module is new
+     Kinematics_Test_Default_Modules.Kinematics
+       (My_Controller_Generic_Types => Kinematics_Test_Controller_Types,
+        Config_Saving_Module        => Kinematics_Test_Config_Saving,
+        Motor_Drivers_Module        => Kinematics_Test_Motor_Drivers);
+   package Kinematics_Test is new Kinematics_Test_Module.Test;
+
    package Moving_Averages_Float is new Prunt.Moving_Averages (Float);
    package Moving_Averages_Float_Test is new Moving_Averages_Float.Test;
    package Moving_Averages_Long_Float is new Prunt.Moving_Averages (Long_Float);
@@ -43,14 +82,7 @@ procedure Tests is
    package Generic_Lock is new Prunt.Generic_Lock;
    package Generic_Lock_Test is new Generic_Lock.Test;
 
-   procedure Xcov_Dump (Name : String) is
-   begin
-      pragma Annotate (Xcov, Dump_Buffers, "individual_test-" & Name);
-      pragma Annotate (Xcov, Reset_Buffers);
-   end Xcov_Dump;
-
-   function Is_Xcov_Dump return Boolean is
-     (Ada.Command_Line.Argument_Count >= 1 and then Ada.Command_Line.Argument (1) = "xcov_dump");
+   function Is_Xcov_Dump return Boolean;
 
    function Filter return String is
    begin
@@ -66,8 +98,18 @@ procedure Tests is
          return "";
       end if;
    end Filter;
+
+   function Is_Xcov_Dump return Boolean is
+     (Ada.Command_Line.Argument_Count >= 1 and then Ada.Command_Line.Argument (1) = "xcov_dump");
+
+   procedure Xcov_Dump (Name : String) is
+   begin
+      pragma Annotate (Xcov, Dump_Buffers, "individual_test-" & Name);
+      pragma Annotate (Xcov, Reset_Buffers);
+   end Xcov_Dump;
 begin
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
+   Trendy_Test.Register (Kinematics_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Long_Float_Test.All_Tests);
    Trendy_Test.Register (Prunt.Bounded_Indefinite_Queues_Test.All_Tests);
@@ -79,7 +121,9 @@ begin
    Trendy_Test.Register (Prunt.Gcode_Queues.Test.All_Tests);
    Trendy_Test.Register (Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test.All_Tests);
    Trendy_Test.Register (Prunt.Integration_Config_Overlays.Test.All_Tests);
-   Trendy_Test.Register (Prunt.Motion_Planner.PH_Beziers.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Motion_Planner.Corner_Transitions.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Motion_Planner.Stereographic_Curves.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Motion_Planner.Planner_Primitive_Jet_Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Test.All_Tests);
    Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
 
@@ -91,4 +135,9 @@ begin
       Trendy_Test.Reports.Print_Basic_Report (Trendy_Test.Run (Filter => Filter));
       pragma Annotate (Xcov, Dump_Buffers, "all_tests");
    end if;
+   Kinematics_Test_Logger_Control.Stop;
+exception
+   when others =>
+      Kinematics_Test_Logger_Control.Stop;
+      raise;
 end Tests;

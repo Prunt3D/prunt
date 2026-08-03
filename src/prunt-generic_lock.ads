@@ -60,5 +60,6 @@ private
 
    overriding
    procedure Finalize (Object : in out Lock_Holder);
+   --  Release the held lock exactly once when Object leaves scope.
 
 end Prunt.Generic_Lock;

@@ -28,6 +28,9 @@ package body Prunt_Simulator_Samples is
 
    Sample_Capacity    : constant Positive := 65_536;
    Max_Response_Bytes : constant Stream_Element_Offset := 96 * 1_024 * 1_024;
+   --  One-tick fifth differences amplify position roundoff enough to swamp the plotted crackle signal.
+   Derivative_Step    : constant Positive := 5;
+   Derivative_Period  : constant Long_Float := Sample_Period_S * Long_Float (Derivative_Step);
 
    type Sample is record
       Sequence     : Long_Long_Integer := 0;
@@ -91,26 +94,48 @@ package body Prunt_Simulator_Samples is
       end Reset;
 
       procedure Append (Position : Axis_Position) is
-         Previous_Index : Positive := 1;
-         New_Sample     : Sample;
+         New_Sample : Sample;
+
+         function Previous_Index (Steps_Back : Positive) return Positive;
+
+         function Previous_Index (Steps_Back : Positive) return Positive is
+         begin
+            return ((Next - 1 - Steps_Back + Sample_Capacity) mod Sample_Capacity) + 1;
+         end Previous_Index;
       begin
-         if Count > 0 then
-            Previous_Index := (if Next = 1 then Sample_Capacity else Next - 1);
+         if Count >= Derivative_Step then
             New_Sample.Velocity :=
               [for Axis in Axis_Name =>
-                 (Position (Axis) - Samples (Previous_Index).Position (Axis)) / Sample_Period_S];
+                 (Position (Axis) - Samples (Previous_Index (Derivative_Step)).Position (Axis))
+                 / Derivative_Period];
+         end if;
+
+         if Count >= 2 * Derivative_Step then
             New_Sample.Acceleration :=
               [for Axis in Axis_Name =>
-                 (New_Sample.Velocity (Axis) - Samples (Previous_Index).Velocity (Axis)) / Sample_Period_S];
+                 (New_Sample.Velocity (Axis) - Samples (Previous_Index (Derivative_Step)).Velocity (Axis))
+                 / Derivative_Period];
+         end if;
+
+         if Count >= 3 * Derivative_Step then
             New_Sample.Jerk :=
               [for Axis in Axis_Name =>
-                 (New_Sample.Acceleration (Axis) - Samples (Previous_Index).Acceleration (Axis)) / Sample_Period_S];
+                 (New_Sample.Acceleration (Axis) - Samples (Previous_Index (Derivative_Step)).Acceleration (Axis))
+                 / Derivative_Period];
+         end if;
+
+         if Count >= 4 * Derivative_Step then
             New_Sample.Snap :=
               [for Axis in Axis_Name =>
-                 (New_Sample.Jerk (Axis) - Samples (Previous_Index).Jerk (Axis)) / Sample_Period_S];
+                 (New_Sample.Jerk (Axis) - Samples (Previous_Index (Derivative_Step)).Jerk (Axis))
+                 / Derivative_Period];
+         end if;
+
+         if Count >= 5 * Derivative_Step then
             New_Sample.Crackle :=
               [for Axis in Axis_Name =>
-                 (New_Sample.Snap (Axis) - Samples (Previous_Index).Snap (Axis)) / Sample_Period_S];
+                 (New_Sample.Snap (Axis) - Samples (Previous_Index (Derivative_Step)).Snap (Axis))
+                 / Derivative_Period];
          end if;
 
          New_Sample.Sequence := Next_Sequence;

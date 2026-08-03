@@ -21,6 +21,8 @@ pragma Extensions_Allowed (On);
 
 with Ada.Containers; use Ada.Containers;
 
+private with Ada.Numerics;
+private with Ada.Numerics.Generic_Elementary_Functions;
 private with System.Pool_Local;
 private with Prunt.Bounded_Indefinite_Queues;
 
@@ -59,6 +61,11 @@ private
        (Element_Type => Corner_Extra_Data_Type,
         Storage_Size => Max_Corners_Extra_Data_Storage);
 
+   Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+
+   type Command_Queue_Array_Access is access Command_Queue_Array_Type with Storage_Pool => Pool;
+   type Corner_Extra_Data_Queue_Access is access Corner_Extra_Data_Queues.Queue with Storage_Pool => Pool;
+
    protected Command_Queue is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       entry Enqueue
@@ -82,19 +89,20 @@ private
       In_Dequeue              : Boolean := False;
       Is_Full                 : Boolean := False;
       Next_Read, Next_Write   : Count_Type := Command_Queue_Array_Type'First;
-      Elements                : Command_Queue_Array_Type;
+      Elements                : Command_Queue_Array_Access := new Command_Queue_Array_Type;
       Current_Params          : Kinematic_Parameters;
-      Extra_Data_Storage      : Corner_Extra_Data_Queues.Queue;
+      Extra_Data_Storage      : Corner_Extra_Data_Queue_Access := new Corner_Extra_Data_Queues.Queue;
       Retry_High_Priority     : Boolean := True;
       Last_Assigned_Corner_ID : Planner_Corner_ID := 0;
       Has_Current_Corner_ID   : Boolean := False;
+      Queued_Position         : Position := Initial_Position;
+      --  Endpoint of the last accepted motion command, used to validate the complete path of a subsequent helix.
    end Command_Queue;
-
-   Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
 
    type Block_Plain_Corners_Access is access Block_Plain_Corners with Storage_Pool => Pool;
    type Block_Corner_Dwell_Times_Access is access Block_Corner_Dwell_Times with Storage_Pool => Pool;
    type Block_Segment_Feedrates_Access is access Block_Segment_Feedrates with Storage_Pool => Pool;
+   type Block_Path_Primitives_Access is access Block_Path_Primitives with Storage_Pool => Pool;
    type Block_Corners_Extra_Data_Access is access Corner_Extra_Data_Vectors.Vector with Storage_Pool => Pool;
    type Block_Corners_Extra_Data_End_Indices_Access is access Block_Corners_Extra_Data_End_Indices
    with Storage_Pool => Pool;
@@ -114,6 +122,8 @@ private
         new Block_Corner_Dwell_Times (2 .. Corners_Index'Last);
       Segment_Feedrates              : Block_Segment_Feedrates_Access :=
         new Block_Segment_Feedrates (2 .. Corners_Index'Last);
+      Primitives                     : Block_Path_Primitives_Access :=
+        new Block_Path_Primitives (2 .. Corners_Index'Last);
       Corners_Extra_Data             : Block_Corners_Extra_Data_Access := new Corner_Extra_Data_Vectors.Vector;
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices_Access :=
         new Block_Corners_Extra_Data_End_Indices (1 .. Corners_Index'Last);
@@ -126,5 +136,11 @@ private
    function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters;
    --  Limit the higher order kinematic limits to those reachable within a single interpolation period. This may be
    --  useful if the user chooses to enter an extremely large value.
+
+   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+
+   procedure Check_Helix_Bounds
+     (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean; Params : Kinematic_Parameters);
+   --  Check the complete executed helix, including every interior X/Y extremum and the linearly interpolated Z/E axes.
 
 end Prunt.Motion_Planner.Planner.Preprocessor;

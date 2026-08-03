@@ -49,8 +49,10 @@ package Prunt.Dummy_Allocator is
       Storage_Address          : System.Address;
       Size_In_Storage_Elements : Storage_Count;
       Alignment                : Storage_Count);
+   --  Accept a deallocation request without changing storage because this pool does not own the supplied address.
 
    overriding
    function Storage_Size (Pool : Dummy_Pool_Type) return Storage_Count;
+   --  Report an effectively unbounded capacity so allocation size checks are left to the caller-controlled storage.
 
 end Prunt.Dummy_Allocator;

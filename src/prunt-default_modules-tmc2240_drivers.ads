@@ -43,12 +43,15 @@ package Prunt.Default_Modules.TMC2240_Drivers is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
@@ -60,6 +63,7 @@ package Prunt.Default_Modules.TMC2240_Drivers is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -68,6 +72,7 @@ package Prunt.Default_Modules.TMC2240_Drivers is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -382,16 +387,21 @@ private
       Report_Config_Error : access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
       Motor               : My_Controller_Generic_Types.Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers;
+   --  Build and validate Motor's initial registers.
 
    type Motor_Registers_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC2240_Registers;
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    function MRES_To_Dimensionless (MRES : TMC_Types.TMC2240.Microstep_Resolution_Type) return Dimensionless;
+   --  Convert MRES to a microstep count.
 
    procedure Write_And_Validate
      (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : My_Controller_Generic_Types.Motor_Name)
@@ -401,6 +411,7 @@ private
    function Read
      (Address : TMC_Types.TMC2240.UART_Register_Address; Motor : My_Controller_Generic_Types.Motor_Name)
       return TMC_Types.TMC2240.UART_Data_Message;
+   --  Read and validate a motor register.
 
    task type UART_Motor_Manager is
       entry Setup
@@ -429,6 +440,7 @@ private
 
    overriding
    procedure Finalize (Object : in out TMC_Motor_Manager);
+   --  Stop the UART manager.
 
    type Motor_Manager_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Motor_Manager;
 
@@ -642,8 +654,10 @@ private
 
    overriding
    procedure Enable_Motor (This : in out UART_Motor_Handler);
+   --  Enable the driver.
 
    overriding
    procedure Disable_Motor (This : in out UART_Motor_Handler);
+   --  Disable the driver.
 
 end Prunt.Default_Modules.TMC2240_Drivers;

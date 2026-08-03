@@ -428,6 +428,7 @@ procedure Prebuild is
       XMLAda_Old    : constant String := Getenv ("XMLADA_ALIRE_PREFIX").all;
       LibGPR_Old    : constant String := Getenv ("LIBGPR_ALIRE_PREFIX").all;
       GNATCOLL_Old  : constant String := Getenv ("GNATCOLL_ALIRE_PREFIX").all;
+      GNATCOLL_Minimal_Old : constant String := Getenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX").all;
    begin
       Collect_Files (Join_Path ([Working_Dir, "config_codegen", "src"]), Src_Files, Recursive => True);
       for F of Src_Files loop
@@ -452,12 +453,14 @@ procedure Prebuild is
       Setenv ("XMLADA_ALIRE_PREFIX", "");
       Setenv ("LIBGPR_ALIRE_PREFIX", "");
       Setenv ("GNATCOLL_ALIRE_PREFIX", "");
+      Setenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX", "");
       Run ("alr", ["--chdir=config_codegen", "build", "--development"]);
       Setenv ("VSS_EXTRA_ALIRE_PREFIX", VSS_Extra_Old);
       Setenv ("VSS_TEXT_ALIRE_PREFIX", VSS_Text_Old);
       Setenv ("XMLADA_ALIRE_PREFIX", XMLAda_Old);
       Setenv ("LIBGPR_ALIRE_PREFIX", LibGPR_Old);
       Setenv ("GNATCOLL_ALIRE_PREFIX", GNATCOLL_Old);
+      Setenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX", GNATCOLL_Minimal_Old);
    end Build_Config_Codegen;
 
    procedure Run_Config_Codegen is

@@ -22,9 +22,12 @@ pragma Extensions_Allowed (On);
 package Prunt.Mockable.Directories is
 
    function Exists (Name : String) return Boolean;
+   --  Return True when the mocked filesystem contains an entry named Name.
 
    procedure Delete_File (Name : String);
+   --  Remove the named file from the mocked filesystem.
 
    procedure Rename (Old_Name, New_Name : String);
+   --  Rename a file in the mocked filesystem from Old_Name to New_Name.
 
 end Prunt.Mockable.Directories;

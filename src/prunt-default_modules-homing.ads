@@ -87,9 +87,11 @@ package Prunt.Default_Modules.Homing is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Module_Instance_Interface is synchronized interface;
 
@@ -97,9 +99,11 @@ package Prunt.Default_Modules.Homing is
      (This       : in out Module_Instance_Interface;
       Subscriber : not null access function return Homing_Event_Subscriber'Class)
    is abstract;
+   --  Register a homing subscriber.
 
    function Get_Homing_Parameters (This : Module_Instance_Interface; Axis : Axis_Name) return Axis_Homing_Parameters
    is abstract;
+   --  Return Axis's homing parameters.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -111,6 +115,7 @@ package Prunt.Default_Modules.Homing is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -119,14 +124,18 @@ package Prunt.Default_Modules.Homing is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
    function First_StallGuard2_Motor return Motor_Name;
+   --  Return a default StallGuard2 motor.
 
    function First_StallGuard4_Motor return Motor_Name;
+   --  Return a default StallGuard4 motor.
 
    function First_User_Visible_Input_Switch return Input_Switch_Name;
+   --  Return a default input switch.
 
    type User_Config_Homing_Set_To_Value is record
       --  This homing method doesn't involve any physical movement. When the homing procedure is initiated, it simply
@@ -336,16 +345,20 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    package Homing_Event_Subscriber_Shared_Pointers is new
      Prunt.Limited_Shared_Pointers (Homing_Event_Subscriber'Class);
 
    function Return_False (Left, Right : Homing_Event_Subscriber_Shared_Pointers.Ref with Unreferenced) return Boolean
    is (False);
+   --  Return False.
 
    package Homing_Subscriber_Vectors is new
      Ada.Containers.Vectors (Positive, Homing_Event_Subscriber_Shared_Pointers.Ref, "=" => Return_False);
@@ -360,6 +373,7 @@ private
 
    overriding
    procedure Process_After_Block (This : Homing_Event; Context : Block_End_Context'Class);
+   --  Notify homing subscribers.
 
    procedure Auto_Home
      (This     : Module_Instance;

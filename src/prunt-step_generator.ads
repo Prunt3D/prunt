@@ -30,6 +30,10 @@ generic
 
    type Motor_Position is array (Motor_Name) of Dimensionless;
 
+   type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
+
+   Maximum_Deltas_Per_Command : Motor_Delta_Limits;
+
    with
      procedure Start_Planner_Block
        (Resetting_Data : Planner.Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
@@ -131,17 +135,28 @@ private
    end record;
    --  Tracks the shared command-index stream and last queued position across primary and pause execution.
 
+   type Catch_Up_Axis_Set is array (Axis_Name) of Boolean;
+
    procedure Queue_Command
      (State           : in out Command_State;
       Pos             : Position;
       Map             : Motor_Pos_Map;
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
-      Vel_Ratio       : Dimensionless);
+      Vel_Ratio       : Dimensionless;
+      Catch_Up_Axes   : Catch_Up_Axis_Set := [others => False]);
    --  Append one shaped command to the shared step queue and update State.
 
    function No_Pause_Requested return Boolean;
+   --  Default pause-policy hook that always reports no pending pause request.
 
    procedure No_Pause_Handler (Pause_Position : Position; Reset_Requested : out Boolean);
+   --  Default pause handler that performs no motion and reports that no reset was requested.
+
+   type Axis_Fractions is array (Axis_Name) of Dimensionless;
+
+   function Command_Fractions
+     (Start_Pos, Target_Pos : Position; Map : Motor_Pos_Map; Catch_Up_Axes : Catch_Up_Axis_Set) return Axis_Fractions;
+   --  Return per-axis fractions that keep pressure-advance catch-up within every motor's per-command delta limit.
 
 end Prunt.Step_Generator;

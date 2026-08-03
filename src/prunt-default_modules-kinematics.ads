@@ -23,7 +23,6 @@ with Ada.Tags;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
 with Prunt.Default_Modules.Config_Saving;
-with Prunt.Default_Modules.Input_Shapers;
 with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Gcode_Arguments;
 with Prunt.Motion_Planner;
@@ -36,16 +35,17 @@ generic
    with package Config_Saving_Module is new Default_Modules.Config_Saving;
    with package Motor_Drivers_Module is new
      Default_Modules.Motor_Drivers (My_Controller_Generic_Types => My_Controller_Generic_Types);
-   with package Input_Shapers_Module is new Default_Modules.Input_Shapers (others => <>);
 package Prunt.Default_Modules.Kinematics is
 
    type Module is new My_Modules.Module with null record;
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Motor_Position_Map is array (Axis_Name, Motor_Name) of Length;
 
@@ -59,6 +59,10 @@ package Prunt.Default_Modules.Kinematics is
    function Get_Default_Motion_Planner_Configuration
      (This : Module_Instance_Interface) return Motion_Planner_Configuration
    is abstract;
+   --  Return the current planner parameters and motor map.
+
+   function Axis_Is_Motor_Separable (This : Module_Instance_Interface; Axis : Axis_Name) return Boolean is abstract;
+   --  Return whether Axis maps independently.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -70,6 +74,7 @@ package Prunt.Default_Modules.Kinematics is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -78,6 +83,7 @@ package Prunt.Default_Modules.Kinematics is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -119,11 +125,142 @@ private
    type User_Config_Position_Limits_Array is array (Axis_Name) of Length range -1.0E100 * mm .. 1.0E100 * mm
    with Annotate => (Prunt_Config, User_Config);
 
+   type User_Config_Axial_Deviation_Limits_Array is array (Axis_Name) of Length range 0.0 * mm .. 1.0E100 * mm
+   with Annotate => (Prunt_Config, User_Config);
+
    type User_Config_Axial_Velocity_Limits_Array is
      array (Axis_Name) of Velocity range 1.0E-6 * mm / s .. 1.0E100 * mm / s
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Axial_Scaler_Array is array (Axis_Name) of Dimensionless range 1.0E-100 .. 1.0E100
+   type User_Config_Axial_Acceleration_Limits_Array is
+     array (Axis_Name) of Acceleration range 1.0E-6 * mm / s ** 2 .. 1.0E100 * mm / s ** 2
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Axial_Jerk_Limits_Array is
+     array (Axis_Name) of Jerk range 1.0E-6 * mm / s ** 3 .. 1.0E100 * mm / s ** 3
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Axial_Snap_Limits_Array is
+     array (Axis_Name) of Snap range 1.0E-6 * mm / s ** 4 .. 1.0E100 * mm / s ** 4
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Axial_Crackle_Limits_Array is
+     array (Axis_Name) of Crackle range 1.0E-6 * mm / s ** 5 .. 1.0E100 * mm / s ** 5
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cornering_Stereographic is record
+      --  Use an inverse-stereographic unit-tangent curve for supported line/helix combinations. This is the default
+      --  and the only family that preserves the planner's higher-order endpoint continuity: position and its first
+      --  four distance derivatives match the adjoining path at each endpoint.
+
+      Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
+      --  Maximum deviation from the commanded path along each scaled axis. The limits form an axis-aligned corridor
+      --  around the requested path. Setting every component to zero disables corner curves. Setting one component to
+      --  zero requires that coordinate to be preserved exactly.
+
+      Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
+      --  Maximum distance by which the curve may miss the commanded corner point.
+
+      Shape_Bias : Dimensionless range -1.0 .. 1.0 := 0.0;
+      --  Bias the curve toward the incoming side when negative and toward the outgoing side when positive.
+
+      Circularity : Dimensionless range 0.0 .. 1.0 := 0.0;
+      --  Prefer a more circular-looking curve without increasing the allowed deviation.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cornering_Circular is record
+      --  Use an exact circular fillet for supported line-to-line corners. Position and tangent are continuous and
+      --  acceleration remains bounded, but acceleration may jump at the endpoints. Jerk, snap, and crackle limits do
+      --  not apply to those endpoint jumps.
+
+      Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
+      --  Maximum deviation from the commanded path along each scaled axis.
+
+      Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
+      --  Maximum distance by which the arc may miss the commanded corner point.
+
+      Maximum_Radius : Length range 0.0 * mm .. 1.0E100 * mm := 1.0E100 * mm;
+      --  Maximum circular-fillet radius. The default of 1.0E100 leaves the radius effectively uncapped so the
+      --  deviation limits determine its size.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cornering_Parabolic is record
+      --  Use a quadratic parabolic curve for supported line-to-line corners. Position and tangent are continuous and
+      --  acceleration remains bounded, but acceleration may jump at the endpoints. Jerk, snap, and crackle limits do
+      --  not apply to those endpoint jumps.
+
+      Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
+      --  Maximum deviation from the commanded path along each scaled axis.
+
+      Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
+      --  Maximum distance by which the curve may miss the commanded corner point.
+
+      Shape_Bias : Dimensionless range -1.0 .. 1.0 := 0.0;
+      --  Bias the curve toward the incoming side when negative and toward the outgoing side when positive.
+
+      Maximum_Trim : Length range 0.0 * mm .. 1.0E100 * mm := 1.0E100 * mm;
+      --  Maximum distance that the curve may trim from either adjoining path. The default of 1.0E100 leaves trimming
+      --  effectively uncapped so the deviation limits determine the curve size.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cornering_Biarc is record
+      --  Use two tangent circular arcs for line/helix corners where a certified biarc exists. Position and tangent are
+      --  continuous. Acceleration may jump at the endpoints and at the internal arc splice, so jerk, snap, and crackle
+      --  limits do not apply at those locations.
+
+      Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
+      --  Maximum deviation from the commanded path along each scaled axis.
+
+      Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
+      --  Maximum distance by which the biarc may miss the commanded corner point.
+
+      Shape_Bias : Dimensionless range -1.0 .. 1.0 := 0.0;
+      --  Bias the biarc toward the incoming side when negative and toward the outgoing side when positive.
+
+      Maximum_Trim : Length range 0.0 * mm .. 1.0E100 * mm := 1.0E100 * mm;
+      --  Maximum distance that the biarc may trim from either adjoining path. The default of 1.0E100 leaves trimming
+      --  effectively uncapped so the deviation limits determine the biarc size.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cornering_Sharp_SCV is record
+      --  Keep corners between primitives with usable tangents geometrically sharp and use Klipper-style square-corner
+      --  velocity to limit traversal speed according to the change in direction. Velocity direction is discontinuous;
+      --  acceleration, jerk, snap, and crackle limits intentionally do not apply at that junction. Spatial tangents
+      --  are compared in XYZ when Ignore_E_In_XYZE is enabled; mixed pure-E/spatial junctions become hard stops.
+
+      Square_Corner_Velocity : Velocity range 0.0 * mm / s .. 1.0E100 * mm / s := 5.0 * mm / s;
+      --  Junction speed at a 90-degree corner. Shallower corners may be traversed faster and reversals still stop.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cornering_Kind is (Stereographic, Circular, Parabolic, Biarc, Sharp_SCV)
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cornering (Kind : User_Config_Cornering_Kind := Stereographic) is record
+      --  Select the geometric and junction-limit model used at path corners. Unsupported or uncertifiable corners
+      --  always become exact stops rather than silently changing to another cornering method.
+
+      case Kind is
+         when Stereographic =>
+            Stereographic_Params : User_Config_Cornering_Stereographic;
+
+         when Circular =>
+            Circular_Params : User_Config_Cornering_Circular;
+
+         when Parabolic =>
+            Parabolic_Params : User_Config_Cornering_Parabolic;
+
+         when Biarc =>
+            Biarc_Params : User_Config_Cornering_Biarc;
+
+         when Sharp_SCV =>
+            Sharp_SCV_Params : User_Config_Cornering_Sharp_SCV;
+      end case;
+   end record
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Kinematics is record
@@ -151,15 +288,6 @@ private
       --
       --  Regardless of this setting, the individual feedrate limits for each axis will always be respected.
 
-      Shift_Blended_Corners : Boolean := False;
-      --  When the motion planner blends corners to maintain a higher speed, it does so by creating a curved path that
-      --  cuts inside the original corner. When this setting is enabled, Prunt will attempt to shift the blended corner
-      --  path so that it intersects the original corner point. This can result in a path that is slightly more
-      --  faithful to curved sections in the original CAD models before export and slicing, but it also means that the
-      --  straight line segments leading into and out of the corner will be shifted outwards slightly.
-      --
-      --  TODO: Image here.
-
       Maximum_Tangential_Velocity : Velocity range 0.000_001 * mm / s .. 1.0E100 * mm / s := 10.0 * mm / s;
       --  This is the maximum combined speed of all axes. It's a global limit on the toolhead's speed. In most cases,
       --  it's better to set this to a very high value (e.g., `1E100`) and use the per-axis velocity limits below to
@@ -168,45 +296,33 @@ private
       Axial_Velocity_Limits : User_Config_Axial_Velocity_Limits_Array := [others => 10.0 * mm / s];
       --  This sets the maximum speed for each individual axis.
 
-      Maximum_Chord_Error : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
-      --  This setting controls how far a path is allowed to deviate from the path specified in G-code. Instead of
-      --  coming to a complete stop at every corner, the motion planner can create a smooth, curved path that 'cuts'
-      --  the corner. This allows the machine to maintain a higher average speed. This setting defines the maximum
-      --  allowed distance between the curved path and the original, sharp corner. A value of 0 will disable corner
-      --  blending, causing the machine to come to a full stop at every corner.
+      Axial_Acceleration_Limits : User_Config_Axial_Acceleration_Limits_Array := [others => 100.0 * mm / s ** 2];
+      --  This sets the maximum acceleration for each individual axis. These values can be set to a very high value to
+      --  effectively disable this limit and rely solely on the higher order constraints below.
+
+      Axial_Jerk_Limits : User_Config_Axial_Jerk_Limits_Array := [others => 100.0E2 * mm / s ** 3];
+      --  This sets the maximum jerk for each individual axis. Jerk is the rate of change of acceleration. A good
+      --  starting point for tuning is to set the jerk to 100 times the maximum acceleration. This can be achieved by
+      --  placing the max acceleration values in these fields and appending E2 to them.
       --
-      --  TODO: Image here.
+      --  This can be set to a very high value to effectively disable the limit.
 
-      Maximum_Acceleration : Acceleration range 0.000_001 * mm / s ** 2 .. 1.0E100 * mm / s ** 2 :=
-        100.0 * mm / s ** 2;
-      --  This is the maximum rate at which the printer can change its velocity. A higher acceleration will result in
-      --  faster prints, but may also cause vibrations and ringing artifacts. This can be set to a very high value
-      --  to effectively disable the limit and rely on the higher order constraints below.
+      Axial_Snap_Limits : User_Config_Axial_Snap_Limits_Array := [others => 100.0E5 * mm / s ** 4];
+      --  This sets the maximum snap for each individual axis. Snap is the rate of change of jerk. A good starting
+      --  point for tuning is to set the snap to 100,000 times the maximum acceleration. This can be achieved by
+      --  placing the max acceleration values in these fields and appending E5 to them.
+      --
+      --  This can be set to a very high value to effectively disable the limit.
 
-      Maximum_Jerk : Jerk range 0.000_001 * mm / s ** 3 .. 1.0E100 * mm / s ** 3 := 100.0E2 * mm / s ** 3;
-      --  Jerk is the rate of change of acceleration. It determines how abruptly the printer can change its
-      --  acceleration. A higher jerk value allows for faster changes in direction, but can also introduce vibrations.
-      --  A good starting point for tuning is to set the jerk to 100 times the maximum acceleration (e.g., if
-      --  acceleration is 1000, set jerk to 100,000). You can do this by appending `E2` to your acceleration value in
-      --  this field. This can be set to a very high value to effectively disable the limit.
+      Axial_Crackle_Limits : User_Config_Axial_Crackle_Limits_Array := [others => 100.0E9 * mm / s ** 5];
+      --  This sets the maximum crackle for each individual axis. Crackle is the rate of change of snap. A good
+      --  starting point for tuning is to set the crackle to 1,000,000,000 times the maximum acceleration. This can be
+      --  achieved by placing the max acceleration values in these fields and appending E9 to them.
+      --
+      --  This can be set to a very high value to effectively disable the limit.
 
-      Maximum_Snap : Snap range 0.000_001 * mm / s ** 4 .. 1.0E100 * mm / s ** 4 := 100.0E5 * mm / s ** 4;
-      --  Snap is the rate of change of jerk. It's a higher-order derivative of motion that can help to smooth out
-      --  movements even further. A good starting point for tuning is to set the snap to 100,000 times the maximum
-      --  acceleration (append `E5` to your acceleration value in this field). This can be set to a very high value to
-      --  effectively disable the limit.
-
-      Maximum_Crackle : Crackle range 0.000_001 * mm / s ** 5 .. 1.0E100 * mm / s ** 5 := 100.0E9 * mm / s ** 5;
-      --  Crackle is the rate of change of snap. It's an even higher-order derivative of motion. A good starting point
-      --  for tuning is to set the crackle to 1,000,000,000 times the maximum acceleration (append `E9` to your
-      --  acceleration value in this field). This can be set to a very high value to effectively disable the limit.
-
-      Axial_Scaler : User_Config_Axial_Scaler_Array := [others => 1.0];
-      --  Inside the motion planner, all positions are divided by this value before applying motion profile limits,
-      --  allowing for different limits on different axes. You do not need to take this value into account when setting
-      --  position limits, mm per step values, axial velocity limits, or when setting the feedrate in g-code. Corner
-      --  deviation and tangential feedrate, acceleration, etc. is based on scaled positions, so a tangential
-      --  acceleration of 10 mm/s² and a scaler of 0.5 will set the axial limit to 5mm/s².
+      Cornering : User_Config_Cornering := (others => <>);
+      --  Select the corner-transition model and configure the parameters relevant to that model.
 
       Kinematics_Kind : User_Config_Kinematics_Variant := (others => <>);
       --  This selects the kinematic layout and allows motors to be assigned to the axes they control.
@@ -219,27 +335,30 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
-   type Axial_Velocity_Update_Set is array (Axis_Name) of Boolean;
-   type Axial_Velocity_Update_Values is array (Axis_Name) of Velocity;
+   function Build_Cornering_Parameters (Cornering : User_Config_Cornering) return Motion_Planner.Cornering_Parameters;
+   --  Convert the selected user-config cornering branch to the corresponding planner parameters.
+
+   type Axial_Update_Set is array (Axis_Name) of Boolean;
 
    type Runtime_Kinematics_Updates is record
-      Has_Axial_Velocity_Limit : Axial_Velocity_Update_Set := [others => False];
-      Axial_Velocity_Limits    : Axial_Velocity_Update_Values := [others => 1.0E-6 * mm / s];
-      Has_Maximum_Acceleration : Boolean := False;
-      Maximum_Acceleration     : Acceleration := 1.0E-6 * mm / s ** 2;
-      Has_Maximum_Jerk         : Boolean := False;
-      Maximum_Jerk             : Jerk := 1.0E-6 * mm / s ** 3;
-      Has_Maximum_Snap         : Boolean := False;
-      Maximum_Snap             : Snap := 1.0E-6 * mm / s ** 4;
-      Has_Maximum_Crackle      : Boolean := False;
-      Maximum_Crackle          : Crackle := 1.0E-6 * mm / s ** 5;
-      Has_Maximum_Chord_Error  : Boolean := False;
-      Maximum_Chord_Error      : Length := 0.0 * mm;
+      Has_Axial_Velocity_Limit     : Axial_Update_Set := [others => False];
+      Axial_Velocity_Limits        : Axial_Velocities := [others => 1.0E-6 * mm / s];
+      Has_Axial_Acceleration_Limit : Axial_Update_Set := [others => False];
+      Axial_Acceleration_Limits    : Axial_Accelerations := [others => 1.0E-6 * mm / s ** 2];
+      Has_Axial_Jerk_Limit         : Axial_Update_Set := [others => False];
+      Axial_Jerk_Limits            : Axial_Jerks := [others => 1.0E-6 * mm / s ** 3];
+      Has_Axial_Snap_Limit         : Axial_Update_Set := [others => False];
+      Axial_Snap_Limits            : Axial_Snaps := [others => 1.0E-6 * mm / s ** 4];
+      Has_Axial_Crackle_Limit      : Axial_Update_Set := [others => False];
+      Axial_Crackle_Limits         : Axial_Crackles := [others => 1.0E-6 * mm / s ** 5];
    end record;
 
    type Kinematics_Config_Update is new Extra_Block_Resetting_Data with record
@@ -249,12 +368,12 @@ private
 
    overriding
    procedure Process_After_Block (This : Kinematics_Config_Update; Context : Block_End_Context'Class);
+   --  Apply kinematic-limit changes.
 
    function Build_Motion_Planner_Configuration
-     (Config                        : User_Config;
-      Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class;
-      Input_Shapers_Module_Instance : Input_Shapers_Module.Module_Instance_Interface'Class)
+     (Config : User_Config; Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class)
       return Motion_Planner_Configuration;
+   --  Build the motion-planner configuration.
 
    procedure Set_Max_Feedrate
      (This     : Module_Instance;
@@ -286,10 +405,8 @@ private
       --  Jerk limit in mm/s³. Not modified if not specified.
       S        : Gcode_Optional_Float;
       --  Snap limit in mm/s⁴. Not modified if not specified.
-      C        : Gcode_Optional_Float;
+      C        : Gcode_Optional_Float
       --  Crackle limit in mm/s⁵. Not modified if not specified.
-      D        : Gcode_Optional_Float
-      --  Path deviation limit in mm. Not modified if not specified.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M205");
    --  Set dynamic kinematic limits. May be saved using `M500`.
@@ -301,8 +418,7 @@ private
       procedure Initialize
         (Config_In                            : User_Config;
          Config_Data_In                       : Config.Config_Data;
-         Motor_Drivers_Module_Instance_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Ref;
-         Input_Shapers_Module_Instance_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Ref);
+         Motor_Drivers_Module_Instance_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Ref);
 
       overriding
       procedure Start
@@ -313,12 +429,17 @@ private
       overriding
       function Get_Default_Motion_Planner_Configuration return Motion_Planner_Configuration;
 
+      overriding
+      function Axis_Is_Motor_Separable (Axis : Axis_Name) return Boolean;
+
       function Get_Config return User_Config;
    private
       Config                            : User_Config;
       Config_Data                       : Prunt.Config.Config_Data;
       Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Input_Shapers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
    end Module_Instance;
+
+   function Map_Axis_Is_Motor_Separable (Map : Motor_Position_Map; Axis : Axis_Name) return Boolean;
+   --  Return whether Axis is independently mapped.
 
 end Prunt.Default_Modules.Kinematics;

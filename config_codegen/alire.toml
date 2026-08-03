@@ -9,17 +9,34 @@ licenses = "GPL-3.0-or-later"
 website = ""
 tags = []
 
-executables = ["config_codegen"]
+executables = ["config_codegen", "package_subprogram_audit"]
 
 [[depends-on]]
-gnat_native = "^15.2.1001"
+gnat_native = "~16.1.1002"
 # From here: https://github.com/Prunt3D/prunt_alire_index/tree/master
 
 [[depends-on]]
-libadalang = "^25.0.0"
+libadalang = "^26.0.0"
 
 [build-switches]
 "*".style_checks = "No"
 
 [[depends-on]]
 vss_text = "^26.0.0"
+
+[[pins]]
+gnat_native = "16.1.1002"
+gnat = "16.1.1002"
+libadalang = "26.0.0"
+libgpr = { url = "https://github.com/Prunt3D/gprbuild.git", commit = "56139608315345ffe109bb98ecb3d3bfa27c036e" }
+gnatcoll = "26.0.0"
+gnatcoll_minimal = "26.0.0"
+gnatcoll_gmp = "26.0.0"
+gnatcoll_iconv = "26.0.0"
+gprconfig_kb = "26.0.0"
+langkit_support = { url = "https://github.com/Prunt3D/langkit_support.git", commit = "3fe0191dcbea529c52116afe510ad73fb0e395d7" }
+prettier_ada = "26.0.0"
+adasat = "26.0.0"
+xmlada = "26.0.0"
+libgpr2 = { url = "https://github.com/Prunt3D/gpr.git", commit = "ae17b1b3ce7f8f17f11466a8b9b86c02cb9d6f20" }
+vss_text = "26.2.0"

@@ -37,23 +37,28 @@ package Prunt.Default_Modules.Thermistors is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Module_Instance_Interface is synchronized interface;
 
    function Thermistor_Is_Enabled_In_Config
      (This : Module_Instance_Interface; Thermistor : Thermistor_Name) return Boolean
    is abstract;
+   --  Return whether Thermistor is enabled.
 
    function Get_Thermistor_Parameters
      (This : Module_Instance_Interface; Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters
    is abstract;
+   --  Return Thermistor's conversion parameters.
 
    function Get_Temperature
      (This : Module_Instance_Interface; Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature
    is abstract;
+   --  Return Thermistor's temperature.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -65,6 +70,7 @@ package Prunt.Default_Modules.Thermistors is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -73,6 +79,7 @@ package Prunt.Default_Modules.Thermistors is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -270,12 +277,16 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    function To_Thermistor_Parameters (Config : User_Config_Thermistor) return Prunt.Thermistors.Thermistor_Parameters;
+   --  Convert a thermistor configuration.
 
    procedure Report_Temperatures
      (Planner : Planner_Interface'Class;

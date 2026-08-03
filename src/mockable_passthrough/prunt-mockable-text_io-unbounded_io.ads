@@ -26,5 +26,6 @@ package Prunt.Mockable.Text_IO.Unbounded_IO is
 
    function Get_Line (File : File_Type) return Ada.Strings.Unbounded.Unbounded_String
    renames Ada.Text_IO.Unbounded_IO.Get_Line;
+   --  Read the next line from File as an unbounded string, without a line terminator.
 
 end Prunt.Mockable.Text_IO.Unbounded_IO;

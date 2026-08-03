@@ -17,6 +17,8 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Numerics;
+with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Strings;
 with Ada.Strings.Fixed;
 with VSS.Characters.Latin;
@@ -24,6 +26,8 @@ with VSS.Characters.Latin;
 package body Prunt.Default_Modules.Motion is
 
    pragma Extensions_Allowed (On);
+
+   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
    use type Gcode_Arguments.Argument_Integer;
 
@@ -305,6 +309,54 @@ package body Prunt.Default_Modules.Motion is
       Status_Emitter.Set_Value ("Firmware retract", "Current Z hop", State.Current_Z_Hop / mm);
    end Update_Status;
 
+   procedure Initialize_Status_Setters
+     (Setters : out Motion_Status_Setters; Status_Emitter : Status_Manager.Status_Emitter) is
+   begin
+      for Axis in Axis_Name loop
+         Setters.G92_Offset (Axis) := Status_Emitter.Get_Lock_Free_Setter ("G92 offset", +Axis'Image);
+      end loop;
+
+      Setters.Stored_Feedrate := Status_Emitter.Get_Lock_Free_Setter ("Feedrate", "Stored feedrate");
+      Setters.Feedrate_Scale := Status_Emitter.Get_Lock_Free_Setter ("Feedrate", "Feedrate scale");
+      Setters.Backup_Feedrate_Scale := Status_Emitter.Get_Lock_Free_Setter ("Feedrate", "Backup feedrate scale");
+      Setters.Effective_Feedrate := Status_Emitter.Get_Lock_Free_Setter ("Feedrate", "Effective feedrate");
+      Setters.Flow_Scale := Status_Emitter.Get_Lock_Free_Setter ("Flow", "Flow scale");
+      Setters.Retract_Length := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Retract length");
+      Setters.Retract_Feedrate := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Retract feedrate");
+      Setters.Retract_Z_Lift := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Retract Z lift");
+      Setters.Recover_Extra_Length := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Recover extra length");
+      Setters.Recover_Feedrate := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Recover feedrate");
+      Setters.Current_Z_Hop := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Current Z hop");
+      Setters.Auto_Retract_Enabled := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Auto retract enabled");
+      Setters.Is_Retracted := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Is retracted");
+   end Initialize_Status_Setters;
+
+   procedure Update_Status
+     (Setters : Motion_Status_Setters; Status_Emitter : Status_Manager.Status_Emitter; State : Motion_State) is
+   begin
+      for Axis in Axis_Name loop
+         Setters.G92_Offset (Axis).Set_Value (State.G92_Offset (Axis) / mm);
+      end loop;
+
+      Status_Emitter.Set_Value ("Modal state", "Units", +State.Units'Image);
+      Status_Emitter.Set_Value ("Modal state", "Positioning", +State.Positioning'Image);
+      Status_Emitter.Set_Value ("Modal state", "E positioning", +State.E_Positioning'Image);
+
+      Setters.Stored_Feedrate.Set_Value (State.Feedrate / (mm / s));
+      Setters.Feedrate_Scale.Set_Value (State.Feedrate_Scale);
+      Setters.Backup_Feedrate_Scale.Set_Value (State.Backup_Feedrate_Scale);
+      Setters.Effective_Feedrate.Set_Value (State.Feedrate * State.Feedrate_Scale / (mm / s));
+      Setters.Flow_Scale.Set_Value (State.Flow_Scale);
+      Setters.Retract_Length.Set_Value (State.Retract_Length / mm);
+      Setters.Retract_Feedrate.Set_Value (State.Retract_Feedrate / (mm / s));
+      Setters.Retract_Z_Lift.Set_Value (State.Retract_Z_Lift / mm);
+      Setters.Recover_Extra_Length.Set_Value (State.Recover_Extra_Length / mm);
+      Setters.Recover_Feedrate.Set_Value (State.Recover_Feedrate / (mm / s));
+      Setters.Current_Z_Hop.Set_Value (State.Current_Z_Hop / mm);
+      Setters.Auto_Retract_Enabled.Set_Value (State.Auto_Retract_Enabled);
+      Setters.Is_Retracted.Set_Value (State.Is_Retracted);
+   end Update_Status;
+
    function Logical_Position_From_Physical
      (Physical_Position : Position; G92_Offset : Position_Offset; Current_Z_Hop : Length) return Position
    is
@@ -496,6 +548,7 @@ package body Prunt.Default_Modules.Motion is
          Config := Config_In;
          Config_Data := Config_Data_In;
          Status_Emitter := Status_Emitter_In;
+         Initialize_Status_Setters (Status_Setters, Status_Emitter);
          Planned_State :=
            (Feedrate              => Config.Motion_Gcode.Default_G1_Feedrate,
             Units                 => Config.Motion_Gcode.Default_Units,
@@ -521,7 +574,7 @@ package body Prunt.Default_Modules.Motion is
          Committed_State := Planned_State;
          Planned_Stored_Positions := [others => (Present => False, others => <>)];
          Committed_Stored_Positions := Planned_Stored_Positions;
-         Update_Status (Status_Emitter, Committed_State);
+         Update_Status (Status_Setters, Status_Emitter, Committed_State);
       end Initialize;
 
       procedure Start
@@ -529,7 +582,7 @@ package body Prunt.Default_Modules.Motion is
       is
          pragma Unreferenced (Planner, Self_Ref_In);
       begin
-         Update_Status (Status_Emitter, Committed_State);
+         Update_Status (Status_Setters, Status_Emitter, Committed_State);
       end Start;
 
       procedure Catch_Up_Planner_State (Executed_Corner_ID : Planner_Corner_ID) is
@@ -565,7 +618,7 @@ package body Prunt.Default_Modules.Motion is
          end if;
          pragma Annotate (Xcov, Exempt_Off);
 
-         Update_Status (Status_Emitter, Committed_State);
+         Update_Status (Status_Setters, Status_Emitter, Committed_State);
       end Catch_Up_Planner_State;
 
       procedure Prepare_Config_For_Save is
@@ -611,7 +664,7 @@ package body Prunt.Default_Modules.Motion is
                Committed_State := Planned_State;
                Committed_Corner_ID := Anchor_ID;
                Last_Queued_State := Planned_State;
-               Update_Status (Status_Emitter, Committed_State);
+               Update_Status (Status_Setters, Status_Emitter, Committed_State);
             else
                Catch_Up_Planner_State (Executed_ID);
                begin
@@ -678,7 +731,7 @@ package body Prunt.Default_Modules.Motion is
          Planned_State := Committed_State;
          Last_Queued_State := Planned_State;
          Planned_Stored_Positions := Committed_Stored_Positions;
-         Update_Status (Status_Emitter, Committed_State);
+         Update_Status (Status_Setters, Status_Emitter, Committed_State);
       end Handle_Cancel;
 
       procedure Execute_Linear_Move
@@ -822,10 +875,340 @@ package body Prunt.Default_Modules.Motion is
               (if Rapid and then not F.Present
                then Velocity'Last
                else Command_Feedrate * Planned_State.Feedrate_Scale));
-         pragma Unreferenced (Physical_Position);
-
          Maybe_Queue_Planned_State (Planner);
+         pragma Unreferenced (Physical_Position);
       end Execute_Linear_Move;
+
+      procedure Execute_Arc_Move
+        (Planner     : Planner_Interface'Class;
+         X           : Gcode_Optional_Float;
+         Y           : Gcode_Optional_Float;
+         Z           : Gcode_Optional_Float;
+         E           : Gcode_Optional_Float;
+         F           : Gcode_Optional_Float;
+         Clockwise   : Boolean;
+         Offset_Form : Boolean;
+         I           : Gcode_Optional_Float := (Present => False);
+         J           : Gcode_Optional_Float := (Present => False);
+         R           : Dimensionless := 0.0)
+      is
+         Physical_Position          : constant Position := Planner.Get_Last_Position;
+         Logical_Position           : constant Position :=
+           Logical_Position_From_Physical (Physical_Position, Planned_State.G92_Offset, Planned_State.Current_Z_Hop);
+         Target_Logical             : Position := Logical_Position;
+         Target_Physical            : Position := Physical_Position;
+         Arc_Target_Physical        : Position := Physical_Position;
+         Center_Physical            : Position := Physical_Position;
+         Command_Feedrate           : Velocity := Planned_State.Feedrate;
+         Persistent_Feedrate_Change : Boolean := False;
+         Needs_Endpoint_Correction  : Boolean := False;
+         Use_Linear_Fallback        : Boolean := False;
+         function Hypot (DX, DY : Length) return Length;
+
+         procedure Validate_Position (Pos : Position; Params : Motion_Planner.Kinematic_Parameters);
+
+         procedure Validate_Helix_Travel
+           (Start_Pos, Finish_Pos, Center : Position;
+            Clockwise                     : Boolean;
+            Params                        : Motion_Planner.Kinematic_Parameters);
+
+         function Hypot (DX, DY : Length) return Length is
+         begin
+            return Dimensionless_Math.Sqrt ((DX / mm) ** 2 + (DY / mm) ** 2) * mm;
+         end Hypot;
+
+         procedure Validate_Position (Pos : Position; Params : Motion_Planner.Kinematic_Parameters) is
+         begin
+            for Axis in Axis_Name loop
+               if not (Pos (Axis) >= Params.Lower_Pos_Limit (Axis)
+                       and then Pos (Axis) <= Params.Upper_Pos_Limit (Axis))
+               then
+                  raise Gcode_Bad_Inputs_Error
+                    with "Move is out of bounds (" & Axis'Image & " = " & Pos (Axis)'Image & ").";
+               end if;
+            end loop;
+         end Validate_Position;
+
+         procedure Validate_Helix_Travel
+           (Start_Pos, Finish_Pos, Center : Position;
+            Clockwise                     : Boolean;
+            Params                        : Motion_Planner.Kinematic_Parameters)
+         is
+            Two_Pi           : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
+            Radius_Tolerance : constant Length := 1.0E-6 * mm;
+
+            procedure Validate_Axis (Axis : Axis_Name; Value : Length);
+
+            function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean;
+
+            procedure Validate_Axis (Axis : Axis_Name; Value : Length) is
+            begin
+               if not (Value >= Params.Lower_Pos_Limit (Axis) and then Value <= Params.Upper_Pos_Limit (Axis)) then
+                  raise Gcode_Bad_Inputs_Error
+                    with "Helix is out of bounds (" & Axis'Image & " = " & Value'Image & ").";
+               end if;
+            end Validate_Axis;
+
+            function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean is
+               Progress  : Dimensionless := (if Theta_Delta > 0.0 then Phase - Theta_Start else Theta_Start - Phase);
+               Magnitude : constant Dimensionless := abs Theta_Delta;
+               Tolerance : constant Dimensionless :=
+                 64.0
+                 * Dimensionless'Model_Epsilon
+                 * (1.0 + Dimensionless'Max (abs Phase, Dimensionless'Max (abs Theta_Start, Magnitude)));
+            begin
+               if Progress < 0.0 then
+                  Progress := Progress + Two_Pi;
+               end if;
+               return Progress <= Magnitude + Tolerance;
+            end Phase_Is_On_Arc;
+
+            Start_DX      : constant Length := Start_Pos (X_Axis) - Center (X_Axis);
+            Start_DY      : constant Length := Start_Pos (Y_Axis) - Center (Y_Axis);
+            Finish_DX     : constant Length := Finish_Pos (X_Axis) - Center (X_Axis);
+            Finish_DY     : constant Length := Finish_Pos (Y_Axis) - Center (Y_Axis);
+            Start_Radius  : constant Length := Hypot (Start_DX, Start_DY);
+            Finish_Radius : constant Length := Hypot (Finish_DX, Finish_DY);
+         begin
+            --  The axial coordinates are affine in phase, so their extrema are at the endpoints.
+            Validate_Position (Start_Pos, Params);
+            Validate_Position (Finish_Pos, Params);
+
+            --  This is the line fallback used by Derive_Path_Primitive, for which endpoint checks enclose the path.
+            if Start_Radius <= 0.0 * mm or else abs (Start_Radius - Finish_Radius) > Radius_Tolerance then
+               return;
+            end if;
+
+            declare
+               Theta_Start   : constant Dimensionless := Dimensionless_Math.Arctan (Start_DY / mm, Start_DX / mm);
+               Offset_Scale  : constant Length :=
+                 Length'Max (abs Start_DX, Length'Max (abs Start_DY, Length'Max (abs Finish_DX, abs Finish_DY)));
+               Coincident_XY : constant Boolean := Start_DX = Finish_DX and then Start_DY = Finish_DY;
+               Theta_Delta   : Dimensionless := 0.0;
+
+               procedure Validate_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length);
+
+               procedure Validate_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length) is
+               begin
+                  if Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta) then
+                     Validate_Axis (Axis, Value);
+                  end if;
+               end Validate_Cardinal;
+            begin
+               if Coincident_XY then
+                  Theta_Delta := (if Clockwise then -Two_Pi else Two_Pi);
+               else
+                  declare
+                     Start_X  : constant Dimensionless := Start_DX / Offset_Scale;
+                     Start_Y  : constant Dimensionless := Start_DY / Offset_Scale;
+                     Finish_X : constant Dimensionless := Finish_DX / Offset_Scale;
+                     Finish_Y : constant Dimensionless := Finish_DY / Offset_Scale;
+                     Cross    : constant Dimensionless := Start_X * Finish_Y - Start_Y * Finish_X;
+                     Dot      : constant Dimensionless := Start_X * Finish_X + Start_Y * Finish_Y;
+                  begin
+                     Theta_Delta := Dimensionless_Math.Arctan (Cross, Dot);
+                  end;
+
+                  if Theta_Delta = 0.0 then
+                     return;
+                  elsif Clockwise and then Theta_Delta > 0.0 then
+                     Theta_Delta := Theta_Delta - Two_Pi;
+                  elsif not Clockwise and then Theta_Delta < 0.0 then
+                     Theta_Delta := Theta_Delta + Two_Pi;
+                  end if;
+               end if;
+
+               Validate_Cardinal (0.0, X_Axis, Center (X_Axis) + Start_Radius);
+               Validate_Cardinal (Ada.Numerics.Pi, X_Axis, Center (X_Axis) - Start_Radius);
+               Validate_Cardinal (0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) + Start_Radius);
+               Validate_Cardinal (-0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) - Start_Radius);
+
+               --  The primitive uses the start radius. Radius-mismatch arcs therefore need the projected finish
+               --  checked as well as the requested destination.
+               if Finish_Radius > 0.0 * mm then
+                  declare
+                     Radius_Scale : constant Dimensionless := Start_Radius / Finish_Radius;
+                  begin
+                     Validate_Axis (X_Axis, Center (X_Axis) + Radius_Scale * Finish_DX);
+                     Validate_Axis (Y_Axis, Center (Y_Axis) + Radius_Scale * Finish_DY);
+                  end;
+               else
+                  raise Gcode_Bad_Inputs_Error with "G2/G3 radius must be non-zero.";
+               end if;
+            end;
+         exception
+            when Constraint_Error =>
+               raise Gcode_Bad_Inputs_Error with "Helix geometry is outside the supported numeric range.";
+         end Validate_Helix_Travel;
+
+         procedure Resolve_Axis (Axis : Axis_Name; Value : Gcode_Optional_Float);
+
+         procedure Commit_Persistent_Feedrate_Change;
+
+         procedure Commit_Persistent_Feedrate_Change is
+         begin
+            if Persistent_Feedrate_Change then
+               Planned_State.Feedrate := Command_Feedrate;
+               Maybe_Queue_Planned_State (Planner);
+            end if;
+         end Commit_Persistent_Feedrate_Change;
+
+         procedure Resolve_Axis (Axis : Axis_Name; Value : Gcode_Optional_Float) is
+            Converted : Length;
+            Relative  : Boolean;
+         begin
+            if Value.Present then
+               Converted := To_Current_Units_Length (Value.Value, Planned_State.Units);
+               Relative :=
+                 (if Axis = E_Axis
+                  then E_Is_Relative (Planned_State.Positioning, Planned_State.E_Positioning)
+                  else Planned_State.Positioning = Relative_Positioning_Mode);
+
+               if Relative then
+                  Target_Logical (Axis) := Logical_Position (Axis) + Converted;
+               else
+                  Target_Logical (Axis) := Converted;
+               end if;
+            end if;
+         end Resolve_Axis;
+      begin
+         Ensure_Can_Queue_Planned_State (Planner, Pending_Snapshots => 2);
+
+         if F.Present then
+            Command_Feedrate := To_Current_Units_Feedrate (F.Value, Planned_State.Units);
+            if Command_Feedrate <= 0.0 * mm / min then
+               raise Gcode_Bad_Inputs_Error with "F feedrate must be greater than zero.";
+            end if;
+            Persistent_Feedrate_Change := Command_Feedrate /= Planned_State.Feedrate;
+         end if;
+
+         Resolve_Axis (X_Axis, X);
+         Resolve_Axis (Y_Axis, Y);
+         Resolve_Axis (Z_Axis, Z);
+         Resolve_Axis (E_Axis, E);
+
+         for Axis in Axis_Name when Axis /= E_Axis loop
+            Target_Physical (Axis) := Target_Logical (Axis) - Planned_State.G92_Offset (Axis);
+         end loop;
+
+         Target_Physical (E_Axis) :=
+           Physical_Position (E_Axis)
+           + (Target_Logical (E_Axis) - Logical_Position (E_Axis)) * Planned_State.Flow_Scale;
+
+         Target_Physical (Z_Axis) := Target_Physical (Z_Axis) + Planned_State.Current_Z_Hop;
+         Arc_Target_Physical := Target_Physical;
+
+         if Offset_Form then
+            if not I.Present and then not J.Present then
+               raise Gcode_Bad_Inputs_Error with "G2/G3 offset form requires I or J.";
+            end if;
+
+            Center_Physical (X_Axis) :=
+              Physical_Position (X_Axis)
+              + To_Current_Units_Length ((if I.Present then I.Value else 0.0), Planned_State.Units);
+            Center_Physical (Y_Axis) :=
+              Physical_Position (Y_Axis)
+              + To_Current_Units_Length ((if J.Present then J.Value else 0.0), Planned_State.Units);
+         else
+            declare
+               Radius     : constant Length := abs To_Current_Units_Length (R, Planned_State.Units);
+               DX         : constant Length := Target_Physical (X_Axis) - Physical_Position (X_Axis);
+               DY         : constant Length := Target_Physical (Y_Axis) - Physical_Position (Y_Axis);
+               Chord      : constant Length := Hypot (DX, DY);
+               Half_Chord : constant Length := 0.5 * Chord;
+               Major      : constant Boolean := R < 0.0;
+               Side       : constant Dimensionless := (if Clockwise = Major then 1.0 else -1.0);
+               H          : constant Length :=
+                 (if Radius > Half_Chord
+                  then Dimensionless_Math.Sqrt (((Radius - Half_Chord) * (Radius + Half_Chord)) / mm ** 2) * mm
+                  else 0.0 * mm);
+            begin
+               if not X.Present and then not Y.Present then
+                  raise Gcode_Bad_Inputs_Error with "G2/G3 radius form requires an X or Y endpoint.";
+               elsif Radius <= 0.0 * mm then
+                  raise Gcode_Bad_Inputs_Error with "G2/G3 radius must be non-zero.";
+               elsif Chord <= 0.0 * mm then
+                  raise Gcode_Bad_Inputs_Error with "G2/G3 radius-form XY endpoint must differ from the start.";
+               end if;
+
+               Center_Physical (X_Axis) :=
+                 0.5 * (Physical_Position (X_Axis) + Target_Physical (X_Axis)) - Side * H * DY / Chord;
+               Center_Physical (Y_Axis) :=
+                 0.5 * (Physical_Position (Y_Axis) + Target_Physical (Y_Axis)) + Side * H * DX / Chord;
+            end;
+         end if;
+
+         declare
+            Start_DX      : constant Length := Physical_Position (X_Axis) - Center_Physical (X_Axis);
+            Start_DY      : constant Length := Physical_Position (Y_Axis) - Center_Physical (Y_Axis);
+            Finish_DX     : constant Length := Target_Physical (X_Axis) - Center_Physical (X_Axis);
+            Finish_DY     : constant Length := Target_Physical (Y_Axis) - Center_Physical (Y_Axis);
+            Start_Radius  : constant Length := Hypot (Start_DX, Start_DY);
+            Finish_Radius : constant Length := Hypot (Finish_DX, Finish_DY);
+            XY_Chord      : constant Length :=
+              Hypot
+                (Target_Physical (X_Axis) - Physical_Position (X_Axis),
+                 Target_Physical (Y_Axis) - Physical_Position (Y_Axis));
+            Cross         : constant Area := Start_DX * Finish_DY - Start_DY * Finish_DX;
+            Dot           : constant Area := Start_DX * Finish_DX + Start_DY * Finish_DY;
+            Tolerance     : constant Length := 1.0E-6 * mm;
+         begin
+            Use_Linear_Fallback :=
+              XY_Chord > 0.0 * mm
+              and then (Finish_Radius <= 0.0 * mm or else (Cross = 0.0 * mm ** 2 and then Dot > 0.0 * mm ** 2));
+
+            if Start_Radius <= 0.0 * mm then
+               raise Gcode_Bad_Inputs_Error with "G2/G3 radius must be non-zero.";
+            elsif not Use_Linear_Fallback and then abs (Start_Radius - Finish_Radius) > Tolerance then
+               --  Marlin derives the arc angle from the destination without requiring it to lie on the starting
+               --  circle, then makes its final segment reach the requested destination. Keep Prunt's true-helix
+               --  primitive circular by projecting the endpoint to that angle, followed by a radial correction.
+               declare
+                  Radius_Scale : constant Dimensionless := Start_Radius / Finish_Radius;
+               begin
+                  Arc_Target_Physical (X_Axis) := Center_Physical (X_Axis) + Finish_DX * Radius_Scale;
+                  Arc_Target_Physical (Y_Axis) := Center_Physical (Y_Axis) + Finish_DY * Radius_Scale;
+                  Needs_Endpoint_Correction := True;
+               end;
+            end if;
+         end;
+
+         declare
+            Params : constant Motion_Planner.Kinematic_Parameters := Planner.Get_Last_Kinematic_Parameters;
+         begin
+            if Use_Linear_Fallback then
+               Validate_Position (Target_Physical, Params);
+            else
+               Validate_Helix_Travel (Physical_Position, Arc_Target_Physical, Center_Physical, Clockwise, Params);
+
+               if Needs_Endpoint_Correction then
+                  Validate_Position (Target_Physical, Params);
+               end if;
+            end if;
+         end;
+
+         Commit_Persistent_Feedrate_Change;
+
+         if Use_Linear_Fallback then
+            --  Queue an explicit line rather than relying on the helix radius tolerance, which could turn a tiny
+            --  radial displacement into an unintended full circle.
+            Planner.Add_Corner (Pos => Target_Physical, Feedrate => Command_Feedrate * Planned_State.Feedrate_Scale);
+         else
+            Planner.Add_Helix
+              (Center    => Center_Physical,
+               Pos       => Arc_Target_Physical,
+               Clockwise => Clockwise,
+               Feedrate  => Command_Feedrate * Planned_State.Feedrate_Scale);
+
+            if Needs_Endpoint_Correction then
+               Planner.Add_Corner
+                 (Pos => Target_Physical, Feedrate => Command_Feedrate * Planned_State.Feedrate_Scale);
+            end if;
+         end if;
+
+         Planned_State.G92_Offset (E_Axis) := Target_Logical (E_Axis) - Target_Physical (E_Axis);
+         Maybe_Queue_Planned_State (Planner);
+      end Execute_Arc_Move;
 
       procedure Execute_Retract (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer) is
       begin
@@ -1299,7 +1682,7 @@ package body Prunt.Default_Modules.Motion is
             end;
          end if;
 
-         Update_Status (Status_Emitter, Committed_State);
+         Update_Status (Status_Setters, Status_Emitter, Committed_State);
       end Handle_Resume;
 
    end Module_Instance;
@@ -1341,67 +1724,121 @@ package body Prunt.Default_Modules.Motion is
    end Linear_Move;
 
    procedure Clockwise_Arc_Move_Offset_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      I       : Dimensionless;
-      J       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      Y        : Gcode_Optional_Float;
+      Z        : Gcode_Optional_Float;
+      E        : Gcode_Optional_Float;
+      F        : Gcode_Optional_Float;
+      I        : Gcode_Optional_Float;
+      J        : Gcode_Optional_Float)
    is
-      pragma Unreferenced (This, Planner, X, Y, Z, E, F, I, J);
+      pragma Unreferenced (This);
    begin
-      raise Gcode_Bad_Inputs_Error with "G2 arcs and helices are not implemented yet.";
+      Module_Instance (Self_Ref.Get.Element.all).Execute_Arc_Move
+        (Planner     => Planner,
+         X           => X,
+         Y           => Y,
+         Z           => Z,
+         E           => E,
+         F           => F,
+         Clockwise   => True,
+         Offset_Form => True,
+         I           => I,
+         J           => J,
+         R           => 0.0);
       --  We need to bypass the usual enqueue/execute separation since we have state that needs to be fed into the
       --  planner. Other modules should normally not do this.
    end Clockwise_Arc_Move_Offset_Form;
 
    procedure Clockwise_Arc_Move_Radius_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      R       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      Y        : Gcode_Optional_Float;
+      Z        : Gcode_Optional_Float;
+      E        : Gcode_Optional_Float;
+      F        : Gcode_Optional_Float;
+      R        : Dimensionless)
    is
-      pragma Unreferenced (This, Planner, X, Y, Z, E, F, R);
+      pragma Unreferenced (This);
    begin
-      raise Gcode_Bad_Inputs_Error with "G2 arcs and helices are not implemented yet.";
+      Module_Instance (Self_Ref.Get.Element.all).Execute_Arc_Move
+        (Planner     => Planner,
+         X           => X,
+         Y           => Y,
+         Z           => Z,
+         E           => E,
+         F           => F,
+         Clockwise   => True,
+         Offset_Form => False,
+         I           => (Present => False),
+         J           => (Present => False),
+         R           => R);
+      --  We need to bypass the usual enqueue/execute separation since we have state that needs to be fed into the
+      --  planner. Other modules should normally not do this.
    end Clockwise_Arc_Move_Radius_Form;
 
    procedure Counter_Clockwise_Arc_Move_Offset_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      I       : Dimensionless;
-      J       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      Y        : Gcode_Optional_Float;
+      Z        : Gcode_Optional_Float;
+      E        : Gcode_Optional_Float;
+      F        : Gcode_Optional_Float;
+      I        : Gcode_Optional_Float;
+      J        : Gcode_Optional_Float)
    is
-      pragma Unreferenced (This, Planner, X, Y, Z, E, F, I, J);
+      pragma Unreferenced (This);
    begin
-      raise Gcode_Bad_Inputs_Error with "G3 arcs and helices are not implemented yet.";
+      Module_Instance (Self_Ref.Get.Element.all).Execute_Arc_Move
+        (Planner     => Planner,
+         X           => X,
+         Y           => Y,
+         Z           => Z,
+         E           => E,
+         F           => F,
+         Clockwise   => False,
+         Offset_Form => True,
+         I           => I,
+         J           => J,
+         R           => 0.0);
+      --  We need to bypass the usual enqueue/execute separation since we have state that needs to be fed into the
+      --  planner. Other modules should normally not do this.
    end Counter_Clockwise_Arc_Move_Offset_Form;
 
    procedure Counter_Clockwise_Arc_Move_Radius_Form
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      F       : Gcode_Optional_Float;
-      R       : Dimensionless)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_Float;
+      Y        : Gcode_Optional_Float;
+      Z        : Gcode_Optional_Float;
+      E        : Gcode_Optional_Float;
+      F        : Gcode_Optional_Float;
+      R        : Dimensionless)
    is
-      pragma Unreferenced (This, Planner, X, Y, Z, E, F, R);
+      pragma Unreferenced (This);
    begin
-      raise Gcode_Bad_Inputs_Error with "G3 arcs and helices are not implemented yet.";
+      Module_Instance (Self_Ref.Get.Element.all).Execute_Arc_Move
+        (Planner     => Planner,
+         X           => X,
+         Y           => Y,
+         Z           => Z,
+         E           => E,
+         F           => F,
+         Clockwise   => False,
+         Offset_Form => False,
+         I           => (Present => False),
+         J           => (Present => False),
+         R           => R);
+      --  We need to bypass the usual enqueue/execute separation since we have state that needs to be fed into the
+      --  planner. Other modules should normally not do this.
    end Counter_Clockwise_Arc_Move_Radius_Form;
 
    procedure Retract

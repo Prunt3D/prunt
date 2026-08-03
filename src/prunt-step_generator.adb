@@ -24,6 +24,9 @@ package body Prunt.Step_Generator is
 
    pragma Extensions_Allowed (On);
 
+   --  Keep rounded PA catch-up commands below the exact hardware limit.
+   Catch_Up_Numerical_Safety_Factor : constant Dimensionless := 0.999;
+
    protected Reset_Control is
       procedure Request;
       --  Request that the runner stop at the next reset check. If the runner is idle, acknowledge immediately.
@@ -145,23 +148,114 @@ package body Prunt.Step_Generator is
       return Ret;
    end To_Motor_Position;
 
+   function Command_Fractions
+     (Start_Pos, Target_Pos : Position; Map : Motor_Pos_Map; Catch_Up_Axes : Catch_Up_Axis_Set) return Axis_Fractions
+   is
+      Start_Motor_Pos  : constant Motor_Position := To_Motor_Position (Start_Pos, Map);
+      Target_Motor_Pos : constant Motor_Position := To_Motor_Position (Target_Pos, Map);
+      Result           : Axis_Fractions := [others => 1.0];
+   begin
+      for Motor in Motor_Name loop
+         declare
+            Motor_Delta       : constant Dimensionless := Target_Motor_Pos (Motor) - Start_Motor_Pos (Motor);
+            Limit             : constant Dimensionless := abs Maximum_Deltas_Per_Command (Motor);
+            Safe_Limit        : constant Dimensionless := Catch_Up_Numerical_Safety_Factor * Limit;
+            Catch_Up_Axis     : Axis_Name := Axis_Name'First;
+            Has_Catch_Up_Axis : Boolean := False;
+         begin
+            for Axis in Axis_Name loop
+               if Map (Axis, Motor) /= Length'Last then
+                  if Catch_Up_Axes (Axis) then
+                     Catch_Up_Axis := Axis;
+                     Has_Catch_Up_Axis := True;
+                  end if;
+               end if;
+            end loop;
+
+            if abs Motor_Delta > Limit then
+               if not Has_Catch_Up_Axis then
+                  raise Constraint_Error with "Maximum_Delta_Per_Command exceeded without pressure advance catch-up.";
+               elsif Limit <= 0.0 then
+                  Result (Catch_Up_Axis) := 0.0;
+               else
+                  Result (Catch_Up_Axis) := Dimensionless'Min (Result (Catch_Up_Axis), Safe_Limit / abs Motor_Delta);
+               end if;
+            end if;
+         end;
+      end loop;
+
+      return Result;
+   end Command_Fractions;
+
    procedure Queue_Command
      (State           : in out Command_State;
       Pos             : Position;
       Map             : Motor_Pos_Map;
       Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
-      Vel_Ratio       : Dimensionless) is
+      Vel_Ratio       : Dimensionless;
+      Catch_Up_Axes   : Catch_Up_Axis_Set := [others => False])
+   is
+      procedure Emit (Emit_Pos : Position; Emit_Safe_Stop_After : Boolean);
+
+      procedure Emit (Emit_Pos : Position; Emit_Safe_Stop_After : Boolean) is
+      begin
+         State.Current_Command_Index := @ + 1;
+         State.Last_Queued_Position := Emit_Pos;
+         Enqueue_Command
+           (Pos             => Emit_Pos,
+            Motor_Pos       => To_Motor_Position (Emit_Pos, Map),
+            Index           => State.Current_Command_Index,
+            Loop_Until_Hit  => Loop_Until_Hit,
+            Safe_Stop_After => Emit_Safe_Stop_After,
+            Vel_Ratio       => Vel_Ratio);
+      end Emit;
+
+      Target_Pos : constant Position := Pos;
    begin
-      State.Current_Command_Index := @ + 1;
-      State.Last_Queued_Position := Pos;
-      Enqueue_Command
-        (Pos             => Pos,
-         Motor_Pos       => To_Motor_Position (Pos, Map),
-         Index           => State.Current_Command_Index,
-         Loop_Until_Hit  => Loop_Until_Hit,
-         Safe_Stop_After => Safe_Stop_After,
-         Vel_Ratio       => Vel_Ratio);
+      loop
+         declare
+            Fractions : constant Axis_Fractions :=
+              Command_Fractions
+                (Start_Pos     => State.Last_Queued_Position,
+                 Target_Pos    => Target_Pos,
+                 Map           => Map,
+                 Catch_Up_Axes => Catch_Up_Axes);
+            Complete  : Boolean := True;
+         begin
+            for Axis in Axis_Name loop
+               if Fractions (Axis) < 1.0 then
+                  Complete := False;
+                  if Fractions (Axis) <= 0.0 then
+                     raise Constraint_Error with "Maximum_Delta_Per_Command catch-up can not make progress.";
+                  end if;
+               end if;
+            end loop;
+
+            if Complete then
+               Emit (Target_Pos, Safe_Stop_After);
+               exit;
+            end if;
+
+            declare
+               Intermediate_Pos : Position := State.Last_Queued_Position;
+            begin
+               for Axis in Axis_Name loop
+                  Intermediate_Pos (Axis) :=
+                    State.Last_Queued_Position (Axis)
+                    + (Target_Pos (Axis) - State.Last_Queued_Position (Axis)) * Fractions (Axis);
+               end loop;
+
+               if Intermediate_Pos = State.Last_Queued_Position then
+                  raise Constraint_Error with "Maximum_Delta_Per_Command catch-up stalled.";
+               end if;
+
+               Emit (Intermediate_Pos, False);
+            end;
+
+            exit when not Safe_Stop_After;
+         end;
+      end loop;
    end Queue_Command;
 
    function No_Pause_Requested return Boolean is
@@ -203,10 +297,6 @@ package body Prunt.Step_Generator is
 
       procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean);
 
-      procedure Log_Primary_Waiting_For_Step_Rate_Limiter;
-
-      procedure Log_Pause_Waiting_For_Step_Rate_Limiter;
-
       function Primary_Pause_Requested return Boolean;
 
       procedure Publish_Primary_Corner_ID (Corner_ID : Planner_Corner_ID);
@@ -218,22 +308,6 @@ package body Prunt.Step_Generator is
          Reset_Requested := Reset_Control.Requested;
       end Check_Reset;
 
-      procedure Log_Primary_Waiting_For_Step_Rate_Limiter is
-      begin
-         Log
-           ("The step command generator is waiting for the step rate limiter to complete. This can take "
-            & "a long time if the G-code contains multiple very long moves. In a future version this "
-            & "will be improved.");
-      end Log_Primary_Waiting_For_Step_Rate_Limiter;
-
-      procedure Log_Pause_Waiting_For_Step_Rate_Limiter is
-      begin
-         Log
-           ("The pause step command generator is waiting for the step rate limiter to complete. This can "
-            & "take a long time if the pause plan contains multiple very long moves. In a future version "
-            & "this will be improved.");
-      end Log_Pause_Waiting_For_Step_Rate_Limiter;
-
       function Primary_Pause_Requested return Boolean is
       begin
          return Do_Pause;
@@ -243,12 +317,8 @@ package body Prunt.Step_Generator is
          Last_Executed : constant Planner_Corner_ID := Last_Executed_Primary_Corner_ID;
       begin
          if Corner_ID < Last_Executed then
-            raise Constraint_Error with
-              "Corner ID publication moved backwards from"
-              & Last_Executed'Image
-              & " to"
-              & Corner_ID'Image
-              & ".";
+            raise Constraint_Error
+              with "Corner ID publication moved backwards from" & Last_Executed'Image & " to" & Corner_ID'Image & ".";
          end if;
 
          Last_Executed_Primary_Corner_ID := Corner_ID;
@@ -262,27 +332,25 @@ package body Prunt.Step_Generator is
 
       package Primary_Block_Executor is new
         Block_Executor
-          (Active_Planner            => Planner,
-           Allow_Homing              => True,
-           Check_Reset               => Check_Reset,
-           Step_Rate_Limiter_Stalled => Log_Primary_Waiting_For_Step_Rate_Limiter,
-           Start_Block_Callback      => Start_Planner_Block,
-           Start_Corner_Callback     => Start_Corner,
-           Finish_Block_Callback     => Finish_Planner_Block,
-           Publish_Corner_ID         => Publish_Primary_Corner_ID,
-           Pause_Requested           => Primary_Pause_Requested,
-           Handle_Pause              => Run_Pause_Cycle);
+          (Active_Planner        => Planner,
+           Allow_Homing          => True,
+           Check_Reset           => Check_Reset,
+           Start_Block_Callback  => Start_Planner_Block,
+           Start_Corner_Callback => Start_Corner,
+           Finish_Block_Callback => Finish_Planner_Block,
+           Publish_Corner_ID     => Publish_Primary_Corner_ID,
+           Pause_Requested       => Primary_Pause_Requested,
+           Handle_Pause          => Run_Pause_Cycle);
 
       package Pause_Block_Executor is new
         Block_Executor
-          (Active_Planner            => Pause_Planner,
-           Allow_Homing              => False,
-           Check_Reset               => Check_Reset,
-           Step_Rate_Limiter_Stalled => Log_Pause_Waiting_For_Step_Rate_Limiter,
-           Start_Block_Callback      => Start_Pause_Planner_Block,
-           Start_Corner_Callback     => Start_Pause_Corner,
-           Finish_Block_Callback     => Finish_Pause_Planner_Block,
-           Publish_Corner_ID         => Ignore_Corner_ID_Publication);
+          (Active_Planner        => Pause_Planner,
+           Allow_Homing          => False,
+           Check_Reset           => Check_Reset,
+           Start_Block_Callback  => Start_Pause_Planner_Block,
+           Start_Corner_Callback => Start_Pause_Corner,
+           Finish_Block_Callback => Finish_Pause_Planner_Block,
+           Publish_Corner_ID     => Ignore_Corner_ID_Publication);
 
       procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean) is
          Stable_Pause_Position : constant Position := Pause_Position;
@@ -304,11 +372,11 @@ package body Prunt.Step_Generator is
                if Reset_Requested then
                   return;
                end if;
-               Pause_Block_Executor.Execute_Block (Pause_Block, Pos_Map, Commands, Reset_Requested);
+               Pause_Block_Executor.Execute_Block (Pause_Block'Access, Pos_Map, Commands, Reset_Requested);
                if Reset_Requested then
                   return;
                end if;
-               exit when Is_Pause_Plan_Done (Pause_Planner.Flush_Resetting_Data (Pause_Block));
+               exit when Is_Pause_Plan_Done (Pause_Planner.Flush_Resetting_Data (Pause_Block'Access));
             end loop;
          end Execute_Pause_Plan;
 
@@ -372,7 +440,7 @@ package body Prunt.Step_Generator is
                Primary_Block_Executor.Dequeue_Block (Block, Commands, Reset_Requested);
                exit Main when Reset_Requested;
 
-               Primary_Block_Executor.Execute_Block (Block, Pos_Map, Commands, Reset_Requested);
+               Primary_Block_Executor.Execute_Block (Block'Access, Pos_Map, Commands, Reset_Requested);
                exit Main when Reset_Requested;
             end;
          end loop Main;

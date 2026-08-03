@@ -24,5 +24,6 @@ with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 package Prunt.Mockable.Text_IO.Unbounded_IO is
 
    function Get_Line (File : File_Type) return Unbounded_String;
+   --  Read the next line from File and return it without a line terminator.
 
 end Prunt.Mockable.Text_IO.Unbounded_IO;

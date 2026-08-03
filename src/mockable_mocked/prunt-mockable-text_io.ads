@@ -33,18 +33,26 @@ package Prunt.Mockable.Text_IO is
    Out_File : constant File_Mode := Ada.Text_IO.Out_File;
 
    procedure Create (File : in out File_Type; Mode : File_Mode := Out_File; Name : String := ""; Form : String := "");
+   --  Create and open a mocked text file with the requested mode and name. Form is accepted for compatibility and
+   --  ignored.
 
    procedure Open (File : in out File_Type; Mode : File_Mode; Name : String; Form : String := "");
+   --  Open an existing mocked text file with the requested mode. Form is accepted for compatibility and ignored.
 
    procedure Close (File : in out File_Type);
+   --  Close File.
 
    procedure Put_Line (File : File_Type; Item : String);
+   --  Append Item and a line terminator to File.
 
    function Get_Line (File : File_Type) return String;
+   --  Read the next line from File and return it without a line terminator.
 
    function End_Of_File (File : File_Type) return Boolean;
+   --  Return True when File has no unread characters.
 
    function Is_Open (File : File_Type) return Boolean;
+   --  Return True when File is currently open.
 
 private
 

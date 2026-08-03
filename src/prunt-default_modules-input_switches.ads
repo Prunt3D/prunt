@@ -42,20 +42,25 @@ package Prunt.Default_Modules.Input_Switches is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    type Module_Instance_Interface is synchronized interface;
 
    function Switch_Is_Enabled_In_Config (This : Module_Instance_Interface; Switch : Input_Switch_Name) return Boolean
    is abstract;
+   --  Return whether Switch is enabled.
 
    function Switch_Is_Normally_Closed (This : Module_Instance_Interface; Switch : Input_Switch_Name) return Boolean
    is abstract;
+   --  Return whether Switch is normally closed.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -67,6 +72,7 @@ package Prunt.Default_Modules.Input_Switches is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -75,6 +81,7 @@ package Prunt.Default_Modules.Input_Switches is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -106,12 +113,16 @@ private
 
    overriding
    procedure Process_After_Block (This : Endstop_Report_Event; Context : Block_End_Context'Class);
+   --  Log the captured switch states.
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    procedure Report_Endstop_States (This : Module_Instance; Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M119");
@@ -128,10 +139,12 @@ private
 
    overriding
    procedure Finalize (Object : in out Status_Updater_Wrapper);
+   --  Stop the status updater.
 
    package Status_Updater_Wrapper_Pointers is new Limited_Shared_Pointers (Status_Updater_Wrapper);
 
    function Switch_Is_Triggered (Config : User_Config; Switch : Input_Switch_Name) return Boolean;
+   --  Read the configured switch state.
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);

@@ -31,12 +31,15 @@ package Prunt.Default_Modules.Basic_Config is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the versioned configuration schema for the basic Prunt settings.
 
    type Module_Instance_Interface is synchronized interface;
 
    procedure Disable_Prunt (This : in out Module_Instance_Interface) is abstract;
+   --  Persistently disable machine operation by saving Prunt.Enabled as False.
 
    function Prunt_Is_Disabled (This : Module_Instance_Interface) return Boolean is abstract;
+   --  Return True when machine operation has been disabled.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -48,6 +51,7 @@ package Prunt.Default_Modules.Basic_Config is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
 private
 
@@ -66,10 +70,13 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    overriding
    procedure Gcode_Dispatch
@@ -78,6 +85,7 @@ private
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Raise Constraint_Error because the basic-config module declares no G-code commands.
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       overriding

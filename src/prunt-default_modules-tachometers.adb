@@ -27,13 +27,6 @@ package body Prunt.Default_Modules.Tachometers is
 
    use type Ada.Real_Time.Time;
 
-   function Current_Speed
-     (Config         : User_Config;
-      Tachometer     : Tachometer_Name;
-      Requires_Fresh : Boolean) return Dimensionless;
-
-   procedure Log_Tachometers (Config : User_Config; Requires_Fresh : Boolean);
-
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config is separate;

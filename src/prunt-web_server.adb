@@ -217,9 +217,6 @@ package body Prunt.Web_Server is
       null;
    end Write;
 
-   function Patch_Config_Values (Patch : String) return Virtual_String;
-   --  Apply a JSON configuration patch and return a JSON response containing any validation errors.
-
    function Patch_Config_Values (Patch : String) return Virtual_String is
       Patch_Errors : Config.Config_Error_Vectors.Vector;
       Result       : Virtual_String;
@@ -378,9 +375,6 @@ package body Prunt.Web_Server is
          return null;
       end if;
    end Create;
-
-   procedure Do_Get_Head (Client : in out Prunt_Client; Get : Boolean);
-   --  Process a GET or HEAD request, emitting a body only when Get is True.
 
    procedure Do_Get_Head (Client : in out Prunt_Client; Get : Boolean) is
       Status : constant Status_Line := Get_Status_Line (Client);

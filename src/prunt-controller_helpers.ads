@@ -51,6 +51,7 @@ package Prunt.Controller_Helpers is
 
    function Return_False (Left, Right : Gcode_Dispatch_Entry_Vectors.Vector with Unreferenced) return Boolean
    is (False);
+   --  Treat dispatch-entry vectors as unequal for ordered-map operations that accept an equality function.
 
    package Gcode_Dispatch_Maps is new
      Ada.Containers.Ordered_Maps
@@ -72,5 +73,22 @@ package Prunt.Controller_Helpers is
    --  Returns the owning module name for a command or an empty string if no entry matches.
 
    function Build_Gcode_JSON (Active_Modules : Module_Maps.Map) return JSON.JSON_Value;
+   --  Build the web-facing JSON description of every G-code command supplied by Active_Modules.
+
+private
+
+   function Identifier_Image (Identifier : Module_Types.Gcode_Command_Identifier) return String;
+   --  Return a compact G-code identifier string such as G1 or M104.
+
+   function Are_Kinds_Disjoint
+     (Left, Right : Module_Types.Gcode_Argument_Allowed_Kinds) return Boolean;
+   --  Return True when two argument-kind sets have no common allowed kind.
+
+   function Overlaps (Left, Right : Gcode_Dispatch_Entry) return Boolean;
+   --  Return True when two dispatch entries can both match the same parsed command arguments.
+
+   function Build_Dispatch_Entry
+     (Module_Name : Virtual_String; Command : Module_Types.Gcode_Command) return Gcode_Dispatch_Entry;
+   --  Build a symbolic dispatch entry for one module-owned command variant.
 
 end Prunt.Controller_Helpers;

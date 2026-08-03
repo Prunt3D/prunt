@@ -17,18 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Ada.Unchecked_Deallocation;
-
 package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    pragma Extensions_Allowed (On);
 
    use type Key_Vectors.Cursor;
-
-   procedure Free is new
-     Ada.Unchecked_Deallocation
-       (Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class,
-        Key_Vectors_Iterator_Access);
 
    function Empty return Map is
    begin

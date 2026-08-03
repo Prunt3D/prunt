@@ -157,13 +157,17 @@ package Prunt.Module_Types is
 
    function "<" (Left, Right : Gcode_Command_Identifier) return Boolean
    is (if Left.Argument /= Right.Argument then Left.Argument < Right.Argument else Left.Number < Right.Number);
+   --  Order command identifiers first by their G or M argument and then by command number.
 
    package Gcode_Command_Vectors is new Ada.Containers.Indefinite_Vectors (Positive, Gcode_Command);
 
    function Get_Last_Position (This : Planner_Interface) return Position is abstract;
+   --  Return the current queued/planner endpoint used as the start of subsequently queued motion.
 
    function Get_Last_Kinematic_Parameters (This : Planner_Interface) return Motion_Planner.Kinematic_Parameters
    is abstract;
+   --  Return the current planner parameters that apply to subsequently queued motion.
+   --
    --  TODO: This should probably be changed to a set of procedures to update a particular field without reading all
    --  the kinematic limits so that there are less restrictions on the planner.
 
@@ -186,6 +190,7 @@ package Prunt.Module_Types is
    --  long then the motion queue will run dry in an unsafe state.
 
    procedure Process (This : Extra_Corner_Data; Last_Command_Index : Command_Index) is null;
+   --  Process non-blocking data attached to a planner corner after its motion commands have been queued.
 
    type Extra_Block_Resetting_Data is tagged null record;
    --  Use this for handlers which need motion to stop before processing.
@@ -197,43 +202,56 @@ package Prunt.Module_Types is
    type Block_End_Context is limited interface;
 
    function Get_First_Accel_Distance (This : Block_End_Context) return Length is abstract;
+   --  Return the acceleration distance of the first segment in the completed block.
 
    function Get_Last_Command_Index (This : Block_End_Context) return Command_Index is abstract;
+   --  Return the last interpolation or step-generator command index queued for the completed block.
 
    function Get_Loop_Move_Offset (This : Block_End_Context) return Position_Offset is abstract;
+   --  Return the accumulated position offset produced by any repeated loop move in the completed block.
 
    procedure Wait_For_Idle (This : Block_End_Context) is abstract;
+   --  Wait until hardware execution has reached the end of the completed block.
 
    procedure Catch_Up_Planner_State (This : Block_End_Context) is abstract;
+   --  Commit speculative module state through the last physically executed primary-planner corner.
 
    procedure Prepare_Config_For_Save (This : Block_End_Context) is abstract;
+   --  Ask registered modules to copy their current runtime settings into their persistent configuration handles.
 
    procedure Process_After_Block (This : Extra_Block_Resetting_Data; Context : Block_End_Context'Class) is null;
+   --  Process resetting data after motion has stopped at the end of a planner block.
 
    type Pause_Context is abstract tagged null record;
 
    function Get_Pause_Position (This : Pause_Context) return Position is abstract;
+   --  Return the physical position at which pause handling begins or resume handling ends.
 
    function Get_Last_Command_Index (This : Pause_Context) return Command_Index is abstract;
+   --  Return the last command index queued before the pause transition.
 
    type Pause_Handler is synchronized interface;
 
    procedure Handle_Pause
      (This : in out Pause_Handler; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
    is null;
+   --  Add any module-specific parking or shutdown work to Planner when a pause begins.
 
    procedure Handle_Resume
      (This : in out Pause_Handler; Planner : Planner_Interface'Class; Context : Pause_Context'Class)
    is null;
+   --  Add any module-specific restoration work to Planner before normal motion resumes.
 
    type Planner_State_Handler is synchronized interface;
 
    procedure Catch_Up_Planner_State (This : in out Planner_State_Handler; Executed_Corner_ID : Planner_Corner_ID)
    is null;
+   --  Commit pending module state anchored at or before Executed_Corner_ID.
 
    type Config_Save_Preparer is synchronized interface;
 
    procedure Prepare_Config_For_Save (This : in out Config_Save_Preparer) is null;
+   --  Copy the module's current runtime settings into the configuration data used for saving.
 
    type Cancellation_Handler is synchronized interface;
 
@@ -243,12 +261,16 @@ package Prunt.Module_Types is
       Cancellation_Barrier_ID : Planner_Corner_ID;
       Current_Position        : Position)
    is null;
+   --  Discard or commit pending module state at a cancellation barrier and synchronize it with Current_Position.
 
    procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;
+   --  Mark Axis as homed in the planner state used for subsequent motion validation.
 
    procedure Mark_Axis_Unhomed (This : Planner_Interface; Axis : Axis_Name) is abstract;
+   --  Mark Axis as unhomed in the planner state used for subsequent motion validation.
 
    function Axis_Is_Homed (This : Planner_Interface; Axis : Axis_Name) return Boolean is abstract;
+   --  Return whether Axis is currently marked as homed.
 
    procedure Add_Corner
      (This          : Planner_Interface;
@@ -257,6 +279,18 @@ package Prunt.Module_Types is
       Dwell_After   : Time := 0.0 * s;
       Require_Homed : Boolean := True)
    is abstract;
+   --  Append a linear move to Pos, optionally requiring every moving axis to have been homed.
+
+   procedure Add_Helix
+     (This          : Planner_Interface;
+      Center        : Position;
+      Pos           : Position;
+      Clockwise     : Boolean;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True)
+   is abstract;
+   --  Append a clockwise or counter-clockwise XY helix ending at Pos around Center.
 
    procedure Add_Corner_Data (This : Planner_Interface; Corner_Data : Extra_Corner_Data'Class) is abstract;
    --  May be attached to a dummy corner in the next block.
@@ -266,6 +300,7 @@ package Prunt.Module_Types is
       Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
       Is_Homing_Move : Boolean := False)
    is abstract;
+   --  Finish the current planner block and attach Extra_Data for processing once its motion stops.
 
    procedure Flush_And_Change_Kinematic_Parameters
      (This           : Planner_Interface;
@@ -273,6 +308,7 @@ package Prunt.Module_Types is
       Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
       Is_Homing_Move : Boolean := False)
    is abstract;
+   --  Flush pending motion, process Extra_Data, and make Params apply to subsequently planned motion.
 
    procedure Flush_And_Reset_Position
      (This           : Planner_Interface;
@@ -280,5 +316,6 @@ package Prunt.Module_Types is
       Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
       Is_Homing_Move : Boolean := False)
    is abstract;
+   --  Flush pending motion, process Extra_Data, and reset the subsequent planner position to New_Position.
 
 end Prunt.Module_Types;

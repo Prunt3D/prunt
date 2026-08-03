@@ -22,7 +22,10 @@ pragma Extensions_Allowed (On);
 private generic
 package Prunt.Motion_Planner.Planner.Kinematic_Limiter is
 
-   procedure Run (Block : in out Execution_Block);
+   procedure Run
+     (Block     : aliased in out Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace : not null access constant Planning_Workspace);
    --  Fill Block.Corner_Velocity_Limits with velocity limits, that when enforced at corners, will prevent other
    --  limits from being violated.
 

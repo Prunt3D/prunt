@@ -1,10 +1,18 @@
 with "config/prunt_config.gpr";
 project Prunt is
 
+   for Languages use ("Ada", "Fortran");
+
    for Library_Name use "prunt";
    for Library_Version use Project'Library_Name & ".so." & Prunt_Config.Crate_Version;
 
-   for Source_Dirs use ("src/", "config/", "generated_src_html/", "generated_src_modules/", "gnatcoll_modifications_src/");
+   for Source_Dirs use
+     ("src/",
+      "config/",
+      "generated_src_html/",
+      "generated_src_modules/",
+      "gnatcoll_modifications_src/",
+      "lapack_src/");
 
    for Object_Dir use "obj/" & Prunt_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
@@ -22,16 +30,29 @@ project Prunt is
          for Source_Dirs use Project'Source_Dirs & ("src/mockable_mocked");
    end case;
 
+   type Benchmark_Mode_Type is ("disabled", "enabled");
+   Benchmark_Mode : Benchmark_Mode_Type := external ("PRUNT_BENCHMARK_MODE", "disabled");
+
+   Prunt_Release_Ada_Compiler_Switches :=
+     (--  TODO: Benchmark with -gnatp (disable all runtime checks)
+      "-flto=auto",
+      "-fuse-linker-plugin",
+      "-ffat-lto-objects",
+      "-gnatn", --  Enable inlining
+      "-O2");   --  TODO: Benchmark with O2 vs O3
+
+   case Benchmark_Mode is
+      when "disabled" =>
+         null;
+      when "enabled" =>
+         Prunt_Release_Ada_Compiler_Switches :=
+           external_as_list ("PRUNT_BENCHMARK_COMPILER_SWITCHES", ",");
+   end case;
+
    Prunt_Extra_Ada_Compiler_Switches := ();
    case Prunt_Config.Build_Profile is
       when "release" =>
-         Prunt_Extra_Ada_Compiler_Switches :=
-           (--  TODO: Benchmark with -gnatp (disable all runtime checks)
-            "-flto=auto",
-            "-fuse-linker-plugin",
-            "-ffat-lto-objects",
-            "-gnatn", --  Enable inlining
-            "-O2");   --  TODO: Benchmark with O2 vs O3
+         Prunt_Extra_Ada_Compiler_Switches := Prunt_Release_Ada_Compiler_Switches;
 
       when "validation" =>
          Prunt_Extra_Ada_Compiler_Switches :=
@@ -104,7 +125,13 @@ project Prunt is
            "-gnatw.u",   --  Treat enumerations as unordered without ordered clause
            "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
            "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
+
    end Compiler;
+
+   package Naming is
+      for Implementation_Exceptions ("Fortran") use
+        ("lapack_free.f90");
+   end Naming;
 
    package Builder is
       for Global_Configuration_Pragmas use "gnat.adc";
@@ -173,7 +200,7 @@ project Prunt is
          "Prunt.Modules",
          "Prunt.Motion_Planner.Planner",
          "Prunt.Motion_Planner.Planner.*",
-         "Prunt.Motion_Planner.PH_Beziers",
+         "Prunt.Motion_Planner.Stereographic_Curves",
          "Prunt.TMC_Types",
          "Prunt.TMC_Types.TMC2240",
          "Prunt.Mockable",

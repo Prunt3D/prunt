@@ -1,0 +1,53 @@
+{
+  "description": "Verify pressure-advance catch-up bounds E commands and drains without limiting other axes.",
+  "config": {
+    "Basic Motor Drivers": {
+      "Motors": {
+        "X_MOTOR": {
+          "Basic_Parameters": {
+            "Microsteps": 100.0
+          }
+        },
+        "E_MOTOR": {
+          "Basic_Parameters": {
+            "Microsteps": 100.0
+          }
+        }
+      }
+    },
+    "Input Shapers": {
+      "Input_Shaping": {
+        "E_AXIS": {
+          "Kind": {
+            "Selected": "Pressure_Advance",
+            "Children": {
+              "Pressure_Advance": {
+                "Pressure_Advance": {
+                  "Pressure_Advance_Time": 0.5,
+                  "Pressure_Advance_Smooth_Time": 0.002,
+                  "Smooth_Added_Part_Only": true,
+                  "Smoothing_Levels": 2
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "M82" },
+    { "kind": "submit_gcode", "command": "G1 X100 E100 F1200000" },
+    { "kind": "wait_idle", "timeout_s": 10.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 10000.0, "Y": 0.0, "Z": 0.0, "E": 10000.0 },
+    "position_tolerance": 0.05,
+    "max_sample_delta": { "X": 1.000001, "E": 1.000001 },
+    "sample_delta_reaches": { "E": 0.95 },
+    "min_samples": 20,
+    "event_counts": { "gcode": 4 }
+  }
+}

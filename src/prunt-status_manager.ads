@@ -32,10 +32,12 @@ package Prunt.Status_Manager is
    type Lock_Free_Dimensionless_Setter is private;
 
    procedure Set_Value (This : Lock_Free_Dimensionless_Setter; Value : Dimensionless);
+   --  Atomically publish Value through a previously acquired real-valued lock-free setter.
 
    type Lock_Free_Boolean_Setter is private;
 
    procedure Set_Value (This : Lock_Free_Boolean_Setter; Value : Boolean);
+   --  Atomically publish Value through a previously acquired Boolean lock-free setter.
 
    type Status_Value_Kind is (Real_Kind, Integer_Kind, Boolean_Kind, String_Kind);
 
@@ -54,12 +56,14 @@ package Prunt.Status_Manager is
 
    function Return_False (Left, Right : Status_Value_Maps.Map with Unreferenced) return Boolean
    is (False);
+   --  Supply deliberately false element equality for the enclosing map, whose aggregate equality is never used.
 
    package Status_Group_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Status_Value_Maps.Map, "=" => Return_False);
 
    function Return_False (Left, Right : Status_Group_Maps.Map with Unreferenced) return Boolean
    is (False);
+   --  Supply deliberately false element equality for the enclosing map, whose aggregate equality is never used.
 
    package Status_Module_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Status_Group_Maps.Map, "=" => Return_False);
@@ -67,22 +71,37 @@ package Prunt.Status_Manager is
    type Status_Data_Collection is limited private;
 
    function Build_Collection (Modules : Status_Module_Maps.Map) return Status_Data_Collection;
+   --  Build an initially empty status collection with the module, group, key, type, and description schema in Modules.
 
    function Get_Emitter (This : Status_Data_Collection; Module_Name : Virtual_String) return Status_Emitter;
+   --  Return a handle that publishes values for Module_Name, raising Constraint_Error when the module is unknown.
 
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Dimensionless);
+   --  Publish a real Value for Group and Key after validating the key against the collection schema.
+
    procedure Set_Value
      (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Long_Long_Integer);
+   --  Publish an integer Value for Group and Key after validating the key against the collection schema.
+
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Boolean);
+   --  Publish a Boolean Value for Group and Key after validating the key against the collection schema.
+
    procedure Set_Value (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String; Value : Virtual_String);
+   --  Publish a string Value for Group and Key after validating the key against the collection schema.
 
    function Get_Lock_Free_Setter
      (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Dimensionless_Setter;
+   --  Return a reusable atomic setter for a real-valued key while preserving its current value.
+
    function Get_Lock_Free_Setter
      (This : Status_Emitter; Group : Virtual_String; Key : Virtual_String) return Lock_Free_Boolean_Setter;
+   --  Return a reusable atomic setter for a Boolean key while preserving its current value.
 
    function JSON_Schema (This : Status_Data_Collection) return Virtual_String;
+   --  Return the immutable status schema as JSON.
+
    function JSON_Data (This : Status_Data_Collection) return Virtual_String;
+   --  Snapshot all ordinary and lock-free status values and return them as JSON.
 
 private
 
@@ -110,12 +129,14 @@ private
 
    function Return_False (Left, Right : Atomic_Dimensionless_Ref_Maps.Map with Unreferenced) return Boolean
    is (False);
+   --  Supply deliberately false element equality for a map whose aggregate equality is never used.
 
    package Atomic_Dimensionless_Group_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Dimensionless_Ref_Maps.Map, "=" => Return_False);
 
    function Return_False (Left, Right : Atomic_Dimensionless_Group_Maps.Map with Unreferenced) return Boolean
    is (False);
+   --  Supply deliberately false element equality for a map whose aggregate equality is never used.
 
    package Atomic_Dimensionless_Module_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Dimensionless_Group_Maps.Map, "=" => Return_False);
@@ -128,12 +149,14 @@ private
 
    function Return_False (Left, Right : Atomic_Boolean_Ref_Maps.Map with Unreferenced) return Boolean
    is (False);
+   --  Supply deliberately false element equality for a map whose aggregate equality is never used.
 
    package Atomic_Boolean_Group_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Boolean_Ref_Maps.Map, "=" => Return_False);
 
    function Return_False (Left, Right : Atomic_Boolean_Group_Maps.Map with Unreferenced) return Boolean
    is (False);
+   --  Supply deliberately false element equality for a map whose aggregate equality is never used.
 
    package Atomic_Boolean_Module_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Atomic_Boolean_Group_Maps.Map, "=" => Return_False);
@@ -189,6 +212,7 @@ private
 
    overriding
    procedure Initialize (Object : in out Status_Data_Collection);
+   --  Allocate the protected shared backing object for a newly created collection.
 
    overriding
    procedure Finalize (Object : in out Status_Data_Collection);

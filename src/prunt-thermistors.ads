@@ -48,9 +48,11 @@ package Prunt.Thermistors is
        Temp >= Params.Minimum_Temperature
        and then Temp <= Params.Maximum_Temperature
        and then Params.Kind /= Disabled_Kind;
+   --  Convert Temp to the resistance predicted by the configured thermistor model.
 
 private
 
    function Safe_Cbrt (Val : Dimensionless) return Dimensionless;
+   --  Return the real cube root of Val, including for negative inputs.
 
 end Prunt.Thermistors;

@@ -153,11 +153,12 @@ package body Prunt_Simulator_Config_Overrides is
       Add_Axis_Float (Result, "Axial_Velocity_Limits", "Y_AXIS", 250.0);
       Add_Axis_Float (Result, "Axial_Velocity_Limits", "Z_AXIS", 25.0);
       Add_Axis_Float (Result, "Axial_Velocity_Limits", "E_AXIS", 80.0);
-      Add_Kinematics_Float (Result, "Maximum_Chord_Error", 0.02);
-      Add_Kinematics_Float (Result, "Maximum_Acceleration", 5_000.0);
-      Add_Kinematics_Float (Result, "Maximum_Jerk", 500_000.0);
-      Add_Kinematics_Float (Result, "Maximum_Snap", 500_000_000.0);
-      Add_Kinematics_Float (Result, "Maximum_Crackle", 500_000_000_000.0);
+      for Axis in Axis_Name loop
+         Add_Axis_Float (Result, "Axial_Acceleration_Limits", Axis'Image, 5_000.0);
+         Add_Axis_Float (Result, "Axial_Jerk_Limits", Axis'Image, 500_000.0);
+         Add_Axis_Float (Result, "Axial_Snap_Limits", Axis'Image, 500_000_000.0);
+         Add_Axis_Float (Result, "Axial_Crackle_Limits", Axis'Image, 500_000_000_000.0);
+      end loop;
       Add_Cartesian_Motor (Result, "X_MOTOR", "X_AXIS");
       Add_Cartesian_Motor (Result, "Y_MOTOR", "Y_AXIS");
       Add_Cartesian_Motor (Result, "Z_MOTOR", "Z_AXIS");

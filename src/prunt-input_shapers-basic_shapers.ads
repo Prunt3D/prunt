@@ -39,9 +39,11 @@ package Prunt.Input_Shapers.Basic_Shapers is
    function Create
      (Parameters : Shaper_Parameters; Interpolation_Time : Time; Start_Position : Length) return Basic_Shaper
    with Pre => Parameters.Kind in No_Shaper | Zero_Vibration | Extra_Insensitive;
+   --  Construct an impulse shaper initialized to Start_Position for the requested sampling interval.
 
    overriding
    function Do_Step (This : in out Basic_Shaper; Step : Length) return Length;
+   --  Add Step to the delay buffer and return the weighted sum selected by This's impulse sequence.
 
 private
 
@@ -80,6 +82,9 @@ private
    --      < 0.000_000_1;
 
    function Compute_Impulses (Parameters : Shaper_Parameters; Interpolation_Time : Time) return Impulses_Array;
+   --  Derive the normalized impulse delays and weights for Parameters at the requested sampling interval.
+
    function Compute_Input_Offset (Impulses : Impulses_Array) return Cycle_Count;
+   --  Return the cycle offset that centers the impulse sequence around its weighted time.
 
 end Prunt.Input_Shapers.Basic_Shapers;

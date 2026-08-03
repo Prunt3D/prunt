@@ -804,7 +804,10 @@ package Prunt.TMC_Types.TMC2240 is
      end record;
 
    function Compute_CRC (Message : UART_Data_Message) return UART_CRC;
+   --  Compute the TMC2240 UART CRC over the sync/reserved, node-address, register, and data bytes of Message.
+
    function Compute_CRC (Message : UART_Query_Message) return UART_CRC;
+   --  Compute the TMC2240 UART CRC over the sync/reserved, node-address, and register bytes of Message.
 
    procedure Optimize_Spreadcycle
      (Driver_Voltage              : Voltage;
@@ -820,10 +823,12 @@ package Prunt.TMC_Types.TMC2240 is
       Sum_Too_High_For_Full_Scale : out Boolean;
       Excessive_Heating           : out Boolean;
       Driver_Voltage_Too_Low      : out Boolean);
+   --  Derive SpreadCycle hysteresis settings and report electrical-limit warnings.
 
 private
 
    type UART_Bytes_For_CRC is array (Integer range <>) of UART_Byte;
    function Compute_CRC (Bytes : UART_Bytes_For_CRC) return UART_CRC;
+   --  Apply the TMC UART polynomial to Bytes, which are stored in reverse wire-transmission order.
 
 end Prunt.TMC_Types.TMC2240;

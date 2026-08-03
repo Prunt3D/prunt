@@ -39,12 +39,15 @@ package Prunt.Default_Modules.Tachometers is
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   --  Return the configuration schema.
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
@@ -56,6 +59,7 @@ package Prunt.Default_Modules.Tachometers is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -64,6 +68,7 @@ package Prunt.Default_Modules.Tachometers is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
@@ -86,12 +91,22 @@ private
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 
+   function Current_Speed
+     (Config         : User_Config;
+      Tachometer     : Tachometer_Name;
+      Requires_Fresh : Boolean) return Dimensionless;
+   --  Return Tachometer's speed.
+
+   procedure Log_Tachometers (Config : User_Config; Requires_Fresh : Boolean);
+   --  Log enabled tachometer speeds.
+
    type Tachometer_Report_Event is new Extra_Block_Resetting_Data with record
       Config : User_Config;
    end record;
 
    overriding
    procedure Process_After_Block (This : Tachometer_Report_Event; Context : Block_End_Context'Class);
+   --  Log a tachometer report.
 
    type Tachometer_Auto_Report_Event is new Extra_Block_Resetting_Data with record
       Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -100,12 +115,16 @@ private
 
    overriding
    procedure Process_After_Block (This : Tachometer_Auto_Report_Event; Context : Block_End_Context'Class);
+   --  Update periodic tachometer reporting.
 
    function Build_Schema return Config.Config_Property_Maps.Map;
+   --  Build the configuration schema.
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
+   --  Convert validated configuration data.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+   --  Store the configuration in Data.
 
    type Tachometer_Speed_Status_Setters is array (Tachometer_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
 
@@ -139,6 +158,7 @@ private
 
    overriding
    procedure Finalize (Object : in out Status_Updater_Wrapper);
+   --  Stop the status updater.
 
    package Status_Updater_Wrapper_Pointers is new Limited_Shared_Pointers (Status_Updater_Wrapper);
 

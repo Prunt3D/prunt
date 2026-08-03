@@ -6,6 +6,7 @@
 /.dir-locals.el
 /.config_codegen_stamp
 /tests/*.srctrace
+/benchmark_results/
 /prebuild
 /b~prebuild*
 /prebuild.ali

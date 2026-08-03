@@ -33,6 +33,7 @@ package Prunt.Default_Modules.Config_Saving is
 
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the supported G-code commands.
 
    type Config_Saver is synchronized interface;
 
@@ -49,6 +50,7 @@ package Prunt.Default_Modules.Config_Saving is
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
+   --  Create a module instance.
 
    overriding
    procedure Gcode_Dispatch
@@ -57,11 +59,13 @@ package Prunt.Default_Modules.Config_Saving is
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
+   --  Dispatch a G-code command.
 
 private
 
    function Return_False (Left, Right : Config.Config_Data with Unreferenced) return Boolean
    is (False);
+   --  Return False.
 
    package Config_Data_Maps is new
      Ada.Containers.Ordered_Maps (Virtual_String, Config.Config_Data, "=" => Return_False);
@@ -80,6 +84,7 @@ private
 
    overriding
    procedure Process_After_Block (This : Config_Save_Event; Context : Block_End_Context'Class);
+   --  Save the selected configuration.
 
    type Config_List_Event is new Extra_Block_Resetting_Data with record
       Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -87,6 +92,7 @@ private
 
    overriding
    procedure Process_After_Block (This : Config_List_Event; Context : Block_End_Context'Class);
+   --  List modules with savable settings.
 
    procedure Save_Settings
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class)

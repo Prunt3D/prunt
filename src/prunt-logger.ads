@@ -52,8 +52,11 @@ private
 
    overriding
    procedure Initialize (Object : in out Handle);
+   --  Register Object in the shared receiver list.
+
    overriding
    procedure Finalize (Object : in out Handle);
+   --  Remove Object's receiver registration from the shared list.
 
    protected List_Handler is
       procedure Initialize (Log_Handle : in out Handle);

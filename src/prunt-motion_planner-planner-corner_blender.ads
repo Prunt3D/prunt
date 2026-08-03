@@ -19,56 +19,65 @@
 
 pragma Extensions_Allowed (On);
 
+private with Ada.Numerics.Generic_Elementary_Functions;
 private with System.Pool_Local;
 
 private generic
 package Prunt.Motion_Planner.Planner.Corner_Blender is
 
-   procedure Run (Block : in out Execution_Block);
-   --  Replaces sharp corners in Block.Corners with C4 continuous PH Bézier curves, storing them in Block.Beziers.
-   --
-   --  The maximum deviation of these curves from the original path is limited by Chord_Error_Max.
-   --
-   --  If Shift_Blended_Corners is True then corners that are not within Chord_Error_Max of the work area
-   --  boundaries and are not outside of the work area will be shifted so that the midpoint of the curve is where the
-   --  original corner was. Block.Corners will not be modified when the generated curves are shifted. The accuracy
-   --  for this shifting is controlled by the generic parameter Corner_Blender_Max_Computational_Error.
-   --
-   --  This procedure uses a number of large allocated arrays and will only allow one call to run at a time while other
-   --  calls block. This package may be instantiated multiple times if concurrency is required.
+   procedure Run
+     (Block     : aliased in out Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace : not null access Planning_Workspace);
+   --  Select and certify the configured Stereographic, Circular, Parabolic, Biarc, or Sharp_SCV representation at each
+   --  corner, storing compact evaluators and transient planning summaries. Stereographic preserves derivatives through
+   --  order four; Circular and Parabolic are C1; Biarc is C1 at its endpoints and internal splice; Sharp_SCV is C0.
+   --  Unsupported, out-of-bounds, or uncertifiable geometry retains the commanded path and inserts a hard stop.
 
 private
 
+   package Angle_Elementary_Functions is new Ada.Numerics.Generic_Elementary_Functions (Angle);
+   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+
+   type Corner_Lengths is array (Corners_Index) of Length;
+   type Corner_Flags is array (Corners_Index) of Boolean;
+
+   type Corner_Transition_Attempt is record
+      Accepted             : Boolean := False;
+      Requires_Hard_Anchor : Boolean := False;
+      Trim_In              : Length := 0.0 * mm;
+      Trim_Out             : Length := 0.0 * mm;
+      Failure_Limit        : Length := 0.0 * mm;
+      Failure_Upper        : Length := Length'Last;
+   end record;
+
+   type Axial_Deviation_Check is record
+      Pass        : Boolean := False;
+      Worst_Ratio : Dimensionless := Dimensionless'Last;
+   end record;
+
+   type Corner_Transition_Attempts is array (Corners_Index) of Corner_Transition_Attempt;
+
    Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
 
-   type Shifted_Corner_Error_Limits_Type is array (Corners_Index) of Length;
-   type Shifted_Corners_Type is array (Corners_Index) of Scaled_Position;
-
-   type Shifted_Corner_Error_Limits_Type_Access is access Shifted_Corner_Error_Limits_Type with Storage_Pool => Pool;
-   type Shifted_Corners_Type_Access is access Shifted_Corners_Type with Storage_Pool => Pool;
+   type Corner_Lengths_Access is access Corner_Lengths with Storage_Pool => Pool;
+   type Corner_Flags_Access is access Corner_Flags with Storage_Pool => Pool;
+   type Corner_Transition_Attempts_Access is access Corner_Transition_Attempts with Storage_Pool => Pool;
 
    protected Runner is
-      procedure Run (Block : in out Execution_Block);
+      procedure Run
+        (Block     : aliased in out Execution_Block;
+         Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+         Workspace : not null access Planning_Workspace);
    private
-      Shifted_Corner_Error_Limits : Shifted_Corner_Error_Limits_Type_Access := new Shifted_Corner_Error_Limits_Type;
-      Shifted_Corners             : Shifted_Corners_Type_Access := new Shifted_Corners_Type;
-      --  When corner shifting is enabled, the original corners are not used directly to create the Bézier curves.
-      --  Instead, virtual corners are created by shifting the original corner points. These arrays store the positions
-      --  of the virtual corners and the calculated deviation limits for them during the solving process.
+      Target_Incoming_Trims    : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
+      Target_Outgoing_Trims    : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
+      Allocated_Incoming_Trims : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
+      Allocated_Outgoing_Trims : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
+      Hard_Anchors             : Corner_Flags_Access := new Corner_Flags'(others => True);
+      Cached_Attempts          : Corner_Transition_Attempts_Access :=
+        new Corner_Transition_Attempts'(others => (others => <>));
+      Cached_Attempt_Valid     : Corner_Flags_Access := new Corner_Flags'(others => False);
    end Runner;
-
-   function Sine_Secondary_Angle (Start, Corner, Finish : Scaled_Position) return Dimensionless;
-   --  Calculates the sine of 0.5 × (180° - the angle between the two segments meeting at a corner), or the angles in
-   --  an isosceles triangle at the corner where the corner angle is the potentially unique angle. A value of 0.0
-   --  corresponds to a 180° angle at the corner (a straight line), while a value of 1.0 corresponds to a 0° angle at
-   --  the corner (a complete reversal of direction).
-   --
-   --  1.0 is returned in the case of any two of the points being equal.
-
-   function Unit_Bisector (Start, Corner, Finish : Scaled_Position) return Position_Scale;
-   --  Computes the unit vector that bisects the angle formed by the segments (Start -> Corner) and (Corner ->
-   --  Finish). The input vectors do not need to be normalised by the caller.
-   --
-   --  All elements in the return value are set to zero if either segment has zero length.
 
 end Prunt.Motion_Planner.Planner.Corner_Blender;

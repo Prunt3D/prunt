@@ -22,6 +22,7 @@ pragma Extensions_Allowed (On);
 with System.Storage_Elements;
 
 private with Ada.Finalization;
+private with Ada.Unchecked_Deallocation;
 private with System;
 private with System.Storage_Pools.Subpools;
 private with Prunt.Dummy_Allocator;
@@ -60,8 +61,10 @@ package Prunt.Bounded_Indefinite_Queues is
    --  Returns the head element without removing it.
 
    procedure Clear (This : in out Queue);
+   --  Remove every queued element and release its space for reuse.
 
    function Is_Empty (This : Queue) return Boolean;
+   --  Return True when This contains no elements.
 
 private
 
@@ -70,6 +73,7 @@ private
 
    function Round_Up_Size (Size : Storage_Count; Alignment : Storage_Count) return Storage_Count
    is (Size + ((Alignment - (Size mod Alignment)) mod Alignment));
+   --  Return the smallest multiple of Alignment that is not less than Size.
 
    package Subpool_Support is
       --  TODO: Do we really need subpools here of can we just use Prunt.Dummy_Allocator for everything?
@@ -164,6 +168,12 @@ private
    --  This is copied from GNAT's Bounded_Indefinite_Holder implementation. It does not appear that it is actually
    --  required, but there should be no harm in keeping it.
 
+   procedure Free is new Ada.Unchecked_Deallocation (Queue_Elements_Subpool, Pooled_Subpool_Handle);
+
+   procedure Free is new Ada.Unchecked_Deallocation (Element_Type, Element_Access);
+
+   procedure Free is new Ada.Unchecked_Deallocation (Node, Node_Access);
+
    type Aligned_Storage_Array is array (Storage_Offset range <>) of aliased Storage_Element
    with Component_Size => System.Storage_Unit, Alignment => Standard'Maximum_Alignment;
 
@@ -181,10 +191,14 @@ private
    with Preelaborable_Initialization => Element_Type'Preelaborable_Initialization;
 
    procedure Maybe_Initialize (This : in out Queue);
+   --  Create This's embedded subpool if it has not yet been initialized.
 
    overriding
    procedure Adjust (This : in out Queue);
+   --  Rebuild a copied queue so its nodes and elements reside in the copy's embedded storage.
+
    overriding
    procedure Finalize (This : in out Queue);
+   --  Finalize queued elements and release the embedded subpool bookkeeping object.
 
 end Prunt.Bounded_Indefinite_Queues;
