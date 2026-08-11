@@ -21,19 +21,22 @@ pragma Extensions_Allowed (On);
 
 with Ada.Exceptions;
 with Ada.Streams;
+with GNAT.Sockets;
+with Prunt.Command_Line_Arguments;
 with Prunt.Config;
 with Prunt.Controller_Generic_Types;
 with Prunt.Exception_Occurrence_Holders;
+with Prunt.Motion_Planner;
+with System.Multiprocessors;
 
 private with Ada.Containers.Indefinite_Holders;
 private with Ada.Containers.Vectors;
-private with Prunt.Command_Line_Arguments;
 private with Prunt.Controller_Helpers;
 private with Prunt.Default_Modules;
-private with Prunt.Default_Modules.Basic_Motor_Drivers;
 private with Prunt.Default_Modules.Basic_Config;
-private with Prunt.Default_Modules.Config_Saving;
+private with Prunt.Default_Modules.Basic_Motor_Drivers;
 private with Prunt.Default_Modules.Blocking_Tracker;
+private with Prunt.Default_Modules.Config_Saving;
 private with Prunt.Default_Modules.Dwell;
 private with Prunt.Default_Modules.Fans;
 private with Prunt.Default_Modules.Heaters;
@@ -48,8 +51,8 @@ private with Prunt.Default_Modules.Machine_Name;
 private with Prunt.Default_Modules.Motion;
 private with Prunt.Default_Modules.Motor_Drivers;
 private with Prunt.Default_Modules.Power_Control;
-private with Prunt.Default_Modules.Tachometers;
 private with Prunt.Default_Modules.TMC2240_Drivers;
+private with Prunt.Default_Modules.Tachometers;
 private with Prunt.Default_Modules.Thermistors;
 private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
@@ -121,6 +124,21 @@ generic
    --  Capacity of the ring buffer used to transfer queued execution positions from the step generator path to
    --  execution reporting. This sets an upper bound on how many commands may be queued before new commands stop being
    --  emitted.
+
+   Web_Server_Port : GNAT.Sockets.Port_Type := Command_Line_Arguments.Web_Server_Port;
+   --  Port used by this controller's web server. Defaults to the value from Prunt.Command_Line_Arguments.
+
+   Motion_Planner_CPU : System.Multiprocessors.CPU_Range := Command_Line_Arguments.Motion_Planner_CPU;
+   --  CPU used by this controller's motion planner, or 0 to allow the runtime to select one. Defaults to the value
+   --  from Prunt.Command_Line_Arguments.
+
+   Step_Generator_CPU : System.Multiprocessors.CPU_Range := Command_Line_Arguments.Step_Generator_CPU;
+   --  CPU used by this controller's step generator, or 0 to allow the runtime to select one. Defaults to the value
+   --  from Prunt.Command_Line_Arguments.
+
+   Max_Planner_Block_Corners : Motion_Planner.Max_Corners_Type := Command_Line_Arguments.Max_Planner_Block_Corners;
+   --  Maximum number of corners in a planner block for this controller. Defaults to the value from
+   --  Prunt.Command_Line_Arguments.
 
    Disable_Default_Modules : Boolean := False;
 
@@ -270,7 +288,7 @@ private
         My_Default_Modules.Motion
           (Config_Saving_Module       => Config_Saving,
            Kinematics_Module          => Kinematics,
-           Pending_State_Queue_Length => Command_Line_Arguments.Max_Planner_Block_Corners);
+           Pending_State_Queue_Length => Max_Planner_Block_Corners);
       package Thermistors is new
         My_Default_Modules.Thermistors
           (My_Controller_Generic_Types => Generic_Types,
@@ -459,8 +477,8 @@ private
         Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
         Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
         Interpolation_Time                => Interpolation_Time,
-        Runner_CPU                        => Command_Line_Arguments.Motion_Planner_CPU,
-        Max_Corners                       => Command_Line_Arguments.Max_Planner_Block_Corners);
+        Runner_CPU                        => Motion_Planner_CPU,
+        Max_Corners                       => Max_Planner_Block_Corners);
 
    package My_Pause_Motion_Planner is new
      Motion_Planner.Planner
@@ -544,7 +562,7 @@ private
         Handle_Resume              => Handle_Resume,
         Loop_Cycle_Reporter        => Loop_Move_Cycles'Access,
         Interpolation_Time         => Interpolation_Time,
-        Runner_CPU                 => Command_Line_Arguments.Step_Generator_CPU);
+        Runner_CPU                 => Step_Generator_CPU);
 
    My_Gcode_Queue : Gcode_Queues.Queue;
 
@@ -576,7 +594,7 @@ private
         Status_Schema_String        => My_Status_Data.JSON_Schema,
         Gcode_JSON_String           => Active_Module_Gcode_JSON_String,
         Get_Status_Values_String    => Get_Status_Values_String,
-        Port                        => Command_Line_Arguments.Web_Server_Port);
+        Port                        => Web_Server_Port);
 
    function Recursive_Module_Initialization
      (Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
