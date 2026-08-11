@@ -373,7 +373,7 @@ procedure Prebuild is
             end if;
 
             if not Keep then
-               Delete_File (Join_Path ([Dist_Base, D]));
+               Delete_File (D);
                Removed := True;
             end if;
          end;
