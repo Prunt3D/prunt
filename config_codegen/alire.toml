@@ -12,7 +12,7 @@ tags = []
 executables = ["config_codegen", "package_subprogram_audit"]
 
 [[depends-on]]
-gnat_native = "~16.1.1002"
+gnat_native = "~16.1.1003"
 # From here: https://github.com/Prunt3D/prunt_alire_index/tree/master
 
 [[depends-on]]
@@ -25,8 +25,8 @@ libadalang = "^26.0.0"
 vss_text = "^26.0.0"
 
 [[pins]]
-gnat_native = "16.1.1002"
-gnat = "16.1.1002"
+gnat_native = "16.1.1003"
+gnat = "16.1.1003"
 libadalang = "26.0.0"
 libgpr = { url = "https://github.com/Prunt3D/gprbuild.git", commit = "56139608315345ffe109bb98ecb3d3bfa27c036e" }
 gnatcoll = "26.0.0"
