@@ -51,26 +51,25 @@ package body Prunt.Default_Modules.Idle_Emitter is
          null;
       end Start;
 
-      procedure Request_Idle_Notifications
-        (Receiver : not null access function return Idle_Notification_Receiver'Class)
-      is
-         Receiver_Ref : Idle_Notification_Receiver_Shared_Pointers.Ref;
+      procedure Request_Idle_Notifications (Receiver : My_Modules.Module_Instance_Shared_Pointers.Ref) is
       begin
-         Receiver_Ref.Set (Receiver);
-         Receivers.Append (Receiver_Ref);
+         if Receiver.Get.Element.all not in Idle_Notification_Receiver'Class then
+            raise Constraint_Error with "Idle notification receiver does not implement the receiver interface.";
+         end if;
+         Receivers.Append (Receiver);
       end Request_Idle_Notifications;
 
       procedure Idle_Start is
       begin
          for Receiver of Receivers loop
-            Receiver.Get.Idle_Start;
+            Idle_Notification_Receiver'Class (Receiver.Get.Element.all).Idle_Start;
          end loop;
       end Idle_Start;
 
       procedure Idle_End is
       begin
          for Receiver of Receivers loop
-            Receiver.Get.Idle_End;
+            Idle_Notification_Receiver'Class (Receiver.Get.Element.all).Idle_End;
          end loop;
       end Idle_End;
    end Module_Instance;

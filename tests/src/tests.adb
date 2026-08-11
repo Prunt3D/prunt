@@ -24,8 +24,11 @@ with Prunt.Config.Test;
 with Prunt.Controller_Generic_Types;
 with Prunt.Default_Modules;
 with Prunt.Default_Modules.Config_Saving;
+with Prunt.Default_Modules.Idle_Emitter;
 with Prunt.Default_Modules.Kinematics;
 with Prunt.Default_Modules.Kinematics.Test;
+with Prunt.Default_Modules.Machine_Idle_Timeout;
+with Prunt.Default_Modules.Machine_Idle_Timeout.Test;
 with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Dummy_Allocator.Test;
 with Prunt.Exception_Occurrence_Holders.Test;
@@ -74,6 +77,31 @@ procedure Tests is
         Motor_Drivers_Module        => Kinematics_Test_Motor_Drivers);
    package Kinematics_Test is new Kinematics_Test_Module.Test;
 
+   Timeout_Report_Count : Natural := 0 with Atomic, Volatile;
+
+   function Get_Timeout_Report_Count return Natural is (Timeout_Report_Count);
+
+   procedure Request_Machine_Idle_Timeout_Shutdown (Message : String) is
+      pragma Unreferenced (Message);
+   begin
+      Timeout_Report_Count := @ + 1;
+   end Request_Machine_Idle_Timeout_Shutdown;
+
+   procedure Reset_Timeout_Report_Count is
+   begin
+      Timeout_Report_Count := 0;
+   end Reset_Timeout_Report_Count;
+
+   package Machine_Idle_Timeout_Test_Idle_Emitter is new Kinematics_Test_Default_Modules.Idle_Emitter;
+   package Machine_Idle_Timeout_Test_Module is new
+     Kinematics_Test_Default_Modules.Machine_Idle_Timeout
+       (Config_Saving_Module => Kinematics_Test_Config_Saving,
+        Idle_Emitter_Module  => Machine_Idle_Timeout_Test_Idle_Emitter,
+        Request_Shutdown     => Request_Machine_Idle_Timeout_Shutdown);
+   package Machine_Idle_Timeout_Test is new
+     Machine_Idle_Timeout_Test_Module.Test
+       (Get_Report_Count => Get_Timeout_Report_Count, Reset_Report_Count => Reset_Timeout_Report_Count);
+
    package Moving_Averages_Float is new Prunt.Moving_Averages (Float);
    package Moving_Averages_Float_Test is new Moving_Averages_Float.Test;
    package Moving_Averages_Long_Float is new Prunt.Moving_Averages (Long_Float);
@@ -110,6 +138,7 @@ procedure Tests is
 begin
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Kinematics_Test.All_Tests);
+   Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Long_Float_Test.All_Tests);
    Trendy_Test.Register (Prunt.Bounded_Indefinite_Queues_Test.All_Tests);

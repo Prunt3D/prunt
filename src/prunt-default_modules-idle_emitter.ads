@@ -25,7 +25,6 @@ with Ada.Containers.Vectors;
 with Ada.Tags;
 with Prunt.Config;
 with Prunt.Gcode_Arguments;
-with Prunt.Limited_Shared_Pointers;
 with Prunt.Module_Types; use Prunt.Module_Types;
 with Prunt.Controller_Interfaces;
 
@@ -37,7 +36,7 @@ package Prunt.Default_Modules.Idle_Emitter is
    type Idle_Notification_Receiver is synchronized interface;
 
    procedure Idle_Start (This : in out Idle_Notification_Receiver) is abstract;
-   --  Called when command execution catches up to the last emitted command and there is no end--of-block handler
+   --  Called when command execution catches up to the last emitted command and there is no end-of-block handler
    --  running.
 
    procedure Idle_End (This : in out Idle_Notification_Receiver) is abstract;
@@ -48,8 +47,7 @@ package Prunt.Default_Modules.Idle_Emitter is
    type Idle_Notification_Emitter is limited interface;
 
    procedure Request_Idle_Notifications
-     (This     : in out Idle_Notification_Emitter;
-      Receiver : not null access function return Idle_Notification_Receiver'Class)
+     (This : in out Idle_Notification_Emitter; Receiver : My_Modules.Module_Instance_Shared_Pointers.Ref)
    is abstract;
    --  Register an idle-state receiver.
 
@@ -70,16 +68,11 @@ package Prunt.Default_Modules.Idle_Emitter is
 
 private
 
-   package Idle_Notification_Receiver_Shared_Pointers is new
-     Prunt.Limited_Shared_Pointers (Idle_Notification_Receiver'Class);
-
-   function Return_False
-     (Left, Right : Idle_Notification_Receiver_Shared_Pointers.Ref with Unreferenced) return Boolean
-   is (False);
-   --  Return False.
-
    package Idle_Notification_Receiver_Vectors is new
-     Ada.Containers.Vectors (Positive, Idle_Notification_Receiver_Shared_Pointers.Ref, "=" => Return_False);
+     Ada.Containers.Vectors
+       (Positive,
+        My_Modules.Module_Instance_Shared_Pointers.Ref,
+        "=" => My_Modules.Module_Instance_Shared_Pointers."=");
 
    overriding
    procedure Gcode_Dispatch
@@ -98,8 +91,7 @@ private
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       overriding
-      procedure Request_Idle_Notifications
-        (Receiver : not null access function return Idle_Notification_Receiver'Class);
+      procedure Request_Idle_Notifications (Receiver : My_Modules.Module_Instance_Shared_Pointers.Ref);
 
       overriding
       procedure Idle_Start;

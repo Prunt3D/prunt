@@ -234,6 +234,11 @@ private
    function Get_Current_File_Line return File_Line_Count;
    --  Return the current one-based line number within the active G-code file.
 
+   Machine_Idle_Timeout_Error : exception;
+
+   procedure Request_Machine_Idle_Timeout_Shutdown (Message : String);
+   --  Shut the controller down after an M85 timeout.
+
    package My_Default_Modules_Children is
       package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
       --  TODO: Idle emitter needs to be connected to controller idle interface.
@@ -241,7 +246,11 @@ private
       package Blocking_Tracker is new My_Default_Modules.Blocking_Tracker;
       package Config_Saving is new My_Default_Modules.Config_Saving;
       package Machine_Name is new My_Default_Modules.Machine_Name (Config_Saving_Module => Config_Saving);
-      package Machine_Idle_Timeout is new My_Default_Modules.Machine_Idle_Timeout;
+      package Machine_Idle_Timeout is new
+        My_Default_Modules.Machine_Idle_Timeout
+          (Config_Saving_Module => Config_Saving,
+           Idle_Emitter_Module  => Idle_Emitter,
+           Request_Shutdown     => Request_Machine_Idle_Timeout_Shutdown);
       package Power_Control is new My_Default_Modules.Power_Control;
       package Dwell is new My_Default_Modules.Dwell;
       package Input_Switches is new
@@ -321,6 +330,9 @@ private
       procedure Report (Index : Command_Index);
 
       function Get return Command_Index;
+
+      function Is_Idle return Boolean;
+      --  Return True when execution has caught up to every queued command.
 
       function Get_Current_Position return Position;
       --  Note that this function may return parts from different position reports. This is really only intended for
@@ -645,6 +657,61 @@ private
 
    type Cancellation_Generation_Type is mod 2 ** 64;
 
+   type Idle_Notification_Phase is (Active, Starting_Idle, Idle, Ending_Idle);
+
+   type Idle_Activity_Generation is mod 2 ** 64;
+
+   type Idle_Completion_Serial is mod 2 ** 64;
+
+   type Idle_Activity_Completion is record
+      Generation         : Idle_Activity_Generation;
+      Completion_Serial  : Idle_Completion_Serial;
+      Last_Command_Index : Command_Index;
+   end record;
+
+   protected Idle_Notification_State is
+      procedure Reset;
+      --  Discard all tracked activity and pending completions for a fresh controller run. Any completion already held
+      --  by the notification worker is invalidated by advancing the generation.
+
+      entry Begin_Activity (Notify : out Boolean);
+      --  Record the start of a planner block before it can emit commands. Notify is True only when this is the first
+      --  activity after an idle interval, in which case the caller must emit Idle_End and then call Finish_Idle_End.
+
+      procedure Finish_Idle_End;
+      --  Complete an Idle_End notification and mark the controller active.
+
+      procedure Complete_Activity (Last_Command_Index : Command_Index);
+      --  Record that a planner block and its block-end handler have finished. When this completes the outermost active
+      --  block, publish Last_Command_Index for the notification worker to wait on.
+
+      entry Abandon_Activities (Last_Command_Index : Command_Index);
+      --  Discard activities interrupted by cancellation. If the controller was active, publish Last_Command_Index as
+      --  the new completion boundary; if it was already idle, preserve the idle state without another notification.
+
+      procedure Publish_Completion_When_Inactive (Last_Command_Index : Command_Index);
+      --  Publish a completion boundary only when no planner block is active. Used to establish the initial idle state
+      --  after module startup.
+
+      entry Wait_For_Completion (Completion : out Idle_Activity_Completion);
+      --  Wait for and consume the newest completion boundary that the notification worker must observe.
+
+      procedure Begin_Idle (Completion : Idle_Activity_Completion; Notify : out Boolean);
+      --  Begin an Idle_Start transition if Completion is still the newest boundary and no activity has since started.
+      --  Notify is True only when the caller must emit Idle_Start and then call Finish_Idle.
+
+      procedure Finish_Idle;
+      --  Complete an Idle_Start notification and allow a waiting activity start to emit Idle_End.
+   private
+      Phase                    : Idle_Notification_Phase := Active;
+      Generation               : Idle_Activity_Generation := 0;
+      Active_Activity_Count    : Natural := 0;
+      Latest_Completion_Serial : Idle_Completion_Serial := 0;
+      Completion_Pending       : Boolean := False;
+      Pending_Completion       : Idle_Activity_Completion :=
+        (Generation => 0, Completion_Serial => 0, Last_Command_Index => 0);
+   end Idle_Notification_State;
+
    protected type Handler_Instances is
       procedure Load (New_Handlers : Module_Instance_Vectors.Vector);
       procedure Clear;
@@ -657,6 +724,7 @@ private
    Planner_State_Handler_Instances : Handler_Instances;
    Config_Save_Preparer_Instances  : Handler_Instances;
    Cancellation_Handler_Instances  : Handler_Instances;
+   Idle_Notification_Instances     : Handler_Instances;
    --  We use these wrappers because the instances need to be accessed from multiple threads.
 
    protected Gcode_Cancellation_Barrier is
@@ -847,5 +915,23 @@ private
       Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
       Is_Homing_Move : Boolean := False);
    --  Queue a flush that resets the selected planner's tracked and planned position to New_Position.
+
+   Pipeline_Is_Set_Up         : Boolean := False;
+   Gcode_Processor_Is_Running : Boolean := False
+   with Atomic, Volatile;
+   Current_Motor_Position_Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map :=
+     [others => [others => Length'Last]];
+   --  Runtime setup state shared between Run and package-level callbacks such as G-code cancellation.
+   --  Pipeline_Is_Set_Up tracks whether the planners and step generator have accepted Setup and can therefore be reset
+   --  or reused safely. Current_Motor_Position_Map caches the active kinematics module's Motors_To_Position table
+   --  after startup; Cancel_Gcode resets the planners and step generator without rebuilding the module tree, so it
+   --  reuses this map to restart the same mechanical mapping at the current executed position.
+   --
+   --  Length'Last is the unused axis/motor sentinel consumed by To_Motor_Position. These invalid initial maps are
+   --  overwritten before Pipeline_Is_Set_Up is set True.
+
+   procedure Notify_Activity_Start;
+
+   procedure Notify_Idle_Start (Completion : Idle_Activity_Completion);
 
 end Prunt.Controller;

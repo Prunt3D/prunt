@@ -21,6 +21,7 @@ with Ada.Containers.Ordered_Sets;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
+with Prunt.Controller_Interfaces;
 with Prunt.Gcode_Arguments;
 with VSS.Strings.Conversions;
 
@@ -28,19 +29,93 @@ package body Prunt.Controller is
 
    pragma Extensions_Allowed (On);
 
-   Pipeline_Is_Set_Up         : Boolean := False;
-   Gcode_Processor_Is_Running : Boolean := False
-   with Atomic, Volatile;
-   Current_Motor_Position_Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map :=
-     [others => [others => Length'Last]];
-   --  Runtime setup state shared between Run and package-level callbacks such as G-code cancellation.
-   --  Pipeline_Is_Set_Up tracks whether the planners and step generator have accepted Setup and can therefore be reset
-   --  or reused safely. Current_Motor_Position_Map caches the active kinematics module's Motors_To_Position table
-   --  after startup; Cancel_Gcode resets the planners and step generator without rebuilding the module tree, so it
-   --  reuses this map to restart the same mechanical mapping at the current executed position.
-   --
-   --  Length'Last is the unused axis/motor sentinel consumed by To_Motor_Position. These invalid initial maps are
-   --  overwritten before Pipeline_Is_Set_Up is set True.
+   protected body Idle_Notification_State is
+      procedure Reset is
+      begin
+         Phase := Active;
+         Generation := @ + 1;
+         Active_Activity_Count := 0;
+         Latest_Completion_Serial := @ + 1;
+         Completion_Pending := False;
+      end Reset;
+
+      entry Begin_Activity (Notify : out Boolean) when Phase /= Starting_Idle is
+      begin
+         Generation := @ + 1;
+         Active_Activity_Count := @ + 1;
+         Notify := Phase = Idle;
+         if Notify then
+            Phase := Ending_Idle;
+         end if;
+      end Begin_Activity;
+
+      procedure Finish_Idle_End is
+      begin
+         if Phase = Ending_Idle then
+            Phase := Active;
+         end if;
+      end Finish_Idle_End;
+
+      procedure Complete_Activity (Last_Command_Index : Command_Index) is
+      begin
+         if Active_Activity_Count = 0 then
+            raise Constraint_Error with "Completed idle-notification activity without a matching start.";
+         end if;
+
+         Active_Activity_Count := @ - 1;
+         if Active_Activity_Count = 0 then
+            Publish_Completion_When_Inactive (Last_Command_Index);
+         end if;
+      end Complete_Activity;
+
+      entry Abandon_Activities (Last_Command_Index : Command_Index) when Phase in Active | Idle is
+      begin
+         Generation := @ + 1;
+         Active_Activity_Count := 0;
+         Completion_Pending := False;
+
+         if Phase = Active then
+            Publish_Completion_When_Inactive (Last_Command_Index);
+         end if;
+      end Abandon_Activities;
+
+      procedure Publish_Completion_When_Inactive (Last_Command_Index : Command_Index) is
+      begin
+         if Active_Activity_Count = 0 then
+            Latest_Completion_Serial := @ + 1;
+            Pending_Completion :=
+              (Generation         => Generation,
+               Completion_Serial  => Latest_Completion_Serial,
+               Last_Command_Index => Last_Command_Index);
+            Completion_Pending := True;
+         end if;
+      end Publish_Completion_When_Inactive;
+
+      entry Wait_For_Completion (Completion : out Idle_Activity_Completion) when Completion_Pending is
+      begin
+         Completion := Pending_Completion;
+         Completion_Pending := False;
+      end Wait_For_Completion;
+
+      procedure Begin_Idle (Completion : Idle_Activity_Completion; Notify : out Boolean) is
+      begin
+         Notify :=
+           Phase = Active
+           and then Active_Activity_Count = 0
+           and then Completion.Generation = Generation
+           and then Completion.Completion_Serial = Latest_Completion_Serial;
+         if Notify then
+            Phase := Starting_Idle;
+         end if;
+      end Begin_Idle;
+
+      procedure Finish_Idle is
+      begin
+         if Phase = Starting_Idle then
+            Phase := Idle;
+         end if;
+      end Finish_Idle;
+   end Idle_Notification_State;
 
    protected body Handler_Instances is
       procedure Load (New_Handlers : Module_Instance_Vectors.Vector) is
@@ -58,6 +133,46 @@ package body Prunt.Controller is
          Result := Handlers;
       end Snapshot;
    end Handler_Instances;
+
+   procedure Notify_Activity_Start is
+      Handlers : Module_Instance_Vectors.Vector;
+      Notify   : Boolean;
+   begin
+      Idle_Notification_State.Begin_Activity (Notify);
+      if not Notify then
+         return;
+      end if;
+
+      Idle_Notification_Instances.Snapshot (Handlers);
+      for Instance of Handlers loop
+         Controller_Interfaces.Idle_Notification_Receiver'Class (Instance.Get.Element.all).Idle_End;
+      end loop;
+      Idle_Notification_State.Finish_Idle_End;
+   exception
+      when others =>
+         Idle_Notification_State.Finish_Idle_End;
+         raise;
+   end Notify_Activity_Start;
+
+   procedure Notify_Idle_Start (Completion : Idle_Activity_Completion) is
+      Handlers : Module_Instance_Vectors.Vector;
+      Notify   : Boolean;
+   begin
+      Idle_Notification_State.Begin_Idle (Completion, Notify);
+      if not Notify then
+         return;
+      end if;
+
+      Idle_Notification_Instances.Snapshot (Handlers);
+      for Instance of Handlers loop
+         Controller_Interfaces.Idle_Notification_Receiver'Class (Instance.Get.Element.all).Idle_Start;
+      end loop;
+      Idle_Notification_State.Finish_Idle;
+   exception
+      when others =>
+         Idle_Notification_State.Finish_Idle;
+         raise;
+   end Notify_Idle_Start;
 
    protected body Gcode_Cancellation_Barrier is
       entry Start_Cancellation when not Cancellation_Active is
@@ -473,6 +588,7 @@ package body Prunt.Controller is
          Pause_Planner_State.Reset;
          Pause_Default_State.Reset;
          Last_Command_Executed.Reset (Startup_Position);
+         Idle_Notification_State.Reset;
          My_Gcode_Queue.Cancel_All;
       end Reset_Runtime_State;
 
@@ -553,10 +669,18 @@ package body Prunt.Controller is
                       Active_Module_Instances
                       when Instance.Get.Element.all in Cancellation_Handler'Class =>
                     Instance]);
+            Idle_Notification_Instances.Load
+              (Module_Instance_Vectors.Vector'
+                 [for Instance of
+                      Active_Module_Instances
+                      when Instance.Get.Element.all in Controller_Interfaces.Idle_Notification_Receiver'Class =>
+                    Instance]);
 
             for M of Active_Module_Instances loop
                My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
             end loop;
+
+            Idle_Notification_State.Publish_Completion_When_Inactive (Last_Command_Executed.Get);
 
             Started := True;
          end if;
@@ -573,6 +697,7 @@ package body Prunt.Controller is
          Planner_State_Handler_Instances.Clear;
          Config_Save_Preparer_Instances.Clear;
          Cancellation_Handler_Instances.Clear;
+         Idle_Notification_Instances.Clear;
          Active_Module_Instances.Reverse_Clear;
       end Clear_Active_Modules;
 
@@ -805,6 +930,7 @@ package body Prunt.Controller is
                protected Catch_Up_Stop is
                   procedure Stop;
                   function Stopped return Boolean;
+                  entry Wait_Until_Stopped;
                private
                   Stop_Requested : Boolean := False;
                end Catch_Up_Stop;
@@ -819,9 +945,15 @@ package body Prunt.Controller is
                   begin
                      return Stop_Requested;
                   end Stopped;
+
+                  entry Wait_Until_Stopped when Stop_Requested is
+                  begin
+                     null;
+                  end Wait_Until_Stopped;
                end Catch_Up_Stop;
 
                task Gcode_Processor;
+               task Idle_Notification_Worker;
                task Planner_State_Catch_Up;
 
                task body Gcode_Processor is
@@ -835,6 +967,32 @@ package body Prunt.Controller is
                      Exception_Occurrence_Holder.all.Set_Fatal
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Gcode_Processor;
+
+               task body Idle_Notification_Worker is
+                  Completion : Idle_Activity_Completion;
+               begin
+                  loop
+                     select
+                        Catch_Up_Stop.Wait_Until_Stopped;
+                        exit;
+                     then abort
+                        Idle_Notification_State.Wait_For_Completion (Completion);
+                     end select;
+
+                     select
+                        Catch_Up_Stop.Wait_Until_Stopped;
+                        exit;
+                     then abort
+                        Wait_Until_Idle (Completion.Last_Command_Index);
+                     end select;
+
+                     Notify_Idle_Start (Completion);
+                  end loop;
+               exception
+                  when E : others =>
+                     Exception_Occurrence_Holder.all.Set_Fatal
+                       (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+               end Idle_Notification_Worker;
 
                task body Planner_State_Catch_Up is
                begin
@@ -894,6 +1052,17 @@ package body Prunt.Controller is
            (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
       end if;
    end Report_External_Error;
+
+   procedure Request_Machine_Idle_Timeout_Shutdown (Message : String) is
+   begin
+      begin
+         raise Machine_Idle_Timeout_Error with Message;
+      exception
+         when E : Machine_Idle_Timeout_Error =>
+            Exception_Occurrence_Holder.all.Set_Fatal
+              (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
+      end;
+   end Request_Machine_Idle_Timeout_Shutdown;
 
    function Last_Error_Message return String is
       Occurrence : Ada.Exceptions.Exception_Occurrence;
@@ -1322,6 +1491,7 @@ package body Prunt.Controller is
          My_Pause_Motion_Planner.Reset;
 
          Last_Command_Executed.Reset (Current_Position);
+         Idle_Notification_State.Abandon_Activities (Last_Command_Executed.Get);
 
          Setup_Planner_Runners (Params, Current_Motor_Position_Map);
 
@@ -1425,12 +1595,11 @@ package body Prunt.Controller is
    end Is_Pause_Plan_Done;
 
    procedure Start_Planner_Block
-     (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index) is
+     (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index)
+   is
+      pragma Unreferenced (Resetting_Data, Last_Command_Index);
    begin
-      null;
-      --  if not Resetting_Data.Is_Empty then
-      --     Resetting_Data.Element.Process_Before_Block (Last_Command_Index);
-      --  end if;
+      Notify_Activity_Start;
    end Start_Planner_Block;
 
    procedure Enqueue_Command_Internal
@@ -1473,6 +1642,7 @@ package body Prunt.Controller is
       end if;
 
       Reset_Position (Next_Block_Pos);
+      Idle_Notification_State.Complete_Activity (Last_Command_Index);
    end Finish_Planner_Block;
 
    procedure Report_Last_Command_Executed (Index : Command_Index) is
@@ -1624,6 +1794,11 @@ package body Prunt.Controller is
       begin
          return Command_Index (Last_Command_Executed_Index);
       end Get;
+
+      function Is_Idle return Boolean is
+      begin
+         return Pending_Position_Read_Slot = Pending_Position_Write_Slot;
+      end Is_Idle;
 
       function Get_Current_Position return Position is
       begin
