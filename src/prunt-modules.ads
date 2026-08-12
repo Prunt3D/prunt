@@ -33,8 +33,8 @@ package Prunt.Modules is
 
    type Module is abstract tagged private;
 
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema
-   is (Version => 1, Top_Level_Items => []);
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class
+   is (Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => []));
    --  Return this module's versioned configuration schema, or an empty version-one schema by default.
 
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector

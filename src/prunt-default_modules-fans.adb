@@ -79,9 +79,9 @@ package body Prunt.Default_Modules.Fans is
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
    overriding
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
-      return (Version => 1, Top_Level_Items => Build_Schema);
+      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding

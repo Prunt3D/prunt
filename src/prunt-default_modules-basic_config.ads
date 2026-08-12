@@ -30,7 +30,7 @@ package Prunt.Default_Modules.Basic_Config is
    type Module is new My_Modules.Module with null record;
 
    overriding
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class;
    --  Return the versioned configuration schema for the basic Prunt settings.
 
    type Module_Instance_Interface is synchronized interface;

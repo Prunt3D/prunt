@@ -86,7 +86,7 @@ package Prunt.Default_Modules.Homing is
    end record;
 
    overriding
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class;
    --  Return the configuration schema.
 
    overriding

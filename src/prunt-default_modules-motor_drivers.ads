@@ -35,7 +35,7 @@ package Prunt.Default_Modules.Motor_Drivers is
    type Module is new My_Modules.Module with null record;
 
    overriding
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema;
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class;
    --  Return the configuration schema.
 
    overriding

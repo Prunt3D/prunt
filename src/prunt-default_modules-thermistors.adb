@@ -161,9 +161,9 @@ package body Prunt.Default_Modules.Thermistors is
    end To_Thermistor_Parameters;
 
    overriding
-   function Config_Schema (This : Module) return Config.Versioned_Config_Schema is
+   function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
-      return (Version => 1, Top_Level_Items => Build_Schema);
+      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding
