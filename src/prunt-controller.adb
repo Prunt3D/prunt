@@ -565,11 +565,11 @@ package body Prunt.Controller is
       procedure Handle_Reload_Request (Modules_Started : Boolean);
       --  Reset runtime and configuration state after a reload request.
 
-      procedure Handle_Fatal_Error (Modules_Started : Boolean);
-      --  Wait for a fatal error, then tear runtime state down for shutdown.
+      procedure Handle_Error (Modules_Started : Boolean; Is_Fatal : out Boolean);
+      --  Wait for an error, report its severity, and soft-halt the runtime.
 
-      procedure Wait_For_Reload_Or_Fatal (Modules_Started : Boolean; Exit_Main : out Boolean);
-      --  Wait for either a reload request or a fatal error.
+      procedure Wait_For_Reload_Or_Error (Modules_Started : Boolean; Exit_Main : out Boolean);
+      --  Wait for either a reload request or an error.
 
       procedure Wait_For_Run_End (Started : Boolean; Exit_Main : out Boolean);
       --  Wait for the current controller run to end, starting the G-code processor when needed.
@@ -579,8 +579,7 @@ package body Prunt.Controller is
          if Pipeline_Is_Set_Up then
             My_Motion_Planner.Reset;
             My_Pause_Motion_Planner.Reset;
-            My_Step_Generator.Pause;
-            My_Step_Generator.Reset;
+            My_Step_Generator.Soft_Halt;
             Pipeline_Is_Set_Up := False;
          end if;
 
@@ -897,9 +896,11 @@ package body Prunt.Controller is
          My_Web_Server.Reset;
       end Handle_Reload_Request;
 
-      procedure Handle_Fatal_Error (Modules_Started : Boolean) is
+      procedure Handle_Error (Modules_Started : Boolean; Is_Fatal : out Boolean) is
+         Occurrence : Ada.Exceptions.Exception_Occurrence;
+         pragma Unreferenced (Occurrence);
       begin
-         Exception_Occurrence_Holder.Enter_When_Fatal_Set;
+         Exception_Occurrence_Holder.Get (Occurrence, Is_Fatal);
 
          if Modules_Started then
             My_Gcode_Queue.Stop_Waiting;
@@ -910,19 +911,35 @@ package body Prunt.Controller is
          if Modules_Started then
             Clear_Active_Modules;
          end if;
-      end Handle_Fatal_Error;
+      end Handle_Error;
 
-      procedure Wait_For_Reload_Or_Fatal (Modules_Started : Boolean; Exit_Main : out Boolean) is
+      procedure Wait_For_Reload_Or_Error (Modules_Started : Boolean; Exit_Main : out Boolean) is
+         Recoverable_Error_Handled : Boolean := False;
+         Is_Fatal                  : Boolean;
       begin
          select
             Reload_Signal.Wait;
             Handle_Reload_Request (Modules_Started);
             Exit_Main := False;
          then abort
-            Handle_Fatal_Error (Modules_Started);
-            Exit_Main := True;
+            Handle_Error (Modules_Started, Is_Fatal);
+            Exit_Main := Is_Fatal;
+            Recoverable_Error_Handled := not Is_Fatal;
          end select;
-      end Wait_For_Reload_Or_Fatal;
+
+         if Recoverable_Error_Handled then
+            --  The machine is stopped but the web server remains available so the user can request an in-process
+            --  reload. A fatal error reported while waiting still takes precedence and shuts the controller down.
+            select
+               Reload_Signal.Wait;
+               Handle_Reload_Request (Modules_Started => False);
+               Exit_Main := False;
+            then abort
+               Exception_Occurrence_Holder.Enter_When_Fatal_Set;
+               Exit_Main := True;
+            end select;
+         end if;
+      end Wait_For_Reload_Or_Error;
 
       procedure Wait_For_Run_End (Started : Boolean; Exit_Main : out Boolean) is
       begin
@@ -1008,11 +1025,11 @@ package body Prunt.Controller is
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Planner_State_Catch_Up;
             begin
-               Wait_For_Reload_Or_Fatal (Modules_Started => True, Exit_Main => Exit_Main);
+               Wait_For_Reload_Or_Error (Modules_Started => True, Exit_Main => Exit_Main);
                Catch_Up_Stop.Stop;
             end;
          else
-            Wait_For_Reload_Or_Fatal (Modules_Started => False, Exit_Main => Exit_Main);
+            Wait_For_Reload_Or_Error (Modules_Started => False, Exit_Main => Exit_Main);
          end if;
       end Wait_For_Run_End;
 

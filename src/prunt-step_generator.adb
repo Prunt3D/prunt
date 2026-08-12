@@ -86,7 +86,34 @@ package body Prunt.Step_Generator is
       end Wait_For_Acknowledgement;
    end Reset_Control;
 
+   protected Halt_Control is
+      procedure Request;
+      procedure Acknowledge;
+      entry Wait_For_Acknowledgement;
+   private
+      Halt_Acknowledged : Boolean := False;
+   end Halt_Control;
+
+   protected body Halt_Control is
+      procedure Request is
+      begin
+         Halt_Acknowledged := False;
+      end Request;
+
+      procedure Acknowledge is
+      begin
+         Halt_Acknowledged := True;
+      end Acknowledge;
+
+      entry Wait_For_Acknowledgement when Halt_Acknowledged is
+      begin
+         null;
+      end Wait_For_Acknowledgement;
+   end Halt_Control;
+
    Do_Pause : Boolean := False
+   with Atomic, Volatile;
+   Do_Halt  : Boolean := False
    with Atomic, Volatile;
    Paused   : Boolean := False
    with Atomic, Volatile;
@@ -113,6 +140,28 @@ package body Prunt.Step_Generator is
       end loop;
    end Reset;
 
+   procedure Soft_Halt is
+   begin
+      Halt_Control.Request;
+      Do_Halt := True;
+      Do_Pause := True;
+
+      loop
+         select
+            Halt_Control.Wait_For_Acknowledgement;
+            exit;
+         or
+            delay 0.1;
+
+            if Runner'Terminated then
+               exit;
+            end if;
+         end select;
+      end loop;
+
+      Reset;
+   end Soft_Halt;
+
    procedure Pause is
    begin
       Do_Pause := True;
@@ -120,7 +169,9 @@ package body Prunt.Step_Generator is
 
    procedure Resume is
    begin
-      Do_Pause := False;
+      if not Do_Halt then
+         Do_Pause := False;
+      end if;
    end Resume;
 
    function Is_Paused return Boolean is
@@ -310,7 +361,7 @@ package body Prunt.Step_Generator is
 
       function Primary_Pause_Requested return Boolean is
       begin
-         return Do_Pause;
+         return Do_Pause or else Do_Halt;
       end Primary_Pause_Requested;
 
       procedure Publish_Primary_Corner_ID (Corner_ID : Planner_Corner_ID) is
@@ -356,8 +407,21 @@ package body Prunt.Step_Generator is
          Stable_Pause_Position : constant Position := Pause_Position;
          --  Implicit pass-by-reference was a mistake.
 
+         procedure Enter_Halted_State;
          procedure Execute_Pause_Plan (Resume_Plan : Boolean);
          procedure Wait_For_Resume;
+
+         procedure Enter_Halted_State is
+         begin
+            Wait_Until_Idle (Commands.Current_Command_Index);
+            Halt_Control.Acknowledge;
+
+            loop
+               Check_Reset (Reset_Requested);
+               exit when Reset_Requested;
+               delay 0.1;
+            end loop;
+         end Enter_Halted_State;
 
          procedure Execute_Pause_Plan (Resume_Plan : Boolean) is
          begin
@@ -388,7 +452,7 @@ package body Prunt.Step_Generator is
                   return;
                end if;
 
-               exit when not Do_Pause;
+               exit when Do_Halt or else not Do_Pause;
 
                delay 0.1;
             end loop;
@@ -396,13 +460,29 @@ package body Prunt.Step_Generator is
       begin
          Reset_Requested := False;
          Paused := True;
+
+         if Do_Halt then
+            Enter_Halted_State;
+            return;
+         end if;
+
          Execute_Pause_Plan (Resume_Plan => False);
          if Reset_Requested then
             return;
          end if;
 
+         if Do_Halt then
+            Enter_Halted_State;
+            return;
+         end if;
+
          Wait_For_Resume;
          if Reset_Requested then
+            return;
+         end if;
+
+         if Do_Halt then
+            Enter_Halted_State;
             return;
          end if;
 
@@ -425,6 +505,7 @@ package body Prunt.Step_Generator is
       loop
          Paused := False;
          Do_Pause := False;
+         Do_Halt := False;
          Reset_Control.Acknowledge;
          Commands.Last_Queued_Position := [others => Zero_Length];
 

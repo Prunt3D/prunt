@@ -85,6 +85,9 @@ generic
 
    with procedure Handle_Resume (Pause_Position : Position; Last_Command_Index : Command_Index);
 
+   with procedure Wait_Until_Idle (Last_Command_Index : Command_Index);
+   --  Block until the hardware has executed through Last_Command_Index.
+
    pragma Warnings (Off, "formal object ""Loop_Cycle_Reporter"" is not referenced");
    Loop_Cycle_Reporter : access Loop_Cycle_Reporter_Interface'Class;
    pragma Warnings (On, "formal object ""Loop_Cycle_Reporter"" is not referenced");
@@ -113,11 +116,15 @@ package Prunt.Step_Generator is
    procedure Reset;
    --  Reset the step generator state. This should be called when the machine is disabled or reset.
 
+   procedure Soft_Halt;
+   --  Slew to a safe stop, wait for the hardware to execute the stop, and reset the step generator. This blocks until
+   --  the halt is complete.
+
    procedure Pause;
    --  Request the step generator to pause execution. This call is non-blocking. Use Is_Paused to check if the pause
    --  has taken effect.
    procedure Resume;
-   --  Request the step generator to resume execution from a paused state.
+   --  Request the step generator to resume execution from a paused state. Ignored while a soft halt is active.
    function Is_Paused return Boolean;
    --  Returns True if the step generator is currently fully paused.
 

@@ -172,10 +172,12 @@ package Prunt.Controller is
    --  Report the number of iterations completed by the loop move identified by Index.
 
    procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
-   --  Report an error to Prunt and cause the printer to halt.
+   --  Report an error to Prunt and soft-halt the printer. Recoverable errors allow an in-process reload; fatal errors
+   --  require the controller process to be restarted.
 
    procedure Report_External_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean := True);
-   --  Report an error to Prunt and cause the printer to halt.
+   --  Report an error to Prunt and soft-halt the printer. Recoverable errors allow an in-process reload; fatal errors
+   --  require the controller process to be restarted.
 
    function Last_Error_Message return String;
    --  Return the stored controller error message, or an empty string if no error has been stored.
@@ -572,6 +574,7 @@ private
         Is_Pause_Plan_Done         => Is_Pause_Plan_Done,
         Handle_Pause               => Handle_Pause,
         Handle_Resume              => Handle_Resume,
+        Wait_Until_Idle            => Wait_Until_Idle,
         Loop_Cycle_Reporter        => Loop_Move_Cycles'Access,
         Interpolation_Time         => Interpolation_Time,
         Runner_CPU                 => Step_Generator_CPU);
