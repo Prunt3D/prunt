@@ -759,9 +759,7 @@ package body Prunt.Motion_Planner.Planner is
       Result : Projection_Coefficients := [others => 0.0 / mm];
    begin
       for A in Axis_Name loop
-         if Motor_Map (A, Motor) /= Length'Last then
-            Result (A) := 1.0 / Motor_Map (A, Motor);
-         end if;
+         Result (A) := Motor_Map (A, Motor);
       end loop;
 
       return Result;
@@ -957,7 +955,7 @@ package body Prunt.Motion_Planner.Planner is
       Workspace             : constant Planning_Workspace_Access := new Planning_Workspace;
 
       Reset_Called      : Boolean := False;
-      Current_Motor_Map : Motor_Position_Map := [others => [others => Length'Last]];
+      Current_Motor_Map : Motor_Position_Map := [others => [others => 0.0 / mm]];
    begin
       loop
          accept Setup (In_Params : Kinematic_Parameters; In_Motor_Map : Motor_Position_Map) do

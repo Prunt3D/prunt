@@ -25,7 +25,7 @@ package body Prunt.Motion_Planner.Planner_Primitive_Jet_Test is
    pragma Extensions_Allowed (On);
 
    type Test_Motor_Name is range 1 .. 1;
-   type Test_Motor_Position_Map is array (Axis_Name, Test_Motor_Name) of Length;
+   type Test_Motor_Position_Map is array (Axis_Name, Test_Motor_Name) of Curvature;
    type Test_Motor_Delta_Limits is array (Test_Motor_Name) of Dimensionless;
    type Test_Flush_Resetting_Data is null record;
    type Test_Corner_Extra_Data is null record;

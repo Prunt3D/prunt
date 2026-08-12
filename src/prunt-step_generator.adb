@@ -189,10 +189,7 @@ package body Prunt.Step_Generator is
    begin
       for M in Motor_Name loop
          for A in Axis_Name loop
-            --  TODO: Use multiplication for the map instead of division so we don't need this check.
-            if Map (A, M) /= Length'Last then
-               Ret (M) := Ret (M) + Pos (A) / Map (A, M);
-            end if;
+            Ret (M) := Ret (M) + Pos (A) * Map (A, M);
          end loop;
       end loop;
 
@@ -215,7 +212,7 @@ package body Prunt.Step_Generator is
             Has_Catch_Up_Axis : Boolean := False;
          begin
             for Axis in Axis_Name loop
-               if Map (Axis, Motor) /= Length'Last then
+               if Map (Axis, Motor) /= 0.0 / mm then
                   if Catch_Up_Axes (Axis) then
                      Catch_Up_Axis := Axis;
                      Has_Catch_Up_Axis := True;

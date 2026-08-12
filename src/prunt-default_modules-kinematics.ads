@@ -47,11 +47,11 @@ package Prunt.Default_Modules.Kinematics is
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
    --  Return the supported G-code commands.
 
-   type Motor_Position_Map is array (Axis_Name, Motor_Name) of Length;
+   type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
 
    type Motion_Planner_Configuration is record
       Parameters         : Motion_Planner.Kinematic_Parameters;
-      Motors_To_Position : Motor_Position_Map := [others => [others => Length'Last]];
+      Motors_To_Position : Motor_Position_Map := [others => [others => 0.0 / mm]];
    end record;
 
    type Module_Instance_Interface is synchronized interface;

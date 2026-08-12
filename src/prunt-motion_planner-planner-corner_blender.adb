@@ -326,12 +326,10 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                   Norm_Squared_Upper : Curvature_To_2 := 0.0 / mm ** 2;
                begin
                   for A in Axis_Name loop
-                     if Motor_Map (A, M) = 0.0 * mm then
-                        return 0.0 * mm;
-                     elsif Motor_Map (A, M) /= Length'Last then
+                     if Motor_Map (A, M) /= 0.0 / mm then
                         Has_Relevant_Motor := True;
                         declare
-                           Coefficient_Upper : constant Curvature := Round_Curvature_Up (abs (1.0 / Motor_Map (A, M)));
+                           Coefficient_Upper : constant Curvature := Round_Curvature_Up (abs Motor_Map (A, M));
                            Square_Upper      : constant Curvature_To_2 :=
                              Curvature_To_2'Adjacent (Coefficient_Upper ** 2, Curvature_To_2'Last);
                         begin

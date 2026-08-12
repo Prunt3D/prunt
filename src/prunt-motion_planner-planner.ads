@@ -86,7 +86,7 @@ pragma Warnings (Off, "formal object * is not referenced");
 generic
    type Motor_Name is (<>);
 
-   type Motor_Position_Map is array (Axis_Name, Motor_Name) of Length;
+   type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
 
    type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
 

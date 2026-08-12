@@ -30,7 +30,7 @@ procedure Benchy_Planner_Time is
    Gcode_Path : constant String := "../prunt_simulator/uploads/benchy.gcode";
 
    type Motor_Name is (X_Motor, Y_Motor, Z_Motor, E_Motor);
-   type Motor_Position_Map is array (Axis_Name, Motor_Name) of Length;
+   type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
    type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
 
    package Planner is new
@@ -70,10 +70,10 @@ procedure Benchy_Planner_Time is
       Axial_Shapers            => [others => (Kind => Prunt.Input_Shapers.No_Shaper)]);
 
    Motor_Map : constant Motor_Position_Map :=
-     [X_Axis => [X_Motor => 1.0 * mm, others => Length'Last],
-      Y_Axis => [Y_Motor => 1.0 * mm, others => Length'Last],
-      Z_Axis => [Z_Motor => 1.0 * mm, others => Length'Last],
-      E_Axis => [E_Motor => 1.0 * mm, others => Length'Last]];
+     [X_Axis => [X_Motor => 1.0 / mm, others => 0.0 / mm],
+      Y_Axis => [Y_Motor => 1.0 / mm, others => 0.0 / mm],
+      Z_Axis => [Z_Motor => 1.0 / mm, others => 0.0 / mm],
+      E_Axis => [E_Motor => 1.0 / mm, others => 0.0 / mm]];
 
    function Has_Value (Line : String; Letter : Character) return Boolean;
    function Value_Of (Line : String; Letter : Character) return Long_Float;

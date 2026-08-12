@@ -923,15 +923,14 @@ private
    Gcode_Processor_Is_Running : Boolean := False
    with Atomic, Volatile;
    Current_Motor_Position_Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map :=
-     [others => [others => Length'Last]];
+     [others => [others => 0.0 / mm]];
    --  Runtime setup state shared between Run and package-level callbacks such as G-code cancellation.
    --  Pipeline_Is_Set_Up tracks whether the planners and step generator have accepted Setup and can therefore be reset
    --  or reused safely. Current_Motor_Position_Map caches the active kinematics module's Motors_To_Position table
    --  after startup; Cancel_Gcode resets the planners and step generator without rebuilding the module tree, so it
    --  reuses this map to restart the same mechanical mapping at the current executed position.
    --
-   --  Length'Last is the unused axis/motor sentinel consumed by To_Motor_Position. These invalid initial maps are
-   --  overwritten before Pipeline_Is_Set_Up is set True.
+   --  These empty initial maps are overwritten before Pipeline_Is_Set_Up is set True.
 
    procedure Notify_Activity_Start;
 

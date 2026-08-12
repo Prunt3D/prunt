@@ -239,7 +239,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
    procedure Test_Early_Limiter_Helix_Ignore_E (T : in out Trendy_Test.Operation'Class) is
       Block     : aliased Execution_Block (2);
-      Motor_Map : constant Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
       Radius    : constant Length := 10.0 * mm;
       Start_Pos : constant Position :=
         [X_Axis => Radius, Y_Axis => 0.0 * mm, Z_Axis => 0.0 * mm, E_Axis => 0.0 * mm];
@@ -278,7 +278,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
    procedure Test_Early_Limiter_Uses_Executed_Distance (T : in out Trendy_Test.Operation'Class) is
       Block             : aliased Execution_Block (2);
-      Motor_Map         : constant Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map         : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
       Retained_Distance : constant Length := 0.5 * mm;
       Expected_Limit    : constant Velocity := Retained_Distance / Interpolation_Time;
    begin
@@ -363,7 +363,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
    procedure Test_Analytical_Shaper_Motor_Bound (T : in out Trendy_Test.Operation'Class) is
       Params       : Kinematic_Parameters := (others => <>);
-      Motor_Map    : Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map    : Motor_Position_Map := [others => [others => 0.0 / mm]];
       ZV_Parameters : constant Input_Shapers.Shaper_Parameters :=
         (Kind                            => Input_Shapers.Zero_Vibration,
          Zero_Vibration_Frequency        => 50.0 * hertz,
@@ -376,8 +376,8 @@ package body Prunt.Motion_Planner.Planner.Test is
    begin
       T.Register;
 
-      Motor_Map (X_Axis, Motor_Name'First) := 1.0 * mm;
-      Motor_Map (Y_Axis, Motor_Name'First) := 1.0 * mm;
+      Motor_Map (X_Axis, Motor_Name'First) := 1.0 / mm;
+      Motor_Map (Y_Axis, Motor_Name'First) := 1.0 / mm;
       Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];
       Raw_Ceiling := Motor_Delta_Ceiling_For_Projection (Params, Motor_Map, 1.0E6 * mm / s);
 
@@ -408,8 +408,8 @@ package body Prunt.Motion_Planner.Planner.Test is
         (Matched_Ceiling = Raw_Ceiling,
          "Identical coupled-axis shapers retain the existing motor projection ceiling");
 
-      Motor_Map := [others => [others => Length'Last]];
-      Motor_Map (X_Axis, Motor_Name'First) := 1.0E-200 * mm;
+      Motor_Map := [others => [others => 0.0 / mm]];
+      Motor_Map (X_Axis, Motor_Name'First) := 1.0E200 / mm;
       Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];
       T.Assert
         (Motor_Delta_Ceiling_For_Projection (Params, Motor_Map, 1.0 * mm / s) > 0.0 * mm / s,
@@ -445,7 +445,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
       Block     : constant Block_Access := new Execution_Block (3);
       Workspace : constant Workspace_Access := new Planning_Workspace;
-      Motor_Map : Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map : Motor_Position_Map := [others => [others => 0.0 / mm]];
       Deviation : constant Axial_Deviation_Limits := [others => 100.0 * mm];
 
       procedure Assert_Dispatched
@@ -478,7 +478,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Corners (2) := [others => 0.0 * mm];
       Block.Corners (3) := [Y_Axis => 20.0 * mm, others => 0.0 * mm];
       Block.Primitives := [others => Make_Line_Primitive];
-      Motor_Map (X_Axis, Motor_Name'First) := 1.0 * mm;
+      Motor_Map (X_Axis, Motor_Name'First) := 1.0 / mm;
 
       Block.Params.Cornering := (others => <>);
       Assert_Dispatched (Stereographic_Transition, "Default stereographic", T);
@@ -594,7 +594,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
       Block     : constant Block_Access := new Execution_Block (3);
       Workspace : constant Workspace_Access := new Planning_Workspace;
-      Motor_Map : constant Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
       Radius    : constant Length := 20.0 * mm;
       Deviation : constant Axial_Deviation_Limits := [others => 100.0 * mm];
 
@@ -810,7 +810,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
       Block     : constant Block_Access := new Execution_Block (3);
       Workspace : constant Workspace_Access := new Planning_Workspace;
-      Motor_Map : Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map : Motor_Position_Map := [others => [others => 0.0 / mm]];
       Deviation : constant Axial_Deviation_Limits := [others => 100.0 * mm];
       Max_Vel   : constant Velocity := 1.0E6 * mm / s;
    begin
@@ -830,7 +830,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          2 => [others => 0.0 * mm],
          3 => [Y_Axis => 20.0 * mm, others => 0.0 * mm]];
       Block.Primitives := [others => Make_Line_Primitive];
-      Motor_Map (X_Axis, Motor_Name'First) := 1.0 * mm;
+      Motor_Map (X_Axis, Motor_Name'First) := 1.0 / mm;
 
       Tested_Corner_Blender.Run (Block.all, Motor_Map, Workspace);
       T.Assert
@@ -879,7 +879,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
       Block     : constant Block_Access := new Execution_Block (3);
       Workspace : constant Workspace_Access := new Planning_Workspace;
-      Motor_Map : constant Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
       Deviation : constant Axial_Deviation_Limits := [others => 100.0 * mm];
       Full_Incoming_Trim, Bounded_Incoming_Trim : Length;
       Full_Outgoing_Trim, Bounded_Outgoing_Trim : Length;
@@ -1058,7 +1058,7 @@ package body Prunt.Motion_Planner.Planner.Test is
 
       Block     : constant Block_Access := new Execution_Block (3);
       Workspace : constant Workspace_Access := new Planning_Workspace;
-      Motor_Map : Motor_Position_Map := [others => [others => Length'Last]];
+      Motor_Map : Motor_Position_Map := [others => [others => 0.0 / mm]];
       Limits    : constant Axial_Deviation_Limits :=
         [X_Axis => 0.12 * mm,
          Y_Axis => 0.50 * mm,
@@ -1075,7 +1075,7 @@ package body Prunt.Motion_Planner.Planner.Test is
             Corner_Miss_Distance_Max => 100.0 * mm,
             Shape_Bias               => 1.0,
             Circularity              => 0.0));
-      Motor_Map (X_Axis, Motor_Name'First) := 1.0 * mm;
+      Motor_Map (X_Axis, Motor_Name'First) := 1.0 / mm;
       Block.Corners (1) := [X_Axis => -20.0 * mm, others => 0.0 * mm];
       Block.Corners (2) := [others => 0.0 * mm];
       Block.Corners (3) := [Y_Axis => 20.0 * mm, others => 0.0 * mm];

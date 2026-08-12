@@ -24,9 +24,9 @@ package body Prunt.Default_Modules.Kinematics is
    function Map_Axis_Is_Motor_Separable (Map : Motor_Position_Map; Axis : Axis_Name) return Boolean is
    begin
       for Motor in Motor_Name loop
-         if Map (Axis, Motor) /= Length'Last then
+         if Map (Axis, Motor) /= 0.0 / mm then
             for Other_Axis in Axis_Name loop
-               if Other_Axis /= Axis and then Map (Other_Axis, Motor) /= Length'Last then
+               if Other_Axis /= Axis and then Map (Other_Axis, Motor) /= 0.0 / mm then
                   return False;
                end if;
             end loop;
@@ -126,11 +126,12 @@ package body Prunt.Default_Modules.Kinematics is
               Axial_Crackle_Maxes      => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
               Cornering                => Build_Cornering_Parameters (Config.Kinematics.Cornering),
               Axial_Shapers            => <>),
-         Motors_To_Position => [others => [others => Length'Last]]);
+         Motors_To_Position => [others => [others => 0.0 / mm]]);
    begin
       for M in Motor_Name loop
          declare
-            Distance_Per_Unit : constant Length := Motor_Drivers_Module_Instance.Distance_Per_Unit (M);
+            Distance_Per_Unit  : constant Length := Motor_Drivers_Module_Instance.Distance_Per_Unit (M);
+            Units_Per_Distance : constant Curvature := 1.0 / Distance_Per_Unit;
          begin
             case Config.Kinematics.Kinematics_Kind.Kind is
                when Cartesian =>
@@ -139,16 +140,16 @@ package body Prunt.Default_Modules.Kinematics is
                         null;
 
                      when X_Axis =>
-                        Result.Motors_To_Position (X_Axis, M) := Distance_Per_Unit;
+                        Result.Motors_To_Position (X_Axis, M) := Units_Per_Distance;
 
                      when Y_Axis =>
-                        Result.Motors_To_Position (Y_Axis, M) := Distance_Per_Unit;
+                        Result.Motors_To_Position (Y_Axis, M) := Units_Per_Distance;
 
                      when Z_Axis =>
-                        Result.Motors_To_Position (Z_Axis, M) := Distance_Per_Unit;
+                        Result.Motors_To_Position (Z_Axis, M) := Units_Per_Distance;
 
                      when E_Axis =>
-                        Result.Motors_To_Position (E_Axis, M) := Distance_Per_Unit;
+                        Result.Motors_To_Position (E_Axis, M) := Units_Per_Distance;
                   end case;
 
                when Core_XY   =>
@@ -157,18 +158,18 @@ package body Prunt.Default_Modules.Kinematics is
                         null;
 
                      when A_Axis =>
-                        Result.Motors_To_Position (X_Axis, M) := Distance_Per_Unit;
-                        Result.Motors_To_Position (Y_Axis, M) := Distance_Per_Unit;
+                        Result.Motors_To_Position (X_Axis, M) := Units_Per_Distance;
+                        Result.Motors_To_Position (Y_Axis, M) := Units_Per_Distance;
 
                      when B_Axis =>
-                        Result.Motors_To_Position (X_Axis, M) := Distance_Per_Unit;
-                        Result.Motors_To_Position (Y_Axis, M) := -Distance_Per_Unit;
+                        Result.Motors_To_Position (X_Axis, M) := Units_Per_Distance;
+                        Result.Motors_To_Position (Y_Axis, M) := -Units_Per_Distance;
 
                      when Z_Axis =>
-                        Result.Motors_To_Position (Z_Axis, M) := Distance_Per_Unit;
+                        Result.Motors_To_Position (Z_Axis, M) := Units_Per_Distance;
 
                      when E_Axis =>
-                        Result.Motors_To_Position (E_Axis, M) := Distance_Per_Unit;
+                        Result.Motors_To_Position (E_Axis, M) := Units_Per_Distance;
                   end case;
             end case;
          end;

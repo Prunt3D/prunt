@@ -100,7 +100,7 @@ generic
 package Prunt.Step_Generator is
    use Planner;
 
-   type Motor_Pos_Map is array (Axis_Name, Motor_Name) of Length;
+   type Motor_Pos_Map is array (Axis_Name, Motor_Name) of Curvature;
 
    task Runner
      with
