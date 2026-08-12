@@ -1059,7 +1059,7 @@ package body Prunt.Controller is
          raise Machine_Idle_Timeout_Error with Message;
       exception
          when E : Machine_Idle_Timeout_Error =>
-            Exception_Occurrence_Holder.all.Set_Fatal
+            Exception_Occurrence_Holder.all.Set_Recoverable
               (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
       end;
    end Request_Machine_Idle_Timeout_Shutdown;

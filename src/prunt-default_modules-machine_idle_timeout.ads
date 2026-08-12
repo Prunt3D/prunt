@@ -33,7 +33,7 @@ generic
    with package Config_Saving_Module is new Default_Modules.Config_Saving;
    with package Idle_Emitter_Module is new Default_Modules.Idle_Emitter;
    with procedure Request_Shutdown (Message : String);
-   --  Request a controlled machine shutdown because the inactivity timeout expired.
+   --  Report a recoverable error because the inactivity timeout expired.
 package Prunt.Default_Modules.Machine_Idle_Timeout is
 
    type Module is new My_Modules.Module with null record;
@@ -75,8 +75,8 @@ private
       --  Configure the inactivity shutdown timer.
 
       Timeout : Time range 0.0 * s .. 1.0E12 * s := 0.0 * s;
-      --  Maximum time without queued or executing moves before Prunt shuts down and halts. Set this to zero to disable
-      --  inactivity shutdown. M85 S changes this value at runtime, and M500 persists the change.
+      --  Maximum time without queued or executing moves before Prunt reports a recoverable error. Set this to zero to
+      --  disable inactivity shutdown. M85 S changes this value at runtime, and M500 persists the change.
    end record
    with Annotate => (Prunt_Config, User_Config);
 
@@ -120,8 +120,7 @@ private
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M85");
    --  Set the maximum time the machine may remain without queued or executing moves. When the timeout expires, Prunt
-   --  shuts down the hardware and halts with a fatal error. Motion restarts the timer. Use `S0` to disable the
-   --  timeout. Saved by M500.
+   --  reports a recoverable error. Motion restarts the timer. Use `S0` to disable the timeout. Saved by M500.
 
    procedure Report_Inactivity_Shutdown
      (This     : Module_Instance;

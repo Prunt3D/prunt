@@ -237,7 +237,7 @@ private
    Machine_Idle_Timeout_Error : exception;
 
    procedure Request_Machine_Idle_Timeout_Shutdown (Message : String);
-   --  Shut the controller down after an M85 timeout.
+   --  Report a recoverable controller error after an M85 timeout.
 
    package My_Default_Modules_Children is
       package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
