@@ -1090,6 +1090,7 @@ package body Prunt.Motion_Planner.Planner is
         Segment_Total_Distance (Block, Finishing_Corner) - Prefix_Distance - Profile_Distance;
       Prefix_Time      : constant Time := Constant_Speed_Time (Prefix_Distance, Start_Vel);
       Profile_Time     : constant Time := Total_Time (Block.Feedrate_Profiles (Finishing_Corner));
+      Time_Past_Prefix : constant Time := Time_Into_Segment - Prefix_Time;
       Suffix_Time      : constant Time := Constant_Speed_Time (Suffix_Distance, End_Vel);
       Motion_Time      : constant Time := Prefix_Time + Profile_Time + Suffix_Time;
 
@@ -1117,12 +1118,15 @@ package body Prunt.Motion_Planner.Planner is
          Pos := Point_At_Segment_Distance (Block, Finishing_Corner, Start_Vel * Time_Into_Segment);
 
          return Pos;
-      elsif Time_Into_Segment <= Prefix_Time + Profile_Time then
+      elsif Time_Past_Prefix <= Profile_Time then
          declare
-            Profile_T : constant Time := Time_Into_Segment - Prefix_Time;
-            Distance  : constant Length :=
+            Distance : constant Length :=
               Distance_At_Time
-                (Block.Feedrate_Profiles (Finishing_Corner), Profile_T, Max_Crackle, Start_Vel, Is_Past_Accel_Part);
+                (Block.Feedrate_Profiles (Finishing_Corner),
+                 Time_Past_Prefix,
+                 Max_Crackle,
+                 Start_Vel,
+                 Is_Past_Accel_Part);
          begin
             Pos := Point_At_Segment_Distance (Block, Finishing_Corner, Prefix_Distance + Distance);
 
@@ -1136,7 +1140,7 @@ package body Prunt.Motion_Planner.Planner is
            Point_At_Segment_Distance
              (Block,
               Finishing_Corner,
-              Prefix_Distance + Profile_Distance + End_Vel * (Time_Into_Segment - Prefix_Time - Profile_Time));
+              Prefix_Distance + Profile_Distance + End_Vel * (Time_Past_Prefix - Profile_Time));
 
          return Pos;
       end if;
@@ -1157,6 +1161,7 @@ package body Prunt.Motion_Planner.Planner is
         Segment_Total_Distance (Block, Finishing_Corner) - Prefix_Distance - Profile_Distance;
       Prefix_Time      : constant Time := Constant_Speed_Time (Prefix_Distance, Start_Vel);
       Profile_Time     : constant Time := Total_Time (Block.Feedrate_Profiles (Finishing_Corner));
+      Profile_T        : constant Time := Time_Into_Segment - Prefix_Time;
       Suffix_Time      : constant Time := Constant_Speed_Time (Suffix_Distance, End_Vel);
       Motion_Time      : constant Time := Prefix_Time + Profile_Time + Suffix_Time;
    begin
@@ -1165,12 +1170,11 @@ package body Prunt.Motion_Planner.Planner is
          return 1.0;
       elsif Time_Into_Segment <= Prefix_Time then
          return Velocity'Max (0.0 * mm / s, Start_Vel) / Block.Original_Segment_Feedrates (Finishing_Corner);
-      elsif Time_Into_Segment <= Prefix_Time + Profile_Time then
+      elsif Profile_T <= Profile_Time then
          return
            Velocity'Max
              (0.0 * mm / s,
-              Velocity_At_Time
-                (Block.Feedrate_Profiles (Finishing_Corner), Time_Into_Segment - Prefix_Time, Max_Crackle, Start_Vel))
+              Velocity_At_Time (Block.Feedrate_Profiles (Finishing_Corner), Profile_T, Max_Crackle, Start_Vel))
            / Block.Original_Segment_Feedrates (Finishing_Corner);
       else
          return Velocity'Max (0.0 * mm / s, End_Vel) / Block.Original_Segment_Feedrates (Finishing_Corner);
