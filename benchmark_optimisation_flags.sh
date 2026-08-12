@@ -29,7 +29,7 @@ benchmark_configuration()
    printf '\nBuilding %s with: %s\n' "$configuration" "$compiler_flags"
    if ! (
       cd "$tests_dir"
-      alr build --release -- \
+      alr build --profiles=tests=release,prunt=release -- \
          -XPRUNT_BENCHMARK_MODE=enabled \
          "-XPRUNT_BENCHMARK_COMPILER_SWITCHES=$compiler_flags" \
          "--subdirs=$build_subdir" \
