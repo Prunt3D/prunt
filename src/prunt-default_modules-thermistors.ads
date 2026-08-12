@@ -92,6 +92,12 @@ private
    type User_Config_Thermistor_ATC_Semitec_104GT_2 is record
       --  Use the recommended Steinhart-Hart coefficients for the ATC Semitec 104GT-2 thermistor:
       --  A=8.0965E-4, B=2.1163E-4, C=7.0742E-8. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -272 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -99,6 +105,12 @@ private
    type User_Config_Thermistor_ATC_Semitec_104NT_4_R025H42G is record
       --  Use the recommended Steinhart-Hart coefficients for the ATC Semitec 104NT-4-R025H42G thermistor:
       --  A=7.9582E-4, B=2.1360E-4, C=6.4830E-8. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -271 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -106,6 +118,12 @@ private
    type User_Config_Thermistor_EPCOS_100K_B57560G104F is record
       --  Use the recommended Steinhart-Hart coefficients for the EPCOS 100K B57560G104F thermistor:
       --  A=7.2213E-4, B=2.1676E-4, C=8.9293E-8. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -272 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -113,6 +131,12 @@ private
    type User_Config_Thermistor_Generic_3950 is record
       --  Use the recommended Steinhart-Hart coefficients for a generic 100k thermistor with a B-value of 3950:
       --  A=7.9347E-4, B=2.0076E-4, C=1.6328E-7. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -272 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -120,6 +144,12 @@ private
    type User_Config_Thermistor_Slice_Engineering_450 is record
       --  Use the recommended Steinhart-Hart coefficients for the Slice Engineering 450 thermistor:
       --  A=3.0553E-4, B=2.1171E-4, C=1.1962E-7. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -272 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -127,6 +157,12 @@ private
    type User_Config_Thermistor_TDK_NTCG104LH104JT1 is record
       --  Use the recommended Steinhart-Hart coefficients for the TDK NTCG104LH104JT1 thermistor:
       --  A=9.7639E-4, B=1.9688E-4, C=7.2671E-8. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -272 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full
+      --  temperature range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -134,6 +170,12 @@ private
    type User_Config_Thermistor_Honeywell_100K_135_104LAG_J01 is record
       --  Use the recommended Steinhart-Hart coefficients for the Honeywell 100K 135-104LAG-J01 thermistor:
       --  A=4.5695E-4, B=2.5163E-4, C=0.0. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -256 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -141,27 +183,53 @@ private
    type User_Config_Thermistor_NTC_100K_MGB18_104F39050L32 is record
       --  Use the recommended Steinhart-Hart coefficients for the NTC 100K MGB18-104F39050L32 thermistor:
       --  A=5.4598E-4, B=2.4390E-4, C=0.0. Always verify temperature readings before using a heater.
+      --
+      --  Mathematical temperature range supported by model: -255 °C ≤ T, with no finite maximum.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Thermistor_PT_1000_PT_385 is record
-      --  Use the recommended Callendar-Van Dusen coefficients for a PT-385 class PT1000 RTD above 0 C:
+      --  Use the recommended Callendar-Van Dusen coefficients for a PT-385 class PT1000 RTD above 0 °C:
       --  R0=1000, A=3.9083E-3, B=-5.775E-7. Always verify temperature readings before use.
+      --
+      --  Mathematical temperature range supported by model: -246 °C < T ≤ 3383 °C or 3384 °C ≤ T < 7014 °C. Minimum
+      --  and maximum must be in the same range.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Thermistor_PT_1000_PT_392 is record
-      --  Use the recommended Callendar-Van Dusen coefficients for a PT-392 class PT1000 RTD above 0 C:
+      --  Use the recommended Callendar-Van Dusen coefficients for a PT-392 class PT1000 RTD above 0 °C:
       --  R0=1000, A=3.9827E-3, B=-5.875E-7. Always verify temperature readings before use.
+      --
+      --  Mathematical temperature range supported by model: -242 °C < T ≤ 3389 °C or 3390 °C ≤ T < 7021 °C. Minimum
+      --  and maximum must be in the same range.
+      --
+      --  The maximum range of the model is not the same as the safe temperature range of the sensor or surrounding
+      --  components. In addition, the temperature sensor may not fully conform to this model over its full temperature
+      --  range. Check the datasheet for your specific sensor for more details.
       null;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Thermistor_Custom_Steinhart_Hart is record
       --  Enter custom Steinhart-Hart coefficients using the equation
-      --  `1/T = A + B*ln(R) + C*(ln(R))^3`, where `T` is in Kelvin and `R` is in Ohms.
+      --
+      --  `1/T = A + B*ln(R) + C*(ln(R))^3`
+      --
+      --  where `T` is in Kelvin and `R` is in Ohms.
+      --
+      --  The coefficients must define a monotonic model producing between 1.0E-100 and 1.0E100 Ω throughout the
+      --  configured temperature range.
 
       A : Dimensionless range -1.0E100 .. 1.0E100 := 0.0;
       --  Steinhart-Hart A coefficient.
@@ -177,6 +245,9 @@ private
    type User_Config_Thermistor_Custom_Callendar_Van_Dusen is record
       --  Enter custom Callendar-Van Dusen coefficients using the equation
       --  `R(T) = R(0) * (1 + A*T + B*T^2)`, where `T` is in Celsius and `R(0)` is in Ohms.
+      --
+      --  The coefficients must define a monotonic model producing between 1.0E-100 and 1.0E100 Ω throughout the
+      --  configured temperature range.
 
       R0 : Resistance range 1.0E-100 * ohm .. 1.0E100 * ohm := 1000.0 * ohm;
       --  Resistance at 0 C.

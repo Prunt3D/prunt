@@ -17,13 +17,105 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Ada.Numerics.Generic_Elementary_Functions;
-
 package body Prunt.Thermistors is
 
    pragma Extensions_Allowed (On);
 
-   package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
+   function Steinhart_Hart_Value (Params : Thermistor_Parameters; Ln_R : Dimensionless) return Dimensionless is
+   begin
+      return Params.SH_A + Ln_R * (Params.SH_B + Params.SH_C * Ln_R ** 2);
+   end Steinhart_Hart_Value;
+
+   function Steinhart_Hart_Is_Increasing (Params : Thermistor_Parameters) return Boolean is
+      Derivative_At_Zero : constant Dimensionless := Params.SH_B;
+      Derivative_At_Edge : constant Dimensionless := Params.SH_B + 3.0 * Params.SH_C * Maximum_Abs_Ln_R ** 2;
+   begin
+      return
+        Derivative_At_Zero >= 0.0
+        and then Derivative_At_Edge >= 0.0
+        and then (Derivative_At_Zero > 0.0 or else Derivative_At_Edge > 0.0);
+   end Steinhart_Hart_Is_Increasing;
+
+   function Steinhart_Hart_Is_Decreasing (Params : Thermistor_Parameters) return Boolean is
+      Derivative_At_Zero : constant Dimensionless := Params.SH_B;
+      Derivative_At_Edge : constant Dimensionless := Params.SH_B + 3.0 * Params.SH_C * Maximum_Abs_Ln_R ** 2;
+   begin
+      return
+        Derivative_At_Zero <= 0.0
+        and then Derivative_At_Edge <= 0.0
+        and then (Derivative_At_Zero < 0.0 or else Derivative_At_Edge < 0.0);
+   end Steinhart_Hart_Is_Decreasing;
+
+   function Temperature_Is_In_Steinhart_Hart_Range (Params : Thermistor_Parameters; Temp : Temperature) return Boolean
+   is
+      Inv_T       : constant Dimensionless := 1.0 / ((Temp - Absolute_Zero) / celsius);
+      Lower_Value : constant Dimensionless := Steinhart_Hart_Value (Params, Minimum_Ln_R);
+      Upper_Value : constant Dimensionless := Steinhart_Hart_Value (Params, Maximum_Ln_R);
+   begin
+      if Steinhart_Hart_Is_Increasing (Params) then
+         return Inv_T >= Lower_Value and then Inv_T <= Upper_Value;
+      else
+         return Inv_T <= Lower_Value and then Inv_T >= Upper_Value;
+      end if;
+   end Temperature_Is_In_Steinhart_Hart_Range;
+
+   function Steinhart_Hart_Model_Is_Valid (Params : Thermistor_Parameters) return Boolean is
+   begin
+      return
+        Params.Minimum_Temperature > Absolute_Zero
+        and then Params.Maximum_Temperature > Params.Minimum_Temperature
+        and then Params.Maximum_Temperature <= 1.0E100 * celsius
+        and then abs Params.SH_A <= Coefficient_Limit
+        and then abs Params.SH_B <= Coefficient_Limit
+        and then abs Params.SH_C <= Coefficient_Limit
+        and then (Steinhart_Hart_Is_Increasing (Params) or else Steinhart_Hart_Is_Decreasing (Params))
+        and then Temperature_Is_In_Steinhart_Hart_Range (Params, Params.Minimum_Temperature)
+        and then Temperature_Is_In_Steinhart_Hart_Range (Params, Params.Maximum_Temperature);
+   end Steinhart_Hart_Model_Is_Valid;
+
+   function Callendar_Van_Dusen_Value (Params : Thermistor_Parameters; Temp : Temperature) return Resistance is
+      Temp_C : constant Dimensionless := Temp / celsius;
+   begin
+      return Params.CVD_R0 * (1.0 + Temp_C * (Params.CVD_A + Params.CVD_B * Temp_C));
+   end Callendar_Van_Dusen_Value;
+
+   function Callendar_Van_Dusen_Model_Is_Valid (Params : Thermistor_Parameters) return Boolean is
+   begin
+      if Params.Minimum_Temperature <= Absolute_Zero
+        or else Params.Maximum_Temperature <= Params.Minimum_Temperature
+        or else Params.Maximum_Temperature > 1.0E100 * celsius
+        or else Params.CVD_R0 < Minimum_Supported_Resistance
+        or else Params.CVD_R0 > Maximum_Supported_Resistance
+        or else abs Params.CVD_A > Coefficient_Limit
+        or else abs Params.CVD_B > Coefficient_Limit
+      then
+         return False;
+      end if;
+
+      declare
+         Minimum_Temp_C        : constant Dimensionless := Params.Minimum_Temperature / celsius;
+         Maximum_Temp_C        : constant Dimensionless := Params.Maximum_Temperature / celsius;
+         Minimum_Derivative    : constant Dimensionless := Params.CVD_A + 2.0 * Params.CVD_B * Minimum_Temp_C;
+         Maximum_Derivative    : constant Dimensionless := Params.CVD_A + 2.0 * Params.CVD_B * Maximum_Temp_C;
+         Resistance_At_Minimum : constant Resistance := Callendar_Van_Dusen_Value (Params, Params.Minimum_Temperature);
+         Resistance_At_Maximum : constant Resistance := Callendar_Van_Dusen_Value (Params, Params.Maximum_Temperature);
+         Increasing            : constant Boolean :=
+           Minimum_Derivative >= 0.0
+           and then Maximum_Derivative >= 0.0
+           and then (Minimum_Derivative > 0.0 or else Maximum_Derivative > 0.0);
+         Decreasing            : constant Boolean :=
+           Minimum_Derivative <= 0.0
+           and then Maximum_Derivative <= 0.0
+           and then (Minimum_Derivative < 0.0 or else Maximum_Derivative < 0.0);
+      begin
+         return
+           (Increasing or else Decreasing)
+           and then Resistance_At_Minimum >= Minimum_Supported_Resistance
+           and then Resistance_At_Minimum <= Maximum_Supported_Resistance
+           and then Resistance_At_Maximum >= Minimum_Supported_Resistance
+           and then Resistance_At_Maximum <= Maximum_Supported_Resistance;
+      end;
+   end Callendar_Van_Dusen_Model_Is_Valid;
 
    function Temperature_To_Resistance (Params : Thermistor_Parameters; Temp : Temperature) return Resistance is
    begin
@@ -39,59 +131,34 @@ package body Prunt.Thermistors is
             --  1/T = A + B*ln(R) + C*(ln(R))^3
             --  C*ln(R)^3 + B*ln(R) + (A - 1/T) = 0
             --
-            --  When C = 0:
-            --
-            --  B*ln(R) + (A - 1/T) = 0
-            --  B*ln(R) = 1/T - A
-            --  ln(R)   = (1/T - A)/B
-            --
-            --  When C != 0:
-            --
-            --  C*(ln(R))^3 + B*ln(R)     + A - 1/T     = 0
-            --  ln(R)^3     + (B/C)*ln(R) + (A - 1/T)/C = 0
-            --
-            --  Apply Cardano's formula:
-            --
-            --  u^3 + p*u + q = 0
-            --  w = (q^2/4 + p^3/27)^(1/2)
-            --  u = (-q/2 + w)^(1/3) + (-q/2 - w)^(1/3)
-            --
-            --  u = ln(R)
-            --  p = (B/C)
-            --  q = (A - 1/T)/C
-
             declare
-               Inv_T : constant Dimensionless := 1.0 / (Temp / celsius + 273.15);
-               Ln_R  : Dimensionless;
+               Inv_T      : constant Dimensionless := 1.0 / ((Temp - Absolute_Zero) / celsius);
+               Increasing : constant Boolean := Steinhart_Hart_Is_Increasing (Params);
+               Low        : Dimensionless := Minimum_Ln_R;
+               High       : Dimensionless := Maximum_Ln_R;
             begin
-               if abs Params.SH_C < 1.0e-12 then
-                  --  TODO: What if SH_A or SH_B are also very small? Should we define some limits in the config?
-                  Ln_R := (Inv_T - Params.SH_A) / Params.SH_B;
-               else
+               --  Validation guarantees one root in this interval. Bisection avoids dividing by either coefficient
+               --  and remains stable when B or C is zero or very small.
+               for I in 1 .. Dimensioned_Float'Machine_Mantissa + 8 loop
                   declare
-                     Q : constant Dimensionless := (Params.SH_A - Inv_T) / Params.SH_C;
-                     P : constant Dimensionless := Params.SH_B / Params.SH_C;
-                     W : constant Dimensionless := (Q ** 2 / 4.0 + P ** 3 / 27.0) ** (1 / 2);
+                     Mid       : constant Dimensionless := Low + (High - Low) / 2.0;
+                     Mid_Value : constant Dimensionless := Steinhart_Hart_Value (Params, Mid);
                   begin
-                     Ln_R := Safe_Cbrt (-Q / 2.0 + W) + Safe_Cbrt (-Q / 2.0 - W);
+                     if (Increasing and then Mid_Value < Inv_T) or else (not Increasing and then Mid_Value > Inv_T)
+                     then
+                        Low := Mid;
+                     else
+                        High := Mid;
+                     end if;
                   end;
-               end if;
+               end loop;
 
-               return Math.Exp (Ln_R) * ohm;
+               return Math.Exp (Low + (High - Low) / 2.0) * ohm;
             end;
 
          when Callendar_Van_Dusen_Kind =>
-            return Params.CVD_R0 * (1.0 + Params.CVD_A * Temp / celsius + Params.CVD_B * (Temp / celsius) ** 2);
+            return Callendar_Van_Dusen_Value (Params, Temp);
       end case;
    end Temperature_To_Resistance;
-
-   function Safe_Cbrt (Val : Dimensionless) return Dimensionless is
-   begin
-      if Val < 0.0 then
-         return -((-Val) ** (1 / 3));
-      else
-         return Val ** (1 / 3);
-      end if;
-   end Safe_Cbrt;
 
 end Prunt.Thermistors;

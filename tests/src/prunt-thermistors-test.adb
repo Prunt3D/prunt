@@ -28,17 +28,21 @@ package body Prunt.Thermistors.Test is
    package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
 
    procedure Test_Thermistor (T : in out Trendy_Test.Operation'Class) is
+      Minimum_Test_Temperature : constant Integer :=
+        (if Params.Kind = Callendar_Van_Dusen_Kind then -200 else -250);
    begin
       T.Register;
       if Params.Kind not in Steinhart_Hart_Kind | Callendar_Van_Dusen_Kind then
          raise Constraint_Error;
       end if;
 
-      for I in -250 .. 2000 loop
+      for I in Minimum_Test_Temperature .. 2000 loop
          Temp : constant Temperature := Dimensionless (I) * celsius;
          Calculated_Resistance : constant Resistance :=
            Temperature_To_Resistance
-             ((Params with delta Minimum_Temperature => -250.0 * celsius, Maximum_Temperature => 2000.0 * celsius),
+             ((Params with delta
+                 Minimum_Temperature => Dimensionless (Minimum_Test_Temperature) * celsius,
+                 Maximum_Temperature => 2000.0 * celsius),
               Temp);
          Expected_Resistance : constant Resistance :=
            (if Params.Kind = Steinhart_Hart_Kind
@@ -186,6 +190,189 @@ package body Prunt.Thermistors.Test is
          null;
    end Test_Disabled;
 
+   procedure Test_Callendar_Van_Dusen_Custom_Validation (T : in out Trendy_Test.Operation'Class) is
+      Increasing : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => 1_000.0 * ohm,
+         CVD_A               => 4.0E-3,
+         CVD_B               => -6.0E-7,
+         Minimum_Temperature => -200.0 * celsius,
+         Maximum_Temperature => 2_000.0 * celsius);
+
+      Decreasing : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => 1_000.0 * ohm,
+         CVD_A               => 4.0E-3,
+         CVD_B               => -6.0E-7,
+         Minimum_Temperature => 4_000.0 * celsius,
+         Maximum_Temperature => 6_000.0 * celsius);
+
+      Linear : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => 1_000.0 * ohm,
+         CVD_A               => 1.0E-3,
+         CVD_B               => 0.0,
+         Minimum_Temperature => 0.0 * celsius,
+         Maximum_Temperature => 100.0 * celsius);
+
+      Degenerate : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => 1_000.0 * ohm,
+         CVD_A               => 0.0,
+         CVD_B               => 0.0,
+         Minimum_Temperature => 0.0 * celsius,
+         Maximum_Temperature => 100.0 * celsius);
+
+      Non_Monotonic : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => 1_000.0 * ohm,
+         CVD_A               => 4.0E-3,
+         CVD_B               => -6.0E-7,
+         Minimum_Temperature => 0.0 * celsius,
+         Maximum_Temperature => 5_000.0 * celsius);
+
+      Out_Of_Range : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => Maximum_Supported_Resistance,
+         CVD_A               => 1.0,
+         CVD_B               => 0.0,
+         Minimum_Temperature => 0.0 * celsius,
+         Maximum_Temperature => 1.0 * celsius);
+
+      Negative_Resistance : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => 1_000.0 * ohm,
+         CVD_A               => -1.0,
+         CVD_B               => 0.0,
+         Minimum_Temperature => 0.0 * celsius,
+         Maximum_Temperature => 2.0 * celsius);
+
+      At_Absolute_Zero : constant Thermistor_Parameters :=
+        (Kind                => Callendar_Van_Dusen_Kind,
+         CVD_R0              => 1_000.0 * ohm,
+         CVD_A               => 1.0E-3,
+         CVD_B               => 0.0,
+         Minimum_Temperature => Absolute_Zero,
+         Maximum_Temperature => 0.0 * celsius);
+   begin
+      T.Register;
+
+      T.Assert (Callendar_Van_Dusen_Model_Is_Valid (Increasing));
+      T.Assert (Callendar_Van_Dusen_Model_Is_Valid (Decreasing));
+      declare
+         Expected : constant Resistance := Solve_Callendar_Van_Dusen (Decreasing, 5_000.0 * celsius);
+      begin
+         T.Assert
+           (abs (Temperature_To_Resistance (Decreasing, 5_000.0 * celsius) - Expected)
+            < Expected * 1.0E-12);
+      end;
+      T.Assert (Callendar_Van_Dusen_Model_Is_Valid (Linear));
+      T.Assert (not Callendar_Van_Dusen_Model_Is_Valid (Degenerate));
+      T.Assert (not Callendar_Van_Dusen_Model_Is_Valid (Non_Monotonic));
+      T.Assert (not Callendar_Van_Dusen_Model_Is_Valid (Out_Of_Range));
+      T.Assert (not Callendar_Van_Dusen_Model_Is_Valid (Negative_Resistance));
+      T.Assert (not Callendar_Van_Dusen_Model_Is_Valid (At_Absolute_Zero));
+   end Test_Callendar_Van_Dusen_Custom_Validation;
+
+   procedure Test_Steinhart_Hart_Custom_Validation (T : in out Trendy_Test.Operation'Class) is
+      Temp       : constant Temperature := 25.0 * celsius;
+      Inv_T      : constant Dimensionless := 1.0 / ((Temp - Absolute_Zero) / celsius);
+      Expected_X : constant Dimensionless := 10.0;
+
+      Small_B_And_C : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => Inv_T - 1.0E-15 * Expected_X - 5.0E-13 * Expected_X ** 3,
+         SH_B                => 1.0E-15,
+         SH_C                => 5.0E-13,
+         Minimum_Temperature => 24.99 * celsius,
+         Maximum_Temperature => 25.01 * celsius);
+
+      Zero_B : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => Inv_T - 5.0E-7 * Expected_X ** 3,
+         SH_B                => 0.0,
+         SH_C                => 5.0E-7,
+         Minimum_Temperature => 20.0 * celsius,
+         Maximum_Temperature => 30.0 * celsius);
+
+      Zero_A : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => 0.0,
+         SH_B                => 1.0E-3,
+         SH_C                => 0.0,
+         Minimum_Temperature => 0.0 * celsius,
+         Maximum_Temperature => 100.0 * celsius);
+
+      Decreasing : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => Inv_T + 1.0E-3 * Expected_X,
+         SH_B                => -1.0E-3,
+         SH_C                => 0.0,
+         Minimum_Temperature => 20.0 * celsius,
+         Maximum_Temperature => 30.0 * celsius);
+
+      Degenerate : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => Inv_T,
+         SH_B                => 0.0,
+         SH_C                => 0.0,
+         Minimum_Temperature => 20.0 * celsius,
+         Maximum_Temperature => 30.0 * celsius);
+
+      Non_Monotonic : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => Inv_T,
+         SH_B                => -3.0E-4,
+         SH_C                => 1.0E-4,
+         Minimum_Temperature => 24.0 * celsius,
+         Maximum_Temperature => 26.0 * celsius);
+
+      Out_Of_Range : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => 0.0,
+         SH_B                => 1.0E-7,
+         SH_C                => 0.0,
+         Minimum_Temperature => 24.0 * celsius,
+         Maximum_Temperature => 26.0 * celsius);
+
+      At_Absolute_Zero : constant Thermistor_Parameters :=
+        (Kind                => Steinhart_Hart_Kind,
+         SH_A                => 1.0E-3,
+         SH_B                => 2.0E-4,
+         SH_C                => 0.0,
+         Minimum_Temperature => Absolute_Zero,
+         Maximum_Temperature => 0.0 * celsius);
+
+      Expected_Resistance : constant Resistance := Math.Exp (Expected_X) * ohm;
+   begin
+      T.Register;
+
+      T.Assert (Steinhart_Hart_Model_Is_Valid (Small_B_And_C));
+      T.Assert
+        (abs (Temperature_To_Resistance (Small_B_And_C, Temp) - Expected_Resistance)
+           < Expected_Resistance * 1.0E-8,
+         "Expected"
+         & Dimensionless'Image (Expected_Resistance / ohm)
+         & " ohm, got"
+         & Dimensionless'Image (Temperature_To_Resistance (Small_B_And_C, Temp) / ohm)
+         & " ohm.");
+
+      T.Assert (Steinhart_Hart_Model_Is_Valid (Zero_B));
+      T.Assert
+        (abs (Temperature_To_Resistance (Zero_B, Temp) - Expected_Resistance)
+         < Expected_Resistance * 1.0E-12);
+
+      T.Assert (Steinhart_Hart_Model_Is_Valid (Zero_A));
+      T.Assert (Steinhart_Hart_Model_Is_Valid (Decreasing));
+      T.Assert
+        (abs (Temperature_To_Resistance (Decreasing, Temp) - Expected_Resistance)
+         < Expected_Resistance * 1.0E-12);
+      T.Assert (not Steinhart_Hart_Model_Is_Valid (Degenerate));
+      T.Assert (not Steinhart_Hart_Model_Is_Valid (Non_Monotonic));
+      T.Assert (not Steinhart_Hart_Model_Is_Valid (Out_Of_Range));
+      T.Assert (not Steinhart_Hart_Model_Is_Valid (At_Absolute_Zero));
+   end Test_Steinhart_Hart_Custom_Validation;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
@@ -199,6 +386,8 @@ package body Prunt.Thermistors.Test is
          Test_NTC_100K_MGB18_104F39050L32'Access,
          Test_PT_1000_PT_385'Access,
          Test_PT_1000_PT_392'Access,
+         Test_Callendar_Van_Dusen_Custom_Validation'Access,
+         Test_Steinhart_Hart_Custom_Validation'Access,
          Test_Disabled'Access];
    end All_Tests;
 
