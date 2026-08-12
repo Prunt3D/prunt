@@ -295,6 +295,7 @@ package Prunt is
             null;
 
          when others =>
+            Safe_Below                 : Temperature := 70.0 * celsius;
             Check_Max_Cumulative_Error : Temperature := 120.0 * celsius;
             Check_Gain_Time            : Time := 20.0 * s;
             Check_Minimum_Gain         : Temperature := 2.0 * celsius;

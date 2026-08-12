@@ -68,6 +68,7 @@ package body Prunt.Default_Modules.Heaters is
          when PID       =>
             return
               (Kind                       => PID_Kind,
+               Safe_Below                 => Config.Safe_Below,
                Check_Max_Cumulative_Error => Config.Check_Maximum_Cumulative_Error,
                Check_Gain_Time            => Config.Check_Gain_Time,
                Check_Minimum_Gain         => Config.Check_Minimum_Gain,
@@ -79,6 +80,7 @@ package body Prunt.Default_Modules.Heaters is
          when Bang_Bang =>
             return
               (Kind                       => Bang_Bang_Kind,
+               Safe_Below                 => Config.Safe_Below,
                Check_Max_Cumulative_Error => Config.Check_Maximum_Cumulative_Error,
                Check_Gain_Time            => Config.Check_Gain_Time,
                Check_Minimum_Gain         => Config.Check_Minimum_Gain,

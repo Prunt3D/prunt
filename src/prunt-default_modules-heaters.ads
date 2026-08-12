@@ -17,9 +17,6 @@
 --  SOFTWARE.
 --------------------------------------------------
 
---  TODO: Add a `Safe_Below` component to each heater to determine when we should raise an error if the heater is not
---  cooling down when off.
-
 pragma Extensions_Allowed (On);
 
 with Ada.Tags;
@@ -173,6 +170,10 @@ private
          when Enabled =>
             Thermistor : Thermistor_Name := Thermistor_Name'First;
             --  Select the thermistor used to measure this heater's temperature.
+
+            Safe_Below : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 70.0 * celsius;
+            --  Temperature below which this heater is considered safe while switched off. The firmware raises an error
+            --  if the heater is above this temperature and not cooling down for an extended period when it should be.
 
             Check_Gain_Time : Time range 0.0 * s .. 1.0E100 * s := 20.0 * s;
             --  Time window used when checking that the heater is gaining temperature.
