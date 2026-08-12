@@ -226,6 +226,11 @@ package body Prunt.Controller is
       begin
          return Cancellation_Count;
       end Cancellation_Generation;
+
+      function Is_Cancellation_Active return Boolean is
+      begin
+         return Cancellation_Active;
+      end Is_Cancellation_Active;
    end Gcode_Cancellation_Barrier;
 
    protected body Planner_State_Type is
@@ -233,6 +238,9 @@ package body Prunt.Controller is
       begin
          Last_Position := [others => 0.0 * mm];
          Last_Kinematic_Parameters := (others => <>);
+         Homed_Axes := [others => False];
+         Homing_Update_Generations := [for Axis in Axis_Name => Homing_Update_Generations (Axis) + 1];
+         Homing_Updates_Processed := [others => True];
       end Reset;
 
       function Get_Last_Position return Position is
@@ -245,6 +253,11 @@ package body Prunt.Controller is
          return Last_Kinematic_Parameters;
       end Get_Last_Kinematic_Parameters;
 
+      function Get_Homed_Axes return Homed_Axis_Array is
+      begin
+         return Homed_Axes;
+      end Get_Homed_Axes;
+
       procedure Set_Last_Position (Pos : Position) is
       begin
          Last_Position := Pos;
@@ -254,7 +267,59 @@ package body Prunt.Controller is
       begin
          Last_Kinematic_Parameters := Params;
       end Set_Last_Kinematic_Parameters;
+
+      procedure Set_Homed_Axes (Axes : Homed_Axis_Array) is
+      begin
+         Homed_Axes := Axes;
+         Homing_Update_Generations := [for Axis in Axis_Name => Homing_Update_Generations (Axis) + 1];
+         Homing_Updates_Processed := [others => True];
+      end Set_Homed_Axes;
+
+      procedure Mark_Axis_Homed (Axis : Axis_Name) is
+      begin
+         Homed_Axes (Axis) := True;
+         Homing_Update_Generations (Axis) := @ + 1;
+         Homing_Updates_Processed (Axis) := True;
+      end Mark_Axis_Homed;
+
+      procedure Mark_Axis_Unhomed (Axis : Axis_Name) is
+      begin
+         Homed_Axes (Axis) := False;
+         Homing_Update_Generations (Axis) := @ + 1;
+         Homing_Updates_Processed (Axis) := True;
+      end Mark_Axis_Unhomed;
+
+      function Axis_Is_Homed (Axis : Axis_Name) return Boolean is
+      begin
+         return Homed_Axes (Axis);
+      end Axis_Is_Homed;
+
+      procedure Start_Homing_Update (Axis : Axis_Name; Generation : out Homing_Update_Generation) is
+      begin
+         Homed_Axes (Axis) := False;
+         Homing_Update_Generations (Axis) := @ + 1;
+         Homing_Updates_Processed (Axis) := False;
+         Generation := Homing_Update_Generations (Axis);
+      end Start_Homing_Update;
+
+      procedure Apply_Homing_Update (Axis : Axis_Name; Homed : Boolean; Generation : Homing_Update_Generation) is
+      begin
+         if Generation = Homing_Update_Generations (Axis) then
+            Homed_Axes (Axis) := Homed;
+            Homing_Updates_Processed (Axis) := True;
+         end if;
+      end Apply_Homing_Update;
+
+      function Homing_Update_Completed (Axis : Axis_Name; Generation : Homing_Update_Generation) return Boolean is
+      begin
+         return Generation /= Homing_Update_Generations (Axis) or else Homing_Updates_Processed (Axis);
+      end Homing_Update_Completed;
    end Planner_State_Type;
+
+   function Primary_Axis_Is_Homed (Axis : Axis_Name) return Boolean is
+   begin
+      return Primary_Planner_State.Axis_Is_Homed (Axis);
+   end Primary_Axis_Is_Homed;
 
    overriding
    function Get_Last_Position (This : Planner_Wrapper) return Position is
@@ -301,9 +366,24 @@ package body Prunt.Controller is
 
    overriding
    procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name) is
+      Generation : Homing_Update_Generation;
    begin
-      pragma Unreferenced (This, Axis); --  TODO
-      null;
+      case This.Target is
+         when Primary_Planner_Target =>
+            Primary_Planner_State.Start_Homing_Update (Axis, Generation);
+            This.Flush
+              (Axis_Homing_Update_Event'
+                 (Target => Primary_Planner_Target, Axis => Axis, Homed => True, Generation => Generation));
+
+            while not Primary_Planner_State.Homing_Update_Completed (Axis, Generation)
+              and then not Gcode_Cancellation_Barrier.Is_Cancellation_Active
+            loop
+               delay 0.01;
+            end loop;
+
+         when Pause_Planner_Target   =>
+            Pause_Planner_State.Mark_Axis_Homed (Axis);
+      end case;
    end Mark_Axis_Homed;
 
    overriding
@@ -345,17 +425,51 @@ package body Prunt.Controller is
 
    overriding
    procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name) is
+      Generation : Homing_Update_Generation;
    begin
-      pragma Unreferenced (This, Axis); --  TODO
-      null;
+      case This.Target is
+         when Primary_Planner_Target =>
+            Primary_Planner_State.Start_Homing_Update (Axis, Generation);
+            This.Flush
+              (Axis_Homing_Update_Event'
+                 (Target => Primary_Planner_Target, Axis => Axis, Homed => False, Generation => Generation));
+
+            while not Primary_Planner_State.Homing_Update_Completed (Axis, Generation)
+              and then not Gcode_Cancellation_Barrier.Is_Cancellation_Active
+            loop
+               delay 0.01;
+            end loop;
+
+         when Pause_Planner_Target   =>
+            Pause_Planner_State.Mark_Axis_Unhomed (Axis);
+      end case;
    end Mark_Axis_Unhomed;
 
    overriding
    function Axis_Is_Homed (This : Planner_Wrapper; Axis : Axis_Name) return Boolean is
    begin
-      --  TODO
-      return False;
+      case This.Target is
+         when Primary_Planner_Target =>
+            return Primary_Planner_State.Axis_Is_Homed (Axis);
+
+         when Pause_Planner_Target   =>
+            return Pause_Planner_State.Axis_Is_Homed (Axis);
+      end case;
    end Axis_Is_Homed;
+
+   overriding
+   procedure Process_After_Block (This : Axis_Homing_Update_Event; Context : Block_End_Context'Class) is
+   begin
+      Context.Wait_For_Idle;
+
+      case This.Target is
+         when Primary_Planner_Target =>
+            Primary_Planner_State.Apply_Homing_Update (This.Axis, This.Homed, This.Generation);
+
+         when Pause_Planner_Target   =>
+            Pause_Planner_State.Apply_Homing_Update (This.Axis, This.Homed, This.Generation);
+      end case;
+   end Process_After_Block;
 
    overriding
    procedure Add_Corner
@@ -365,10 +479,18 @@ package body Prunt.Controller is
       Dwell_After   : Time := 0.0 * s;
       Require_Homed : Boolean := True)
    is
-      pragma Unreferenced (Require_Homed);
+      Last_Position : constant Position := This.Get_Last_Position;
    begin
-      if This.Startup_Mode and then Pos /= This.Get_Last_Position then
+      if This.Startup_Mode and then Pos /= Last_Position then
          raise Constraint_Error with "Motion not allowed during startup.";
+      end if;
+
+      if Require_Homed then
+         for Axis in Axis_Name loop
+            if Pos (Axis) /= Last_Position (Axis) and then not This.Axis_Is_Homed (Axis) then
+               raise Gcode_Bad_Inputs_Error with "Axis " & Axis'Image & " must be homed before moving.";
+            end if;
+         end loop;
       end if;
 
       case This.Target is
@@ -392,10 +514,20 @@ package body Prunt.Controller is
       Dwell_After   : Time := 0.0 * s;
       Require_Homed : Boolean := True)
    is
-      pragma Unreferenced (Require_Homed);
+      Last_Position : constant Position := This.Get_Last_Position;
    begin
-      if This.Startup_Mode and then Pos /= This.Get_Last_Position then
+      if This.Startup_Mode then
          raise Constraint_Error with "Motion not allowed during startup.";
+      end if;
+
+      if Require_Homed then
+         for Axis in Axis_Name loop
+            if (Axis in X_Axis | Y_Axis or else Pos (Axis) /= Last_Position (Axis))
+              and then not This.Axis_Is_Homed (Axis)
+            then
+               raise Gcode_Bad_Inputs_Error with "Axis " & Axis'Image & " must be homed before moving.";
+            end if;
+         end loop;
       end if;
 
       case This.Target is
@@ -1575,8 +1707,11 @@ package body Prunt.Controller is
         (Pause_Position => Pause_Position, Last_Command_Index => Last_Command_Index);
       Params        : constant Motion_Planner.Kinematic_Parameters :=
         Pause_Default_State.Get_Last_Kinematic_Parameters;
+      Homed_Axes    : constant Homed_Axis_Array := Primary_Planner_State.Get_Homed_Axes;
       Handlers      : Module_Instance_Vectors.Vector;
    begin
+      Pause_Planner_State.Set_Homed_Axes (Homed_Axes);
+      Pause_Default_State.Set_Homed_Axes (Homed_Axes);
       Pause_Planner.Flush_And_Change_Kinematic_Parameters (Params);
       Pause_Planner.Flush_And_Reset_Position (Pause_Position);
 
@@ -1603,6 +1738,13 @@ package body Prunt.Controller is
          begin
             Pause_Handler'Class (Instance.Get.Element.all).Handle_Resume (Pause_Planner, Context);
          end;
+      end loop;
+
+      for Axis in Axis_Name loop
+         if Pause_Planner.Axis_Is_Homed (Axis) /= Pause_Default_State.Axis_Is_Homed (Axis) then
+            raise Program_Error
+              with "Pause resume handlers did not restore the homed state of axis " & Axis'Image & ".";
+         end if;
       end loop;
 
       Pause_Planner.Flush (Pause_Plan_End_Event'(null record));

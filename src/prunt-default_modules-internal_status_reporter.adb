@@ -78,7 +78,13 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
    begin
       return
-        ["Position"     =>
+        ["Homed"        =>
+           [for A in Axis_Name use Conversions.To_Virtual_String (A'Image) =>
+              (Kind        => Status_Manager.Boolean_Kind,
+               Unit        => "",
+               Description => "True if axis " & Conversions.To_Virtual_String (A'Image) & " is currently homed.",
+               Condition   => "")],
+         "Position"     =>
            [for A in Axis_Name use Conversions.To_Virtual_String (A'Image) =>
               (Kind        => Status_Manager.Real_Kind,
                Unit        => "mm",
@@ -139,6 +145,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
                Pos : constant Position := Get_Position;
             begin
                for A in Axis_Name loop
+                  Status_Ref.Set_Value ("Homed", +A'Image, Axis_Is_Homed (A));
                   Status_Ref.Set_Value ("Position", +A'Image, Pos (A) / mm);
                end loop;
                Status_Ref.Set_Value ("Print status", "File name", Get_File_Name);
@@ -151,8 +158,8 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
                Next_Status_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Status_Report_Period);
             end if;
          or
-            when Current_Auto_Report_Interval > 0.0
-            => delay until Next_Position_Auto_Report;
+            when Current_Auto_Report_Interval > 0.0 =>
+            delay until Next_Position_Auto_Report;
             Log_Position;
 
             Next_Position_Auto_Report :=

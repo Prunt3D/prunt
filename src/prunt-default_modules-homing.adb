@@ -79,10 +79,10 @@ package body Prunt.Default_Modules.Homing is
 
    overriding
    procedure Process_After_Block (This : Homing_Event; Context : Block_End_Context'Class) is
-      pragma Unreferenced (Context);
-
       Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
    begin
+      Context.Wait_For_Idle;
+
       case This.Kind is
          when Axis_Start_Event  =>
             Instance.Notify_Homing_Axis_Start (This.Axis);
@@ -189,9 +189,10 @@ package body Prunt.Default_Modules.Homing is
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
       is
-         pragma Unreferenced (Self_Ref_In, Planner);
+         pragma Unreferenced (Self_Ref_In);
       begin
-         null;
+         --  The extruder coordinate is relative to an arbitrary origin and has no physical homing procedure.
+         Planner.Mark_Axis_Homed (E_Axis);
       end Start;
 
       procedure Notify_Homing_Axis_Start (Axis : Axis_Name) is
@@ -328,6 +329,8 @@ package body Prunt.Default_Modules.Homing is
 
          --  TODO: Every homing move here needs a maximum move length.
 
+         Planner.Mark_Axis_Unhomed (Axis);
+
          case Axis_Config.Homing_Method.Kind is
             when Set_To_Value     =>
                Planner.Flush_And_Reset_Position
@@ -460,6 +463,13 @@ package body Prunt.Default_Modules.Homing is
       for Axis in Axis_Name when Axis /= E_Axis and then Requested_Axes (Axis) loop
          Home_Axis (Axis);
       end loop;
+   exception
+      when others =>
+         --  A partially completed homing sequence cannot leave cartesian axes trusted.
+         for Axis in Axis_Name when Axis /= E_Axis loop
+            Planner.Mark_Axis_Unhomed (Axis);
+         end loop;
+         raise;
    end Auto_Home;
 
 end Prunt.Default_Modules.Homing;

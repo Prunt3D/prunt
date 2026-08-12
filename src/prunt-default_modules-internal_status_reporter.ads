@@ -33,6 +33,7 @@ generic
    with function Get_File_Name return Virtual_String;
    with function Get_Line return File_Line_Count;
    with function Stepgen_Paused return Boolean;
+   with function Axis_Is_Homed (Axis : Axis_Name) return Boolean;
 package Prunt.Default_Modules.Internal_Status_Reporter is
 
    type Module is new My_Modules.Module with null record;

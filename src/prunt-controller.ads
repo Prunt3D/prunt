@@ -236,6 +236,9 @@ private
    function Get_Current_File_Line return File_Line_Count;
    --  Return the current one-based line number within the active G-code file.
 
+   function Primary_Axis_Is_Homed (Axis : Axis_Name) return Boolean;
+   --  Return the homing state used by the primary planner.
+
    Machine_Idle_Timeout_Error : exception;
 
    procedure Request_Machine_Idle_Timeout_Shutdown (Message : String);
@@ -270,7 +273,8 @@ private
           (Get_Position   => Get_Current_Position,
            Get_File_Name  => Get_Current_File_Name,
            Get_Line       => Get_Current_File_Line,
-           Stepgen_Paused => Stepgen_Paused);
+           Stepgen_Paused => Stepgen_Paused,
+           Axis_Is_Homed  => Primary_Axis_Is_Homed);
       package Fans is new
         My_Default_Modules.Fans (My_Controller_Generic_Types => Generic_Types, Fan_Hardware => Hardware.Fan_Hardware);
       package Tachometers is new
@@ -765,6 +769,9 @@ private
       function Cancellation_Generation return Cancellation_Generation_Type;
       --  Return a monotonic generation value which changes when cancellation starts.
 
+      function Is_Cancellation_Active return Boolean;
+      --  Return True while a cancellation barrier is active.
+
    private
       Processing_Line     : Boolean := False;
       Active_Submissions  : Natural := 0;
@@ -772,15 +779,31 @@ private
       Cancellation_Count  : Cancellation_Generation_Type := 0;
    end Gcode_Cancellation_Barrier;
 
+   type Homed_Axis_Array is array (Axis_Name) of Boolean;
+   type Homing_Update_Generation is mod 2 ** 64;
+   type Homing_Update_Generation_Array is array (Axis_Name) of Homing_Update_Generation;
+   type Homing_Update_Processed_Array is array (Axis_Name) of Boolean;
+
    protected type Planner_State_Type is
       procedure Reset;
       function Get_Last_Position return Position;
       function Get_Last_Kinematic_Parameters return Motion_Planner.Kinematic_Parameters;
+      function Get_Homed_Axes return Homed_Axis_Array;
       procedure Set_Last_Position (Pos : Position);
       procedure Set_Last_Kinematic_Parameters (Params : Motion_Planner.Kinematic_Parameters);
+      procedure Set_Homed_Axes (Axes : Homed_Axis_Array);
+      procedure Mark_Axis_Homed (Axis : Axis_Name);
+      procedure Mark_Axis_Unhomed (Axis : Axis_Name);
+      function Axis_Is_Homed (Axis : Axis_Name) return Boolean;
+      procedure Start_Homing_Update (Axis : Axis_Name; Generation : out Homing_Update_Generation);
+      procedure Apply_Homing_Update (Axis : Axis_Name; Homed : Boolean; Generation : Homing_Update_Generation);
+      function Homing_Update_Completed (Axis : Axis_Name; Generation : Homing_Update_Generation) return Boolean;
    private
       Last_Position             : Position := [others => 0.0 * mm];
       Last_Kinematic_Parameters : Motion_Planner.Kinematic_Parameters := (others => <>);
+      Homed_Axes                : Homed_Axis_Array := [others => False];
+      Homing_Update_Generations : Homing_Update_Generation_Array := [others => 0];
+      Homing_Updates_Processed  : Homing_Update_Processed_Array := [others => True];
    end Planner_State_Type;
 
    Primary_Planner_State : Planner_State_Type;
@@ -793,6 +816,17 @@ private
       Startup_Mode : Boolean := False;
       Target       : Planner_Target_Kind := Primary_Planner_Target;
    end record;
+
+   type Axis_Homing_Update_Event is new Module_Types.Extra_Block_Resetting_Data with record
+      Target     : Planner_Target_Kind;
+      Axis       : Axis_Name;
+      Homed      : Boolean;
+      Generation : Homing_Update_Generation;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Axis_Homing_Update_Event; Context : Block_End_Context'Class);
+   --  Apply a homing-state update once execution reaches its planner block.
 
    type Pause_Plan_End_Event is new Module_Types.Extra_Block_Resetting_Data with null record;
 
@@ -838,11 +872,11 @@ private
 
    overriding
    procedure Mark_Axis_Homed (This : Planner_Wrapper; Axis : Axis_Name);
-   --  Mark Axis homed.
+   --  Mark Axis homed after a blocking primary-planner marker reaches execution, unless cancellation supersedes it.
 
    overriding
    procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name);
-   --  Mark Axis unhomed.
+   --  Mark Axis unhomed immediately, then block on a primary-planner marker unless cancellation supersedes it.
 
    overriding
    function Axis_Is_Homed (This : Planner_Wrapper; Axis : Axis_Name) return Boolean;

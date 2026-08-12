@@ -264,10 +264,12 @@ package Prunt.Module_Types is
    --  Discard or commit pending module state at a cancellation barrier and synchronize it with Current_Position.
 
    procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;
-   --  Mark Axis as homed in the planner state used for subsequent motion validation.
+   --  Mark Axis as homed. Primary planners block on an execution marker so cancellation leaves Axis unhomed; isolated
+   --  pause planners update only their speculative pause state.
 
    procedure Mark_Axis_Unhomed (This : Planner_Interface; Axis : Axis_Name) is abstract;
-   --  Mark Axis as unhomed in the planner state used for subsequent motion validation.
+   --  Unconditionally mark Axis as unhomed. Primary planners then block on an execution marker; isolated pause
+   --  planners update only their speculative pause state.
 
    function Axis_Is_Homed (This : Planner_Interface; Axis : Axis_Name) return Boolean is abstract;
    --  Return whether Axis is currently marked as homed.
