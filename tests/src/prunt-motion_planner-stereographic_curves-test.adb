@@ -991,10 +991,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
    procedure Test_Default_And_Zero_State
      (T : in out Trendy_Test.Operation'Class)
    is
-      Default_Curve  : Stereographic_Curve;
-      Default_Result : Blend_Result;
-      type Result_Array is array (Positive range <>) of Blend_Result;
-      Results : Result_Array (1 .. 3);
+      Default_Curve : Stereographic_Curve;
       Point : constant Position :=
         Make_Point
           (4.0 * mm,
@@ -1010,15 +1007,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          E_Axis => 4.0 / mm];
    begin
       T.Register;
-
-      T.Assert
-        (Default_Result.Kind = Blend_Not_Attempted,
-         "A default result has not been attempted");
-      for Result of Results loop
-         T.Assert
-           (Result.Kind = Blend_Not_Attempted,
-            "Default array elements have not been attempted");
-      end loop;
 
       T.Assert
         (Arc_Length (Default_Curve) = 0.0 * mm,

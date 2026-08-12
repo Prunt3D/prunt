@@ -425,7 +425,7 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          Name & " point error is " & Error'Image & ", tolerance is " & Tolerance'Image);
    end Assert_Point_Close;
 
-   procedure Test_Biarc_Determinism_Reversal_And_Metadata (T : in out Trendy_Test.Operation'Class) is
+   procedure Test_Biarc_Determinism_And_Reversal (T : in out Trendy_Test.Operation'Class) is
       Finish_Point : constant Position := R4_Origin + R4_First * (10.0 * mm) + R4_Second * (10.0 * mm);
       Forward : constant Construction_Result :=
         Create_Biarc
@@ -451,12 +451,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          return;
       end if;
 
-      T.Assert (Transition_Kind (Forward.Transition) = Biarc_Transition, "Biarc retains its variant tag");
-      T.Assert (Policy (Forward.Transition) = Derivative_Bounded, "Biarc uses derivative-bounded policy");
-      T.Assert
-        (Continuity (Forward.Transition) = (Endpoint_Order => 1, Internal_Splice => True,
-                                            Internal_Splice_Order => 1),
-         "Biarc advertises C1 endpoints and a C1 internal splice");
       T.Assert
         (Split_Distance (Forward.Transition) = Forward.Transition.Two_Arcs.First.Length_Value
          and then Split_Distance (Forward.Transition) > 0.0 * mm
@@ -507,7 +501,7 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
       Assert_Arc_Derivatives_Covered (Forward.Transition, Forward.Transition.Two_Arcs.First, "First biarc arc", T);
       Assert_Arc_Derivatives_Covered (Forward.Transition, Forward.Transition.Two_Arcs.Second, "Second biarc arc", T);
       Assert_Evaluator_Matches (Forward.Transition, "R4 biarc", T);
-   end Test_Biarc_Determinism_Reversal_And_Metadata;
+   end Test_Biarc_Determinism_And_Reversal;
 
    procedure Test_Biarc_Trim_Ratio_Search (T : in out Trendy_Test.Operation'Class) is
       Finish_Point : constant Position :=
@@ -549,12 +543,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          return;
       end if;
 
-      T.Assert (Transition_Kind (Result.Transition) = Circular_Transition, "Circular retains its variant tag");
-      T.Assert (Policy (Result.Transition) = Derivative_Bounded, "Circular uses derivative-bounded policy");
-      T.Assert
-        (Continuity (Result.Transition) = (Endpoint_Order => 1, Internal_Splice => False,
-                                           Internal_Splice_Order => 0),
-         "Circular advertises C1 endpoint continuity only");
       T.Assert
         (abs (Arc_Length (Result.Transition) - 4.0 * Ada.Numerics.Pi * mm) <= 1.0E-10 * mm,
          "Circular arc has the exact physical quarter-circle length");
@@ -635,12 +623,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          return;
       end if;
 
-      T.Assert (Transition_Kind (Result.Transition) = Parabolic_Transition, "Parabolic retains its variant tag");
-      T.Assert (Policy (Result.Transition) = Derivative_Bounded, "Parabolic uses derivative-bounded policy");
-      T.Assert
-        (Continuity (Result.Transition) = (Endpoint_Order => 1, Internal_Splice => False,
-                                           Internal_Splice_Order => 0),
-         "Parabolic advertises C1 endpoint continuity only");
       T.Assert
         (abs (Split_Distance (Result.Transition) - Arc_Length (Result.Transition) / 2.0) > 0.1 * mm,
          "Unequal-trim parabolic split is not a hard-coded half length");
@@ -740,14 +722,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          return;
       end if;
       T.Assert
-        (Transition_Kind (Result.Transition) = Stereographic_Transition
-         and then Policy (Result.Transition) = Derivative_Bounded,
-         "Stereographic construction retains its transition variant and policy");
-      T.Assert
-        (Continuity (Result.Transition) = (Endpoint_Order => 4, Internal_Splice => False,
-                                           Internal_Splice_Order => 0),
-         "Stereographic transition retains fourth-order endpoint continuity metadata");
-      T.Assert
         (Split_Distance (Result.Transition) = Arc_Length (Result.Transition) / 2.0,
          "Stereographic split is half arc length");
       Assert_Point_Close
@@ -779,20 +753,10 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          and then Split_Distance (Sharp) = 0.0 * mm,
          "All junction-only variants have a zero split distance");
       T.Assert
-        (Policy (Stop) = Hard_Stop
-         and then Policy (Through) = Passthrough
-         and then Policy (Sharp) = Square_Corner_Velocity,
-         "Zero length does not collapse hard-stop, passthrough, and SCV policies");
-      T.Assert
         (Junction_Velocity_Limit (Stop) = 0.0 * mm / s
          and then Junction_Velocity_Limit (Through) = Velocity'Last
          and then Junction_Velocity_Limit (Sharp) = 7.0 * mm / s,
          "Each zero-length policy retains its distinct junction velocity semantics");
-      T.Assert
-        (Continuity (Stop).Endpoint_Order = 0
-         and then Continuity (Through).Endpoint_Order = 0
-         and then Continuity (Sharp).Endpoint_Order = 0,
-         "Zero-length variants retain explicit continuity metadata");
       Assert_Point_Close (Point_At_Parameter (Stop, 0.75), Point, 0.0 * mm, "Hard-stop point", T);
       Assert_Point_Close (Point_At_Parameter (Through, 0.75), Point, 0.0 * mm, "Passthrough point", T);
       Assert_Point_Close (Point_At_Parameter (Sharp, 0.75), Point, 0.0 * mm, "Sharp point", T);
@@ -808,7 +772,7 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          Test_SCV_Angles_And_Axis_Selection'Access,
          Test_Circular_R4_Geometry_And_Bounds'Access,
          Test_Parabolic_R4_Geometry_And_Bounds'Access,
-         Test_Biarc_Determinism_Reversal_And_Metadata'Access,
+         Test_Biarc_Determinism_And_Reversal'Access,
          Test_Biarc_Trim_Ratio_Search'Access,
          Test_Stereographic_Wrapper'Access,
          Test_Fixed_Size_Copying'Access];

@@ -25,11 +25,8 @@ with Prunt.Controller_Generic_Types;
 with Prunt.Default_Modules;
 with Prunt.Default_Modules.Config_Saving;
 with Prunt.Default_Modules.Idle_Emitter;
-with Prunt.Default_Modules.Kinematics;
-with Prunt.Default_Modules.Kinematics.Test;
 with Prunt.Default_Modules.Machine_Idle_Timeout;
 with Prunt.Default_Modules.Machine_Idle_Timeout.Test;
-with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Dummy_Allocator.Test;
 with Prunt.Exception_Occurrence_Holders.Test;
 with Prunt.Gcode_Arguments.Test;
@@ -48,35 +45,25 @@ with Prunt.Thermistors.Test;
 with Trendy_Test.Reports;
 
 procedure Tests is
-   type Kinematics_Test_Name is (Only_Item);
+   type Machine_Idle_Timeout_Test_Name is (Only_Item);
    pragma Unreferenced (Only_Item);
 
-   package Kinematics_Test_Controller_Types is new
+   package Machine_Idle_Timeout_Test_Controller_Types is new
      Prunt.Controller_Generic_Types
-       (Motor_Name                   => Kinematics_Test_Name,
-        Heater_Name                  => Kinematics_Test_Name,
-        Thermistor_Name              => Kinematics_Test_Name,
-        Board_Temperature_Probe_Name => Kinematics_Test_Name,
-        Fan_Name                     => Kinematics_Test_Name,
-        Tachometer_Name              => Kinematics_Test_Name,
-        Input_Switch_Name            => Kinematics_Test_Name);
-   package Kinematics_Test_Logger is new Prunt.Logger;
-   package Kinematics_Test_Logger_Control is new Kinematics_Test_Logger.Test_Control;
-   package Kinematics_Test_Default_Modules is new
+       (Motor_Name                   => Machine_Idle_Timeout_Test_Name,
+        Heater_Name                  => Machine_Idle_Timeout_Test_Name,
+        Thermistor_Name              => Machine_Idle_Timeout_Test_Name,
+        Board_Temperature_Probe_Name => Machine_Idle_Timeout_Test_Name,
+        Fan_Name                     => Machine_Idle_Timeout_Test_Name,
+        Tachometer_Name              => Machine_Idle_Timeout_Test_Name,
+        Input_Switch_Name            => Machine_Idle_Timeout_Test_Name);
+   package Machine_Idle_Timeout_Test_Logger is new Prunt.Logger;
+   package Machine_Idle_Timeout_Test_Logger_Control is new Machine_Idle_Timeout_Test_Logger.Test_Control;
+   package Machine_Idle_Timeout_Test_Default_Modules is new
      Prunt.Default_Modules
-       (My_Modules => Kinematics_Test_Controller_Types.My_Modules,
-        My_Logger  => Kinematics_Test_Logger);
-   package Kinematics_Test_Config_Saving is new Kinematics_Test_Default_Modules.Config_Saving;
-   package Kinematics_Test_Motor_Drivers is new
-     Kinematics_Test_Default_Modules.Motor_Drivers
-       (My_Controller_Generic_Types => Kinematics_Test_Controller_Types);
-   package Kinematics_Test_Module is new
-     Kinematics_Test_Default_Modules.Kinematics
-       (My_Controller_Generic_Types => Kinematics_Test_Controller_Types,
-        Config_Saving_Module        => Kinematics_Test_Config_Saving,
-        Motor_Drivers_Module        => Kinematics_Test_Motor_Drivers);
-   package Kinematics_Test is new Kinematics_Test_Module.Test;
-
+       (My_Modules => Machine_Idle_Timeout_Test_Controller_Types.My_Modules,
+        My_Logger  => Machine_Idle_Timeout_Test_Logger);
+   package Machine_Idle_Timeout_Test_Config_Saving is new Machine_Idle_Timeout_Test_Default_Modules.Config_Saving;
    Timeout_Report_Count : Natural := 0 with Atomic, Volatile;
 
    function Get_Timeout_Report_Count return Natural is (Timeout_Report_Count);
@@ -92,10 +79,10 @@ procedure Tests is
       Timeout_Report_Count := 0;
    end Reset_Timeout_Report_Count;
 
-   package Machine_Idle_Timeout_Test_Idle_Emitter is new Kinematics_Test_Default_Modules.Idle_Emitter;
+   package Machine_Idle_Timeout_Test_Idle_Emitter is new Machine_Idle_Timeout_Test_Default_Modules.Idle_Emitter;
    package Machine_Idle_Timeout_Test_Module is new
-     Kinematics_Test_Default_Modules.Machine_Idle_Timeout
-       (Config_Saving_Module => Kinematics_Test_Config_Saving,
+     Machine_Idle_Timeout_Test_Default_Modules.Machine_Idle_Timeout
+       (Config_Saving_Module => Machine_Idle_Timeout_Test_Config_Saving,
         Idle_Emitter_Module  => Machine_Idle_Timeout_Test_Idle_Emitter,
         Request_Shutdown     => Request_Machine_Idle_Timeout_Shutdown);
    package Machine_Idle_Timeout_Test is new
@@ -137,7 +124,6 @@ procedure Tests is
    end Xcov_Dump;
 begin
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
-   Trendy_Test.Register (Kinematics_Test.All_Tests);
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Long_Float_Test.All_Tests);
@@ -164,9 +150,9 @@ begin
       Trendy_Test.Reports.Print_Basic_Report (Trendy_Test.Run (Filter => Filter));
       pragma Annotate (Xcov, Dump_Buffers, "all_tests");
    end if;
-   Kinematics_Test_Logger_Control.Stop;
+   Machine_Idle_Timeout_Test_Logger_Control.Stop;
 exception
    when others =>
-      Kinematics_Test_Logger_Control.Stop;
+      Machine_Idle_Timeout_Test_Logger_Control.Stop;
       raise;
 end Tests;

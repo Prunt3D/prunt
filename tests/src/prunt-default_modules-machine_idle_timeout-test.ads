@@ -25,6 +25,6 @@ generic
 package Prunt.Default_Modules.Machine_Idle_Timeout.Test is
 
    function All_Tests return Trendy_Test.Test_Group;
-   --  Return M85 command metadata, user configuration, and inactivity-watchdog tests.
+   --  Return inactivity-watchdog tests.
 
 end Prunt.Default_Modules.Machine_Idle_Timeout.Test;

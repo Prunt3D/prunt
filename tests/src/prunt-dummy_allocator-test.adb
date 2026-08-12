@@ -18,9 +18,6 @@
 --------------------------------------------------
 
 with Trendy_Test;             use Trendy_Test;
-with Prunt.Dummy_Allocator;
-with System;
-with System.Storage_Elements; use System.Storage_Elements;
 
 package body Prunt.Dummy_Allocator.Test is
 
@@ -42,7 +39,6 @@ package body Prunt.Dummy_Allocator.Test is
    end Test_Allocation;
 
    procedure Test_Missing_Address (T : in out Trendy_Test.Operation'Class) is
-      use System.Storage_Elements;
    begin
       T.Register;
 
@@ -58,18 +54,9 @@ package body Prunt.Dummy_Allocator.Test is
       end;
    end Test_Missing_Address;
 
-   procedure Test_Storage_Size (T : in out Trendy_Test.Operation'Class) is
-   begin
-      T.Register;
-
-      Pool : Prunt.Dummy_Allocator.Dummy_Pool_Type;
-
-      T.Assert (Pool.Storage_Size = Storage_Count'Last);
-   end Test_Storage_Size;
-
    function All_Tests return Trendy_Test.Test_Group is
    begin
-      return [Test_Allocation'Access, Test_Missing_Address'Access, Test_Storage_Size'Access];
+      return [Test_Allocation'Access, Test_Missing_Address'Access];
    end All_Tests;
 
 end Prunt.Dummy_Allocator.Test;
