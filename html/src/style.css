@@ -90,6 +90,7 @@ body {
 .btn {
   padding: 8px 16px; border: none; border-radius: var(--radius); font-size: 0.9rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: var(--transition); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
 }
+.btn:disabled { cursor: not-allowed; opacity: 0.5; }
 .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
 .btn-primary { background-color: var(--primary); color: #0d1117; }
 .btn-primary:hover { background-color: var(--primary-hover); color: #fff; }

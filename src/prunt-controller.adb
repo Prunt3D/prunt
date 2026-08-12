@@ -1530,7 +1530,7 @@ package body Prunt.Controller is
 
    procedure Reload_Server is
    begin
-      null; --  TODO
+      Signal_Reload;
    end Reload_Server;
 
    overriding

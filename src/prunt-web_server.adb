@@ -703,8 +703,18 @@ package body Prunt.Web_Server is
             Startup_Manager.Set_Update_Allowed;
             Reply_Text (Client, 204, "No Content", "", True);
          elsif Status.File = "reload-server" then
-            Reload_Server;
-            Reply_Text (Client, 204, "No Content", "", True);
+            declare
+               Occurrence : Exception_Occurrence;
+               Is_Fatal   : Boolean;
+            begin
+               Exception_Occurrence_Holder.Get_Snapshot (Occurrence, Is_Fatal);
+               if Is_Fatal then
+                  Reply_Text (Client, 409, "Conflict", "Can not restart the server after a fatal error.", True);
+               else
+                  Reload_Server;
+                  Reply_Text (Client, 204, "No Content", "", True);
+               end if;
+            end;
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", True);
          end if;
