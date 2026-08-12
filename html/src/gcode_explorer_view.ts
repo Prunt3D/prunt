@@ -12,7 +12,7 @@ import {
 } from './localization.js';
 
 let currentSchema: any = null;
-let groupByModule = false;
+let groupByModule = true;
 
 export async function initGcodeExplorerView() {
     const container = document.getElementById('gcode-explorer-content');

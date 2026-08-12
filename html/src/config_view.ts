@@ -13,7 +13,7 @@ let currentSchema: any = null;
 let currentValues: any = null;
 let currentErrors: any[] = [];
 
-let groupByModule = false;
+let groupByModule = true;
 let devMode = false;
 
 export async function initConfigView() {
