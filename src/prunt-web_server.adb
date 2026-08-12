@@ -19,6 +19,7 @@
 
 with Ada.Containers.Ordered_Sets;
 with Ada.Directories; use Ada.Directories;
+with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Real_Time;   use Ada.Real_Time;
 with Ada.Strings;
 with Ada.Strings.Fixed;
@@ -929,6 +930,7 @@ package body Prunt.Web_Server is
 
       procedure Send_To_All_WebSocket_Receivers (Message : String; Ignore_Divisors : Boolean);
       procedure Logger_Receiver (Message : Virtual_String);
+      function Server_Exception_JSON return String;
 
       procedure Send_To_All_WebSocket_Receivers (Message : String; Ignore_Divisors : Boolean) is
       begin
@@ -958,6 +960,25 @@ package body Prunt.Web_Server is
       begin
          Server.Log_To_WebSocket_Receivers (Message);
       end Logger_Receiver;
+
+      function Server_Exception_JSON return String is
+         Occurrence : Ada.Exceptions.Exception_Occurrence;
+         Is_Fatal   : Boolean;
+      begin
+         Exception_Occurrence_Holder.Get_Snapshot (Occurrence, Is_Fatal);
+
+         if Ada.Exceptions.Is_Null_Occurrence (Occurrence) then
+            return "null";
+         end if;
+
+         return
+           "{""Message"":"
+           & Conversions.To_UTF_8_String
+               (JSON.Escape_String (Conversions.To_Virtual_String (Ada.Exceptions.Exception_Information (Occurrence))))
+           & ",""Fatal"":"
+           & (if Is_Fatal then "true" else "false")
+           & "}";
+      end Server_Exception_JSON;
 
       Server_Start_Time : Ada.Real_Time.Time := Clock;
       --  Used by client to force a reload if the server has been restarted.
@@ -1027,6 +1048,8 @@ package body Prunt.Web_Server is
             Send_To_All_WebSocket_Receivers
               ("{""Status_Values"":"
                & Conversions.To_UTF_8_String (Get_Status_Values_String)
+               & ", ""Server_Exception"":"
+               & Server_Exception_JSON
                & ", ""Startup"": """
                & (if Startup_Manager.Get_Startup_Done
                   then "Done"

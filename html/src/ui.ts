@@ -1,4 +1,4 @@
-import { wsClient } from './ws.js';
+import { ServerException, wsClient } from './ws.js';
 import { pauseMachine, resumeMachine } from './api.js';
 import { initConfigView } from './config_view.js';
 import { initStatusView } from './status_view.js';
@@ -45,7 +45,32 @@ export async function initUI() {
         window.location.reload();
     });
 
+    wsClient.on('serverException', (serverException: ServerException | null) => {
+        updateServerExceptionBanner(serverException);
+    });
+
     wsClient.connect();
+}
+
+function updateServerExceptionBanner(serverException: ServerException | null) {
+    const banner = document.getElementById('server-exception-banner');
+    const title = document.getElementById('server-exception-title');
+    const message = document.getElementById('server-exception-message');
+    if (!banner || !title || !message) return;
+
+    if (!serverException || typeof serverException.Message !== 'string' || serverException.Message.length === 0) {
+        banner.hidden = true;
+        message.textContent = '';
+        return;
+    }
+
+    const isFatal = serverException.Fatal === true;
+    banner.classList.toggle('fatal', isFatal);
+    title.textContent = isFatal
+        ? t('ui.serverException.fatalTitle', 'Fatal server error')
+        : t('ui.serverException.title', 'Server error');
+    message.textContent = serverException.Message;
+    banner.hidden = false;
 }
 
 function setupNavigation() {

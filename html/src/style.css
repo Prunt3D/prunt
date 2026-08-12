@@ -53,6 +53,13 @@ body {
   font-family: var(--font-family); background-color: var(--bg-color); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden;
 }
 
+.server-exception-banner { padding: 14px 24px; background-color: rgba(210, 153, 34, 0.18); border-bottom: 1px solid var(--warning); color: var(--text-main); z-index: 20; }
+.server-exception-banner[hidden] { display: none; }
+.server-exception-banner.fatal { background-color: rgba(248, 81, 73, 0.18); border-bottom-color: var(--danger); }
+.server-exception-banner strong { display: block; margin-bottom: 6px; color: var(--warning); }
+.server-exception-banner.fatal strong { color: var(--danger); }
+.server-exception-banner pre { max-height: 25vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 0.85rem/1.45 monospace; color: inherit; }
+
 .topbar {
   display: flex; justify-content: space-between; align-items: center; padding: 0 24px; height: 64px; background-color: var(--bg-surface); border-bottom: 1px solid var(--border); z-index: 10;
 }

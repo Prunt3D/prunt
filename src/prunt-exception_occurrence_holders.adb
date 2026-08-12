@@ -82,6 +82,12 @@ package body Prunt.Exception_Occurrence_Holders is
          Ada.Exceptions.Save_Occurrence (Occurrence, Data);
       end Get;
 
+      procedure Get_Snapshot (Occurrence : out Ada.Exceptions.Exception_Occurrence; Is_Fatal : out Boolean) is
+      begin
+         Is_Fatal := Fatal_Occurrence_Stored;
+         Ada.Exceptions.Save_Occurrence (Occurrence, Data);
+      end Get_Snapshot;
+
       entry Enter_When_Fatal_Set when Fatal_Occurrence_Stored is
       begin
          null;

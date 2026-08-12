@@ -18,6 +18,7 @@
 --------------------------------------------------
 
 with Ada.Exceptions;
+with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
 with Ada.Text_IO;
@@ -119,6 +120,38 @@ package body Prunt.Exception_Occurrence_Holders.Test is
       T.Assert (not Got_Fatal);
       T.Assert (Ada.Exceptions.Exception_Name (Result) = Ada.Exceptions.Exception_Name (Occurrence));
    end Test_Get_Blocks_Until_Set;
+
+   procedure Test_Get_Snapshot_When_Empty (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Holder     : Exception_Occurrence_Holder_Type;
+      Occurrence : Ada.Exceptions.Exception_Occurrence;
+      Is_Fatal   : Boolean;
+
+      Holder.Get_Snapshot (Occurrence, Is_Fatal);
+
+      T.Assert (not Is_Fatal);
+      T.Assert (Ada.Exceptions.Is_Null_Occurrence (Occurrence));
+   end Test_Get_Snapshot_When_Empty;
+
+   procedure Test_Get_Snapshot_When_Set (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Holder     : Exception_Occurrence_Holder_Type;
+      Occurrence : Ada.Exceptions.Exception_Occurrence;
+      Snapshot   : Ada.Exceptions.Exception_Occurrence;
+      Is_Fatal   : Boolean;
+
+      Raise_And_Save (Occurrence, Test_Exception'Identity);
+      Holder.Set_Fatal (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, Occurrence);
+      Holder.Get_Snapshot (Snapshot, Is_Fatal);
+
+      T.Assert (Is_Fatal);
+      T.Assert (not Ada.Exceptions.Is_Null_Occurrence (Snapshot));
+      T.Assert (Ada.Exceptions.Exception_Name (Snapshot) = Ada.Exceptions.Exception_Name (Occurrence));
+   end Test_Get_Snapshot_When_Set;
 
    procedure Test_Initial_State (T : in out Trendy_Test.Operation'Class) is
    begin
@@ -327,6 +360,8 @@ package body Prunt.Exception_Occurrence_Holders.Test is
       return
         [Test_Enter_When_Fatal_Set'Access,
          Test_Get_Blocks_Until_Set'Access,
+         Test_Get_Snapshot_When_Empty'Access,
+         Test_Get_Snapshot_When_Set'Access,
          Test_Initial_State'Access,
          Test_Reset_Clears_Non_Fatal'Access,
          Test_Reset_Does_Not_Clear_Fatal'Access,

@@ -6,6 +6,8 @@
   "ui.global.resumeFailed": "Failed to resume machine.",
   "ui.connection.connected": "Connected",
   "ui.connection.disconnected": "Disconnected",
+  "ui.serverException.title": "Server error",
+  "ui.serverException.fatalTitle": "Fatal server error",
   "ui.nav.status": "Status Dashboard",
   "ui.nav.config": "Configuration",
   "ui.nav.control": "Machine Control",

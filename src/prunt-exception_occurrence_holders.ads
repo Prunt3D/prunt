@@ -44,6 +44,9 @@ package Prunt.Exception_Occurrence_Holders is
       entry Get (Occurrence : out Ada.Exceptions.Exception_Occurrence; Is_Fatal : out Boolean);
       --  Get the stored exception. Blocks until an exception is available.
 
+      procedure Get_Snapshot (Occurrence : out Ada.Exceptions.Exception_Occurrence; Is_Fatal : out Boolean);
+      --  Copy the current exception state without blocking. Occurrence is null when no exception has been set.
+
       entry Enter_When_Fatal_Set;
 
       procedure Reset;

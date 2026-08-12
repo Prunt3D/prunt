@@ -18,6 +18,7 @@
 --------------------------------------------------
 
 with Ada.Containers.Ordered_Sets;
+with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
@@ -1069,11 +1070,12 @@ package body Prunt.Controller is
       Is_Fatal   : Boolean;
       pragma Unreferenced (Is_Fatal);
    begin
-      if not Exception_Occurrence_Holder.all.Is_Set then
+      Exception_Occurrence_Holder.all.Get_Snapshot (Occurrence, Is_Fatal);
+
+      if Ada.Exceptions.Is_Null_Occurrence (Occurrence) then
          return "";
       end if;
 
-      Exception_Occurrence_Holder.all.Get (Occurrence, Is_Fatal);
       return Ada.Exceptions.Exception_Information (Occurrence);
    end Last_Error_Message;
 

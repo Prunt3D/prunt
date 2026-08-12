@@ -1,4 +1,9 @@
-export type AppEvent = 'connected' | 'disconnected' | 'tick' | 'restarted' | 'log';
+export type ServerException = {
+    Message: string;
+    Fatal: boolean;
+};
+
+export type AppEvent = 'connected' | 'disconnected' | 'tick' | 'restarted' | 'log' | 'serverException';
 
 export class PruntWebSocket {
     private ws: WebSocket | null = null;
@@ -48,6 +53,10 @@ export class PruntWebSocket {
 
                 if (message.Log) {
                     this.emit('log', message.Log);
+                }
+
+                if (Object.prototype.hasOwnProperty.call(message, 'Server_Exception')) {
+                    this.emit('serverException', message.Server_Exception);
                 }
 
             } catch (err) {
