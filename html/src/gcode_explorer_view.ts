@@ -60,7 +60,7 @@ function renderGcodeExplorer(container: HTMLElement, schema: any) {
             modContainer.appendChild(title);
 
             for (const cmd of commands) {
-                modContainer.appendChild(createCommandCard(moduleName, cmd));
+                modContainer.appendChild(createCommandEntry(moduleName, cmd));
             }
 
             container.appendChild(modContainer);
@@ -86,7 +86,7 @@ function renderGcodeExplorer(container: HTMLElement, schema: any) {
 
         for (const cmd of sortedCommands) {
             const moduleName = Object.entries(schema).find(([, commands]) => Array.isArray(commands) && commands.includes(cmd))?.[0];
-            flatContainer.appendChild(createCommandCard(moduleName || '', cmd));
+            flatContainer.appendChild(createCommandEntry(moduleName || '', cmd));
         }
 
         container.appendChild(flatContainer);
@@ -109,9 +109,9 @@ function normalizeSearchTarget(...parts: string[]): string {
         .replace(/[^a-z0-9_]+/g, '');
 }
 
-function createCommandCard(moduleName: string, cmd: any): HTMLElement {
-    const cmdCard = document.createElement('div');
-    cmdCard.className = 'card gcode-command-card';
+function createCommandEntry(moduleName: string, cmd: any): HTMLElement {
+    const commandEntry = document.createElement('article');
+    commandEntry.className = 'gcode-command';
 
     const header = document.createElement('div');
     header.className = 'gcode-command-header';
@@ -120,7 +120,7 @@ function createCommandCard(moduleName: string, cmd: any): HTMLElement {
     identifier.className = 'gcode-command-id';
     const commandIdentifier = `${cmd.Identifier.Argument}${cmd.Identifier.Number}`;
     identifier.innerText = commandIdentifier;
-    cmdCard.dataset.gcodeTarget = normalizeSearchTarget(moduleName, cmd.Name || '');
+    commandEntry.dataset.gcodeTarget = normalizeSearchTarget(moduleName, cmd.Name || '');
 
     const name = document.createElement('span');
     name.className = 'gcode-command-name';
@@ -128,21 +128,21 @@ function createCommandCard(moduleName: string, cmd: any): HTMLElement {
 
     header.appendChild(identifier);
     header.appendChild(name);
-    cmdCard.appendChild(header);
+    commandEntry.appendChild(header);
 
     const commandDescription = translateGcodeCommandDescription(commandIdentifier, cmd.Description || '');
     if (commandDescription) {
         const descContainer = document.createElement('div');
         descContainer.className = 'gcode-command-desc';
         renderDescription(descContainer, commandDescription);
-        cmdCard.appendChild(descContainer);
+        commandEntry.appendChild(descContainer);
     }
 
     if (cmd.Arguments && Object.keys(cmd.Arguments).length > 0) {
         const argsTitle = document.createElement('h4');
         argsTitle.innerText = t('ui.gcode.arguments', 'Arguments');
         argsTitle.className = 'gcode-args-title';
-        cmdCard.appendChild(argsTitle);
+        commandEntry.appendChild(argsTitle);
 
         const argsList = document.createElement('ul');
         argsList.className = 'gcode-args-list';
@@ -189,8 +189,8 @@ function createCommandCard(moduleName: string, cmd: any): HTMLElement {
 
             argsList.appendChild(argItem);
         }
-        cmdCard.appendChild(argsList);
+        commandEntry.appendChild(argsList);
     }
 
-    return cmdCard;
+    return commandEntry;
 }

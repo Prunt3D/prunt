@@ -110,12 +110,14 @@ body {
 .status-indicator.connected::before { background-color: var(--success); box-shadow: 0 0 8px var(--success); }
 .status-indicator.disconnected::before { background-color: var(--danger); box-shadow: 0 0 8px var(--danger); }
 
-.control-cards, .dashboard-grid {
+.machine-control-layout, .dashboard-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px;
 }
 .card { background-color: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); transition: transform 0.2s ease, box-shadow 0.2s ease; display: flex; flex-direction: column; }
 .card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4); }
 .card h3 { margin-bottom: 20px; font-size: 1.1rem; color: var(--text-strong); font-weight: 600; }
+.machine-control-section { display: flex; flex-direction: column; }
+.machine-control-section h3 { margin-bottom: 20px; font-size: 1.1rem; color: var(--text-strong); font-weight: 600; }
 
 .drop-zone { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px 16px; text-align: center; color: var(--text-muted); cursor: pointer; transition: var(--transition); background-color: rgba(22, 27, 34, 0.5); min-height: 120px; }
 .drop-zone:hover, .drop-zone.dragover { border-color: var(--primary); color: var(--primary); background-color: rgba(88, 166, 255, 0.05); }
@@ -130,7 +132,7 @@ input[type="text"]:focus, input[type="number"]:focus { outline: none; border-col
 .command-input-group { display: flex; gap: 8px; margin-top: auto; }
 .command-input-group input { flex: 1; }
 .gcode-entry-layout { display: flex; justify-content: center; min-height: max(420px, calc(100vh - 240px)); }
-.gcode-entry-card { width: min(100%, 920px); gap: 16px; flex: 1; }
+.gcode-entry-panel { display: flex; flex-direction: column; width: min(100%, 920px); gap: 16px; flex: 1; }
 .gcode-entry-history {
   flex: 1;
   min-height: 240px;
@@ -278,7 +280,8 @@ select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3p
 .config-tab.has-error { color: var(--danger); border: 1px solid var(--danger); background-color: rgba(248, 81, 73, 0.05); }
 .config-tab.has-error.active { background-color: rgba(248, 81, 73, 0.12); box-shadow: inset 0 0 0 1px var(--danger); }
 
-.system-card { display: flex; flex-direction: column; gap: 12px; }
+.system-actions-section { gap: 12px; }
+.system-actions-section h3 { margin-bottom: 8px; }
 .error-message { color: var(--danger); font-size: 0.85rem; margin-top: 6px; display: block; font-weight: 500; }
 .error-message.server-error { color: var(--warning); }
 .global-errors { margin-bottom: 24px; padding: 16px; background-color: rgba(248, 81, 73, 0.1); border: 1px solid var(--danger); border-radius: var(--radius); display: none; }
@@ -344,7 +347,8 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
 .gcode-module-group { margin-bottom: 24px; }
 .gcode-module-group h3 { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
 .text-muted { color: var(--text-muted); }
-.gcode-command-card { margin-bottom: 16px; padding: 16px; }
+.gcode-command { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.gcode-command:last-child { border-bottom: 0; }
 .gcode-command-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .gcode-command-id { font-size: 1.2rem; color: var(--primary); }
 .gcode-command-name { font-size: 1.1rem; font-weight: bold; }

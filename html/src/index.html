@@ -99,27 +99,27 @@
                     <h2 data-i18n="ui.control.title">Machine Control & Files</h2>
                 </div>
                 
-                <div class="control-cards">
-                    <div class="card file-upload-card">
+                <div class="machine-control-layout">
+                    <section class="machine-control-section file-upload-section">
                         <h3 data-i18n="ui.control.fileUpload">File Upload</h3>
                         <div class="drop-zone" id="drop-zone">
                             <p data-i18n="ui.control.dropZone">Drag & Drop G-Code file here or click to select</p>
                             <input type="file" id="file-input" hidden>
                         </div>
-                    </div>
+                    </section>
 
-                    <div class="card files-card">
+                    <section class="machine-control-section uploaded-files-section">
                         <h3 data-i18n="ui.control.uploadedFiles">Uploaded Files</h3>
                         <ul id="file-list" class="file-list">
                             <!-- Files injected here -->
                         </ul>
-                    </div>
+                    </section>
 
-                    <div class="card system-card">
+                    <section class="machine-control-section system-actions-section">
                         <h3 data-i18n="ui.control.systemActions">System Actions</h3>
                         <button id="btn-restart-server" class="btn btn-danger" data-i18n="ui.control.restartServer" disabled>Restart Server</button>
                         <button id="btn-firmware-update" class="btn btn-secondary" data-i18n="ui.control.allowFirmwareUpdate">Allow Firmware Update</button>
-                    </div>
+                    </section>
                 </div>
             </section>
 
@@ -129,7 +129,7 @@
                 </div>
 
                 <div class="gcode-entry-layout">
-                    <div class="card gcode-entry-card">
+                    <div class="gcode-entry-panel">
                         <div id="gcode-entry-history" class="gcode-entry-history" aria-live="polite"></div>
                         <p id="gcode-entry-status" class="gcode-entry-status text-muted" data-i18n="ui.gcodeEntry.loading">
                             Loading G-Code schema...
