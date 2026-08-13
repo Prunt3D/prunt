@@ -141,15 +141,55 @@ input[type="text"]:focus, input[type="number"]:focus { outline: none; border-col
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background-color: var(--bg-surface);
-  font-family: monospace;
   line-height: 1.5;
 }
-.gcode-entry-history-line {
+.gcode-entry-history-empty { color: var(--text-muted); }
+.gcode-entry-command-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--text-muted);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.gcode-entry-command-card + .gcode-entry-command-card { margin-top: 12px; }
+.gcode-entry-command-card.state-running { border-left-color: var(--primary); }
+.gcode-entry-command-card.state-completed { border-left-color: var(--success); }
+.gcode-entry-command-card.state-cancelled,
+.gcode-entry-command-card.state-failed { border-left-color: var(--danger); }
+.gcode-entry-command-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.gcode-entry-command-text {
+  min-width: 0;
   color: var(--text-main);
   white-space: pre-wrap;
   word-break: break-word;
 }
-.gcode-entry-history-empty { color: var(--text-muted); }
+.gcode-entry-command-state {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.state-running .gcode-entry-command-state { color: var(--primary); }
+.state-completed .gcode-entry-command-state { color: var(--success); }
+.state-cancelled .gcode-entry-command-state,
+.state-failed .gcode-entry-command-state { color: var(--danger); }
+.gcode-entry-command-output,
+.gcode-entry-command-failure { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.gcode-entry-command-output pre,
+.gcode-entry-command-failure {
+  margin: 0;
+  font-family: monospace;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gcode-entry-command-output pre + pre { margin-top: 6px; }
+.gcode-entry-command-failure { color: var(--danger); }
 .gcode-entry-status { min-height: 1.5rem; }
 .gcode-entry-input-shell { position: relative; padding-top: 12px; }
 .gcode-entry-input-group { margin-top: 0; align-items: stretch; }

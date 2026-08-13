@@ -213,8 +213,7 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
       pragma Unreferenced (This);
    begin
       Context.Wait_For_Idle;
-
-      Log_Position;
+      Context.Log (Current_Position_Report (Get_Position));
    end Process_After_Block;
 
    overriding
@@ -225,12 +224,12 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
       Module_Instance (This.Module_Instance_Ref.Get.Element.all).Set_Position_Auto_Report_Interval (This.Interval);
 
       if This.Interval = 0.0 then
-         My_Logger.Log ("Position auto-reporting disabled.");
+         Context.Log_If_Interactive ("Position logging stopped.");
       else
-         My_Logger.Log
+         Context.Log_If_Interactive
            (+("Position auto-reporting every "
               & Ada.Strings.Fixed.Trim (This.Interval'Image, Ada.Strings.Both)
-              & " seconds."));
+              & " seconds started; reports will appear in the log."));
       end if;
    end Process_After_Block;
 

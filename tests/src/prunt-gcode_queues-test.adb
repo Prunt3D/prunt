@@ -29,12 +29,12 @@ package body Prunt.Gcode_Queues.Test is
 
       Q : Queue;
       Line : Virtual_String;
-      Kind : Queue_Item_Kind;
+      Source : Queue_Item_Source;
       End_Of_Item : Boolean;
       Stopped : Boolean;
 
       select
-         Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+         Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
          T.Fail ("Barrier should be closed");
       else
          null;
@@ -61,7 +61,7 @@ package body Prunt.Gcode_Queues.Test is
       T.Assert (Q.Get_Current_File = "", "File not cancelled");
       T.Assert (Q.Get_Current_Line_Number = 0, "Line number not reset");
 
-      Q.Try_Set_Command ("M112", Succeeded);
+      Q.Try_Set_Command ("M112", 1, Succeeded);
       T.Assert (Succeeded, "Failed to queue command after cancelling file");
       Q.Cancel_All;
       T.Assert (Q.Get_Current_Command = "", "Command not cancelled");
@@ -74,7 +74,7 @@ package body Prunt.Gcode_Queues.Test is
       Succeeded : Boolean;
       Q : Queue;
 
-      Q.Try_Set_Command ("M112", Succeeded);
+      Q.Try_Set_Command ("M112", 1, Succeeded);
       T.Assert (Succeeded, "Failed to queue command");
 
       Q.Cancel_Command;
@@ -116,19 +116,20 @@ package body Prunt.Gcode_Queues.Test is
 
       Succeeded : Boolean;
       Line : Virtual_String;
-      Kind : Queue_Item_Kind;
+      Source : Queue_Item_Source;
       End_Of_Item : Boolean;
       Stopped : Boolean;
       Cmd : constant Virtual_String := "G28";
       Q : Queue;
 
-      Q.Try_Set_Command (Cmd, Succeeded);
+      Q.Try_Set_Command (Cmd, 42, Succeeded);
       T.Assert (Succeeded, "Failed to queue command");
       T.Assert (Q.Get_Current_Command = Cmd, "Current command not set");
 
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = Cmd, "Wrong command line");
-      T.Assert (Kind = Command_Item, "Wrong item kind");
+      T.Assert (Source.Kind = Command_Item, "Wrong item kind");
+      T.Assert (Source.Command_ID = 42, "Wrong command ID");
       T.Assert (End_Of_Item, "Command should end the item");
       T.Assert (not Stopped, "Command should not stop the queue");
       T.Assert (Q.Get_Current_Command = "", "Current command should be cleared");
@@ -153,14 +154,14 @@ package body Prunt.Gcode_Queues.Test is
       Q.Try_Set_File ("other.gcode", Succeeded);
       T.Assert (not Succeeded, "Should fail to set file when file active");
 
-      Q.Try_Set_Command ("G28", Succeeded);
+      Q.Try_Set_Command ("G28", 1, Succeeded);
       T.Assert (not Succeeded, "Should fail to set command when file active");
 
       Q.Cancel_File;
-      Q.Try_Set_Command ("G28", Succeeded);
+      Q.Try_Set_Command ("G28", 2, Succeeded);
       T.Assert (Succeeded, "Try_Set_Command failed");
 
-      Q.Try_Set_Command ("G29", Succeeded);
+      Q.Try_Set_Command ("G29", 3, Succeeded);
       T.Assert (not Succeeded, "Should fail to set command when command active");
 
       Q.Cancel_Command;
@@ -174,7 +175,7 @@ package body Prunt.Gcode_Queues.Test is
       Filename : constant String := Prunt.Next_Test_Filename;
       File : Mockable.Text_IO.File_Type;
       Line : Virtual_String;
-      Kind : Queue_Item_Kind;
+      Source : Queue_Item_Source;
       End_Of_Item : Boolean;
       Stopped : Boolean;
       Q : Queue;
@@ -186,7 +187,7 @@ package body Prunt.Gcode_Queues.Test is
       T.Assert (Succeeded, "Failed to queue empty file");
 
       select
-         Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+         Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
          T.Fail ("Should have requeued/blocked on empty file");
       else
          T.Assert (Q.Get_Current_File = "", "File should be closed/cleared");
@@ -213,7 +214,7 @@ package body Prunt.Gcode_Queues.Test is
       Filename : constant String := Prunt.Next_Test_Filename;
       File : Mockable.Text_IO.File_Type;
       Line : Virtual_String;
-      Kind : Queue_Item_Kind;
+      Source : Queue_Item_Source;
       End_Of_Item : Boolean;
       Stopped : Boolean;
 
@@ -225,30 +226,35 @@ package body Prunt.Gcode_Queues.Test is
       Q.Try_Set_File (+Filename, Succeeded);
       T.Assert (Succeeded, "Failed to queue file");
 
-      Q.Try_Set_Command ("CMD_FAIL", Succeeded);
+      Q.Try_Set_Command ("CMD_FAIL", 1, Succeeded);
       T.Assert (not Succeeded, "Should not be able to queue command while file is active");
 
       Q.Cancel_File;
 
-      Q.Try_Set_Command ("CMD_1", Succeeded);
+      Q.Try_Set_Command ("CMD_1", 2, Succeeded);
       T.Assert (Succeeded, "Failed to queue command");
 
       Q.Try_Set_File (+Filename, Succeeded);
       T.Assert (Succeeded, "Failed to queue file over command");
 
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = "FILE_LINE_1");
-      T.Assert (Kind = File_Item, "First item should be a file");
+      T.Assert (Source.Kind = File_Item, "First item should be a file");
+      T.Assert (Source.File_Name = +Filename, "First line should retain its filename");
+      T.Assert (Source.Line_Number = 1, "First line should have line number 1");
       T.Assert (not End_Of_Item, "First file line should not end the item");
       T.Assert (not Stopped, "File line should not stop the queue");
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = "FILE_LINE_2");
-      T.Assert (Kind = File_Item, "Second item should still be a file");
+      T.Assert (Source.Kind = File_Item, "Second item should still be a file");
+      T.Assert (Source.File_Name = +Filename, "Final line should retain its filename");
+      T.Assert (Source.Line_Number = 2, "Final line should have line number 2");
       T.Assert (End_Of_Item, "Last file line should end the item");
       T.Assert (not Stopped, "File line should not stop the queue");
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = "CMD_1");
-      T.Assert (Kind = Command_Item, "Last item should be a direct command");
+      T.Assert (Source.Kind = Command_Item, "Last item should be a direct command");
+      T.Assert (Source.Command_ID = 2, "Last item should retain its command ID");
       T.Assert (End_Of_Item, "Direct command should end the item");
       T.Assert (not Stopped, "Command should not stop the queue");
 
@@ -271,7 +277,7 @@ package body Prunt.Gcode_Queues.Test is
 
       Succeeded : Boolean;
       Line : Virtual_String;
-      Kind : Queue_Item_Kind;
+      Source : Queue_Item_Source;
       End_Of_Item : Boolean;
       Stopped : Boolean;
 
@@ -279,16 +285,18 @@ package body Prunt.Gcode_Queues.Test is
       T.Assert (Succeeded, "Failed to queue file");
       T.Assert (Q.Get_Current_File = +Filename, "Current file not set");
 
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = "G1 X10", "Wrong first line");
-      T.Assert (Kind = File_Item, "Wrong item kind for first line");
+      T.Assert (Source.Kind = File_Item, "Wrong item kind for first line");
       T.Assert (not End_Of_Item, "First file line should not end the item");
       T.Assert (not Stopped, "File line should not stop the queue");
       T.Assert (Q.Get_Current_File = +Filename, "Current file cleared too early");
 
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = "G1 Y10", "Wrong second line");
-      T.Assert (Kind = File_Item, "Wrong item kind for second line");
+      T.Assert (Source.Kind = File_Item, "Wrong item kind for second line");
+      T.Assert (Source.File_Name = +Filename, "Final line should retain its filename");
+      T.Assert (Source.Line_Number = 2, "Final line should retain its line number");
       T.Assert (End_Of_Item, "Second file line should end the item");
       T.Assert (not Stopped, "File line should not stop the queue");
 
@@ -304,7 +312,7 @@ package body Prunt.Gcode_Queues.Test is
       File : Mockable.Text_IO.File_Type;
       Succeeded : Boolean;
       Line : Virtual_String;
-      Kind : Queue_Item_Kind;
+      Source : Queue_Item_Source;
       End_Of_Item : Boolean;
       Stopped : Boolean;
 
@@ -317,21 +325,21 @@ package body Prunt.Gcode_Queues.Test is
       Q.Try_Set_File (+Filename, Succeeded);
       T.Assert (Succeeded, "Failed to queue file");
 
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = "G1 X10", "Wrong motion line");
-      T.Assert (Kind = File_Item, "Wrong item kind for first line");
+      T.Assert (Source.Kind = File_Item, "Wrong item kind for first line");
       T.Assert (not End_Of_Item, "First line should not end the item");
       T.Assert (not Stopped, "Motion line should not stop the queue");
 
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line = "; trailing comment", "Wrong comment line");
-      T.Assert (Kind = File_Item, "Wrong item kind for comment line");
+      T.Assert (Source.Kind = File_Item, "Wrong item kind for comment line");
       T.Assert (not End_Of_Item, "Comment line should not end the item when a blank line follows");
       T.Assert (not Stopped, "Comment line should not stop the queue");
 
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
       T.Assert (Line.Is_Empty, "Wrong blank line");
-      T.Assert (Kind = File_Item, "Wrong item kind for blank line");
+      T.Assert (Source.Kind = File_Item, "Wrong item kind for blank line");
       T.Assert (End_Of_Item, "Blank line should still carry the file boundary");
       T.Assert (not Stopped, "Blank line should not stop the queue");
    end Test_File_Item_Boundary_With_Trailing_Comments;
@@ -342,19 +350,19 @@ package body Prunt.Gcode_Queues.Test is
 
       Q : Queue;
       Line : Virtual_String;
-      Kind : Queue_Item_Kind;
+      Source : Queue_Item_Source;
       End_Of_Item : Boolean;
       Stopped : Boolean;
 
       Q.Stop_Waiting;
-      Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+      Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
 
       T.Assert (Stopped, "Stop_Waiting should wake Get_Next_Line");
       T.Assert (Line.Is_Empty, "Stopped wakeup should not return a line");
       T.Assert (not End_Of_Item, "Stopped wakeup should not report an item boundary");
 
       select
-         Q.Get_Next_Line (Line, Kind, End_Of_Item, Stopped);
+         Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
          T.Fail ("Barrier should be closed after the stop request is consumed");
       else
          null;

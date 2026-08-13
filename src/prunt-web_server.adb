@@ -685,11 +685,13 @@ package body Prunt.Web_Server is
             end if;
          elsif Status.File = "run-command" then
             declare
-               Succeeded : Boolean;
+               Succeeded  : Boolean;
+               Command_ID : Gcode_Command_ID;
             begin
-               Submit_Gcode_Command (+Post_Bodies.To_String (Client.Content.Post_Content.Content), Succeeded);
+               Submit_Gcode_Command
+                 (+Post_Bodies.To_String (Client.Content.Post_Content.Content), Succeeded, Command_ID);
                if Succeeded then
-                  Reply_Text (Client, 204, "No Content", "", True);
+                  Reply_JSON (Client, 200, "OK", "{""ID"":""" & Trim (Command_ID'Image) & """}", True);
                else
                   Reply_Text
                     (Client,
@@ -921,6 +923,12 @@ package body Prunt.Web_Server is
       Server.Reset_Server_Start_Time;
    end Reset;
 
+   procedure Publish_Gcode_Command_Update
+     (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String := "") is
+   begin
+      Server.Gcode_Command_Update_To_WebSocket_Receivers (Command_ID, Kind, Message);
+   end Publish_Gcode_Command_Update;
+
    task body Server is
       Factory :
         aliased Prunt_HTTP_Factory
@@ -1047,6 +1055,34 @@ package body Prunt.Web_Server is
                  ("{""Log"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Message)) & "}",
                   Ignore_Divisors => True);
             end Log_To_WebSocket_Receivers;
+         or
+            accept Gcode_Command_Update_To_WebSocket_Receivers
+              (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String)
+            do
+               declare
+                  Kind_Name     : constant String :=
+                    (case Kind is
+                       when Running   => "Running",
+                       when Output    => "Output",
+                       when Completed => "Completed",
+                       when Cancelled => "Cancelled",
+                       when Failed    => "Failed");
+                  Message_Field : constant String :=
+                    (if Kind in Output | Failed
+                     then ",""Message"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Message))
+                     else "");
+               begin
+                  Send_To_All_WebSocket_Receivers
+                    ("{""Gcode_Command"":{""ID"":"""
+                     & Trim (Command_ID'Image)
+                     & """,""Kind"":"""
+                     & Kind_Name
+                     & """"
+                     & Message_Field
+                     & "}}",
+                     Ignore_Divisors => True);
+               end;
+            end Gcode_Command_Update_To_WebSocket_Receivers;
          or
             accept Reset_Server_Start_Time;
             Server_Start_Time := Clock;

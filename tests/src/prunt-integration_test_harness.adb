@@ -184,7 +184,8 @@ package body Prunt.Integration_Test_Harness is
    procedure Reset_Position (Pos : Motor_Position);
    procedure Run_Action
      (Action       : JSON_Value;
-      Submit       : access procedure (Command : Virtual_String; Succeeded : out Boolean);
+      Submit       : access procedure
+        (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
       Submit_File  : access procedure (Path : Virtual_String; Succeeded : out Boolean);
       Cancel       : access procedure (Succeeded : out Boolean));
    procedure Run_Cancel_At
@@ -968,7 +969,8 @@ package body Prunt.Integration_Test_Harness is
 
    procedure Run_Action
      (Action       : JSON_Value;
-      Submit       : access procedure (Command : Virtual_String; Succeeded : out Boolean);
+      Submit       : access procedure
+        (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
       Submit_File  : access procedure (Path : Virtual_String; Succeeded : out Boolean);
       Cancel       : access procedure (Succeeded : out Boolean))
    is
@@ -976,14 +978,15 @@ package body Prunt.Integration_Test_Harness is
    begin
       if Kind = "submit_gcode" then
          declare
-            Command : constant Virtual_String := Action.Get ("command").Get;
-            Success  : Boolean := False;
-            Deadline : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Submit_Timeout_S);
+            Command    : constant Virtual_String := Action.Get ("command").Get;
+            Success    : Boolean := False;
+            Command_ID : Gcode_Command_ID;
+            Deadline   : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Submit_Timeout_S);
          begin
             Log_Event ("gcode", "submit_gcode", Value => VSS.Strings.Conversions.To_UTF_8_String (Command));
 
             while not Success loop
-               Submit (Command, Success);
+               Submit (Command, Success, Command_ID);
                exit when Success;
                Advance_By (0.002, Submit_Empty_Wait_Limit);
                Assert (Ada.Calendar.Clock < Deadline, "Timed out submitting G-code command.");
@@ -992,6 +995,7 @@ package body Prunt.Integration_Test_Harness is
             Assert
               (Success,
                "Controller rejected G-code command: " & VSS.Strings.Conversions.To_UTF_8_String (Command));
+            Assert (Command_ID /= 0, "Controller accepted a G-code command without assigning an ID.");
             Advance_By (0.002, Submit_Empty_Wait_Limit);
          end;
       elsif Kind = "submit_gcode_file" then

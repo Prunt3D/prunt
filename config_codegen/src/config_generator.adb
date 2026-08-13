@@ -530,20 +530,22 @@ package body Config_Generator is
                         end;
                      end loop;
                      Emit ("else");
-                     Emit ("raise Constraint_Error with ""No matching G-code variant found."";");
+                     Emit
+                       ("raise Prunt.Module_Types.Gcode_Bad_Inputs_Error "
+                        & "with ""No matching G-code variant found."";");
                      Emit ("end if;");
                   end;
                end;
             end loop;
 
             Emit ("when others =>");
-            Emit ("raise Constraint_Error with ""Unknown G-code command."";");
+            Emit ("raise Prunt.Module_Types.Gcode_Bad_Inputs_Error with ""Unknown G-code command."";");
          end;
          Emit ("end case;");
       end loop;
 
       Emit ("when others =>");
-      Emit ("raise Constraint_Error with ""Unknown G-code command identifier."";");
+      Emit ("raise Prunt.Module_Types.Gcode_Bad_Inputs_Error with ""Unknown G-code command identifier."";");
       Emit ("end case;");
       Emit ("pragma Annotate (Xcov, Exempt_Off);");
       Emit ("pragma Style_Checks (On);");

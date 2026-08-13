@@ -1,4 +1,5 @@
 import { fetchGcodeSchema, runCommand } from './api.js';
+import { GcodeCommandUpdate, wsClient } from './ws.js';
 import {
     onLocaleChange,
     t,
@@ -42,17 +43,28 @@ type EntryState = {
     usedArguments: Set<string>;
 };
 
+type CommandCardState = 'Submitting' | 'Queued' | 'Running' | 'Completed' | 'Cancelled' | 'Failed';
+
 type HistoryEntry = {
+    localId: number;
     command: string;
+    commandId?: string;
+    state: CommandCardState;
+    outputs: string[];
+    failureMessage?: string;
 };
 
 const MAX_COMMAND_CANDIDATES = 8;
+const MAX_UNMATCHED_COMMAND_IDS = 512;
 
 let indexedCommands: IndexedGcodeCommand[] = [];
 let schemaReady = false;
 let schemaLoadFailed = false;
 let popupShouldBeVisible = false;
 let commandHistory: HistoryEntry[] = [];
+let nextLocalCommandId = 1;
+const commandsById = new Map<string, HistoryEntry>();
+const unmatchedCommandUpdates = new Map<string, GcodeCommandUpdate[]>();
 
 export function initGcodeEntryView() {
     const input = document.getElementById('gcode-entry-input') as HTMLInputElement | null;
@@ -73,14 +85,35 @@ export function initGcodeEntryView() {
         const command = input.value.trim();
         if (!command) return;
 
+        const entry: HistoryEntry = {
+            localId: nextLocalCommandId++,
+            command,
+            state: 'Submitting',
+            outputs: []
+        };
+        commandHistory = [...commandHistory, entry];
+        input.value = '';
+        render();
+
         try {
-            await runCommand(command);
-            commandHistory = [...commandHistory, { command }];
-            input.value = '';
+            const submission = await runCommand(command);
+            entry.commandId = submission.ID;
+            entry.state = 'Queued';
+            commandsById.set(submission.ID, entry);
+
+            const bufferedUpdates = unmatchedCommandUpdates.get(submission.ID) || [];
+            unmatchedCommandUpdates.delete(submission.ID);
+            for (const update of bufferedUpdates) {
+                applyCommandUpdate(entry, update);
+            }
             render();
         } catch (error) {
             console.error(error);
-            alert(t('ui.control.sendFailed', 'Failed to send command.'));
+            entry.state = 'Failed';
+            entry.failureMessage = error instanceof Error
+                ? error.message
+                : t('ui.control.sendFailed', 'Failed to send command.');
+            render();
         }
     });
 
@@ -114,8 +147,69 @@ export function initGcodeEntryView() {
     });
 
     onLocaleChange(render);
+    wsClient.on('gcodeCommand', (update: GcodeCommandUpdate) => {
+        if (!isGcodeCommandUpdate(update)) return;
+
+        const entry = commandsById.get(update.ID);
+        if (entry) {
+            applyCommandUpdate(entry, update);
+            renderHistory(history);
+        } else {
+            bufferUnmatchedCommandUpdate(update);
+        }
+    });
     render();
     void loadSchema(render);
+}
+
+function isGcodeCommandUpdate(value: GcodeCommandUpdate): boolean {
+    return Boolean(value)
+        && typeof value.ID === 'string'
+        && ['Running', 'Output', 'Completed', 'Cancelled', 'Failed'].includes(value.Kind)
+        && (value.Message === undefined || typeof value.Message === 'string');
+}
+
+function applyCommandUpdate(entry: HistoryEntry, update: GcodeCommandUpdate) {
+    if (entry.state === 'Completed' || entry.state === 'Cancelled' || entry.state === 'Failed') {
+        return;
+    }
+
+    if (update.Kind === 'Output') {
+        entry.outputs.push(update.Message || '');
+        return;
+    }
+
+    entry.state = update.Kind;
+    if (update.Kind === 'Failed') {
+        entry.failureMessage = update.Message || t('ui.gcodeEntry.failed', 'Command failed.');
+    }
+}
+
+function bufferUnmatchedCommandUpdate(update: GcodeCommandUpdate) {
+    let updates = unmatchedCommandUpdates.get(update.ID);
+    if (!updates) {
+        evictUnmatchedCommandUpdatesIfNeeded();
+        updates = [];
+        unmatchedCommandUpdates.set(update.ID, updates);
+    }
+    updates.push(update);
+}
+
+function evictUnmatchedCommandUpdatesIfNeeded() {
+    if (unmatchedCommandUpdates.size < MAX_UNMATCHED_COMMAND_IDS) return;
+
+    const terminalKinds = new Set<GcodeCommandUpdate['Kind']>(['Completed', 'Cancelled', 'Failed']);
+    for (const [id, updates] of unmatchedCommandUpdates) {
+        if (updates.some(update => terminalKinds.has(update.Kind))) {
+            unmatchedCommandUpdates.delete(id);
+            return;
+        }
+    }
+
+    const oldestId = unmatchedCommandUpdates.keys().next().value as string | undefined;
+    if (oldestId !== undefined) {
+        unmatchedCommandUpdates.delete(oldestId);
+    }
 }
 
 async function loadSchema(onChange: () => void) {
@@ -265,6 +359,7 @@ function renderStatus(status: HTMLElement) {
 }
 
 function renderHistory(history: HTMLElement) {
+    const shouldFollow = history.scrollHeight - history.scrollTop - history.clientHeight < 48;
     history.replaceChildren();
 
     if (commandHistory.length === 0) {
@@ -276,13 +371,65 @@ function renderHistory(history: HTMLElement) {
     }
 
     for (const entry of commandHistory) {
-        const line = document.createElement('div');
-        line.className = 'gcode-entry-history-line';
-        line.textContent = `> ${entry.command}`;
-        history.appendChild(line);
+        const card = document.createElement('article');
+        card.className = `gcode-entry-command-card state-${entry.state.toLowerCase()}`;
+        card.dataset.localCommandId = entry.localId.toString();
+
+        const header = document.createElement('div');
+        header.className = 'gcode-entry-command-header';
+
+        const command = document.createElement('code');
+        command.className = 'gcode-entry-command-text';
+        command.textContent = `> ${entry.command}`;
+        header.appendChild(command);
+
+        const state = document.createElement('span');
+        state.className = 'gcode-entry-command-state';
+        state.textContent = commandStateLabel(entry.state);
+        header.appendChild(state);
+        card.appendChild(header);
+
+        if (entry.outputs.length > 0) {
+            const output = document.createElement('div');
+            output.className = 'gcode-entry-command-output';
+            for (const message of entry.outputs) {
+                const line = document.createElement('pre');
+                line.textContent = message;
+                output.appendChild(line);
+            }
+            card.appendChild(output);
+        }
+
+        if (entry.failureMessage) {
+            const failure = document.createElement('pre');
+            failure.className = 'gcode-entry-command-failure';
+            failure.textContent = entry.failureMessage;
+            card.appendChild(failure);
+        }
+
+        history.appendChild(card);
     }
 
-    history.scrollTop = history.scrollHeight;
+    if (shouldFollow) {
+        history.scrollTop = history.scrollHeight;
+    }
+}
+
+function commandStateLabel(state: CommandCardState): string {
+    switch (state) {
+        case 'Submitting':
+            return t('ui.gcodeEntry.submitting', 'Submitting');
+        case 'Queued':
+            return t('ui.gcodeEntry.queued', 'Queued');
+        case 'Running':
+            return t('ui.gcodeEntry.running', 'Running');
+        case 'Completed':
+            return t('ui.gcodeEntry.completed', 'Completed');
+        case 'Cancelled':
+            return t('ui.gcodeEntry.cancelled', 'Cancelled');
+        case 'Failed':
+            return t('ui.gcodeEntry.failedState', 'Failed');
+    }
 }
 
 function renderPopup(input: HTMLInputElement, popup: HTMLElement) {

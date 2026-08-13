@@ -54,12 +54,13 @@ package body Prunt.Gcode_Queues is
          Current_Line_Number := 0;
       end Cancel_File;
 
-      procedure Try_Set_Command (Command : Virtual_String; Succeeded : out Boolean) is
+      procedure Try_Set_Command (Command : Virtual_String; Command_ID : Gcode_Command_ID; Succeeded : out Boolean) is
       begin
          if Current_File.Is_Open or else Current_Command /= "" then
             Succeeded := False;
          else
             Current_Command := Command;
+            Current_Command_ID := Command_ID;
             Succeeded := True;
          end if;
       end Try_Set_Command;
@@ -67,6 +68,7 @@ package body Prunt.Gcode_Queues is
       procedure Cancel_Command is
       begin
          Current_Command := "";
+         Current_Command_ID := 0;
       end Cancel_Command;
 
       procedure Cancel_All is
@@ -91,13 +93,13 @@ package body Prunt.Gcode_Queues is
       end Get_Current_Command;
 
       entry Get_Next_Line
-        (Line : out Virtual_String; Item_Kind : out Queue_Item_Kind; End_Of_Item : out Boolean; Stopped : out Boolean)
+        (Line : out Virtual_String; Source : out Queue_Item_Source; End_Of_Item : out Boolean; Stopped : out Boolean)
         when Stop_Requested or else Current_File.Is_Open or else Current_Command /= ""
       is
       begin
          if Stop_Requested then
             Line := "";
-            Item_Kind := Command_Item;
+            Source := (Kind => Command_Item, Command_ID => 0);
             End_Of_Item := False;
             Stopped := True;
             Stop_Requested := False;
@@ -112,7 +114,7 @@ package body Prunt.Gcode_Queues is
 
             Line := Conversions.To_Virtual_String (Mockable.Text_IO.Unbounded_IO.Get_Line (Current_File));
             Current_Line_Number := @ + 1;
-            Item_Kind := File_Item;
+            Source := (Kind => File_Item, File_Name => Current_File_Name, Line_Number => Current_Line_Number);
             End_Of_Item := Current_File.End_Of_File;
             Stopped := False;
 
@@ -123,10 +125,11 @@ package body Prunt.Gcode_Queues is
             end if;
          else
             Line := Current_Command;
-            Item_Kind := Command_Item;
+            Source := (Kind => Command_Item, Command_ID => Current_Command_ID);
             End_Of_Item := True;
             Stopped := False;
             Current_Command := "";
+            Current_Command_ID := 0;
          end if;
       end Get_Next_Line;
    end Queue;

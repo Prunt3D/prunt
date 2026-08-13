@@ -65,7 +65,7 @@ package body Prunt.Default_Modules.Machine_Idle_Timeout is
    procedure Process_After_Block (This : Inactivity_Shutdown_Report_Event; Context : Block_End_Context'Class) is
    begin
       Context.Wait_For_Idle;
-      My_Logger.Log
+      Context.Log
         (+("Inactivity timeout "
            & Ada.Strings.Fixed.Trim
                (Module_Instance (This.Module_Instance_Ref.Get.Element.all).Get_Timeout'Image, Ada.Strings.Both)

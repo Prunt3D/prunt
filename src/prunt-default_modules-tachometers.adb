@@ -34,10 +34,7 @@ package body Prunt.Default_Modules.Tachometers is
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
    function Current_Speed
-     (Config         : User_Config;
-      Tachometer     : Tachometer_Name;
-      Requires_Fresh : Boolean) return Dimensionless
-   is
+     (Config : User_Config; Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Dimensionless is
    begin
       return
         Dimensionless (Tachometer_Hardware (Tachometer).Get_Pulse_Frequency (Tachometer, Requires_Fresh) / hertz)
@@ -93,9 +90,28 @@ package body Prunt.Default_Modules.Tachometers is
 
    overriding
    procedure Process_After_Block (This : Tachometer_Report_Event; Context : Block_End_Context'Class) is
+      use Ada.Strings;
+      use Ada.Strings.Fixed;
+
+      Found_Enabled_Tachometer : Boolean := False;
    begin
       Context.Wait_For_Idle;
-      Log_Tachometers (This.Config, Requires_Fresh => True);
+      Context.Log ("Tachometer speeds:");
+
+      for T in Tachometer_Name loop
+         if This.Config.Tachometers (T).Enabled then
+            Found_Enabled_Tachometer := True;
+            Context.Log
+              (+(T'Image
+                 & ": "
+                 & Trim (Dimensionless'Image (Current_Speed (This.Config, T, Requires_Fresh => True)), Both)
+                 & " RPM"));
+         end if;
+      end loop;
+
+      if not Found_Enabled_Tachometer then
+         Context.Log ("No tachometers are enabled.");
+      end if;
    end Process_After_Block;
 
    overriding
@@ -108,12 +124,12 @@ package body Prunt.Default_Modules.Tachometers is
       Module_Instance (This.Module_Instance_Ref.Get.Element.all).Set_Auto_Report_Interval (This.Interval);
 
       if This.Interval = 0.0 then
-         My_Logger.Log ("Tachometer auto-reporting disabled.");
+         Context.Log_If_Interactive ("Tachometer logging stopped.");
       else
-         My_Logger.Log
+         Context.Log_If_Interactive
            (+("Tachometer auto-reporting every "
               & Trim (This.Interval'Image, Both)
-              & " seconds."));
+              & " seconds started; reports will appear in the log."));
       end if;
    end Process_After_Block;
 
@@ -171,8 +187,7 @@ package body Prunt.Default_Modules.Tachometers is
                Current_Auto_Report_Interval := Value;
 
                if Current_Auto_Report_Interval > 0.0 then
-                  Next_Auto_Report :=
-                    Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+                  Next_Auto_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
                end if;
             end Set_Auto_Report_Interval;
          or
@@ -191,13 +206,12 @@ package body Prunt.Default_Modules.Tachometers is
                Next_Status_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Status_Report_Period);
             end if;
          or
-            when Current_Auto_Report_Interval > 0.0
-            => delay until Next_Auto_Report;
+            when Current_Auto_Report_Interval > 0.0 =>
+            delay until Next_Auto_Report;
 
             Log_Tachometers (Config_Ref, Requires_Fresh => False);
 
-            Next_Auto_Report :=
-              Next_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+            Next_Auto_Report := Next_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
             if Ada.Real_Time.Clock > Next_Auto_Report then
                Next_Auto_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
             end if;
@@ -230,8 +244,7 @@ package body Prunt.Default_Modules.Tachometers is
       end Initialize;
 
       procedure Start
-        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-         Planner     : Planner_Interface'Class)
+        (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
       is
          pragma Unreferenced (Planner);
       begin

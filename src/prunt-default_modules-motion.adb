@@ -372,7 +372,7 @@ package body Prunt.Default_Modules.Motion is
       --  This can technically trigger a bit earlier than the user might expect since we do not wait for the machine to
       --  become idle, however the queue should be short in practice and the values will still be correct, so this
       --  should not be an issue.
-      My_Logger.Log (This.Message);
+      Context.Log (This.Message);
    end Process_After_Block;
 
    function Bounds_Checked_Position

@@ -40,7 +40,9 @@ generic
        (Value : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
    with package My_Logger is new Prunt.Logger (<>);
    with package My_Update_Checker is new Prunt.Update_Checker (<>);
-   with procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean);
+   with
+     procedure Submit_Gcode_Command
+       (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
    with procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
    with procedure Pause_Stepgen;
    with procedure Resume_Stepgen;
@@ -67,6 +69,10 @@ package Prunt.Web_Server is
 
    procedure Reset;
    --  Clear the startup-complete flag and restart the server uptime counter.
+
+   procedure Publish_Gcode_Command_Update
+     (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String := "");
+   --  Immediately broadcast an interactive command update.
 
 private
 
@@ -222,6 +228,8 @@ private
       entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
       entry Log_To_WebSocket_Receivers (Message : Virtual_String);
+      entry Gcode_Command_Update_To_WebSocket_Receivers
+        (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String);
       entry Reset_Server_Start_Time;
    end Server;
 

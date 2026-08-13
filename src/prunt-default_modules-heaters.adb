@@ -119,8 +119,6 @@ package body Prunt.Default_Modules.Heaters is
 
    overriding
    procedure Process_After_Block (This : Heater_Temperature_Wait; Context : Block_End_Context'Class) is
-      pragma Unreferenced (Context);
-
       Thermistors_Module_Instance : Thermistors_Module.Module_Instance_Interface'Class renames
         Thermistors_Module.Module_Instance_Interface'Class (This.Thermistors_Module_Instance_Ref.Get.Element.all);
       Heaters_Module_Instance     : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
@@ -136,6 +134,13 @@ package body Prunt.Default_Modules.Heaters is
          Heaters_Module_Instance.Record_Heater_Target (This.Heater, Value);
       end Set_Target;
    begin
+
+      Context.Log_If_Interactive
+        (+("Waiting for heater "
+           & This.Heater'Image
+           & " to reach "
+           & Dimensionless'Image (This.Target / celsius)
+           & " °C."));
 
       if This.Ramp_Duration > 0.0 * s
         and then (not This.Ramp_Only_If_Heating or else Ramp_Start_Temperature < This.Target)

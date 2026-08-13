@@ -3,7 +3,13 @@ export type ServerException = {
     Fatal: boolean;
 };
 
-export type AppEvent = 'connected' | 'disconnected' | 'tick' | 'restarted' | 'log' | 'serverException';
+export type GcodeCommandUpdate = {
+    ID: string;
+    Kind: 'Running' | 'Output' | 'Completed' | 'Cancelled' | 'Failed';
+    Message?: string;
+};
+
+export type AppEvent = 'connected' | 'disconnected' | 'tick' | 'restarted' | 'log' | 'serverException' | 'gcodeCommand';
 
 export class PruntWebSocket {
     private ws: WebSocket | null = null;
@@ -57,6 +63,10 @@ export class PruntWebSocket {
 
                 if (Object.prototype.hasOwnProperty.call(message, 'Server_Exception')) {
                     this.emit('serverException', message.Server_Exception);
+                }
+
+                if (message.Gcode_Command) {
+                    this.emit('gcodeCommand', message.Gcode_Command);
                 }
 
             } catch (err) {

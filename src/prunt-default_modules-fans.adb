@@ -236,8 +236,8 @@ package body Prunt.Default_Modules.Fans is
          return;
       end loop;
 
-      My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
-      raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
+      raise Gcode_Bad_Inputs_Error
+        with Conversions.To_UTF_8_String ("Fan index not known. Valid fan indices: " & Valid_Fan_Indices);
    end Set_Fan_Speed;
 
    procedure Set_Fan_Speed
@@ -249,8 +249,8 @@ package body Prunt.Default_Modules.Fans is
          Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
       exception
          when Constraint_Error =>
-            My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
-            raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
+            raise Gcode_Bad_Inputs_Error
+              with Conversions.To_UTF_8_String ("Fan name not known. Valid fan names: " & Valid_Fan_Names);
       end;
 
       Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (Fan, S));
@@ -271,8 +271,8 @@ package body Prunt.Default_Modules.Fans is
          return;
       end loop;
 
-      My_Logger.Log ("Valid fan indices: " & Valid_Fan_Indices);
-      raise Gcode_Bad_Inputs_Error with "Fan index not known. Refer to valid fan indices in log.";
+      raise Gcode_Bad_Inputs_Error
+        with Conversions.To_UTF_8_String ("Fan index not known. Valid fan indices: " & Valid_Fan_Indices);
    end Turn_Off_Fan;
 
    procedure Turn_Off_Fan (This : Module_Instance; Planner : Planner_Interface'Class; P : Virtual_String) is
@@ -282,8 +282,8 @@ package body Prunt.Default_Modules.Fans is
          Fan := Fan_Name'Value (Conversions.To_UTF_8_String (P));
       exception
          when Constraint_Error =>
-            My_Logger.Log ("Valid fan names: " & Valid_Fan_Names);
-            raise Gcode_Bad_Inputs_Error with "Fan name not known. Refer to valid fan names in log.";
+            raise Gcode_Bad_Inputs_Error
+              with Conversions.To_UTF_8_String ("Fan name not known. Valid fan names: " & Valid_Fan_Names);
       end;
 
       Planner.Add_Corner_Data (This.Prepare_Fan_Speed_Change (Fan, 0.0));

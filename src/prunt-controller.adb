@@ -19,6 +19,8 @@
 
 with Ada.Containers.Ordered_Sets;
 with Ada.Exceptions.Is_Null_Occurrence;
+with Ada.Strings;
+with Ada.Strings.Fixed;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
@@ -29,6 +31,67 @@ with VSS.Strings.Conversions;
 package body Prunt.Controller is
 
    pragma Extensions_Allowed (On);
+
+   protected body Gcode_Command_Lifecycle is
+      procedure Prepare_Submission (Command_ID : out Gcode_Command_ID) is
+      begin
+         if Next_Command_ID = Gcode_Command_ID'Last then
+            raise Constraint_Error with "Interactive G-code command ID space exhausted.";
+         end if;
+
+         Next_Command_ID := @ + 1;
+         Command_ID := Next_Command_ID;
+         Active_Commands.Insert (Command_ID, Queued_State);
+      end Prepare_Submission;
+
+      procedure Reject_Submission (Command_ID : Gcode_Command_ID) is
+      begin
+         if Active_Commands.Contains (Command_ID) then
+            Active_Commands.Delete (Command_ID);
+         end if;
+      end Reject_Submission;
+
+      procedure Mark_Running (Command_ID : Gcode_Command_ID; Changed : out Boolean) is
+      begin
+         Changed := Active_Commands.Contains (Command_ID) and then Active_Commands (Command_ID) = Queued_State;
+         if Changed then
+            Active_Commands.Replace (Command_ID, Running_State);
+         end if;
+      end Mark_Running;
+
+      procedure Mark_Terminal (Command_ID : Gcode_Command_ID; Changed : out Boolean) is
+      begin
+         Changed := Active_Commands.Contains (Command_ID);
+         if Changed then
+            Active_Commands.Delete (Command_ID);
+         end if;
+      end Mark_Terminal;
+
+      function Is_Active (Command_ID : Gcode_Command_ID) return Boolean is
+      begin
+         return Active_Commands.Contains (Command_ID);
+      end Is_Active;
+
+      procedure Cancel_All (Command_IDs : out Gcode_Command_ID_Vectors.Vector) is
+      begin
+         Command_IDs.Clear;
+         for C in Active_Commands.Iterate loop
+            Command_IDs.Append (Gcode_Command_Lifecycle_Maps.Key (C));
+         end loop;
+         Active_Commands.Clear;
+      end Cancel_All;
+
+      procedure Reset is
+      begin
+         Active_Commands.Clear;
+      end Reset;
+   end Gcode_Command_Lifecycle;
+
+   procedure Publish_Gcode_Command_Update
+     (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String := "") is
+   begin
+      My_Web_Server.Publish_Gcode_Command_Update (Command_ID, Kind, Message);
+   end Publish_Gcode_Command_Update;
 
    protected body Idle_Notification_State is
       procedure Reset is
@@ -424,6 +487,41 @@ package body Prunt.Controller is
    end Prepare_Config_For_Save;
 
    overriding
+   procedure Log (This : Planner_Block_End_Context; Message : Virtual_String) is
+      use Ada.Strings;
+      use Ada.Strings.Fixed;
+   begin
+      case This.Source.Kind is
+         when Interactive_Source =>
+            if Gcode_Command_Lifecycle.Is_Active (This.Source.Command_ID) then
+               Publish_Gcode_Command_Update (This.Source.Command_ID, Output, Message);
+            end if;
+
+         when File_Source        =>
+            My_Logger.Log
+              ("["
+               & This.Source.File_Name
+               & ":"
+               & Conversions.To_Virtual_String (Trim (This.Source.Line_Number'Image, Both))
+               & "] "
+               & Message);
+
+         when Internal_Source    =>
+            My_Logger.Log (Message);
+      end case;
+   end Log;
+
+   overriding
+   procedure Log_If_Interactive (This : Planner_Block_End_Context; Message : Virtual_String) is
+   begin
+      if This.Source.Kind = Interactive_Source then
+         if Gcode_Command_Lifecycle.Is_Active (This.Source.Command_ID) then
+            Publish_Gcode_Command_Update (This.Source.Command_ID, Output, Message);
+         end if;
+      end if;
+   end Log_If_Interactive;
+
+   overriding
    procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name) is
       Generation : Homing_Update_Generation;
    begin
@@ -557,6 +655,22 @@ package body Prunt.Controller is
       end if;
    end Add_Corner_Data;
 
+   function Build_Block_End_Data
+     (This : Planner_Wrapper; Extra_Data : Extra_Block_Resetting_Data'Class; Final : Boolean := False)
+      return Extra_Block_Resetting_Data_Holders.Holder is
+   begin
+      if This.Source.Kind = Internal_Source then
+         return Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data);
+      end if;
+
+      return
+        Extra_Block_Resetting_Data_Holders.To_Holder
+          (Gcode_Block_End_Data'
+             (Nested_Data => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
+              Source      => This.Source,
+              Final       => Final and then This.Source.Kind = Interactive_Source));
+   end Build_Block_End_Data;
+
    overriding
    procedure Flush
      (This           : Planner_Wrapper;
@@ -570,13 +684,23 @@ package body Prunt.Controller is
       case This.Target is
          when Primary_Planner_Target =>
             My_Motion_Planner.Enqueue_Flush
-              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Is_Homing_Move => Is_Homing_Move);
+              (Build_Block_End_Data (This, Extra_Data), Is_Homing_Move => Is_Homing_Move);
 
          when Pause_Planner_Target   =>
             My_Pause_Motion_Planner.Enqueue_Flush
-              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Is_Homing_Move => Is_Homing_Move);
+              (Build_Block_End_Data (This, Extra_Data), Is_Homing_Move => Is_Homing_Move);
       end case;
    end Flush;
+
+   procedure Flush_Final_Interactive_Command (This : Planner_Wrapper) is
+   begin
+      if This.Target /= Primary_Planner_Target or else This.Source.Kind /= Interactive_Source then
+         raise Constraint_Error with "A final interactive block requires an interactive primary planner.";
+      end if;
+
+      My_Motion_Planner.Enqueue_Flush
+        (Build_Block_End_Data (This, Extra_Block_Resetting_Data'(null record), Final => True));
+   end Flush_Final_Interactive_Command;
 
    overriding
    procedure Flush_And_Change_Kinematic_Parameters
@@ -592,12 +716,12 @@ package body Prunt.Controller is
       case This.Target is
          when Primary_Planner_Target =>
             My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
-              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+              (Build_Block_End_Data (This, Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
             Primary_Planner_State.Set_Last_Kinematic_Parameters (Params);
 
          when Pause_Planner_Target   =>
             My_Pause_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
-              (Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
+              (Build_Block_End_Data (This, Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
             Pause_Planner_State.Set_Last_Kinematic_Parameters (Params);
       end case;
    end Flush_And_Change_Kinematic_Parameters;
@@ -616,16 +740,12 @@ package body Prunt.Controller is
       case This.Target is
          when Primary_Planner_Target =>
             My_Motion_Planner.Enqueue_Flush_And_Reset_Position
-              (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
-               Pos            => New_Position,
-               Is_Homing_Move => Is_Homing_Move);
+              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position, Is_Homing_Move => Is_Homing_Move);
             Primary_Planner_State.Set_Last_Position (New_Position);
 
          when Pause_Planner_Target   =>
             My_Pause_Motion_Planner.Enqueue_Flush_And_Reset_Position
-              (Data           => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
-               Pos            => New_Position,
-               Is_Homing_Move => Is_Homing_Move);
+              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position, Is_Homing_Move => Is_Homing_Move);
             Pause_Planner_State.Set_Last_Position (New_Position);
       end case;
    end Flush_And_Reset_Position;
@@ -722,6 +842,7 @@ package body Prunt.Controller is
          Last_Command_Executed.Reset (Startup_Position);
          Idle_Notification_State.Reset;
          My_Gcode_Queue.Cancel_All;
+         Gcode_Command_Lifecycle.Reset;
       end Reset_Runtime_State;
 
       procedure Setup_Runtime_Pipeline is
@@ -767,7 +888,8 @@ package body Prunt.Controller is
             Had_Error := True;
          end Report_Config_Error;
 
-         Startup_Planner : constant Planner_Wrapper := (Startup_Mode => True, Target => Primary_Planner_Target);
+         Startup_Planner : constant Planner_Wrapper :=
+           (Startup_Mode => True, Target => Primary_Planner_Target, Source => (Kind => Internal_Source));
       begin
          Active_Module_Instances :=
            Recursive_Module_Initialization
@@ -836,8 +958,6 @@ package body Prunt.Controller is
       procedure Process_Gcode_Queue is
          use type Gcode_Arguments.Argument_Kind;
 
-         Active_Planner              : constant Planner_Wrapper :=
-           (Startup_Mode => False, Target => Primary_Planner_Target);
          Gcode_Rejection_Retry_Delay : constant Duration := 0.1;
 
          function Line_Is_Empty (Args : Gcode_Arguments.Arguments) return Boolean;
@@ -848,9 +968,9 @@ package body Prunt.Controller is
 
          function Extract_Command_Identifier (Args : in out Gcode_Arguments.Arguments) return Gcode_Command_Identifier;
 
-         procedure Dispatch_Gcode_Command (Args : in out Gcode_Arguments.Arguments);
+         procedure Dispatch_Gcode_Command (Args : in out Gcode_Arguments.Arguments; Planner : Planner_Wrapper);
 
-         procedure Process_Gcode_Line (Line : Virtual_String);
+         procedure Process_Gcode_Line (Line : Virtual_String; Planner : Planner_Wrapper);
 
          procedure Process_Next_Gcode_Item (Stopped : out Boolean);
 
@@ -897,30 +1017,30 @@ package body Prunt.Controller is
             return Extract_Integer_Command_Identifier (Args, 'M');
          end Extract_Command_Identifier;
 
-         procedure Dispatch_Gcode_Command (Args : in out Gcode_Arguments.Arguments) is
+         procedure Dispatch_Gcode_Command (Args : in out Gcode_Arguments.Arguments; Planner : Planner_Wrapper) is
             Command_Identifier : constant Gcode_Command_Identifier := Extract_Command_Identifier (Args);
             Module_Name        : constant Virtual_String :=
               Find_Module_Name (Active_Module_Gcode_Dispatch_Map, Command_Identifier, Args);
          begin
             if Module_Name.Is_Empty then
-               raise Constraint_Error with "No active module can handle the requested G-code command.";
+               raise Gcode_Bad_Inputs_Error with "No active module can handle the requested G-code command.";
             end if;
 
             My_Modules.Module_Instance'Class (Active_Module_Instances (Module_Name).Get.Element.all).Gcode_Dispatch
               (Self_Ref           => Active_Module_Instances (Module_Name),
                Args               => Args,
-               Planner            => Active_Planner,
+               Planner            => Planner,
                Command_Identifier => Command_Identifier);
          end Dispatch_Gcode_Command;
 
-         procedure Process_Gcode_Line (Line : Virtual_String) is
+         procedure Process_Gcode_Line (Line : Virtual_String; Planner : Planner_Wrapper) is
             Args : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments (Line);
          begin
             if Line_Is_Empty (Args) then
                return;
             end if;
 
-            Dispatch_Gcode_Command (Args);
+            Dispatch_Gcode_Command (Args, Planner);
 
             Gcode_Arguments.Validate_All_Consumed (Args);
          end Process_Gcode_Line;
@@ -929,17 +1049,30 @@ package body Prunt.Controller is
             use type Gcode_Queues.Queue_Item_Kind;
 
             Line                            : Virtual_String;
-            Item_Kind                       : Gcode_Queues.Queue_Item_Kind;
+            Queue_Source                    : Gcode_Queues.Queue_Item_Source;
             End_Of_Item                     : Boolean;
             Queue_Stopped                   : Boolean;
             Initial_Cancellation_Generation : Cancellation_Generation_Type;
+            Active_Planner                  : Planner_Wrapper;
          begin
-            My_Gcode_Queue.Get_Next_Line (Line, Item_Kind, End_Of_Item, Queue_Stopped);
+            My_Gcode_Queue.Get_Next_Line (Line, Queue_Source, End_Of_Item, Queue_Stopped);
 
             if Queue_Stopped then
                Stopped := True;
                return;
             end if;
+
+            Active_Planner :=
+              (Startup_Mode => False,
+               Target       => Primary_Planner_Target,
+               Source       =>
+                 (case Queue_Source.Kind is
+                    when Gcode_Queues.Command_Item =>
+                      (Kind => Interactive_Source, Command_ID => Queue_Source.Command_ID),
+                    when Gcode_Queues.File_Item    =>
+                      (Kind        => File_Source,
+                       File_Name   => Queue_Source.File_Name,
+                       Line_Number => Queue_Source.Line_Number)));
 
             Initial_Cancellation_Generation := Gcode_Cancellation_Barrier.Cancellation_Generation;
 
@@ -959,10 +1092,14 @@ package body Prunt.Controller is
                      return;
                   end if;
 
-                  Process_Gcode_Line (Line);
+                  Process_Gcode_Line (Line, Active_Planner);
 
                   if End_Of_Item then
-                     Active_Planner.Flush;
+                     if Queue_Source.Kind = Gcode_Queues.Command_Item then
+                        Flush_Final_Interactive_Command (Active_Planner);
+                     else
+                        Active_Planner.Flush;
+                     end if;
                   end if;
 
                   Gcode_Cancellation_Barrier.Finish_Line;
@@ -975,14 +1112,32 @@ package body Prunt.Controller is
                      Gcode_Cancellation_Barrier.Finish_Line;
                      delay Gcode_Rejection_Retry_Delay;
 
-                  when E : Gcode_Bad_Inputs_Error =>
-                     My_Logger.Log
-                       (Conversions.To_Virtual_String ("Rejected G-code line: ")
-                        & Line
-                        & Conversions.To_Virtual_String (" (")
-                        & Conversions.To_Virtual_String (Ada.Exceptions.Exception_Message (E))
-                        & Conversions.To_Virtual_String (")"));
-                     if Item_Kind = Gcode_Queues.File_Item then
+                  when E : Gcode_Bad_Inputs_Error | Gcode_Arguments.Parse_Error =>
+                     declare
+                        Message : constant Virtual_String :=
+                          Conversions.To_Virtual_String (Ada.Exceptions.Exception_Message (E));
+                        Changed : Boolean;
+                     begin
+                        if Queue_Source.Kind = Gcode_Queues.Command_Item then
+                           Gcode_Command_Lifecycle.Mark_Terminal (Queue_Source.Command_ID, Changed);
+                           if Changed then
+                              Publish_Gcode_Command_Update (Queue_Source.Command_ID, Failed, Message);
+                           end if;
+                        else
+                           My_Logger.Log
+                             ("["
+                              & Queue_Source.File_Name
+                              & ":"
+                              & Conversions.To_Virtual_String
+                                  (Ada.Strings.Fixed.Trim (Queue_Source.Line_Number'Image, Ada.Strings.Both))
+                              & "] Rejected G-code line: "
+                              & Line
+                              & " ("
+                              & Message
+                              & ")");
+                        end if;
+                     end;
+                     if Queue_Source.Kind = Gcode_Queues.File_Item then
                         My_Gcode_Queue.Cancel_File;
                         Active_Planner.Flush;
                      end if;
@@ -1560,8 +1715,10 @@ package body Prunt.Controller is
       Active_Config_File.Reset_Live_To_Stored;
    end Reset_Live_Config_To_Stored;
 
-   procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean) is
+   procedure Submit_Gcode_Command
+     (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID) is
    begin
+      Command_ID := 0;
       select
          Gcode_Cancellation_Barrier.Start_Submission;
       else
@@ -1570,10 +1727,19 @@ package body Prunt.Controller is
       end select;
 
       begin
-         My_Gcode_Queue.Try_Set_Command (Command, Succeeded);
+         Gcode_Command_Lifecycle.Prepare_Submission (Command_ID);
+         My_Gcode_Queue.Try_Set_Command (Command, Command_ID, Succeeded);
+         if not Succeeded then
+            Gcode_Command_Lifecycle.Reject_Submission (Command_ID);
+            Command_ID := 0;
+         end if;
          Gcode_Cancellation_Barrier.Finish_Submission;
       exception
          when others =>
+            if Command_ID /= 0 then
+               Gcode_Command_Lifecycle.Reject_Submission (Command_ID);
+               Command_ID := 0;
+            end if;
             Gcode_Cancellation_Barrier.Finish_Submission;
             raise;
       end;
@@ -1603,6 +1769,7 @@ package body Prunt.Controller is
       Cancellation_Barrier_ID : Planner_Corner_ID;
       Current_Position        : Position;
       Params                  : Motion_Planner.Kinematic_Parameters;
+      Cancelled_Command_IDs   : Gcode_Command_ID_Vectors.Vector;
    begin
       if not Pipeline_Is_Set_Up then
          Succeeded := False;
@@ -1629,6 +1796,11 @@ package body Prunt.Controller is
          Gcode_Cancellation_Barrier.Wait_Until_Not_Submitting;
          My_Gcode_Queue.Cancel_All;
          Gcode_Cancellation_Barrier.Wait_Until_Not_Processing;
+         Gcode_Command_Lifecycle.Cancel_All (Cancelled_Command_IDs);
+
+         for Command_ID of Cancelled_Command_IDs loop
+            Publish_Gcode_Command_Update (Command_ID, Cancelled);
+         end loop;
 
          Executed_Corner_ID := My_Step_Generator.Get_Last_Executed_Primary_Corner_ID;
          Cancellation_Barrier_ID := My_Motion_Planner.Get_Last_Assigned_Corner_ID;
@@ -1702,7 +1874,8 @@ package body Prunt.Controller is
    end Get_Last_Command_Index;
 
    procedure Handle_Pause (Pause_Position : Position; Last_Command_Index : Command_Index) is
-      Pause_Planner : constant Planner_Wrapper := (Startup_Mode => False, Target => Pause_Planner_Target);
+      Pause_Planner : constant Planner_Wrapper :=
+        (Startup_Mode => False, Target => Pause_Planner_Target, Source => (Kind => Internal_Source));
       Context       : constant Pause_Context_Data :=
         (Pause_Position => Pause_Position, Last_Command_Index => Last_Command_Index);
       Params        : constant Motion_Planner.Kinematic_Parameters :=
@@ -1725,7 +1898,8 @@ package body Prunt.Controller is
    end Handle_Pause;
 
    procedure Handle_Resume (Pause_Position : Position; Last_Command_Index : Command_Index) is
-      Pause_Planner : constant Planner_Wrapper := (Startup_Mode => False, Target => Pause_Planner_Target);
+      Pause_Planner : constant Planner_Wrapper :=
+        (Startup_Mode => False, Target => Pause_Planner_Target, Source => (Kind => Internal_Source));
       Context       : constant Pause_Context_Data :=
         (Pause_Position => Pause_Position, Last_Command_Index => Last_Command_Index);
       Handlers      : Module_Instance_Vectors.Vector;
@@ -1792,14 +1966,52 @@ package body Prunt.Controller is
       Last_Command_Index   : Command_Index;
       Loop_Move_Offset     : Position_Offset)
    is
+      function Block_Source return Gcode_Source;
+
+      function Block_Source return Gcode_Source is
+      begin
+         if not Resetting_Data.Is_Empty and then Resetting_Data.Element in Gcode_Block_End_Data then
+            return Gcode_Block_End_Data (Resetting_Data.Element).Source;
+         end if;
+
+         return (Kind => Internal_Source);
+      end Block_Source;
+
       Context : constant Planner_Block_End_Context :=
         (First_Accel_Distance     => First_Accel_Distance,
          Last_Command_Index       => Last_Command_Index,
          Loop_Move_Offset         => Loop_Move_Offset,
-         State_Catch_Up_Corner_ID => My_Step_Generator.Get_Last_Executed_Primary_Corner_ID);
+         State_Catch_Up_Corner_ID => My_Step_Generator.Get_Last_Executed_Primary_Corner_ID,
+         Source                   => Block_Source);
    begin
       if not Resetting_Data.Is_Empty then
-         Resetting_Data.Element.Process_After_Block (Context);
+         if Resetting_Data.Element in Gcode_Block_End_Data then
+            declare
+               Data    : Gcode_Block_End_Data renames Gcode_Block_End_Data (Resetting_Data.Element);
+               Changed : Boolean;
+            begin
+               if Data.Source.Kind = Interactive_Source then
+                  Gcode_Command_Lifecycle.Mark_Running (Data.Source.Command_ID, Changed);
+                  if Changed then
+                     Publish_Gcode_Command_Update (Data.Source.Command_ID, Running);
+                  end if;
+               end if;
+
+               if not Data.Nested_Data.Is_Empty then
+                  Data.Nested_Data.Element.Process_After_Block (Context);
+               end if;
+
+               if Data.Final then
+                  Context.Wait_For_Idle;
+                  Gcode_Command_Lifecycle.Mark_Terminal (Data.Source.Command_ID, Changed);
+                  if Changed then
+                     Publish_Gcode_Command_Update (Data.Source.Command_ID, Completed);
+                  end if;
+               end if;
+            end;
+         else
+            Resetting_Data.Element.Process_After_Block (Context);
+         end if;
       end if;
 
       Reset_Position (Next_Block_Pos);

@@ -257,8 +257,7 @@ package body Prunt.Default_Modules.Motor_Drivers is
 
    procedure Report_DAC_Current (Planner : Planner_Interface'Class) is
    begin
-      pragma Unreferenced (Planner);
-      My_Logger.Log ("M909 reporting is not implemented yet.");
+      Planner.Flush (Gcode_Message_Event'(Message => "M909 reporting is not implemented yet."));
    end Report_DAC_Current;
 
    procedure Commit_DAC_To_EEPROM (Planner : Planner_Interface'Class) is

@@ -259,14 +259,14 @@ package body Prunt.Default_Modules.Thermistors is
    procedure Report_Temperatures
      (Planner : Planner_Interface'Class; R : Gcode_Optional_No_Value; T : Gcode_Optional_Integer) is
    begin
-      pragma Unreferenced (Planner, R, T);
-      My_Logger.Log ("M105 reporting is not implemented yet.");
+      pragma Unreferenced (R, T);
+      Planner.Flush (Gcode_Message_Event'(Message => "M105 reporting is not implemented yet."));
    end Report_Temperatures;
 
    procedure Set_Temperature_Auto_Report (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer) is
    begin
-      pragma Unreferenced (Planner, S);
-      My_Logger.Log ("M155 auto-reporting is not implemented yet.");
+      pragma Unreferenced (S);
+      Planner.Flush (Gcode_Message_Event'(Message => "M155 auto-reporting is not implemented yet."));
    end Set_Temperature_Auto_Report;
 
 end Prunt.Default_Modules.Thermistors;

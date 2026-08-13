@@ -63,12 +63,26 @@ export async function runFile(filename: string) {
     if (!res.ok) throw new Error("Failed to run file");
 }
 
-export async function runCommand(command: string) {
+export type GcodeCommandSubmission = {
+    ID: string;
+};
+
+export async function runCommand(command: string): Promise<GcodeCommandSubmission> {
     const res = await fetch(`${API_BASE}/run-command`, {
         method: "POST",
         body: command
     });
-    if (!res.ok) throw new Error("Failed to run command");
+    if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || "Failed to run command");
+    }
+
+    const result = await res.json() as Partial<GcodeCommandSubmission>;
+    if (typeof result.ID !== 'string' || result.ID.length === 0) {
+        throw new Error("Command response did not include an ID");
+    }
+
+    return { ID: result.ID };
 }
 
 export async function restartServer() {

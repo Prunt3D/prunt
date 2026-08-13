@@ -219,8 +219,23 @@ package Prunt.Module_Types is
    procedure Prepare_Config_For_Save (This : Block_End_Context) is abstract;
    --  Ask registered modules to copy their current runtime settings into their persistent configuration handles.
 
+   procedure Log (This : Block_End_Context; Message : Virtual_String) is abstract;
+   --  Emit command output using the source associated with this block. Interactive commands send output to their web
+   --  card, file commands include their source location in the global log, and internal blocks use the global log.
+
+   procedure Log_If_Interactive (This : Block_End_Context; Message : Virtual_String) is abstract;
+   --  Emit Message only when this block belongs to an interactively submitted command.
+
    procedure Process_After_Block (This : Extra_Block_Resetting_Data; Context : Block_End_Context'Class) is null;
    --  Process resetting data after motion has stopped at the end of a planner block.
+
+   type Gcode_Message_Event is new Extra_Block_Resetting_Data with record
+      Message : Virtual_String;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Gcode_Message_Event; Context : Block_End_Context'Class);
+   --  Emit a preformatted G-code reply at its block boundary.
 
    type Pause_Context is abstract tagged null record;
 

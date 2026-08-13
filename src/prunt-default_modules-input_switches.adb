@@ -71,12 +71,12 @@ package body Prunt.Default_Modules.Input_Switches is
    begin
       Context.Wait_For_Idle;
 
-      My_Logger.Log ("Input switch status:");
+      Context.Log ("Input switch status:");
 
       for Switch in Input_Switch_Name loop
          if This.Config.Switches (Switch).Enabled then
             Found_Enabled_Switch := True;
-            My_Logger.Log
+            Context.Log
               (+(Switch'Image
                  & ": "
                  & (if Switch_Is_Triggered (This.Config, Switch) then "Triggered" else "Not triggered")));
@@ -84,7 +84,7 @@ package body Prunt.Default_Modules.Input_Switches is
       end loop;
 
       if not Found_Enabled_Switch then
-         My_Logger.Log ("No input switches are enabled.");
+         Context.Log ("No input switches are enabled.");
       end if;
    end Process_After_Block;
 

@@ -67,8 +67,7 @@ package body Prunt.Default_Modules.Machine_Name is
    overriding
    procedure Process_After_Block (This : Machine_Name_Report_Event; Context : Block_End_Context'Class) is
    begin
-      Context.Wait_For_Idle;
-      My_Logger.Log ("RepRap name: " & Module_Instance (This.Module_Instance_Ref.Get.Element.all).Get_Current_Name);
+      Context.Log ("Machine name: " & Module_Instance (This.Module_Instance_Ref.Get.Element.all).Get_Current_Name);
    end Process_After_Block;
 
    overriding

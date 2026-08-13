@@ -30,6 +30,7 @@ with Prunt.Motion_Planner;
 with System.Multiprocessors;
 
 private with Ada.Containers.Indefinite_Holders;
+private with Ada.Containers.Ordered_Maps;
 private with Ada.Containers.Vectors;
 private with Prunt.Controller_Helpers;
 private with Prunt.Default_Modules;
@@ -185,7 +186,8 @@ package Prunt.Controller is
    procedure Log (Message : String);
    --  Log a message for the user.
 
-   procedure Submit_Gcode_Command (Command : Virtual_String; Succeeded : out Boolean);
+   procedure Submit_Gcode_Command
+     (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
    --  Queue a single G-code command for execution.
 
    procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean);
@@ -480,6 +482,30 @@ private
    package Extra_Block_Resetting_Data_Holders is new
      Ada.Containers.Indefinite_Holders (Module_Types.Extra_Block_Resetting_Data'Class, Module_Types."=");
 
+   type Gcode_Source_Kind is (Internal_Source, Interactive_Source, File_Source);
+
+   type Gcode_Source (Kind : Gcode_Source_Kind := Internal_Source) is record
+      case Kind is
+         when Internal_Source =>
+            null;
+
+         when Interactive_Source =>
+            Command_ID : Gcode_Command_ID;
+
+         when File_Source =>
+            File_Name   : Virtual_String;
+            Line_Number : File_Line_Count;
+      end case;
+   end record;
+
+   type Gcode_Block_End_Data is new Module_Types.Extra_Block_Resetting_Data with record
+      Nested_Data : Extra_Block_Resetting_Data_Holders.Holder;
+      Source      : Gcode_Source;
+      Final       : Boolean;
+   end record;
+   --  Associates a module block-end handler with the G-code line which emitted it. Final is set only on the
+   --  controller-added terminal block for an interactive command.
+
    Hardware_Maximum_Deltas_Per_Command : constant Motor_Position :=
      [for M in Motor_Name => Hardware.Motor_Hardware (M).Maximum_Delta_Per_Command];
 
@@ -664,6 +690,30 @@ private
 
    type Cancellation_Generation_Type is mod 2 ** 64;
 
+   type Gcode_Command_Lifecycle_State is (Queued_State, Running_State);
+
+   package Gcode_Command_Lifecycle_Maps is new
+     Ada.Containers.Ordered_Maps (Gcode_Command_ID, Gcode_Command_Lifecycle_State);
+
+   package Gcode_Command_ID_Vectors is new Ada.Containers.Vectors (Positive, Gcode_Command_ID);
+
+   protected Gcode_Command_Lifecycle is
+      procedure Prepare_Submission (Command_ID : out Gcode_Command_ID);
+      procedure Reject_Submission (Command_ID : Gcode_Command_ID);
+      procedure Mark_Running (Command_ID : Gcode_Command_ID; Changed : out Boolean);
+      procedure Mark_Terminal (Command_ID : Gcode_Command_ID; Changed : out Boolean);
+      function Is_Active (Command_ID : Gcode_Command_ID) return Boolean;
+      procedure Cancel_All (Command_IDs : out Gcode_Command_ID_Vectors.Vector);
+      procedure Reset;
+   private
+      Next_Command_ID : Gcode_Command_ID := 0;
+      Active_Commands : Gcode_Command_Lifecycle_Maps.Map;
+   end Gcode_Command_Lifecycle;
+
+   procedure Publish_Gcode_Command_Update
+     (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String := "");
+   --  Broadcast an interactive command update through the web server.
+
    type Idle_Notification_Phase is (Active, Starting_Idle, Idle, Ending_Idle);
 
    type Idle_Activity_Generation is mod 2 ** 64;
@@ -815,7 +865,16 @@ private
    type Planner_Wrapper is new Planner_Interface with record
       Startup_Mode : Boolean := False;
       Target       : Planner_Target_Kind := Primary_Planner_Target;
+      Source       : Gcode_Source := (Kind => Internal_Source);
    end record;
+
+   function Build_Block_End_Data
+     (This : Planner_Wrapper; Extra_Data : Extra_Block_Resetting_Data'Class; Final : Boolean := False)
+      return Extra_Block_Resetting_Data_Holders.Holder;
+   --  Wrap block-end data with This's G-code source when it has one.
+
+   procedure Flush_Final_Interactive_Command (This : Planner_Wrapper);
+   --  Append the terminal full block for an interactively submitted command.
 
    type Axis_Homing_Update_Event is new Module_Types.Extra_Block_Resetting_Data with record
       Target     : Planner_Target_Kind;
@@ -852,6 +911,7 @@ private
       Last_Command_Index       : Command_Index;
       Loop_Move_Offset         : Position_Offset;
       State_Catch_Up_Corner_ID : Planner_Corner_ID;
+      Source                   : Gcode_Source;
    end record;
 
    overriding
@@ -905,6 +965,14 @@ private
    overriding
    procedure Prepare_Config_For_Save (This : Planner_Block_End_Context);
    --  Ask registered modules to copy their current runtime state into their savable configuration handles.
+
+   overriding
+   procedure Log (This : Planner_Block_End_Context; Message : Virtual_String);
+   --  Route command output to an interactive card or source-prefixed global log entry.
+
+   overriding
+   procedure Log_If_Interactive (This : Planner_Block_End_Context; Message : Virtual_String);
+   --  Route output only when This belongs to an interactive command.
 
    overriding
    procedure Add_Corner

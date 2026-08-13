@@ -33,6 +33,13 @@ package Prunt is
 
    type Planner_Corner_ID is range 0 .. 2 ** 63 - 2;
 
+   type Gcode_Command_ID is range 0 .. 2 ** 63 - 2;
+   --  Identifies an interactively submitted G-code command. Zero is reserved for the absence of an interactive
+   --  command.
+
+   type Gcode_Command_Update_Kind is (Running, Output, Completed, Cancelled, Failed);
+   --  Updates published to web clients for interactively submitted G-code commands.
+
    type Pin_State is (High_State, Low_State);
 
    --  You may notice a lot of math similar to 5.0**(1/2) here when using the below types. This may seem like it should

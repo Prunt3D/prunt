@@ -810,8 +810,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       S       : Gcode_Optional_Integer;
       P       : Gcode_Optional_Integer) is
    begin
-      pragma Unreferenced (Planner, I, X, Y, Z, E, V, S, P);
-      My_Logger.Log ("M122 TMC debug reporting is not implemented yet.");
+      pragma Unreferenced (I, X, Y, Z, E, V, S, P);
+      Planner.Flush (Gcode_Message_Event'(Message => "M122 TMC debug reporting is not implemented yet."));
    end Report_TMC_Debug;
 
    procedure Report_TMC_Debug
@@ -822,8 +822,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       S       : Gcode_Optional_Integer;
       P       : Gcode_Optional_Integer) is
    begin
-      pragma Unreferenced (Planner, I, N, V, S, P);
-      My_Logger.Log ("M122 TMC debug reporting by index is not implemented yet.");
+      pragma Unreferenced (I, N, V, S, P);
+      Planner.Flush (Gcode_Message_Event'(Message => "M122 TMC debug reporting by index is not implemented yet."));
    end Report_TMC_Debug;
 
    procedure Report_TMC_Debug
@@ -834,8 +834,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       S       : Gcode_Optional_Integer;
       P       : Gcode_Optional_Integer) is
    begin
-      pragma Unreferenced (Planner, I, N, V, S, P);
-      My_Logger.Log ("M122 TMC debug reporting by name is not implemented yet.");
+      pragma Unreferenced (I, N, V, S, P);
+      Planner.Flush (Gcode_Message_Event'(Message => "M122 TMC debug reporting by name is not implemented yet."));
    end Report_TMC_Debug;
 
    procedure Set_TMC_Stepping_Mode
@@ -881,8 +881,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
 
    procedure Report_TMC_OT_Prewarn (Planner : Planner_Interface'Class) is
    begin
-      pragma Unreferenced (Planner);
-      My_Logger.Log ("M911 TMC OT prewarn reporting is not implemented yet.");
+      Planner.Flush (Gcode_Message_Event'(Message => "M911 TMC OT prewarn reporting is not implemented yet."));
    end Report_TMC_OT_Prewarn;
 
    procedure Clear_TMC_OT_Prewarn

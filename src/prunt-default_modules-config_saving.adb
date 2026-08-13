@@ -63,9 +63,8 @@ package body Prunt.Default_Modules.Config_Saving is
 
    overriding
    procedure Process_After_Block (This : Config_List_Event; Context : Block_End_Context'Class) is
-      pragma Unreferenced (Context);
    begin
-      My_Logger.Log (Module_Instance (This.Module_Instance_Ref.Get.Element.all).Config_List);
+      Context.Log (Module_Instance (This.Module_Instance_Ref.Get.Element.all).Config_List);
    end Process_After_Block;
 
    protected body Module_Instance is

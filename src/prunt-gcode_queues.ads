@@ -23,6 +23,18 @@ package Prunt.Gcode_Queues is
 
    type Queue_Item_Kind is (Command_Item, File_Item);
 
+   type Queue_Item_Source (Kind : Queue_Item_Kind := Command_Item) is record
+      case Kind is
+         when Command_Item =>
+            Command_ID : Gcode_Command_ID := 0;
+
+         when File_Item =>
+            File_Name   : Virtual_String;
+            Line_Number : File_Line_Count := 0;
+      end case;
+   end record;
+   --  Immutable origin information captured when a line is removed from the queue.
+
    protected type Queue is
       procedure Try_Set_File (File_Name : Virtual_String; Succeeded : out Boolean);
       --  Set the next file to run as soon as possible. Succeeded is set to False if a file is already enqueued or
@@ -34,9 +46,9 @@ package Prunt.Gcode_Queues is
       procedure Cancel_File;
       --  Cancel the currently enqueued or running file.
 
-      procedure Try_Set_Command (Command : Virtual_String; Succeeded : out Boolean);
+      procedure Try_Set_Command (Command : Virtual_String; Command_ID : Gcode_Command_ID; Succeeded : out Boolean);
       --  Set a command to run as soon as possible. Will only succeed if no file is enqueued or running and no command
-      --  is enqueued.
+      --  is enqueued. Command_ID is returned in the immutable source snapshot when the command is dequeued.
 
       procedure Cancel_Command;
       --  Cancel the currently enqueued command.
@@ -53,7 +65,7 @@ package Prunt.Gcode_Queues is
       --  Get the currently running command. Returns empty string if no command is running.
 
       entry Get_Next_Line
-        (Line : out Virtual_String; Item_Kind : out Queue_Item_Kind; End_Of_Item : out Boolean; Stopped : out Boolean);
+        (Line : out Virtual_String; Source : out Queue_Item_Source; End_Of_Item : out Boolean; Stopped : out Boolean);
       --  Get the next gcode line to process. Once the last line in a file is read the file will be cleared and
       --  Try_Set_File will succeed. Once a direct command is read then Try_Set_Command will succeed as long as there
       --  is not also a file queued.
@@ -65,6 +77,7 @@ package Prunt.Gcode_Queues is
       Current_File        : Mockable.Text_IO.File_Type;
       Current_File_Name   : Virtual_String := "";
       Current_Command     : Virtual_String := "";
+      Current_Command_ID  : Gcode_Command_ID := 0;
       Current_Line_Number : File_Line_Count := 0;
       Stop_Requested      : Boolean := False;
    end Queue;
