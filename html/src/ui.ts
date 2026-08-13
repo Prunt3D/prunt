@@ -5,6 +5,7 @@ import { initStatusView } from './status_view.js';
 import { initControlView } from './control_view.js';
 import { initGcodeEntryView } from './gcode_entry_view.js';
 import { initGcodeExplorerView } from './gcode_explorer_view.js';
+import { initLogView } from './log_view.js';
 import { initLocalization, t } from './localization.js';
 import { activateView } from './navigation.js';
 
@@ -20,6 +21,7 @@ export async function initUI() {
     initControlView();
     initGcodeEntryView();
     initGcodeExplorerView();
+    initLogView();
 
     setupTheme();
 

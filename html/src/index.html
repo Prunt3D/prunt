@@ -33,6 +33,10 @@
                 <li class="nav-item" data-target="control-view" data-i18n="ui.nav.control">Machine Control</li>
                 <li class="nav-item" data-target="gcode-entry-view" data-i18n="ui.nav.gcodeEntry">G-Code Entry</li>
                 <li class="nav-item" data-target="gcode-explorer-view" data-i18n="ui.nav.gcode">G-Code Explorer</li>
+                <li class="nav-item" data-target="log-view">
+                    <span data-i18n="ui.nav.log">Log</span>
+                    <span id="log-unread-count" class="log-unread-count" hidden></span>
+                </li>
             </ul>
             <div class="sidebar-footer">
                 <div class="sidebar-footer-title" data-i18n="ui.sidebar.theme">Theme</div>
@@ -162,6 +166,20 @@
                 <div id="gcode-explorer-content" class="gcode-explorer-content">
                     <!-- Content injected by TS -->
                 </div>
+            </section>
+
+            <section id="log-view" class="view">
+                <div class="view-header">
+                    <h2 data-i18n="ui.log.title">Log</h2>
+                    <button id="btn-clear-log" class="btn btn-secondary btn-sm" data-i18n="ui.log.clear">Clear</button>
+                </div>
+                <div
+                    id="log-output"
+                    class="log-output"
+                    role="log"
+                    aria-live="polite"
+                    aria-relevant="additions"
+                ></div>
             </section>
         </main>
     </div>
