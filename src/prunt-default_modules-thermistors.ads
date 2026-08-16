@@ -26,6 +26,9 @@ with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 with Prunt.Thermistors;
 
+private with Ada.Finalization;
+private with Prunt.Limited_Shared_Pointers;
+
 generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    Thermistor_Hardware : My_Controller_Generic_Types.Thermistor_Hardware_Parameters_Array_Type;
@@ -359,23 +362,59 @@ private
    function To_Thermistor_Parameters (Config : User_Config_Thermistor) return Prunt.Thermistors.Thermistor_Parameters;
    --  Convert a thermistor configuration.
 
-   procedure Report_Temperatures
-     (Planner : Planner_Interface'Class;
-      R       : Gcode_Optional_No_Value;
-      --  Include redundant temperature information if present.
-      T       : Gcode_Optional_Integer
-      --  Optional hotend index.
-      )
+   type Thermistor_Enabled_Array is array (Thermistor_Name) of Boolean;
+
+   procedure Report_Temperatures (This : Module_Instance; Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M105");
    --  Report temperatures to the logger.
 
    procedure Set_Temperature_Auto_Report
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless
       --  Interval in seconds between reports. `S0` disables auto-reporting.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M155");
    --  Configure automatic temperature reporting to the logger.
+   --
+   --  This command differs from Marlin in that the `S` parameter is required and may be a real number instead of just
+   --  an integer.
+
+   type Temperature_Report_Event is new Extra_Block_Resetting_Data with record
+      Enabled_Thermistors : Thermistor_Enabled_Array;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Temperature_Report_Event; Context : Block_End_Context'Class);
+   --  Log a temperature report.
+
+   type Temperature_Auto_Report_Event is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Interval            : Duration;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Temperature_Auto_Report_Event; Context : Block_End_Context'Class);
+   --  Update periodic temperature reporting.
+
+   procedure Log_Temperatures (Enabled_Thermistors : Thermistor_Enabled_Array; Requires_Fresh : Boolean);
+   --  Log all enabled thermistor temperatures.
+
+   task type Temperature_Reporter is
+      entry Start (Enabled_Thermistors : Thermistor_Enabled_Array);
+      entry Stop;
+      entry Set_Auto_Report_Interval (Value : Duration);
+   end Temperature_Reporter;
+
+   type Temperature_Reporter_Wrapper is new Ada.Finalization.Limited_Controlled with record
+      Reporter : Temperature_Reporter;
+   end record;
+
+   overriding
+   procedure Finalize (Object : in out Temperature_Reporter_Wrapper);
+   --  Stop the temperature reporter.
+
+   package Temperature_Reporter_Wrapper_Pointers is new Limited_Shared_Pointers (Temperature_Reporter_Wrapper);
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config);
@@ -392,9 +431,14 @@ private
 
       overriding
       function Get_Temperature (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;
+
+      procedure Set_Auto_Report_Interval (Value : Duration);
+
+      function Get_Enabled_Thermistors return Thermistor_Enabled_Array;
    private
       Config   : User_Config;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Reporter : Temperature_Reporter_Wrapper_Pointers.Ref;
    end Module_Instance;
 
 end Prunt.Default_Modules.Thermistors;

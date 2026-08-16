@@ -17,6 +17,9 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Real_Time;
+with Ada.Strings;
+with Ada.Strings.Fixed;
 with Prunt.Default_Modules.Thermistors.Config_Paths;
 
 package body Prunt.Default_Modules.Thermistors is
@@ -25,6 +28,7 @@ package body Prunt.Default_Modules.Thermistors is
 
    package My_Config_Paths is new Config_Paths;
 
+   use type Ada.Real_Time.Time;
    use type Prunt.Thermistors.Thermistor_Kind;
 
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
@@ -164,6 +168,32 @@ package body Prunt.Default_Modules.Thermistors is
       end case;
    end To_Thermistor_Parameters;
 
+   procedure Log_Temperatures (Enabled_Thermistors : Thermistor_Enabled_Array; Requires_Fresh : Boolean) is
+      use Ada.Strings;
+      use Ada.Strings.Fixed;
+
+      Found_Enabled_Thermistor : Boolean := False;
+   begin
+      My_Logger.Log ("Temperatures:");
+
+      for T in Thermistor_Name loop
+         if Enabled_Thermistors (T) then
+            Found_Enabled_Thermistor := True;
+            My_Logger.Log
+              (+(T'Image
+                 & ": "
+                 & Trim
+                     (Dimensionless'Image (Thermistor_Hardware (T).Get_Temperature (T, Requires_Fresh) / celsius),
+                      Both)
+                 & " °C"));
+         end if;
+      end loop;
+
+      if not Found_Enabled_Thermistor then
+         My_Logger.Log ("No thermistors are enabled.");
+      end if;
+   end Log_Temperatures;
+
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
@@ -225,10 +255,112 @@ package body Prunt.Default_Modules.Thermistors is
       end return;
    end Initialize;
 
+   overriding
+   procedure Process_After_Block (This : Temperature_Report_Event; Context : Block_End_Context'Class) is
+      use Ada.Strings;
+      use Ada.Strings.Fixed;
+
+      Found_Enabled_Thermistor : Boolean := False;
+   begin
+      Context.Wait_For_Idle;
+      Context.Log ("Temperatures:");
+
+      for T in Thermistor_Name loop
+         if This.Enabled_Thermistors (T) then
+            Found_Enabled_Thermistor := True;
+            Context.Log
+              (+(T'Image
+                 & ": "
+                 & Trim
+                     (Dimensionless'Image
+                        (Thermistor_Hardware (T).Get_Temperature (T, Requires_Fresh => True) / celsius),
+                      Both)
+                 & " °C"));
+         end if;
+      end loop;
+
+      if not Found_Enabled_Thermistor then
+         Context.Log ("No thermistors are enabled.");
+      end if;
+   end Process_After_Block;
+
+   overriding
+   procedure Process_After_Block (This : Temperature_Auto_Report_Event; Context : Block_End_Context'Class) is
+      use Ada.Strings;
+      use Ada.Strings.Fixed;
+   begin
+      Context.Wait_For_Idle;
+
+      Module_Instance (This.Module_Instance_Ref.Get.Element.all).Set_Auto_Report_Interval (This.Interval);
+
+      if This.Interval = 0.0 then
+         Context.Log_If_Interactive ("Temperature logging stopped.");
+      else
+         Context.Log_If_Interactive
+           (+("Temperature auto-reporting every "
+              & Trim (This.Interval'Image, Both)
+              & " seconds started; reports will appear in the log."));
+      end if;
+   end Process_After_Block;
+
+   task body Temperature_Reporter is
+      Enabled_Thermistors_Ref      : Thermistor_Enabled_Array;
+      Stop_Received                : Boolean := False;
+      Current_Auto_Report_Interval : Duration := 0.0;
+      Next_Auto_Report             : Ada.Real_Time.Time := Ada.Real_Time.Time_First;
+   begin
+      select
+         accept Stop;
+         Stop_Received := True;
+      or
+         accept Start (Enabled_Thermistors : Thermistor_Enabled_Array) do
+            Enabled_Thermistors_Ref := Enabled_Thermistors;
+         end Start;
+      end select;
+
+      while not Stop_Received loop
+         select
+            accept Stop;
+            Stop_Received := True;
+         or
+            accept Set_Auto_Report_Interval (Value : Duration) do
+               Current_Auto_Report_Interval := Value;
+
+               if Current_Auto_Report_Interval > 0.0 then
+                  Next_Auto_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+               end if;
+            end Set_Auto_Report_Interval;
+         or
+            when Current_Auto_Report_Interval > 0.0 =>
+            delay until Next_Auto_Report;
+
+            Log_Temperatures (Enabled_Thermistors_Ref, Requires_Fresh => False);
+
+            Next_Auto_Report := Next_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+            if Ada.Real_Time.Clock > Next_Auto_Report then
+               Next_Auto_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+            end if;
+         end select;
+      end loop;
+   end Temperature_Reporter;
+
+   overriding
+   procedure Finalize (Object : in out Temperature_Reporter_Wrapper) is
+   begin
+      Object.Reporter.Stop;
+   end Finalize;
+
    protected body Module_Instance is
       procedure Initialize (Config_In : User_Config) is
+         function Make_Reporter_Task return Temperature_Reporter_Wrapper;
+
+         function Make_Reporter_Task return Temperature_Reporter_Wrapper is
+         begin
+            return Result : Temperature_Reporter_Wrapper;
+         end Make_Reporter_Task;
       begin
          Config := Config_In;
+         Reporter.Set (Make_Reporter_Task'Access);
       end Initialize;
 
       procedure Start
@@ -241,6 +373,9 @@ package body Prunt.Default_Modules.Thermistors is
          for T in Thermistor_Name loop
             Thermistor_Hardware (T).Reconfigure (T, To_Thermistor_Parameters (Config.Thermistors (T)));
          end loop;
+
+         Reporter.Get.Reporter.Start
+           ([for T in Thermistor_Name => Config.Thermistors (T).Sensor_Model.Kind /= Disabled]);
       end Start;
 
       function Thermistor_Is_Enabled_In_Config (Thermistor : Thermistor_Name) return Boolean is
@@ -258,19 +393,50 @@ package body Prunt.Default_Modules.Thermistors is
       begin
          return Thermistor_Hardware (Thermistor).Get_Temperature (Thermistor, Requires_Fresh);
       end Get_Temperature;
+
+      procedure Set_Auto_Report_Interval (Value : Duration) is
+      begin
+         Reporter.Get.Reporter.Set_Auto_Report_Interval (Value);
+      end Set_Auto_Report_Interval;
+
+      function Get_Enabled_Thermistors return Thermistor_Enabled_Array is
+      begin
+         return [for T in Thermistor_Name => Config.Thermistors (T).Sensor_Model.Kind /= Disabled];
+      end Get_Enabled_Thermistors;
    end Module_Instance;
 
-   procedure Report_Temperatures
-     (Planner : Planner_Interface'Class; R : Gcode_Optional_No_Value; T : Gcode_Optional_Integer) is
+   procedure Report_Temperatures (This : Module_Instance; Planner : Planner_Interface'Class) is
    begin
-      pragma Unreferenced (R, T);
-      Planner.Flush (Gcode_Message_Event'(Message => "M105 reporting is not implemented yet."));
+      Planner.Flush (Temperature_Report_Event'(Enabled_Thermistors => This.Get_Enabled_Thermistors));
    end Report_Temperatures;
 
-   procedure Set_Temperature_Auto_Report (Planner : Planner_Interface'Class; S : Gcode_Optional_Integer) is
+   procedure Set_Temperature_Auto_Report
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
+   is
+      Interval : Duration;
    begin
-      pragma Unreferenced (S);
-      Planner.Flush (Gcode_Message_Event'(Message => "M155 auto-reporting is not implemented yet."));
+      if S = 0.0 then
+         Planner.Flush (Temperature_Auto_Report_Event'(Module_Instance_Ref => Self_Ref, Interval => 0.0));
+         return;
+      end if;
+
+      if S < 0.1 then
+         raise Gcode_Bad_Inputs_Error with "Temperature auto-report interval must be 0.1 or higher.";
+      end if;
+
+      if S > Dimensionless (Duration'Last) then
+         raise Gcode_Bad_Inputs_Error
+           with "Temperature auto-report interval must not be greater than " & Duration'Last'Image;
+      end if;
+
+      begin
+         Interval := Duration (S);
+      exception
+         when Constraint_Error =>
+            raise Gcode_Bad_Inputs_Error with "Temperature auto-report interval is out of range.";
+      end;
+
+      Planner.Flush (Temperature_Auto_Report_Event'(Module_Instance_Ref => Self_Ref, Interval => Interval));
    end Set_Temperature_Auto_Report;
 
 end Prunt.Default_Modules.Thermistors;
