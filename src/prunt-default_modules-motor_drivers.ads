@@ -26,6 +26,8 @@ with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 with Prunt.Status_Manager;
 
+private with Ada.Containers.Indefinite_Ordered_Maps;
+
 generic
    with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    --  We need to pass in the whole package rather than just `Motor_Name` so codegen can properly resolve the types.
@@ -62,7 +64,7 @@ package Prunt.Default_Modules.Motor_Drivers is
       --  from a list of possible options.
    end record;
 
-   type Motor_Handler is limited interface;
+   type Motor_Handler is interface;
 
    procedure Enable_Motor (This : in out Motor_Handler) is abstract;
    --  Power up the motor if possible. Will only be called when the motor is enabled in the user configuration.
@@ -97,6 +99,11 @@ package Prunt.Default_Modules.Motor_Drivers is
      (This : Module_Instance_Interface; Motor : Motor_Name; Microsteps : Dimensionless) return Length
    is abstract;
    --  Like the above version, but does not rely on the motor configuration having been provided by the handler.
+
+   type Motor_Axis_Map is array (Axis_Name, Motor_Name) of Boolean;
+
+   procedure Set_Motor_Axis_Map (This : in out Module_Instance_Interface; Map : Motor_Axis_Map) is abstract;
+   --  Provide the axes affected by each motor. Kinematics provides this after it resolves the configured motor map.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
@@ -242,110 +249,58 @@ private
    type Motor_Configuration_Provided_Array is array (Motor_Name) of Boolean;
 
    procedure Enable_Steppers
-     (Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_No_Value;
-      Y       : Gcode_Optional_No_Value;
-      Z       : Gcode_Optional_No_Value;
-      E       : Gcode_Optional_No_Value;
-      A       : Gcode_Optional_No_Value;
-      B       : Gcode_Optional_No_Value;
-      C       : Gcode_Optional_No_Value;
-      U       : Gcode_Optional_No_Value;
-      V       : Gcode_Optional_No_Value;
-      W       : Gcode_Optional_No_Value)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_No_Value;
+      --  Enable every configured motor affecting the X axis.
+      Y        : Gcode_Optional_No_Value;
+      --  Enable every configured motor affecting the Y axis.
+      Z        : Gcode_Optional_No_Value;
+      --  Enable every configured motor affecting the Z axis.
+      E        : Gcode_Optional_No_Value
+      --  Enable every configured motor affecting the E axis.
+      )
    with Annotate => (Prunt_Config, Gcode_Command, "M17");
-   --  Enable one or more steppers immediately.
+   --  Enable the configured motors affecting the selected axes. With no axis arguments, enable every configured motor.
 
    procedure Disable_Steppers
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_No_Value;
-      Y       : Gcode_Optional_No_Value;
-      Z       : Gcode_Optional_No_Value;
-      E       : Gcode_Optional_No_Value;
-      A       : Gcode_Optional_No_Value;
-      B       : Gcode_Optional_No_Value;
-      C       : Gcode_Optional_No_Value;
-      U       : Gcode_Optional_No_Value;
-      V       : Gcode_Optional_No_Value;
-      W       : Gcode_Optional_No_Value)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_No_Value;
+      --  Disable every configured motor affecting the X axis.
+      Y        : Gcode_Optional_No_Value;
+      --  Disable every configured motor affecting the Y axis.
+      Z        : Gcode_Optional_No_Value;
+      --  Disable every configured motor affecting the Z axis.
+      E        : Gcode_Optional_No_Value
+      --  Disable every configured motor affecting the E axis.
+      )
    with Annotate => (Prunt_Config, Gcode_Command, "M18");
-   --  Disable one or more steppers immediately or update the inactivity timeout.
+   --  Disable the configured motors affecting the selected axes after queued motion stops. With no arguments, disable
+   --  every configured motor. Every axis affected by a disabled motor is marked unhomed.
 
    procedure Disable_Steppers_M84
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_No_Value;
-      Y       : Gcode_Optional_No_Value;
-      Z       : Gcode_Optional_No_Value;
-      E       : Gcode_Optional_No_Value;
-      A       : Gcode_Optional_No_Value;
-      B       : Gcode_Optional_No_Value;
-      C       : Gcode_Optional_No_Value;
-      U       : Gcode_Optional_No_Value;
-      V       : Gcode_Optional_No_Value;
-      W       : Gcode_Optional_No_Value)
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_No_Value;
+      --  Disable every configured motor affecting the X axis.
+      Y        : Gcode_Optional_No_Value;
+      --  Disable every configured motor affecting the Y axis.
+      Z        : Gcode_Optional_No_Value;
+      --  Disable every configured motor affecting the Z axis.
+      E        : Gcode_Optional_No_Value
+      --  Disable every configured motor affecting the E axis.
+      )
    with Annotate => (Prunt_Config, Gcode_Command, "M84");
-   --  Alias of M18.
+   --  Alias of `M18`.
 
-   procedure Set_Microstepping
-     (Planner : Planner_Interface'Class;
-      B       : Gcode_Optional_Integer;
-      S       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_Integer;
-      Y       : Gcode_Optional_Integer;
-      Z       : Gcode_Optional_Integer;
-      A       : Gcode_Optional_Integer;
-      C       : Gcode_Optional_Integer;
-      U       : Gcode_Optional_Integer;
-      V       : Gcode_Optional_Integer;
-      W       : Gcode_Optional_Integer;
-      E       : Gcode_Optional_Integer)
-   with Annotate => (Prunt_Config, Gcode_Command, "M350");
-   --  Set stepper microstepping values.
+   type Axis_Selection is array (Axis_Name) of Boolean;
 
-   procedure Set_Microstep_Pins
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Arguments.Argument_Integer;
-      B       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_Integer;
-      Y       : Gcode_Optional_Integer;
-      Z       : Gcode_Optional_Integer;
-      E       : Gcode_Optional_Integer)
-   with Annotate => (Prunt_Config, Gcode_Command, "M351");
-   --  Set raw microstep pin states.
-
-   procedure Set_Trimpot_Current
-     (Planner : Planner_Interface'Class;
-      B       : Gcode_Optional_Float;
-      C       : Gcode_Optional_Float;
-      D       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      S       : Gcode_Optional_Float;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      I       : Gcode_Optional_Float;
-      J       : Gcode_Optional_Float;
-      K       : Gcode_Optional_Float;
-      U       : Gcode_Optional_Float;
-      V       : Gcode_Optional_Float;
-      W       : Gcode_Optional_Float)
-   with Annotate => (Prunt_Config, Gcode_Command, "M907");
-   --  Set stepper current through a digital trimpot interface.
-
-   procedure Set_Trimpot_Pin
-     (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Gcode_Arguments.Argument_Integer)
-   with Annotate => (Prunt_Config, Gcode_Command, "M908");
-   --  Set a trimpot value by raw pin/address.
-
-   procedure Report_DAC_Current (Planner : Planner_Interface'Class)
-   with Annotate => (Prunt_Config, Gcode_Command, "M909");
-   --  Report DAC current values to the logger.
-
-   procedure Commit_DAC_To_EEPROM (Planner : Planner_Interface'Class)
-   with Annotate => (Prunt_Config, Gcode_Command, "M910");
-   --  Commit DAC values to external EEPROM.
+   package Motor_Handler_Maps is new
+     Ada.Containers.Indefinite_Ordered_Maps (Key_Type => Motor_Name, Element_Type => Motor_Handler'Class);
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize (Config_In : User_Config);
@@ -359,6 +314,9 @@ private
         (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class);
 
       overriding
+      procedure Set_Motor_Axis_Map (Map : Motor_Axis_Map);
+
+      overriding
       function Motor_Is_Enabled_In_Config (Motor : Motor_Name) return Boolean;
 
       overriding
@@ -369,11 +327,20 @@ private
 
       overriding
       function Distance_Per_Unit (Motor : Motor_Name; Microsteps : Dimensionless) return Length;
+
+      procedure Enable_Selected (Axes : Axis_Selection);
+
+      function Affected_Axes (Requested_Axes : Axis_Selection) return Axis_Selection;
+
+      procedure Disable_Selected (Requested_Axes : Axis_Selection; Invalidated_Axes : out Axis_Selection);
+
    private
       Config                 : User_Config;
       Self_Ref               : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Motor_Configs          : Motor_Configuration_Array;
       Motor_Configs_Provided : Motor_Configuration_Provided_Array := [others => False];
+      Motor_Axes             : Motor_Axis_Map := [others => [others => False]];
+      Motor_Handlers         : Motor_Handler_Maps.Map;
    end Module_Instance;
 
 end Prunt.Default_Modules.Motor_Drivers;

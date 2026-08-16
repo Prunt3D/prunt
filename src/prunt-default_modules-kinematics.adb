@@ -218,6 +218,16 @@ package body Prunt.Default_Modules.Kinematics is
                Config_Data_In                       => Config_Data,
                Motor_Drivers_Module_Instance_Ref_In => Motor_Drivers_Module_Instance_Ref);
 
+            declare
+               Planner_Config : constant Motion_Planner_Configuration :=
+                 Build_Motion_Planner_Configuration (Parsed_Config, Motor_Drivers_Module_Instance);
+               Zero_Curvature : constant Curvature := 0.0 / mm;
+            begin
+               Motor_Drivers_Module_Instance.Set_Motor_Axis_Map
+                 ([for Axis in Axis_Name =>
+                     [for Motor in Motor_Name => Planner_Config.Motors_To_Position (Axis, Motor) /= Zero_Curvature]]);
+            end;
+
             case Parsed_Config.Kinematics.Kinematics_Kind.Kind is
                when Cartesian =>
                   for M in Motor_Name loop

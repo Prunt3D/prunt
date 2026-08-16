@@ -1,0 +1,27 @@
+{
+  "description": "Enable and disable all steppers or only the motors mapped to selected Prunt axes.",
+  "actions": [
+    { "kind": "submit_gcode", "command": "M17 X" },
+    { "kind": "submit_gcode", "command": "M17" },
+    { "kind": "submit_gcode", "command": "M18 X" },
+    { "kind": "submit_gcode", "command": "M84 E" },
+    { "kind": "submit_gcode", "command": "M18" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "event_counts": { "gcode": 5, "motor": 11 },
+    "event_order": [
+      { "kind": "motor", "label": "enable", "value": "X_MOTOR" },
+      { "kind": "motor", "label": "enable", "value": "X_MOTOR" },
+      { "kind": "motor", "label": "enable", "value": "Y_MOTOR" },
+      { "kind": "motor", "label": "enable", "value": "Z_MOTOR" },
+      { "kind": "motor", "label": "enable", "value": "E_MOTOR" },
+      { "kind": "motor", "label": "disable", "value": "X_MOTOR" },
+      { "kind": "motor", "label": "disable", "value": "E_MOTOR" },
+      { "kind": "motor", "label": "disable", "value": "X_MOTOR" },
+      { "kind": "motor", "label": "disable", "value": "Y_MOTOR" },
+      { "kind": "motor", "label": "disable", "value": "Z_MOTOR" },
+      { "kind": "motor", "label": "disable", "value": "E_MOTOR" }
+    ]
+  }
+}

@@ -81,17 +81,21 @@ package body Prunt.Default_Modules.Motor_Drivers is
       end Start;
 
       procedure Provide_Motor_Configuration
-        (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class)
-      is
-         pragma Unreferenced (Handler);
+        (Motor : Motor_Name; Configuration : Motor_Configuration; Handler : Motor_Handler'Class) is
       begin
          if Motor_Configs_Provided (Motor) then
             raise Program_Error with "Motor configuration already provided for " & Motor'Image;
          end if;
 
          Motor_Configs (Motor) := Configuration;
+         Motor_Handlers.Insert (Motor, Handler);
          Motor_Configs_Provided (Motor) := True;
       end Provide_Motor_Configuration;
+
+      procedure Set_Motor_Axis_Map (Map : Motor_Axis_Map) is
+      begin
+         Motor_Axes := Map;
+      end Set_Motor_Axis_Map;
 
       function Motor_Is_Enabled_In_Config (Motor : Motor_Name) return Boolean is
       begin
@@ -142,128 +146,115 @@ package body Prunt.Default_Modules.Motor_Drivers is
 
          return Distance_Per_Unit (Motor, Motor_Configs (Motor).Microsteps);
       end Distance_Per_Unit;
+
+      procedure Enable_Selected (Axes : Axis_Selection) is
+         Enable_All : constant Boolean := (for all Selected of Axes => not Selected);
+      begin
+         for Motor in Motor_Name loop
+            if Config.Motors (Motor).Enabled
+              and then
+                (Enable_All or else (for some Axis in Axis_Name => Axes (Axis) and then Motor_Axes (Axis, Motor)))
+            then
+               declare
+                  Handler : Motor_Handler'Class renames Motor_Handlers.Reference (Motor);
+               begin
+                  Handler.Enable_Motor;
+               end;
+            end if;
+         end loop;
+      end Enable_Selected;
+
+      function Affected_Axes (Requested_Axes : Axis_Selection) return Axis_Selection is
+         Affect_All : constant Boolean := (for all Selected of Requested_Axes => not Selected);
+      begin
+         return
+           [for Axis in Axis_Name =>
+              (for some Motor in Motor_Name =>
+                 Config.Motors (Motor).Enabled
+                 and then Motor_Axes (Axis, Motor)
+                 and then
+                   (Affect_All
+                    or else
+                      (for some Requested_Axis in Requested_Axes'Range =>
+                         Requested_Axes (Requested_Axis) and then Motor_Axes (Requested_Axis, Motor))))];
+      end Affected_Axes;
+
+      procedure Disable_Selected (Requested_Axes : Axis_Selection; Invalidated_Axes : out Axis_Selection) is
+         Disable_All    : constant Boolean := (for all Selected of Requested_Axes => not Selected);
+         Disabled_Motor : array (Motor_Name) of Boolean := [others => False];
+      begin
+         for Motor in Motor_Name loop
+            if Config.Motors (Motor).Enabled
+              and then
+                (Disable_All
+                 or else (for some Axis in Axis_Name => Requested_Axes (Axis) and then Motor_Axes (Axis, Motor)))
+            then
+               declare
+                  Handler : Motor_Handler'Class renames Motor_Handlers.Reference (Motor);
+               begin
+                  Handler.Disable_Motor;
+               end;
+               Disabled_Motor (Motor) := True;
+            end if;
+         end loop;
+
+         Invalidated_Axes :=
+           [for Axis in Axis_Name =>
+              (for some Motor in Motor_Name => Disabled_Motor (Motor) and then Motor_Axes (Axis, Motor))];
+      end Disable_Selected;
+
    end Module_Instance;
 
    procedure Enable_Steppers
-     (Planner : Planner_Interface'Class;
-      X       : Gcode_Optional_No_Value;
-      Y       : Gcode_Optional_No_Value;
-      Z       : Gcode_Optional_No_Value;
-      E       : Gcode_Optional_No_Value;
-      A       : Gcode_Optional_No_Value;
-      B       : Gcode_Optional_No_Value;
-      C       : Gcode_Optional_No_Value;
-      U       : Gcode_Optional_No_Value;
-      V       : Gcode_Optional_No_Value;
-      W       : Gcode_Optional_No_Value) is
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_No_Value;
+      Y        : Gcode_Optional_No_Value;
+      Z        : Gcode_Optional_No_Value;
+      E        : Gcode_Optional_No_Value)
+   is
+      Instance : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
    begin
-      pragma Unreferenced (Planner, X, Y, Z, E, A, B, C, U, V, W);
-      raise Constraint_Error with "M17 is not implemented yet.";
+      pragma Unreferenced (This, Planner);
+      Instance.Enable_Selected ([X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present]);
    end Enable_Steppers;
 
    procedure Disable_Steppers
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_No_Value;
-      Y       : Gcode_Optional_No_Value;
-      Z       : Gcode_Optional_No_Value;
-      E       : Gcode_Optional_No_Value;
-      A       : Gcode_Optional_No_Value;
-      B       : Gcode_Optional_No_Value;
-      C       : Gcode_Optional_No_Value;
-      U       : Gcode_Optional_No_Value;
-      V       : Gcode_Optional_No_Value;
-      W       : Gcode_Optional_No_Value) is
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_No_Value;
+      Y        : Gcode_Optional_No_Value;
+      Z        : Gcode_Optional_No_Value;
+      E        : Gcode_Optional_No_Value)
+   is
+      Instance         : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
+      Requested_Axes   : constant Axis_Selection :=
+        [X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present];
+      Invalidated_Axes : Axis_Selection;
    begin
-      pragma Unreferenced (Planner, S, X, Y, Z, E, A, B, C, U, V, W);
-      raise Constraint_Error with "M18 is not implemented yet.";
+      pragma Unreferenced (This);
+
+      --  Marking the axes unhomed flushes and waits for all preceding motion. Motors are only released after every
+      --  affected axis has reached that synchronization point.
+      Invalidated_Axes := Instance.Affected_Axes (Requested_Axes);
+      for Axis in Axis_Name when Invalidated_Axes (Axis) loop
+         Planner.Mark_Axis_Unhomed (Axis);
+      end loop;
+      Instance.Disable_Selected (Requested_Axes, Invalidated_Axes);
    end Disable_Steppers;
 
    procedure Disable_Steppers_M84
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_No_Value;
-      Y       : Gcode_Optional_No_Value;
-      Z       : Gcode_Optional_No_Value;
-      E       : Gcode_Optional_No_Value;
-      A       : Gcode_Optional_No_Value;
-      B       : Gcode_Optional_No_Value;
-      C       : Gcode_Optional_No_Value;
-      U       : Gcode_Optional_No_Value;
-      V       : Gcode_Optional_No_Value;
-      W       : Gcode_Optional_No_Value) is
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      X        : Gcode_Optional_No_Value;
+      Y        : Gcode_Optional_No_Value;
+      Z        : Gcode_Optional_No_Value;
+      E        : Gcode_Optional_No_Value) is
    begin
-      Disable_Steppers (Planner, S, X, Y, Z, E, A, B, C, U, V, W);
+      Disable_Steppers (This, Self_Ref, Planner, X, Y, Z, E);
    end Disable_Steppers_M84;
-
-   procedure Set_Microstepping
-     (Planner : Planner_Interface'Class;
-      B       : Gcode_Optional_Integer;
-      S       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_Integer;
-      Y       : Gcode_Optional_Integer;
-      Z       : Gcode_Optional_Integer;
-      A       : Gcode_Optional_Integer;
-      C       : Gcode_Optional_Integer;
-      U       : Gcode_Optional_Integer;
-      V       : Gcode_Optional_Integer;
-      W       : Gcode_Optional_Integer;
-      E       : Gcode_Optional_Integer) is
-   begin
-      pragma Unreferenced (Planner, B, S, X, Y, Z, A, C, U, V, W, E);
-      raise Constraint_Error with "M350 is not implemented yet.";
-   end Set_Microstepping;
-
-   procedure Set_Microstep_Pins
-     (Planner : Planner_Interface'Class;
-      S       : Gcode_Arguments.Argument_Integer;
-      B       : Gcode_Optional_Integer;
-      X       : Gcode_Optional_Integer;
-      Y       : Gcode_Optional_Integer;
-      Z       : Gcode_Optional_Integer;
-      E       : Gcode_Optional_Integer) is
-   begin
-      pragma Unreferenced (Planner, S, B, X, Y, Z, E);
-      raise Constraint_Error with "M351 is not implemented yet.";
-   end Set_Microstep_Pins;
-
-   procedure Set_Trimpot_Current
-     (Planner : Planner_Interface'Class;
-      B       : Gcode_Optional_Float;
-      C       : Gcode_Optional_Float;
-      D       : Gcode_Optional_Float;
-      E       : Gcode_Optional_Float;
-      S       : Gcode_Optional_Float;
-      X       : Gcode_Optional_Float;
-      Y       : Gcode_Optional_Float;
-      Z       : Gcode_Optional_Float;
-      I       : Gcode_Optional_Float;
-      J       : Gcode_Optional_Float;
-      K       : Gcode_Optional_Float;
-      U       : Gcode_Optional_Float;
-      V       : Gcode_Optional_Float;
-      W       : Gcode_Optional_Float) is
-   begin
-      pragma Unreferenced (Planner, B, C, D, E, S, X, Y, Z, I, J, K, U, V, W);
-      raise Constraint_Error with "M907 is not implemented yet.";
-   end Set_Trimpot_Current;
-
-   procedure Set_Trimpot_Pin
-     (Planner : Planner_Interface'Class; P : Gcode_Arguments.Argument_Integer; S : Gcode_Arguments.Argument_Integer) is
-   begin
-      pragma Unreferenced (Planner, P, S);
-      raise Constraint_Error with "M908 is not implemented yet.";
-   end Set_Trimpot_Pin;
-
-   procedure Report_DAC_Current (Planner : Planner_Interface'Class) is
-   begin
-      Planner.Flush (Gcode_Message_Event'(Message => "M909 reporting is not implemented yet."));
-   end Report_DAC_Current;
-
-   procedure Commit_DAC_To_EEPROM (Planner : Planner_Interface'Class) is
-   begin
-      pragma Unreferenced (Planner);
-      raise Constraint_Error with "M910 is not implemented yet.";
-   end Commit_DAC_To_EEPROM;
 
 end Prunt.Default_Modules.Motor_Drivers;
