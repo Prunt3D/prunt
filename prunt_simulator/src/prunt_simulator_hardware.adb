@@ -19,6 +19,25 @@
 
 package body Prunt_Simulator_Hardware is
 
+   protected Power_Supply_State is
+      procedure Set (New_Value : Boolean);
+      function Get return Boolean;
+   private
+      Value : Boolean := True;
+   end Power_Supply_State;
+
+   protected body Power_Supply_State is
+      procedure Set (New_Value : Boolean) is
+      begin
+         Value := New_Value;
+      end Set;
+
+      function Get return Boolean is
+      begin
+         return Value;
+      end Get;
+   end Power_Supply_State;
+
    procedure Enable_Motor (Motor : Motor_Name) is
    begin
       pragma Unreferenced (Motor);
@@ -94,5 +113,20 @@ package body Prunt_Simulator_Hardware is
       pragma Unreferenced (Probe, Requires_Fresh);
       return 25.0 * celsius;
    end Get_Board_Temperature;
+
+   procedure Turn_Power_Supply_On is
+   begin
+      Power_Supply_State.Set (True);
+   end Turn_Power_Supply_On;
+
+   procedure Turn_Power_Supply_Off is
+   begin
+      Power_Supply_State.Set (False);
+   end Turn_Power_Supply_Off;
+
+   function Power_Supply_Is_On return Boolean is
+   begin
+      return Power_Supply_State.Get;
+   end Power_Supply_Is_On;
 
 end Prunt_Simulator_Hardware;

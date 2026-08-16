@@ -258,7 +258,10 @@ private
           (Config_Saving_Module => Config_Saving,
            Idle_Emitter_Module  => Idle_Emitter,
            Request_Shutdown     => Request_Machine_Idle_Timeout_Shutdown);
-      package Power_Control is new My_Default_Modules.Power_Control;
+      package Power_Control is new
+        My_Default_Modules.Power_Control
+          (My_Controller_Generic_Types => Generic_Types,
+           Power_Control_Hardware      => Hardware.Power_Control_Hardware);
       package Dwell is new My_Default_Modules.Dwell;
       package Input_Switches is new
         My_Default_Modules.Input_Switches

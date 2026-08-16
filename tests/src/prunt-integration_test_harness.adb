@@ -214,6 +214,16 @@ package body Prunt.Integration_Test_Harness is
    function Get_Thermistor_Temperature (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;
    function Get_Board_Temperature
      (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature;
+   procedure Turn_Power_Supply_On;
+   procedure Turn_Power_Supply_Off;
+   function Power_Supply_Is_On return Boolean;
+
+   protected Power_Supply_State is
+      procedure Set (New_Value : Boolean);
+      function Get return Boolean;
+   private
+      Value : Boolean := True;
+   end Power_Supply_State;
 
    Hardware : constant Generic_Types.Hardware_Parameters :=
      (Motor_Hardware                   =>
@@ -257,7 +267,23 @@ package body Prunt.Integration_Test_Harness is
            (Reconfigure     => Reconfigure_Thermistor'Access,
             Get_Temperature => Get_Thermistor_Temperature'Access)],
       Board_Temperature_Probe_Hardware =>
-        [others => (Get_Temperature => Get_Board_Temperature'Access)]);
+        [others => (Get_Temperature => Get_Board_Temperature'Access)],
+      Power_Control_Hardware           =>
+        (Turn_On  => Turn_Power_Supply_On'Access,
+         Turn_Off => Turn_Power_Supply_Off'Access,
+         Is_On    => Power_Supply_Is_On'Access));
+
+   protected body Power_Supply_State is
+      procedure Set (New_Value : Boolean) is
+      begin
+         Value := New_Value;
+      end Set;
+
+      function Get return Boolean is
+      begin
+         return Value;
+      end Get;
+   end Power_Supply_State;
 
    protected body Machine is
       entry Enqueue (Command : Queued_Command) when Count < Command_Queue_Capacity is
@@ -1763,5 +1789,24 @@ package body Prunt.Integration_Test_Harness is
       Log_Event ("board_temperature", "read_temperature", Probe'Image, Boolean'Image (Requires_Fresh));
       return 25.0 * celsius;
    end Get_Board_Temperature;
+
+   procedure Turn_Power_Supply_On is
+   begin
+      Power_Supply_State.Set (True);
+      Log_Event ("power_supply", "turn_on");
+   end Turn_Power_Supply_On;
+
+   procedure Turn_Power_Supply_Off is
+   begin
+      Power_Supply_State.Set (False);
+      Log_Event ("power_supply", "turn_off");
+   end Turn_Power_Supply_Off;
+
+   function Power_Supply_Is_On return Boolean is
+      Result : constant Boolean := Power_Supply_State.Get;
+   begin
+      Log_Event ("power_supply", "is_on", Value => Boolean'Image (Result));
+      return Result;
+   end Power_Supply_Is_On;
 
 end Prunt.Integration_Test_Harness;

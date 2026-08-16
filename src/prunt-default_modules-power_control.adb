@@ -33,6 +33,26 @@ package body Prunt.Default_Modules.Power_Control is
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
    overriding
+   procedure Process_After_Block (This : Power_State_Change_Event; Context : Block_End_Context'Class) is
+   begin
+      Context.Wait_For_Idle;
+
+      if This.Turn_On then
+         Power_Control_Hardware.Turn_On.all;
+      else
+         Power_Control_Hardware.Turn_Off.all;
+      end if;
+   end Process_After_Block;
+
+   overriding
+   procedure Process_After_Block (This : Power_State_Report_Event; Context : Block_End_Context'Class) is
+      pragma Unreferenced (This);
+   begin
+      Context.Wait_For_Idle;
+      Context.Log (+(if Power_Control_Hardware.Is_On.all then "Power supply is on" else "Power supply is off"));
+   end Process_After_Block;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
@@ -54,16 +74,20 @@ package body Prunt.Default_Modules.Power_Control is
       end Start;
    end Module_Instance;
 
-   procedure Power_On (Planner : Planner_Interface'Class; S : Gcode_Optional_No_Value) is
+   procedure Power_On (Planner : Planner_Interface'Class) is
    begin
-      pragma Unreferenced (Planner, S);
-      raise Constraint_Error with "M80 is not implemented yet.";
+      Planner.Flush (Power_State_Change_Event'(Turn_On => True));
    end Power_On;
+
+   procedure Report_Power_State (Planner : Planner_Interface'Class; S : Gcode_No_Value) is
+   begin
+      pragma Unreferenced (S);
+      Planner.Flush (Power_State_Report_Event'(null record));
+   end Report_Power_State;
 
    procedure Power_Off (Planner : Planner_Interface'Class) is
    begin
-      pragma Unreferenced (Planner);
-      raise Constraint_Error with "M81 is not implemented yet.";
+      Planner.Flush (Power_State_Change_Event'(Turn_On => False));
    end Power_Off;
 
 end Prunt.Default_Modules.Power_Control;

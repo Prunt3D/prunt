@@ -158,8 +158,7 @@ package Prunt.Controller_Generic_Types is
              /= Fan_Hardware_Parameters_Array_Type (J).Gcode_Index));
 
    type Tachometer_Hardware_Parameters is record
-      Get_Pulse_Frequency :
-        access function (Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Frequency;
+      Get_Pulse_Frequency : access function (Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Frequency;
       --  Return the pulse frequency currently being measured for the tachometer input. May be called from any task.
       --
       --  This value is not converted to RPM. The tachometer module applies the configured pulses-per-revolution value.
@@ -215,6 +214,26 @@ package Prunt.Controller_Generic_Types is
    type Board_Temperature_Probe_Hardware_Parameters_Array_Type is
      array (Board_Temperature_Probe_Name) of Board_Temperature_Probe_Hardware_Parameters;
 
+   type Power_Control_Hardware_Parameters is record
+      Turn_On : access procedure := null;
+      --  Turn on the machine power supply.
+
+      Turn_Off : access procedure := null;
+      --  Turn off the machine power supply.
+
+      Is_On : access function return Boolean := null;
+      --  Return True when the machine power supply is on.
+   end record
+   with
+     Dynamic_Predicate =>
+       ((Power_Control_Hardware_Parameters.Turn_On = null
+         and then Power_Control_Hardware_Parameters.Turn_Off = null
+         and then Power_Control_Hardware_Parameters.Is_On = null)
+        or else
+          (Power_Control_Hardware_Parameters.Turn_On /= null
+           and then Power_Control_Hardware_Parameters.Turn_Off /= null
+           and then Power_Control_Hardware_Parameters.Is_On /= null));
+
    type Hardware_Parameters is record
       pragma Warnings (Off, "null array aggregate indexed by an enumeration type");
       --  We want this to raise an error if the user tries to default-initialize any of these fields when providing a
@@ -227,6 +246,7 @@ package Prunt.Controller_Generic_Types is
       Heater_Hardware                  : Heater_Hardware_Parameters_Array_Type := [];
       Thermistor_Hardware              : Thermistor_Hardware_Parameters_Array_Type := [];
       Board_Temperature_Probe_Hardware : Board_Temperature_Probe_Hardware_Parameters_Array_Type := [];
+      Power_Control_Hardware           : Power_Control_Hardware_Parameters := (others => <>);
       pragma Warnings (On, "null array aggregate indexed by an enumeration type");
    end record;
 

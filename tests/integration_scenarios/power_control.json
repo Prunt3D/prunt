@@ -1,0 +1,20 @@
+{
+  "description": "Forward M80 and M81 to the board and report the board power state with bare M80 S.",
+  "actions": [
+    { "kind": "submit_gcode", "command": "M81" },
+    { "kind": "submit_gcode", "command": "M80 S" },
+    { "kind": "submit_gcode", "command": "M80" },
+    { "kind": "submit_gcode", "command": "M80 S" },
+    { "kind": "submit_gcode", "command": "M80 S1" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "event_counts": { "gcode": 5, "power_supply": 4 },
+    "event_order": [
+      { "kind": "power_supply", "label": "turn_off" },
+      { "kind": "power_supply", "label": "is_on", "value": "FALSE" },
+      { "kind": "power_supply", "label": "turn_on" },
+      { "kind": "power_supply", "label": "is_on", "value": "TRUE" }
+    ]
+  }
+}

@@ -21,10 +21,13 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
+with Prunt.Controller_Generic_Types;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
 generic
+   with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
+   Power_Control_Hardware : My_Controller_Generic_Types.Power_Control_Hardware_Parameters;
 package Prunt.Default_Modules.Power_Control is
 
    type Module is new My_Modules.Module with null record;
@@ -56,13 +59,31 @@ package Prunt.Default_Modules.Power_Control is
 
 private
 
-   procedure Power_On
+   type Power_State_Change_Event is new Extra_Block_Resetting_Data with record
+      Turn_On : Boolean;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Power_State_Change_Event; Context : Block_End_Context'Class);
+   --  Forward a power-state change to the board after queued work has stopped.
+
+   type Power_State_Report_Event is new Extra_Block_Resetting_Data with null record;
+
+   overriding
+   procedure Process_After_Block (This : Power_State_Report_Event; Context : Block_End_Context'Class);
+   --  Read the board power state and log it.
+
+   procedure Power_On (Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M80");
+   --  Turn on the power supply.
+
+   procedure Report_Power_State
      (Planner : Planner_Interface'Class;
-      S       : Gcode_Optional_No_Value
-      --  Report power state if present.
+      S       : Gcode_No_Value
+      --  Select the power-state reporting variant.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M80");
-   --  Turn on or report the power supply state.
+   --  Report the power supply state.
 
    procedure Power_Off (Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M81");

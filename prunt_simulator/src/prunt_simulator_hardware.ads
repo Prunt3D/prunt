@@ -44,6 +44,9 @@ package Prunt_Simulator_Hardware is
    function Get_Thermistor_Temperature (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;
    function Get_Board_Temperature
      (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature;
+   procedure Turn_Power_Supply_On;
+   procedure Turn_Power_Supply_Off;
+   function Power_Supply_Is_On return Boolean;
 
    Hardware : constant Generic_Types.Hardware_Parameters :=
      (Motor_Hardware                   =>
@@ -73,6 +76,10 @@ package Prunt_Simulator_Hardware is
            (Reconfigure     => Reconfigure_Thermistor'Access,
             Get_Temperature => Get_Thermistor_Temperature'Access)],
       Board_Temperature_Probe_Hardware =>
-        [others => (Get_Temperature => Get_Board_Temperature'Access)]);
+        [others => (Get_Temperature => Get_Board_Temperature'Access)],
+      Power_Control_Hardware           =>
+        (Turn_On  => Turn_Power_Supply_On'Access,
+         Turn_Off => Turn_Power_Supply_Off'Access,
+         Is_On    => Power_Supply_Is_On'Access));
 
 end Prunt_Simulator_Hardware;
