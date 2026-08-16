@@ -19,9 +19,13 @@
 
 with Ada.Real_Time;
 
+with Prunt.Default_Modules.TMC2240_Drivers.Config_Paths;
+
 package body Prunt.Default_Modules.TMC2240_Drivers is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
@@ -113,7 +117,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
@@ -142,17 +146,9 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
       Motor_Enabled       : Boolean;
-      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
       Motor               : My_Controller_Generic_Types.Motor_Name;
-      Distance_Per_Step   : Length) return TMC2240_Registers
-   is
-      procedure Report (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
-
-      procedure Report (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String) is
-         use type Prunt.Config.Config_Data_Paths.Vector;
-      begin
-         Report_Config_Error (["Motors", +Motor'Image, "TMC2240_Parameters"] & Path, Message);
-      end Report;
+      Distance_Per_Step   : Length) return TMC2240_Registers is
    begin
       return
          Result : TMC2240_Registers :=
@@ -307,12 +303,14 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       do
          if Motor_Enabled then
             if Config.IRUN_During_Homing > Config.IRUN then
-               Report (["IRUN_During_Homing"], "IRUN during homing must be less than or equal to IRUN.");
+               Report_Config_Error
+                 (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.IRUN_During_Homing,
+                  "IRUN during homing must be less than or equal to IRUN.");
             end if;
 
             if Config.TOFF = Disable_Driver then
-               Report
-                 (["TOFF"],
+               Report_Config_Error
+                 (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.TOFF,
                   "Setting TOFF to Disable_Driver will cause the motor to never be powered. If you do not want this "
                   & "motor to be used then use the motor disable toggle.");
             end if;
@@ -338,8 +336,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks
                --  to be an off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but
                --  the maximum is probably actually 255.
-               Report
-                 (["CHM", "SpreadCycle", "Manual"],
+               Report_Config_Error
+                 (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.CHM.SpreadCycle.Manual.Path,
                   "HSTRT + HEND must be less than 15 unless IRUN is reduced to 0.97 or below as otherwise the "
                   & "hysteresis start setting will be greater than the full scale current, leading to incorrect "
                   & "operation.");
@@ -368,14 +366,14 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                   Driver_Voltage_Too_Low      => Driver_Voltage_Too_Low);
 
                if Sum_Too_High then
-                  Report
-                    (["CHM", "SpreadCycle", "Derived"],
+                  Report_Config_Error
+                    (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.CHM.SpreadCycle.Derived.Path,
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning.");
                elsif Sum_Too_High_For_Full_Scale and then Result.IHOLD_IRUN.I_Run = 31 then
-                  Report
-                    (["CHM", "SpreadCycle", "Derived"],
+                  Report_Config_Error
+                    (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.CHM.SpreadCycle.Derived.Path,
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning. A very small reduction of IRUN to 0.97 will allow the computed parameters "
@@ -383,16 +381,16 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                end if;
 
                if Excessive_Heating then
-                  Report
-                    (["CHM", "SpreadCycle", "Derived"],
+                  Report_Config_Error
+                    (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.CHM.SpreadCycle.Derived.Path,
                      "The stepper motor is likely to heat up excessively at the given driver voltage. "
                      & "Check that parameters are correct. If parameters are correct and you still want to "
                      & "use this motor then use manual tuning.");
                end if;
 
                if Driver_Voltage_Too_Low then
-                  Report
-                    (["CHM", "SpreadCycle", "Derived"],
+                  Report_Config_Error
+                    (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.CHM.SpreadCycle.Derived.Path,
                      "The stepper motor requires a higher driver voltage to reach full current. Check that "
                      & "parameters are correct. If parameters are correct and you still want to use this "
                      & "motor then use manual tuning.");
@@ -736,7 +734,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
         (Config_In                         : User_Config;
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
-           access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+           access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
          Status_Emitter_In                 : Status_Manager.Status_Emitter)
       is
          Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames

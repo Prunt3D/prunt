@@ -17,9 +17,13 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Prunt.Default_Modules.Homing.Config_Paths;
+
 package body Prunt.Default_Modules.Homing is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
@@ -96,7 +100,7 @@ package body Prunt.Default_Modules.Homing is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -111,7 +115,7 @@ package body Prunt.Default_Modules.Homing is
          for Axis in Axis_Name when Axis /= E_Axis loop
             if Parsed_Config.Homing (Axis).Homing_Method.Kind = Disabled then
                Report_Config_Error
-                 (["Homing", +Axis'Image, "Homing_Method", "Kind"], "Homing is not configured for this axis.");
+                 (My_Config_Paths.Root.Homing (Axis).Homing_Method.Kind, "Homing is not configured for this axis.");
             elsif Parsed_Config.Homing (Axis).Homing_Method.Kind = Use_Input_Switch then
                declare
                   Input_Switches_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
@@ -124,14 +128,7 @@ package body Prunt.Default_Modules.Homing is
                            (Parsed_Config.Homing (Axis).Homing_Method.Use_Input_Switch.Switch)
                   then
                      Report_Config_Error
-                       (["Homing",
-                         +Axis'Image,
-                         "Homing_Method",
-                         "Kind",
-                         "Children",
-                         "Use_Input_Switch",
-                         "Use_Input_Switch",
-                         "Switch"],
+                       (My_Config_Paths.Root.Homing (Axis).Homing_Method.Use_Input_Switch.Switch,
                         "This switch is disabled.");
                   end if;
                end;
@@ -164,7 +161,7 @@ package body Prunt.Default_Modules.Homing is
                         when Visiting  =>
                            --  TODO: We should show the cycle in the log.
                            Report_Config_Error
-                             (["Homing", +Axis'Image, "Prerequisites", +Prereq_Axis'Image, "Kind"],
+                             (My_Config_Paths.Root.Homing (Axis).Prerequisites (Prereq_Axis).Kind,
                               "This prerequisite introduces a cycle in the homing prerequisites.");
 
                         when Done      =>

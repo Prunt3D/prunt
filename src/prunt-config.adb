@@ -17,6 +17,7 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Exceptions;
 with Ada.Strings.Fixed;
 with Ada.Tags;
 with Prunt.Mockable.Directories;
@@ -656,9 +657,8 @@ package body Prunt.Config is
    end Path_Without_Last;
 
    function Selected_Variant_Default
-     (Schema        : Config_Property_Maps.Map;
-      Path          : Config_Data_Paths.Vector;
-      Default_Value : out JSON_Value) return Boolean
+     (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector; Default_Value : out JSON_Value)
+      return Boolean
    is
       use type Ada.Containers.Count_Type;
 
@@ -747,8 +747,8 @@ package body Prunt.Config is
       return True;
    end Try_Get_JSON_Node;
 
-   procedure Merge_Default_JSON_Node
-     (Root : JSON_Value; Path : Config_Data_Paths.Vector; Default_Value : JSON_Value) is
+   procedure Merge_Default_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Default_Value : JSON_Value)
+   is
       Existing_Value : JSON_Value;
    begin
       if Try_Get_JSON_Node (Root, Path, Existing_Value) then
@@ -1741,6 +1741,49 @@ package body Prunt.Config is
    begin
       return Data.Module;
    end Module_Name;
+
+   function Resolve_Config_Path (Data : Config_Data; Path : Config_Path'Class) return Config_Data_Paths.Vector is
+      Ignored : JSON_Value;
+   begin
+      for Requirement of Path.Required_Selections loop
+         declare
+            Actual : constant Virtual_String := Data.Get (Requirement.Path);
+         begin
+            if Actual /= Requirement.Selected then
+               raise Constraint_Error
+                 with
+                   "Configuration error path uses an unselected variant (Path: "
+                   & Config_Data_Paths.Vector'Image (Path.Path)
+                   & ", Selection path: "
+                   & Config_Data_Paths.Vector'Image (Requirement.Path)
+                   & ", Expected: "
+                   & Requirement.Selected'Image
+                   & ", Actual: "
+                   & Actual'Image
+                   & ").";
+            end if;
+         end;
+      end loop;
+
+      begin
+         if Data.For_Migration then
+            Ignored := Get_JSON_Node (Data.Migration_Config, Path.Path, Data.Module);
+         else
+            Ignored := Data.Internal.Get.Get (Data.Module, Path.Path);
+         end if;
+      exception
+         when Occurrence : Constraint_Error =>
+            raise Constraint_Error
+              with
+                "Configuration error path is unavailable (Path: "
+                & Config_Data_Paths.Vector'Image (Path.Path)
+                & ", Reason: "
+                & Ada.Exceptions.Exception_Message (Occurrence)
+                & ").";
+      end;
+
+      return Path.Path;
+   end Resolve_Config_Path;
 
    procedure Recursive_Left_Merge (Left : JSON_Value; Right : JSON_Value; Full_Join : Boolean := True) is
       procedure Map_Double_JSON_Object is new Gen_Map_JSON_Object (JSON_Value);

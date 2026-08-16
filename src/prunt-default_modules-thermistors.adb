@@ -17,9 +17,13 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Prunt.Default_Modules.Thermistors.Config_Paths;
+
 package body Prunt.Default_Modules.Thermistors is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    use type Prunt.Thermistors.Thermistor_Kind;
 
@@ -170,7 +174,7 @@ package body Prunt.Default_Modules.Thermistors is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -188,11 +192,11 @@ package body Prunt.Default_Modules.Thermistors is
                  >= Parsed_Config.Thermistors (T).Maximum_Temperature
                then
                   Report_Config_Error
-                    (["Thermistors", +T'Image, "Maximum_Temperature"],
+                    (My_Config_Paths.Root.Thermistors (T).Maximum_Temperature,
                      "Maximum temperature must be greater than minimum temperature.");
                elsif Parsed_Config.Thermistors (T).Minimum_Temperature <= Prunt.Thermistors.Absolute_Zero then
                   Report_Config_Error
-                    (["Thermistors", +T'Image, "Minimum_Temperature"],
+                    (My_Config_Paths.Root.Thermistors (T).Minimum_Temperature,
                      "Minimum temperature must be above absolute zero.");
                else
                   declare
@@ -203,14 +207,14 @@ package body Prunt.Default_Modules.Thermistors is
                        and then not Prunt.Thermistors.Steinhart_Hart_Model_Is_Valid (Params)
                      then
                         Report_Config_Error
-                          (["Thermistors", +T'Image, "Sensor_Model"],
+                          (My_Config_Paths.Root.Thermistors (T).Sensor_Model.Path,
                            "The Steinhart-Hart model must be monotonic and produce resistance between 1.0E-100 and "
                            & "1.0E100 ohm throughout the configured temperature range.");
                      elsif Params.Kind = Prunt.Thermistors.Callendar_Van_Dusen_Kind
                        and then not Prunt.Thermistors.Callendar_Van_Dusen_Model_Is_Valid (Params)
                      then
                         Report_Config_Error
-                          (["Thermistors", +T'Image, "Sensor_Model"],
+                          (My_Config_Paths.Root.Thermistors (T).Sensor_Model.Path,
                            "The Callendar-Van Dusen model must be monotonic and produce resistance between 1.0E-100 "
                            & "and 1.0E100 ohm throughout the configured temperature range.");
                      end if;

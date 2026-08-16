@@ -17,9 +17,13 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Prunt.Default_Modules.Basic_Config.Config_Paths;
+
 package body Prunt.Default_Modules.Basic_Config is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
@@ -37,7 +41,7 @@ package body Prunt.Default_Modules.Basic_Config is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
@@ -47,7 +51,8 @@ package body Prunt.Default_Modules.Basic_Config is
          if Module_Instance_Interface'Class (Result).Prunt_Is_Disabled then
             --  TODO: GCC bug above? Cast should not be required?
             Report_Config_Error
-              (["Prunt", "Enabled"], "Prunt is currently disabled. Enable after configuring all other settings.");
+              (My_Config_Paths.Root.Prunt.Enabled,
+               "Prunt is currently disabled. Enable after configuring all other settings.");
          end if;
       end return;
    end Initialize;

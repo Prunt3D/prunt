@@ -20,9 +20,13 @@
 with Ada.Real_Time;
 with Prunt.Thermistors;
 
+with Prunt.Default_Modules.Heaters.Config_Paths;
+
 package body Prunt.Default_Modules.Heaters is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    use type Ada.Real_Time.Time;
    use type Ada.Real_Time.Time_Span;
@@ -193,7 +197,7 @@ package body Prunt.Default_Modules.Heaters is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -219,22 +223,13 @@ package body Prunt.Default_Modules.Heaters is
                   if not Thermistors_Module_Instance.Thermistor_Is_Enabled_In_Config
                            (Parsed_Config.Heaters (H).Thermistor)
                   then
-                     Report_Config_Error (["Heaters", +H'Image, "Thermistor"], "This thermistor is disabled.");
+                     Report_Config_Error (My_Config_Paths.Root.Heaters (H).Thermistor, "This thermistor is disabled.");
                   elsif Parsed_Config.Heaters (H).Pause_Action.Kind = Set_Pause_Target then
                      declare
                         Thermistor_Params : constant Prunt.Thermistors.Thermistor_Parameters :=
                           Thermistors_Module_Instance.Get_Thermistor_Parameters (Parsed_Config.Heaters (H).Thermistor);
-                        Target_Path       : constant Config.Config_Data_Paths.Vector :=
-                          ["Heaters",
-                           +H'Image,
-                           "Kind",
-                           "Children",
-                           "Enabled",
-                           "Pause_Action",
-                           "Kind",
-                           "Children",
-                           "Set_Pause_Target",
-                           "Target"];
+                        Target_Path       : constant Config.Config_Path :=
+                          My_Config_Paths.Root.Heaters (H).Pause_Action.Target;
                      begin
                         if Parsed_Config.Heaters (H).Pause_Action.Target < Thermistor_Params.Minimum_Temperature then
                            Report_Config_Error (Target_Path, "This target is below the thermistor minimum.");
@@ -249,46 +244,56 @@ package body Prunt.Default_Modules.Heaters is
             end loop;
 
             declare
-               procedure Validate_Default (Name : Virtual_String; Selection : User_Config_Default_Heater);
+               procedure Validate_Default (Selection : User_Config_Default_Heater; Path : Config.Config_Path);
 
                procedure Check_Overlap
                  (Left_Name       : Virtual_String;
                   Left_Selection  : User_Config_Default_Heater;
-                  Right_Name      : Virtual_String;
-                  Right_Selection : User_Config_Default_Heater);
+                  Right_Selection : User_Config_Default_Heater;
+                  Right_Path      : Config.Config_Path);
 
-               procedure Validate_Default (Name : Virtual_String; Selection : User_Config_Default_Heater) is
+               procedure Validate_Default (Selection : User_Config_Default_Heater; Path : Config.Config_Path) is
                begin
                   if Selection.Kind = Enabled and then Parsed_Config.Heaters (Selection.Heater).Kind = Disabled then
-                     Report_Config_Error (["Gcode_Defaults", Name, "Heater"], "This heater is disabled.");
+                     Report_Config_Error (Path, "This heater is disabled.");
                   end if;
                end Validate_Default;
 
                procedure Check_Overlap
                  (Left_Name       : Virtual_String;
                   Left_Selection  : User_Config_Default_Heater;
-                  Right_Name      : Virtual_String;
-                  Right_Selection : User_Config_Default_Heater) is
+                  Right_Selection : User_Config_Default_Heater;
+                  Right_Path      : Config.Config_Path) is
                begin
                   if Left_Selection.Kind = Enabled
                     and then Right_Selection.Kind = Enabled
                     and then Left_Selection.Heater = Right_Selection.Heater
                   then
-                     Report_Config_Error
-                       (["Gcode_Defaults", Right_Name, "Heater"],
-                        "This heater is already selected for " & Left_Name & ".");
+                     Report_Config_Error (Right_Path, "This heater is already selected for " & Left_Name & ".");
                   end if;
                end Check_Overlap;
             begin
-               Validate_Default ("Hotend", Parsed_Config.Gcode_Defaults.Hotend);
-               Validate_Default ("Bed", Parsed_Config.Gcode_Defaults.Bed);
-               Validate_Default ("Chamber", Parsed_Config.Gcode_Defaults.Chamber);
+               Validate_Default
+                 (Parsed_Config.Gcode_Defaults.Hotend, My_Config_Paths.Root.Gcode_Defaults.Hotend.Heater);
+               Validate_Default (Parsed_Config.Gcode_Defaults.Bed, My_Config_Paths.Root.Gcode_Defaults.Bed.Heater);
+               Validate_Default
+                 (Parsed_Config.Gcode_Defaults.Chamber, My_Config_Paths.Root.Gcode_Defaults.Chamber.Heater);
 
-               Check_Overlap ("Hotend", Parsed_Config.Gcode_Defaults.Hotend, "Bed", Parsed_Config.Gcode_Defaults.Bed);
                Check_Overlap
-                 ("Hotend", Parsed_Config.Gcode_Defaults.Hotend, "Chamber", Parsed_Config.Gcode_Defaults.Chamber);
+                 ("Hotend",
+                  Parsed_Config.Gcode_Defaults.Hotend,
+                  Parsed_Config.Gcode_Defaults.Bed,
+                  My_Config_Paths.Root.Gcode_Defaults.Bed.Heater);
                Check_Overlap
-                 ("Bed", Parsed_Config.Gcode_Defaults.Bed, "Chamber", Parsed_Config.Gcode_Defaults.Chamber);
+                 ("Hotend",
+                  Parsed_Config.Gcode_Defaults.Hotend,
+                  Parsed_Config.Gcode_Defaults.Chamber,
+                  My_Config_Paths.Root.Gcode_Defaults.Chamber.Heater);
+               Check_Overlap
+                 ("Bed",
+                  Parsed_Config.Gcode_Defaults.Bed,
+                  Parsed_Config.Gcode_Defaults.Chamber,
+                  My_Config_Paths.Root.Gcode_Defaults.Chamber.Heater);
             end;
          end;
       end return;

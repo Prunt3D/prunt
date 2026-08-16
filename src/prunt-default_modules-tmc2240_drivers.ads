@@ -59,7 +59,7 @@ package Prunt.Default_Modules.TMC2240_Drivers is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
@@ -384,7 +384,8 @@ private
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
       Motor_Enabled       : Boolean;
-      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error               :
+           access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
       Motor               : My_Controller_Generic_Types.Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers;
    --  Build and validate Motor's initial registers.
@@ -630,7 +631,7 @@ private
         (Config_In                         : User_Config;
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
-           access procedure (Path : Prunt.Config.Config_Data_Paths.Vector; Message : Virtual_String);
+           access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
          Status_Emitter_In                 : Status_Manager.Status_Emitter)
       with
         Pre =>

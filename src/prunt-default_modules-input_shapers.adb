@@ -20,9 +20,13 @@
 with Ada.Exceptions;
 with Prunt.JSON;
 
+with Prunt.Default_Modules.Input_Shapers.Config_Paths;
+
 package body Prunt.Default_Modules.Input_Shapers is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    use type JSON.JSON_Value_Type;
 
@@ -275,7 +279,7 @@ package body Prunt.Default_Modules.Input_Shapers is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -300,7 +304,7 @@ package body Prunt.Default_Modules.Input_Shapers is
            and then not Pressure_Advance_Allowed_Axes (Axis)
          then
             Report_Config_Error
-              (["Input_Shaping", +Axis'Image, "Kind"],
+              (My_Config_Paths.Root.Input_Shaping (Axis).Kind,
                "Pressure advance is not supported on an axis that shares a motor with another axis.");
          end if;
       end loop;

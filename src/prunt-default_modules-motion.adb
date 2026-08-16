@@ -23,9 +23,13 @@ with Ada.Strings;
 with Ada.Strings.Fixed;
 with VSS.Characters.Latin;
 
+with Prunt.Default_Modules.Motion.Config_Paths;
+
 package body Prunt.Default_Modules.Motion is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
@@ -52,7 +56,7 @@ package body Prunt.Default_Modules.Motion is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -68,14 +72,12 @@ package body Prunt.Default_Modules.Motion is
       procedure Report_If_Absolute_Park_Position_Out_Of_Bounds;
 
       procedure Report_If_Absolute_Park_Position_Out_Of_Bounds is
-         use type Config.Config_Data_Paths.Vector;
-
          Params : constant Motion_Planner.Kinematic_Parameters :=
            Kinematics_Module_Instance.Get_Default_Motion_Planner_Configuration.Parameters;
 
-         procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Data_Paths.Vector);
+         procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Path);
 
-         procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Data_Paths.Vector) is
+         procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Path) is
          begin
             pragma Annotate (Xcov, Exempt_On, "Configuration validation error reporting.");
             if Value < Params.Lower_Pos_Limit (Axis) then
@@ -90,19 +92,17 @@ package body Prunt.Default_Modules.Motion is
       begin
          if Parsed_Config.Pause_Park.Kind = Absolute_Park_Move then
             declare
-               Move      : constant User_Config_Pause_Park_Absolute_Park_Move :=
+               Move : constant User_Config_Pause_Park_Absolute_Park_Move :=
                  Parsed_Config.Pause_Park.Absolute_Park_Move;
-               Base_Path : constant Config.Config_Data_Paths.Vector :=
-                 ["Pause_Park", "Kind", "Children", "Absolute_Park_Move", "Absolute_Park_Move"];
             begin
-               Check_Axis (X_Axis, Move.X_Position, Base_Path & ["X_Position"]);
-               Check_Axis (Y_Axis, Move.Y_Position, Base_Path & ["Y_Position"]);
+               Check_Axis (X_Axis, Move.X_Position, My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.X_Position);
+               Check_Axis (Y_Axis, Move.Y_Position, My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.Y_Position);
 
                if Move.Z_Target.Kind = Absolute_Z_Position then
                   Check_Axis
                     (Z_Axis,
                      Move.Z_Target.Z_Position,
-                     Base_Path & ["Z_Target", "Kind", "Children", "Absolute_Z_Position", "Z_Position"]);
+                     My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.Z_Target.Z_Position);
                end if;
             end;
          end if;

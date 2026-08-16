@@ -17,9 +17,13 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Prunt.Default_Modules.Kinematics.Config_Paths;
+
 package body Prunt.Default_Modules.Kinematics is
 
    pragma Extensions_Allowed (On);
+
+   package My_Config_Paths is new Config_Paths;
 
    function Map_Axis_Is_Motor_Separable (Map : Motor_Position_Map; Axis : Axis_Name) return Boolean is
    begin
@@ -188,7 +192,7 @@ package body Prunt.Default_Modules.Kinematics is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -221,7 +225,7 @@ package body Prunt.Default_Modules.Kinematics is
                        and then not Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M)
                      then
                         Report_Config_Error
-                          (["Kinematics", "Kinematics_Kind", "Kind", "Children", "Cartesian", "Cartesian", +M'Image],
+                          (My_Config_Paths.Root.Kinematics.Kinematics_Kind.Cartesian (M),
                            "This motor is assigned to an axis but the motor is disabled in its motor configuration.");
                      end if;
                   end loop;
@@ -232,7 +236,7 @@ package body Prunt.Default_Modules.Kinematics is
                        and then not Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M)
                      then
                         Report_Config_Error
-                          (["Kinematics", "Kinematics_Kind", "Kind", "Children", "Core_XY", "Core_XY", +M'Image],
+                          (My_Config_Paths.Root.Kinematics.Kinematics_Kind.Core_XY (M),
                            "This motor is assigned to an axis but the motor is disabled in its motor configuration.");
                      end if;
                   end loop;

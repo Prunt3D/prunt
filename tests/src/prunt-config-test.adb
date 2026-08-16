@@ -19,6 +19,7 @@
 
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Prunt.Config.Paths;
 with Prunt.JSON;            use Prunt.JSON;
 with Prunt.Mockable.Directories;
 with Prunt.Mockable.Text_IO;
@@ -26,6 +27,55 @@ with Prunt.Mockable.Text_IO;
 package body Prunt.Config.Test is
 
    pragma Extensions_Allowed (On);
+
+   function Migration_Data (Input : Virtual_String) return Config_Data is
+     (For_Migration => True, Module => "Test", Migration_Config => Read (Input), others => <>);
+
+   function Homing_Method_Path return Config_Path is
+     (Paths.Append (Paths.Empty_Path, ["Homing", "X", "Homing_Method"]));
+
+   function Homing_Switch_Path return Config_Path is
+     (Paths.Append_Selected
+        (Homing_Method_Path,
+         ["Kind", "Children", "Use_Input_Switch", "Use_Input_Switch", "Switch"],
+         ["Kind", "Selected"],
+         "Use_Input_Switch"));
+
+   function Motion_Z_Position_Path return Config_Path is
+      Pause_Path    : constant Config_Path := Paths.Append (Paths.Empty_Path, [1 => "Pause_Park"]);
+      Absolute_Path : constant Config_Path :=
+        Paths.Append_Selected
+          (Pause_Path,
+           ["Kind", "Children", "Absolute_Park_Move", "Absolute_Park_Move"],
+           ["Kind", "Selected"],
+           "Absolute_Park_Move");
+      Z_Target_Path : constant Config_Path := Paths.Append (Absolute_Path, [1 => "Z_Target"]);
+   begin
+      return
+        Paths.Append_Selected
+          (Z_Target_Path,
+           ["Kind", "Children", "Absolute_Z_Position", "Z_Position"],
+           ["Kind", "Selected"],
+           "Absolute_Z_Position");
+   end Motion_Z_Position_Path;
+
+   function TMC2240_Run_Current_Path return Config_Path is
+     (Paths.Append (Paths.Empty_Path, ["Motors", "M", "TMC2240_Parameters", "Run_Current"]));
+
+   procedure Assert_Config_Path_Unreportable
+     (T : in out Trendy_Test.Operation'Class; Data : Config_Data; Path : Config_Path'Class)
+   is
+   begin
+      declare
+         Resolved : constant Config_Data_Paths.Vector := Resolve_Config_Path (Data, Path);
+         pragma Unreferenced (Resolved);
+      begin
+         T.Fail ("Configuration path should have raised Constraint_Error.");
+      end;
+   exception
+      when Constraint_Error =>
+         null;
+   end Assert_Config_Path_Unreportable;
 
    function Reports_Error_Outer_Config (Input : Virtual_String) return Boolean is
       Error_Reported : Boolean := False;
@@ -3001,6 +3051,106 @@ package body Prunt.Config.Test is
       T.Assert (Reported_Path = Config_Data_Paths.Vector'([1 => "s"]));
    end Test_Config_Override_Helper_Edges;
 
+   procedure Test_Config_Path_Selected_Variant (T : in out Trendy_Test.Operation'Class) is
+      use type Config_Data_Paths.Vector;
+
+      Data : constant Config_Data :=
+        Migration_Data
+          ("{""Homing"":{""X"":{""Homing_Method"":{""Kind"":{"
+           & """Selected"":""Use_Input_Switch"",""Children"":{""Use_Input_Switch"":{"
+           & """Use_Input_Switch"":{""Switch"":""Probe""}}}}}}}}");
+      Resolved : constant Config_Data_Paths.Vector :=
+        Resolve_Config_Path (Data, Homing_Switch_Path);
+   begin
+      T.Register;
+      T.Assert
+        (Resolved
+         = Config_Data_Paths.Vector'
+             (["Homing",
+               "X",
+               "Homing_Method",
+               "Kind",
+               "Children",
+               "Use_Input_Switch",
+               "Use_Input_Switch",
+               "Switch"]),
+         "Typed homing path did not resolve to the legacy path.");
+   end Test_Config_Path_Selected_Variant;
+
+   procedure Test_Config_Path_Unselected_Variant_Does_Not_Report (T : in out Trendy_Test.Operation'Class) is
+      Data : constant Config_Data :=
+        Migration_Data
+          ("{""Homing"":{""X"":{""Homing_Method"":{""Kind"":{"
+           & """Selected"":""Disabled"",""Children"":{""Use_Input_Switch"":{"
+           & """Use_Input_Switch"":{""Switch"":""Probe""}}}}}}}}");
+      Reported : Boolean := False;
+
+      procedure Report (Path : Config_Path'Class) is
+         Resolved : constant Config_Data_Paths.Vector := Resolve_Config_Path (Data, Path);
+         pragma Unreferenced (Resolved);
+      begin
+         Reported := True;
+      end Report;
+   begin
+      T.Register;
+
+      begin
+         Report (Homing_Switch_Path);
+         T.Fail ("Unselected variant path should have raised Constraint_Error.");
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+
+      T.Assert (not Reported, "An unselected typed path reached the reporting callback.");
+   end Test_Config_Path_Unselected_Variant_Does_Not_Report;
+
+   procedure Test_Config_Path_Nested_Variant_Selections (T : in out Trendy_Test.Operation'Class) is
+      Inner_Unselected : constant Config_Data :=
+        Migration_Data
+          ("{""Pause_Park"":{""Kind"":{""Selected"":""Absolute_Park_Move"",""Children"":{"
+           & """Absolute_Park_Move"":{""Absolute_Park_Move"":{""Z_Target"":{""Kind"":{"
+           & """Selected"":""Relative_Z_Offset"",""Children"":{""Absolute_Z_Position"":{"
+           & """Z_Position"":1}}}}}}}}}}");
+      Outer_Unselected : constant Config_Data :=
+        Migration_Data
+          ("{""Pause_Park"":{""Kind"":{""Selected"":""Relative_Park_Move"",""Children"":{"
+           & """Absolute_Park_Move"":{""Absolute_Park_Move"":{""Z_Target"":{""Kind"":{"
+           & """Selected"":""Absolute_Z_Position"",""Children"":{""Absolute_Z_Position"":{"
+           & """Z_Position"":1}}}}}}}}}}");
+      Target : constant Config_Path := Motion_Z_Position_Path;
+   begin
+      T.Register;
+      Assert_Config_Path_Unreportable (T, Inner_Unselected, Target);
+      Assert_Config_Path_Unreportable (T, Outer_Unselected, Target);
+   end Test_Config_Path_Nested_Variant_Selections;
+
+   procedure Test_Config_Path_Discriminator_Always_Reportable (T : in out Trendy_Test.Operation'Class) is
+      use type Config_Data_Paths.Vector;
+
+      Data : constant Config_Data :=
+        Migration_Data
+          ("{""Homing"":{""X"":{""Homing_Method"":{""Kind"":{""Selected"":""Disabled"",""Children"":{}}}}}}");
+      Resolved : constant Config_Data_Paths.Vector :=
+        Resolve_Config_Path (Data, Paths.Append (Homing_Method_Path, [1 => "Kind"]));
+   begin
+      T.Register;
+      T.Assert
+        (Resolved = Config_Data_Paths.Vector'(["Homing", "X", "Homing_Method", "Kind"]),
+         "A discriminator path should not require a particular selection.");
+   end Test_Config_Path_Discriminator_Always_Reportable;
+
+   procedure Test_Config_Path_Missing_Conditional_Targets (T : in out Trendy_Test.Operation'Class) is
+      Missing_Present_When : constant Config_Data := Migration_Data ("{""Homing"":{}}");
+      Missing_Fixed_Kind   : constant Config_Data := Migration_Data ("{""Motors"":{""M"":{}}}");
+   begin
+      T.Register;
+      Assert_Config_Path_Unreportable
+        (T, Missing_Present_When, Paths.Append (Homing_Method_Path, [1 => "Kind"]));
+      Assert_Config_Path_Unreportable
+        (T, Missing_Fixed_Kind, TMC2240_Run_Current_Path);
+   end Test_Config_Path_Missing_Conditional_Targets;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
@@ -3083,7 +3233,12 @@ package body Prunt.Config.Test is
          Test_Config_Overrides_Variant_Selected_Rehydrates_Defaults'Access,
          Test_Config_Overrides_Invalid'Access,
          Test_Config_Overrides_Prune_During_Migration'Access,
-         Test_Config_Override_Helper_Edges'Access];
+         Test_Config_Override_Helper_Edges'Access,
+         Test_Config_Path_Selected_Variant'Access,
+         Test_Config_Path_Unselected_Variant_Does_Not_Report'Access,
+         Test_Config_Path_Nested_Variant_Selections'Access,
+         Test_Config_Path_Discriminator_Always_Reportable'Access,
+         Test_Config_Path_Missing_Conditional_Targets'Access];
    end All_Tests;
 
 end Prunt.Config.Test;

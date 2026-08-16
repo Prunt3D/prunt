@@ -1588,20 +1588,23 @@ package body Prunt.Controller is
                   with Post => Get_Data'Result in My_Modules.Module_Instance'Class;
                   --  Initialize the module selected by the current cursor and return its instance data.
 
-                  procedure Report_Config_Error_With_Module
-                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
-                  --  Prefix a configuration error path with the module location before reporting it.
-
-                  procedure Report_Config_Error_With_Module
-                    (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String)
-                  is
-                     use type Config.Config_Data_Paths.Vector;
-                  begin
-                     Report_Config_Error (["Config", Module_Name, "Config"] & Path, Message);
-                  end Report_Config_Error_With_Module;
-
                   function Get_Data return My_Modules.Module_Instance_Parent'Class is
                      Config_Data : constant Config.Config_Data := My_Config_File.Get_Data (Module_Name);
+
+                     procedure Report_Config_Error_With_Module
+                       (Path : Config.Config_Path'Class; Message : Virtual_String);
+                     --  Resolve and validate the typed path before prefixing it with the module location.
+
+                     procedure Report_Config_Error_With_Module
+                       (Path : Config.Config_Path'Class; Message : Virtual_String)
+                     is
+                        use type Config.Config_Data_Paths.Vector;
+
+                        Resolved_Path : constant Config.Config_Data_Paths.Vector :=
+                          Config.Resolve_Config_Path (Config_Data, Path);
+                     begin
+                        Report_Config_Error (["Config", Module_Name, "Config"] & Resolved_Path, Message);
+                     end Report_Config_Error_With_Module;
                   begin
                      return
                        Element (C).Initialize

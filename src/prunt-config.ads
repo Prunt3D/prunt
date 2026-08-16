@@ -65,6 +65,8 @@ package Prunt.Config is
 
    package Config_Data_Paths is new Ada.Containers.Vectors (Positive, Virtual_String);
 
+   type Config_Path is tagged private;
+
    type Config_Override is record
       Owner : Virtual_String;
       Path  : Config_Data_Paths.Vector;
@@ -298,6 +300,10 @@ package Prunt.Config is
    function Module_Name (Data : Config_Data) return Virtual_String;
    --  Returns the name of the module which this object is for.
 
+   function Resolve_Config_Path (Data : Config_Data; Path : Config_Path'Class) return Config_Data_Paths.Vector;
+   --  Return Path's raw representation after checking that all enclosing variant alternatives are selected and that
+   --  the target exists in Data. Raises Constraint_Error when Path is not currently reportable.
+
    type Config_Schema_Version is new Positive;
 
    type Versioned_Config_Schema is tagged record
@@ -381,6 +387,18 @@ package Prunt.Config is
 private
 
    use Prunt.JSON;
+
+   type Required_Config_Selection is record
+      Path     : Config_Data_Paths.Vector;
+      Selected : Virtual_String;
+   end record;
+
+   package Required_Config_Selection_Vectors is new Ada.Containers.Vectors (Positive, Required_Config_Selection);
+
+   type Config_Path is tagged record
+      Path                : Config_Data_Paths.Vector;
+      Required_Selections : Required_Config_Selection_Vectors.Vector;
+   end record;
 
    package File_Access_Lock is new Generic_Lock;
    --  Anything that touches a file uses this as multiple Config_File objects may refer to the same file.

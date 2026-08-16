@@ -28,7 +28,6 @@ with Ada.Strings.Fixed; use Ada.Strings.Fixed;
 with Ada.Text_IO;       use Ada.Text_IO;
 with GNAT.Source_Info;
 with VSS.Characters.Latin;
-with VSS.String_Vectors;
 with VSS.Strings.Conversions;
 
 package body Config_Generator is
@@ -706,6 +705,13 @@ package body Config_Generator is
 
    procedure Generate_Files (Filename : String; Data : Module_Data; Global_Config : Config_Maps.Map) is
       Config_Map_Out, Reader_Out, Setter_Out : Virtual_String := "";
+
+      Path_Type_Declarations       : Virtual_String := "";
+      Path_Subprogram_Declarations : Virtual_String := "";
+      Path_Private_Declarations    : Virtual_String := "";
+      Path_Subprogram_Bodies       : Virtual_String := "";
+      Path_Has_Arrays              : Boolean := False;
+      Path_Node_Count              : Natural := 0;
 
       Index_Level : Natural := 0;
 
@@ -1561,6 +1567,269 @@ package body Config_Generator is
                Handle_Ratio (Item.Ratio_Value, Outer, Path, Reader_Prefix, Ada_Prefix);
          end case;
       end Handle_Item;
+
+      procedure Append_Line (Target : in out Virtual_String; Text : Virtual_String) is
+      begin
+         Target.Append (Text);
+         Target.Append (VSS.Characters.Latin.Line_Feed);
+      end Append_Line;
+
+      function New_Path_Node return Virtual_String is
+      begin
+         Path_Node_Count := @ + 1;
+         return "Path_Node_" & Conversions.To_Virtual_String (Trim (Path_Node_Count'Image, Both));
+      end New_Path_Node;
+
+      procedure Declare_Path_Node (Name : Virtual_String) is
+      begin
+         Append_Line (Path_Type_Declarations, "type " & Name & " is private;");
+         Append_Line
+           (Path_Private_Declarations,
+            "type " & Name & " is record Value : Standard.Prunt.Config.Config_Path; end record;");
+         Append_Line
+           (Path_Subprogram_Declarations,
+            "function Path (Self : " & Name & ") return Standard.Prunt.Config.Config_Path;");
+         Append_Line
+           (Path_Subprogram_Bodies,
+            "function Path (Self : " & Name & ") return Standard.Prunt.Config.Config_Path is (Self.Value);");
+      end Declare_Path_Node;
+
+      procedure Generate_Path_Record
+        (Item : Config_Type; Outer : Component_Data; Node_Name : Virtual_String);
+
+      procedure Emit_Path_Selector
+        (Parent_Node    : Virtual_String;
+         Selector_Name : Virtual_String;
+         Target_Item   : Config_Type;
+         Target_Outer  : Component_Data;
+         Parameters    : Virtual_String;
+         Suffix        : Virtual_String;
+         Selection     : Virtual_String := "";
+         Selected      : Virtual_String := "")
+      is
+         Return_Type : Virtual_String := "Standard.Prunt.Config.Config_Path";
+         Builder     : Virtual_String;
+      begin
+         if Target_Item.Kind = Record_Kind then
+            Return_Type := New_Path_Node;
+            Declare_Path_Node (Return_Type);
+            Generate_Path_Record (Target_Item, Target_Outer, Return_Type);
+         end if;
+
+         Append_Line
+           (Path_Subprogram_Declarations,
+            "function "
+            & Selector_Name
+            & " (Self : "
+            & Parent_Node
+            & Parameters
+            & ") return "
+            & Return_Type
+            & ";");
+
+         if Selection = "" then
+            Builder := "Standard.Prunt.Config.Paths.Append (Self.Value, " & Suffix & ")";
+         else
+            Builder :=
+              "Standard.Prunt.Config.Paths.Append_Selected (Self.Value, "
+              & Suffix
+              & ", "
+              & Selection
+              & ", +"""
+              & Selected
+              & """)";
+         end if;
+
+         if Target_Item.Kind = Record_Kind then
+            Builder := "(Value => " & Builder & ")";
+         end if;
+
+         Append_Line
+           (Path_Subprogram_Bodies,
+            "function "
+            & Selector_Name
+            & " (Self : "
+            & Parent_Node
+            & Parameters
+            & ") return "
+            & Return_Type
+            & " is ("
+            & Builder
+            & ");");
+      end Emit_Path_Selector;
+
+      procedure Emit_Path_Component
+        (Parent_Node    : Virtual_String;
+         Selector_Name : Virtual_String;
+         Component     : Component_Data;
+         Suffix        : Virtual_String;
+         Selection     : Virtual_String := "";
+         Selected      : Virtual_String := "")
+      is
+         Item : constant Config_Type := Global_Config (Component.Type_Name);
+
+         procedure Emit_Array
+           (Array_Item  : Config_Type;
+            Array_Outer : Component_Data;
+            Parameters  : Virtual_String;
+            Full_Suffix : Virtual_String;
+            Depth       : Positive);
+
+         procedure Emit_Array
+           (Array_Item  : Config_Type;
+            Array_Outer : Component_Data;
+            Parameters  : Virtual_String;
+            Full_Suffix : Virtual_String;
+            Depth       : Positive)
+         is
+            Array_Val      : constant Array_Data := Array_Item.Array_Value;
+            Index_Name     : constant Virtual_String :=
+              "Index_" & Conversions.To_Virtual_String (Trim (Depth'Image, Both));
+            New_Parameters : constant Virtual_String :=
+              Parameters & "; " & Index_Name & " : " & Array_Val.Index_Type;
+            New_Suffix     : constant Virtual_String :=
+              Full_Suffix & " & [+" & Index_Name & "'Image]";
+            Element_Outer  : constant Component_Data :=
+              (Array_Outer with delta Type_Name => Array_Val.Element_Type, Description => "");
+            Element_Item   : constant Config_Type := Global_Config (Array_Val.Element_Type);
+         begin
+            if Element_Item.Kind = Array_Kind then
+               Emit_Array (Element_Item, Element_Outer, New_Parameters, New_Suffix, Depth + 1);
+            else
+               Emit_Path_Selector
+                 (Parent_Node,
+                  Selector_Name,
+                  Element_Item,
+                  Element_Outer,
+                  New_Parameters,
+                  New_Suffix,
+                  Selection,
+                  Selected);
+            end if;
+         end Emit_Array;
+      begin
+         if Item.Kind = Array_Kind then
+            Path_Has_Arrays := True;
+            Emit_Array (Item, Component, "", Suffix, 1);
+         else
+            Emit_Path_Selector
+              (Parent_Node, Selector_Name, Item, Component, "", Suffix, Selection, Selected);
+         end if;
+      end Emit_Path_Component;
+
+      procedure Generate_Path_Record
+        (Item : Config_Type; Outer : Component_Data; Node_Name : Virtual_String)
+      is
+         Record_Val : constant Record_Data := Item.Record_Value;
+      begin
+         for C in Record_Val.Components.Iterate loop
+            declare
+               Name      : constant Virtual_String := Component_Data_Maps.Key (C);
+               Component : constant Component_Data := Component_Data_Maps.Element (C);
+            begin
+               Emit_Path_Component (Node_Name, Name, Component, "[+""" & Name & """]");
+            end;
+         end loop;
+
+         if Record_Val.Has_Variant then
+            Emit_Path_Selector
+              (Node_Name,
+               Record_Val.Discriminant,
+               (Kind => String_Kind, String_Value => (null record)),
+               (others => <>),
+               "",
+               "[+""" & Record_Val.Discriminant & """]");
+
+            for V in Record_Val.Variants.Iterate loop
+               declare
+                  Case_Name    : constant Virtual_String := Variant_Case_Maps.Key (V);
+                  Variant_Data : constant Variant_Case_Data := Variant_Case_Maps.Element (V);
+               begin
+                  for C in Variant_Data.Components.Iterate loop
+                     declare
+                        Name      : constant Virtual_String := Component_Data_Maps.Key (C);
+                        Component : constant Component_Data := Component_Data_Maps.Element (C);
+                     begin
+                        if Outer.Fixed_Kind = "" then
+                           Emit_Path_Component
+                             (Node_Name,
+                              Name,
+                              Component,
+                              "[+"""
+                              & Record_Val.Discriminant
+                              & """, +""Children"", +"""
+                              & Case_Name
+                              & """, +"""
+                              & Name
+                              & """]",
+                              "[+""" & Record_Val.Discriminant & """, +""Selected""]",
+                              Case_Name);
+                        else
+                           Emit_Path_Component (Node_Name, Name, Component, "[+""" & Name & """]");
+                        end if;
+                     end;
+                  end loop;
+               end;
+            end loop;
+         end if;
+      end Generate_Path_Record;
+
+      procedure Generate_Config_Paths is
+         Unit_Name : constant Virtual_String := Data.Name & ".Config_Paths";
+         Root_Node : constant Virtual_String := New_Path_Node;
+         Spec_Out, Body_Out : Virtual_String;
+      begin
+         Declare_Path_Node (Root_Node);
+         Generate_Path_Record (Global_Config (Data.Root_Type), (others => <>), Root_Node);
+
+         Append_Line (Spec_Out, "pragma Style_Checks (Off);");
+         Append_Line
+           (Spec_Out,
+            "--  This file is automatically generated based on the contents of "
+            & Conversions.To_Virtual_String (Filename));
+         Append_Line (Spec_Out, "--  Run config_codegen to regenerate this file.");
+         Append_Line (Spec_Out, "with Prunt.Config;");
+         Append_Line (Spec_Out, "private with Prunt.Config.Paths;");
+         Append_Line (Spec_Out, "private generic");
+         Append_Line (Spec_Out, "package " & Unit_Name & " is");
+         Spec_Out.Append (Path_Type_Declarations);
+         Append_Line (Spec_Out, "Root : constant " & Root_Node & ";");
+         Spec_Out.Append (Path_Subprogram_Declarations);
+         Append_Line (Spec_Out, "private");
+         Spec_Out.Append (Path_Private_Declarations);
+         Append_Line
+           (Spec_Out,
+            "Root : constant "
+            & Root_Node
+            & " := (Value => Standard.Prunt.Config.Paths.Empty_Path);");
+         Append_Line (Spec_Out, "end " & Unit_Name & ";");
+
+         Append_Line (Body_Out, "pragma Style_Checks (Off);");
+         Append_Line
+           (Body_Out,
+            "--  This file is automatically generated based on the contents of "
+            & Conversions.To_Virtual_String (Filename));
+         Append_Line (Body_Out, "--  Run config_codegen to regenerate this file.");
+         Append_Line (Body_Out, "package body " & Unit_Name & " is");
+         if Path_Has_Arrays then
+            Append_Line (Body_Out, "use type Standard.Prunt.Config.Config_Data_Paths.Vector;");
+         end if;
+         Append_Line (Body_Out, "pragma Annotate (Xcov, Exempt_On, ""Generated config paths."");");
+         Body_Out.Append (Path_Subprogram_Bodies);
+         Append_Line (Body_Out, "pragma Annotate (Xcov, Exempt_Off);");
+         Append_Line (Body_Out, "end " & Unit_Name & ";");
+
+         Write_File
+           (Ada.Directories.Compose
+              (Containing_Directory => Out_Dir,
+               Name                 => Ada.Directories.Base_Name (Filename) & "-config_paths.ads"),
+            Spec_Out);
+         Write_File
+           (Ada.Directories.Compose
+              (Containing_Directory => Out_Dir,
+               Name                 => Ada.Directories.Base_Name (Filename) & "-config_paths.adb"),
+            Body_Out);
+      end Generate_Config_Paths;
    begin
 
       if not Ada.Directories.Exists (Out_Dir) then
@@ -1665,6 +1934,8 @@ package body Config_Generator is
               (Containing_Directory => Out_Dir,
                Name                 => Ada.Directories.Base_Name (Filename) & "-user_config_to_config_data.adb"),
             Setter_Out);
+
+         Generate_Config_Paths;
       end if;
 
       if not Data.Gcode_Commands.Is_Empty then
