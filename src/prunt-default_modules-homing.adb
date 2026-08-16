@@ -103,11 +103,7 @@ package body Prunt.Default_Modules.Homing is
    is
       pragma Unreferenced (This, Status_Emitter);
 
-      Parsed_Config                      : constant User_Config := Config_Data_To_User_Config (Config_Data);
-      Input_Switches_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
-        Get_Other_Instance (Input_Switches_Module.Module_Instance'Tag);
-      Input_Switches_Module_Instance     : Input_Switches_Module.Module_Instance_Interface'Class renames
-        Input_Switches_Module.Module_Instance_Interface'Class (Input_Switches_Module_Instance_Ref.Get.Element.all);
+      Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data);
    begin
       return Result : Module_Instance do
          Result.Initialize (Parsed_Config);
@@ -116,21 +112,29 @@ package body Prunt.Default_Modules.Homing is
             if Parsed_Config.Homing (Axis).Homing_Method.Kind = Disabled then
                Report_Config_Error
                  (["Homing", +Axis'Image, "Homing_Method", "Kind"], "Homing is not configured for this axis.");
-            elsif Parsed_Config.Homing (Axis).Homing_Method.Kind = Use_Input_Switch
-              and then
-                not Input_Switches_Module_Instance.Switch_Is_Enabled_In_Config
-                      (Parsed_Config.Homing (Axis).Homing_Method.Use_Input_Switch.Switch)
-            then
-               Report_Config_Error
-                 (["Homing",
-                   +Axis'Image,
-                   "Homing_Method",
-                   "Kind",
-                   "Children",
-                   "Use_Input_Switch",
-                   "Use_Input_Switch",
-                   "Switch"],
-                  "This switch is disabled.");
+            elsif Parsed_Config.Homing (Axis).Homing_Method.Kind = Use_Input_Switch then
+               declare
+                  Input_Switches_Module_Instance_Ref : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+                    Get_Other_Instance (Input_Switches_Module.Module_Instance'Tag);
+                  Input_Switches_Module_Instance     : Input_Switches_Module.Module_Instance_Interface'Class renames
+                    Input_Switches_Module.Module_Instance_Interface'Class
+                      (Input_Switches_Module_Instance_Ref.Get.Element.all);
+               begin
+                  if not Input_Switches_Module_Instance.Switch_Is_Enabled_In_Config
+                           (Parsed_Config.Homing (Axis).Homing_Method.Use_Input_Switch.Switch)
+                  then
+                     Report_Config_Error
+                       (["Homing",
+                         +Axis'Image,
+                         "Homing_Method",
+                         "Kind",
+                         "Children",
+                         "Use_Input_Switch",
+                         "Use_Input_Switch",
+                         "Switch"],
+                        "This switch is disabled.");
+                  end if;
+               end;
             end if;
          end loop;
 

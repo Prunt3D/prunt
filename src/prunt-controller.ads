@@ -408,48 +408,87 @@ private
    --  package thousands of times, which is the only time a leak will matter.
    pragma Warnings (On, "use of an anonymous access type allocator");
 
-   function Get_Modules_For_Hardware return Module_Maps.Map
-   is ["Basic Config"             =>
-         My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record),
-       "Config Saving"            =>
-         My_Default_Modules_Children.Config_Saving.Module'(My_Modules.Module with null record),
-       "Blocking Tracker"         =>
-         My_Default_Modules_Children.Blocking_Tracker.Module'(My_Modules.Module with null record),
-       "Dwell"                    => My_Default_Modules_Children.Dwell.Module'(My_Modules.Module with null record),
-       "Fans"                     => My_Default_Modules_Children.Fans.Module'(My_Modules.Module with null record),
-       "Heaters"                  => My_Default_Modules_Children.Heaters.Module'(My_Modules.Module with null record),
-       "Homing"                   => My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record),
-       "Idle Emitter"             =>
-         My_Default_Modules_Children.Idle_Emitter.Module'(My_Modules.Module with null record),
-       "Input Shapers"            =>
-         My_Default_Modules_Children.Input_Shapers.Module'(My_Modules.Module with null record),
-       "Input Switches"           =>
-         My_Default_Modules_Children.Input_Switches.Module'(My_Modules.Module with null record),
-       "Internal Status Reporter" =>
-         My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record),
-       "Machine Idle Timeout"     =>
-         My_Default_Modules_Children.Machine_Idle_Timeout.Module'(My_Modules.Module with null record),
-       "Machine Name"             =>
-         My_Default_Modules_Children.Machine_Name.Module'(My_Modules.Module with null record),
-       "Motion"                   => My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record),
-       "Motor Drivers"            =>
-         My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record),
-       "Basic Motor Drivers"      =>
-         My_Default_Modules_Children.Basic_Motor_Drivers.Module'(My_Modules.Module with null record),
-       "TMC2240 Drivers"          =>
-         My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record),
-       "Kinematics"               =>
-         My_Default_Modules_Children.Kinematics.Module'(My_Modules.Module with null record),
-       "Power Control"            =>
-         My_Default_Modules_Children.Power_Control.Module'(My_Modules.Module with null record),
-       "Tachometers"              =>
-         My_Default_Modules_Children.Tachometers.Module'(My_Modules.Module with null record),
-       "Thermistors"              =>
-         My_Default_Modules_Children.Thermistors.Module'(My_Modules.Module with null record)];
+   function Get_Modules_For_Hardware return Module_Maps.Map;
    --  Return one instance of every default module supported by the configured hardware generic parameters.
-   --
-   --  TODO: We should avoid returning modules that are not used at all by the specified hardware. It doesn't hurt to
-   --  have modules that do nothing, however it would be cleaner to not have them at all.
+
+   function Has_Motor_Kind (Kind : Motor_Hardware_Kind) return Boolean
+   is (for some M in Motor_Name => Hardware.Motor_Hardware (M).Kind = Kind);
+
+   function Module_If
+     (Condition : Boolean; Name : Virtual_String; Item : My_Modules.Module'Class) return Module_Maps.Map
+   is (if Condition then [Name => Item] else []);
+
+   function Get_Modules_For_Hardware return Module_Maps.Map
+   is (Module_If
+         (True, "Basic Config", My_Default_Modules_Children.Basic_Config.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True,
+            "Config Saving",
+            My_Default_Modules_Children.Config_Saving.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Hardware.Heater_Hardware'Length > 0,
+            "Blocking Tracker",
+            My_Default_Modules_Children.Blocking_Tracker.Module'(My_Modules.Module with null record))
+       & Module_If (True, "Dwell", My_Default_Modules_Children.Dwell.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Hardware.Fan_Hardware'Length > 0,
+            "Fans",
+            My_Default_Modules_Children.Fans.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Hardware.Heater_Hardware'Length > 0,
+            "Heaters",
+            My_Default_Modules_Children.Heaters.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True,
+            "Homing",
+            My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True, "Idle Emitter", My_Default_Modules_Children.Idle_Emitter.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True,
+            "Input Shapers",
+            My_Default_Modules_Children.Input_Shapers.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Hardware.Input_Switch_Hardware'Length > 0,
+            "Input Switches",
+            My_Default_Modules_Children.Input_Switches.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True,
+            "Internal Status Reporter",
+            My_Default_Modules_Children.Internal_Status_Reporter.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True,
+            "Machine Idle Timeout",
+            My_Default_Modules_Children.Machine_Idle_Timeout.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True, "Machine Name", My_Default_Modules_Children.Machine_Name.Module'(My_Modules.Module with null record))
+       & Module_If (True, "Motion", My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True,
+            "Motor Drivers",
+            My_Default_Modules_Children.Motor_Drivers.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Has_Motor_Kind (Basic_Motor_Kind),
+            "Basic Motor Drivers",
+            My_Default_Modules_Children.Basic_Motor_Drivers.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Has_Motor_Kind (TMC2240_UART_Kind),
+            "TMC2240 Drivers",
+            My_Default_Modules_Children.TMC2240_Drivers.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True, "Kinematics", My_Default_Modules_Children.Kinematics.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Hardware.Power_Control_Hardware.Turn_On /= null,
+            "Power Control",
+            My_Default_Modules_Children.Power_Control.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Hardware.Tachometer_Hardware'Length > 0,
+            "Tachometers",
+            My_Default_Modules_Children.Tachometers.Module'(My_Modules.Module with null record))
+       & Module_If
+           (Hardware.Thermistor_Hardware'Length > 0,
+            "Thermistors",
+            My_Default_Modules_Children.Thermistors.Module'(My_Modules.Module with null record)));
 
    Active_Modules : constant Module_Maps.Map :=
      ((if Disable_Default_Modules then Module_Maps.Map'[] else Get_Modules_For_Hardware) & Extra_Modules);
