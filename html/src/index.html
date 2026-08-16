@@ -13,6 +13,20 @@
         <pre id="server-exception-message"></pre>
     </div>
 
+    <dialog id="firmware-update-dialog" class="modal firmware-update-modal" aria-labelledby="firmware-update-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="firmware-update-title">Firmware update required</h3>
+            </div>
+            <div class="firmware-update-body">
+                <p id="firmware-update-message">The board firmware must be updated before Prunt can start. Confirm when you are ready to begin.</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-allow-firmware-update" class="btn btn-primary">Update firmware</button>
+            </div>
+        </div>
+    </dialog>
+
     <header class="topbar">
         <div class="brand">Prunt</div>
         <div class="global-controls">
@@ -118,7 +132,6 @@
                     <section class="machine-control-section system-actions-section">
                         <h3 data-i18n="ui.control.systemActions">System Actions</h3>
                         <button id="btn-restart-server" class="btn btn-danger" data-i18n="ui.control.restartServer" disabled>Restart Server</button>
-                        <button id="btn-firmware-update" class="btn btn-secondary" data-i18n="ui.control.allowFirmwareUpdate">Allow Firmware Update</button>
                     </section>
                 </div>
             </section>

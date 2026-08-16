@@ -74,9 +74,12 @@ package body Prunt.Web_Server is
          return Startup_Done;
       end Get_Startup_Done;
 
-      procedure Set_Update_Allowed is
+      procedure Set_Update_Allowed (Succeeded : out Boolean) is
       begin
-         Update_Allowed := True;
+         Succeeded := Update_Required;
+         if Succeeded then
+            Update_Allowed := True;
+         end if;
       end Set_Update_Allowed;
 
       function Get_Update_Allowed return Boolean is
@@ -702,8 +705,16 @@ package body Prunt.Web_Server is
                end if;
             end;
          elsif Status.File = "allow-firmware-update" then
-            Startup_Manager.Set_Update_Allowed;
-            Reply_Text (Client, 204, "No Content", "", True);
+            declare
+               Succeeded : Boolean;
+            begin
+               Startup_Manager.Set_Update_Allowed (Succeeded);
+               if Succeeded then
+                  Reply_Text (Client, 204, "No Content", "", True);
+               else
+                  Reply_Text (Client, 409, "Conflict", "No firmware update is awaiting approval.", True);
+               end if;
+            end;
          elsif Status.File = "reload-server" then
             declare
                Occurrence : Exception_Occurrence;

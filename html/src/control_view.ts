@@ -1,4 +1,4 @@
-import { listUploads, uploadFile, runFile, restartServer, allowFirmwareUpdate } from './api.js';
+import { listUploads, uploadFile, runFile, restartServer } from './api.js';
 import { onLocaleChange, t } from './localization.js';
 import { ServerException, wsClient } from './ws.js';
 
@@ -110,7 +110,6 @@ async function refreshFileList() {
 
 function setupServerActions() {
     const btnRestart = document.getElementById('btn-restart-server') as HTMLButtonElement | null;
-    const btnFirmware = document.getElementById('btn-firmware-update');
 
     if (btnRestart) {
         // Wait for the server's authoritative error state before allowing a restart.
@@ -129,16 +128,6 @@ function setupServerActions() {
                 console.error(e);
                 alert(t('ui.control.restartFailed', 'Failed to restart server.'));
             }
-        }
-    });
-
-    btnFirmware?.addEventListener('click', async () => {
-        try {
-            await allowFirmwareUpdate();
-            alert(t('ui.control.firmwareAllowed', 'Firmware update allowed.'));
-        } catch (e) {
-            console.error(e);
-            alert(t('ui.control.firmwareFailed', 'Failed to allow firmware update.'));
         }
     });
 }

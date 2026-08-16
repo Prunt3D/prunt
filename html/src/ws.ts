@@ -9,7 +9,9 @@ export type GcodeCommandUpdate = {
     Message?: string;
 };
 
-export type AppEvent = 'connected' | 'disconnected' | 'tick' | 'restarted' | 'log' | 'serverException' | 'gcodeCommand';
+export type StartupState = 'Done' | 'Update_Running' | 'Update_Required' | 'Waiting';
+
+export type AppEvent = 'connected' | 'disconnected' | 'tick' | 'restarted' | 'log' | 'serverException' | 'gcodeCommand' | 'startup';
 
 export class PruntWebSocket {
     private ws: WebSocket | null = null;
@@ -63,6 +65,10 @@ export class PruntWebSocket {
 
                 if (Object.prototype.hasOwnProperty.call(message, 'Server_Exception')) {
                     this.emit('serverException', message.Server_Exception);
+                }
+
+                if (typeof message.Startup === 'string') {
+                    this.emit('startup', message.Startup);
                 }
 
                 if (message.Gcode_Command) {

@@ -752,7 +752,7 @@ package body Prunt.Controller is
 
    procedure Prompt_For_Update is
    begin
-      null; --  TODO
+      My_Web_Server.Wait_For_User_To_Allow_Update;
    end Prompt_For_Update;
 
    procedure Setup_Planner_Runners

@@ -343,6 +343,9 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
 .modal-content { display: flex; flex-direction: column; max-height: 80vh; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border); }
 .modal-header h3 { color: var(--text-strong); margin: 0; }
+.firmware-update-modal { max-width: 520px; }
+.firmware-update-body { padding: 24px; line-height: 1.6; }
+.firmware-update-modal .btn[hidden] { display: none; }
 .widget-selection-list { overflow-y: auto; padding: 16px 24px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
 .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
 .module-group h4 { margin-bottom: 8px; color: var(--primary); font-size: 1.1rem; }

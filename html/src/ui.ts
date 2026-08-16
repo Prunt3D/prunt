@@ -1,12 +1,12 @@
-import { ServerException, wsClient } from './ws.js';
-import { pauseMachine, resumeMachine } from './api.js';
+import { ServerException, StartupState, wsClient } from './ws.js';
+import { allowFirmwareUpdate, pauseMachine, resumeMachine } from './api.js';
 import { initConfigView } from './config_view.js';
 import { initStatusView } from './status_view.js';
 import { initControlView } from './control_view.js';
 import { initGcodeEntryView } from './gcode_entry_view.js';
 import { initGcodeExplorerView } from './gcode_explorer_view.js';
 import { initLogView } from './log_view.js';
-import { initLocalization, t } from './localization.js';
+import { initLocalization, onLocaleChange, t } from './localization.js';
 import { activateView } from './navigation.js';
 
 export async function initUI() {
@@ -14,6 +14,7 @@ export async function initUI() {
 
     setupNavigation();
     setupGlobalControls();
+    setupUpdatePrompt();
 
     // Initialize individual views
     initConfigView();
@@ -52,6 +53,69 @@ export async function initUI() {
     });
 
     wsClient.connect();
+}
+
+function setupUpdatePrompt() {
+    const dialog = document.getElementById('firmware-update-dialog') as HTMLDialogElement | null;
+    const title = document.getElementById('firmware-update-title');
+    const message = document.getElementById('firmware-update-message');
+    const allowButton = document.getElementById('btn-allow-firmware-update') as HTMLButtonElement | null;
+    if (!dialog || !title || !message || !allowButton) return;
+
+    let startupState: StartupState = 'Waiting';
+
+    const render = () => {
+        switch (startupState) {
+            case 'Update_Required':
+                title.textContent = t('ui.update.requiredTitle', 'Firmware update required');
+                message.textContent = t(
+                    'ui.update.requiredMessage',
+                    'The controller firmware must be updated before Prunt can start. Confirm when you are ready to begin.'
+                );
+                allowButton.textContent = t('ui.update.allow', 'Update firmware');
+                allowButton.hidden = false;
+                allowButton.disabled = false;
+                if (!dialog.open) dialog.showModal();
+                break;
+
+            case 'Update_Running':
+                title.textContent = t('ui.update.runningTitle', 'Updating firmware');
+                message.textContent = t(
+                    'ui.update.runningMessage',
+                    'The firmware update is in progress.'
+                );
+                allowButton.hidden = true;
+                allowButton.disabled = true;
+                if (!dialog.open) dialog.showModal();
+                break;
+
+            case 'Done':
+            case 'Waiting':
+                if (dialog.open) dialog.close();
+                break;
+        }
+    };
+
+    dialog.addEventListener('cancel', event => event.preventDefault());
+    allowButton.addEventListener('click', async () => {
+        allowButton.disabled = true;
+        try {
+            await allowFirmwareUpdate();
+            startupState = 'Update_Running';
+            render();
+        } catch (error) {
+            console.error(error);
+            allowButton.disabled = false;
+            alert(t('ui.update.allowFailed', 'Failed to start the firmware update.'));
+        }
+    });
+
+    wsClient.on('startup', (state: StartupState) => {
+        if (!['Done', 'Update_Running', 'Update_Required', 'Waiting'].includes(state)) return;
+        startupState = state;
+        render();
+    });
+    onLocaleChange(render);
 }
 
 function updateServerExceptionBanner(serverException: ServerException | null) {

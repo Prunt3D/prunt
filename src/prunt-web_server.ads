@@ -95,7 +95,7 @@ private
       procedure Set_Startup_Done;
       procedure Clear_Startup_Done;
       function Get_Startup_Done return Boolean;
-      procedure Set_Update_Allowed;
+      procedure Set_Update_Allowed (Succeeded : out Boolean);
       function Get_Update_Allowed return Boolean;
    private
       Update_Required : Boolean := False;
