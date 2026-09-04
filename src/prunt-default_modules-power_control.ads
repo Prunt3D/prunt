@@ -21,12 +21,10 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
-with Prunt.Controller_Generic_Types;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
 generic
-   with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    Power_Control_Hardware : My_Controller_Generic_Types.Power_Control_Hardware_Parameters;
 package Prunt.Default_Modules.Power_Control is
 
@@ -42,7 +40,7 @@ package Prunt.Default_Modules.Power_Control is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;

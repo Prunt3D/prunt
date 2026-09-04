@@ -43,15 +43,23 @@ procedure Benchy_Planner_Time is
         Flush_Resetting_Data_Type_Default  => False,
         Corner_Extra_Data_Type             => Boolean,
         Home_Move_Minimum_Coast_Time       => 0.000_25 * s,
+        Home_Move_Maximum_Tail_Time        => 1.0E100 * s,
         Interpolation_Time                 => 0.000_05 * s,
         Max_Corners                        => 50_000);
 
    use type Planner.Corners_Index;
 
    Params : constant Kinematic_Parameters :=
-     (Lower_Pos_Limit          => [E_Axis => -1.0E100 * mm, others => 0.0 * mm],
-      Upper_Pos_Limit          =>
-        [X_Axis | Y_Axis | Z_Axis => 300.0 * mm, E_Axis => 1.0E100 * mm],
+     (Bounds                   =>
+        (Kind    => Rectangular_Workspace,
+         Lower_Z => 0.0 * mm,
+         Upper_Z => 300.0 * mm,
+         Lower_E => -1.0E100 * mm,
+         Upper_E => 1.0E100 * mm,
+         Lower_X => 0.0 * mm,
+         Upper_X => 300.0 * mm,
+         Lower_Y => 0.0 * mm,
+         Upper_Y => 300.0 * mm),
       Ignore_E_In_XYZE         => True,
       Tangential_Velocity_Max  => 250.0 * mm / s,
       Axial_Velocity_Maxes     =>

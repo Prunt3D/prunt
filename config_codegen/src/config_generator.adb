@@ -806,6 +806,37 @@ package body Config_Generator is
          return Result;
       end Path_To_Vector_Access_String;
 
+      function Path_To_Vector_Access_String
+        (Path : Config_Types.String_Vectors.Vector) return Virtual_String
+      is
+         Result : Virtual_String := "";
+      begin
+         for I in Path.First_Index .. Path.Last_Index loop
+            if I > Path.First_Index then
+               Result := Result & ", ";
+            end if;
+            Result := Result & """" & Path (I) & """";
+         end loop;
+
+         return Result;
+      end Path_To_Vector_Access_String;
+
+      function Dynamic_Presentation_Association (Outer : Component_Data) return Virtual_String is
+      begin
+         if Outer.Dynamic_Present_When_Path.Is_Empty then
+            return ", Present_When => Prunt.Config.No_Presentation_Condition";
+         else
+            return
+              ", Present_When => (Controller_Tag => "
+              & Outer.Dynamic_Present_When_Tag
+              & ", Controller_Path => "
+              & Outer.Dynamic_Present_When_Path
+              & ", Values => ["
+              & Path_To_Vector_Access_String (Outer.Dynamic_Present_When_Values)
+              & "])";
+         end if;
+      end Dynamic_Presentation_Association;
+
       function Effective_Schema_Default (Outer : Component_Data; Fallback : Virtual_String) return Virtual_String is
       begin
          if Outer.Schema_Default_Expr /= "" then
@@ -903,6 +934,7 @@ package body Config_Generator is
             & Outer.Description
             & """, Default => "
             & Effective_Schema_Default (Outer, Outer.Default)
+            & Dynamic_Presentation_Association (Outer)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -927,6 +959,7 @@ package body Config_Generator is
             & Outer.Description
             & """, Default => "
             & Effective_Schema_Default (Outer, Outer.Default)
+            & Dynamic_Presentation_Association (Outer)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -967,7 +1000,9 @@ package body Config_Generator is
                 (if Float_Val.Unit.Conversion /= "" then " / (" & Float_Val.Unit.Conversion & ")" else "")
             & ", Unit => """
             & Effective_Display_Unit (Float_Val.Unit, Outer.Unit)
-            & """)");
+            & """"
+            & Dynamic_Presentation_Association (Outer)
+            & ")");
          Emit_Reader
            (Reader_Prefix
             & " := Data.Get(Prunt.Config.Config_Data_Paths.Vector'["
@@ -1006,6 +1041,7 @@ package body Config_Generator is
             & Min_Expr
             & ", Max => "
             & Max_Expr
+            & Dynamic_Presentation_Association (Outer)
             & ")");
          Emit_Reader (Reader_Prefix & " := Data.Get (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "]);");
          Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & ");");
@@ -1037,7 +1073,9 @@ package body Config_Generator is
             & (if Integer_Val.Unit.Conversion = "" then "" else " / " & Integer_Val.Unit.Conversion)
             & ", Unit => """
             & Effective_Display_Unit (Integer_Val.Unit, Outer.Unit)
-            & """)");
+            & """"
+            & Dynamic_Presentation_Association (Outer)
+            & ")");
          Emit_Reader
            (Reader_Prefix
             & " := "
@@ -1103,6 +1141,7 @@ package body Config_Generator is
             & Effective_Schema_Default (Outer, "+" & Outer.Default & "'Image")
             & ", Options => "
             & Options
+            & Dynamic_Presentation_Association (Outer)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -1134,6 +1173,7 @@ package body Config_Generator is
             & Outer.Description
             & """, Tabbed => "
             & Virtual_String'(if Array_Val.Tabbed then "True" else "False")
+            & Dynamic_Presentation_Association (Outer)
             & ", Children => [for "
             & Loop_Index
             & " in "
@@ -1154,12 +1194,15 @@ package body Config_Generator is
          Handle_Component
            ((Outer
              with delta
-               Type_Name   => Array_Val.Element_Type,
-               Description => "",
+               Type_Name                      => Array_Val.Element_Type,
+               Description                    => "",
                --  Avoid duplicated description with nested arrays.
-               Default     => Outer.Type_Name & "'" & Outer.Default & "(" & Loop_Index & ")",
-               Min         => Array_Val.Min,
-               Max         => Array_Val.Max),
+               Default                        => Outer.Type_Name & "'" & Outer.Default & "(" & Loop_Index & ")",
+               Min                            => Array_Val.Min,
+               Max                            => Array_Val.Max,
+               Dynamic_Present_When_Tag       => "",
+               Dynamic_Present_When_Path      => "",
+               Dynamic_Present_When_Values    => []),
             Path & [""" & (+" & Loop_Index & "'Image) & """],
             Reader_Prefix & " (" & Loop_Index & ")",
             Ada_Prefix & " (" & Loop_Index & ")");
@@ -1219,6 +1262,31 @@ package body Config_Generator is
               or else not Variant_Case_Maps.Element (Variant_C).Components.Is_Empty;
          end Needs_Others_Choice;
 
+         function With_Containing_Default
+           (Field : Component_Data; Name : Virtual_String) return Component_Data
+         is
+            Default_Text : constant String := Conversions.To_UTF_8_String (Outer.Default);
+            Is_Name      : Boolean := Default_Text'Length > 0;
+         begin
+            for C of Default_Text loop
+               if not (C in 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '_' | '.') then
+                  Is_Name := False;
+                  exit;
+               end if;
+            end loop;
+
+            if not Is_Name then
+               return Field;
+            else
+               return
+                 (Field
+                  with delta
+                    Default => Outer.Default & "." & Name);
+            end if;
+         end With_Containing_Default;
+         --  A containing record component can override the defaults declared by its type through a named constant.
+         --  Reflect that constant in the generated child schema instead of reverting to the type-level defaults.
+
          procedure Emit_Component_Map
            (Components     : Component_Data_Maps.Map;
             Base_Path      : String_Vectors.Vector;
@@ -1238,7 +1306,8 @@ package body Config_Generator is
                for C in Components.Iterate loop
                   declare
                      Name  : constant Virtual_String := Component_Data_Maps.Key (C);
-                     Field : constant Component_Data := Component_Data_Maps.Element (C);
+                     Field : constant Component_Data :=
+                       With_Containing_Default (Component_Data_Maps.Element (C), Name);
                   begin
                      if not Is_First then
                         Emit_Config_Map (", ");
@@ -1255,7 +1324,8 @@ package body Config_Generator is
                for C in Components.Iterate loop
                   declare
                      Name  : constant Virtual_String := Component_Data_Maps.Key (C);
-                     Field : constant Component_Data := Component_Data_Maps.Element (C);
+                     Field : constant Component_Data :=
+                       With_Containing_Default (Component_Data_Maps.Element (C), Name);
                      Present_When : constant Virtual_String := Expand_Index_Level (Field.Present_When);
                   begin
                      if not Is_First then
@@ -1316,6 +1386,7 @@ package body Config_Generator is
             & Record_Val.Description
             & """"
             & Fixed_Desc_Suffix
+            & Dynamic_Presentation_Association (Outer)
             & ", Children => Prunt.Config.Config_Property_Maps.""&"" (");
          --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
          --  non-variant part. We can not simply place the variant code after the non-variant code generation as we use
@@ -1389,7 +1460,7 @@ package body Config_Generator is
                   & Record_Val.Discriminant
                   & """ => Prunt.Config.Config_Property_Parameters_Variant'(Default => """
                   & Record_Val.Discriminant_Default
-                  & """, Description => """", Children => ");
+                  & """, Description => """", Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
                --  non-variant part. We can not simply place this code after the non-variant code generation as we use
                --  a delta aggregate to set the non-variant fields and delta aggregates can not set discriminants,
@@ -1413,7 +1484,7 @@ package body Config_Generator is
                            & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
                            & ", Description => """
                            & Variant_Case_Maps.Element (Variant_C).Description
-                           & """, Children => ");
+                           & """, Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                         Emit_Reader
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
@@ -1470,7 +1541,7 @@ package body Config_Generator is
                            & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
                            & ", Description => """
                            & Variant_Case_Maps.Element (Variant_C).Description
-                           & """, Children => ");
+                           & """, Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                         Emit_Reader
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["

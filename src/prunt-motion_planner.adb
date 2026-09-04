@@ -25,6 +25,174 @@ package body Prunt.Motion_Planner is
 
    type Feedrate_Profile_Stage_Index is range 1 .. 15;
 
+   function XY_Position_Is_In_Bounds (Pos : Position; Params : Kinematic_Parameters) return Boolean is
+   begin
+      case Params.Bounds.Kind is
+         when Rectangular_Workspace =>
+            return
+              Pos (X_Axis) >= Params.Bounds.Lower_X
+              and then Pos (X_Axis) <= Params.Bounds.Upper_X
+              and then Pos (Y_Axis) >= Params.Bounds.Lower_Y
+              and then Pos (Y_Axis) <= Params.Bounds.Upper_Y;
+
+         when Circular_Workspace    =>
+            if Params.Bounds.Radius < 0.0 * mm then
+               return False;
+            end if;
+
+            return
+              Dimensionless_Math.Sqrt ((Pos (X_Axis) / mm) ** 2 + (Pos (Y_Axis) / mm) ** 2)
+              <= Params.Bounds.Radius / mm;
+      end case;
+   end XY_Position_Is_In_Bounds;
+
+   function Position_Is_In_Bounds (Pos : Position; Params : Kinematic_Parameters) return Boolean is
+   begin
+      return
+        Pos (Z_Axis) >= Params.Bounds.Lower_Z
+        and then Pos (Z_Axis) <= Params.Bounds.Upper_Z
+        and then Pos (E_Axis) >= Params.Bounds.Lower_E
+        and then Pos (E_Axis) <= Params.Bounds.Upper_E
+        and then XY_Position_Is_In_Bounds (Pos, Params);
+   end Position_Is_In_Bounds;
+
+   function Helix_Is_In_Bounds
+     (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean; Params : Kinematic_Parameters) return Boolean
+   is
+      Two_Pi           : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
+      Radius_Tolerance : constant Length := 1.0E-6 * mm;
+
+      function Hypot (X, Y : Length) return Length;
+
+      function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean;
+
+      function Hypot (X, Y : Length) return Length is
+         DX    : constant Dimensionless := X / mm;
+         DY    : constant Dimensionless := Y / mm;
+         Scale : constant Dimensionless := Dimensionless'Max (abs DX, abs DY);
+      begin
+         if Scale = 0.0 then
+            return 0.0 * mm;
+         end if;
+         return Scale * Dimensionless_Math.Sqrt ((DX / Scale) ** 2 + (DY / Scale) ** 2) * mm;
+      end Hypot;
+
+      function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean is
+         Progress  : Dimensionless := (if Theta_Delta > 0.0 then Phase - Theta_Start else Theta_Start - Phase);
+         Magnitude : constant Dimensionless := abs Theta_Delta;
+         Tolerance : constant Dimensionless :=
+           64.0
+           * Dimensionless'Model_Epsilon
+           * (1.0 + Dimensionless'Max (abs Phase, Dimensionless'Max (abs Theta_Start, Magnitude)));
+      begin
+         if Progress < 0.0 then
+            Progress := Progress + Two_Pi;
+         end if;
+         return Progress <= Magnitude + Tolerance;
+      end Phase_Is_On_Arc;
+
+      Start_DX      : constant Length := Start_Pos (X_Axis) - Center (X_Axis);
+      Start_DY      : constant Length := Start_Pos (Y_Axis) - Center (Y_Axis);
+      Finish_DX     : constant Length := Finish_Pos (X_Axis) - Center (X_Axis);
+      Finish_DY     : constant Length := Finish_Pos (Y_Axis) - Center (Y_Axis);
+      Start_Radius  : constant Length := Hypot (Start_DX, Start_DY);
+      Finish_Radius : constant Length := Hypot (Finish_DX, Finish_DY);
+   begin
+      if not Position_Is_In_Bounds (Start_Pos, Params) or else not Position_Is_In_Bounds (Finish_Pos, Params) then
+         return False;
+      end if;
+
+      --  Radius-zero and materially mismatched arcs are executed as lines. Both supported XY workspaces are convex,
+      --  and Z/E are affine, so the endpoint checks enclose the complete fallback path.
+      if Start_Radius <= 0.0 * mm or else abs (Start_Radius - Finish_Radius) > Radius_Tolerance then
+         return True;
+      end if;
+
+      declare
+         Theta_Start   : constant Dimensionless := Dimensionless_Math.Arctan (Start_DY / mm, Start_DX / mm);
+         Offset_Scale  : constant Length :=
+           Length'Max (abs Start_DX, Length'Max (abs Start_DY, Length'Max (abs Finish_DX, abs Finish_DY)));
+         Coincident_XY : constant Boolean := Start_DX = Finish_DX and then Start_DY = Finish_DY;
+         Theta_Delta   : Dimensionless := 0.0;
+
+         function Point_Is_In_Bounds (Phase : Dimensionless) return Boolean;
+
+         function Candidate_Passes (Phase : Dimensionless) return Boolean;
+
+         function Point_Is_In_Bounds (Phase : Dimensionless) return Boolean is
+            Pos : Position := Start_Pos;
+         begin
+            Pos (X_Axis) := Center (X_Axis) + Start_Radius * Dimensionless_Math.Cos (Phase);
+            Pos (Y_Axis) := Center (Y_Axis) + Start_Radius * Dimensionless_Math.Sin (Phase);
+            return Position_Is_In_Bounds (Pos, Params);
+         end Point_Is_In_Bounds;
+
+         function Candidate_Passes (Phase : Dimensionless) return Boolean
+         is (not Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta) or else Point_Is_In_Bounds (Phase));
+      begin
+         if Coincident_XY then
+            Theta_Delta := (if Clockwise then -Two_Pi else Two_Pi);
+         else
+            declare
+               Start_X  : constant Dimensionless := Start_DX / Offset_Scale;
+               Start_Y  : constant Dimensionless := Start_DY / Offset_Scale;
+               Finish_X : constant Dimensionless := Finish_DX / Offset_Scale;
+               Finish_Y : constant Dimensionless := Finish_DY / Offset_Scale;
+               Cross    : constant Dimensionless := Start_X * Finish_Y - Start_Y * Finish_X;
+               Dot      : constant Dimensionless := Start_X * Finish_X + Start_Y * Finish_Y;
+            begin
+               Theta_Delta := Dimensionless_Math.Arctan (Cross, Dot);
+            end;
+
+            if Theta_Delta = 0.0 then
+               return True;
+            elsif Clockwise and then Theta_Delta > 0.0 then
+               Theta_Delta := Theta_Delta - Two_Pi;
+            elsif not Clockwise and then Theta_Delta < 0.0 then
+               Theta_Delta := Theta_Delta + Two_Pi;
+            end if;
+         end if;
+
+         case Params.Bounds.Kind is
+            when Rectangular_Workspace =>
+               if not Candidate_Passes (0.0)
+                 or else not Candidate_Passes (0.5 * Ada.Numerics.Pi)
+                 or else not Candidate_Passes (Ada.Numerics.Pi)
+                 or else not Candidate_Passes (-0.5 * Ada.Numerics.Pi)
+               then
+                  return False;
+               end if;
+
+            when Circular_Workspace    =>
+               --  Distance from the workspace centre is greatest where the arc's radial vector points in the same
+               --  direction as the vector from the workspace centre to the arc centre.
+               if (Center (X_Axis) /= 0.0 * mm or else Center (Y_Axis) /= 0.0 * mm)
+                 and then not Candidate_Passes (Dimensionless_Math.Arctan (Center (Y_Axis) / mm, Center (X_Axis) / mm))
+               then
+                  return False;
+               end if;
+         end case;
+
+         --  Within the accepted radius tolerance, the executed primitive uses Start_Radius rather than the requested
+         --  finish radius. Check that projected endpoint explicitly.
+         if Finish_Radius <= 0.0 * mm then
+            return False;
+         end if;
+
+         declare
+            Pos   : Position := Finish_Pos;
+            Scale : constant Dimensionless := Start_Radius / Finish_Radius;
+         begin
+            Pos (X_Axis) := Center (X_Axis) + Scale * Finish_DX;
+            Pos (Y_Axis) := Center (Y_Axis) + Scale * Finish_DY;
+            return Position_Is_In_Bounds (Pos, Params);
+         end;
+      end;
+   exception
+      when Constraint_Error =>
+         return False;
+   end Helix_Is_In_Bounds;
+
    function Nth_Root_Ratio (Numerator, Denominator : Dimensionless; Degree : Positive) return Dimensionless is
       Exponent_Difference : Integer;
       Root_Exponent       : Integer;
@@ -1375,38 +1543,6 @@ package body Prunt.Motion_Planner is
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
          return Accel_Dist + Mid_Vel * (T - Total_Time (Profile.Accel));
       else
-         declare
-            Decel_T : constant Time :=
-              Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));
-         begin
-            return Accel_Dist + Mid_Dist + Distance_At_Time (Profile.Decel, Decel_T, -Max_Crackle, Mid_Vel);
-         end;
-      end if;
-   end Distance_At_Time;
-
-   function Distance_At_Time
-     (Profile            : Feedrate_Profile;
-      T                  : Time;
-      Max_Crackle        : Crackle;
-      Start_Vel          : Velocity;
-      Is_Past_Accel_Part : out Boolean) return Length
-   is
-      Mid_Vel    : constant Velocity :=
-        Velocity_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Accel_Dist : constant Length :=
-        Distance_At_Time (Profile.Accel, Total_Time (Profile.Accel), Max_Crackle, Start_Vel);
-      Mid_Dist   : constant Length := Mid_Vel * Profile.Coast;
-   begin
-      pragma Assert (T <= Total_Time (Profile));
-
-      if T <= Total_Time (Profile.Accel) then
-         Is_Past_Accel_Part := False;
-         return Distance_At_Time (Profile.Accel, T, Max_Crackle, Start_Vel);
-      elsif T < Total_Time (Profile.Accel) + Profile.Coast then
-         Is_Past_Accel_Part := True;
-         return Accel_Dist + Mid_Vel * (T - Total_Time (Profile.Accel));
-      else
-         Is_Past_Accel_Part := True;
          declare
             Decel_T : constant Time :=
               Time'Min (T - (Total_Time (Profile.Accel) + Profile.Coast), Total_Time (Profile.Decel));

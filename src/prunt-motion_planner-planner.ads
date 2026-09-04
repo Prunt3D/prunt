@@ -64,9 +64,10 @@
 --
 --  6. Homing move limits:
 --
---     If the move is a homing sequence, an inner loop first checks if the generated profile has a sufficiently long
---     constant-velocity (coast) phase, as defined by Home_Move_Minimum_Coast_Time. If the coast time is too short,
---     the segment's maximum velocity is reduced before going back to stage 4 (Kinematic_Limiter).
+--     If the move is a homing sequence, an inner loop first checks that the generated profile has a sufficiently long
+--     constant-velocity (coast) phase and that the complete tail after the loop command fits within
+--     Home_Move_Maximum_Tail_Time. If either check fails, the segment's maximum velocity is reduced before going back
+--     to stage 4 (Kinematic_Limiter).
 --
 --  The fully processed Execution_Block is then made available via the Dequeue procedure.
 
@@ -102,8 +103,14 @@ generic
    --  Data to be included with each corner such as heater targets or the current file line number.
 
    Home_Move_Minimum_Coast_Time : Time;
-   --  The minimum time that should be used for the coasting phase of a move where Is_Homing_Move returns True. This
-   --  can be used to have a section that can be repeated in a loop until a switch is hit.
+   --  The minimum constant-velocity time reserved on each side of the loop command of a move where Is_Homing_Move
+   --  returns True. This keeps the repeated command clear of both acceleration and deceleration.
+
+   Home_Move_Maximum_Tail_Time : Time;
+   --  Maximum duration represented by commands retained after a homing loop command. The planner places the loop
+   --  command late enough in a long coast that the remaining coast, deceleration, constant-speed suffix, and dwell all
+   --  fit within this bound. It also lowers the homing feedrate until the part of that tail which cannot be moved
+   --  earlier in the coast fits within this bound.
 
    Interpolation_Time : Time;
    --  The length of each interpolation period used by the step generator. This also determines the minimum time of a
@@ -165,17 +172,15 @@ package Prunt.Motion_Planner.Planner is
    --  Returns the distance between the two original corners for a given segment.
 
    function Segment_Pos_At_Time
-     (Block              : not null access constant Execution_Block;
-      Finishing_Corner   : Finishing_Corners_Index;
-      Time_Into_Segment  : Time;
-      Is_Past_Accel_Part : out Boolean) return Position
+     (Block             : not null access constant Execution_Block;
+      Finishing_Corner  : Finishing_Corners_Index;
+      Time_Into_Segment : Time) return Position
    with
      Pre =>
        Finishing_Corner <= Block.N_Corners
        and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
        and then Time_Into_Segment >= 0.0 * s;
-   --  Returns the position at a given time in to a segment. Is_Past_Accel_Part indicates if the given time is past the
-   --  acceleration part of the segment.
+   --  Return the position at a given time into a segment.
 
    function Segment_Vel_Ratio_At_Time
      (Block             : not null access constant Execution_Block;
@@ -199,10 +204,9 @@ package Prunt.Motion_Planner.Planner is
    function Flush_Resetting_Data (Block : not null access constant Execution_Block) return Flush_Resetting_Data_Type;
    --  Return the data passed to the Enqueue procedure. This data resets for each block.
 
-   function Segment_Accel_Distance
-     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
-   with Pre => Finishing_Corner <= Block.N_Corners;
-   --  Returns the length of the acceleration part of a segment.
+   function Loop_Move_Minimum_Time (Block : not null access constant Execution_Block) return Time
+   with Pre => Block.Is_Homing_Move;
+   --  Return the earliest interpolation time at which the homing loop command may be emitted.
 
    function Block_Kind (Block : Execution_Block) return Execution_Block_Kind;
    --  Return whether Block contains planned motion or only overflow corner data.
@@ -250,18 +254,22 @@ package Prunt.Motion_Planner.Planner is
    --  This may be emitted in an Extra_Data_Overflow_Block_Kind block if the current motion block has no room for the
    --  data.
 
-   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False);
+   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type);
    --  End the current input block and attach Data for processing after its motion stops.
 
+   function Enqueue_Homing_Flush (Data : Flush_Resetting_Data_Type) return Position_Offset;
+   --  End the current input block as a homing loop move, prevent further motion enqueueing, and return the planned
+   --  displacement from the detector-hit command to the end of the retained tail.
+
+   procedure Resolve_Homing_Position (Pos : Position);
+   --  Supply the homing move's true stopped position and allow subsequent motion to be enqueued.
+
    procedure Enqueue_Flush_And_Reset_Position
-     (Data           : Flush_Resetting_Data_Type;
-      Pos            : Position;
-      Is_Homing_Move : Boolean := False;
-      Ignore_Bounds  : Boolean := False);
+     (Data : Flush_Resetting_Data_Type; Pos : Position; Ignore_Bounds : Boolean := False);
    --  End the current input block and make Pos the start position for subsequently queued motion.
 
    procedure Enqueue_Flush_And_Change_Kinematic_Parameters
-     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters; Is_Homing_Move : Boolean := False);
+     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters);
    --  End the current input block and make New_Params apply to subsequently queued motion.
 
    procedure Reset;
@@ -291,18 +299,14 @@ private
       Helix_Move_Kind,
       Corner_Extra_Data_Kind,
       Flush_Kind,
+      Homing_Flush_Kind,
       Flush_And_Reset_Position_Kind,
       Flush_And_Change_Parameters_Kind);
 
    type Command (Kind : Command_Kind := Move_Kind) is record
       case Kind is
-         when Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
+         when Flush_Kind | Homing_Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
             Flush_Resetting_Data : Flush_Resetting_Data_Type;
-            Is_Homing_Move       : Boolean := False;
-            --  Indicates whether a move is a homing move for the purposes of applying Home_Move_Minimum_Coast_Time.
-            --  Currently a block containing a homing move must have exactly 2 corners, however this is trivial to
-            --  change if required as the planner does not do anything with homing moves beyond setting the minimum
-            --  coast time.
             case Kind is
                when Flush_And_Reset_Position_Kind =>
                   Reset_Pos : Position;
@@ -336,6 +340,15 @@ private
 
    use Prunt.Motion_Planner.Stereographic_Curves;
    use Prunt.Motion_Planner.Corner_Transitions;
+
+   Motor_Delta_Numerical_Safety_Factor : constant Dimensionless := 0.999;
+   Maximum_Homing_Feedrate_Adjustments : constant Positive := 128;
+   Home_Move_Required_Coast_Time       : constant Time := 2.0 * Home_Move_Minimum_Coast_Time + Interpolation_Time;
+   --  Reserve the configured leeway on both sides of the loop command plus one interpolation period for rounding the
+   --  minimum time up to an emitted command.
+
+   function Scaled_Curvature_Norm (Coefficients : Projection_Coefficients) return Curvature;
+   function Scaled_Curvature_Hypot (Left, Right : Curvature) return Curvature;
 
    --  Preprocessor
    type Corners_Extra_Data_Index is new Max_Corners_Extra_Data_Type'Base range 1 .. Max_Corners_Extra_Data_Count;
@@ -555,6 +568,13 @@ private
    function Constant_Speed_Time (Distance : Length; Speed : Velocity) return Time;
    --  Return the time needed to cover Distance at Speed, raising Constraint_Error for nonzero distance at zero speed.
 
+   function Homing_Profile_Violation (Block : not null access constant Execution_Block) return Time;
+   --  Return the combined short-coast and over-budget-tail duration for a homing block.
+
+   function Homing_Unavoidable_Tail_Time (Block : not null access constant Execution_Block) return Time;
+   --  Return the part of a homing tail which cannot be placed before the loop command: the required final coast,
+   --  deceleration, suffix motion, and dwell.
+
    function Selected_Profile_Window
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
       return Profile_Window;
@@ -585,6 +605,8 @@ private
       First_Corner_ID                : Planner_Corner_ID := 0;
       Associated_Overflow_Block      : Boolean := False;
       Is_Homing_Move                 : Boolean;
+      Loop_Move_Minimum_Time         : Time := 0.0 * s;
+      --  Earliest interpolation time at which the loop command of a homing block may be emitted.
       Limited_Segment_Feedrates      : Block_Segment_Feedrates (2 .. N_Corners);
       Corner_Dwell_Times             : Block_Corner_Dwell_Times (2 .. N_Corners);
 

@@ -18,8 +18,17 @@
 --------------------------------------------------
 
 with Prunt_Simulator_Controller;
+with Prunt_Simulator_Telemetry_Server;
 
 procedure Prunt_Simulator is
 begin
-   Prunt_Simulator_Controller.Run;
+   Prunt_Simulator_Telemetry_Server.Start;
+   begin
+      Prunt_Simulator_Controller.Run;
+   exception
+      when others =>
+         Prunt_Simulator_Telemetry_Server.Stop;
+         raise;
+   end;
+   Prunt_Simulator_Telemetry_Server.Stop;
 end Prunt_Simulator;

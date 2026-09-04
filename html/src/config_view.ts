@@ -12,6 +12,7 @@ import {
 let currentSchema: any = null;
 let currentValues: any = null;
 let currentErrors: any[] = [];
+let dynamicPresentationControllerPaths = new Set<string>();
 
 let groupByModule = true;
 let devMode = false;
@@ -146,6 +147,18 @@ export async function initConfigView() {
             }
             updateRealtimeFrontendErrors();
         });
+
+        form.addEventListener('change', (e: Event) => {
+            const target = e.target as HTMLInputElement | HTMLSelectElement;
+            if (!target?.dataset.path) return;
+            const targetPath = JSON.parse(target.dataset.path);
+            if (!dynamicPresentationControllerPaths.has(JSON.stringify(targetPath))) return;
+
+            const updatedValues = scrapeFormValues();
+            if (updatedValues) currentValues = updatedValues;
+            renderConfigForm();
+            if (currentErrors.length > 0) handleErrors(currentErrors);
+        });
     }
 
     onLocaleChange(() => {
@@ -165,6 +178,7 @@ export async function initConfigView() {
 
     try {
         currentSchema = await fetchConfigSchema();
+        dynamicPresentationControllerPaths = collectDynamicPresentationControllerPaths(currentSchema);
         const res = await fetchConfigValues();
         currentValues = res.Values || res;
         renderConfigForm();
@@ -175,6 +189,40 @@ export async function initConfigView() {
     } catch (e) {
         console.error("Failed to init config", e);
     }
+}
+
+function collectDynamicPresentationControllerPaths(schema: any): Set<string> {
+    const result = new Set<string>();
+
+    const visit = (value: any) => {
+        if (!value || typeof value !== 'object') return;
+        const condition = value.Present_When;
+        if (typeof condition?.Owner === 'string' && Array.isArray(condition.Path)) {
+            result.add(JSON.stringify(['Config', condition.Owner, 'Config', ...condition.Path]));
+        }
+        for (const child of Object.values(value)) visit(child);
+    };
+
+    visit(schema);
+    return result;
+}
+
+function valueAtConfigPath(owner: string, path: string[]): any {
+    let value = currentValues?.Config?.[owner]?.Config;
+    for (const segment of path) {
+        if (value === undefined || value === null) return undefined;
+        value = value[segment];
+    }
+    return value;
+}
+
+function isDynamicallyPresented(schema: any): boolean {
+    const condition = schema?.Present_When;
+    if (!condition) return true;
+    if (typeof condition.Owner !== 'string' || !Array.isArray(condition.Path) || !Array.isArray(condition.Values)) {
+        return false;
+    }
+    return condition.Values.includes(valueAtConfigPath(condition.Owner, condition.Path));
 }
 
 function renderConfigForm() {
@@ -476,6 +524,8 @@ function createField(
     path: string[],
     options: FieldRenderOptions = {}
 ): HTMLElement | null {
+    if (!isDynamicallyPresented(schema)) return null;
+
     const fieldDiv = document.createElement('div');
     fieldDiv.className = 'form-group';
     fieldDiv.dataset.path = JSON.stringify(path);

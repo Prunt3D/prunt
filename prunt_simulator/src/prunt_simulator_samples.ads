@@ -18,16 +18,26 @@
 --------------------------------------------------
 
 with Ada.Streams;
+with Interfaces;
+with Prunt; use Prunt;
 
 package Prunt_Simulator_Samples is
 
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis);
    type Axis_Position is array (Axis_Name) of Long_Float;
+   type Input_Switch_State is array (Positive range 1 .. 3) of Boolean;
 
    Sample_Period_S : constant Long_Float := 1.0 / 20_000.0;
 
-   procedure Reset (Position : Axis_Position);
-   procedure Append (Position : Axis_Position);
+   procedure Reset
+     (Motor_Position : Axis_Position;
+      Switch_State   : Input_Switch_State);
+   procedure Append
+     (Motor_Position : Axis_Position;
+      Command        : Command_Index;
+      Switch_State   : Input_Switch_State);
    function JSON_Content return access constant Ada.Streams.Stream_Element_Array;
+   function JSON_String_Content return String;
+   function Execution_JSON_Content (After_Sequence : Interfaces.Integer_64) return String;
 
 end Prunt_Simulator_Samples;

@@ -129,49 +129,6 @@ package body Prunt.Motion_Planner.Test is
          Name & ": Incorrect end velocity delta " & End_Velocity'Image & " vs " & Delta_V'Image);
    end Check_Profile_For_Delta_V;
 
-   procedure Test_Distance_At_Time_Is_Past_Accel (T : in out Trendy_Test.Operation'Class) is
-   begin
-      T.Register;
-
-      Cm : constant Crackle := 1000.0 * mm / s ** 5;
-      Sm : constant Snap := 10.0 * mm / s ** 4;
-      Jm : constant Jerk := 1.0 * mm / s ** 3;
-      Am : constant Acceleration := 10.0 * mm / s ** 2;
-      Vs : constant Velocity := 0.0 * mm / s;
-
-      Profile : constant Feedrate_Profile :=
-        (Accel => [Sm / Cm, Jm / Sm - Sm / Cm, Am / Jm - Jm / Sm - Sm / Cm, 0.0 * s],
-         Coast => 1.0 * s,
-         Decel => [Sm / Cm, Jm / Sm - Sm / Cm, Am / Jm - Jm / Sm - Sm / Cm, 0.0 * s]);
-
-      Is_Past_Accel : Boolean;
-      Dist : Length;
-      Dist_Check : Length;
-
-      Dist := Distance_At_Time (Profile, 0.5 * Total_Time (Profile.Accel), Cm, Vs, Is_Past_Accel);
-      T.Assert (not Is_Past_Accel, "Is_Past_Accel should be False in Accel phase");
-      Dist_Check := Distance_At_Time (Profile, 0.5 * Total_Time (Profile.Accel), Cm, Vs);
-      T.Assert (Dist = Dist_Check, "Distance should match for Accel phase");
-
-      Dist := Distance_At_Time (Profile, Total_Time (Profile.Accel) + 0.5 * Profile.Coast, Cm, Vs, Is_Past_Accel);
-      T.Assert (Is_Past_Accel, "Is_Past_Accel should be True in Coast phase");
-      Dist_Check := Distance_At_Time (Profile, Total_Time (Profile.Accel) + 0.5 * Profile.Coast, Cm, Vs);
-      T.Assert (Dist = Dist_Check, "Distance should match for Coast phase");
-
-      Dist :=
-        Distance_At_Time
-          (Profile,
-           Total_Time (Profile.Accel) + Profile.Coast + 0.5 * Total_Time (Profile.Decel),
-           Cm,
-           Vs,
-           Is_Past_Accel);
-      T.Assert (Is_Past_Accel, "Is_Past_Accel should be True in Decel phase");
-      Dist_Check :=
-        Distance_At_Time
-          (Profile, Total_Time (Profile.Accel) + Profile.Coast + 0.5 * Total_Time (Profile.Decel), Cm, Vs);
-      T.Assert (Dist = Dist_Check, "Distance should match for Decel phase");
-   end Test_Distance_At_Time_Is_Past_Accel;
-
    procedure Test_Distance_At_Time_Phases (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -2095,11 +2052,60 @@ package body Prunt.Motion_Planner.Test is
       end loop;
    end Test_Optimal_Profile_For_Distance_Case_D5_4;
 
+   procedure Test_Workspace_Bounds (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters :=
+        (Bounds =>
+           (Kind    => Circular_Workspace,
+            Lower_Z => -100.0 * mm,
+            Upper_Z => 100.0 * mm,
+            Lower_E => -100.0 * mm,
+            Upper_E => 100.0 * mm,
+            Radius  => 50.0 * mm),
+         others => <>);
+      Arc_Center : constant Position := [X_Axis => 40.0 * mm, others => 0.0 * mm];
+      Arc_Start  : constant Position := [X_Axis => 40.0 * mm, Y_Axis => -20.0 * mm, others => 0.0 * mm];
+      Arc_Finish : constant Position := [X_Axis => 40.0 * mm, Y_Axis => 20.0 * mm, others => 0.0 * mm];
+   begin
+      T.Register;
+      T.Assert
+        (Position_Is_In_Bounds ([others => 0.0 * mm], Params), "workspace centre should be in bounds");
+      T.Assert
+        (Position_Is_In_Bounds ([X_Axis => 50.0 * mm, others => 0.0 * mm], Params),
+         "circle boundary should be in bounds");
+      T.Assert
+        (not Position_Is_In_Bounds ([X_Axis => 50.0 * mm, Y_Axis => 50.0 * mm, others => 0.0 * mm], Params),
+         "circle bounding-box corner should be out of bounds");
+      T.Assert
+        (not Helix_Is_In_Bounds (Arc_Start, Arc_Finish, Arc_Center, Clockwise => False, Params => Params),
+         "arc whose midpoint leaves the circle should be out of bounds");
+      T.Assert
+        (Helix_Is_In_Bounds (Arc_Start, Arc_Finish, Arc_Center, Clockwise => True, Params => Params),
+         "arc travelling through the near side should remain in bounds");
+
+      Params.Bounds :=
+        (Kind    => Rectangular_Workspace,
+         Lower_Z => -100.0 * mm,
+         Upper_Z => 100.0 * mm,
+         Lower_E => -100.0 * mm,
+         Upper_E => 100.0 * mm,
+         Lower_X => -40.0 * mm,
+         Upper_X => 60.0 * mm,
+         Lower_Y => -55.0 * mm,
+         Upper_Y => 45.0 * mm);
+      T.Assert
+         (not Helix_Is_In_Bounds
+           ([X_Axis => 50.0 * mm, Y_Axis => -20.0 * mm, others => 0.0 * mm],
+            [X_Axis => 50.0 * mm, Y_Axis => -20.0 * mm, others => 0.0 * mm],
+            [X_Axis => 50.0 * mm, others => 0.0 * mm],
+            Clockwise => False,
+            Params    => Params),
+         "full circle should be checked between its coincident endpoints");
+   end Test_Workspace_Bounds;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Distance_At_Time_Is_Past_Accel'Access,
-         Test_Distance_At_Time_Phases'Access,
+        [Test_Distance_At_Time_Phases'Access,
          Test_Mixed_Derivative_Straight_Line'Access,
          Test_Constant_Speed_Axial_Ceiling'Access,
          Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios'Access,
@@ -2121,6 +2127,7 @@ package body Prunt.Motion_Planner.Test is
          Test_Optimal_Full_Profile_Start_End_Constraints'Access,
          Test_Optimal_Full_Profile_Triangle'Access,
          Test_Optimal_Full_Profile_Short_Triangle_Distance_Closure'Access,
+         Test_Workspace_Bounds'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_1'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_2'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_3'Access,

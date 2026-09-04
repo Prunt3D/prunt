@@ -27,10 +27,24 @@ package body Prunt.Motion_Planner.Planner.Test is
 
    pragma Extensions_Allowed (On);
 
+   function Rectangular_Bounds (Lower, Upper : Position) return Workspace_Bounds;
+
+   function Rectangular_Bounds (Lower, Upper : Position) return Workspace_Bounds is
+     (Kind    => Rectangular_Workspace,
+      Lower_Z => Lower (Z_Axis),
+      Upper_Z => Upper (Z_Axis),
+      Lower_E => Lower (E_Axis),
+      Upper_E => Upper (E_Axis),
+      Lower_X => Lower (X_Axis),
+      Upper_X => Upper (X_Axis),
+      Lower_Y => Lower (Y_Axis),
+      Upper_Y => Upper (Y_Axis));
+
    use Ada.Numerics.Long_Elementary_Functions;
    package Tested_Corner_Blender is new Corner_Blender;
    package Tested_Early_Kinematic_Limiter is new Early_Kinematic_Limiter;
    package Tested_Preprocessor is new Preprocessor;
+   package Boundary_Preprocessor is new Preprocessor;
 
    Identity_Tolerance_Factor : constant Long_Float := 32_768.0;
 
@@ -117,8 +131,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Flush_Resetting_Data := Flush_Resetting_Data_Type_Default;
       Block.Next_Block_Pos := [others => 0.0 * mm];
       Block.Params := (others => <>);
-      Block.Params.Lower_Pos_Limit := [others => -1.0E100 * mm];
-      Block.Params.Upper_Pos_Limit := [others => 1.0E100 * mm];
+      Block.Params.Bounds := Rectangular_Bounds ([others => -1.0E100 * mm], [others => 1.0E100 * mm]);
       Block.Corners_Extra_Data.Clear;
       Block.Corners_Extra_Data_End_Indices := [others => Block.Corners_Extra_Data.Last_Index];
       Block.Corners := [others => [others => 0.0 * mm]];
@@ -472,8 +485,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       T.Register;
 
       Reset_Early_Limiter_Block (Block.all);
-      Block.Params.Lower_Pos_Limit := [others => -100.0 * mm];
-      Block.Params.Upper_Pos_Limit := [others => 100.0 * mm];
+      Block.Params.Bounds := Rectangular_Bounds ([others => -100.0 * mm], [others => 100.0 * mm]);
       Block.Corners (1) := [X_Axis => -20.0 * mm, others => 0.0 * mm];
       Block.Corners (2) := [others => 0.0 * mm];
       Block.Corners (3) := [Y_Axis => 20.0 * mm, others => 0.0 * mm];
@@ -483,8 +495,10 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Params.Cornering := (others => <>);
       Assert_Dispatched (Stereographic_Transition, "Default stereographic", T);
 
-      Block.Params.Lower_Pos_Limit := [X_Axis | Y_Axis | Z_Axis => 0.0 * mm, E_Axis => -1.0E100 * mm];
-      Block.Params.Upper_Pos_Limit := [X_Axis | Y_Axis | Z_Axis => 300.0 * mm, E_Axis => 1.0E100 * mm];
+      Block.Params.Bounds :=
+        Rectangular_Bounds
+          ([X_Axis | Y_Axis | Z_Axis => 0.0 * mm, E_Axis => -1.0E100 * mm],
+           [X_Axis | Y_Axis | Z_Axis => 300.0 * mm, E_Axis => 1.0E100 * mm]);
       Block.Corners :=
         [1 => [X_Axis => 1.0 * mm, Y_Axis => 1.0 * mm, others => 0.0 * mm],
          2 => [X_Axis => 0.0 * mm, Y_Axis => 1.0 * mm, others => 0.0 * mm],
@@ -497,8 +511,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          3 => [X_Axis => 122.615 * mm, Y_Axis => 117.549 * mm, Z_Axis => 0.25 * mm, E_Axis => 0.03802 * mm]];
       Assert_Dispatched (Stereographic_Transition, "Default stereographic printed corner", T);
 
-      Block.Params.Lower_Pos_Limit := [others => -100.0 * mm];
-      Block.Params.Upper_Pos_Limit := [others => 100.0 * mm];
+      Block.Params.Bounds := Rectangular_Bounds ([others => -100.0 * mm], [others => 100.0 * mm]);
       Block.Corners (1) := [X_Axis => -20.0 * mm, others => 0.0 * mm];
       Block.Corners (2) := [others => 0.0 * mm];
       Block.Corners (3) := [Y_Axis => 20.0 * mm, others => 0.0 * mm];
@@ -604,8 +617,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       procedure Configure is
       begin
          Reset_Early_Limiter_Block (Block.all);
-         Block.Params.Lower_Pos_Limit := [others => -100.0 * mm];
-         Block.Params.Upper_Pos_Limit := [others => 100.0 * mm];
+         Block.Params.Bounds := Rectangular_Bounds ([others => -100.0 * mm], [others => 100.0 * mm]);
          Block.Params.Cornering :=
            (Kind        => Biarc,
             Biarc_Params =>
@@ -817,8 +829,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       T.Register;
 
       Reset_Early_Limiter_Block (Block.all);
-      Block.Params.Lower_Pos_Limit := [others => -100.0 * mm];
-      Block.Params.Upper_Pos_Limit := [others => 100.0 * mm];
+      Block.Params.Bounds := Rectangular_Bounds ([others => -100.0 * mm], [others => 100.0 * mm]);
       Block.Params.Cornering :=
         (Kind            => Circular,
          Circular_Params =>
@@ -906,10 +917,9 @@ package body Prunt.Motion_Planner.Planner.Test is
       procedure Run_Case (Lower_X, Upper_Y : Length) is
       begin
          Reset_Early_Limiter_Block (Block.all);
-         Block.Params.Lower_Pos_Limit := [others => -100.0 * mm];
-         Block.Params.Upper_Pos_Limit := [others => 100.0 * mm];
-         Block.Params.Lower_Pos_Limit (X_Axis) := Lower_X;
-         Block.Params.Upper_Pos_Limit (Y_Axis) := Upper_Y;
+         Block.Params.Bounds := Rectangular_Bounds ([others => -100.0 * mm], [others => 100.0 * mm]);
+         Block.Params.Bounds.Lower_X := Lower_X;
+         Block.Params.Bounds.Upper_Y := Upper_Y;
          Block.Params.Cornering :=
            (Kind            => Circular,
             Circular_Params =>
@@ -982,10 +992,9 @@ package body Prunt.Motion_Planner.Planner.Test is
    begin
       T.Register;
 
-      Params.Lower_Pos_Limit := [others => -10.0 * mm];
-      Params.Upper_Pos_Limit := [others => 10.0 * mm];
-      Params.Upper_Pos_Limit (X_Axis) := 1.5 * mm;
-      Params.Lower_Pos_Limit (Y_Axis) := -0.5 * mm;
+      Params.Bounds := Rectangular_Bounds ([others => -10.0 * mm], [others => 10.0 * mm]);
+      Params.Bounds.Upper_X := 1.5 * mm;
+      Params.Bounds.Lower_Y := -0.5 * mm;
       Tested_Preprocessor.Setup (Params);
 
       begin
@@ -1010,10 +1019,8 @@ package body Prunt.Motion_Planner.Planner.Test is
           Clockwise        => True,
           Feedrate         => 1.0 * mm / s));
       Tested_Preprocessor.Enqueue
-        ((Kind                  => Flush_Kind,
-          Flush_Resetting_Data => Flush_Resetting_Data_Type_Default,
-          Is_Homing_Move       => False));
-      Tested_Preprocessor.Run (Block, Reset_Called);
+        ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
+      Tested_Preprocessor.Run (Block, Initial_Position, Reset_Called);
 
       T.Assert (not Reset_Called, "Accepted helix produces a normal motion block");
       T.Assert
@@ -1147,6 +1154,86 @@ package body Prunt.Motion_Planner.Planner.Test is
          "A later blend should not reuse stale hard-anchor workspace state");
    end Test_Per_Axis_Deviation_Corridor;
 
+   procedure Test_Homing_Unavoidable_Tail_Includes_Complete_Tail (T : in out Trendy_Test.Operation'Class) is
+      Block : aliased Execution_Block (2);
+   begin
+      T.Register;
+
+      Reset_Early_Limiter_Block (Block);
+      Block.Is_Homing_Move := True;
+      Block.Feedrate_Profiles (2) :=
+        (Accel => [others => 0.0 * s], Coast => 100.0 * ms, Decel => [others => 0.0 * s]);
+      Block.Corner_Dwell_Times (2) := 10.0 * ms;
+
+      T.Assert
+        (Homing_Unavoidable_Tail_Time (Block'Access) = 15.0 * ms,
+         "The unavoidable homing tail includes the required coast and dwell but excludes earlier excess coast");
+   end Test_Homing_Unavoidable_Tail_Includes_Complete_Tail;
+
+   procedure Test_Homing_Boundary_Uses_Resolved_Position (T : in out Trendy_Test.Operation'Class) is
+      Params             : Kinematic_Parameters := (others => <>);
+      Homing_Block       : aliased Execution_Block;
+      Following_Block    : aliased Execution_Block;
+      Reset_Called       : Boolean;
+      Observed_Offset    : Position_Offset;
+      Resolved_Position  : Position;
+      Detector_Hit       : constant Position := [others => 0.0 * mm];
+      Tail_Offset        : constant Position_Offset := [X_Axis => 1.0 * mm, others => 0.0 * mm];
+      Stopped_Position   : constant Position := Detector_Hit + Tail_Offset;
+      Approach_End       : constant Position := [X_Axis => 100.0 * mm, others => 0.0 * mm];
+      Following_End      : constant Position := [Y_Axis => 1.0 * mm, others => 0.0 * mm];
+      Following_Centre   : constant Position := [others => 0.0 * mm];
+   begin
+      T.Register;
+
+      Params.Bounds :=
+        (Kind    => Circular_Workspace,
+         Lower_Z => -10.0 * mm,
+         Upper_Z => 10.0 * mm,
+         Lower_E => -10.0 * mm,
+         Upper_E => 10.0 * mm,
+         Radius  => 2.0 * mm);
+      Boundary_Preprocessor.Setup (Params);
+      Boundary_Preprocessor.Enqueue
+        ((Kind        => Move_Kind,
+          Dwell_After => 0.0 * s,
+          Pos         => Approach_End,
+          Feedrate    => 1.0 * mm / s),
+         Ignore_Bounds => True);
+      Boundary_Preprocessor.Enqueue
+        ((Kind => Homing_Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
+      Boundary_Preprocessor.Run (Homing_Block, Initial_Position, Reset_Called);
+
+      T.Assert (not Reset_Called and then Homing_Block.Is_Homing_Move, "The boundary produces a homing block");
+      Boundary_Preprocessor.Publish_Homing_Tail_Offset (Tail_Offset);
+      Boundary_Preprocessor.Wait_For_Homing_Tail_Offset (Observed_Offset, Reset_Called);
+      T.Assert
+        (not Reset_Called and then Observed_Offset = Tail_Offset,
+         "The homing module receives the planner's retained-tail displacement");
+
+      Boundary_Preprocessor.Resolve_Homing_Position (Stopped_Position);
+      Boundary_Preprocessor.Wait_For_Resolved_Homing_Position (Resolved_Position, Reset_Called);
+      T.Assert
+        (not Reset_Called and then Resolved_Position = Stopped_Position,
+         "The planner receives the stopped position resolved by the homing module");
+
+      Boundary_Preprocessor.Enqueue
+        ((Kind        => Helix_Move_Kind,
+          Dwell_After => 0.0 * s,
+          Pos         => Following_End,
+          Center      => Following_Centre,
+          Clockwise   => False,
+          Feedrate    => 1.0 * mm / s));
+      Boundary_Preprocessor.Enqueue
+        ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
+      Boundary_Preprocessor.Run (Following_Block, Stopped_Position, Reset_Called);
+      T.Assert
+        (not Reset_Called
+         and then Following_Block.Corners (1) = Stopped_Position
+         and then Following_Block.Corners (2) = Following_End,
+         "Following preprocessing and helix validation use the resolved stopped position");
+   end Test_Homing_Boundary_Uses_Resolved_Position;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
@@ -1163,7 +1250,9 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Corner_Transition_Travel_Bounds'Unrestricted_Access,
          Test_Helix_Travel_Bounds_Are_Transactional'Unrestricted_Access,
          Test_Line_Primitive_Tangent_Jet_Identities'Unrestricted_Access,
-         Test_Per_Axis_Deviation_Corridor'Unrestricted_Access];
+         Test_Per_Axis_Deviation_Corridor'Unrestricted_Access,
+         Test_Homing_Boundary_Uses_Resolved_Position'Unrestricted_Access,
+         Test_Homing_Unavoidable_Tail_Includes_Complete_Tail'Unrestricted_Access];
    end All_Tests;
 
 end Prunt.Motion_Planner.Planner.Test;

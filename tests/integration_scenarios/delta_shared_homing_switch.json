@@ -1,0 +1,74 @@
+{
+  "description": "Home a delta with two motors on tower A and one any-trigger input shared by all towers.",
+  "config": {
+    "Input Switches": {
+      "Switches": {
+        "DUMMY_INPUT_SWITCH": { "Enabled": true }
+      }
+    },
+    "Kinematics": {
+      "Kinematics": {
+        "Workspace_Bounds": {
+          "Lower_Z": -10.0,
+          "Kind": {
+            "Selected": "Circular",
+            "Children": {
+              "Circular": { "Radius": 50.0 }
+            }
+          }
+        },
+        "Kinematics_Kind": {
+          "Kind": {
+            "Selected": "Linear_Delta",
+            "Children": {
+              "Linear_Delta": {
+                "Linear_Delta": {
+                  "Motors": {
+                    "X_MOTOR": "TOWER_A",
+                    "Y_MOTOR": "TOWER_A",
+                    "Z_MOTOR": "TOWER_B",
+                    "E_MOTOR": "TOWER_C"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Homing": {
+      "Homing": {
+        "Linear_Delta_Homing": {
+          "Home_Z": 200.0,
+          "Move_To_After": 150.0,
+          "Tower_A": {
+            "Kind": {
+              "Selected": "Input_Switch",
+              "Children": { "Input_Switch": { "Switch": "DUMMY_INPUT_SWITCH" } }
+            }
+          },
+          "Tower_B": {
+            "Kind": {
+              "Selected": "Input_Switch",
+              "Children": { "Input_Switch": { "Switch": "DUMMY_INPUT_SWITCH" } }
+            }
+          },
+          "Tower_C": {
+            "Kind": {
+              "Selected": "Input_Switch",
+              "Children": { "Input_Switch": { "Switch": "DUMMY_INPUT_SWITCH" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "wait_idle", "timeout_s": 20.0 }
+  ],
+  "expect": {
+    "min_samples": 1,
+    "event_counts": { "gcode": 1 }
+  }
+}

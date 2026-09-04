@@ -982,9 +982,10 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             function Side_Envelope_Passes
               (First_Distance, Last_Distance : Length; Numeric_Passes : out Boolean) return Boolean
             is
-               Envelope : constant Position_Envelope :=
+               Envelope          : constant Position_Envelope :=
                  Certified_Position_Envelope (Curve, First_Distance, Last_Distance);
-               Error    : constant Length := Position_Error_Bound (Curve);
+               Expanded_Envelope : Position_Envelope;
+               Error             : constant Length := Position_Error_Bound (Curve);
             begin
                Numeric_Passes := False;
                if not Finite_Length (Error) or else Error < 0.0 * mm or else Error >= Length'Last then
@@ -1009,20 +1010,63 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                        (if Constant_Axis
                         then Envelope (Axis).Upper
                         else Length'Adjacent (Envelope (Axis).Upper, Length'Last));
+                     Outside_Bounds : constant Boolean :=
+                       (case Axis is
+                          when X_Axis =>
+                            (case Block.Params.Bounds.Kind is
+                               when Rectangular_Workspace =>
+                                 Expanded_Lower < Block.Params.Bounds.Lower_X
+                                 or else Expanded_Upper > Block.Params.Bounds.Upper_X,
+                               when Circular_Workspace    => False),
+                          when Y_Axis =>
+                            (case Block.Params.Bounds.Kind is
+                               when Rectangular_Workspace =>
+                                 Expanded_Lower < Block.Params.Bounds.Lower_Y
+                                 or else Expanded_Upper > Block.Params.Bounds.Upper_Y,
+                               when Circular_Workspace    => False),
+                          when Z_Axis =>
+                            Expanded_Lower < Block.Params.Bounds.Lower_Z
+                            or else Expanded_Upper > Block.Params.Bounds.Upper_Z,
+                          when E_Axis =>
+                            Expanded_Lower < Block.Params.Bounds.Lower_E
+                            or else Expanded_Upper > Block.Params.Bounds.Upper_E);
                   begin
+                     Expanded_Envelope (Axis) := (Lower => Expanded_Lower, Upper => Expanded_Upper);
                      if not Finite_Length (Expanded_Lower)
                        or else not Finite_Length (Expanded_Upper)
                        or else Expanded_Lower > Expanded_Upper
                      then
                         return False;
-                     elsif Expanded_Lower < Block.Params.Lower_Pos_Limit (Axis)
-                       or else Expanded_Upper > Block.Params.Upper_Pos_Limit (Axis)
-                     then
+                     elsif Outside_Bounds then
                         Numeric_Passes := True;
                         return False;
                      end if;
                   end;
                end loop;
+
+               if Block.Params.Bounds.Kind = Circular_Workspace then
+                  for Use_Upper_X in Boolean loop
+                     for Use_Upper_Y in Boolean loop
+                        declare
+                           Pos : Position := Block.Corners (I);
+                        begin
+                           Pos (X_Axis) :=
+                             (if Use_Upper_X
+                              then Expanded_Envelope (X_Axis).Upper
+                              else Expanded_Envelope (X_Axis).Lower);
+                           Pos (Y_Axis) :=
+                             (if Use_Upper_Y
+                              then Expanded_Envelope (Y_Axis).Upper
+                              else Expanded_Envelope (Y_Axis).Lower);
+                           if not XY_Position_Is_In_Bounds (Pos, Block.Params) then
+                              Numeric_Passes := True;
+                              return False;
+                           end if;
+                        end;
+                     end loop;
+                  end loop;
+               end if;
+
                Numeric_Passes := True;
                return True;
             exception

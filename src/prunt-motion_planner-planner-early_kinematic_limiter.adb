@@ -21,8 +21,8 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
    pragma Extensions_Allowed (On);
 
-   procedure Run
-     (Block : aliased in out Execution_Block; Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map) is
+   procedure Run (Block : aliased in out Execution_Block; Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map)
+   is
    begin
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
@@ -36,14 +36,12 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
          declare
             Primitive          : constant Derived_Path_Primitive :=
-              Derive_Path_Primitive
-                (Block.Primitives (I), Block.Corners (I - 1), Block.Corners (I));
+              Derive_Path_Primitive (Block.Primitives (I), Block.Corners (I - 1), Block.Corners (I));
             Path_Length        : constant Length := Primitive.Length;
             Segment_Distance   : constant Length := Segment_Total_Distance (Block'Access, I);
             Primitive_Distance : constant Length := Block.Primitive_Distances (I);
             Bounds             : constant Unit_Speed_Axial_Derivative_Bounds :=
-              Primitive_Derivative_Bounds
-                (Block'Access, I, Block.Primitive_Start_Distances (I), Primitive_Distance);
+              Primitive_Derivative_Bounds (Block'Access, I, Block.Primitive_Start_Distances (I), Primitive_Distance);
             Velocity_Safety    : constant Dimensionless := (if Primitive_Distance > 0.0 * mm then 0.999 else 1.0);
             Offset             : constant Position_Offset := Block.Corners (I - 1) - Block.Corners (I);
             XYZ_Path_Length    : Length;
@@ -57,8 +55,7 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
                when Helix_Primitive_Kind =>
                   XYZ_Path_Length :=
-                    (Primitive.Radius ** 2
-                     + (abs [Primitive.Axial_Per_Phase with delta E_Axis => 0.0 * mm]) ** 2)
+                    (Primitive.Radius ** 2 + (abs [Primitive.Axial_Per_Phase with delta E_Axis => 0.0 * mm]) ** 2)
                     ** (1 / 2)
                     * abs Primitive.Theta_Delta;
             end case;
@@ -70,8 +67,7 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                   Feedrate := Feedrate * Full_Path_Scale;
                   --  Segment_Vel_Ratio_At_Time operates on the planner's full-path scalar velocity. Keep its
                   --  programmed reference in the same coordinates so a move at the requested XYZ speed reports 1.0.
-                  Block.Original_Segment_Feedrates (I) :=
-                    Block.Original_Segment_Feedrates (I) * Full_Path_Scale;
+                  Block.Original_Segment_Feedrates (I) := Block.Original_Segment_Feedrates (I) * Full_Path_Scale;
                end;
             end if;
 
@@ -86,20 +82,14 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                if Bounds.Velocity (A) > 0.0 then
                   Feedrate :=
                     Velocity'Min
-                      (Feedrate,
-                       Velocity_Safety * Block.Params.Axial_Velocity_Maxes (A) / Bounds.Velocity (A));
+                      (Feedrate, Velocity_Safety * Block.Params.Axial_Velocity_Maxes (A) / Bounds.Velocity (A));
                end if;
             end loop;
 
             if Primitive_Distance > 0.0 * mm then
                Feedrate :=
                  Primitive_Motor_Delta_Ceiling
-                   (Block'Access,
-                    Motor_Map,
-                    I,
-                    Block.Primitive_Start_Distances (I),
-                    Primitive_Distance,
-                    Feedrate);
+                   (Block'Access, Motor_Map, I, Block.Primitive_Start_Distances (I), Primitive_Distance, Feedrate);
             end if;
 
             Block.Limited_Segment_Feedrates (I) := Feedrate;

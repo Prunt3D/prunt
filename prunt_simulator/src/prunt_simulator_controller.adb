@@ -58,9 +58,9 @@ package body Prunt_Simulator_Controller is
    begin
       if Name_String = "position_samples.json" then
          return Prunt_Simulator_Samples.JSON_Content;
+      else
+         return Prunt_Simulator_Extra_Resources.Get_Content (Name_String);
       end if;
-
-      return Prunt_Simulator_Extra_Resources.Get_Content (Name_String);
    end Get_Extra_HTTP_Content;
 
    package Controller is new
@@ -68,7 +68,9 @@ package body Prunt_Simulator_Controller is
        (Generic_Types                           => Generic_Types,
         Hardware                                => Prunt_Simulator_Hardware.Hardware,
         Interpolation_Time                      => Interpolation_Time,
+        Maximum_Loop_Move_Tail_Length           => Prunt_Simulator_Types.Maximum_Loop_Move_Tail_Length,
         Enqueue_Command                         => Prunt_Simulator_Machine.Enqueue_Command,
+        Setup_For_Loop_Move                     => Prunt_Simulator_Machine.Setup_For_Loop_Move,
         Reset_Position                          => Prunt_Simulator_Machine.Reset_Position,
         Wait_Until_Idle                         => Prunt_Simulator_Machine.Wait_Until_Idle,
         Reset_Hardware                          => Prunt_Simulator_Machine.Reset_Hardware,
@@ -90,7 +92,6 @@ package body Prunt_Simulator_Controller is
 
 begin
    Prunt_Simulator_Machine.Set_Reporters
-     (Last_Command => Controller.Report_Last_Command_Executed'Access,
-      Loop_Cycles  => Controller.Report_Loop_Move_Cycles'Access,
-      Error        => Report_Executor_Error'Access);
+     (Last_Command  => Controller.Report_Last_Command_Executed'Access,
+      Error         => Report_Executor_Error'Access);
 end Prunt_Simulator_Controller;

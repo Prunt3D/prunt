@@ -57,7 +57,7 @@ package Prunt.Default_Modules.Motion is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
@@ -353,7 +353,10 @@ private
    --  Return True if applying Update would change Stored_Positions, so no-op actions are not queued.
 
    procedure Add_Corner_If_Moved
-     (Planner : Planner_Interface'Class; Current : in out Position; Target : Position; Feedrate : Velocity);
+     (Planner  : Prunt.Module_Types.Planner_Interface'Class;
+      Current  : in out Position;
+      Target   : Position;
+      Feedrate : Velocity);
    --  Add Target to Planner and update Current, but only if Target differs from Current.
 
    function Unit_Scale (Units : Linear_Units_Mode) return Length;
@@ -895,10 +898,10 @@ private
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       overriding
-      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+      procedure Handle_Pause (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class);
 
       overriding
-      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+      procedure Handle_Resume (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class);
 
       overriding
       procedure Catch_Up_Planner_State (Executed_Corner_ID : Planner_Corner_ID);

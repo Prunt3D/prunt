@@ -31,6 +31,8 @@ package Prunt is
 
    type Command_Index is range 0 .. 2 ** 63 - 2;
 
+   type Loop_Move_Count is range 0 .. 2 ** 31 - 1;
+
    type Planner_Corner_ID is range 0 .. 2 ** 63 - 2;
 
    type Gcode_Command_ID is range 0 .. 2 ** 63 - 2;
@@ -345,11 +347,5 @@ package Prunt is
    private
       Counter : Natural := 0;
    end Test_File_Name_Generator;
-
-   type Loop_Cycle_Reporter_Interface is limited interface;
-
-   procedure Wait (Reporter : in out Loop_Cycle_Reporter_Interface; Index : Command_Index; Cycles : out Dimensionless)
-   is abstract;
-   --  Wait for the loop move identified by Index to report completion and return its executed cycle count.
 
 end Prunt;

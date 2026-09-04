@@ -44,10 +44,6 @@ package body Prunt.Step_Generator.Block_Executor is
    end Pause_Slew_Interpolation_Time;
 
    type Pausing_State_Kind is (Running_Kind, Pausing_Kind, Paused_Kind, Resuming_Kind);
-   type Homing_Move_When_Kind is (Not_Pending_Kind, This_Block_Kind, This_Move_Kind);
-
-   Zero_Length : constant Length := 0.0 * mm;
-
    procedure Dequeue_Block
      (Block : out Active_Planner.Execution_Block; Commands : in out Command_State; Reset_Requested : out Boolean)
    is
@@ -76,22 +72,32 @@ package body Prunt.Step_Generator.Block_Executor is
 
    procedure Execute_Block
      (Block           : access constant Active_Planner.Execution_Block;
-      Map             : Motor_Pos_Map;
+      Transform       : Kinematic_Transform;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean)
    is
-      Pausing_State           : Pausing_State_Kind := Running_Kind;
-      Pause_Slew_Cursor       : Pause_Slew_Index := Pause_Slew_Index'First;
-      Current_Time            : Time := 0.0 * s;
-      Use_Input_Shapers       : constant Boolean := not Active_Planner.Is_Homing_Move (Block);
-      Shapers                 : Input_Shapers.Shapers.Axial_Shapers;
-      Homing_Move_When        : Homing_Move_When_Kind := Not_Pending_Kind;
-      Loop_Move_Offset        : Position_Offset := [others => Zero_Length];
-      Loop_Move_Command_Index : Command_Index := 0;
-      Catch_Up_Axes           : Catch_Up_Axis_Set := [others => False];
+      Pausing_State      : Pausing_State_Kind := Running_Kind;
+      Pause_Slew_Cursor  : Pause_Slew_Index := Pause_Slew_Index'First;
+      Current_Time       : Time := 0.0 * s;
+      Shapers            : Input_Shapers.Shapers.Axial_Shapers;
+      Has_Loop_Move      : Boolean := False;
+      Catch_Up_Axes      : Catch_Up_Axis_Set := [others => False];
+      Pin_To_Block_Start : constant Motor_Pin_Selection :=
+        [for Motor in Motor_Name =>
+           Pin_Motor_To_Block_Start_Callback (Active_Planner.Flush_Resetting_Data (Block), Transform, Motor)];
+      Stationary_Pos     : constant Motor_Position :=
+        Transform_To_Motor_Position (Active_Planner.Block_Start_Pos (Block), Transform);
+      Use_Input_Shapers  : constant Boolean :=
+        not Active_Planner.Is_Homing_Move (Block) and then not (for some Is_Pinned of Pin_To_Block_Start => Is_Pinned);
 
       procedure Process_Corner_Extra_Data (Data : in out Active_Planner.Corner_Extra_Data_Type);
       procedure Publish_Block_Corner_ID (Corner : Active_Planner.Corners_Index);
+      procedure Queue_Block_Command
+        (Pos             : Position;
+         Safe_Stop_After : Boolean;
+         Vel_Ratio       : Dimensionless;
+         Catch_Up_Axes   : Catch_Up_Axis_Set := [others => False]);
+      procedure Queue_Loop_Command (Pos : Position; Safe_Stop_After : Boolean; Vel_Ratio : Dimensionless);
 
       procedure Process_Corner_Extra_Data (Data : in out Active_Planner.Corner_Extra_Data_Type) is
       begin
@@ -107,6 +113,56 @@ package body Prunt.Step_Generator.Block_Executor is
 
          Publish_Corner_ID (Corner_ID);
       end Publish_Block_Corner_ID;
+
+      procedure Queue_Block_Command
+        (Pos             : Position;
+         Safe_Stop_After : Boolean;
+         Vel_Ratio       : Dimensionless;
+         Catch_Up_Axes   : Catch_Up_Axis_Set := [others => False]) is
+      begin
+         Queue_Command
+           (State              => Commands,
+            Pos                => Pos,
+            Transform          => Transform,
+            Safe_Stop_After    => Safe_Stop_After,
+            Vel_Ratio          => Vel_Ratio,
+            Catch_Up_Axes      => Catch_Up_Axes,
+            Pin_To_Block_Start => Pin_To_Block_Start,
+            Stationary_Pos     => Stationary_Pos);
+      end Queue_Block_Command;
+
+      procedure Queue_Loop_Command (Pos : Position; Safe_Stop_After : Boolean; Vel_Ratio : Dimensionless) is
+         Fractions  : constant Axis_Fractions :=
+           Command_Fractions
+             (Start_Pos     => Commands.Last_Queued_Position,
+              Target_Pos    => Pos,
+              Transform     => Transform,
+              Catch_Up_Axes => [others => False]);
+         Motor_Pos  : Motor_Position := Transform_To_Motor_Position (Pos, Transform);
+         Next_Index : constant Command_Index := Commands.Current_Command_Index + 1;
+      begin
+         for Axis in Axis_Name loop
+            if Fractions (Axis) < 1.0 then
+               raise Constraint_Error with "A loop command unexpectedly requires subdivision.";
+            end if;
+         end loop;
+
+         for Motor in Motor_Name loop
+            if Pin_To_Block_Start (Motor) then
+               Motor_Pos (Motor) := Stationary_Pos (Motor);
+            end if;
+         end loop;
+
+         Setup_Loop_Move_Callback (Active_Planner.Flush_Resetting_Data (Block));
+         Enqueue_Command
+           (Pos             => Pos,
+            Motor_Pos       => Motor_Pos,
+            Index           => Next_Index,
+            Safe_Stop_After => Safe_Stop_After,
+            Vel_Ratio       => Vel_Ratio);
+         Commands.Current_Command_Index := Next_Index;
+         Commands.Last_Queued_Position := Pos;
+      end Queue_Loop_Command;
    begin
       Reset_Requested := False;
       Commands.Last_Queued_Position := Active_Planner.Block_Start_Pos (Block);
@@ -119,8 +175,6 @@ package body Prunt.Step_Generator.Block_Executor is
          if Block.N_Corners /= 2 then
             raise Constraint_Error with "Homing move must have exactly 2 corners.";
          end if;
-
-         Homing_Move_When := This_Block_Kind;
       end if;
 
       if Use_Input_Shapers then
@@ -157,7 +211,7 @@ package body Prunt.Step_Generator.Block_Executor is
             loop
                case Pausing_State is
                   when Running_Kind  =>
-                     if Pause_Requested and then Homing_Move_When = Not_Pending_Kind then
+                     if Pause_Requested and then not Active_Planner.Is_Homing_Move (Block) then
                         Pausing_State := Pausing_Kind;
                      end if;
 
@@ -192,14 +246,12 @@ package body Prunt.Step_Generator.Block_Executor is
                begin
                   if Current_Time <= Segment_Time then
                      declare
-                        Is_Past_Accel_Part : Boolean;
-                        Unshaped_Pos       : constant Position :=
-                          Active_Planner.Segment_Pos_At_Time
-                            (Block, Finishing_Corner, Current_Time, Is_Past_Accel_Part);
-                        Shaped_Pos         : Position := Unshaped_Pos;
-                        Vel_Ratio          : constant Dimensionless :=
+                        Unshaped_Pos : constant Position :=
+                          Active_Planner.Segment_Pos_At_Time (Block, Finishing_Corner, Current_Time);
+                        Shaped_Pos   : Position := Unshaped_Pos;
+                        Vel_Ratio    : constant Dimensionless :=
                           Active_Planner.Segment_Vel_Ratio_At_Time (Block, Finishing_Corner, Current_Time);
-                        At_Stop            : constant Boolean :=
+                        At_Stop      : constant Boolean :=
                           Pause_Stopped
                           or else (Finishing_Corner = Block.N_Corners and then Current_Time >= Segment_Time);
                      begin
@@ -214,11 +266,8 @@ package body Prunt.Step_Generator.Block_Executor is
                                   (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Shapers));
                            begin
                               for J in 0 .. Extra_Loops_Required loop
-                                 Queue_Command
-                                   (State           => Commands,
-                                    Pos             => Shaped_Pos,
-                                    Map             => Map,
-                                    Loop_Until_Hit  => False,
+                                 Queue_Block_Command
+                                   (Pos             => Shaped_Pos,
                                     Safe_Stop_After => J = Extra_Loops_Required,
                                     Vel_Ratio       => Vel_Ratio,
                                     Catch_Up_Axes   => Catch_Up_Axes);
@@ -227,33 +276,20 @@ package body Prunt.Step_Generator.Block_Executor is
                               end loop;
                            end;
                         else
-                           if Homing_Move_When = This_Move_Kind then
-                              Loop_Move_Offset := Shaped_Pos - Commands.Last_Queued_Position;
-                              Loop_Move_Command_Index := Commands.Current_Command_Index + 1;
+                           if Active_Planner.Is_Homing_Move (Block)
+                             and then not Has_Loop_Move
+                             and then Current_Time >= Active_Planner.Loop_Move_Minimum_Time (Block)
+                           then
+                              Has_Loop_Move := True;
+                              Queue_Loop_Command
+                                (Pos => Shaped_Pos, Safe_Stop_After => At_Stop, Vel_Ratio => Vel_Ratio);
+                           else
+                              Queue_Block_Command
+                                (Pos             => Shaped_Pos,
+                                 Safe_Stop_After => At_Stop,
+                                 Vel_Ratio       => Vel_Ratio,
+                                 Catch_Up_Axes   => Catch_Up_Axes);
                            end if;
-
-                           Queue_Command
-                             (State           => Commands,
-                              Pos             => Shaped_Pos,
-                              Map             => Map,
-                              Loop_Until_Hit  => Homing_Move_When = This_Move_Kind,
-                              Safe_Stop_After => At_Stop,
-                              Vel_Ratio       => Vel_Ratio,
-                              Catch_Up_Axes   => Catch_Up_Axes);
-
-                           case Homing_Move_When is
-                              when This_Block_Kind  =>
-                                 if Is_Past_Accel_Part then
-                                    Homing_Move_When := This_Move_Kind; --  Next loop iteration, not this one.
-
-                                 end if;
-
-                              when Not_Pending_Kind =>
-                                 null;
-
-                              when This_Move_Kind   =>
-                                 Homing_Move_When := Not_Pending_Kind;
-                           end case;
                         end if;
 
                         if Pause_Stopped then
@@ -265,12 +301,6 @@ package body Prunt.Step_Generator.Block_Executor is
                            Pausing_State := Resuming_Kind;
                         end if;
                      end;
-                  end if;
-
-                  if Homing_Move_When /= Not_Pending_Kind
-                    and then Current_Time >= Active_Planner.Segment_Time (Block, Finishing_Corner)
-                  then
-                     raise Constraint_Error with "Homing move queued but end of block reached before execution.";
                   end if;
 
                   if Current_Time /= Segment_Time and then not Pause_Stopped then
@@ -295,38 +325,18 @@ package body Prunt.Step_Generator.Block_Executor is
          end;
       end loop;
 
-      declare
-         Loop_Move_Cycles : Dimensionless := 0.0;
-      begin
-         if Loop_Move_Command_Index /= 0 then
-            loop
-               select
-                  Loop_Cycle_Reporter.Wait (Loop_Move_Command_Index, Loop_Move_Cycles);
-                  exit;
-               or
-                  delay 3.0;
-               end select;
+      if Active_Planner.Is_Homing_Move (Block) and then not Has_Loop_Move then
+         raise Constraint_Error with "Homing block ended before its loop command was emitted.";
+      end if;
 
-               delay 0.1;
+      if Has_Loop_Move then
+         Wait_Until_Idle (Commands.Current_Command_Index);
+      end if;
 
-               Check_Reset (Reset_Requested);
-               if Reset_Requested then
-                  return;
-               end if;
-            end loop;
-         end if;
-
-         Finish_Block_Callback
-           (Resetting_Data       => Active_Planner.Flush_Resetting_Data (Block),
-            Next_Block_Pos       => To_Motor_Position (Active_Planner.Next_Block_Pos (Block), Map),
-            First_Accel_Distance =>
-              Length'
-                (if Block.N_Corners < 2
-                 then Zero_Length
-                 else Active_Planner.Segment_Accel_Distance (Block, Active_Planner.Finishing_Corners_Index'First)),
-            Last_Command_Index   => Commands.Current_Command_Index,
-            Loop_Move_Offset     => [for A in Axis_Name => Loop_Move_Offset (A) * Loop_Move_Cycles]);
-      end;
+      Finish_Block_Callback
+        (Resetting_Data     => Active_Planner.Flush_Resetting_Data (Block),
+         Next_Block_Pos     => Transform_To_Motor_Position (Active_Planner.Next_Block_Pos (Block), Transform),
+         Last_Command_Index => Commands.Current_Command_Index);
 
    end Execute_Block;
 

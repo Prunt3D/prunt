@@ -184,23 +184,12 @@ package body Prunt.Step_Generator is
       return Last_Executed_Primary_Corner_ID;
    end Get_Last_Executed_Primary_Corner_ID;
 
-   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position is
-      Ret : Motor_Position := [others => 0.0];
-   begin
-      for M in Motor_Name loop
-         for A in Axis_Name loop
-            Ret (M) := Ret (M) + Pos (A) * Map (A, M);
-         end loop;
-      end loop;
-
-      return Ret;
-   end To_Motor_Position;
-
    function Command_Fractions
-     (Start_Pos, Target_Pos : Position; Map : Motor_Pos_Map; Catch_Up_Axes : Catch_Up_Axis_Set) return Axis_Fractions
+     (Start_Pos, Target_Pos : Position; Transform : Kinematic_Transform; Catch_Up_Axes : Catch_Up_Axis_Set)
+      return Axis_Fractions
    is
-      Start_Motor_Pos  : constant Motor_Position := To_Motor_Position (Start_Pos, Map);
-      Target_Motor_Pos : constant Motor_Position := To_Motor_Position (Target_Pos, Map);
+      Start_Motor_Pos  : constant Motor_Position := Transform_To_Motor_Position (Start_Pos, Transform);
+      Target_Motor_Pos : constant Motor_Position := Transform_To_Motor_Position (Target_Pos, Transform);
       Result           : Axis_Fractions := [others => 1.0];
    begin
       for Motor in Motor_Name loop
@@ -212,7 +201,7 @@ package body Prunt.Step_Generator is
             Has_Catch_Up_Axis : Boolean := False;
          begin
             for Axis in Axis_Name loop
-               if Map (Axis, Motor) /= 0.0 / mm then
+               if Transform_Motor_Affects_Axis (Transform, Motor, Axis) then
                   if Catch_Up_Axes (Axis) then
                      Catch_Up_Axis := Axis;
                      Has_Catch_Up_Axis := True;
@@ -236,25 +225,32 @@ package body Prunt.Step_Generator is
    end Command_Fractions;
 
    procedure Queue_Command
-     (State           : in out Command_State;
-      Pos             : Position;
-      Map             : Motor_Pos_Map;
-      Loop_Until_Hit  : Boolean;
-      Safe_Stop_After : Boolean;
-      Vel_Ratio       : Dimensionless;
-      Catch_Up_Axes   : Catch_Up_Axis_Set := [others => False])
+     (State              : in out Command_State;
+      Pos                : Position;
+      Transform          : Kinematic_Transform;
+      Safe_Stop_After    : Boolean;
+      Vel_Ratio          : Dimensionless;
+      Catch_Up_Axes      : Catch_Up_Axis_Set;
+      Pin_To_Block_Start : Motor_Pin_Selection;
+      Stationary_Pos     : Motor_Position)
    is
       procedure Emit (Emit_Pos : Position; Emit_Safe_Stop_After : Boolean);
 
       procedure Emit (Emit_Pos : Position; Emit_Safe_Stop_After : Boolean) is
+         Motor_Pos : Motor_Position := Transform_To_Motor_Position (Emit_Pos, Transform);
       begin
+         for Motor in Motor_Name loop
+            if Pin_To_Block_Start (Motor) then
+               Motor_Pos (Motor) := Stationary_Pos (Motor);
+            end if;
+         end loop;
+
          State.Current_Command_Index := @ + 1;
          State.Last_Queued_Position := Emit_Pos;
          Enqueue_Command
            (Pos             => Emit_Pos,
-            Motor_Pos       => To_Motor_Position (Emit_Pos, Map),
+            Motor_Pos       => Motor_Pos,
             Index           => State.Current_Command_Index,
-            Loop_Until_Hit  => Loop_Until_Hit,
             Safe_Stop_After => Emit_Safe_Stop_After,
             Vel_Ratio       => Vel_Ratio);
       end Emit;
@@ -267,7 +263,7 @@ package body Prunt.Step_Generator is
               Command_Fractions
                 (Start_Pos     => State.Last_Queued_Position,
                  Target_Pos    => Target_Pos,
-                 Map           => Map,
+                 Transform     => Transform,
                  Catch_Up_Axes => Catch_Up_Axes);
             Complete  : Boolean := True;
          begin
@@ -318,8 +314,8 @@ package body Prunt.Step_Generator is
    end No_Pause_Handler;
 
    task body Runner is
-      Commands : Command_State;
-      Pos_Map  : Motor_Pos_Map;
+      Commands         : Command_State;
+      Active_Transform : Kinematic_Transform;
 
       type Block_Wrapper is record
          Block : aliased Execution_Block;
@@ -351,6 +347,12 @@ package body Prunt.Step_Generator is
 
       procedure Ignore_Corner_ID_Publication (Corner_ID : Planner_Corner_ID);
 
+      procedure Reject_Pause_Loop_Move_Setup (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type);
+
+      function No_Pause_Motor_Is_Pinned
+        (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type; Transform : Kinematic_Transform; Motor : Motor_Name)
+         return Boolean;
+
       procedure Check_Reset (Reset_Requested : out Boolean) is
       begin
          Reset_Requested := Reset_Control.Requested;
@@ -378,27 +380,43 @@ package body Prunt.Step_Generator is
          null;
       end Ignore_Corner_ID_Publication;
 
+      procedure Reject_Pause_Loop_Move_Setup
+        (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type with Unreferenced) is
+      begin
+         raise Program_Error with "Homing moves are not allowed in pause plans.";
+      end Reject_Pause_Loop_Move_Setup;
+
+      function No_Pause_Motor_Is_Pinned
+        (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type with Unreferenced;
+         Transform      : Kinematic_Transform with Unreferenced;
+         Motor          : Motor_Name with Unreferenced) return Boolean
+      is (False);
+
       package Primary_Block_Executor is new
         Block_Executor
-          (Active_Planner        => Planner,
-           Allow_Homing          => True,
-           Check_Reset           => Check_Reset,
-           Start_Block_Callback  => Start_Planner_Block,
-           Start_Corner_Callback => Start_Corner,
-           Finish_Block_Callback => Finish_Planner_Block,
-           Publish_Corner_ID     => Publish_Primary_Corner_ID,
-           Pause_Requested       => Primary_Pause_Requested,
-           Handle_Pause          => Run_Pause_Cycle);
+          (Active_Planner                    => Planner,
+           Allow_Homing                      => True,
+           Check_Reset                       => Check_Reset,
+           Start_Block_Callback              => Start_Planner_Block,
+           Setup_Loop_Move_Callback          => Setup_Loop_Move,
+           Pin_Motor_To_Block_Start_Callback => Pin_Motor_To_Block_Start,
+           Start_Corner_Callback             => Start_Corner,
+           Finish_Block_Callback             => Finish_Planner_Block,
+           Publish_Corner_ID                 => Publish_Primary_Corner_ID,
+           Pause_Requested                   => Primary_Pause_Requested,
+           Handle_Pause                      => Run_Pause_Cycle);
 
       package Pause_Block_Executor is new
         Block_Executor
-          (Active_Planner        => Pause_Planner,
-           Allow_Homing          => False,
-           Check_Reset           => Check_Reset,
-           Start_Block_Callback  => Start_Pause_Planner_Block,
-           Start_Corner_Callback => Start_Pause_Corner,
-           Finish_Block_Callback => Finish_Pause_Planner_Block,
-           Publish_Corner_ID     => Ignore_Corner_ID_Publication);
+          (Active_Planner                    => Pause_Planner,
+           Allow_Homing                      => False,
+           Check_Reset                       => Check_Reset,
+           Start_Block_Callback              => Start_Pause_Planner_Block,
+           Setup_Loop_Move_Callback          => Reject_Pause_Loop_Move_Setup,
+           Pin_Motor_To_Block_Start_Callback => No_Pause_Motor_Is_Pinned,
+           Start_Corner_Callback             => Start_Pause_Corner,
+           Finish_Block_Callback             => Finish_Pause_Planner_Block,
+           Publish_Corner_ID                 => Ignore_Corner_ID_Publication);
 
       procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean) is
          Stable_Pause_Position : constant Position := Pause_Position;
@@ -433,7 +451,7 @@ package body Prunt.Step_Generator is
                if Reset_Requested then
                   return;
                end if;
-               Pause_Block_Executor.Execute_Block (Pause_Block'Access, Pos_Map, Commands, Reset_Requested);
+               Pause_Block_Executor.Execute_Block (Pause_Block'Access, Active_Transform, Commands, Reset_Requested);
                if Reset_Requested then
                   return;
                end if;
@@ -506,8 +524,8 @@ package body Prunt.Step_Generator is
          Reset_Control.Acknowledge;
          Commands.Last_Queued_Position := [others => Zero_Length];
 
-         accept Setup (Map : Motor_Pos_Map) do
-            Pos_Map := Map;
+         accept Setup (Transform : Kinematic_Transform) do
+            Active_Transform := Transform;
             Reset_Control.Mark_Running;
          end Setup;
 
@@ -518,7 +536,7 @@ package body Prunt.Step_Generator is
                Primary_Block_Executor.Dequeue_Block (Block, Commands, Reset_Requested);
                exit Main when Reset_Requested;
 
-               Primary_Block_Executor.Execute_Block (Block'Access, Pos_Map, Commands, Reset_Requested);
+               Primary_Block_Executor.Execute_Block (Block'Access, Active_Transform, Commands, Reset_Requested);
                exit Main when Reset_Requested;
             end;
          end loop Main;

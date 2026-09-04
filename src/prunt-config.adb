@@ -19,7 +19,6 @@
 
 with Ada.Exceptions;
 with Ada.Strings.Fixed;
-with Ada.Tags;
 with Prunt.Mockable.Directories;
 with Prunt.Mockable.Text_IO;
 with Prunt.Mockable.Text_IO.Unbounded_IO;
@@ -466,12 +465,262 @@ package body Prunt.Config is
    end Create_Default_Module_Config;
 
    function Generate_Schemas_String (Schemas : Config_Schema_Maps.Map) return Virtual_String is
+      use type Ada.Tags.Tag;
+
+      function Controller_Is_Variant (Condition : Config_Presentation_Condition) return Boolean;
+
+      function Resolve_Controller_Owner (Condition : Config_Presentation_Condition) return Virtual_String;
+
+      procedure Validate_Presentation_Conditions;
+
+      function Controller_Is_Variant (Condition : Config_Presentation_Condition) return Boolean is
+         function Find
+           (Property : Config_Property_Parameters'Class; Path : Config_Data_Paths.Vector; Next_Index : Positive)
+            return Boolean;
+
+         function Find
+           (Property : Config_Property_Parameters'Class; Path : Config_Data_Paths.Vector; Next_Index : Positive)
+            return Boolean is
+         begin
+            if Next_Index > Path.Last_Index then
+               return Property in Config_Property_Parameters_Variant;
+            elsif Property in Config_Property_Parameters_Sequence then
+               return
+                 Find
+                   (Config_Property_Parameters_Sequence (Property).Children (Path (Next_Index)), Path, Next_Index + 1);
+            elsif Property in Config_Property_Parameters_Variant
+              and then Path (Next_Index) = "Children"
+              and then Next_Index < Path.Last_Index
+            then
+               return
+                 Find
+                   (Config_Property_Parameters_Variant (Property).Children (Path (Next_Index + 1)),
+                    Path,
+                    Next_Index + 2);
+            else
+               raise Program_Error with "Validated dynamic presentation controller path is malformed.";
+            end if;
+         end Find;
+      begin
+         for Module_Cursor in Schemas.Iterate loop
+            if Config_Schema_Maps.Element (Module_Cursor).Module_Instance_Tag = Condition.Controller_Tag then
+               return
+                 Find
+                   (Config_Schema_Maps.Element (Module_Cursor).Top_Level_Items
+                      (Condition.Controller_Path.Path.First_Element),
+                    Condition.Controller_Path.Path,
+                    Condition.Controller_Path.Path.First_Index + 1);
+            end if;
+         end loop;
+
+         raise Program_Error with "Validated dynamic presentation controller module is missing.";
+      end Controller_Is_Variant;
+
+      function Resolve_Controller_Owner (Condition : Config_Presentation_Condition) return Virtual_String is
+      begin
+         for Module_Cursor in Schemas.Iterate loop
+            if Config_Schema_Maps.Element (Module_Cursor).Module_Instance_Tag = Condition.Controller_Tag then
+               return Config_Schema_Maps.Key (Module_Cursor);
+            end if;
+         end loop;
+
+         raise Program_Error with "Validated dynamic presentation controller module is missing.";
+      end Resolve_Controller_Owner;
+
+      procedure Validate_Presentation_Conditions is
+         function Validate_Controller
+           (Property : Config_Property_Parameters'Class; Values : Discrete_String_Sets.Set) return Boolean;
+
+         function Match_Controller
+           (Items      : Config_Property_Maps.Map;
+            Path       : Config_Data_Paths.Vector;
+            Path_Index : Positive;
+            Values     : Discrete_String_Sets.Set) return Boolean;
+
+         procedure Validate_Condition (Condition : Config_Presentation_Condition);
+         procedure Validate_Children (Children : Config_Property_Maps.Map);
+         procedure Validate_Property (Property : Config_Property_Parameters'Class);
+
+         function Validate_Controller
+           (Property : Config_Property_Parameters'Class; Values : Discrete_String_Sets.Set) return Boolean is
+         begin
+            if Values.Is_Empty then
+               raise Constraint_Error with "Dynamic config presentation values must not be empty.";
+            elsif Property in Config_Property_Parameters_Discrete then
+               for Value of Values loop
+                  if not Config_Property_Parameters_Discrete (Property).Options.Contains (Value) then
+                     raise Constraint_Error
+                       with
+                         "Dynamic config presentation value is not an option of its controller (Value: "
+                         & Conversions.To_UTF_8_String (Value)
+                         & ").";
+                  end if;
+               end loop;
+            elsif Property in Config_Property_Parameters_Variant then
+               for Value of Values loop
+                  if not Config_Property_Parameters_Variant (Property).Children.Contains (Value) then
+                     raise Constraint_Error
+                       with
+                         "Dynamic config presentation value is not a variant of its controller (Value: "
+                         & Conversions.To_UTF_8_String (Value)
+                         & ").";
+                  end if;
+               end loop;
+            else
+               raise Constraint_Error with "Dynamic config presentation controller must be discrete or a variant.";
+            end if;
+
+            return True;
+         end Validate_Controller;
+
+         function Match_Controller
+           (Items      : Config_Property_Maps.Map;
+            Path       : Config_Data_Paths.Vector;
+            Path_Index : Positive;
+            Values     : Discrete_String_Sets.Set) return Boolean
+         is
+            Name : constant Virtual_String := Path (Path_Index);
+
+            function Match_Property
+              (Property : Config_Property_Parameters'Class; Next_Index : Positive) return Boolean;
+
+            function Match_Property (Property : Config_Property_Parameters'Class; Next_Index : Positive) return Boolean
+            is
+            begin
+               if Next_Index > Path.Last_Index then
+                  return Validate_Controller (Property, Values);
+               elsif Property in Config_Property_Parameters_Sequence then
+                  declare
+                     Children   : Config_Property_Maps.Map renames
+                       Config_Property_Parameters_Sequence (Property).Children;
+                     Child_Name : constant Virtual_String := Path (Next_Index);
+                  begin
+                     return
+                       Children.Contains (Child_Name) and then Match_Property (Children (Child_Name), Next_Index + 1);
+                  end;
+               elsif Property in Config_Property_Parameters_Variant
+                 and then Path (Next_Index) = "Children"
+                 and then Next_Index < Path.Last_Index
+               then
+                  declare
+                     Children   : Config_Property_Maps.Map renames
+                       Config_Property_Parameters_Variant (Property).Children;
+                     Child_Name : constant Virtual_String := Path (Next_Index + 1);
+                  begin
+                     return
+                       Children.Contains (Child_Name) and then Match_Property (Children (Child_Name), Next_Index + 2);
+                  end;
+               else
+                  return False;
+               end if;
+            end Match_Property;
+         begin
+            if not Items.Contains (Name) then
+               return False;
+            end if;
+
+            return Match_Property (Items (Name), Path_Index + 1);
+         end Match_Controller;
+
+         procedure Validate_Condition (Condition : Config_Presentation_Condition) is
+            Module_Matches     : Natural := 0;
+            Controller_Matched : Boolean := False;
+         begin
+            if Condition.Controller_Tag = Ada.Tags.No_Tag then
+               raise Constraint_Error with "Dynamic config presentation controller tag must not be No_Tag.";
+            elsif Condition.Controller_Path.Path.Is_Empty then
+               raise Constraint_Error with "Dynamic config presentation controller path must not be empty.";
+            end if;
+
+            for Module_Cursor in Schemas.Iterate loop
+               if Config_Schema_Maps.Element (Module_Cursor).Module_Instance_Tag = Condition.Controller_Tag then
+                  Module_Matches := Module_Matches + 1;
+                  Controller_Matched :=
+                    Match_Controller
+                      (Config_Schema_Maps.Element (Module_Cursor).Top_Level_Items,
+                       Condition.Controller_Path.Path,
+                       Condition.Controller_Path.Path.First_Index,
+                       Condition.Values);
+               end if;
+            end loop;
+
+            if Module_Matches = 0 then
+               raise Constraint_Error
+                 with
+                   "Dynamic config presentation controller module does not exist (Path: "
+                   & Condition.Controller_Path.Path'Image
+                   & ").";
+            elsif Module_Matches > 1 then
+               raise Constraint_Error
+                 with
+                   "Dynamic config presentation controller module tag is ambiguous (Path: "
+                   & Condition.Controller_Path.Path'Image
+                   & ").";
+            elsif not Controller_Matched then
+               raise Constraint_Error
+                 with
+                   "Dynamic config presentation controller does not exist (Path: "
+                   & Condition.Controller_Path.Path'Image
+                   & ").";
+            end if;
+         end Validate_Condition;
+
+         procedure Validate_Children (Children : Config_Property_Maps.Map) is
+         begin
+            for Child in Children.Iterate loop
+               Validate_Property (Config_Property_Maps.Element (Child));
+            end loop;
+         end Validate_Children;
+
+         procedure Validate_Property (Property : Config_Property_Parameters'Class) is
+         begin
+            if Property.Present_When.Controller_Tag /= Ada.Tags.No_Tag
+              or else not Property.Present_When.Controller_Path.Path.Is_Empty
+              or else not Property.Present_When.Values.Is_Empty
+            then
+               Validate_Condition (Property.Present_When);
+            end if;
+
+            if Property in Config_Property_Parameters_Sequence then
+               Validate_Children (Config_Property_Parameters_Sequence (Property).Children);
+            elsif Property in Config_Property_Parameters_Variant then
+               Validate_Children (Config_Property_Parameters_Variant (Property).Children);
+            end if;
+         end Validate_Property;
+      begin
+         for Module_Cursor in Schemas.Iterate loop
+            Validate_Children (Config_Schema_Maps.Element (Module_Cursor).Top_Level_Items);
+         end loop;
+      end Validate_Presentation_Conditions;
+
       function Outer_Generate (Property : Config_Property_Parameters'Class) return JSON_Value;
 
       function Outer_Generate (Property : Config_Property_Parameters'Class) return JSON_Value is
          Result : constant JSON_Value := Create_Object;
       begin
          Result.Set_Field ("Description", Property.Description);
+
+         if Property.Present_When.Controller_Tag /= Ada.Tags.No_Tag then
+            declare
+               Parameters      : constant JSON_Value := Create_Object;
+               Controller_Path : JSON_Array := Empty_Array;
+               Values          : JSON_Array := Empty_Array;
+            begin
+               for Segment of Property.Present_When.Controller_Path.Path loop
+                  Controller_Path.Append (Create (Segment));
+               end loop;
+               if Controller_Is_Variant (Property.Present_When) then
+                  Controller_Path.Append (Create ("Selected"));
+               end if;
+               for Value of Property.Present_When.Values loop
+                  Values.Append (Create (Value));
+               end loop;
+               Parameters.Set_Field ("Owner", Resolve_Controller_Owner (Property.Present_When));
+               Parameters.Set_Field ("Path", Controller_Path);
+               Parameters.Set_Field ("Values", Values);
+               Result.Set_Field ("Present_When", Parameters);
+            end;
+         end if;
 
          if Property in Config_Property_Parameters_Boolean then
             Result.Set_Field ("Kind", "Boolean");
@@ -535,6 +784,8 @@ package body Prunt.Config is
 
       Result : constant JSON_Value := Create_Object;
    begin
+      Validate_Presentation_Conditions;
+
       Result.Set_Field ("Prunt config version", Create (Long_Long_Integer'(1)));
       Result.Set_Field ("Config", Create_Object);
 
@@ -1742,7 +1993,7 @@ package body Prunt.Config is
       return Data.Module;
    end Module_Name;
 
-   function Resolve_Config_Path (Data : Config_Data; Path : Config_Path'Class) return Config_Data_Paths.Vector is
+   function Resolve_Config_Path (Data : Config_Data; Path : Config_Path) return Config_Data_Paths.Vector is
       Ignored : JSON_Value;
    begin
       for Requirement of Path.Required_Selections loop

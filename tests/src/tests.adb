@@ -34,6 +34,7 @@ with Prunt.Gcode_Queues.Test;
 with Prunt.Generic_Lock.Test;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test;
 with Prunt.Integration_Config_Overlays.Test;
+with Prunt.Kinematic_Transforms_Test;
 with Prunt.Logger;
 with Prunt.Logger.Test_Control;
 with Prunt.Motion_Planner.Corner_Transitions.Test;
@@ -61,8 +62,8 @@ procedure Tests is
    package Machine_Idle_Timeout_Test_Logger_Control is new Machine_Idle_Timeout_Test_Logger.Test_Control;
    package Machine_Idle_Timeout_Test_Default_Modules is new
      Prunt.Default_Modules
-       (My_Modules => Machine_Idle_Timeout_Test_Controller_Types.My_Modules,
-        My_Logger  => Machine_Idle_Timeout_Test_Logger);
+       (My_Controller_Generic_Types => Machine_Idle_Timeout_Test_Controller_Types,
+        My_Logger                   => Machine_Idle_Timeout_Test_Logger);
    package Machine_Idle_Timeout_Test_Config_Saving is new Machine_Idle_Timeout_Test_Default_Modules.Config_Saving;
    Timeout_Report_Count : Natural := 0 with Atomic, Volatile;
 
@@ -136,6 +137,7 @@ begin
    Trendy_Test.Register (Prunt.Gcode_Queues.Test.All_Tests);
    Trendy_Test.Register (Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test.All_Tests);
    Trendy_Test.Register (Prunt.Integration_Config_Overlays.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Kinematic_Transforms_Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Corner_Transitions.Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Stereographic_Curves.Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Planner_Primitive_Jet_Test.All_Tests);

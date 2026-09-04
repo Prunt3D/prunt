@@ -25,16 +25,17 @@ package Prunt_Simulator_Machine is
 
    subtype Queued_Command is Prunt_Simulator_Types.Generic_Types.Queued_Command;
    subtype Motor_Position is Prunt_Simulator_Types.Generic_Types.Motor_Position;
+   subtype Loop_Move_Setup is Prunt_Simulator_Types.Generic_Types.Loop_Move_Setup;
 
    type Last_Command_Reporter is access procedure (Index : Command_Index);
-   type Loop_Cycles_Reporter is access procedure (Index : Command_Index; Cycles : Dimensionless);
    type Error_Reporter is access procedure
      (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean);
 
    procedure Set_Reporters
-     (Last_Command : Last_Command_Reporter; Loop_Cycles : Loop_Cycles_Reporter; Error : Error_Reporter);
+     (Last_Command : Last_Command_Reporter; Error : Error_Reporter);
 
    procedure Enqueue_Command (Command : Queued_Command);
+   procedure Setup_For_Loop_Move (Setup : Loop_Move_Setup);
    procedure Reset_Position (Pos : Motor_Position);
    procedure Wait_Until_Idle (Last_Command_Index : Command_Index);
    procedure Reset_Hardware;

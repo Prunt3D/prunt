@@ -26,6 +26,8 @@ with VSS.Strings; use VSS.Strings;
 
 package Config_Types is
 
+   package String_Vectors is new Ada.Containers.Vectors (Positive, Virtual_String);
+
    type Unit_Data is record
       Conversion : Virtual_String;
       Display    : Virtual_String;
@@ -40,6 +42,8 @@ package Config_Types is
       --    [Annotate (Prunt_Config, Fixed_Kind, "`Fixed_Kind`"),]
       --    [Annotate (Prunt_Config, Options_Expr, "`Options_Expr`"),]
       --    [Annotate (Prunt_Config, Present_When, "`Present_When`"),]
+      --    [Annotate (Prunt_Config, Dynamic_Present_When, `Controller_Tag`, `Controller_Path`, "`Value`"
+      --      [, "`Value`" ...]),]
       --    [Annotate (Prunt_Config, Schema_Default_Expr, "`Schema_Default_Expr`"),]
       --    [Annotate (Prunt_Config, Unit, "`Conversion_Unit`" [, "`Display_Unit`"])];
       --  -- `Description`
@@ -53,7 +57,10 @@ package Config_Types is
       --  Options_Expr overrides the generated options expression for enum-backed discrete values.
       --
       --  Present_When conditionally includes the field in the generated schema and skips corresponding reader/setter
-      --  code when false.
+      --  code when false. Dynamic_Present_When always includes the field and attaches a UI presentation condition to
+      --  it. Controller_Tag identifies the module instance type supplying the controller, Controller_Path names a
+      --  parameterless function returning a typed Config_Path, and the remaining arguments are accepted controller
+      --  values.
       --
       --  Schema_Default_Expr overrides the generated schema default expression.
 
@@ -66,6 +73,9 @@ package Config_Types is
       Fixed_Kind          : Virtual_String;
       Options_Expr        : Virtual_String;
       Present_When        : Virtual_String;
+      Dynamic_Present_When_Tag    : Virtual_String;
+      Dynamic_Present_When_Path   : Virtual_String;
+      Dynamic_Present_When_Values : String_Vectors.Vector;
       Schema_Default_Expr : Virtual_String;
       Unit                : Unit_Data;
    end record;
@@ -194,7 +204,8 @@ package Config_Types is
       Unit : Unit_Data;
    end record;
 
-   type Config_Kind is (Record_Kind, Array_Kind, Enum_Kind, Boolean_Kind, String_Kind, Integer_Kind, Float_Kind, Ratio_Kind);
+   type Config_Kind is
+     (Record_Kind, Array_Kind, Enum_Kind, Boolean_Kind, String_Kind, Integer_Kind, Float_Kind, Ratio_Kind);
 
    type Config_Type (Kind : Config_Kind := Record_Kind) is record
       case Kind is

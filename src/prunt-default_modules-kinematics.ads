@@ -21,21 +21,40 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
-with Prunt.Controller_Generic_Types;
 with Prunt.Default_Modules.Config_Saving;
 with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Gcode_Arguments;
+with Prunt.Kinematic_Transforms;
 with Prunt.Motion_Planner;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
 generic
-   with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
-   --  We need to pass in the whole package rather than just `Motor_Name` so codegen can properly resolve the types.
    use My_Controller_Generic_Types;
+   with package Transforms is new Prunt.Kinematic_Transforms (Motor_Name, Motor_Position);
    with package Config_Saving_Module is new Default_Modules.Config_Saving;
-   with package Motor_Drivers_Module is new
-     Default_Modules.Motor_Drivers (My_Controller_Generic_Types => My_Controller_Generic_Types);
+   with package Motor_Drivers_Module is new Default_Modules.Motor_Drivers;
 package Prunt.Default_Modules.Kinematics is
+
+   type Delta_Tower_Motor_Array is array (Transforms.Delta_Tower_Name, Motor_Name) of Boolean;
+   --  Membership map from each logical tower to all of its physical drive motors.
+
+   type Motion_Planner_Configuration is record
+      Parameters : Motion_Planner.Kinematic_Parameters;
+      Transform  : Transforms.Kinematic_Transform := Transforms.Default_Transform;
+   end record;
+
+   type Kinematics_Homing_Kind is (Non_Delta_Kinematics, Linear_Delta_Kinematics);
+
+   type Kinematics_Homing_Configuration (Kind : Kinematics_Homing_Kind := Non_Delta_Kinematics) is record
+      case Kind is
+         when Non_Delta_Kinematics =>
+            null;
+
+         when Linear_Delta_Kinematics =>
+            Tower_Motors   : Delta_Tower_Motor_Array := [others => [others => False]];
+            Planner_Config : Motion_Planner_Configuration := (others => <>);
+      end case;
+   end record;
 
    type Module is new My_Modules.Module with null record;
 
@@ -43,16 +62,12 @@ package Prunt.Default_Modules.Kinematics is
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class;
    --  Return the configuration schema.
 
+   function Kinematics_Kind_Config_Path return Config.Config_Path;
+   --  Return the typed path of the configured kinematics-kind selector for presentation dependencies.
+
    overriding
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
    --  Return the supported G-code commands.
-
-   type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
-
-   type Motion_Planner_Configuration is record
-      Parameters         : Motion_Planner.Kinematic_Parameters;
-      Motors_To_Position : Motor_Position_Map := [others => [others => 0.0 / mm]];
-   end record;
 
    type Module_Instance_Interface is synchronized interface;
 
@@ -64,13 +79,21 @@ package Prunt.Default_Modules.Kinematics is
    function Axis_Is_Motor_Separable (This : Module_Instance_Interface; Axis : Axis_Name) return Boolean is abstract;
    --  Return whether Axis maps independently.
 
+   function Motor_Affects_Axis (This : Module_Instance_Interface; Motor : Motor_Name; Axis : Axis_Name) return Boolean
+   is abstract;
+   --  Return whether movement of Axis changes Motor's position.
+
+   function Get_Homing_Configuration (This : Module_Instance_Interface) return Kinematics_Homing_Configuration
+   is abstract;
+   --  Return the kinematics information required to configure and execute homing.
+
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
    overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
@@ -87,6 +110,8 @@ package Prunt.Default_Modules.Kinematics is
 
 private
 
+   use Transforms;
+
    type User_Config_Cartesian_Axis_Name is (None, X_Axis, Y_Axis, Z_Axis, E_Axis)
    with Annotate => (Prunt_Config, User_Config);
 
@@ -99,7 +124,41 @@ private
    type User_Config_Kinematics_Core_XY is array (Motor_Name) of User_Config_Core_XY_Axis_Name
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Kinematics_Kind is (Cartesian, Core_XY) with Annotate => (Prunt_Config, User_Config);
+   type User_Config_Delta_Axis_Name is (None, Tower_A, Tower_B, Tower_C, E_Axis)
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Kinematics_Delta_Motors is array (Motor_Name) of User_Config_Delta_Axis_Name
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Kinematics_Delta_Tower is record
+      Arm_Length : Length range 0.000_001 * mm .. 1.0E100 * mm := 250.0 * mm;
+      --  Length of the diagonal rod connecting this tower's carriage to the effector.
+
+      Angle : Standard.Prunt.Angle range -360.0 * deg .. 360.0 * deg := 0.0 * deg;
+      --  Counter-clockwise angle of this tower around the build-area centre. Zero degrees points along positive X.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Kinematics_Delta is record
+      Motors : User_Config_Kinematics_Delta_Motors := [others => None];
+      --  Assign each enabled motor to a tower or to the extruder axis. Multiple motors may drive the same tower or
+      --  extruder axis.
+
+      Delta_Radius : Length range 0.0 * mm .. 1.0E100 * mm := 100.0 * mm;
+      --  Horizontal distance from the centre of the machine to each tower carriage axis.
+
+      Tower_A : User_Config_Kinematics_Delta_Tower := (Arm_Length => 1.0 * mm, Angle => 210.0 * deg);
+      --  Geometry for the front-left tower.
+
+      Tower_B : User_Config_Kinematics_Delta_Tower := (Arm_Length => 1.0 * mm, Angle => 330.0 * deg);
+      --  Geometry for the front-right tower.
+
+      Tower_C : User_Config_Kinematics_Delta_Tower := (Arm_Length => 1.0 * mm, Angle => 90.0 * deg);
+      --  Geometry for the rear tower.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Kinematics_Kind is (Cartesian, Core_XY, Linear_Delta) with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Kinematics_Variant (Kind : User_Config_Kinematics_Kind := Cartesian) is record
       --  This setting defines the kinematic system of your machine. The kinematics determine how the movement of
@@ -118,11 +177,50 @@ private
             --  (E for extruder and Z). If a motor is not used, assign it to `None`.
             --
             --  TODO: Put motion equations here and details on fixing direction.
+
+         when Linear_Delta =>
+            Linear_Delta : User_Config_Kinematics_Delta := (others => <>);
+            --  A classic three-tower linear delta.
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Position_Limits_Array is array (Axis_Name) of Length range -1.0E100 * mm .. 1.0E100 * mm
+   type User_Config_Workspace_Kind is (Rectangular, Circular) with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Workspace_Bounds (Kind : User_Config_Workspace_Kind := Rectangular) is record
+      --  Bounds of the commanded X/Y/Z/E coordinate space. The selected shape applies to X/Y only.
+
+      Lower_Z : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Minimum allowed Z coordinate.
+
+      Upper_Z : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+      --  Maximum allowed Z coordinate.
+
+      Lower_E : Length range -1.0E100 * mm .. 1.0E100 * mm := -1.0E100 * mm;
+      --  Minimum allowed E coordinate. The default of -1.0E100 effectively disables the lower extruder position limit.
+
+      Upper_E : Length range -1.0E100 * mm .. 1.0E100 * mm := 1.0E100 * mm;
+      --  Maximum allowed E coordinate. The default of 1.0E100 effectively disables the upper extruder position limit.
+
+      case Kind is
+         when Rectangular =>
+            Lower_X : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Minimum allowed X coordinate.
+
+            Upper_X : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Maximum allowed X coordinate.
+
+            Lower_Y : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Minimum allowed Y coordinate.
+
+            Upper_Y : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Maximum allowed Y coordinate.
+
+         when Circular =>
+            Radius : Length range 0.0 * mm .. 1.0E100 * mm := 0.0 * mm;
+            --  Maximum radial distance from X=0, Y=0.
+      end case;
+   end record
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axial_Deviation_Limits_Array is array (Axis_Name) of Length range 0.0 * mm .. 1.0E100 * mm
@@ -266,13 +364,8 @@ private
    type User_Config_Kinematics is record
       --  This section contains settings related to the machine's movement, geometry, and motion planning.
 
-      Lower_Position_Limit : User_Config_Position_Limits_Array := [others => 0.0 * mm];
-      --  This defines the minimum position that each axis can travel to. To effectively disable the lower limit for an
-      --  axis, you can set it to `-1E100`. The E axis should almost always be set to `-1E100`.
-
-      Upper_Position_Limit : User_Config_Position_Limits_Array := [others => 0.0 * mm];
-      --  This defines the maximum position that each axis can travel to. To effectively disable the upper limit for
-      --  an axis, you can set it to `1E100`. The E axis should almost always be set to `1E100`.
+      Workspace_Bounds : User_Config_Workspace_Bounds := (others => <>);
+      --  Allowed commanded coordinate space.
 
       Ignore_E_In_XYZE : Boolean := True;
       --  This setting changes how the feedrate is applied when both the extruder (E) and other axes (X, Y, Z) are
@@ -342,6 +435,21 @@ private
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
    --  Store the configuration in Data.
+
+   function Planner_Workspace_Bounds (Config : User_Config_Workspace_Bounds) return Motion_Planner.Workspace_Bounds;
+   --  Convert the configured workspace bounds to the representation used by the motion planner.
+
+   function Hypot (X, Y : Length) return Length;
+
+   procedure Workspace_Tower_Extents
+     (Workspace      : User_Config_Workspace_Bounds;
+      Tower_X        : Length;
+      Tower_Y        : Length;
+      Maximum_DX     : out Length;
+      Maximum_DY     : out Length;
+      Maximum_Radius : out Length);
+   --  Return the maximum horizontal component distances and radial distance from a delta tower to any point in the
+   --  configured workspace.
 
    function Build_Cornering_Parameters (Cornering : User_Config_Cornering) return Motion_Planner.Cornering_Parameters;
    --  Convert the selected user-config cornering branch to the corresponding planner parameters.
@@ -431,6 +539,10 @@ private
 
       overriding
       function Axis_Is_Motor_Separable (Axis : Axis_Name) return Boolean;
+      overriding
+      function Motor_Affects_Axis (Motor : Motor_Name; Axis : Axis_Name) return Boolean;
+      overriding
+      function Get_Homing_Configuration return Kinematics_Homing_Configuration;
 
       function Get_Config return User_Config;
    private
@@ -438,8 +550,5 @@ private
       Config_Data                       : Prunt.Config.Config_Data;
       Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
    end Module_Instance;
-
-   function Map_Axis_Is_Motor_Separable (Map : Motor_Position_Map; Axis : Axis_Name) return Boolean;
-   --  Return whether Axis is independently mapped.
 
 end Prunt.Default_Modules.Kinematics;

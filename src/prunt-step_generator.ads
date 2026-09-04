@@ -30,6 +30,23 @@ generic
 
    type Motor_Position is array (Motor_Name) of Dimensionless;
 
+   type Kinematic_Transform is private;
+
+   with procedure Setup_Loop_Move (Resetting_Data : Planner.Flush_Resetting_Data_Type);
+   --  Configure the hardware immediately before the repeated command is enqueued.
+
+   with
+     function Pin_Motor_To_Block_Start
+       (Resetting_Data : Planner.Flush_Resetting_Data_Type; Transform : Kinematic_Transform; Motor : Motor_Name)
+        return Boolean;
+   --  Return True when the step generator must override Motor's transformed positions and hold it at its block-start
+   --  position throughout the primary-planner block.
+
+   with function Transform_To_Motor_Position (Pos : Position; Transform : Kinematic_Transform) return Motor_Position;
+   with
+     function Transform_Motor_Affects_Axis
+       (Transform : Kinematic_Transform; Motor : Motor_Name; Axis : Axis_Name) return Boolean;
+
    type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
 
    Maximum_Deltas_Per_Command : Motor_Delta_Limits;
@@ -47,7 +64,6 @@ generic
        (Pos             : Position;
         Motor_Pos       : Motor_Position;
         Index           : Command_Index;
-        Loop_Until_Hit  : Boolean;
         Safe_Stop_After : Boolean;
         Vel_Ratio       : Dimensionless);
 
@@ -62,22 +78,15 @@ generic
 
    with
      procedure Finish_Planner_Block
-       (Resetting_Data       : Planner.Flush_Resetting_Data_Type;
-        Next_Block_Pos       : Motor_Position;
-        First_Accel_Distance : Length;
-        Last_Command_Index   : Command_Index;
-        Loop_Move_Offset     : Position_Offset);
+       (Resetting_Data     : Planner.Flush_Resetting_Data_Type;
+        Next_Block_Pos     : Motor_Position;
+        Last_Command_Index : Command_Index);
 
    with
      procedure Finish_Pause_Planner_Block
-       (Resetting_Data       : Pause_Planner.Flush_Resetting_Data_Type;
-        Next_Block_Pos       : Motor_Position;
-        First_Accel_Distance : Length;
-        Last_Command_Index   : Command_Index;
-        Loop_Move_Offset     : Position_Offset);
-   --  First_Accel_Distance is the distance length of the acceleration part of the first move. This is used to
-   --  determine the position after a homing move as the loop move starts as soon as possible after the acceleration
-   --  part.
+       (Resetting_Data     : Pause_Planner.Flush_Resetting_Data_Type;
+        Next_Block_Pos     : Motor_Position;
+        Last_Command_Index : Command_Index);
 
    with function Is_Pause_Plan_Done (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type) return Boolean;
 
@@ -88,10 +97,6 @@ generic
    with procedure Wait_Until_Idle (Last_Command_Index : Command_Index);
    --  Block until the hardware has executed through Last_Command_Index.
 
-   pragma Warnings (Off, "formal object ""Loop_Cycle_Reporter"" is not referenced");
-   Loop_Cycle_Reporter : access Loop_Cycle_Reporter_Interface'Class;
-   pragma Warnings (On, "formal object ""Loop_Cycle_Reporter"" is not referenced");
-
    pragma Warnings (Off, "formal object ""Interpolation_Time"" is not referenced");
    Interpolation_Time : Time;
    pragma Warnings (On, "formal object ""Interpolation_Time"" is not referenced");
@@ -100,16 +105,14 @@ generic
 package Prunt.Step_Generator is
    use Planner;
 
-   type Motor_Pos_Map is array (Axis_Name, Motor_Name) of Curvature;
-
    task Runner
      with
        CPU          => Runner_CPU,
        Storage_Size => 32 * 1024 * 1024
        --  Allows for very large shapers and shaper buffers to be allocated.
    is
-      entry Setup (Map : Motor_Pos_Map);
-      --  Configure the step generator with the motor position map. This must be called before any steps can be
+      entry Setup (Transform : Kinematic_Transform);
+      --  Configure the step generator with the motor transform. This must be called before any steps can be
       --  generated.
    end Runner;
 
@@ -131,10 +134,9 @@ package Prunt.Step_Generator is
    function Get_Last_Executed_Primary_Corner_ID return Planner_Corner_ID;
    --  Returns the last primary planner corner whose final stepgen command has been queued.
 
-   function To_Motor_Position (Pos : Position; Map : Motor_Pos_Map) return Motor_Position;
-   --  Converts a cartesian position to motor positions using the provided map.
-
 private
+
+   type Motor_Pin_Selection is array (Motor_Name) of Boolean;
 
    type Command_State is record
       Current_Command_Index : Command_Index := 0;
@@ -145,13 +147,14 @@ private
    type Catch_Up_Axis_Set is array (Axis_Name) of Boolean;
 
    procedure Queue_Command
-     (State           : in out Command_State;
-      Pos             : Position;
-      Map             : Motor_Pos_Map;
-      Loop_Until_Hit  : Boolean;
-      Safe_Stop_After : Boolean;
-      Vel_Ratio       : Dimensionless;
-      Catch_Up_Axes   : Catch_Up_Axis_Set := [others => False]);
+     (State              : in out Command_State;
+      Pos                : Position;
+      Transform          : Kinematic_Transform;
+      Safe_Stop_After    : Boolean;
+      Vel_Ratio          : Dimensionless;
+      Catch_Up_Axes      : Catch_Up_Axis_Set;
+      Pin_To_Block_Start : Motor_Pin_Selection;
+      Stationary_Pos     : Motor_Position);
    --  Append one shaped command to the shared step queue and update State.
 
    function No_Pause_Requested return Boolean;
@@ -163,7 +166,8 @@ private
    type Axis_Fractions is array (Axis_Name) of Dimensionless;
 
    function Command_Fractions
-     (Start_Pos, Target_Pos : Position; Map : Motor_Pos_Map; Catch_Up_Axes : Catch_Up_Axis_Set) return Axis_Fractions;
+     (Start_Pos, Target_Pos : Position; Transform : Kinematic_Transform; Catch_Up_Axes : Catch_Up_Axis_Set)
+      return Axis_Fractions;
    --  Return per-axis fractions that keep pressure-advance catch-up within every motor's per-command delta limit.
 
 end Prunt.Step_Generator;

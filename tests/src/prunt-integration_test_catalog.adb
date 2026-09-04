@@ -55,6 +55,8 @@ package body Prunt.Integration_Test_Catalog is
        To_Unbounded_String ("integration_scenarios/motion_max_delta_per_command.json")),
       (To_Unbounded_String ("integration.motion_pressure_advance_catch_up"),
        To_Unbounded_String ("integration_scenarios/motion_pressure_advance_catch_up.json")),
+      (To_Unbounded_String ("integration.delta_shared_homing_switch"),
+       To_Unbounded_String ("integration_scenarios/delta_shared_homing_switch.json")),
       (To_Unbounded_String ("integration.motion_saved_positions"),
        To_Unbounded_String ("integration_scenarios/motion_saved_positions.json")),
       (To_Unbounded_String ("integration.motion_retraction_scaling"),

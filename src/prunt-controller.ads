@@ -57,6 +57,7 @@ private with Prunt.Default_Modules.Tachometers;
 private with Prunt.Default_Modules.Thermistors;
 private with Prunt.Gcode_Queues;
 private with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
+private with Prunt.Kinematic_Transforms;
 private with Prunt.Logger;
 private with Prunt.Module_Types;
 private with Prunt.Motion_Planner.Planner;
@@ -74,19 +75,22 @@ generic
    Interpolation_Time : Time;
    --  The time delta for all moves.
 
+   Maximum_Loop_Move_Tail_Length : Positive;
+   --  Maximum number of queued commands after a loop command, including the first Safe_Stop_After command.
+
    with procedure Enqueue_Command (Command : Queued_Command);
    --  Enqueue a command to be executed.
-   --
-   --  If Loop_Until_Hit = False then the time delta of the move is Interpolation_Time, otherwise the time delta is
-   --  Loop_Interpolation_Time.
-   --
-   --  If Loop_Until_Hit = True then the move should be repeated indefinitely until the condition set by
-   --  Setup_For_Loop_Move is met. If the condition is met before the loop move is reached then
-   --  Report_External_Error should be called. After the loop move is completed, Report_Loop_Cycles must be called.
    --
    --  If the queue runs dry on a move where Safe_Stop_After = False then Report_External_Error should be called
    --  and all heaters and motors should be disabled. Keep in mind that the motors may still be moving when the queue
    --  runs dry, so a delay may be required before disabling the motors.
+
+   with procedure Setup_For_Loop_Move (Setup : Loop_Move_Setup);
+   --  Configure the next call to Enqueue_Command as a loop move. A motor participates exactly when that command's
+   --  position differs from its position in the preceding command. Each participating motor repeats its command offset
+   --  until its assigned stop condition is met, then executes its copy of the queued deceleration tail and remains
+   --  stationary while the other motors continue. Motors assigned the same input stop together. Stop conditions for
+   --  motors with zero command offsets are ignored, and those motors remain stationary through the tail.
 
    with procedure Reset_Position (Pos : Motor_Position);
    --  Reset the position of all motors to the given position. This procedure should not cause the motors to move, it
@@ -169,9 +173,6 @@ package Prunt.Controller is
    --  Report the last command that has been fully executed. There are no restrictions on how often this procedure
    --  needs to be called.
 
-   procedure Report_Loop_Move_Cycles (Index : Command_Index; Cycles : Dimensionless);
-   --  Report the number of iterations completed by the loop move identified by Index.
-
    procedure Report_External_Error (Message : String; Is_Fatal : Boolean := True);
    --  Report an error to Prunt and soft-halt the printer. Recoverable errors allow an in-process reload; fatal errors
    --  require the controller process to be restarted.
@@ -227,7 +228,9 @@ private
    package My_Controller_Helpers is new Prunt.Controller_Helpers (Generic_Types);
    use My_Controller_Helpers;
 
-   package My_Default_Modules is new Default_Modules (My_Modules, My_Logger);
+   package My_Default_Modules is new Default_Modules (Generic_Types, My_Logger);
+
+   package Transforms is new Prunt.Kinematic_Transforms (Motor_Name, Motor_Position);
 
    function Get_Current_Position return Position;
    --  Return the most recently reported executed cartesian position for status reporting.
@@ -259,20 +262,10 @@ private
            Idle_Emitter_Module  => Idle_Emitter,
            Request_Shutdown     => Request_Machine_Idle_Timeout_Shutdown);
       package Power_Control is new
-        My_Default_Modules.Power_Control
-          (My_Controller_Generic_Types => Generic_Types,
-           Power_Control_Hardware      => Hardware.Power_Control_Hardware);
+        My_Default_Modules.Power_Control (Power_Control_Hardware => Hardware.Power_Control_Hardware);
       package Dwell is new My_Default_Modules.Dwell;
       package Input_Switches is new
-        My_Default_Modules.Input_Switches
-          (My_Controller_Generic_Types => Generic_Types,
-           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware);
-      package Homing is new
-        My_Default_Modules.Homing
-          (My_Controller_Generic_Types => Generic_Types,
-           Motor_Hardware              => Hardware.Motor_Hardware,
-           Input_Switch_Hardware       => Hardware.Input_Switch_Hardware,
-           Input_Switches_Module       => Input_Switches);
+        My_Default_Modules.Input_Switches (Input_Switch_Hardware => Hardware.Input_Switch_Hardware);
       package Internal_Status_Reporter is new
         My_Default_Modules.Internal_Status_Reporter
           (Get_Position   => Get_Current_Position,
@@ -280,28 +273,28 @@ private
            Get_Line       => Get_Current_File_Line,
            Stepgen_Paused => Stepgen_Paused,
            Axis_Is_Homed  => Primary_Axis_Is_Homed);
-      package Fans is new
-        My_Default_Modules.Fans (My_Controller_Generic_Types => Generic_Types, Fan_Hardware => Hardware.Fan_Hardware);
-      package Tachometers is new
-        My_Default_Modules.Tachometers
-          (My_Controller_Generic_Types => Generic_Types,
-           Tachometer_Hardware         => Hardware.Tachometer_Hardware);
-      package Motor_Drivers is new My_Default_Modules.Motor_Drivers (My_Controller_Generic_Types => Generic_Types);
+      package Fans is new My_Default_Modules.Fans (Fan_Hardware => Hardware.Fan_Hardware);
+      package Tachometers is new My_Default_Modules.Tachometers (Tachometer_Hardware => Hardware.Tachometer_Hardware);
+      package Motor_Drivers is new My_Default_Modules.Motor_Drivers;
       package Basic_Motor_Drivers is new
         My_Default_Modules.Basic_Motor_Drivers
-          (My_Controller_Generic_Types => Generic_Types,
-           Motor_Hardware              => Hardware.Motor_Hardware,
-           Motor_Drivers_Module        => Motor_Drivers);
+          (Motor_Hardware       => Hardware.Motor_Hardware,
+           Motor_Drivers_Module => Motor_Drivers);
       package TMC2240_Drivers is new
         My_Default_Modules.TMC2240_Drivers
-          (My_Controller_Generic_Types => Generic_Types,
-           Motor_Hardware              => Hardware.Motor_Hardware,
-           Motor_Drivers_Module        => Motor_Drivers);
+          (Motor_Hardware       => Hardware.Motor_Hardware,
+           Motor_Drivers_Module => Motor_Drivers);
       package Kinematics is new
         My_Default_Modules.Kinematics
-          (My_Controller_Generic_Types => Generic_Types,
-           Config_Saving_Module        => Config_Saving,
-           Motor_Drivers_Module        => Motor_Drivers);
+          (Transforms           => Transforms,
+           Config_Saving_Module => Config_Saving,
+           Motor_Drivers_Module => Motor_Drivers);
+      package Homing is new
+        My_Default_Modules.Homing
+          (Kinematics_Module      => Kinematics,
+           Input_Switches_Module  => Input_Switches,
+           TMC2240_Drivers_Module => TMC2240_Drivers,
+           Interpolation_Time     => Interpolation_Time);
       package Input_Shapers is new
         My_Default_Modules.Input_Shapers (Config_Saving_Module => Config_Saving, Kinematics_Module => Kinematics);
       package Motion is new
@@ -309,21 +302,23 @@ private
           (Config_Saving_Module       => Config_Saving,
            Kinematics_Module          => Kinematics,
            Pending_State_Queue_Length => Max_Planner_Block_Corners);
-      package Thermistors is new
-        My_Default_Modules.Thermistors
-          (My_Controller_Generic_Types => Generic_Types,
-           Thermistor_Hardware         => Hardware.Thermistor_Hardware);
+      package Thermistors is new My_Default_Modules.Thermistors (Thermistor_Hardware => Hardware.Thermistor_Hardware);
       package Heaters is new
         My_Default_Modules.Heaters
-          (My_Controller_Generic_Types => Generic_Types,
-           Heater_Hardware             => Hardware.Heater_Hardware,
-           Thermistors_Module          => Thermistors,
-           Blocking_Tracker_Module     => Blocking_Tracker);
+          (Heater_Hardware         => Hardware.Heater_Hardware,
+           Thermistors_Module      => Thermistors,
+           Blocking_Tracker_Module => Blocking_Tracker);
    end My_Default_Modules_Children;
 
    procedure Setup_Planner_Runners
-     (Params : Motion_Planner.Kinematic_Parameters; Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map);
-   --  Configure both motion planners and the step generator with the active kinematics and motor-position map.
+     (Params : Motion_Planner.Kinematic_Parameters; Transform : Transforms.Kinematic_Transform);
+   --  Configure each planner with its effective parameters and projection map, and the step generator with the exact
+   --  transform.
+
+   function Apply_Global_Delta_Velocity_Limit
+     (Params : Motion_Planner.Kinematic_Parameters; Transform : Transforms.Kinematic_Transform)
+      return Motion_Planner.Kinematic_Parameters;
+   --  Fold the globally conservative delta tower command-rate limit into the ordinary tangential velocity limit.
 
    type Executed_Command_Position is record
       Index : Command_Index;
@@ -438,10 +433,7 @@ private
            (Hardware.Heater_Hardware'Length > 0,
             "Heaters",
             My_Default_Modules_Children.Heaters.Module'(My_Modules.Module with null record))
-       & Module_If
-           (True,
-            "Homing",
-            My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record))
+       & Module_If (True, "Homing", My_Default_Modules_Children.Homing.Module'(My_Modules.Module with null record))
        & Module_If
            (True, "Idle Emitter", My_Default_Modules_Children.Idle_Emitter.Module'(My_Modules.Module with null record))
        & Module_If
@@ -548,13 +540,42 @@ private
    --  Associates a module block-end handler with the G-code line which emitted it. Final is set only on the
    --  controller-added terminal block for an interactive command.
 
+   type Loop_Move_Block_End_Data is new Module_Types.Extra_Block_Resetting_Data with record
+      Nested_Data : Extra_Block_Resetting_Data_Holders.Holder;
+      Setup       : Loop_Move_Setup;
+   end record;
+
+   type Motor_Loop_Move_Block_End_Data is new Module_Types.Extra_Block_Resetting_Data with record
+      Nested_Data : Extra_Block_Resetting_Data_Holders.Holder;
+      Setup       : Loop_Move_Setup;
+      Motor       : Motor_Name;
+   end record;
+
+   type Motor_Move_Block_End_Data is new Module_Types.Extra_Block_Resetting_Data with record
+      Nested_Data : Extra_Block_Resetting_Data_Holders.Holder;
+      Motor       : Motor_Name;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Loop_Move_Block_End_Data; Context : Block_End_Context'Class);
+   --  Forward block completion to the module data supplied with Flush_Loop_Move.
+
+   overriding
+   procedure Process_After_Block (This : Motor_Loop_Move_Block_End_Data; Context : Block_End_Context'Class);
+   --  Forward block completion to the module data supplied with Flush_Motor_Loop_Move.
+
+   overriding
+   procedure Process_After_Block (This : Motor_Move_Block_End_Data; Context : Block_End_Context'Class);
+   --  Forward block completion to the module data supplied with Flush_Motor_Move.
+
    Hardware_Maximum_Deltas_Per_Command : constant Motor_Position :=
      [for M in Motor_Name => Hardware.Motor_Hardware (M).Maximum_Delta_Per_Command];
+   Global_Delta_Velocity_Safety_Factor : constant Dimensionless := 0.999;
 
    package My_Motion_Planner is new
      Motion_Planner.Planner
        (Motor_Name                        => Motor_Name,
-        Motor_Position_Map                => My_Default_Modules_Children.Kinematics.Motor_Position_Map,
+        Motor_Position_Map                => Transforms.Motor_Position_Map,
         Motor_Delta_Limits                => Motor_Position,
         Maximum_Deltas_Per_Command        => Hardware_Maximum_Deltas_Per_Command,
         Flush_Resetting_Data_Type         => Extra_Block_Resetting_Data_Holders.Holder,
@@ -562,6 +583,7 @@ private
           Extra_Block_Resetting_Data_Holders.To_Holder (Module_Types.Extra_Block_Resetting_Data'(null record)),
         Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
         Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
+        Home_Move_Maximum_Tail_Time       => Dimensionless (Maximum_Loop_Move_Tail_Length) * 0.99 * Interpolation_Time,
         Interpolation_Time                => Interpolation_Time,
         Runner_CPU                        => Motion_Planner_CPU,
         Max_Corners                       => Max_Planner_Block_Corners);
@@ -569,7 +591,7 @@ private
    package My_Pause_Motion_Planner is new
      Motion_Planner.Planner
        (Motor_Name                        => Motor_Name,
-        Motor_Position_Map                => My_Default_Modules_Children.Kinematics.Motor_Position_Map,
+        Motor_Position_Map                => Transforms.Motor_Position_Map,
         Motor_Delta_Limits                => Motor_Position,
         Maximum_Deltas_Per_Command        => Hardware_Maximum_Deltas_Per_Command,
         Flush_Resetting_Data_Type         => Extra_Block_Resetting_Data_Holders.Holder,
@@ -577,6 +599,7 @@ private
           Extra_Block_Resetting_Data_Holders.To_Holder (Module_Types.Extra_Block_Resetting_Data'(null record)),
         Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
         Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
+        Home_Move_Maximum_Tail_Time       => Dimensionless (Maximum_Loop_Move_Tail_Length) * 0.99 * Interpolation_Time,
         Interpolation_Time                => Interpolation_Time,
         Max_Corners                       => 100);
 
@@ -588,7 +611,6 @@ private
      (Pos             : Position;
       Motor_Pos       : Motor_Position;
       Index           : Command_Index;
-      Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
       Vel_Ratio       : Dimensionless);
    --  Record the cartesian position for Index and forward the corresponding motor command to the hardware queue.
@@ -597,11 +619,9 @@ private
    --  Process a corner's extra data after the final command reaching that corner has been queued.
 
    procedure Finish_Planner_Block
-     (Resetting_Data       : Extra_Block_Resetting_Data_Holders.Holder;
-      Next_Block_Pos       : Motor_Position;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset);
+     (Resetting_Data     : Extra_Block_Resetting_Data_Holders.Holder;
+      Next_Block_Pos     : Motor_Position;
+      Last_Command_Index : Command_Index);
    --  Process block-reset data and reset the hardware position when step generation finishes a planner block.
 
    procedure Handle_Pause (Pause_Position : Position; Last_Command_Index : Command_Index);
@@ -613,43 +633,41 @@ private
    function Is_Pause_Plan_Done (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder) return Boolean;
    --  Return True when Resetting_Data marks the terminal block of a generated pause or resume plan.
 
-   protected Loop_Move_Cycles is new Loop_Cycle_Reporter_Interface with
-      procedure Report (Index : Command_Index; Cycles : Dimensionless);
-      --  Report the number of loops executed for a given loop move.
+   procedure Setup_Loop_Move (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder);
+   --  Configure the hardware from the loop-move block data.
 
-      overriding
-      entry Wait (Index : Command_Index; Cycles : out Dimensionless);
-      --  Wait for loop move cycles to be reported.
-
-      --  TODO: Reset procedure for when controller is reset.
-   private
-      Current_Index  : Command_Index := 0;
-      Current_Cycles : Dimensionless := 0.0;
-      Has_Data       : Boolean := False;
-   end Loop_Move_Cycles;
+   function Pin_Motor_To_Block_Start
+     (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder;
+      Transform      : Transforms.Kinematic_Transform;
+      Motor          : Motor_Name) return Boolean;
+   --  Return whether the step generator must pin Motor at its block-start position.
 
    package My_Step_Generator is new
      Step_Generator
-       (Planner                    => My_Motion_Planner,
-        Pause_Planner              => My_Pause_Motion_Planner,
-        Motor_Name                 => Motor_Name,
-        Motor_Position             => Motor_Position,
-        Motor_Delta_Limits         => Motor_Position,
-        Maximum_Deltas_Per_Command => Hardware_Maximum_Deltas_Per_Command,
-        Start_Planner_Block        => Start_Planner_Block,
-        Start_Pause_Planner_Block  => Start_Planner_Block,
-        Enqueue_Command            => Enqueue_Command_Internal,
-        Start_Corner               => Start_Corner,
-        Start_Pause_Corner         => Start_Corner,
-        Finish_Planner_Block       => Finish_Planner_Block,
-        Finish_Pause_Planner_Block => Finish_Planner_Block,
-        Is_Pause_Plan_Done         => Is_Pause_Plan_Done,
-        Handle_Pause               => Handle_Pause,
-        Handle_Resume              => Handle_Resume,
-        Wait_Until_Idle            => Wait_Until_Idle,
-        Loop_Cycle_Reporter        => Loop_Move_Cycles'Access,
-        Interpolation_Time         => Interpolation_Time,
-        Runner_CPU                 => Step_Generator_CPU);
+       (Planner                      => My_Motion_Planner,
+        Pause_Planner                => My_Pause_Motion_Planner,
+        Motor_Name                   => Motor_Name,
+        Setup_Loop_Move              => Setup_Loop_Move,
+        Pin_Motor_To_Block_Start     => Pin_Motor_To_Block_Start,
+        Kinematic_Transform          => Transforms.Kinematic_Transform,
+        Transform_To_Motor_Position  => Transforms.To_Motor_Position,
+        Transform_Motor_Affects_Axis => Transforms.Motor_Affects_Axis,
+        Motor_Position               => Motor_Position,
+        Motor_Delta_Limits           => Motor_Position,
+        Maximum_Deltas_Per_Command   => Hardware_Maximum_Deltas_Per_Command,
+        Start_Planner_Block          => Start_Planner_Block,
+        Start_Pause_Planner_Block    => Start_Planner_Block,
+        Enqueue_Command              => Enqueue_Command_Internal,
+        Start_Corner                 => Start_Corner,
+        Start_Pause_Corner           => Start_Corner,
+        Finish_Planner_Block         => Finish_Planner_Block,
+        Finish_Pause_Planner_Block   => Finish_Planner_Block,
+        Is_Pause_Plan_Done           => Is_Pause_Plan_Done,
+        Handle_Pause                 => Handle_Pause,
+        Handle_Resume                => Handle_Resume,
+        Wait_Until_Idle              => Wait_Until_Idle,
+        Interpolation_Time           => Interpolation_Time,
+        Runner_CPU                   => Step_Generator_CPU);
 
    My_Gcode_Queue : Gcode_Queues.Queue;
 
@@ -904,7 +922,7 @@ private
 
    type Planner_Target_Kind is (Primary_Planner_Target, Pause_Planner_Target);
 
-   type Planner_Wrapper is new Planner_Interface with record
+   type Planner_Wrapper is new Generic_Types.Planner_Interface with record
       Startup_Mode : Boolean := False;
       Target       : Planner_Target_Kind := Primary_Planner_Target;
       Source       : Gcode_Source := (Kind => Internal_Source);
@@ -949,9 +967,7 @@ private
    --  Return the last command index assigned before pause handling began.
 
    type Planner_Block_End_Context is limited new Module_Types.Block_End_Context with record
-      First_Accel_Distance     : Length;
       Last_Command_Index       : Command_Index;
-      Loop_Move_Offset         : Position_Offset;
       State_Catch_Up_Corner_ID : Planner_Corner_ID;
       Source                   : Gcode_Source;
    end record;
@@ -985,16 +1001,12 @@ private
    --  Report whether Axis is marked as homed.
 
    overriding
-   function Get_First_Accel_Distance (This : Planner_Block_End_Context) return Length;
-   --  Return the length of the first acceleration portion in the completed planner block.
+   function Cancellation_Is_Active (This : Planner_Wrapper) return Boolean;
+   --  Report whether cancellation is currently interrupting primary G-code processing.
 
    overriding
    function Get_Last_Command_Index (This : Planner_Block_End_Context) return Command_Index;
    --  Return the final command index assigned to the completed planner block.
-
-   overriding
-   function Get_Loop_Move_Offset (This : Planner_Block_End_Context) return Position_Offset;
-   --  Return the position offset accumulated by repeated loop-move cycles in the completed block.
 
    overriding
    procedure Wait_For_Idle (This : Planner_Block_End_Context);
@@ -1042,39 +1054,65 @@ private
 
    overriding
    procedure Flush
-     (This           : Planner_Wrapper;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False);
+     (This       : Planner_Wrapper;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
    --  Queue a flush on This's selected planner, carrying Extra_Data to block completion.
 
    overriding
+   function Flush_Loop_Move
+     (This               : Planner_Wrapper;
+      Stop_Conditions    : Stop_Condition_Array;
+      Maximum_Loop_Count : Loop_Move_Count;
+      Extra_Data         : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+      return Position_Offset;
+   --  Queue a primary-planner loop move.
+
+   overriding
+   function Flush_Motor_Loop_Move
+     (This               : Planner_Wrapper;
+      Motor              : Motor_Name;
+      Stop_Condition     : Generic_Types.Stop_Condition;
+      Maximum_Loop_Count : Loop_Move_Count;
+      Extra_Data         : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+      return Position_Offset;
+   --  Queue a primary-planner loop move for the selected motor's independently movable group.
+
+   overriding
+   procedure Flush_Motor_Move
+     (This       : Planner_Wrapper;
+      Motor      : Motor_Name;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+   --  Queue a primary-planner block in which only the selected motor's independently movable group moves.
+
+   overriding
+   procedure Resolve_Homing_Move (This : Planner_Wrapper; Stopped_Position : Position);
+   --  Resolve the pending homing boundary with its true stopped position.
+
+   overriding
    procedure Flush_And_Change_Kinematic_Parameters
-     (This           : Planner_Wrapper;
-      Params         : Motion_Planner.Kinematic_Parameters;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False);
+     (This       : Planner_Wrapper;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
    --  Queue a flush that changes the selected planner's kinematic parameters for subsequent motion.
 
    overriding
    procedure Flush_And_Reset_Position
-     (This           : Planner_Wrapper;
-      New_Position   : Position;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False);
+     (This         : Planner_Wrapper;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
    --  Queue a flush that resets the selected planner's tracked and planned position to New_Position.
 
-   Pipeline_Is_Set_Up         : Boolean := False;
-   Gcode_Processor_Is_Running : Boolean := False
+   Pipeline_Is_Set_Up          : Boolean := False;
+   Gcode_Processor_Is_Running  : Boolean := False
    with Atomic, Volatile;
-   Current_Motor_Position_Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map :=
-     [others => [others => 0.0 / mm]];
+   Current_Kinematic_Transform : Transforms.Kinematic_Transform := Transforms.Default_Transform;
    --  Runtime setup state shared between Run and package-level callbacks such as G-code cancellation.
    --  Pipeline_Is_Set_Up tracks whether the planners and step generator have accepted Setup and can therefore be reset
-   --  or reused safely. Current_Motor_Position_Map caches the active kinematics module's Motors_To_Position table
+   --  or reused safely. Current_Kinematic_Transform caches the active kinematics module's transform
    --  after startup; Cancel_Gcode resets the planners and step generator without rebuilding the module tree, so it
-   --  reuses this map to restart the same mechanical mapping at the current executed position.
+   --  reuses this transform to restart the same mechanical mapping at the current executed position.
    --
-   --  These empty initial maps are overwritten before Pipeline_Is_Set_Up is set True.
+   --  This empty initial transform is overwritten before Pipeline_Is_Set_Up is set True.
 
    procedure Notify_Activity_Start;
 

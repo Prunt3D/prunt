@@ -47,7 +47,7 @@ package body Prunt_Simulator_Config_Overrides is
         (Result,
          "Homing",
          Config_Data_Paths.Vector'
-           (["Homing", +Axis, "Homing_Method", "Kind", "Selected"]),
+           (["Homing", "Axes", +Axis, "Homing_Method", "Kind", "Selected"]),
          Create (+"Set_To_Value"));
    end Add_Homing_Axis;
 
@@ -128,41 +128,36 @@ package body Prunt_Simulator_Config_Overrides is
    function Overrides return Config_Override_Vectors.Vector is
       Result : Config_Override_Vectors.Vector;
    begin
-      Add
-        (Result,
-         "Basic Config",
-         Config_Data_Paths.Vector'(["Prunt", "Enabled"]),
-         Create (True));
+      --  Add
+      --    (Result,
+      --     "Basic Config",
+      --     Config_Data_Paths.Vector'(["Prunt", "Enabled"]),
+      --     Create (True));
 
-      Add_Homing_Axis (Result, "X_AXIS");
-      Add_Homing_Axis (Result, "Y_AXIS");
-      Add_Homing_Axis (Result, "Z_AXIS");
+      --  Add_Homing_Axis (Result, "X_AXIS");
+      --  Add_Homing_Axis (Result, "Y_AXIS");
+      --  Add_Homing_Axis (Result, "Z_AXIS");
 
-      Add_Motor (Result, "X_MOTOR");
-      Add_Motor (Result, "Y_MOTOR");
-      Add_Motor (Result, "Z_MOTOR");
-      Add_Motor (Result, "E_MOTOR");
+      --  Add_Motor (Result, "X_MOTOR");
+      --  Add_Motor (Result, "Y_MOTOR");
+      --  Add_Motor (Result, "Z_MOTOR");
+      --  Add_Motor (Result, "E_MOTOR");
 
-      Add_Axis_Float (Result, "Lower_Position_Limit", "E_AXIS", -1.0E100);
-      Add_Axis_Float (Result, "Upper_Position_Limit", "X_AXIS", 300.0);
-      Add_Axis_Float (Result, "Upper_Position_Limit", "Y_AXIS", 300.0);
-      Add_Axis_Float (Result, "Upper_Position_Limit", "Z_AXIS", 300.0);
-      Add_Axis_Float (Result, "Upper_Position_Limit", "E_AXIS", 1.0E100);
-      Add_Kinematics_Float (Result, "Maximum_Tangential_Velocity", 250.0);
-      Add_Axis_Float (Result, "Axial_Velocity_Limits", "X_AXIS", 250.0);
-      Add_Axis_Float (Result, "Axial_Velocity_Limits", "Y_AXIS", 250.0);
-      Add_Axis_Float (Result, "Axial_Velocity_Limits", "Z_AXIS", 25.0);
-      Add_Axis_Float (Result, "Axial_Velocity_Limits", "E_AXIS", 80.0);
-      for Axis in Axis_Name loop
-         Add_Axis_Float (Result, "Axial_Acceleration_Limits", Axis'Image, 5_000.0);
-         Add_Axis_Float (Result, "Axial_Jerk_Limits", Axis'Image, 500_000.0);
-         Add_Axis_Float (Result, "Axial_Snap_Limits", Axis'Image, 500_000_000.0);
-         Add_Axis_Float (Result, "Axial_Crackle_Limits", Axis'Image, 500_000_000_000.0);
-      end loop;
-      Add_Cartesian_Motor (Result, "X_MOTOR", "X_AXIS");
-      Add_Cartesian_Motor (Result, "Y_MOTOR", "Y_AXIS");
-      Add_Cartesian_Motor (Result, "Z_MOTOR", "Z_AXIS");
-      Add_Cartesian_Motor (Result, "E_MOTOR", "E_AXIS");
+      --  Add_Kinematics_Float (Result, "Maximum_Tangential_Velocity", 250.0);
+      --  Add_Axis_Float (Result, "Axial_Velocity_Limits", "X_AXIS", 250.0);
+      --  Add_Axis_Float (Result, "Axial_Velocity_Limits", "Y_AXIS", 250.0);
+      --  Add_Axis_Float (Result, "Axial_Velocity_Limits", "Z_AXIS", 25.0);
+      --  Add_Axis_Float (Result, "Axial_Velocity_Limits", "E_AXIS", 80.0);
+      --  for Axis in Axis_Name loop
+      --     Add_Axis_Float (Result, "Axial_Acceleration_Limits", Axis'Image, 5_000.0);
+      --     Add_Axis_Float (Result, "Axial_Jerk_Limits", Axis'Image, 500_000.0);
+      --     Add_Axis_Float (Result, "Axial_Snap_Limits", Axis'Image, 500_000_000.0);
+      --     Add_Axis_Float (Result, "Axial_Crackle_Limits", Axis'Image, 500_000_000_000.0);
+      --  end loop;
+      --  Add_Cartesian_Motor (Result, "X_MOTOR", "X_AXIS");
+      --  Add_Cartesian_Motor (Result, "Y_MOTOR", "Y_AXIS");
+      --  Add_Cartesian_Motor (Result, "Z_MOTOR", "Z_AXIS");
+      --  Add_Cartesian_Motor (Result, "E_MOTOR", "E_AXIS");
 
       return Result;
    end Overrides;

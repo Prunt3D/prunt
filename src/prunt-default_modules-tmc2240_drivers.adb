@@ -47,7 +47,9 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
-      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
+      return
+        Config.Versioned_Config_Schema'
+          (Version => 1, Module_Instance_Tag => Module_Instance'Tag, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding
@@ -62,7 +64,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       is
          Result : Status_Manager.Status_Value_Maps.Map;
       begin
-         for M in My_Controller_Generic_Types.Motor_Name loop
+         for M in Motor_Name loop
             if Motor_Hardware (M).Kind in TMC2240_UART_Kind then
                Result.Insert
                  (+M'Image,
@@ -117,7 +119,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class is
@@ -146,8 +148,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
       Motor_Enabled       : Boolean;
-      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
-      Motor               : My_Controller_Generic_Types.Motor_Name;
+      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Path; Message : Virtual_String);
+      Motor               : Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers is
    begin
       return
@@ -444,8 +446,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       end case;
    end MRES_To_Dimensionless;
 
-   procedure Write_And_Validate
-     (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : My_Controller_Generic_Types.Motor_Name) is
+   procedure Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : Motor_Name) is
    begin
       if Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind then
          --  This is always going to be a slow procedure so it is fine to have a check here in release builds.
@@ -496,8 +497,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    end Write_And_Validate;
 
    function Read
-     (Address : TMC_Types.TMC2240.UART_Register_Address; Motor : My_Controller_Generic_Types.Motor_Name)
-      return TMC_Types.TMC2240.UART_Data_Message is
+     (Address : TMC_Types.TMC2240.UART_Register_Address; Motor : Motor_Name) return TMC_Types.TMC2240.UART_Data_Message
+   is
    begin
       if Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind then
          --  This is always going to be a slow procedure so it is fine to have a check here in release builds.
@@ -552,17 +553,13 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       use type Ada.Real_Time.Time;
 
       My_Regs        : TMC2240_Registers;
-      My_Motor       : My_Controller_Generic_Types.Motor_Name;
+      My_Motor       : Motor_Name;
       Status_Ref     : Status_Manager.Status_Emitter;
       Stop_Requested : Boolean := False;
       Next_Poll_Time : Ada.Real_Time.Time := Ada.Real_Time.Clock;
    begin
       select
-         accept Setup
-           (Regs           : TMC2240_Registers;
-            Motor          : My_Controller_Generic_Types.Motor_Name;
-            Status_Emitter : Status_Manager.Status_Emitter)
-         do
+         accept Setup (Regs : TMC2240_Registers; Motor : Motor_Name; Status_Emitter : Status_Manager.Status_Emitter) do
             My_Regs := Regs;
             My_Motor := Motor;
             Status_Ref := Status_Emitter;
@@ -734,7 +731,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
         (Config_In                         : User_Config;
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
-           access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
+           access procedure (Path : Prunt.Config.Config_Path; Message : Virtual_String);
          Status_Emitter_In                 : Status_Manager.Status_Emitter)
       is
          Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames
@@ -750,7 +747,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          Config := Config_In;
          Status_Emitter := Status_Emitter_In;
 
-         for M in My_Controller_Generic_Types.Motor_Name loop
+         for M in Motor_Name loop
             case Config.Motors (M).Fixed_Kind is
                when TMC2240_UART_Kind =>
                   Managers (M).Kind := TMC2240_UART_Kind;
@@ -784,7 +781,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       begin
          Self_Ref := Self_Ref_In;
 
-         for M in My_Controller_Generic_Types.Motor_Name loop
+         for M in Motor_Name loop
             case Managers (M).Kind is
                when TMC2240_UART_Kind =>
                   Managers (M).UART.Get.Setup (Registers (M), M, Status_Emitter);
@@ -794,6 +791,138 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
             end case;
          end loop;
       end Start;
+
+      procedure Configure_Homing (Parameters : Homing_Driver_Parameters) is
+         Motor : Motor_Name;
+
+         procedure Write_Register (Message : TMC_Types.TMC2240.UART_Data_Message);
+
+         procedure Write_Register (Message : TMC_Types.TMC2240.UART_Data_Message) is
+         begin
+            Write_And_Validate (Message, Motor);
+         end Write_Register;
+      begin
+         if Parameters.Kind = No_Homing_Detector then
+            return;
+         end if;
+
+         Motor := Parameters.Motor;
+         if Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind then
+            raise Constraint_Error with "StallGuard homing requires a TMC2240 motor.";
+         end if;
+
+         if not Saved_Homing (Motor).Valid then
+            Saved_Homing (Motor) :=
+              (Valid     => True,
+               Registers =>
+                 (GCONF      => Read (GCONF_Address, Motor).Content.GCONF_Data,
+                  IHOLD_IRUN => Read (IHOLD_IRUN_Address, Motor).Content.IHOLD_IRUN_Data,
+                  TCOOLTHRS  => Read (TCOOLTHRS_Address, Motor).Content.TCOOLTHRS_Data,
+                  COOLCONF   => Read (COOLCONF_Address, Motor).Content.COOLCONF_Data,
+                  SG4_THRS   => Read (SG4_THRS_Address, Motor).Content.SG4_THRS_Data));
+         end if;
+
+         declare
+            Original  : constant Saved_Homing_Registers := Saved_Homing (Motor).Registers;
+            GCONF_Reg : TMC_Types.TMC2240.GCONF := Original.GCONF;
+            IRUN_Reg  : TMC_Types.TMC2240.IHOLD_IRUN := Original.IHOLD_IRUN;
+            TCOOL_Reg : TMC_Types.TMC2240.TCOOLTHRS := Original.TCOOLTHRS;
+            COOL_Reg  : TMC_Types.TMC2240.COOLCONF := Original.COOLCONF;
+            SG4_Reg   : TMC_Types.TMC2240.SG4_THRS := Original.SG4_THRS;
+         begin
+            GCONF_Reg.Diag0_Stall := True;
+            IRUN_Reg.I_Run :=
+              TMC_Types.Unsigned_5
+                (Dimensionless'Max
+                   (0.0,
+                    Dimensionless'Floor (Config.Motors (Motor).TMC2240_Parameters.IRUN_During_Homing * 32.0 - 1.0)));
+            TCOOL_Reg.T_Cool_Thrs := TMC_Types.Unsigned_20'Last;
+
+            case Parameters.Kind is
+               when No_Homing_Detector          =>
+                  null;
+
+               when StallGuard2_Homing_Detector =>
+                  GCONF_Reg.En_PWM_Mode := False;
+                  COOL_Reg.SGT := TMC_Types.Unsigned_7 (Parameters.SG2_Threshold mod 128);
+                  COOL_Reg.SFILT := TMC_Boolean (Parameters.Enable_Filter);
+
+               when StallGuard4_Homing_Detector =>
+                  GCONF_Reg.En_PWM_Mode := True;
+                  SG4_Reg.SG4_Thrs := TMC_Types.Unsigned_8 (Parameters.SG4_Threshold);
+                  SG4_Reg.SG4_Filt_En := TMC_Boolean (Parameters.Enable_Filter);
+            end case;
+
+            Write_Register
+              ((Bytes_Mode => False, Content => (Register => GCONF_Address, GCONF_Data => GCONF_Reg, others => <>)));
+            Write_Register
+              ((Bytes_Mode => False,
+                Content    => (Register => IHOLD_IRUN_Address, IHOLD_IRUN_Data => IRUN_Reg, others => <>)));
+            Write_Register
+              ((Bytes_Mode => False,
+                Content    => (Register => TCOOLTHRS_Address, TCOOLTHRS_Data => TCOOL_Reg, others => <>)));
+            Write_Register
+              ((Bytes_Mode => False,
+                Content    => (Register => COOLCONF_Address, COOLCONF_Data => COOL_Reg, others => <>)));
+            Write_Register
+              ((Bytes_Mode => False,
+                Content    => (Register => SG4_THRS_Address, SG4_THRS_Data => SG4_Reg, others => <>)));
+         end;
+      end Configure_Homing;
+
+      procedure Restore_After_Homing (Parameters : Homing_Driver_Parameters) is
+      begin
+         if Parameters.Kind = No_Homing_Detector then
+            return;
+         end if;
+
+         Restore_Motor_After_Homing (Parameters.Motor);
+      end Restore_After_Homing;
+
+      procedure Restore_Motor_After_Homing (Motor : Motor_Name) is
+      begin
+         if not Saved_Homing (Motor).Valid then
+            return;
+         end if;
+
+         declare
+            Original : constant Saved_Homing_Registers := Saved_Homing (Motor).Registers;
+         begin
+            Write_And_Validate
+              ((Bytes_Mode => False,
+                Content    => (Register => GCONF_Address, GCONF_Data => Original.GCONF, others => <>)),
+               Motor);
+            Write_And_Validate
+              ((Bytes_Mode => False,
+                Content    => (Register => IHOLD_IRUN_Address, IHOLD_IRUN_Data => Original.IHOLD_IRUN, others => <>)),
+               Motor);
+            Write_And_Validate
+              ((Bytes_Mode => False,
+                Content    => (Register => TCOOLTHRS_Address, TCOOLTHRS_Data => Original.TCOOLTHRS, others => <>)),
+               Motor);
+            Write_And_Validate
+              ((Bytes_Mode => False,
+                Content    => (Register => COOLCONF_Address, COOLCONF_Data => Original.COOLCONF, others => <>)),
+               Motor);
+            Write_And_Validate
+              ((Bytes_Mode => False,
+                Content    => (Register => SG4_THRS_Address, SG4_THRS_Data => Original.SG4_THRS, others => <>)),
+               Motor);
+         end;
+         Saved_Homing (Motor) := (Valid => False);
+      end Restore_Motor_After_Homing;
+
+      procedure Handle_Cancel
+        (Executed_Corner_ID      : Planner_Corner_ID;
+         Cancellation_Barrier_ID : Planner_Corner_ID;
+         Current_Position        : Position)
+      is
+         pragma Unreferenced (Executed_Corner_ID, Cancellation_Barrier_ID, Current_Position);
+      begin
+         for Motor in Motor_Name loop
+            Restore_Motor_After_Homing (Motor);
+         end loop;
+      end Handle_Cancel;
 
    end Module_Instance;
 

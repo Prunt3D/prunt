@@ -21,7 +21,7 @@ tags = []
 "*".source_encoding = []
 
 [[depends-on]]
-gnat_native = "~16.1.1003"
+gnat_native = "~16.2.1001"
 # From here: https://github.com/Prunt3D/prunt_alire_index/tree/master
 
 [[depends-on]]
@@ -56,8 +56,8 @@ vss_extra = "^26.0.0"
 
 [[pins]]
 simple_components = { url = "https://github.com/Prunt3D/dak_simple_components.git", commit = "7d3e282ee8ab8c5a836944c80515bf85437425e5" }
-gnat_native = "16.1.1003"
-gnat = "16.1.1003"
+gnat_native = "16.2.1001"
+gnat = "16.2.1001"
 gnatcoll = "26.0.0"
 gnatcoll_minimal = "26.0.0"
 libgpr = { url = "https://github.com/Prunt3D/gprbuild.git", commit = "56139608315345ffe109bb98ecb3d3bfa27c036e" }

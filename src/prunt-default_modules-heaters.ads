@@ -21,19 +21,14 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
-with Prunt.Controller_Generic_Types;
 with Prunt.Default_Modules.Blocking_Tracker;
 with Prunt.Default_Modules.Thermistors;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
 generic
-   with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    Heater_Hardware : My_Controller_Generic_Types.Heater_Hardware_Parameters_Array_Type;
-   with package Thermistors_Module is new
-     Default_Modules.Thermistors
-       (My_Controller_Generic_Types => My_Controller_Generic_Types,
-        Thermistor_Hardware         => <>);
+   with package Thermistors_Module is new Default_Modules.Thermistors (Thermistor_Hardware => <>);
    with package Blocking_Tracker_Module is new Default_Modules.Blocking_Tracker;
 package Prunt.Default_Modules.Heaters is
 
@@ -76,7 +71,7 @@ package Prunt.Default_Modules.Heaters is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
@@ -397,10 +392,10 @@ private
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       overriding
-      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+      procedure Handle_Pause (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class);
 
       overriding
-      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class);
+      procedure Handle_Resume (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class);
 
       function Build_Target_Command (Heater : Heater_Name; Target : Temperature) return Heater_Target_Command;
 

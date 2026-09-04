@@ -21,13 +21,15 @@ with Prunt.Controller_Generic_Types;
 
 package Prunt_Simulator_Types is
 
+   Maximum_Loop_Move_Tail_Length : constant Positive := 65_535;
+
    type Motor_Name is (X_Motor, Y_Motor, Z_Motor, E_Motor);
    type Heater_Name is (Dummy_Heater);
    type Thermistor_Name is (Dummy_Thermistor);
    type Board_Temperature_Probe_Name is (Dummy_Board_Temperature_Probe);
    type Fan_Name is (Dummy_Fan);
    type Tachometer_Name is (Dummy_Tachometer);
-   type Input_Switch_Name is (Dummy_Input_Switch);
+   type Input_Switch_Name is (X_Endstop, Y_Endstop, Z_Endstop);
 
    package Generic_Types is new
      Prunt.Controller_Generic_Types

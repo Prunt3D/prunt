@@ -51,6 +51,7 @@ pragma Extensions_Allowed (On);
 with Ada.Containers.Indefinite_Ordered_Maps;
 with Ada.Containers.Ordered_Sets;
 with Ada.Containers.Vectors;
+with Ada.Tags;
 with Prunt.Generic_Lock;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order;
 with Prunt.JSON;
@@ -65,7 +66,29 @@ package Prunt.Config is
 
    package Config_Data_Paths is new Ada.Containers.Vectors (Positive, Virtual_String);
 
-   type Config_Path is tagged private;
+   type Required_Config_Selection is record
+      Path     : Config_Data_Paths.Vector;
+      Selected : Virtual_String;
+   end record;
+
+   package Required_Config_Selection_Vectors is new Ada.Containers.Vectors (Positive, Required_Config_Selection);
+
+   type Config_Path is record
+      Path                : Config_Data_Paths.Vector;
+      Required_Selections : Required_Config_Selection_Vectors.Vector;
+   end record;
+
+   type Config_Presentation_Condition is record
+      Controller_Tag  : Ada.Tags.Tag;
+      Controller_Path : Config_Path;
+      Values          : Discrete_String_Sets.Set;
+   end record;
+   --  Display the property carrying this condition only when the value at Controller_Path is one of Values.
+   --  Controller_Tag identifies the module supplying the property, independently of its configured owner name.
+   --  Controller_Path is obtained from a typed, module-local path generated from that module's user configuration.
+
+   No_Presentation_Condition : constant Config_Presentation_Condition :=
+     (Controller_Tag => Ada.Tags.No_Tag, Controller_Path => <>, Values => []);
 
    type Config_Override is record
       Owner : Virtual_String;
@@ -87,7 +110,8 @@ package Prunt.Config is
    package Config_Error_Vectors is new Ada.Containers.Vectors (Positive, Config_Error);
 
    type Config_Property_Parameters is tagged record
-      Description : Virtual_String;
+      Description  : Virtual_String;
+      Present_When : Config_Presentation_Condition := No_Presentation_Condition;
    end record;
 
    package Config_Property_Maps is new
@@ -300,15 +324,16 @@ package Prunt.Config is
    function Module_Name (Data : Config_Data) return Virtual_String;
    --  Returns the name of the module which this object is for.
 
-   function Resolve_Config_Path (Data : Config_Data; Path : Config_Path'Class) return Config_Data_Paths.Vector;
+   function Resolve_Config_Path (Data : Config_Data; Path : Config_Path) return Config_Data_Paths.Vector;
    --  Return Path's raw representation after checking that all enclosing variant alternatives are selected and that
    --  the target exists in Data. Raises Constraint_Error when Path is not currently reportable.
 
    type Config_Schema_Version is new Positive;
 
    type Versioned_Config_Schema is tagged record
-      Version         : Config_Schema_Version;
-      Top_Level_Items : Config_Property_Maps.Map;
+      Version             : Config_Schema_Version;
+      Module_Instance_Tag : Ada.Tags.Tag := Ada.Tags.No_Tag;
+      Top_Level_Items     : Config_Property_Maps.Map;
    end record;
 
    procedure Migrate (This : Versioned_Config_Schema; Old_Version : Config_Schema_Version; Data : in out Config_Data)
@@ -387,18 +412,6 @@ package Prunt.Config is
 private
 
    use Prunt.JSON;
-
-   type Required_Config_Selection is record
-      Path     : Config_Data_Paths.Vector;
-      Selected : Virtual_String;
-   end record;
-
-   package Required_Config_Selection_Vectors is new Ada.Containers.Vectors (Positive, Required_Config_Selection);
-
-   type Config_Path is tagged record
-      Path                : Config_Data_Paths.Vector;
-      Required_Selections : Required_Config_Selection_Vectors.Vector;
-   end record;
 
    package File_Access_Lock is new Generic_Lock;
    --  Anything that touches a file uses this as multiple Config_File objects may refer to the same file.

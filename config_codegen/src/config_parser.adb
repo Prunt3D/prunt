@@ -376,6 +376,9 @@ package body Config_Parser is
                      Fixed_Kind          => "",
                      Options_Expr        => "",
                      Present_When        => "",
+                     Dynamic_Present_When_Tag    => "",
+                     Dynamic_Present_When_Path   => "",
+                     Dynamic_Present_When_Values => [],
                      Schema_Default_Expr => "",
                      Unit                => (Conversion => "", Display => ""));
                   begin
@@ -396,7 +399,23 @@ package body Config_Parser is
                                  elsif Argument (Assocs, 2) = "Options_Expr" then
                                     Component.Options_Expr := Strip (Argument (Assocs, 3));
                                  elsif Argument (Assocs, 2) = "Present_When" then
+                                    if Has_Argument (Assocs, 4) then
+                                       Raise_Error
+                                         (Assoc, "Present_When accepts one condition expression only.");
+                                    end if;
                                     Component.Present_When := Strip (Argument (Assocs, 3));
+                                 elsif Argument (Assocs, 2) = "Dynamic_Present_When" then
+                                    if not Has_Argument (Assocs, 5) then
+                                       Raise_Error
+                                         (Assoc,
+                                          "Dynamic_Present_When requires a controller tag, path, and at least one "
+                                          & "value.");
+                                    end if;
+                                    Component.Dynamic_Present_When_Tag := Strip (Argument (Assocs, 3));
+                                    Component.Dynamic_Present_When_Path := Strip (Argument (Assocs, 4));
+                                    for I in 5 .. Assocs.Children_Count loop
+                                       Component.Dynamic_Present_When_Values.Append (Strip (Argument (Assocs, I)));
+                                    end loop;
                                  elsif Argument (Assocs, 2) = "Schema_Default_Expr" then
                                     Component.Schema_Default_Expr := Strip (Argument (Assocs, 3));
                                  elsif Argument (Assocs, 2) = "Min" then

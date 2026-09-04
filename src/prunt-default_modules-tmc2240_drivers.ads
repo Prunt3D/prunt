@@ -21,7 +21,6 @@ pragma Extensions_Allowed (On);
 
 with Ada.Tags;
 with Prunt.Config;
-with Prunt.Controller_Generic_Types;
 with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types;      use Prunt.Module_Types;
@@ -33,11 +32,34 @@ private with Ada.Finalization;
 private with Prunt.Limited_Shared_Pointers;
 
 generic
-   with package My_Controller_Generic_Types is new Controller_Generic_Types (<>);
    Motor_Hardware : My_Controller_Generic_Types.Motor_Hardware_Parameters_Array_Type;
-   with package Motor_Drivers_Module is new
-     Default_Modules.Motor_Drivers (My_Controller_Generic_Types => My_Controller_Generic_Types);
+   with package Motor_Drivers_Module is new Default_Modules.Motor_Drivers;
 package Prunt.Default_Modules.TMC2240_Drivers is
+
+   type Homing_Detector_Kind is (No_Homing_Detector, StallGuard2_Homing_Detector, StallGuard4_Homing_Detector);
+
+   type Homing_Driver_Parameters (Kind : Homing_Detector_Kind := No_Homing_Detector) is record
+      Motor         : Motor_Name := Motor_Name'First;
+      Enable_Filter : Boolean := False;
+      case Kind is
+         when No_Homing_Detector =>
+            null;
+
+         when StallGuard2_Homing_Detector =>
+            SG2_Threshold : Integer range -64 .. 63;
+
+         when StallGuard4_Homing_Detector =>
+            SG4_Threshold : Natural range 0 .. 255;
+      end case;
+   end record;
+
+   type Module_Instance_Interface is limited interface;
+
+   procedure Configure_Homing (This : in out Module_Instance_Interface; Parameters : Homing_Driver_Parameters)
+   is abstract;
+
+   procedure Restore_After_Homing (This : in out Module_Instance_Interface; Parameters : Homing_Driver_Parameters)
+   is abstract;
 
    type Module is new My_Modules.Module with null record;
 
@@ -53,13 +75,16 @@ package Prunt.Default_Modules.TMC2240_Drivers is
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
    --  Return the status schema.
 
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
+   type Module_Instance (<>) is synchronized
+     new My_Modules.Module_Instance
+     and Module_Instance_Interface
+     and Cancellation_Handler with private;
 
    overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class;
@@ -359,7 +384,7 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Motor_Array is array (My_Controller_Generic_Types.Motor_Name) of User_Config_Motor
+   type User_Config_Motor_Array is array (Motor_Name) of User_Config_Motor
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
@@ -384,13 +409,12 @@ private
    function Generate_Default_Registers
      (Config              : User_Config_TMC2240;
       Motor_Enabled       : Boolean;
-      Report_Config_Error               :
-           access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
-      Motor               : My_Controller_Generic_Types.Motor_Name;
+      Report_Config_Error : access procedure (Path : Prunt.Config.Config_Path; Message : Virtual_String);
+      Motor               : Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers;
    --  Build and validate Motor's initial registers.
 
-   type Motor_Registers_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC2240_Registers;
+   type Motor_Registers_Map is array (Motor_Name) of TMC2240_Registers;
 
    function Build_Schema return Config.Config_Property_Maps.Map;
    --  Build the configuration schema.
@@ -404,21 +428,17 @@ private
    function MRES_To_Dimensionless (MRES : TMC_Types.TMC2240.Microstep_Resolution_Type) return Dimensionless;
    --  Convert MRES to a microstep count.
 
-   procedure Write_And_Validate
-     (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : My_Controller_Generic_Types.Motor_Name)
+   procedure Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : Motor_Name)
    with Pre => Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind;
    --  Sets address and checksum.
 
    function Read
-     (Address : TMC_Types.TMC2240.UART_Register_Address; Motor : My_Controller_Generic_Types.Motor_Name)
+     (Address : TMC_Types.TMC2240.UART_Register_Address; Motor : Motor_Name)
       return TMC_Types.TMC2240.UART_Data_Message;
    --  Read and validate a motor register.
 
    task type UART_Motor_Manager is
-      entry Setup
-        (Regs           : TMC2240_Registers;
-         Motor          : My_Controller_Generic_Types.Motor_Name;
-         Status_Emitter : Status_Manager.Status_Emitter);
+      entry Setup (Regs : TMC2240_Registers; Motor : Motor_Name; Status_Emitter : Status_Manager.Status_Emitter);
       entry Enable;
       entry Disable;
       entry Stop;
@@ -443,7 +463,7 @@ private
    procedure Finalize (Object : in out TMC_Motor_Manager);
    --  Stop the UART manager.
 
-   type Motor_Manager_Map is array (My_Controller_Generic_Types.Motor_Name) of TMC_Motor_Manager;
+   type Motor_Manager_Map is array (Motor_Name) of TMC_Motor_Manager;
 
    procedure Report_TMC_Debug
      (Planner : Planner_Interface'Class;
@@ -626,12 +646,36 @@ private
    with Annotate => (Prunt_Config, Gcode_Command, "M920");
    --  Set TMC homing current values.
 
-   protected type Module_Instance is new My_Modules.Module_Instance with
+   type Saved_Homing_Registers is record
+      GCONF      : TMC_Types.TMC2240.GCONF;
+      IHOLD_IRUN : TMC_Types.TMC2240.IHOLD_IRUN;
+      TCOOLTHRS  : TMC_Types.TMC2240.TCOOLTHRS;
+      COOLCONF   : TMC_Types.TMC2240.COOLCONF;
+      SG4_THRS   : TMC_Types.TMC2240.SG4_THRS;
+   end record;
+
+   type Saved_Homing_Register_State (Valid : Boolean := False) is record
+      case Valid is
+         when False =>
+            null;
+
+         when True =>
+            Registers : Saved_Homing_Registers;
+      end case;
+   end record;
+   --  Registers captured before temporary homing configuration is applied. Valid is False when no restoration is
+   --  pending for the motor.
+
+   type Saved_Homing_Register_Map is array (Motor_Name) of Saved_Homing_Register_State;
+
+   protected type Module_Instance is new My_Modules.Module_Instance
+   and Module_Instance_Interface
+   and Cancellation_Handler with
       procedure Initialize
         (Config_In                         : User_Config;
          Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
          Report_Config_Error               :
-           access procedure (Path : Prunt.Config.Config_Path'Class; Message : Virtual_String);
+           access procedure (Path : Prunt.Config.Config_Path; Message : Virtual_String);
          Status_Emitter_In                 : Status_Manager.Status_Emitter)
       with
         Pre =>
@@ -641,12 +685,27 @@ private
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
+      overriding
+      procedure Configure_Homing (Parameters : Homing_Driver_Parameters);
+
+      overriding
+      procedure Restore_After_Homing (Parameters : Homing_Driver_Parameters);
+
+      overriding
+      procedure Handle_Cancel
+        (Executed_Corner_ID      : Planner_Corner_ID;
+         Cancellation_Barrier_ID : Planner_Corner_ID;
+         Current_Position        : Position);
+
    private
+      procedure Restore_Motor_After_Homing (Motor : Motor_Name);
+
       Config         : User_Config;
       Registers      : Motor_Registers_Map;
       Managers       : Motor_Manager_Map;
       Self_Ref       : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Status_Emitter : Status_Manager.Status_Emitter;
+      Saved_Homing   : Saved_Homing_Register_Map := [others => (Valid => False)];
    end Module_Instance;
 
    type UART_Motor_Handler is new Motor_Drivers_Module.Motor_Handler with record

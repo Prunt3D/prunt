@@ -47,10 +47,23 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
    --  state. This clears the command queue and resets position tracking to the initial values. Corner IDs are not
    --  reset.
 
-   procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
+   procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
    --  Process queued commands and assemble them into an execution block. This procedure blocks until either a complete
    --  block is assembled or a reset is requested. Reset_Called indicates whether the operation was terminated by a
    --  reset request.
+
+   procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset);
+   --  Publish the retained-tail displacement calculated for the pending homing block.
+
+   procedure Wait_For_Homing_Tail_Offset (Tail_Offset : out Position_Offset; Reset_Called : out Boolean);
+   --  Wait for the planner to publish the pending homing block's retained-tail displacement.
+
+   procedure Resolve_Homing_Position (Pos : Position);
+   --  Supply the true stopped position for the pending homing block.
+
+   procedure Wait_For_Resolved_Homing_Position (Pos : out Position; Reset_Called : out Boolean);
+   --  Wait for the homing module to supply the pending homing block's true stopped position. On success this also
+   --  updates enqueue-time position tracking and reopens the command queue.
 
 private
 
@@ -66,6 +79,9 @@ private
    type Command_Queue_Array_Access is access Command_Queue_Array_Type with Storage_Pool => Pool;
    type Corner_Extra_Data_Queue_Access is access Corner_Extra_Data_Queues.Queue with Storage_Pool => Pool;
 
+   type Homing_Boundary_State is
+     (No_Homing_Boundary, Waiting_For_Tail_Offset, Tail_Offset_Available, Position_Available);
+
    protected Command_Queue is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
       entry Enqueue
@@ -78,6 +94,10 @@ private
       function Dequeue_Extra_Data return Corner_Extra_Data_Type;
       function Get_Last_Assigned_Corner_ID return Planner_Corner_ID;
       function Next_Is_Corner_Extra_Data return Boolean;
+      procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset);
+      entry Wait_For_Homing_Tail_Offset (Tail_Offset : out Position_Offset; Reset_Called : out Boolean);
+      procedure Resolve_Homing_Position (Pos : Position);
+      entry Wait_For_Resolved_Homing_Position (Pos : out Position; Reset_Called : out Boolean);
       procedure Finish_Dequeue;
       procedure Cancel_Dequeue;
       procedure Reset;
@@ -85,18 +105,21 @@ private
       procedure Assign_Corner_ID (Kind : Command_Kind);
       procedure Append_To_Queue (Comm : Command);
 
-      Setup_Done              : Boolean := False;
-      In_Dequeue              : Boolean := False;
-      Is_Full                 : Boolean := False;
-      Next_Read, Next_Write   : Count_Type := Command_Queue_Array_Type'First;
-      Elements                : Command_Queue_Array_Access := new Command_Queue_Array_Type;
-      Current_Params          : Kinematic_Parameters;
-      Extra_Data_Storage      : Corner_Extra_Data_Queue_Access := new Corner_Extra_Data_Queues.Queue;
-      Retry_High_Priority     : Boolean := True;
-      Last_Assigned_Corner_ID : Planner_Corner_ID := 0;
-      Has_Current_Corner_ID   : Boolean := False;
-      Queued_Position         : Position := Initial_Position;
-      --  Endpoint of the last accepted motion command, used to validate the complete path of a subsequent helix.
+      Setup_Done               : Boolean := False;
+      In_Dequeue               : Boolean := False;
+      Is_Full                  : Boolean := False;
+      Next_Read, Next_Write    : Count_Type := Command_Queue_Array_Type'First;
+      Elements                 : Command_Queue_Array_Access := new Command_Queue_Array_Type;
+      Current_Params           : Kinematic_Parameters;
+      Extra_Data_Storage       : Corner_Extra_Data_Queue_Access := new Corner_Extra_Data_Queues.Queue;
+      Retry_High_Priority      : Boolean := True;
+      Last_Assigned_Corner_ID  : Planner_Corner_ID := 0;
+      Has_Current_Corner_ID    : Boolean := False;
+      Queued_Position          : Position := Initial_Position;
+      --  Endpoint of the last accepted motion command.
+      Homing_State             : Homing_Boundary_State := No_Homing_Boundary;
+      Homing_Tail_Offset       : Position_Offset := [others => 0.0 * mm];
+      Resolved_Homing_Position : Position := Initial_Position;
    end Command_Queue;
 
    type Block_Plain_Corners_Access is access Block_Plain_Corners with Storage_Pool => Pool;
@@ -109,11 +132,10 @@ private
 
    protected Runner is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
-      procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean);
+      procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
       procedure Reset (Last_Assigned_ID : Planner_Corner_ID);
    private
       Setup_Done                     : Boolean := False;
-      Last_Pos                       : Position := Initial_Position;
       Last_Assigned_Corner_ID        : Planner_Corner_ID := 0;
       Current_Input_Corner_ID        : Planner_Corner_ID := 0;
       Current_Params                 : Kinematic_Parameters;

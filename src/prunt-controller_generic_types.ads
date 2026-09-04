@@ -38,9 +38,31 @@ package Prunt.Controller_Generic_Types is
 
    use type Gcode_Arguments.Argument_Integer;
 
+   package My_Modules is new Prunt.Modules (Motor_Name, Input_Switch_Name);
+
+   subtype Planner_Interface is My_Modules.Loop_Move_Planner_Interface;
+   subtype Stop_Condition is My_Modules.Loop_Move_Stop_Condition;
+   subtype Stop_Condition_Array is My_Modules.Loop_Move_Stop_Condition_Array;
+
    type Motor_Position is array (Motor_Name) of Dimensionless;
    --  Position multiplied by mm/step values provided by the user. This array is using floating point types and the
    --  numbers are not rounded. An implementation is allowed to round these values if the decimal part is not useful.
+
+   type Loop_Move_Setup is record
+      Stop_Conditions    : Stop_Condition_Array := [others => <>];
+      Maximum_Loop_Count : Loop_Move_Count := Loop_Move_Count'Last;
+   end record;
+   --  Setup for one loop command. A motor participates exactly when the loop command's position differs from its
+   --  position in the preceding command. Each participating motor repeats its command offset until its assigned
+   --  condition is met, then executes its copy of the retained tail and remains stationary while other motors
+   --  continue. Motors that monitor the same input switch meet their conditions together and start their tails
+   --  together. Motors with zero offsets remain stationary throughout the loop and tail, and their stop conditions are
+   --  ignored.
+   --  Maximum_Loop_Count bounds the repetitions of every participating motor.
+   --
+   --  The hardware must retain the complete tail until every participating motor has stopped; its length is bounded by
+   --  Maximum_Loop_Move_Tail_Length in the controller generic contract. If a motor has not met its condition after
+   --  Maximum_Loop_Count repetitions, the hardware must execute that motor's tail and then call Report_External_Error.
 
    type Queued_Command is record
       Index           : Command_Index;
@@ -53,11 +75,7 @@ package Prunt.Controller_Generic_Types is
       --  should be raised. It is recommended that an implementation buffers moves until a Safe_Stop_After move is
       --  received, at which point it should begin executing the buffer, if a buffer becomes full then execution should
       --  of course be started at that point instead.
-      Loop_Until_Hit  : Boolean;
-      --  If True then this move should be looped until the condition set in Setup_For_Loop_Move is met.
    end record;
-
-   package My_Modules is new Prunt.Modules;
 
    function Return_False (Left, Right : My_Modules.Module'Class with Unreferenced) return Boolean
    is (False);

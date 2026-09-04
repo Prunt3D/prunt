@@ -41,7 +41,9 @@ package body Prunt.Default_Modules.Input_Switches is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
-      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
+      return
+        Config.Versioned_Config_Schema'
+          (Version => 1, Module_Instance_Tag => Module_Instance'Tag, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding
@@ -92,7 +94,7 @@ package body Prunt.Default_Modules.Input_Switches is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class

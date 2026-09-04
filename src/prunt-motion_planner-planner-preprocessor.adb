@@ -30,6 +30,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
          Current_Params := Initial_Parameters;
          Queued_Position := Initial_Position;
+         Homing_State := No_Homing_Boundary;
 
          Setup_Done := True;
       end Setup;
@@ -37,17 +38,17 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       procedure Assign_Corner_ID (Kind : Command_Kind) is
       begin
          case Kind is
-            when Move_Kind | Helix_Move_Kind                                                   =>
+            when Move_Kind | Helix_Move_Kind                                                                       =>
                Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                Has_Current_Corner_ID := True;
 
-            when Corner_Extra_Data_Kind                                                        =>
+            when Corner_Extra_Data_Kind                                                                            =>
                if not Has_Current_Corner_ID then
                   Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                   Has_Current_Corner_ID := True;
                end if;
 
-            when Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
+            when Flush_Kind | Homing_Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
                if not Has_Current_Corner_ID then
                   Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                end if;
@@ -72,7 +73,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       entry Enqueue
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
-        when not Is_Full and then High_Priority_Enqueue'Count = 0
+        when not Is_Full and then High_Priority_Enqueue'Count = 0 and then Homing_State = No_Homing_Boundary
       is
       begin
          if High_Priority_Enqueue'Count /= 0 then
@@ -86,7 +87,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
 
          case Comm.Kind is
-            when Flush_Kind                       =>
+            when Flush_Kind | Homing_Flush_Kind   =>
                Assign_Corner_ID (Comm.Kind);
 
             when Corner_Extra_Data_Kind           =>
@@ -144,6 +145,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          --  Checking happens here so we can provide instant feedback to the user when g-code is typed in manually.
 
          Append_To_Queue (Comm);
+
+         if Comm.Kind = Homing_Flush_Kind then
+            Homing_State := Waiting_For_Tail_Offset;
+         end if;
 
          case Comm.Kind is
             when Move_Kind | Helix_Move_Kind   =>
@@ -224,6 +229,50 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
            and then Elements (Next_Read).Kind = Corner_Extra_Data_Kind;
       end Next_Is_Corner_Extra_Data;
 
+      procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset) is
+      begin
+         if not Setup_Done then
+            return;
+         elsif Homing_State /= Waiting_For_Tail_Offset then
+            raise Program_Error with "No homing boundary is waiting for a retained-tail offset.";
+         end if;
+
+         Homing_Tail_Offset := Tail_Offset;
+         Homing_State := Tail_Offset_Available;
+      end Publish_Homing_Tail_Offset;
+
+      entry Wait_For_Homing_Tail_Offset (Tail_Offset : out Position_Offset; Reset_Called : out Boolean)
+        when Homing_State = Tail_Offset_Available or else not Setup_Done
+      is
+      begin
+         Reset_Called := not Setup_Done;
+         Tail_Offset := (if Reset_Called then [others => 0.0 * mm] else Homing_Tail_Offset);
+      end Wait_For_Homing_Tail_Offset;
+
+      procedure Resolve_Homing_Position (Pos : Position) is
+      begin
+         if not Setup_Done then
+            raise Homing_Move_Cancelled_Error with "Planner reset before the homing position was resolved.";
+         elsif Homing_State /= Tail_Offset_Available then
+            raise Program_Error with "No planned homing boundary is waiting for its stopped position.";
+         end if;
+
+         Resolved_Homing_Position := Pos;
+         Homing_State := Position_Available;
+      end Resolve_Homing_Position;
+
+      entry Wait_For_Resolved_Homing_Position (Pos : out Position; Reset_Called : out Boolean)
+        when Homing_State = Position_Available or else not Setup_Done
+      is
+      begin
+         Reset_Called := not Setup_Done;
+         Pos := (if Reset_Called then Initial_Position else Resolved_Homing_Position);
+         if not Reset_Called then
+            Queued_Position := Pos;
+            Homing_State := No_Homing_Boundary;
+         end if;
+      end Wait_For_Resolved_Homing_Position;
+
       procedure Finish_Dequeue is
          Current_Comm : constant Command := Elements (Next_Read);
       begin
@@ -264,6 +313,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Retry_High_Priority := True;
          Has_Current_Corner_ID := False;
          Queued_Position := Initial_Position;
+         Homing_State := No_Homing_Boundary;
       end Reset;
    end Command_Queue;
 
@@ -284,10 +334,30 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Runner.Reset (Command_Queue.Get_Last_Assigned_Corner_ID);
    end Reset;
 
-   procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean) is
+   procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
    begin
-      Runner.Run (Block, Reset_Called);
+      Runner.Run (Block, Start_Pos, Reset_Called);
    end Run;
+
+   procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset) is
+   begin
+      Command_Queue.Publish_Homing_Tail_Offset (Tail_Offset);
+   end Publish_Homing_Tail_Offset;
+
+   procedure Wait_For_Homing_Tail_Offset (Tail_Offset : out Position_Offset; Reset_Called : out Boolean) is
+   begin
+      Command_Queue.Wait_For_Homing_Tail_Offset (Tail_Offset, Reset_Called);
+   end Wait_For_Homing_Tail_Offset;
+
+   procedure Resolve_Homing_Position (Pos : Position) is
+   begin
+      Command_Queue.Resolve_Homing_Position (Pos);
+   end Resolve_Homing_Position;
+
+   procedure Wait_For_Resolved_Homing_Position (Pos : out Position; Reset_Called : out Boolean) is
+   begin
+      Command_Queue.Wait_For_Resolved_Homing_Position (Pos, Reset_Called);
+   end Wait_For_Resolved_Homing_Position;
 
    procedure Setup (Initial_Parameters : Kinematic_Parameters) is
    begin
@@ -307,7 +377,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Setup_Done := True;
       end Setup;
 
-      procedure Run (Block : aliased out Execution_Block; Reset_Called : out Boolean) is
+      procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
          Flush_Resetting_Data         : Flush_Resetting_Data_Type := Flush_Resetting_Data_Type_Default;
          N_Corners                    : Corners_Index := 1;
          Block_N_Corners              : Corners_Index
@@ -321,6 +391,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Is_Extra_Data_Overflow_Block : Boolean := False;
          Is_First_Command_In_Block    : Boolean := True;
          Associated_Overflow_Block    : Boolean := False;
+         Last_Pos                     : Position := Start_Pos;
 
          procedure Finish_Dequeue_And_Update_Corner_ID (Kind : Command_Kind; Corner_ID : out Planner_Corner_ID);
          --  Commit the current dequeue transaction and update the runner's mirror of command-queue corner ID state.
@@ -338,19 +409,22 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
             --  TODO: We should probably try to combine this with the enqueue logic to lower the risk of a mismatch.
             case Kind is
-               when Move_Kind | Helix_Move_Kind                                                   =>
+               when Move_Kind | Helix_Move_Kind
+               =>
                   Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                   Current_Input_Corner_ID := Last_Assigned_Corner_ID;
                   Corner_ID := Current_Input_Corner_ID;
 
-               when Corner_Extra_Data_Kind                                                        =>
+               when Corner_Extra_Data_Kind
+               =>
                   if Current_Input_Corner_ID = 0 then
                      Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                      Current_Input_Corner_ID := Last_Assigned_Corner_ID;
                   end if;
                   Corner_ID := Current_Input_Corner_ID;
 
-               when Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind =>
+               when Flush_Kind | Homing_Flush_Kind | Flush_And_Reset_Position_Kind | Flush_And_Change_Parameters_Kind
+               =>
                   if Current_Input_Corner_ID = 0 then
                      Last_Assigned_Corner_ID := Last_Assigned_Corner_ID + 1;
                      Corner_ID := Last_Assigned_Corner_ID;
@@ -429,7 +503,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   exit Read_In_Commands when Corners_Extra_Data.Last_Index = Corners_Extra_Data_Index'Last;
                else
                   case Next_Command.Kind is
-                     when Flush_Kind                       =>
+                     when Flush_Kind | Homing_Flush_Kind   =>
                         Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
 
                         if Current_Corner_ID = 0 then
@@ -437,7 +511,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                         end if;
 
                         Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
-                        Is_Homing_Move := Next_Command.Is_Homing_Move;
+                        Is_Homing_Move := Next_Command.Kind = Homing_Flush_Kind;
                         exit Read_In_Commands;
 
                      when Flush_And_Reset_Position_Kind    =>
@@ -449,7 +523,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                         Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                         Last_Pos := Next_Command.Reset_Pos;
-                        Is_Homing_Move := Next_Command.Is_Homing_Move;
+                        Is_Homing_Move := False;
                         exit Read_In_Commands;
 
                      when Flush_And_Change_Parameters_Kind =>
@@ -461,7 +535,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                         Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
                         Next_Params := Limit_Higher_Order_Params (Next_Command.New_Params);
-                        Is_Homing_Move := Next_Command.Is_Homing_Move;
+                        Is_Homing_Move := False;
                         exit Read_In_Commands;
 
                      when Corner_Extra_Data_Kind           =>
@@ -571,7 +645,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       procedure Reset (Last_Assigned_ID : Planner_Corner_ID) is
       begin
          Setup_Done := False;
-         Last_Pos := Initial_Position;
          Last_Assigned_Corner_ID := Last_Assigned_ID;
          Current_Input_Corner_ID := 0;
       end Reset;
@@ -580,168 +653,17 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters) is
    begin
-      for I in Axis_Name loop
-         if not (Pos (I) >= Params.Lower_Pos_Limit (I) and then Pos (I) <= Params.Upper_Pos_Limit (I)) then
-            raise Out_Of_Bounds_Error with "Position is out of bounds (" & I'Image & " = " & Pos (I)'Image & ").";
-         end if;
-      end loop;
+      if not Position_Is_In_Bounds (Pos, Params) then
+         raise Out_Of_Bounds_Error with "Position is outside the configured workspace.";
+      end if;
    end Check_Bounds;
 
    procedure Check_Helix_Bounds
-     (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean; Params : Kinematic_Parameters)
-   is
-      Two_Pi           : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
-      Radius_Tolerance : constant Length := 1.0E-6 * mm;
-
-      function Is_Finite (Value : Dimensionless) return Boolean
-      is (Value >= -Dimensionless'Last and then Value <= Dimensionless'Last);
-
-      function Safe_Hypot (DX, DY : Length; Success : out Boolean) return Length;
-
-      procedure Check_Axis (Axis : Axis_Name; Value : Length);
-
-      function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean;
-
-      function Safe_Hypot (DX, DY : Length; Success : out Boolean) return Length is
-         X     : constant Dimensionless := Dimensionless (DX / mm);
-         Y     : constant Dimensionless := Dimensionless (DY / mm);
-         Scale : constant Dimensionless := Dimensionless'Max (abs X, abs Y);
-      begin
-         if not Is_Finite (X) or else not Is_Finite (Y) then
-            Success := False;
-            return 0.0 * mm;
-         elsif Scale = 0.0 then
-            Success := True;
-            return 0.0 * mm;
-         end if;
-
-         declare
-            Raw : constant Dimensionless := Scale * Dimensionless_Math.Sqrt ((X / Scale) ** 2 + (Y / Scale) ** 2);
-         begin
-            Success := Is_Finite (Raw) and then Raw <= Dimensionless (Length'Last / mm);
-            return (if Success then Raw * mm else 0.0 * mm);
-         end;
-      exception
-         when Constraint_Error =>
-            Success := False;
-            return 0.0 * mm;
-      end Safe_Hypot;
-
-      procedure Check_Axis (Axis : Axis_Name; Value : Length) is
-      begin
-         if not (Value >= Params.Lower_Pos_Limit (Axis) and then Value <= Params.Upper_Pos_Limit (Axis)) then
-            raise Out_Of_Bounds_Error with "Helix is out of bounds (" & Axis'Image & " = " & Value'Image & ").";
-         end if;
-      end Check_Axis;
-
-      function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean is
-         Progress  : Dimensionless := (if Theta_Delta > 0.0 then Phase - Theta_Start else Theta_Start - Phase);
-         Magnitude : constant Dimensionless := abs Theta_Delta;
-         Tolerance : constant Dimensionless :=
-           64.0
-           * Dimensionless'Model_Epsilon
-           * (1.0 + Dimensionless'Max (abs Phase, Dimensionless'Max (abs Theta_Start, Magnitude)));
-      begin
-         if Progress < 0.0 then
-            Progress := Progress + Two_Pi;
-         end if;
-         return Progress <= Magnitude + Tolerance;
-      end Phase_Is_On_Arc;
-
-      Start_DX, Start_DY   : Length;
-      Finish_DX, Finish_DY : Length;
-      Start_Radius         : Length;
-      Finish_Radius        : Length;
-      Start_Radius_OK      : Boolean;
-      Finish_Radius_OK     : Boolean;
+     (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean; Params : Kinematic_Parameters) is
    begin
-      --  The axial coordinates of a helix are affine in phase, so checking both endpoints encloses all Z/E values.
-      Check_Bounds (Start_Pos, Params);
-      Check_Bounds (Finish_Pos, Params);
-
-      Start_DX := Start_Pos (X_Axis) - Center (X_Axis);
-      Start_DY := Start_Pos (Y_Axis) - Center (Y_Axis);
-      Finish_DX := Finish_Pos (X_Axis) - Center (X_Axis);
-      Finish_DY := Finish_Pos (Y_Axis) - Center (Y_Axis);
-      Start_Radius := Safe_Hypot (Start_DX, Start_DY, Start_Radius_OK);
-      Finish_Radius := Safe_Hypot (Finish_DX, Finish_DY, Finish_Radius_OK);
-
-      if not Start_Radius_OK or else not Finish_Radius_OK then
-         raise Out_Of_Bounds_Error with "Helix geometry is outside the supported numeric range.";
+      if not Helix_Is_In_Bounds (Start_Pos, Finish_Pos, Center, Clockwise, Params) then
+         raise Out_Of_Bounds_Error with "Helix is outside the configured position limits.";
       end if;
-
-      --  Derive_Path_Primitive deliberately converts a zero-radius or materially mismatched helix to a line. The two
-      --  endpoint checks above are sufficient for that convex path.
-      if Start_Radius <= 0.0 * mm or else abs (Start_Radius - Finish_Radius) > Radius_Tolerance then
-         return;
-      end if;
-
-      declare
-         Theta_Start   : constant Dimensionless := Dimensionless_Math.Arctan (Start_DY / mm, Start_DX / mm);
-         Offset_Scale  : constant Length :=
-           Length'Max (abs Start_DX, Length'Max (abs Start_DY, Length'Max (abs Finish_DX, abs Finish_DY)));
-         Coincident_XY : constant Boolean := Start_DX = Finish_DX and then Start_DY = Finish_DY;
-         Theta_Delta   : Dimensionless := 0.0;
-
-         procedure Check_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length);
-
-         procedure Check_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length) is
-         begin
-            if Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta) then
-               Check_Axis (Axis, Value);
-            end if;
-         end Check_Cardinal;
-      begin
-         if Coincident_XY then
-            Theta_Delta := (if Clockwise then -Two_Pi else Two_Pi);
-         else
-            declare
-               Start_X  : constant Dimensionless := Start_DX / Offset_Scale;
-               Start_Y  : constant Dimensionless := Start_DY / Offset_Scale;
-               Finish_X : constant Dimensionless := Finish_DX / Offset_Scale;
-               Finish_Y : constant Dimensionless := Finish_DY / Offset_Scale;
-               Cross    : constant Dimensionless := Start_X * Finish_Y - Start_Y * Finish_X;
-               Dot      : constant Dimensionless := Start_X * Finish_X + Start_Y * Finish_Y;
-            begin
-               Theta_Delta := Dimensionless_Math.Arctan (Cross, Dot);
-            end;
-
-            --  Match Derive_Path_Primitive: distinct radial points whose relative angle rounds to zero execute as a
-            --  line, while exact coincident points above execute as a full circle.
-            if Theta_Delta = 0.0 then
-               return;
-            elsif Clockwise and then Theta_Delta > 0.0 then
-               Theta_Delta := Theta_Delta - Two_Pi;
-            elsif not Clockwise and then Theta_Delta < 0.0 then
-               Theta_Delta := Theta_Delta + Two_Pi;
-            end if;
-         end if;
-
-         --  Between endpoints, a circular X/Y coordinate can attain a new extremum only at a cardinal phase.
-         Check_Cardinal (0.0, X_Axis, Center (X_Axis) + Start_Radius);
-         Check_Cardinal (Ada.Numerics.Pi, X_Axis, Center (X_Axis) - Start_Radius);
-         Check_Cardinal (0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) + Start_Radius);
-         Check_Cardinal (-0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) - Start_Radius);
-
-         --  A radius mismatch inside the primitive tolerance still executes on Start_Radius. Check the projected end,
-         --  not only the requested corner, so the tolerance cannot hide a sub-micrometre boundary crossing.
-         if Finish_Radius > 0.0 * mm then
-            declare
-               Scale : constant Dimensionless := Start_Radius / Finish_Radius;
-            begin
-               Check_Axis (X_Axis, Center (X_Axis) + Scale * Finish_DX);
-               Check_Axis (Y_Axis, Center (Y_Axis) + Scale * Finish_DY);
-            end;
-         else
-            Check_Axis (X_Axis, Center (X_Axis) + Start_Radius);
-            Check_Axis (X_Axis, Center (X_Axis) - Start_Radius);
-            Check_Axis (Y_Axis, Center (Y_Axis) + Start_Radius);
-            Check_Axis (Y_Axis, Center (Y_Axis) - Start_Radius);
-         end if;
-      end;
-   exception
-      when Constraint_Error =>
-         raise Out_Of_Bounds_Error with "Helix geometry is outside the supported numeric range.";
    end Check_Helix_Bounds;
 
    function Limit_Higher_Order_Params (Params : Kinematic_Parameters) return Kinematic_Parameters is

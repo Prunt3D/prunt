@@ -40,11 +40,6 @@ package body Prunt.Motion_Planner.Planner is
    package My_Feedrate_Profile_Generator is new Feedrate_Profile_Generator;
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
-   Motor_Delta_Numerical_Safety_Factor : constant Dimensionless := 0.999;
-
-   function Scaled_Curvature_Norm (Coefficients : Projection_Coefficients) return Curvature;
-   function Scaled_Curvature_Hypot (Left, Right : Curvature) return Curvature;
-
    function Scaled_Curvature_Norm (Coefficients : Projection_Coefficients) return Curvature is
       Scale      : Curvature := 0.0 / mm;
       Square_Sum : Dimensionless := 0.0;
@@ -116,33 +111,40 @@ package body Prunt.Motion_Planner.Planner is
         (Comm => (Kind => Corner_Extra_Data_Kind), Ignore_Bounds => False, Extra => Data_Copy'Access);
    end Enqueue_Corner_Extra_Data;
 
-   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type; Is_Homing_Move : Boolean := False) is
+   procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type) is
    begin
-      My_Preprocessor.Enqueue ((Kind => Flush_Kind, Flush_Resetting_Data => Data, Is_Homing_Move => Is_Homing_Move));
+      My_Preprocessor.Enqueue ((Kind => Flush_Kind, Flush_Resetting_Data => Data));
    end Enqueue_Flush;
 
+   function Enqueue_Homing_Flush (Data : Flush_Resetting_Data_Type) return Position_Offset is
+      Tail_Offset  : Position_Offset;
+      Reset_Called : Boolean;
+   begin
+      My_Preprocessor.Enqueue ((Kind => Homing_Flush_Kind, Flush_Resetting_Data => Data));
+      My_Preprocessor.Wait_For_Homing_Tail_Offset (Tail_Offset, Reset_Called);
+      if Reset_Called then
+         raise Homing_Move_Cancelled_Error with "Planner reset while waiting for a homing move to be planned.";
+      end if;
+      return Tail_Offset;
+   end Enqueue_Homing_Flush;
+
+   procedure Resolve_Homing_Position (Pos : Position) is
+   begin
+      My_Preprocessor.Resolve_Homing_Position (Pos);
+   end Resolve_Homing_Position;
+
    procedure Enqueue_Flush_And_Reset_Position
-     (Data           : Flush_Resetting_Data_Type;
-      Pos            : Position;
-      Is_Homing_Move : Boolean := False;
-      Ignore_Bounds  : Boolean := False) is
+     (Data : Flush_Resetting_Data_Type; Pos : Position; Ignore_Bounds : Boolean := False) is
    begin
       My_Preprocessor.Enqueue
-        ((Kind                 => Flush_And_Reset_Position_Kind,
-          Flush_Resetting_Data => Data,
-          Is_Homing_Move       => Is_Homing_Move,
-          Reset_Pos            => Pos),
-         Ignore_Bounds);
+        ((Kind => Flush_And_Reset_Position_Kind, Flush_Resetting_Data => Data, Reset_Pos => Pos), Ignore_Bounds);
    end Enqueue_Flush_And_Reset_Position;
 
    procedure Enqueue_Flush_And_Change_Kinematic_Parameters
-     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters; Is_Homing_Move : Boolean := False) is
+     (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters) is
    begin
       My_Preprocessor.Enqueue
-        ((Kind                 => Flush_And_Change_Parameters_Kind,
-          Flush_Resetting_Data => Data,
-          Is_Homing_Move       => Is_Homing_Move,
-          New_Params           => New_Params));
+        ((Kind => Flush_And_Change_Parameters_Kind, Flush_Resetting_Data => Data, New_Params => New_Params));
    end Enqueue_Flush_And_Change_Kinematic_Parameters;
 
    procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean) is
@@ -940,6 +942,31 @@ package body Prunt.Motion_Planner.Planner is
           (Profile_Window_Candidate_Index (Block.Profile_Window_Selections (Finishing_Corner)));
    end Selected_Profile_Window;
 
+   function Homing_Unavoidable_Tail_Time (Block : not null access constant Execution_Block) return Time is
+      Finishing_Corner : constant Finishing_Corners_Index := Finishing_Corners_Index'First;
+      Window           : constant Profile_Window := Selected_Profile_Window (Block, Finishing_Corner);
+      Suffix_Distance  : constant Length :=
+        Segment_Total_Distance (Block, Finishing_Corner) - Window.Start_Distance - Window.Distance;
+      Suffix_Time      : constant Time :=
+        Constant_Speed_Time (Suffix_Distance, Block.Corner_Velocity_Limits (Finishing_Corner));
+   begin
+      return
+        Home_Move_Minimum_Coast_Time
+        + Total_Time (Block.Feedrate_Profiles (Finishing_Corner).Decel)
+        + Suffix_Time
+        + Block.Corner_Dwell_Times (Finishing_Corner);
+   end Homing_Unavoidable_Tail_Time;
+
+   function Homing_Profile_Violation (Block : not null access constant Execution_Block) return Time is
+      Finishing_Corner : constant Finishing_Corners_Index := Finishing_Corners_Index'First;
+      Coast_Deficit    : constant Time :=
+        Time'Max (0.0 * s, Home_Move_Required_Coast_Time - Block.Feedrate_Profiles (Finishing_Corner).Coast);
+      Tail_Excess      : constant Time :=
+        Time'Max (0.0 * s, Homing_Unavoidable_Tail_Time (Block) - Home_Move_Maximum_Tail_Time);
+   begin
+      return Coast_Deficit + Tail_Excess;
+   end Homing_Profile_Violation;
+
    task body Runner is
       type Block_Wrapper is record
          Block : aliased Execution_Block;
@@ -956,19 +983,21 @@ package body Prunt.Motion_Planner.Planner is
 
       Reset_Called      : Boolean := False;
       Current_Motor_Map : Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Next_Block_Start  : Position := Initial_Position;
    begin
       loop
          accept Setup (In_Params : Kinematic_Parameters; In_Motor_Map : Motor_Position_Map) do
             My_Preprocessor.Setup (In_Params);
             Current_Motor_Map := In_Motor_Map;
+            Next_Block_Start := Initial_Position;
          end Setup;
 
-         loop
-            My_Preprocessor.Run (Block, Reset_Called);
+         Planning_Loop : loop
+            My_Preprocessor.Run (Block, Next_Block_Start, Reset_Called);
 
             if Reset_Called then
                accept Reset_Do_Not_Call_From_Other_Packages;
-               exit;
+               exit Planning_Loop;
             end if;
 
             if Block.Kind /= Extra_Data_Overflow_Block_Kind then
@@ -979,17 +1008,88 @@ package body Prunt.Motion_Planner.Planner is
                My_Corner_Blender.Run (Block, Current_Motor_Map, Workspace);
                My_Early_Kinematic_Limiter.Run (Block, Current_Motor_Map);
 
-               loop
-                  My_Kinematic_Limiter.Run (Block, Current_Motor_Map, Workspace);
-                  My_Feedrate_Profile_Generator.Run (Block, Current_Motor_Map, Workspace);
+               declare
+                  Have_Previous_Violation : Boolean := False;
+                  Previous_Violation      : Time := 0.0 * s;
+                  Adjustment_Count        : Natural := 0;
+               begin
+                  loop
+                     My_Kinematic_Limiter.Run (Block, Current_Motor_Map, Workspace);
+                     My_Feedrate_Profile_Generator.Run (Block, Current_Motor_Map, Workspace);
 
-                  exit when
-                    (not Block.Is_Homing_Move)
-                    or else Block.Feedrate_Profiles (2).Coast >= Home_Move_Minimum_Coast_Time;
+                     exit when
+                       (not Block.Is_Homing_Move)
+                       or else
+                         (Block.Feedrate_Profiles (2).Coast >= Home_Move_Required_Coast_Time
+                          and then Homing_Unavoidable_Tail_Time (Block'Access) <= Home_Move_Maximum_Tail_Time);
 
-                  Block.Limited_Segment_Feedrates (2) := Block.Limited_Segment_Feedrates (2) * 0.9;
-               end loop;
+                     declare
+                        Violation         : constant Time := Homing_Profile_Violation (Block'Access);
+                        Previous_Feedrate : constant Velocity := Block.Limited_Segment_Feedrates (2);
+                        New_Feedrate      : constant Velocity := Previous_Feedrate * 0.9;
+                     begin
+                        if Have_Previous_Violation and then Violation > Previous_Violation then
+                           raise Constraint_Error
+                             with "Reducing the homing feedrate made the coast or retained-tail violation worse.";
+                        end if;
+
+                        if Adjustment_Count = Maximum_Homing_Feedrate_Adjustments then
+                           raise Constraint_Error with "Homing feedrate adjustment exceeded its iteration limit.";
+                        end if;
+
+                        if New_Feedrate <= 0.0 * mm / s or else New_Feedrate >= Previous_Feedrate then
+                           raise Constraint_Error with "Homing feedrate adjustment made no representable progress.";
+                        end if;
+
+                        Have_Previous_Violation := True;
+                        Previous_Violation := Violation;
+                        Adjustment_Count := @ + 1;
+                        Block.Limited_Segment_Feedrates (2) := New_Feedrate;
+                     end;
+                  end loop;
+               end;
+
+               if Block.Is_Homing_Move then
+                  declare
+                     Finishing_Corner  : constant Finishing_Corners_Index := Finishing_Corners_Index'First;
+                     Window            : constant Profile_Window :=
+                       Selected_Profile_Window (Block'Access, Finishing_Corner);
+                     Prefix_Time       : constant Time :=
+                       Constant_Speed_Time
+                         (Window.Start_Distance, Block.Corner_Velocity_Limits (Finishing_Corner - 1));
+                     --  Time spent in the constant-speed prefix before the generated acceleration profile.
+                     Coast_Start_Time  : constant Time :=
+                       Prefix_Time + Total_Time (Block.Feedrate_Profiles (Finishing_Corner).Accel);
+                     --  First time at which the generated profile has reached its constant-velocity coast.
+                     End_Time          : constant Time := Segment_Time (Block'Access, Finishing_Corner);
+                     --  Time at the end of the complete homing segment, including any suffix and dwell.
+                     Minimum_Time      : constant Time :=
+                       Time'Max
+                         (Coast_Start_Time + Home_Move_Minimum_Coast_Time, End_Time - Home_Move_Maximum_Tail_Time);
+                     --  The loop command must leave the configured coast margin after acceleration, while also being
+                     --  late enough that every retained command after it fits within the hardware tail-time limit.
+                     Loop_Pos          : constant Position :=
+                       Segment_Pos_At_Time (Block'Access, Finishing_Corner, Minimum_Time);
+                     --  Planned tool position at the earliest permitted loop-command time. The step generator uses
+                     --  the first regular interpolation sample at or after this point, so the published tail is
+                     --  conservatively longer than the emitted tail by less than one interpolation period of motion.
+                     Tail_Offset       : constant Position_Offset := Block.Corners (Block.N_Corners) - Loop_Pos;
+                     --  Conservative planned displacement from a detector hit through the complete retained tail.
+                     Resolved_Position : Position;
+                  begin
+                     Block.Loop_Move_Minimum_Time := Minimum_Time;
+                     My_Preprocessor.Publish_Homing_Tail_Offset (Tail_Offset);
+                     My_Preprocessor.Wait_For_Resolved_Homing_Position (Resolved_Position, Reset_Called);
+                     if Reset_Called then
+                        accept Reset_Do_Not_Call_From_Other_Packages;
+                        exit Planning_Loop;
+                     end if;
+                     Block.Next_Block_Pos := Resolved_Position;
+                  end;
+               end if;
             end if;
+
+            Next_Block_Start := Block.Next_Block_Pos;
 
             select
                accept Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block) do
@@ -997,9 +1097,9 @@ package body Prunt.Motion_Planner.Planner is
                end Dequeue_Do_Not_Call_From_Other_Packages;
             or
                accept Reset_Do_Not_Call_From_Other_Packages;
-               exit;
+               exit Planning_Loop;
             end select;
-         end loop;
+         end loop Planning_Loop;
       end loop;
    end Runner;
 
@@ -1073,10 +1173,9 @@ package body Prunt.Motion_Planner.Planner is
    end Segment_Corner_Distance;
 
    function Segment_Pos_At_Time
-     (Block              : not null access constant Execution_Block;
-      Finishing_Corner   : Finishing_Corners_Index;
-      Time_Into_Segment  : Time;
-      Is_Past_Accel_Part : out Boolean) return Position
+     (Block             : not null access constant Execution_Block;
+      Finishing_Corner  : Finishing_Corners_Index;
+      Time_Into_Segment : Time) return Position
    is
       Window           : constant Profile_Window := Selected_Profile_Window (Block, Finishing_Corner);
       Max_Crackle      : constant Crackle := Block.Profile_Crackles (Finishing_Corner);
@@ -1109,22 +1208,15 @@ package body Prunt.Motion_Planner.Planner is
                    - End_Vel)
               < 0.000_1 * mm / s);
 
-         Is_Past_Accel_Part := True;
          return Pos;
       elsif Time_Into_Segment <= Prefix_Time then
-         Is_Past_Accel_Part := False;
          Pos := Point_At_Segment_Distance (Block, Finishing_Corner, Start_Vel * Time_Into_Segment);
 
          return Pos;
       elsif Time_Past_Prefix <= Profile_Time then
          declare
             Distance : constant Length :=
-              Distance_At_Time
-                (Block.Feedrate_Profiles (Finishing_Corner),
-                 Time_Past_Prefix,
-                 Max_Crackle,
-                 Start_Vel,
-                 Is_Past_Accel_Part);
+              Distance_At_Time (Block.Feedrate_Profiles (Finishing_Corner), Time_Past_Prefix, Max_Crackle, Start_Vel);
          begin
             Pos := Point_At_Segment_Distance (Block, Finishing_Corner, Prefix_Distance + Distance);
 
@@ -1133,7 +1225,6 @@ package body Prunt.Motion_Planner.Planner is
       else
          pragma Assert (Time_Into_Segment <= Motion_Time);
 
-         Is_Past_Accel_Part := True;
          Pos :=
            Point_At_Segment_Distance
              (Block,
@@ -1194,19 +1285,10 @@ package body Prunt.Motion_Planner.Planner is
       return Block.Flush_Resetting_Data;
    end Flush_Resetting_Data;
 
-   function Segment_Accel_Distance
-     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
-   is
-      Window : constant Profile_Window := Selected_Profile_Window (Block, Finishing_Corner);
+   function Loop_Move_Minimum_Time (Block : not null access constant Execution_Block) return Time is
    begin
-      return
-        Window.Start_Distance
-        + Distance_At_Time
-            (Profile     => Block.Feedrate_Profiles (Finishing_Corner),
-             T           => Total_Time (Block.Feedrate_Profiles (Finishing_Corner).Accel),
-             Max_Crackle => Block.Profile_Crackles (Finishing_Corner),
-             Start_Vel   => Block.Corner_Velocity_Limits (Finishing_Corner - 1));
-   end Segment_Accel_Distance;
+      return Block.Loop_Move_Minimum_Time;
+   end Loop_Move_Minimum_Time;
 
    function Block_Kind (Block : Execution_Block) return Execution_Block_Kind is
    begin

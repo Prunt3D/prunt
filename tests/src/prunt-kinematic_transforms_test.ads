@@ -17,27 +17,10 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-pragma Extensions_Allowed (On);
+with Trendy_Test;
 
-with Prunt.Controller_Generic_Types;
-with Prunt.Logger;
-with Prunt.Module_Types;
+package Prunt.Kinematic_Transforms_Test is
 
-pragma Warnings (Off, "unit ""Prunt.Status_Manager"" is not referenced");
---  Used by child units.
-with Prunt.Status_Manager;
-pragma Warnings (On, "unit ""Prunt.Status_Manager"" is not referenced");
+   function All_Tests return Trendy_Test.Test_Group;
 
-generic
-   with package My_Controller_Generic_Types is new Prunt.Controller_Generic_Types (<>);
-   with package My_Logger is new Prunt.Logger;
-package Prunt.Default_Modules is
-   use My_Controller_Generic_Types;
-
-   package My_Modules renames My_Controller_Generic_Types.My_Modules;
-
-   use type My_Controller_Generic_Types.Motor_Name;
-   use type My_Controller_Generic_Types.Input_Switch_Name;
-
-   subtype Planner_Interface is Module_Types.Planner_Interface;
-end Prunt.Default_Modules;
+end Prunt.Kinematic_Transforms_Test;

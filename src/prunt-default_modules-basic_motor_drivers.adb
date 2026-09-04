@@ -31,7 +31,9 @@ package body Prunt.Default_Modules.Basic_Motor_Drivers is
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
       pragma Unreferenced (This);
    begin
-      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
+      return
+        Config.Versioned_Config_Schema'
+          (Version => 1, Module_Instance_Tag => Module_Instance'Tag, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding
@@ -45,7 +47,7 @@ package body Prunt.Default_Modules.Basic_Motor_Drivers is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -90,7 +92,7 @@ package body Prunt.Default_Modules.Basic_Motor_Drivers is
          Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class renames
            Motor_Drivers_Module.Module_Instance_Interface'Class (Motor_Drivers_Module_Instance_Ref.Get.Element.all);
       begin
-         for M in My_Controller_Generic_Types.Motor_Name loop
+         for M in Motor_Name loop
             case Config_In.Motors (M).Fixed_Kind is
                when Basic_Motor_Kind  =>
                   Motor_Drivers_Module_Instance.Provide_Motor_Configuration

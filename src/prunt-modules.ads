@@ -27,14 +27,65 @@ with Prunt.Module_Types; use Prunt.Module_Types;
 with Prunt.Status_Manager;
 
 generic
-   --  This package is generic to allow it to have the same accessibility level as generic modules. This is required as
-   --  it contains shared pointers to class-wide Module_Instance types.
+   type Motor_Name is (<>);
+   type Input_Switch_Name is (<>);
 package Prunt.Modules is
+
+   type Loop_Move_Stop_Condition is record
+      Input_Switch : Input_Switch_Name := Input_Switch_Name'First;
+      --  Input switch monitored for the corresponding motor when its loop-command offset is nonzero. Motors may share
+      --  an input.
+      Stop_State   : Boolean := True;
+      --  Input-switch state that stops the corresponding motor.
+   end record;
+
+   type Loop_Move_Stop_Condition_Array is array (Motor_Name) of Loop_Move_Stop_Condition;
+
+   type Loop_Move_Planner_Interface is limited interface and Module_Types.Planner_Interface;
+   --  Optional planner capability for modules which generate hardware loop moves.
+
+   function Flush_Loop_Move
+     (This               : Loop_Move_Planner_Interface;
+      Stop_Conditions    : Loop_Move_Stop_Condition_Array;
+      Maximum_Loop_Count : Loop_Move_Count;
+      Extra_Data         : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+      return Position_Offset
+   is abstract;
+   --  Finish the current block as a loop move and return its retained-tail Cartesian offset. A condition is used only
+   --  when the corresponding motor has a nonzero loop-command offset.
+
+   function Flush_Motor_Loop_Move
+     (This               : Loop_Move_Planner_Interface;
+      Motor              : Motor_Name;
+      Stop_Condition     : Loop_Move_Stop_Condition;
+      Maximum_Loop_Count : Loop_Move_Count;
+      Extra_Data         : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+      return Position_Offset
+   is abstract;
+   --  Finish the current block as a loop move in which only the selected motor group executes the planned transformed
+   --  motion. For Cartesian kinematics the group contains every motor assigned to Motor's axis, including duplicated
+   --  axis motors. Motor-selective moves are rejected for CoreXY and other linear kinematics in which a motor affects
+   --  multiple Cartesian axes. For delta kinematics the group contains every motor assigned to Motor's tower; the
+   --  independent extruder forms a group by itself. An unused Motor is rejected. Stop_Condition applies to every motor
+   --  in the group. All motors outside the group are held at their block-start positions throughout the move and its
+   --  retained tail.
+
+   procedure Flush_Motor_Move
+     (This       : Loop_Move_Planner_Interface;
+      Motor      : Motor_Name;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is abstract;
+   --  Finish the current block with only the selected motor group executing the planned transformed motion. For
+   --  Cartesian kinematics the group contains every motor assigned to Motor's axis, including duplicated axis motors.
+   --  The move is rejected for CoreXY and other linear kinematics in which a motor affects multiple Cartesian axes.
+   --  For delta kinematics the group contains every motor assigned to Motor's tower; the independent extruder forms a
+   --  group by itself. An unused Motor is rejected. All motors outside the group are held at their block-start
+   --  positions. This operation does not configure a repeated command or a stop condition.
 
    type Module is abstract tagged private;
 
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class
-   is (Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => []));
+   is (Config.Versioned_Config_Schema'(Version => 1, Module_Instance_Tag => Ada.Tags.No_Tag, Top_Level_Items => []));
    --  Return this module's versioned configuration schema, or an empty version-one schema by default.
 
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector
@@ -90,7 +141,7 @@ package Prunt.Modules is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return Module_Instance_Shared_Pointers.Ref)
       return Module_Instance'Class

@@ -46,7 +46,9 @@ package body Prunt.Default_Modules.Motion is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
-      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
+      return
+        Config.Versioned_Config_Schema'
+          (Version => 1, Module_Instance_Tag => Module_Instance'Tag, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding
@@ -56,7 +58,7 @@ package body Prunt.Default_Modules.Motion is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -75,33 +77,61 @@ package body Prunt.Default_Modules.Motion is
          Params : constant Motion_Planner.Kinematic_Parameters :=
            Kinematics_Module_Instance.Get_Default_Motion_Planner_Configuration.Parameters;
 
-         procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Path);
+         procedure Check_Interval (Value, Lower, Upper : Length; Path : Config.Config_Path);
 
-         procedure Check_Axis (Axis : Axis_Name; Value : Length; Path : Config.Config_Path) is
+         procedure Check_Interval (Value, Lower, Upper : Length; Path : Config.Config_Path) is
          begin
             pragma Annotate (Xcov, Exempt_On, "Configuration validation error reporting.");
-            if Value < Params.Lower_Pos_Limit (Axis) then
+            if Value < Lower then
                Report_Config_Error (Path, "This absolute position is below the configured lower position limit.");
             end if;
 
-            if Value > Params.Upper_Pos_Limit (Axis) then
+            if Value > Upper then
                Report_Config_Error (Path, "This absolute position is above the configured upper position limit.");
             end if;
             pragma Annotate (Xcov, Exempt_Off);
-         end Check_Axis;
+         end Check_Interval;
       begin
          if Parsed_Config.Pause_Park.Kind = Absolute_Park_Move then
             declare
                Move : constant User_Config_Pause_Park_Absolute_Park_Move :=
                  Parsed_Config.Pause_Park.Absolute_Park_Move;
             begin
-               Check_Axis (X_Axis, Move.X_Position, My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.X_Position);
-               Check_Axis (Y_Axis, Move.Y_Position, My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.Y_Position);
+               case Params.Bounds.Kind is
+                  when Motion_Planner.Rectangular_Workspace =>
+                     Check_Interval
+                       (Move.X_Position,
+                        Params.Bounds.Lower_X,
+                        Params.Bounds.Upper_X,
+                        My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.X_Position);
+                     Check_Interval
+                       (Move.Y_Position,
+                        Params.Bounds.Lower_Y,
+                        Params.Bounds.Upper_Y,
+                        My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.Y_Position);
+
+                  when Motion_Planner.Circular_Workspace    =>
+                     declare
+                        Pos : Position := [others => 0.0 * mm];
+                     begin
+                        Pos (X_Axis) := Move.X_Position;
+                        Pos (Y_Axis) := Move.Y_Position;
+                        if not Motion_Planner.XY_Position_Is_In_Bounds (Pos, Params) then
+                           Report_Config_Error
+                             (My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.X_Position,
+                              "The X/Y park position is outside the configured circular workspace.");
+                           Report_Config_Error
+                             (My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.Y_Position,
+                              "The X/Y park position is outside the configured circular workspace.");
+                        end if;
+                     end;
+               end case;
 
                if Move.Z_Target.Kind = Absolute_Z_Position then
-                  Check_Axis
-                    (Z_Axis,
-                     Move.Z_Target.Z_Position,
+                  Check_Interval
+                    (Move.Z_Target.Z_Position,
+                     Params.Bounds.Lower_Z,
+                     Params.Bounds.Upper_Z,
                      My_Config_Paths.Root.Pause_Park.Absolute_Park_Move.Z_Target.Z_Position);
                end if;
             end;
@@ -222,7 +252,10 @@ package body Prunt.Default_Modules.Motion is
       Command_Identifier : Gcode_Command_Identifier) is separate;
 
    procedure Add_Corner_If_Moved
-     (Planner : Planner_Interface'Class; Current : in out Position; Target : Position; Feedrate : Velocity) is
+     (Planner  : Prunt.Module_Types.Planner_Interface'Class;
+      Current  : in out Position;
+      Target   : Position;
+      Feedrate : Velocity) is
    begin
       if Target /= Current then
          Planner.Add_Corner (Pos => Target, Feedrate => Feedrate);
@@ -382,28 +415,64 @@ package body Prunt.Default_Modules.Motion is
       Params             : Motion_Planner.Kinematic_Parameters) return Position
    is
       Result : Position := Target;
-   begin
-      for Axis in Axis_Name loop
-         if Result (Axis) < Params.Lower_Pos_Limit (Axis) then
+
+      procedure Check_Or_Clip_Interval (Axis : Axis_Name; Lower, Upper : Length);
+
+      procedure Check_Or_Clip_Interval (Axis : Axis_Name; Lower, Upper : Length) is
+      begin
+         if Result (Axis) < Lower then
             case Behavior is
                when Error_If_Out_Of_Bounds =>
                   raise Pause_Park_Out_Of_Bounds_Error
                     with Target_Description & " is out of bounds (" & Axis'Image & " = " & Result (Axis)'Image & ").";
 
                when Clip_To_Bounds         =>
-                  Result (Axis) := Params.Lower_Pos_Limit (Axis);
+                  Result (Axis) := Lower;
             end case;
-         elsif Result (Axis) > Params.Upper_Pos_Limit (Axis) then
+         elsif Result (Axis) > Upper then
             case Behavior is
                when Error_If_Out_Of_Bounds =>
                   raise Pause_Park_Out_Of_Bounds_Error
                     with Target_Description & " is out of bounds (" & Axis'Image & " = " & Result (Axis)'Image & ").";
 
                when Clip_To_Bounds         =>
-                  Result (Axis) := Params.Upper_Pos_Limit (Axis);
+                  Result (Axis) := Upper;
             end case;
          end if;
-      end loop;
+      end Check_Or_Clip_Interval;
+   begin
+      Check_Or_Clip_Interval (Z_Axis, Params.Bounds.Lower_Z, Params.Bounds.Upper_Z);
+      Check_Or_Clip_Interval (E_Axis, Params.Bounds.Lower_E, Params.Bounds.Upper_E);
+
+      case Params.Bounds.Kind is
+         when Motion_Planner.Rectangular_Workspace =>
+            Check_Or_Clip_Interval (X_Axis, Params.Bounds.Lower_X, Params.Bounds.Upper_X);
+            Check_Or_Clip_Interval (Y_Axis, Params.Bounds.Lower_Y, Params.Bounds.Upper_Y);
+
+         when Motion_Planner.Circular_Workspace    =>
+            null;
+      end case;
+
+      if not Motion_Planner.XY_Position_Is_In_Bounds (Result, Params) then
+         case Behavior is
+            when Error_If_Out_Of_Bounds =>
+               raise Pause_Park_Out_Of_Bounds_Error
+                 with Target_Description & " is outside the configured XY workspace.";
+
+            when Clip_To_Bounds         =>
+               pragma Assert (Motion_Planner."=" (Params.Bounds.Kind, Motion_Planner.Circular_Workspace));
+               declare
+                  DX             : constant Dimensionless := Result (X_Axis) / mm;
+                  DY             : constant Dimensionless := Result (Y_Axis) / mm;
+                  Norm           : constant Dimensionless := Dimensionless_Math.Sqrt (DX ** 2 + DY ** 2);
+                  Clipped_Radius : constant Length := Length'Adjacent (Params.Bounds.Radius, 0.0 * mm);
+                  Ratio          : constant Dimensionless := (Clipped_Radius / mm) / Norm;
+               begin
+                  Result (X_Axis) := Ratio * DX * mm;
+                  Result (Y_Axis) := Ratio * DY * mm;
+               end;
+         end case;
+      end if;
 
       return Result;
    end Bounds_Checked_Position;
@@ -918,127 +987,41 @@ package body Prunt.Default_Modules.Motion is
          end Hypot;
 
          procedure Validate_Position (Pos : Position; Params : Motion_Planner.Kinematic_Parameters) is
-         begin
-            for Axis in Axis_Name loop
-               if not (Pos (Axis) >= Params.Lower_Pos_Limit (Axis)
-                       and then Pos (Axis) <= Params.Upper_Pos_Limit (Axis))
-               then
+            procedure Validate_Interval (Axis : Axis_Name; Lower, Upper : Length);
+
+            procedure Validate_Interval (Axis : Axis_Name; Lower, Upper : Length) is
+            begin
+               if Pos (Axis) < Lower or else Pos (Axis) > Upper then
                   raise Gcode_Bad_Inputs_Error
                     with "Move is out of bounds (" & Axis'Image & " = " & Pos (Axis)'Image & ").";
                end if;
-            end loop;
+            end Validate_Interval;
+         begin
+            Validate_Interval (Z_Axis, Params.Bounds.Lower_Z, Params.Bounds.Upper_Z);
+            Validate_Interval (E_Axis, Params.Bounds.Lower_E, Params.Bounds.Upper_E);
+
+            case Params.Bounds.Kind is
+               when Motion_Planner.Rectangular_Workspace =>
+                  Validate_Interval (X_Axis, Params.Bounds.Lower_X, Params.Bounds.Upper_X);
+                  Validate_Interval (Y_Axis, Params.Bounds.Lower_Y, Params.Bounds.Upper_Y);
+
+               when Motion_Planner.Circular_Workspace    =>
+                  null;
+            end case;
+
+            if not Motion_Planner.XY_Position_Is_In_Bounds (Pos, Params) then
+               raise Gcode_Bad_Inputs_Error with "Move is outside the configured XY workspace.";
+            end if;
          end Validate_Position;
 
          procedure Validate_Helix_Travel
            (Start_Pos, Finish_Pos, Center : Position;
             Clockwise                     : Boolean;
-            Params                        : Motion_Planner.Kinematic_Parameters)
-         is
-            Two_Pi           : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
-            Radius_Tolerance : constant Length := 1.0E-6 * mm;
-
-            procedure Validate_Axis (Axis : Axis_Name; Value : Length);
-
-            function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean;
-
-            procedure Validate_Axis (Axis : Axis_Name; Value : Length) is
-            begin
-               if not (Value >= Params.Lower_Pos_Limit (Axis) and then Value <= Params.Upper_Pos_Limit (Axis)) then
-                  raise Gcode_Bad_Inputs_Error
-                    with "Helix is out of bounds (" & Axis'Image & " = " & Value'Image & ").";
-               end if;
-            end Validate_Axis;
-
-            function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean is
-               Progress  : Dimensionless := (if Theta_Delta > 0.0 then Phase - Theta_Start else Theta_Start - Phase);
-               Magnitude : constant Dimensionless := abs Theta_Delta;
-               Tolerance : constant Dimensionless :=
-                 64.0
-                 * Dimensionless'Model_Epsilon
-                 * (1.0 + Dimensionless'Max (abs Phase, Dimensionless'Max (abs Theta_Start, Magnitude)));
-            begin
-               if Progress < 0.0 then
-                  Progress := Progress + Two_Pi;
-               end if;
-               return Progress <= Magnitude + Tolerance;
-            end Phase_Is_On_Arc;
-
-            Start_DX      : constant Length := Start_Pos (X_Axis) - Center (X_Axis);
-            Start_DY      : constant Length := Start_Pos (Y_Axis) - Center (Y_Axis);
-            Finish_DX     : constant Length := Finish_Pos (X_Axis) - Center (X_Axis);
-            Finish_DY     : constant Length := Finish_Pos (Y_Axis) - Center (Y_Axis);
-            Start_Radius  : constant Length := Hypot (Start_DX, Start_DY);
-            Finish_Radius : constant Length := Hypot (Finish_DX, Finish_DY);
+            Params                        : Motion_Planner.Kinematic_Parameters) is
          begin
-            --  The axial coordinates are affine in phase, so their extrema are at the endpoints.
-            Validate_Position (Start_Pos, Params);
-            Validate_Position (Finish_Pos, Params);
-
-            --  This is the line fallback used by Derive_Path_Primitive, for which endpoint checks enclose the path.
-            if Start_Radius <= 0.0 * mm or else abs (Start_Radius - Finish_Radius) > Radius_Tolerance then
-               return;
+            if not Motion_Planner.Helix_Is_In_Bounds (Start_Pos, Finish_Pos, Center, Clockwise, Params) then
+               raise Gcode_Bad_Inputs_Error with "Helix is outside the configured position limits.";
             end if;
-
-            declare
-               Theta_Start   : constant Dimensionless := Dimensionless_Math.Arctan (Start_DY / mm, Start_DX / mm);
-               Offset_Scale  : constant Length :=
-                 Length'Max (abs Start_DX, Length'Max (abs Start_DY, Length'Max (abs Finish_DX, abs Finish_DY)));
-               Coincident_XY : constant Boolean := Start_DX = Finish_DX and then Start_DY = Finish_DY;
-               Theta_Delta   : Dimensionless := 0.0;
-
-               procedure Validate_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length);
-
-               procedure Validate_Cardinal (Phase : Dimensionless; Axis : Axis_Name; Value : Length) is
-               begin
-                  if Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta) then
-                     Validate_Axis (Axis, Value);
-                  end if;
-               end Validate_Cardinal;
-            begin
-               if Coincident_XY then
-                  Theta_Delta := (if Clockwise then -Two_Pi else Two_Pi);
-               else
-                  declare
-                     Start_X  : constant Dimensionless := Start_DX / Offset_Scale;
-                     Start_Y  : constant Dimensionless := Start_DY / Offset_Scale;
-                     Finish_X : constant Dimensionless := Finish_DX / Offset_Scale;
-                     Finish_Y : constant Dimensionless := Finish_DY / Offset_Scale;
-                     Cross    : constant Dimensionless := Start_X * Finish_Y - Start_Y * Finish_X;
-                     Dot      : constant Dimensionless := Start_X * Finish_X + Start_Y * Finish_Y;
-                  begin
-                     Theta_Delta := Dimensionless_Math.Arctan (Cross, Dot);
-                  end;
-
-                  if Theta_Delta = 0.0 then
-                     return;
-                  elsif Clockwise and then Theta_Delta > 0.0 then
-                     Theta_Delta := Theta_Delta - Two_Pi;
-                  elsif not Clockwise and then Theta_Delta < 0.0 then
-                     Theta_Delta := Theta_Delta + Two_Pi;
-                  end if;
-               end if;
-
-               Validate_Cardinal (0.0, X_Axis, Center (X_Axis) + Start_Radius);
-               Validate_Cardinal (Ada.Numerics.Pi, X_Axis, Center (X_Axis) - Start_Radius);
-               Validate_Cardinal (0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) + Start_Radius);
-               Validate_Cardinal (-0.5 * Ada.Numerics.Pi, Y_Axis, Center (Y_Axis) - Start_Radius);
-
-               --  The primitive uses the start radius. Radius-mismatch arcs therefore need the projected finish
-               --  checked as well as the requested destination.
-               if Finish_Radius > 0.0 * mm then
-                  declare
-                     Radius_Scale : constant Dimensionless := Start_Radius / Finish_Radius;
-                  begin
-                     Validate_Axis (X_Axis, Center (X_Axis) + Radius_Scale * Finish_DX);
-                     Validate_Axis (Y_Axis, Center (Y_Axis) + Radius_Scale * Finish_DY);
-                  end;
-               else
-                  raise Gcode_Bad_Inputs_Error with "G2/G3 radius must be non-zero.";
-               end if;
-            end;
-         exception
-            when Constraint_Error =>
-               raise Gcode_Bad_Inputs_Error with "Helix geometry is outside the supported numeric range.";
          end Validate_Helix_Travel;
 
          procedure Resolve_Axis (Axis : Axis_Name; Value : Gcode_Optional_Float);
@@ -1635,7 +1618,7 @@ package body Prunt.Default_Modules.Motion is
          return +("M221: S = " & Trimmed_Image (Planned_State.Flow_Scale * 100.0) & "%");
       end Flow_Scale_Report;
 
-      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+      procedure Handle_Pause (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class) is
          Pause_Position : constant Position := Context.Get_Pause_Position;
       begin
          if Config.Pause_Park.Kind in Relative_Park_Move | Absolute_Park_Move then
@@ -1659,7 +1642,7 @@ package body Prunt.Default_Modules.Motion is
          end if;
       end Handle_Pause;
 
-      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+      procedure Handle_Resume (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class) is
          Pause_Position : constant Position := Context.Get_Pause_Position;
       begin
          if Config.Pause_Park.Kind in Relative_Park_Move | Absolute_Park_Move then

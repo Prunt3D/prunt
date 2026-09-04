@@ -17,6 +17,7 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Numerics.Generic_Elementary_Functions;
 with Prunt.Default_Modules.Kinematics.Config_Paths;
 
 package body Prunt.Default_Modules.Kinematics is
@@ -24,21 +25,11 @@ package body Prunt.Default_Modules.Kinematics is
    pragma Extensions_Allowed (On);
 
    package My_Config_Paths is new Config_Paths;
+   package Angle_Math is new Ada.Numerics.Generic_Elementary_Functions (Angle);
+   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
-   function Map_Axis_Is_Motor_Separable (Map : Motor_Position_Map; Axis : Axis_Name) return Boolean is
-   begin
-      for Motor in Motor_Name loop
-         if Map (Axis, Motor) /= 0.0 / mm then
-            for Other_Axis in Axis_Name loop
-               if Other_Axis /= Axis and then Map (Other_Axis, Motor) /= 0.0 / mm then
-                  return False;
-               end if;
-            end loop;
-         end if;
-      end loop;
-
-      return True;
-   end Map_Axis_Is_Motor_Separable;
+   function Kinematics_Kind_Config_Path return Config.Config_Path
+   is (My_Config_Paths.Root.Kinematics.Kinematics_Kind.Kind);
 
    function Build_Schema return Config.Config_Property_Maps.Map is separate;
 
@@ -112,15 +103,72 @@ package body Prunt.Default_Modules.Kinematics is
       end case;
    end Build_Cornering_Parameters;
 
+   function Planner_Workspace_Bounds (Config : User_Config_Workspace_Bounds) return Motion_Planner.Workspace_Bounds is
+   begin
+      case Config.Kind is
+         when Rectangular =>
+            return
+              (Kind    => Motion_Planner.Rectangular_Workspace,
+               Lower_Z => Config.Lower_Z,
+               Upper_Z => Config.Upper_Z,
+               Lower_E => Config.Lower_E,
+               Upper_E => Config.Upper_E,
+               Lower_X => Config.Lower_X,
+               Upper_X => Config.Upper_X,
+               Lower_Y => Config.Lower_Y,
+               Upper_Y => Config.Upper_Y);
+
+         when Circular    =>
+            return
+              (Kind    => Motion_Planner.Circular_Workspace,
+               Lower_Z => Config.Lower_Z,
+               Upper_Z => Config.Upper_Z,
+               Lower_E => Config.Lower_E,
+               Upper_E => Config.Upper_E,
+               Radius  => Config.Radius);
+      end case;
+   end Planner_Workspace_Bounds;
+
+   function Hypot (X, Y : Length) return Length is
+      DX    : constant Dimensionless := X / mm;
+      DY    : constant Dimensionless := Y / mm;
+      Scale : constant Dimensionless := Dimensionless'Max (abs DX, abs DY);
+   begin
+      if Scale = 0.0 then
+         return 0.0 * mm;
+      end if;
+      return Scale * Dimensionless_Math.Sqrt ((DX / Scale) ** 2 + (DY / Scale) ** 2) * mm;
+   end Hypot;
+
+   procedure Workspace_Tower_Extents
+     (Workspace      : User_Config_Workspace_Bounds;
+      Tower_X        : Length;
+      Tower_Y        : Length;
+      Maximum_DX     : out Length;
+      Maximum_DY     : out Length;
+      Maximum_Radius : out Length) is
+   begin
+      case Workspace.Kind is
+         when Rectangular =>
+            Maximum_DX := Length'Max (abs (Workspace.Lower_X - Tower_X), abs (Workspace.Upper_X - Tower_X));
+            Maximum_DY := Length'Max (abs (Workspace.Lower_Y - Tower_Y), abs (Workspace.Upper_Y - Tower_Y));
+            Maximum_Radius := Hypot (Maximum_DX, Maximum_DY);
+
+         when Circular    =>
+            Maximum_DX := abs Tower_X + Workspace.Radius;
+            Maximum_DY := abs Tower_Y + Workspace.Radius;
+            Maximum_Radius := Hypot (Tower_X, Tower_Y) + Workspace.Radius;
+      end case;
+   end Workspace_Tower_Extents;
+
    function Build_Motion_Planner_Configuration
      (Config : User_Config; Motor_Drivers_Module_Instance : Motor_Drivers_Module.Module_Instance_Interface'Class)
       return Motion_Planner_Configuration
    is
       Result : Motion_Planner_Configuration :=
-        (Parameters         =>
+        (Parameters =>
            Motion_Planner.Kinematic_Parameters'
-             (Lower_Pos_Limit          => [for X of Config.Kinematics.Lower_Position_Limit => X],
-              Upper_Pos_Limit          => [for X of Config.Kinematics.Upper_Position_Limit => X],
+             (Bounds                   => Planner_Workspace_Bounds (Config.Kinematics.Workspace_Bounds),
               Ignore_E_In_XYZE         => Config.Kinematics.Ignore_E_In_XYZE,
               Tangential_Velocity_Max  => Config.Kinematics.Maximum_Tangential_Velocity,
               Axial_Velocity_Maxes     => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
@@ -130,7 +178,7 @@ package body Prunt.Default_Modules.Kinematics is
               Axial_Crackle_Maxes      => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
               Cornering                => Build_Cornering_Parameters (Config.Kinematics.Cornering),
               Axial_Shapers            => <>),
-         Motors_To_Position => [others => [others => 0.0 / mm]]);
+         Transform  => (Kind => Linear_Transform, others => <>));
    begin
       for M in Motor_Name loop
          declare
@@ -138,46 +186,138 @@ package body Prunt.Default_Modules.Kinematics is
             Units_Per_Distance : constant Curvature := 1.0 / Distance_Per_Unit;
          begin
             case Config.Kinematics.Kinematics_Kind.Kind is
-               when Cartesian =>
+               when Cartesian    =>
                   case Config.Kinematics.Kinematics_Kind.Cartesian (M) is
                      when None   =>
                         null;
 
                      when X_Axis =>
-                        Result.Motors_To_Position (X_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (X_Axis, M) := Units_Per_Distance;
 
                      when Y_Axis =>
-                        Result.Motors_To_Position (Y_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (Y_Axis, M) := Units_Per_Distance;
 
                      when Z_Axis =>
-                        Result.Motors_To_Position (Z_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (Z_Axis, M) := Units_Per_Distance;
 
                      when E_Axis =>
-                        Result.Motors_To_Position (E_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (E_Axis, M) := Units_Per_Distance;
                   end case;
 
-               when Core_XY   =>
+               when Core_XY      =>
                   case Config.Kinematics.Kinematics_Kind.Core_XY (M) is
                      when None   =>
                         null;
 
                      when A_Axis =>
-                        Result.Motors_To_Position (X_Axis, M) := Units_Per_Distance;
-                        Result.Motors_To_Position (Y_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (X_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (Y_Axis, M) := Units_Per_Distance;
 
                      when B_Axis =>
-                        Result.Motors_To_Position (X_Axis, M) := Units_Per_Distance;
-                        Result.Motors_To_Position (Y_Axis, M) := -Units_Per_Distance;
+                        Result.Transform.Linear_Map (X_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (Y_Axis, M) := -Units_Per_Distance;
 
                      when Z_Axis =>
-                        Result.Motors_To_Position (Z_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (Z_Axis, M) := Units_Per_Distance;
 
                      when E_Axis =>
-                        Result.Motors_To_Position (E_Axis, M) := Units_Per_Distance;
+                        Result.Transform.Linear_Map (E_Axis, M) := Units_Per_Distance;
                   end case;
+
+               when Linear_Delta =>
+                  null;
             end case;
          end;
       end loop;
+
+      if Config.Kinematics.Kinematics_Kind.Kind = Linear_Delta then
+         declare
+            Delta_Config : User_Config_Kinematics_Delta renames Config.Kinematics.Kinematics_Kind.Linear_Delta;
+
+            function Tower_Config (Tower : Delta_Tower_Name) return User_Config_Kinematics_Delta_Tower
+            is (case Tower is
+                  when Transforms.Tower_A => Delta_Config.Tower_A,
+                  when Transforms.Tower_B => Delta_Config.Tower_B,
+                  when Transforms.Tower_C => Delta_Config.Tower_C);
+
+            Delta_Params : Delta_Parameters := (others => <>);
+         begin
+            for Tower in Delta_Tower_Name loop
+               declare
+                  Parameters : constant User_Config_Kinematics_Delta_Tower := Tower_Config (Tower);
+               begin
+                  Delta_Params.Towers (Tower) :=
+                    (X          => Delta_Config.Delta_Radius * Angle_Math.Cos (Parameters.Angle),
+                     Y          => Delta_Config.Delta_Radius * Angle_Math.Sin (Parameters.Angle),
+                     Arm_Length => Parameters.Arm_Length);
+               end;
+            end loop;
+
+            for Motor in Motor_Name loop
+               case Delta_Config.Motors (Motor) is
+                  when Tower_A | Tower_B | Tower_C =>
+                     Delta_Params.Motors (Motor) :=
+                       (Kind               => Delta_Tower_Motor,
+                        Tower              =>
+                          (case Delta_Config.Motors (Motor) is
+                             when Tower_A => Transforms.Tower_A,
+                             when Tower_B => Transforms.Tower_B,
+                             when Tower_C => Transforms.Tower_C,
+                             when others  => raise Program_Error),
+                        Units_Per_Distance => 1.0 / Motor_Drivers_Module_Instance.Distance_Per_Unit (Motor));
+
+                  when E_Axis                      =>
+                     Delta_Params.Motors (Motor) :=
+                       (Kind               => Delta_Extruder_Motor,
+                        Units_Per_Distance => 1.0 / Motor_Drivers_Module_Instance.Distance_Per_Unit (Motor));
+
+                  when None                        =>
+                     null;
+               end case;
+            end loop;
+
+            for Motor in Motor_Name loop
+               declare
+                  Motor_Params : Delta_Motor_Parameters renames Delta_Params.Motors (Motor);
+               begin
+                  case Motor_Params.Kind is
+                     when Unused_Delta_Motor   =>
+                        null;
+
+                     when Delta_Extruder_Motor =>
+                        Delta_Params.Jacobian_Bounds (Motor, E_Axis) := abs Motor_Params.Units_Per_Distance;
+
+                     when Delta_Tower_Motor    =>
+                        declare
+                           Params       : Delta_Tower_Parameters renames Delta_Params.Towers (Motor_Params.Tower);
+                           Max_DX       : Length;
+                           Max_DY       : Length;
+                           Max_Radius   : Length;
+                           Min_Radicand : Area;
+                           Min_Height   : Length;
+                        begin
+                           Workspace_Tower_Extents
+                             (Config.Kinematics.Workspace_Bounds, Params.X, Params.Y, Max_DX, Max_DY, Max_Radius);
+                           Min_Radicand := Params.Arm_Length ** 2 - Max_Radius ** 2;
+                           if Min_Radicand <= 0.0 * mm ** 2 then
+                              Min_Height := Length'Small;
+                           else
+                              Min_Height := Min_Radicand ** (1 / 2);
+                           end if;
+
+                           Delta_Params.Jacobian_Bounds (Motor, X_Axis) :=
+                             abs Motor_Params.Units_Per_Distance * Max_DX / Min_Height;
+                           Delta_Params.Jacobian_Bounds (Motor, Y_Axis) :=
+                             abs Motor_Params.Units_Per_Distance * Max_DY / Min_Height;
+                           Delta_Params.Jacobian_Bounds (Motor, Z_Axis) := abs Motor_Params.Units_Per_Distance;
+                        end;
+                  end case;
+               end;
+            end loop;
+
+            Result.Transform := (Kind => Delta_Transform, Delta_Params => Delta_Params);
+         end;
+      end if;
 
       return Result;
    end Build_Motion_Planner_Configuration;
@@ -185,14 +325,16 @@ package body Prunt.Default_Modules.Kinematics is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
-      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
+      return
+        Config.Versioned_Config_Schema'
+          (Version => 1, Module_Instance_Tag => Module_Instance'Tag, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -221,15 +363,52 @@ package body Prunt.Default_Modules.Kinematics is
             declare
                Planner_Config : constant Motion_Planner_Configuration :=
                  Build_Motion_Planner_Configuration (Parsed_Config, Motor_Drivers_Module_Instance);
-               Zero_Curvature : constant Curvature := 0.0 / mm;
             begin
                Motor_Drivers_Module_Instance.Set_Motor_Axis_Map
                  ([for Axis in Axis_Name =>
-                     [for Motor in Motor_Name => Planner_Config.Motors_To_Position (Axis, Motor) /= Zero_Curvature]]);
+                     [for Motor in Motor_Name => Motor_Affects_Axis (Planner_Config.Transform, Motor, Axis)]]);
             end;
 
+            case Parsed_Config.Kinematics.Workspace_Bounds.Kind is
+               when Rectangular =>
+                  if Parsed_Config.Kinematics.Workspace_Bounds.Lower_X
+                    > Parsed_Config.Kinematics.Workspace_Bounds.Upper_X
+                  then
+                     Report_Config_Error
+                       (My_Config_Paths.Root.Kinematics.Workspace_Bounds.Lower_X,
+                        "The lower X limit must not be greater than the upper X limit.");
+                  end if;
+                  if Parsed_Config.Kinematics.Workspace_Bounds.Lower_Y
+                    > Parsed_Config.Kinematics.Workspace_Bounds.Upper_Y
+                  then
+                     Report_Config_Error
+                       (My_Config_Paths.Root.Kinematics.Workspace_Bounds.Lower_Y,
+                        "The lower Y limit must not be greater than the upper Y limit.");
+                  end if;
+
+               when Circular    =>
+                  if Parsed_Config.Kinematics.Workspace_Bounds.Radius <= 0.0 * mm then
+                     Report_Config_Error
+                       (My_Config_Paths.Root.Kinematics.Workspace_Bounds.Radius,
+                        "The circular XY workspace radius must be greater than zero.");
+                  end if;
+            end case;
+
+            if Parsed_Config.Kinematics.Workspace_Bounds.Lower_Z > Parsed_Config.Kinematics.Workspace_Bounds.Upper_Z
+            then
+               Report_Config_Error
+                 (My_Config_Paths.Root.Kinematics.Workspace_Bounds.Lower_Z,
+                  "The lower Z limit must not be greater than the upper Z limit.");
+            end if;
+            if Parsed_Config.Kinematics.Workspace_Bounds.Lower_E > Parsed_Config.Kinematics.Workspace_Bounds.Upper_E
+            then
+               Report_Config_Error
+                 (My_Config_Paths.Root.Kinematics.Workspace_Bounds.Lower_E,
+                  "The lower E limit must not be greater than the upper E limit.");
+            end if;
+
             case Parsed_Config.Kinematics.Kinematics_Kind.Kind is
-               when Cartesian =>
+               when Cartesian    =>
                   for M in Motor_Name loop
                      if Parsed_Config.Kinematics.Kinematics_Kind.Cartesian (M) /= None
                        and then not Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M)
@@ -240,7 +419,7 @@ package body Prunt.Default_Modules.Kinematics is
                      end if;
                   end loop;
 
-               when Core_XY   =>
+               when Core_XY      =>
                   for M in Motor_Name loop
                      if Parsed_Config.Kinematics.Kinematics_Kind.Core_XY (M) /= None
                        and then not Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M)
@@ -250,6 +429,90 @@ package body Prunt.Default_Modules.Kinematics is
                            "This motor is assigned to an axis but the motor is disabled in its motor configuration.");
                      end if;
                   end loop;
+
+               when Linear_Delta =>
+                  declare
+                     Delta_Config      : User_Config_Kinematics_Delta renames
+                       Parsed_Config.Kinematics.Kinematics_Kind.Linear_Delta;
+                     Assignment_Counts : array (User_Config_Delta_Axis_Name) of Natural := [others => 0];
+                  begin
+                     for Motor in Motor_Name loop
+                        Assignment_Counts (Delta_Config.Motors (Motor)) := @ + 1;
+                        if Delta_Config.Motors (Motor) /= None
+                          and then not Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (Motor)
+                        then
+                           Report_Config_Error
+                             (My_Config_Paths.Root.Kinematics.Kinematics_Kind.Linear_Delta.Motors (Motor),
+                              "This motor is assigned to delta kinematics but is disabled in its motor "
+                              & "configuration.");
+                        end if;
+                     end loop;
+
+                     for Assignment in User_Config_Delta_Axis_Name range Tower_A .. Tower_C loop
+                        if Assignment_Counts (Assignment) = 0 then
+                           Report_Config_Error
+                             (My_Config_Paths.Root.Kinematics.Kinematics_Kind.Linear_Delta.Motors (Motor_Name'First),
+                              "Each of Tower_A, Tower_B, and Tower_C must be assigned to at least one motor.");
+                        end if;
+                     end loop;
+
+                     declare
+                        Delta_Transform_Config : constant Motion_Planner_Configuration :=
+                          Build_Motion_Planner_Configuration (Parsed_Config, Motor_Drivers_Module_Instance);
+                     begin
+                        for Tower in Delta_Tower_Name loop
+                           declare
+                              Params                     : Delta_Tower_Parameters renames
+                                Delta_Transform_Config.Transform.Delta_Params.Towers (Tower);
+                              Max_DX, Max_DY, Max_Radius : Length;
+                           begin
+                              Workspace_Tower_Extents
+                                (Parsed_Config.Kinematics.Workspace_Bounds,
+                                 Params.X,
+                                 Params.Y,
+                                 Max_DX,
+                                 Max_DY,
+                                 Max_Radius);
+                              if Max_Radius >= Params.Arm_Length then
+                                 case Tower is
+                                    when Transforms.Tower_A =>
+                                       Report_Config_Error
+                                         (My_Config_Paths
+                                            .Root
+                                            .Kinematics
+                                            .Kinematics_Kind
+                                            .Linear_Delta
+                                            .Tower_A
+                                            .Arm_Length,
+                                          "The configured XY workspace is not reachable by tower A.");
+
+                                    when Transforms.Tower_B =>
+                                       Report_Config_Error
+                                         (My_Config_Paths
+                                            .Root
+                                            .Kinematics
+                                            .Kinematics_Kind
+                                            .Linear_Delta
+                                            .Tower_B
+                                            .Arm_Length,
+                                          "The configured XY workspace is not reachable by tower B.");
+
+                                    when Transforms.Tower_C =>
+                                       Report_Config_Error
+                                         (My_Config_Paths
+                                            .Root
+                                            .Kinematics
+                                            .Kinematics_Kind
+                                            .Linear_Delta
+                                            .Tower_C
+                                            .Arm_Length,
+                                          "The configured XY workspace is not reachable by tower C.");
+                                 end case;
+                              end if;
+                           end;
+                        end loop;
+                     end;
+                  end;
             end case;
          end;
       end return;
@@ -308,8 +571,36 @@ package body Prunt.Default_Modules.Kinematics is
 
       function Axis_Is_Motor_Separable (Axis : Axis_Name) return Boolean is
       begin
-         return Map_Axis_Is_Motor_Separable (Get_Default_Motion_Planner_Configuration.Motors_To_Position, Axis);
+         return Transforms.Axis_Is_Motor_Separable (Get_Default_Motion_Planner_Configuration.Transform, Axis);
       end Axis_Is_Motor_Separable;
+
+      function Motor_Affects_Axis (Motor : Motor_Name; Axis : Axis_Name) return Boolean is
+      begin
+         return Transforms.Motor_Affects_Axis (Get_Default_Motion_Planner_Configuration.Transform, Motor, Axis);
+      end Motor_Affects_Axis;
+
+      function Get_Homing_Configuration return Kinematics_Homing_Configuration is
+      begin
+         case Config.Kinematics.Kinematics_Kind.Kind is
+            when Cartesian | Core_XY =>
+               return (Kind => Non_Delta_Kinematics);
+
+            when Linear_Delta        =>
+               return
+                 (Kind           => Linear_Delta_Kinematics,
+                  Tower_Motors   =>
+                    [Transforms.Tower_A =>
+                       [for Motor in Motor_Name =>
+                          Config.Kinematics.Kinematics_Kind.Linear_Delta.Motors (Motor) = Tower_A],
+                     Transforms.Tower_B =>
+                       [for Motor in Motor_Name =>
+                          Config.Kinematics.Kinematics_Kind.Linear_Delta.Motors (Motor) = Tower_B],
+                     Transforms.Tower_C =>
+                       [for Motor in Motor_Name =>
+                          Config.Kinematics.Kinematics_Kind.Linear_Delta.Motors (Motor) = Tower_C]],
+                  Planner_Config => Get_Default_Motion_Planner_Configuration);
+         end case;
+      end Get_Homing_Configuration;
 
       function Get_Config return User_Config is
       begin

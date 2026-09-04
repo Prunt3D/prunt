@@ -26,12 +26,24 @@ package Prunt_Simulator_Hardware is
    use Prunt;
    use Prunt_Simulator_Types;
 
+   subtype Motor_Position is Prunt_Simulator_Types.Generic_Types.Motor_Position;
+
    procedure Enable_Motor (Motor : Motor_Name);
    procedure Disable_Motor (Motor : Motor_Name);
    procedure Set_Fan_Duty_Cycle (Fan : Fan_Name; Duty_Cycle : PWM_Scale);
    procedure Reconfigure_Fan (Fan : Fan_Name; PWM_Frequency : Frequency);
    function Get_Tachometer_Frequency (Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Frequency;
    function Get_Input_Switch_State (Switch : Input_Switch_Name) return Boolean;
+   function Get_Input_Switch_State_At_Position
+     (Switch : Input_Switch_Name; Position : Motor_Position) return Boolean;
+   --  Return the raw electrical state of Switch at Position. Position is expressed in the motor units emitted by
+   --  Prunt.
+
+   function Get_Initial_Motor_Position return Motor_Position;
+   --  Return the configured physical motor position at simulator power-on.
+
+   procedure Set_Current_Motor_Position (Position : Motor_Position);
+   --  Update the position used by Get_Input_Switch_State and therefore by M119 and status reporting.
 
    procedure Reconfigure_Heater
      (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
@@ -65,7 +77,7 @@ package Prunt_Simulator_Hardware is
       Tachometer_Hardware              =>
         [others => (Get_Pulse_Frequency => Get_Tachometer_Frequency'Access)],
       Input_Switch_Hardware            =>
-        [others => (Visible_To_User => False, Get_State => Get_Input_Switch_State'Access)],
+        [others => (Visible_To_User => True, Get_State => Get_Input_Switch_State'Access)],
       Heater_Hardware                  =>
         [others =>
            (Reconfigure     => Reconfigure_Heater'Access,

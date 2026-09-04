@@ -64,6 +64,7 @@ package body Prunt.Integration_Test_Harness is
 
    subtype Queued_Command is Generic_Types.Queued_Command;
    subtype Motor_Position is Generic_Types.Motor_Position;
+   subtype Loop_Move_Setup is Generic_Types.Loop_Move_Setup;
 
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis);
    type Axis_Position is array (Axis_Name) of Long_Float;
@@ -73,6 +74,7 @@ package body Prunt.Integration_Test_Harness is
    Sample_Rate_Scale         : constant Positive := Sample_Rate_Hz / Base_Sample_Rate_Hz;
    Sample_Period_S           : constant Long_Float := 1.0 / Long_Float (Sample_Rate_Hz);
    Command_Queue_Capacity    : constant Positive := 128;
+   Hardware_Maximum_Loop_Move_Tail_Length : constant Positive := Command_Queue_Capacity - 1;
    Short_Empty_Wait_Limit    : constant Natural := 50;
    Submit_Empty_Wait_Limit   : constant Natural := 200 * Sample_Rate_Scale;
    Long_Empty_Wait_Limit     : constant Natural := 2_000 * Sample_Rate_Scale;
@@ -110,15 +112,20 @@ package body Prunt.Integration_Test_Harness is
       case Kind is
          when Command_Item         =>
             Command : Queued_Command :=
-              (Index => 0, Pos => [others => 0.0], Safe_Stop_After => True, Loop_Until_Hit => False);
+              (Index => 0, Pos => [others => 0.0], Safe_Stop_After => True);
+            Is_Loop_Move : Boolean := False;
+            Loop_Setup   : Loop_Move_Setup := (others => <>);
          when Reset_Position_Item  =>
             Reset_Pos : Motor_Position := [others => 0.0];
       end case;
    end record;
 
    type Machine_Queue_Array is array (Positive range <>) of Machine_Queue_Item;
+   subtype Loop_Move_Tail_Index is Positive range 1 .. Hardware_Maximum_Loop_Move_Tail_Length;
+   type Loop_Move_Tail_Array is array (Loop_Move_Tail_Index) of Queued_Command;
 
    protected Machine is
+      procedure Setup_For_Loop_Move (Setup : Loop_Move_Setup);
       entry Enqueue (Command : Queued_Command);
       entry Record_Reset_Position (Pos : Motor_Position);
       procedure Clear;
@@ -128,6 +135,12 @@ package body Prunt.Integration_Test_Harness is
       procedure Record_Event
         (Kind : String; Label : String; Target : String := ""; Value : String := ""; Command : Command_Index := 0);
       procedure Record_Executed_Command (Command : Queued_Command);
+      procedure Record_Executed_Loop_Command
+        (Command : Queued_Command;
+         Setup : Loop_Move_Setup;
+         Tail : Loop_Move_Tail_Array;
+         Tail_Length : Loop_Move_Tail_Index;
+         Timed_Out : out Boolean);
       procedure Record_Executed_Reset_Position (Pos : Motor_Position);
       function Current_Time return Long_Float;
       function Current_Position return Axis_Position;
@@ -143,11 +156,14 @@ package body Prunt.Integration_Test_Harness is
       Started       : Boolean := False;
       Now_S         : Long_Float := 0.0;
       Last_Pos      : Axis_Position := [others => 0.0];
+      Last_Motor_Pos : Motor_Position := [others => 0.0];
       Last_Vel      : Axis_Position := [others => 0.0];
       Last_Accel    : Axis_Position := [others => 0.0];
       Last_Jerk     : Axis_Position := [others => 0.0];
       Last_Snap     : Axis_Position := [others => 0.0];
       Last_Command  : Command_Index := 0;
+      Has_Pending_Loop_Setup : Boolean := False;
+      Pending_Loop_Setup     : Loop_Move_Setup := (others => <>);
       Samples       : Sample_Vectors.Vector;
       Events        : Event_Vectors.Vector;
    end Machine;
@@ -170,6 +186,7 @@ package body Prunt.Integration_Test_Harness is
    function Axis_Value (Position : Axis_Position; Name : String) return Long_Float;
    function Build_Config_Overrides return Config.Config_Override_Vectors.Vector;
    procedure Enqueue_Command (Command : Queued_Command);
+   procedure Setup_For_Loop_Move (Setup : Loop_Move_Setup);
    function Event_Kind_Count (Kind : String) return Natural;
    function Expected_Controller_Failure_Contains (Scenario : JSON_Value) return String;
    function Find_Scenario_Path (Name : String) return String;
@@ -256,7 +273,7 @@ package body Prunt.Integration_Test_Harness is
       Tachometer_Hardware              =>
         [others => (Get_Pulse_Frequency => Get_Tachometer_Frequency'Access)],
       Input_Switch_Hardware            =>
-        [others => (Visible_To_User => False, Get_State => Get_Input_Switch_State'Access)],
+        [others => (Visible_To_User => True, Get_State => Get_Input_Switch_State'Access)],
       Heater_Hardware                  =>
         [others =>
            (Reconfigure     => Reconfigure_Heater'Access,
@@ -286,9 +303,24 @@ package body Prunt.Integration_Test_Harness is
    end Power_Supply_State;
 
    protected body Machine is
+      procedure Setup_For_Loop_Move (Setup : Loop_Move_Setup) is
+      begin
+         if Has_Pending_Loop_Setup then
+            raise Program_Error with "Loop move setup was not consumed by the next command.";
+         end if;
+         Has_Pending_Loop_Setup := True;
+         Pending_Loop_Setup := Setup;
+      end Setup_For_Loop_Move;
+
       entry Enqueue (Command : Queued_Command) when Count < Command_Queue_Capacity is
       begin
-         Queue (Tail) := (Kind => Command_Item, Command => Command);
+         Queue (Tail) :=
+           (Kind         => Command_Item,
+            Command      => Command,
+            Is_Loop_Move => Has_Pending_Loop_Setup,
+            Loop_Setup   => Pending_Loop_Setup);
+         Has_Pending_Loop_Setup := False;
+         Pending_Loop_Setup := (others => <>);
          Tail := (if Tail = Command_Queue_Capacity then 1 else Tail + 1);
          Count := Count + 1;
       end Enqueue;
@@ -314,11 +346,14 @@ package body Prunt.Integration_Test_Harness is
          Started := False;
          Now_S := 0.0;
          Last_Pos := [others => 0.0];
+         Last_Motor_Pos := [others => 0.0];
          Last_Vel := [others => 0.0];
          Last_Accel := [others => 0.0];
          Last_Jerk := [others => 0.0];
          Last_Snap := [others => 0.0];
          Last_Command := 0;
+         Has_Pending_Loop_Setup := False;
+         Pending_Loop_Setup := (others => <>);
          Samples.Clear;
          Events.Clear;
       end Clear;
@@ -339,8 +374,10 @@ package body Prunt.Integration_Test_Harness is
       begin
          if Count = 0 then
             Item :=
-              (Kind    => Command_Item,
-               Command => (Index => 0, Pos => [others => 0.0], Safe_Stop_After => True, Loop_Until_Hit => False));
+              (Kind         => Command_Item,
+               Command      => (Index => 0, Pos => [others => 0.0], Safe_Stop_After => True),
+               Is_Loop_Move => False,
+               Loop_Setup   => (others => <>));
             Found := False;
          else
             Item := Queue (Head);
@@ -387,6 +424,7 @@ package body Prunt.Integration_Test_Harness is
          end loop;
 
          Last_Pos := New_Pos;
+         Last_Motor_Pos := Command.Pos;
          Last_Vel := New_Vel;
          Last_Accel := New_Accel;
          Last_Jerk := New_Jerk;
@@ -405,9 +443,50 @@ package body Prunt.Integration_Test_Harness is
                Command      => Command.Index));
       end Record_Executed_Command;
 
+      procedure Record_Executed_Loop_Command
+        (Command : Queued_Command;
+         Setup : Loop_Move_Setup;
+         Tail : Loop_Move_Tail_Array;
+         Tail_Length : Loop_Move_Tail_Index;
+         Timed_Out : out Boolean)
+      is
+         Executed_Command    : Queued_Command := Tail (Tail_Length);
+         Any_Moving_Motor    : Boolean := False;
+      begin
+         Timed_Out := False;
+
+         for Motor in Motor_Name loop
+            if Command.Pos (Motor) /= Last_Motor_Pos (Motor) then
+               declare
+                  Condition          : Generic_Types.Stop_Condition renames Setup.Stop_Conditions (Motor);
+                  Trigger_Loop_Count : Loop_Move_Count;
+                  Executed_Loops     : Loop_Move_Count;
+               begin
+                  Any_Moving_Motor := True;
+                  Trigger_Loop_Count := Loop_Move_Count (Input_Switch_Name'Pos (Condition.Input_Switch) + 1);
+                  Timed_Out := @ or Trigger_Loop_Count > Setup.Maximum_Loop_Count;
+                  Executed_Loops := Loop_Move_Count'Min (Trigger_Loop_Count, Setup.Maximum_Loop_Count);
+                  Executed_Command.Pos (Motor) :=
+                    Last_Motor_Pos (Motor)
+                    + (Command.Pos (Motor) - Last_Motor_Pos (Motor)) * Dimensionless (Executed_Loops)
+                    + (Tail (Tail_Length).Pos (Motor) - Command.Pos (Motor));
+               end;
+            else
+               Executed_Command.Pos (Motor) := Last_Motor_Pos (Motor);
+            end if;
+         end loop;
+
+         if not Any_Moving_Motor then
+            raise Program_Error with "Loop move has no moving motor.";
+         end if;
+
+         Record_Executed_Command (Executed_Command);
+      end Record_Executed_Loop_Command;
+
       procedure Record_Executed_Reset_Position (Pos : Motor_Position) is
       begin
          Last_Pos := To_Axis_Position (Pos);
+         Last_Motor_Pos := Pos;
          Last_Vel := [others => 0.0];
          Last_Accel := [others => 0.0];
          Last_Jerk := [others => 0.0];
@@ -570,6 +649,12 @@ package body Prunt.Integration_Test_Harness is
       Item        : Machine_Queue_Item;
       Found       : Boolean;
       Empty_Waits : Natural := 0;
+      Timed_Out   : Boolean;
+      Loop_Tail   : Loop_Move_Tail_Array :=
+        [others => (Index => Command_Index'First, Pos => [others => 0.0], Safe_Stop_After => True)];
+      Tail_Length : Natural range 0 .. Hardware_Maximum_Loop_Move_Tail_Length := 0;
+      Tail_Item   : Machine_Queue_Item;
+      Tail_Found  : Boolean;
    begin
       while Machine.Current_Time < Target_S loop
          Assert (not Controller_Task_State.Stopped, Controller_Task_State.Message);
@@ -578,8 +663,36 @@ package body Prunt.Integration_Test_Harness is
          if Found then
             case Item.Kind is
                when Command_Item         =>
-                  Machine.Record_Executed_Command (Item.Command);
-                  Report_Command_Executed (Item.Command.Index);
+                  if Item.Is_Loop_Move then
+                     Tail_Length := 0;
+                     loop
+                        Machine.Dequeue (Tail_Item, Tail_Found);
+                        if Tail_Found then
+                           Assert (Tail_Item.Kind = Command_Item, "A loop move tail contains a position reset.");
+                           Assert
+                             (Tail_Length < Hardware_Maximum_Loop_Move_Tail_Length,
+                              "A loop move tail exceeds the advertised hardware maximum.");
+                           Tail_Length := @ + 1;
+                           Loop_Tail (Tail_Length) := Tail_Item.Command;
+                           exit when Tail_Item.Command.Safe_Stop_After;
+                        else
+                           Assert (not Controller_Task_State.Stopped, Controller_Task_State.Message);
+                           delay 0.001;
+                        end if;
+                     end loop;
+
+                     Machine.Record_Executed_Loop_Command
+                       (Item.Command,
+                        Item.Loop_Setup,
+                        Loop_Tail,
+                        Loop_Move_Tail_Index (Tail_Length),
+                        Timed_Out);
+                     Assert (not Timed_Out, "A loop move exceeded its maximum loop count.");
+                     Report_Command_Executed (Loop_Tail (Tail_Length).Index);
+                  else
+                     Machine.Record_Executed_Command (Item.Command);
+                     Report_Command_Executed (Item.Command.Index);
+                  end if;
 
                when Reset_Position_Item  =>
                   Machine.Record_Executed_Reset_Position (Item.Reset_Pos);
@@ -643,6 +756,11 @@ package body Prunt.Integration_Test_Harness is
    begin
       Machine.Enqueue (Command);
    end Enqueue_Command;
+
+   procedure Setup_For_Loop_Move (Setup : Loop_Move_Setup) is
+   begin
+      Machine.Setup_For_Loop_Move (Setup);
+   end Setup_For_Loop_Move;
 
    procedure Reset_Position (Pos : Motor_Position) is
    begin
@@ -782,7 +900,7 @@ package body Prunt.Integration_Test_Harness is
          Add_Override
            (Result,
             "Homing",
-            ["Homing", Axis, "Homing_Method", "Kind", "Selected"],
+            ["Homing", "Axes", Axis, "Homing_Method", "Kind", "Selected"],
             Create (+"Set_To_Value"));
       end loop;
 
@@ -802,11 +920,22 @@ package body Prunt.Integration_Test_Harness is
             Create (Long_Float'(1.0)));
       end loop;
 
-      Add_Override (Result, "Kinematics", ["Kinematics", "Lower_Position_Limit", "E_AXIS"], Create (Long_Float'(-1.0E100)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Upper_Position_Limit", "X_AXIS"], Create (Long_Float'(300.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Upper_Position_Limit", "Y_AXIS"], Create (Long_Float'(300.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Upper_Position_Limit", "Z_AXIS"], Create (Long_Float'(300.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Upper_Position_Limit", "E_AXIS"], Create (Long_Float'(1.0E100)));
+      Add_Override
+        (Result,
+         "Kinematics",
+         ["Kinematics", "Workspace_Bounds", "Kind", "Children", "Rectangular", "Upper_X"],
+         Create (Long_Float'(300.0)));
+      Add_Override
+        (Result,
+         "Kinematics",
+         ["Kinematics", "Workspace_Bounds", "Kind", "Children", "Rectangular", "Upper_Y"],
+         Create (Long_Float'(300.0)));
+      Add_Override
+        (Result, "Kinematics", ["Kinematics", "Workspace_Bounds", "Upper_Z"], Create (Long_Float'(300.0)));
+      Add_Override
+        (Result, "Kinematics", ["Kinematics", "Workspace_Bounds", "Lower_E"], Create (Long_Float'(-1.0E100)));
+      Add_Override
+        (Result, "Kinematics", ["Kinematics", "Workspace_Bounds", "Upper_E"], Create (Long_Float'(1.0E100)));
       Add_Override (Result, "Kinematics", ["Kinematics", "Maximum_Tangential_Velocity"], Create (Long_Float'(250.0)));
       Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "X_AXIS"], Create (Long_Float'(250.0)));
       Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "Y_AXIS"], Create (Long_Float'(250.0)));
@@ -893,7 +1022,9 @@ package body Prunt.Integration_Test_Harness is
        (Generic_Types                           => Generic_Types,
         Hardware                                => Hardware,
         Interpolation_Time                      => Integration_Interpolation_Time,
+        Maximum_Loop_Move_Tail_Length           => Hardware_Maximum_Loop_Move_Tail_Length,
         Enqueue_Command                         => Enqueue_Command,
+        Setup_For_Loop_Move                     => Setup_For_Loop_Move,
         Reset_Position                          => Reset_Position,
         Wait_Until_Idle                         => Wait_Until_Idle,
         Reset_Hardware                          => Machine.Clear,

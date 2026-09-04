@@ -28,9 +28,32 @@ private with Ada.Numerics.Generic_Elementary_Functions;
 
 package Prunt.Motion_Planner is
 
+   Homing_Move_Cancelled_Error : exception;
+   --  Raised when a planner reset invalidates an in-progress homing-move position handshake.
+
    type Axial_Deviation_Limits is array (Axis_Name) of Length range 0.0 * mm .. Length'Last;
 
    type Cornering_Kind is (Stereographic, Circular, Parabolic, Biarc, Sharp_SCV);
+
+   type Workspace_Bounds_Kind is (Rectangular_Workspace, Circular_Workspace);
+
+   type Workspace_Bounds (Kind : Workspace_Bounds_Kind := Rectangular_Workspace) is record
+      Lower_Z : Length := 0.0 * mm;
+      Upper_Z : Length := 0.0 * mm;
+      Lower_E : Length := 0.0 * mm;
+      Upper_E : Length := 0.0 * mm;
+
+      case Kind is
+         when Rectangular_Workspace =>
+            Lower_X : Length := 0.0 * mm;
+            Upper_X : Length := 0.0 * mm;
+            Lower_Y : Length := 0.0 * mm;
+            Upper_Y : Length := 0.0 * mm;
+
+         when Circular_Workspace =>
+            Radius : Length := 0.0 * mm;
+      end case;
+   end record;
 
    type Stereographic_Corner_Parameters is record
       Axial_Deviation_Maxes    : Axial_Deviation_Limits := [others => 0.1 * mm];
@@ -90,13 +113,7 @@ package Prunt.Motion_Planner is
    --  stop.
 
    type Kinematic_Parameters is record
-      Lower_Pos_Limit : Position := [others => 0.0 * mm];
-      --  The minimum allowed coordinate for each axis, if any single component of a position is less than the related
-      --  component of this array then the position is considered to be out of bounds.
-
-      Upper_Pos_Limit : Position := [others => 0.0 * mm];
-      --  The maximum allowed coordinate for each axis, if any single component of a position is greater than the
-      --  related component of this array then the position is considered to be out of bounds.
+      Bounds : Workspace_Bounds := (Kind => Rectangular_Workspace, others => <>);
 
       Ignore_E_In_XYZE : Boolean := True;
       --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
@@ -112,6 +129,17 @@ package Prunt.Motion_Planner is
       Axial_Shapers            : Input_Shapers.Axial_Shaper_Parameters :=
         [others => (Kind => Input_Shapers.No_Shaper)];
    end record;
+
+   function XY_Position_Is_In_Bounds (Pos : Position; Params : Kinematic_Parameters) return Boolean;
+   --  Return whether the X/Y components of Pos are within the workspace.
+
+   function Position_Is_In_Bounds (Pos : Position; Params : Kinematic_Parameters) return Boolean;
+   --  Return whether every component is within the workspace.
+
+   function Helix_Is_In_Bounds
+     (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean; Params : Kinematic_Parameters) return Boolean;
+   --  Return whether the complete executed helix is inside the configured position limits. If the supplied geometry
+   --  would be converted to a line by the planner, check that line instead.
 
    type Unit_Speed_Axial_Velocity_Bounds is array (Axis_Name) of Dimensionless;
    type Unit_Speed_Axial_Acceleration_Bounds is array (Axis_Name) of Curvature;
@@ -330,18 +358,6 @@ package Prunt.Motion_Planner is
      (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length;
    --  Returns the distance from the start point at a specific time T within a feedrate profile. The return value may
    --  be negative.
-
-   function Distance_At_Time
-     (Profile            : Feedrate_Profile;
-      T                  : Time;
-      Max_Crackle        : Crackle;
-      Start_Vel          : Velocity;
-      Is_Past_Accel_Part : out Boolean) return Length;
-   --  Returns the distance from the start point at a specific time T within a feedrate profile. The return value may
-   --  be negative.
-   --
-   --  Is_Past_Accel_Part is set to True if T is in the coasting or deceleration part, otherwise it is set to
-   --  False.
 
    function Optimal_Profile_For_Distance
      (Start_Vel        : Velocity;

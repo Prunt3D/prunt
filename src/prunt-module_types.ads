@@ -201,14 +201,8 @@ package Prunt.Module_Types is
 
    type Block_End_Context is limited interface;
 
-   function Get_First_Accel_Distance (This : Block_End_Context) return Length is abstract;
-   --  Return the acceleration distance of the first segment in the completed block.
-
    function Get_Last_Command_Index (This : Block_End_Context) return Command_Index is abstract;
    --  Return the last interpolation or step-generator command index queued for the completed block.
-
-   function Get_Loop_Move_Offset (This : Block_End_Context) return Position_Offset is abstract;
-   --  Return the accumulated position offset produced by any repeated loop move in the completed block.
 
    procedure Wait_For_Idle (This : Block_End_Context) is abstract;
    --  Wait until hardware execution has reached the end of the completed block.
@@ -289,6 +283,9 @@ package Prunt.Module_Types is
    function Axis_Is_Homed (This : Planner_Interface; Axis : Axis_Name) return Boolean is abstract;
    --  Return whether Axis is currently marked as homed.
 
+   function Cancellation_Is_Active (This : Planner_Interface) return Boolean is abstract;
+   --  Return whether processing through This is being interrupted by cancellation.
+
    procedure Add_Corner
      (This          : Planner_Interface;
       Pos           : Position;
@@ -313,25 +310,26 @@ package Prunt.Module_Types is
    --  May be attached to a dummy corner in the next block.
 
    procedure Flush
-     (This           : Planner_Interface;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False)
+     (This       : Planner_Interface;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
    is abstract;
    --  Finish the current planner block and attach Extra_Data for processing once its motion stops.
 
+   procedure Resolve_Homing_Move (This : Planner_Interface; Stopped_Position : Position) is abstract;
+   --  Supply the true stopped position calculated by the homing module and reopen the motion-input queue. This must be
+   --  called exactly once after each successful loop-move flush.
+
    procedure Flush_And_Change_Kinematic_Parameters
-     (This           : Planner_Interface;
-      Params         : Motion_Planner.Kinematic_Parameters;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False)
+     (This       : Planner_Interface;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
    is abstract;
    --  Flush pending motion, process Extra_Data, and make Params apply to subsequently planned motion.
 
    procedure Flush_And_Reset_Position
-     (This           : Planner_Interface;
-      New_Position   : Position;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False)
+     (This         : Planner_Interface;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
    is abstract;
    --  Flush pending motion, process Extra_Data, and reset the subsequent planner position to New_Position.
 

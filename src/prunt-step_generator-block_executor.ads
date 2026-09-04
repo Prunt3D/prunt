@@ -35,6 +35,16 @@ private generic
        (Resetting_Data : Active_Planner.Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
    --  Runs immediately before the block's first corner data is processed.
 
+   with procedure Setup_Loop_Move_Callback (Resetting_Data : Active_Planner.Flush_Resetting_Data_Type);
+   --  Configure the repeated command immediately before it is enqueued.
+
+   with
+     function Pin_Motor_To_Block_Start_Callback
+       (Resetting_Data : Active_Planner.Flush_Resetting_Data_Type; Transform : Kinematic_Transform; Motor : Motor_Name)
+        return Boolean;
+   --  Return whether Motor is held at its block-start position instead of executing the transformed positions in this
+   --  block.
+
    with
      procedure Start_Corner_Callback
        (Last_Command_Index : Command_Index; Data : Active_Planner.Corner_Extra_Data_Type);
@@ -42,11 +52,9 @@ private generic
 
    with
      procedure Finish_Block_Callback
-       (Resetting_Data       : Active_Planner.Flush_Resetting_Data_Type;
-        Next_Block_Pos       : Motor_Position;
-        First_Accel_Distance : Length;
-        Last_Command_Index   : Command_Index;
-        Loop_Move_Offset     : Position_Offset);
+       (Resetting_Data     : Active_Planner.Flush_Resetting_Data_Type;
+        Next_Block_Pos     : Motor_Position;
+        Last_Command_Index : Command_Index);
    --  Runs after all commands for the block have been queued.
 
    with procedure Publish_Corner_ID (Corner_ID : Planner_Corner_ID);
@@ -67,7 +75,7 @@ is
 
    procedure Execute_Block
      (Block           : access constant Active_Planner.Execution_Block;
-      Map             : Motor_Pos_Map;
+      Transform       : Kinematic_Transform;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean);
    --  Queue all step-generator commands for Block unless reset is requested.

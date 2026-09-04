@@ -96,7 +96,9 @@ package body Prunt.Default_Modules.Heaters is
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
    begin
-      return Config.Versioned_Config_Schema'(Version => 1, Top_Level_Items => Build_Schema);
+      return
+        Config.Versioned_Config_Schema'
+          (Version => 1, Module_Instance_Tag => Module_Instance'Tag, Top_Level_Items => Build_Schema);
    end Config_Schema;
 
    overriding
@@ -197,7 +199,7 @@ package body Prunt.Default_Modules.Heaters is
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
-      Report_Config_Error : access procedure (Path : Config.Config_Path'Class; Message : Virtual_String);
+      Report_Config_Error : access procedure (Path : Config.Config_Path; Message : Virtual_String);
       Status_Emitter      : Status_Manager.Status_Emitter;
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
@@ -347,7 +349,7 @@ package body Prunt.Default_Modules.Heaters is
          end loop;
       end Start;
 
-      procedure Handle_Pause (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+      procedure Handle_Pause (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class) is
          pragma Unreferenced (Context);
       begin
          Save_Pause_Targets;
@@ -361,7 +363,7 @@ package body Prunt.Default_Modules.Heaters is
          end loop;
       end Handle_Pause;
 
-      procedure Handle_Resume (Planner : Planner_Interface'Class; Context : Pause_Context'Class) is
+      procedure Handle_Resume (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class) is
          pragma Unreferenced (Context);
 
          Saved_Pause_Targets : constant Heater_Target_Array := Get_Pause_Targets;

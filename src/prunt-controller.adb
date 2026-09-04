@@ -450,22 +450,10 @@ package body Prunt.Controller is
    end Mark_Axis_Homed;
 
    overriding
-   function Get_First_Accel_Distance (This : Planner_Block_End_Context) return Length is
-   begin
-      return This.First_Accel_Distance;
-   end Get_First_Accel_Distance;
-
-   overriding
    function Get_Last_Command_Index (This : Planner_Block_End_Context) return Command_Index is
    begin
       return This.Last_Command_Index;
    end Get_Last_Command_Index;
-
-   overriding
-   function Get_Loop_Move_Offset (This : Planner_Block_End_Context) return Position_Offset is
-   begin
-      return This.Loop_Move_Offset;
-   end Get_Loop_Move_Offset;
 
    overriding
    procedure Wait_For_Idle (This : Planner_Block_End_Context) is
@@ -554,6 +542,12 @@ package body Prunt.Controller is
             return Pause_Planner_State.Axis_Is_Homed (Axis);
       end case;
    end Axis_Is_Homed;
+
+   overriding
+   function Cancellation_Is_Active (This : Planner_Wrapper) return Boolean is
+   begin
+      return This.Target = Primary_Planner_Target and then Gcode_Cancellation_Barrier.Is_Cancellation_Active;
+   end Cancellation_Is_Active;
 
    overriding
    procedure Process_After_Block (This : Axis_Homing_Update_Event; Context : Block_End_Context'Class) is
@@ -672,25 +666,127 @@ package body Prunt.Controller is
    end Build_Block_End_Data;
 
    overriding
-   procedure Flush
-     (This           : Planner_Wrapper;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False) is
+   procedure Process_After_Block (This : Loop_Move_Block_End_Data; Context : Block_End_Context'Class) is
    begin
-      if This.Target = Pause_Planner_Target and then Is_Homing_Move then
+      if not This.Nested_Data.Is_Empty then
+         This.Nested_Data.Element.Process_After_Block (Context);
+      end if;
+   end Process_After_Block;
+
+   overriding
+   procedure Process_After_Block (This : Motor_Loop_Move_Block_End_Data; Context : Block_End_Context'Class) is
+   begin
+      if not This.Nested_Data.Is_Empty then
+         This.Nested_Data.Element.Process_After_Block (Context);
+      end if;
+   end Process_After_Block;
+
+   overriding
+   procedure Process_After_Block (This : Motor_Move_Block_End_Data; Context : Block_End_Context'Class) is
+   begin
+      if not This.Nested_Data.Is_Empty then
+         This.Nested_Data.Element.Process_After_Block (Context);
+      end if;
+   end Process_After_Block;
+
+   overriding
+   procedure Flush
+     (This       : Planner_Wrapper;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+   begin
+      case This.Target is
+         when Primary_Planner_Target =>
+            My_Motion_Planner.Enqueue_Flush (Build_Block_End_Data (This, Extra_Data));
+
+         when Pause_Planner_Target   =>
+            My_Pause_Motion_Planner.Enqueue_Flush (Build_Block_End_Data (This, Extra_Data));
+      end case;
+   end Flush;
+
+   overriding
+   function Flush_Loop_Move
+     (This               : Planner_Wrapper;
+      Stop_Conditions    : Stop_Condition_Array;
+      Maximum_Loop_Count : Loop_Move_Count;
+      Extra_Data         : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+      return Position_Offset is
+   begin
+      if This.Target /= Primary_Planner_Target then
+         raise Constraint_Error with "Loop moves are not allowed in pause plans.";
+      end if;
+
+      declare
+         Loop_Data : constant Loop_Move_Block_End_Data :=
+           (Nested_Data => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
+            Setup       => (Stop_Conditions => Stop_Conditions, Maximum_Loop_Count => Maximum_Loop_Count));
+      begin
+         return My_Motion_Planner.Enqueue_Homing_Flush (Build_Block_End_Data (This, Loop_Data));
+      end;
+   end Flush_Loop_Move;
+
+   overriding
+   function Flush_Motor_Loop_Move
+     (This               : Planner_Wrapper;
+      Motor              : Motor_Name;
+      Stop_Condition     : Generic_Types.Stop_Condition;
+      Maximum_Loop_Count : Loop_Move_Count;
+      Extra_Data         : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+      return Position_Offset is
+   begin
+      if This.Target /= Primary_Planner_Target then
+         raise Constraint_Error with "Motor-space loop moves are not allowed in pause plans.";
+      elsif not Transforms.Motor_Is_In_Selective_Move_Group (Current_Kinematic_Transform, Motor, Motor) then
+         raise Constraint_Error
+           with
+             "The selected motor does not belong to a motor-selective motion group. Coupled linear kinematics "
+             & "such as CoreXY do not support motor-selective moves.";
+      end if;
+
+      declare
+         Loop_Data : constant Motor_Loop_Move_Block_End_Data :=
+           (Nested_Data => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data),
+            Setup       =>
+              (Stop_Conditions    =>
+                 [others => (Input_Switch => Stop_Condition.Input_Switch, Stop_State => Stop_Condition.Stop_State)],
+               Maximum_Loop_Count => Maximum_Loop_Count),
+            Motor       => Motor);
+      begin
+         return My_Motion_Planner.Enqueue_Homing_Flush (Build_Block_End_Data (This, Loop_Data));
+      end;
+   end Flush_Motor_Loop_Move;
+
+   overriding
+   procedure Flush_Motor_Move
+     (This       : Planner_Wrapper;
+      Motor      : Motor_Name;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+   begin
+      if This.Target /= Primary_Planner_Target then
+         raise Constraint_Error with "Motor-space moves are not allowed in pause plans.";
+      elsif not Transforms.Motor_Is_In_Selective_Move_Group (Current_Kinematic_Transform, Motor, Motor) then
+         raise Constraint_Error
+           with
+             "The selected motor does not belong to a motor-selective motion group. Coupled linear kinematics "
+             & "such as CoreXY do not support motor-selective moves.";
+      end if;
+
+      My_Motion_Planner.Enqueue_Flush
+        (Build_Block_End_Data
+           (This,
+            Motor_Move_Block_End_Data'
+              (Nested_Data => Extra_Block_Resetting_Data_Holders.To_Holder (Extra_Data), Motor => Motor)));
+   end Flush_Motor_Move;
+
+   overriding
+   procedure Resolve_Homing_Move (This : Planner_Wrapper; Stopped_Position : Position) is
+   begin
+      if This.Target /= Primary_Planner_Target then
          raise Constraint_Error with "Homing moves are not allowed in pause plans.";
       end if;
 
-      case This.Target is
-         when Primary_Planner_Target =>
-            My_Motion_Planner.Enqueue_Flush
-              (Build_Block_End_Data (This, Extra_Data), Is_Homing_Move => Is_Homing_Move);
-
-         when Pause_Planner_Target   =>
-            My_Pause_Motion_Planner.Enqueue_Flush
-              (Build_Block_End_Data (This, Extra_Data), Is_Homing_Move => Is_Homing_Move);
-      end case;
-   end Flush;
+      My_Motion_Planner.Resolve_Homing_Position (Stopped_Position);
+      Primary_Planner_State.Set_Last_Position (Stopped_Position);
+   end Resolve_Homing_Move;
 
    procedure Flush_Final_Interactive_Command (This : Planner_Wrapper) is
    begin
@@ -704,48 +800,41 @@ package body Prunt.Controller is
 
    overriding
    procedure Flush_And_Change_Kinematic_Parameters
-     (This           : Planner_Wrapper;
-      Params         : Motion_Planner.Kinematic_Parameters;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False) is
+     (This       : Planner_Wrapper;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is
+      Limited_Params : constant Motion_Planner.Kinematic_Parameters :=
+        Apply_Global_Delta_Velocity_Limit (Params, Current_Kinematic_Transform);
    begin
-      if This.Target = Pause_Planner_Target and then Is_Homing_Move then
-         raise Constraint_Error with "Homing moves are not allowed in pause plans.";
-      end if;
-
       case This.Target is
          when Primary_Planner_Target =>
             My_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
-              (Build_Block_End_Data (This, Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
-            Primary_Planner_State.Set_Last_Kinematic_Parameters (Params);
+              (Build_Block_End_Data (This, Extra_Data), Limited_Params);
+            Primary_Planner_State.Set_Last_Kinematic_Parameters (Limited_Params);
 
          when Pause_Planner_Target   =>
             My_Pause_Motion_Planner.Enqueue_Flush_And_Change_Kinematic_Parameters
-              (Build_Block_End_Data (This, Extra_Data), Params, Is_Homing_Move => Is_Homing_Move);
-            Pause_Planner_State.Set_Last_Kinematic_Parameters (Params);
+              (Build_Block_End_Data (This, Extra_Data), Limited_Params);
+            Pause_Planner_State.Set_Last_Kinematic_Parameters (Limited_Params);
       end case;
    end Flush_And_Change_Kinematic_Parameters;
 
    overriding
    procedure Flush_And_Reset_Position
-     (This           : Planner_Wrapper;
-      New_Position   : Position;
-      Extra_Data     : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
-      Is_Homing_Move : Boolean := False) is
+     (This         : Planner_Wrapper;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
    begin
-      if This.Target = Pause_Planner_Target and then Is_Homing_Move then
-         raise Constraint_Error with "Homing moves are not allowed in pause plans.";
-      end if;
-
       case This.Target is
          when Primary_Planner_Target =>
             My_Motion_Planner.Enqueue_Flush_And_Reset_Position
-              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position, Is_Homing_Move => Is_Homing_Move);
+              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position);
             Primary_Planner_State.Set_Last_Position (New_Position);
 
          when Pause_Planner_Target   =>
             My_Pause_Motion_Planner.Enqueue_Flush_And_Reset_Position
-              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position, Is_Homing_Move => Is_Homing_Move);
+              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position);
             Pause_Planner_State.Set_Last_Position (New_Position);
       end case;
    end Flush_And_Reset_Position;
@@ -756,12 +845,59 @@ package body Prunt.Controller is
    end Prompt_For_Update;
 
    procedure Setup_Planner_Runners
-     (Params : Motion_Planner.Kinematic_Parameters; Map : My_Default_Modules_Children.Kinematics.Motor_Position_Map) is
+     (Params : Motion_Planner.Kinematic_Parameters; Transform : Transforms.Kinematic_Transform)
+   is
+      Motor_Map      : constant Transforms.Motor_Position_Map := Transforms.Transform_Linear_Map (Transform);
+      Limited_Params : constant Motion_Planner.Kinematic_Parameters :=
+        Apply_Global_Delta_Velocity_Limit (Params, Transform);
    begin
-      My_Motion_Planner.Runner.Setup (Params, Map);
-      My_Pause_Motion_Planner.Runner.Setup (Params, Map);
-      My_Step_Generator.Runner.Setup (My_Step_Generator.Motor_Pos_Map (Map));
+      My_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
+      My_Pause_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
+      My_Step_Generator.Runner.Setup (Transform);
    end Setup_Planner_Runners;
+
+   function Apply_Global_Delta_Velocity_Limit
+     (Params : Motion_Planner.Kinematic_Parameters; Transform : Transforms.Kinematic_Transform)
+      return Motion_Planner.Kinematic_Parameters
+   is
+      Result : Motion_Planner.Kinematic_Parameters := Params;
+   begin
+      if Transforms.Transform_Is_Linear (Transform) then
+         return Result;
+      end if;
+
+      declare
+         Jacobian : constant Transforms.Motor_Jacobian_Bounds := Transforms.Conservative_Jacobian_Bounds (Transform);
+         Limit    : Velocity := Velocity'Last;
+      begin
+         for Motor in Motor_Name loop
+            declare
+               Projection : Curvature := 0.0 / mm;
+            begin
+               --  XYZ shapers have normalized nonnegative responses. Summing all global component bounds therefore
+               --  remains valid even when the shaped axes are delayed independently.
+               for Axis in Axis_Name loop
+                  if Axis /= E_Axis then
+                     Projection := Projection + Jacobian (Motor, Axis);
+                  end if;
+               end loop;
+
+               if Projection > 0.0 / mm then
+                  Limit :=
+                    Velocity'Min
+                      (Limit,
+                       Global_Delta_Velocity_Safety_Factor
+                       * Hardware_Maximum_Deltas_Per_Command (Motor)
+                       / (Interpolation_Time * Projection));
+               end if;
+            end;
+         end loop;
+
+         Result.Tangential_Velocity_Max := Velocity'Min (Result.Tangential_Velocity_Max, Limit);
+      end;
+
+      return Result;
+   end Apply_Global_Delta_Velocity_Limit;
 
    procedure Catch_Up_Planner_State_Handlers (Executed_Corner_ID : Planner_Corner_ID) is
       Handlers : Module_Instance_Vectors.Vector;
@@ -856,14 +992,18 @@ package body Prunt.Controller is
          Input_Shapers_Instance     : My_Default_Modules_Children.Input_Shapers.Module_Instance_Interface'Class renames
            My_Default_Modules_Children.Input_Shapers.Module_Instance_Interface'Class
              (Input_Shapers_Instance_Ref.Get.Element.all);
-         Startup_Configuration      : constant My_Default_Modules_Children.Kinematics.Motion_Planner_Configuration :=
+
+         Startup_Configuration : constant My_Default_Modules_Children.Kinematics.Motion_Planner_Configuration :=
            Kinematics_Instance.Get_Default_Motion_Planner_Configuration;
-         Startup_Parameters         : constant Motion_Planner.Kinematic_Parameters :=
-           (Startup_Configuration.Parameters
-            with delta Axial_Shapers => Input_Shapers_Instance.Get_Current_Axial_Shapers);
+         Startup_Transform     : constant Transforms.Kinematic_Transform := Startup_Configuration.Transform;
+         Startup_Parameters    : constant Motion_Planner.Kinematic_Parameters :=
+           Apply_Global_Delta_Velocity_Limit
+             ((Startup_Configuration.Parameters
+               with delta Axial_Shapers => Input_Shapers_Instance.Get_Current_Axial_Shapers),
+              Startup_Transform);
       begin
-         Current_Motor_Position_Map := Startup_Configuration.Motors_To_Position;
-         Setup_Planner_Runners (Startup_Parameters, Current_Motor_Position_Map);
+         Current_Kinematic_Transform := Startup_Transform;
+         Setup_Planner_Runners (Startup_Parameters, Current_Kinematic_Transform);
 
          Primary_Planner_State.Set_Last_Kinematic_Parameters (Startup_Parameters);
          Primary_Planner_State.Set_Last_Position (Startup_Position);
@@ -1269,6 +1409,10 @@ package body Prunt.Controller is
                exception
                   when E : others =>
                      Gcode_Processor_Is_Running := False;
+                     My_Logger.Log
+                       (Conversions.To_Virtual_String
+                          ("Prunt controller fatal error in G-code processor: "
+                           & Ada.Exceptions.Exception_Information (E)));
                      Exception_Occurrence_Holder.all.Set_Fatal
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Gcode_Processor;
@@ -1295,6 +1439,10 @@ package body Prunt.Controller is
                   end loop;
                exception
                   when E : others =>
+                     My_Logger.Log
+                       (Conversions.To_Virtual_String
+                          ("Prunt controller fatal error in idle notification worker: "
+                           & Ada.Exceptions.Exception_Information (E)));
                      Exception_Occurrence_Holder.all.Set_Fatal
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Idle_Notification_Worker;
@@ -1308,6 +1456,10 @@ package body Prunt.Controller is
                   end loop;
                exception
                   when E : others =>
+                     My_Logger.Log
+                       (Conversions.To_Virtual_String
+                          ("Prunt controller fatal error in planner-state catch-up: "
+                           & Ada.Exceptions.Exception_Information (E)));
                      Exception_Occurrence_Holder.all.Set_Fatal
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Planner_State_Catch_Up;
@@ -1591,13 +1743,10 @@ package body Prunt.Controller is
                   function Get_Data return My_Modules.Module_Instance_Parent'Class is
                      Config_Data : constant Config.Config_Data := My_Config_File.Get_Data (Module_Name);
 
-                     procedure Report_Config_Error_With_Module
-                       (Path : Config.Config_Path'Class; Message : Virtual_String);
+                     procedure Report_Config_Error_With_Module (Path : Config.Config_Path; Message : Virtual_String);
                      --  Resolve and validate the typed path before prefixing it with the module location.
 
-                     procedure Report_Config_Error_With_Module
-                       (Path : Config.Config_Path'Class; Message : Virtual_String)
-                     is
+                     procedure Report_Config_Error_With_Module (Path : Config.Config_Path; Message : Virtual_String) is
                         use type Config.Config_Data_Paths.Vector;
 
                         Resolved_Path : constant Config.Config_Data_Paths.Vector :=
@@ -1819,14 +1968,12 @@ package body Prunt.Controller is
          Last_Command_Executed.Reset (Current_Position);
          Idle_Notification_State.Abandon_Activities (Last_Command_Executed.Get);
 
-         Setup_Planner_Runners (Params, Current_Motor_Position_Map);
+         Setup_Planner_Runners (Params, Current_Kinematic_Transform);
 
          Primary_Planner_State.Set_Last_Position (Current_Position);
          Pause_Planner_State.Set_Last_Position (Current_Position);
          Pause_Default_State.Set_Last_Position (Current_Position);
-         Reset_Position
-           (My_Step_Generator.To_Motor_Position
-              (Current_Position, My_Step_Generator.Motor_Pos_Map (Current_Motor_Position_Map)));
+         Reset_Position (Transforms.To_Motor_Position (Current_Position, Current_Kinematic_Transform));
 
          Succeeded := True;
          Gcode_Cancellation_Barrier.Finish_Cancellation;
@@ -1932,6 +2079,43 @@ package body Prunt.Controller is
       return not Resetting_Data.Is_Empty and then Resetting_Data.Element in Pause_Plan_End_Event;
    end Is_Pause_Plan_Done;
 
+   procedure Setup_Loop_Move (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder) is
+   begin
+      if Resetting_Data.Is_Empty then
+         raise Program_Error with "Got a loop-move block that has no resetting data.";
+      elsif Resetting_Data.Element in Gcode_Block_End_Data then
+         Setup_Loop_Move (Gcode_Block_End_Data (Resetting_Data.Element).Nested_Data);
+      elsif Resetting_Data.Element in Loop_Move_Block_End_Data then
+         Setup_For_Loop_Move (Loop_Move_Block_End_Data (Resetting_Data.Element).Setup);
+      elsif Resetting_Data.Element in Motor_Loop_Move_Block_End_Data then
+         Setup_For_Loop_Move (Motor_Loop_Move_Block_End_Data (Resetting_Data.Element).Setup);
+      else
+         raise Program_Error with "Got a loop-move block without explicit loop parameters.";
+      end if;
+   end Setup_Loop_Move;
+
+   function Pin_Motor_To_Block_Start
+     (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder;
+      Transform      : Transforms.Kinematic_Transform;
+      Motor          : Motor_Name) return Boolean is
+   begin
+      if Resetting_Data.Is_Empty then
+         return False;
+      elsif Resetting_Data.Element in Gcode_Block_End_Data then
+         return Pin_Motor_To_Block_Start (Gcode_Block_End_Data (Resetting_Data.Element).Nested_Data, Transform, Motor);
+      elsif Resetting_Data.Element in Motor_Loop_Move_Block_End_Data then
+         return
+           not Transforms.Motor_Is_In_Selective_Move_Group
+                 (Transform, Motor_Loop_Move_Block_End_Data (Resetting_Data.Element).Motor, Motor);
+      elsif Resetting_Data.Element in Motor_Move_Block_End_Data then
+         return
+           not Transforms.Motor_Is_In_Selective_Move_Group
+                 (Transform, Motor_Move_Block_End_Data (Resetting_Data.Element).Motor, Motor);
+      else
+         return False;
+      end if;
+   end Pin_Motor_To_Block_Start;
+
    procedure Start_Planner_Block
      (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index)
    is
@@ -1944,7 +2128,6 @@ package body Prunt.Controller is
      (Pos             : Position;
       Motor_Pos       : Motor_Position;
       Index           : Command_Index;
-      Loop_Until_Hit  : Boolean;
       Safe_Stop_After : Boolean;
       Vel_Ratio       : Dimensionless)
    is
@@ -1953,8 +2136,7 @@ package body Prunt.Controller is
       --  the target speed.
    begin
       Last_Command_Executed.Record_Queued_Position (Index, Pos);
-      Enqueue_Command
-        ((Index => Index, Pos => Motor_Pos, Safe_Stop_After => Safe_Stop_After, Loop_Until_Hit => Loop_Until_Hit));
+      Enqueue_Command ((Index => Index, Pos => Motor_Pos, Safe_Stop_After => Safe_Stop_After));
    end Enqueue_Command_Internal;
 
    procedure Start_Corner (Last_Command_Index : Command_Index; Data : Module_Types.Extra_Corner_Data'Class) is
@@ -1963,11 +2145,9 @@ package body Prunt.Controller is
    end Start_Corner;
 
    procedure Finish_Planner_Block
-     (Resetting_Data       : Extra_Block_Resetting_Data_Holders.Holder;
-      Next_Block_Pos       : Motor_Position;
-      First_Accel_Distance : Length;
-      Last_Command_Index   : Command_Index;
-      Loop_Move_Offset     : Position_Offset)
+     (Resetting_Data     : Extra_Block_Resetting_Data_Holders.Holder;
+      Next_Block_Pos     : Motor_Position;
+      Last_Command_Index : Command_Index)
    is
       function Block_Source return Gcode_Source;
 
@@ -1981,9 +2161,7 @@ package body Prunt.Controller is
       end Block_Source;
 
       Context : constant Planner_Block_End_Context :=
-        (First_Accel_Distance     => First_Accel_Distance,
-         Last_Command_Index       => Last_Command_Index,
-         Loop_Move_Offset         => Loop_Move_Offset,
+        (Last_Command_Index       => Last_Command_Index,
          State_Catch_Up_Corner_ID => My_Step_Generator.Get_Last_Executed_Primary_Corner_ID,
          Source                   => Block_Source);
    begin
@@ -2025,11 +2203,6 @@ package body Prunt.Controller is
    begin
       Last_Command_Executed.Report (Index);
    end Report_Last_Command_Executed;
-
-   procedure Report_Loop_Move_Cycles (Index : Command_Index; Cycles : Dimensionless) is
-   begin
-      Loop_Move_Cycles.Report (Index, Cycles);
-   end Report_Loop_Move_Cycles;
 
    package body Last_Command_Executed is
       function Next_Slot (Slot : Pending_Position_Ring_Index) return Pending_Position_Ring_Index is
@@ -2181,34 +2354,6 @@ package body Prunt.Controller is
          return Read_Position (Current_Position_Data);
       end Get_Current_Position;
    end Last_Command_Executed;
-
-   protected body Loop_Move_Cycles is
-      procedure Report (Index : Command_Index; Cycles : Dimensionless) is
-      begin
-         if Has_Data then
-            raise Constraint_Error with "Attempted to report loop move cycles while result is already pending.";
-         end if;
-
-         Current_Index := Index;
-         Current_Cycles := Cycles;
-         Has_Data := True;
-      end Report;
-
-      entry Wait (Index : Command_Index; Cycles : out Dimensionless) when Has_Data is
-      begin
-         if Current_Index /= Index then
-            raise Constraint_Error
-              with
-                "Reported loop move cycles index mismatch. Expected "
-                & Index'Image
-                & " but got "
-                & Current_Index'Image;
-         end if;
-
-         Cycles := Current_Cycles;
-         Has_Data := False;
-      end Wait;
-   end Loop_Move_Cycles;
 
    protected body Reload_Signal is
       entry Wait when Reload_Requested is
