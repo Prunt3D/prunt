@@ -87,6 +87,14 @@ body {
 .view { display: none; animation: fadeIn 0.3s ease; }
 .view.active { display: block; }
 .view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+.view-header {
+  position: sticky;
+  /* Offset the scroll container's top padding so content cannot peek above the header. */
+  top: -32px;
+  z-index: 1;
+  padding-top: 16px;
+  background-color: var(--bg-color);
+}
 .view-header h2 { font-size: 1.75rem; font-weight: 600; color: var(--text-strong); }
 
 .btn {
