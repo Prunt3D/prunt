@@ -429,7 +429,7 @@ private
    --  Convert MRES to a microstep count.
 
    procedure Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : Motor_Name)
-   with Pre => Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind;
+   with Pre => Motor_Hardware (Motor).Kind = TMC2240_UART_Kind;
    --  Sets address and checksum.
 
    function Read
