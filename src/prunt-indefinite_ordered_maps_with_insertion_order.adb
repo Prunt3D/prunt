@@ -23,6 +23,39 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    use type Key_Vectors.Cursor;
 
+   procedure Check_Position (Container : Map; Position : Cursor) is
+   begin
+      if Position = No_Element then
+         raise Constraint_Error with "Cursor is No_Element";
+      elsif Position.Map /= Container'Unrestricted_Access then
+         raise Program_Error with "Cursor belongs to another map";
+      end if;
+   end Check_Position;
+
+   overriding
+   procedure Adjust (Object : in out Reference_Count) is
+   begin
+      Object.Value := 0;
+   end Adjust;
+
+   overriding
+   procedure Finalize (Object : in out Reference_Control) is
+   begin
+      if Object.Count /= null then
+         Object.Count.Value := @ - 1;
+         Object.Count := null;
+      end if;
+   end Finalize;
+
+   function Hold_Reference (Container : Map) return Reference_Control is
+      Count : constant Reference_Count_Access := Container.References'Unrestricted_Access;
+   begin
+      return Result : Reference_Control do
+         Count.Value := @ + 1;
+         Result.Count := Count;
+      end return;
+   end Hold_Reference;
+
    function Empty return Map is
    begin
       return Empty_Map;
@@ -45,24 +78,35 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    function Constant_Reference (Container : aliased Map; Key : Key_Type) return Constant_Reference_Type is
    begin
-      --  TODO: Is this correct?
+      --  The access value designates the heap element, not the temporary reference. Inner prevents cursor tampering,
+      --  and Control prevents replacement, for the full lifetime of the result. Unchecked_Access bypasses the
+      --  temporary reference's accessibility level; the aliased Container parameter ties the result's lifetime to the
+      --  map.
       return
-        (Container.Map.Constant_Reference (Key).Element.all'Unchecked_Access, Container.Map.Constant_Reference (Key));
+        (Container.Map.Constant_Reference (Key).Element.all'Unchecked_Access,
+         Container.Map.Constant_Reference (Key),
+         Hold_Reference (Container));
    end Constant_Reference;
 
    function Reference (Container : aliased in out Map; Key : Key_Type) return Reference_Type is
    begin
-      --  TODO: Is this correct?
-      return (Container.Map.Reference (Key).Element.all'Unchecked_Access, Container.Map.Reference (Key));
+      --  As above, Inner owns the tampering guard; the access value points into Container, never into either temporary
+      --  reference object.
+      return
+        (Container.Map.Reference (Key).Element.all'Unchecked_Access,
+         Container.Map.Reference (Key),
+         Hold_Reference (Container));
    end Reference;
 
    function Constant_Reference (Container : aliased Map; Position : Cursor) return Constant_Reference_Type is
    begin
+      Check_Position (Container, Position);
       return Constant_Reference (Container, Key (Position));
    end Constant_Reference;
 
    function Reference (Container : aliased in out Map; Position : Cursor) return Reference_Type is
    begin
+      Check_Position (Container, Position);
       return Reference (Container, Key (Position));
    end Reference;
 
@@ -160,25 +204,28 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    function Iterate (Container : Map) return Map_Iterator_Interfaces.Reversible_Iterator'Class is
    begin
-      return
-        Iterator'
-          (Ada.Finalization.Limited_Controlled
-           with
-             Iterator =>
-               new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'(Container.Insertions.Iterate),
-             Map      => Container'Unrestricted_Access);
+      return Result : Iterator do
+         Result.Map := Container'Unrestricted_Access;
+         Result.Iterator :=
+           new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'(Container.Insertions.Iterate);
+         Result.Map_Iterator :=
+           new Inner_Maps.Map_Iterator_Interfaces.Reversible_Iterator'Class'(Container.Map.Iterate);
+      end return;
    end Iterate;
 
    function Iterate (Container : Map; Start : Cursor) return Map_Iterator_Interfaces.Reversible_Iterator'Class is
    begin
-      return
-        Iterator'
-          (Ada.Finalization.Limited_Controlled
-           with
-             Iterator =>
-               new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'
-                 (Container.Insertions.Iterate (Start.Cursor)),
-             Map      => Container'Unrestricted_Access);
+      if Start /= No_Element then
+         Check_Position (Container, Start);
+      end if;
+      return Result : Iterator do
+         Result.Map := Container'Unrestricted_Access;
+         Result.Iterator :=
+           new Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class'
+             (Container.Insertions.Iterate (Start.Cursor));
+         Result.Map_Iterator :=
+           new Inner_Maps.Map_Iterator_Interfaces.Reversible_Iterator'Class'(Container.Map.Iterate);
+      end return;
    end Iterate;
 
    function Length (Container : Map) return Ada.Containers.Count_Type is
@@ -204,6 +251,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
    procedure Finalize (Object : in out Iterator) is
    begin
       Free (Object.Iterator);
+      Free (Object.Map_Iterator);
    end Finalize;
 
    overriding
@@ -231,15 +279,29 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
    overriding
    function Next (Object : Iterator; Position : Cursor) return Cursor is
    begin
-      --  TODO: We should have tampering checks here.
-      return Next (Position);
+      if Position = No_Element then
+         return No_Element;
+      end if;
+      Check_Position (Object.Map.all, Position);
+      declare
+         Inner_Cursor : constant Key_Vectors.Cursor := Object.Iterator.Next (Position.Cursor);
+      begin
+         return (if Inner_Cursor = Key_Vectors.No_Element then No_Element else (Inner_Cursor, Object.Map));
+      end;
    end Next;
 
    overriding
    function Previous (Object : Iterator; Position : Cursor) return Cursor is
    begin
-      --  TODO: We should have tampering checks here.
-      return Previous (Position);
+      if Position = No_Element then
+         return No_Element;
+      end if;
+      Check_Position (Object.Map.all, Position);
+      declare
+         Inner_Cursor : constant Key_Vectors.Cursor := Object.Iterator.Previous (Position.Cursor);
+      begin
+         return (if Inner_Cursor = Key_Vectors.No_Element then No_Element else (Inner_Cursor, Object.Map));
+      end;
    end Previous;
 
    procedure Include (Container : in out Map; Key : Key_Type; New_Item : Element_Type) is
@@ -247,6 +309,9 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
       if Container.Find (Key) = No_Element then
          Container.Insert (Key, New_Item);
       else
+         if Container.References.Value /= 0 then
+            raise Program_Error with "Tampering with referenced elements is prohibited";
+         end if;
          Container.Map.Include (Key, New_Item);
       end if;
    end Include;

@@ -38,7 +38,7 @@ package Prunt.Indefinite_Ordered_Maps_With_Insertion_Order
 is
 
    --  Not all methods from Indefinite_Ordered_Maps are exposed here, but they can be added in the future. If doing so,
-   --  note that the current implementation does not support removal of elements.
+   --  preserve the consistency of the lookup map and insertion-order vector.
 
    type Map is tagged private
    with
@@ -49,6 +49,8 @@ is
      Aggregate         => (Empty => Empty, Add_Named => Insert);
 
    type Cursor is private;
+   --  Cursors must not outlive their map. Deletion invalidates cursors at and after the removed insertion-order
+   --  position.
 
    Empty_Map : constant Map;
 
@@ -85,9 +87,11 @@ is
 
    function Constant_Reference (Container : aliased Map; Position : Cursor) return Constant_Reference_Type;
    --  Return a read-only reference to the element designated by Position.
+   --  Raise Constraint_Error for No_Element and Program_Error for a foreign cursor.
 
    function Reference (Container : aliased in out Map; Position : Cursor) return Reference_Type;
    --  Return a mutable reference to the element designated by Position.
+   --  Raise Constraint_Error for No_Element and Program_Error for a foreign cursor.
 
    procedure Insert (Container : in out Map; Key : Key_Type; New_Item : Element_Type);
    --  Insert New_Item under a previously absent Key and record it as the most recently inserted element.
@@ -132,7 +136,8 @@ is
    --  Return True when Container contains Key.
 
    function Iterate (Container : Map) return Map_Iterator_Interfaces.Reversible_Iterator'Class;
-   --  Return a reversible iterator over all elements in insertion order.
+   --  Return a reversible iterator over all elements in insertion order.  While it exists, insertion and deletion
+   --  raise Program_Error before changing the map.
 
    function Iterate (Container : Map; Start : Cursor) return Map_Iterator_Interfaces.Reversible_Iterator'Class;
    --  Return a reversible insertion-order iterator whose forward traversal begins at Start.
@@ -164,11 +169,34 @@ private
      Ada.Containers.Indefinite_Ordered_Maps (Key_Type => Key_Type, Element_Type => Element_Type);
    package Key_Vectors is new Ada.Containers.Indefinite_Vectors (Ada.Containers.Count_Type, Key_Type);
 
+   type Reference_Count is new Ada.Finalization.Controlled with record
+      Value : Natural := 0;
+   end record;
+
+   overriding
+   function "=" (Left, Right : Reference_Count) return Boolean
+   is (True);
+   --  Reference bookkeeping must not affect the enclosing map's equality.
+
+   overriding
+   procedure Adjust (Object : in out Reference_Count);
+   --  A copy of a map has no outstanding references of its own.
+
+   type Reference_Count_Access is access all Reference_Count;
+
+   type Reference_Control is new Ada.Finalization.Limited_Controlled with record
+      Count : Reference_Count_Access := null;
+   end record;
+
+   overriding
+   procedure Finalize (Object : in out Reference_Control);
+
    type Map_Access is access all Map;
 
    type Map is tagged record
       Map        : Inner_Maps.Map;
       Insertions : Key_Vectors.Vector;
+      References : aliased Reference_Count;
    end record;
 
    type Cursor is record
@@ -176,16 +204,18 @@ private
       Map    : Map_Access;
    end record;
 
-   Empty_Map : constant Map := (Map => Inner_Maps.Empty_Map, Insertions => Key_Vectors.Empty_Vector);
+   Empty_Map : constant Map := (Map => Inner_Maps.Empty_Map, Insertions => Key_Vectors.Empty_Vector, References => <>);
 
    No_Element : constant Cursor := (Key_Vectors.No_Element, null);
 
    type Constant_Reference_Type (Element : not null access constant Element_Type) is record
-      Inner : Inner_Maps.Constant_Reference_Type (Element);
+      Inner   : Inner_Maps.Constant_Reference_Type (Element);
+      Control : Reference_Control;
    end record;
 
    type Reference_Type (Element : not null access Element_Type) is record
-      Inner : Inner_Maps.Reference_Type (Element);
+      Inner   : Inner_Maps.Reference_Type (Element);
+      Control : Reference_Control;
    end record;
 
    type Key_Vectors_Iterator_Access is access all Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class;
@@ -195,14 +225,24 @@ private
        (Key_Vectors.Vector_Iterator_Interfaces.Reversible_Iterator'Class,
         Key_Vectors_Iterator_Access);
 
+   type Inner_Maps_Iterator_Access is access all Inner_Maps.Map_Iterator_Interfaces.Reversible_Iterator'Class;
+
+   procedure Free is new
+     Ada.Unchecked_Deallocation
+       (Inner_Maps.Map_Iterator_Interfaces.Reversible_Iterator'Class,
+        Inner_Maps_Iterator_Access);
+
    type Iterator is new Ada.Finalization.Limited_Controlled and Map_Iterator_Interfaces.Reversible_Iterator with record
-      Iterator : Key_Vectors_Iterator_Access;
-      Map      : Map_Access;
+      Iterator     : Key_Vectors_Iterator_Access := null;
+      Map_Iterator : Inner_Maps_Iterator_Access := null;
+      --  Lock the lookup as well as the vector: mutators change the lookup first, so its tampering check must reject
+      --  the operation before either changes.
+      Map          : Map_Access := null;
    end record;
 
    overriding
    procedure Finalize (Object : in out Iterator);
-   --  Release the heap-allocated underlying insertion-order iterator.
+   --  Release both underlying iterators and their tampering guards.
 
    overriding
    function First (Object : Iterator) return Cursor;

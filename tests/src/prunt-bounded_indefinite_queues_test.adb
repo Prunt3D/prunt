@@ -92,62 +92,114 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
    end Test_Adjust_Wrap;
 
    procedure Test_Alignment (T : in out Trendy_Test.Operation'Class) is
-      type Aligned_Item is record
-         V : Integer;
-      end record
-      with Alignment => 64;
+      use System.Storage_Elements;
+      package Alignment_Checks is
+         type Aligned_Item is new Ada.Finalization.Controlled with record
+            V : Integer := 0;
+         end record
+         with Alignment => Standard'Maximum_Alignment;
+         --  GNAT caps controlled types at Maximum_Alignment.
 
+         Adjustments : Natural := 0;
+         overriding procedure Adjust (Object : in out Aligned_Item);
+      end Alignment_Checks;
+
+      package body Alignment_Checks is
+         overriding procedure Adjust (Object : in out Aligned_Item) is
+         begin
+            --  Adjust runs on the actual pool allocation, unlike a returned copy
+            --  from Peek or Dequeue. Enqueue uses a copy, so Initialize is not called.
+            T.Assert (Object'Address mod Aligned_Item'Alignment = 0, "Misaligned pool element");
+            Adjustments := @ + 1;
+         end Adjust;
+      end Alignment_Checks;
+
+      use Alignment_Checks;
       package Aligned_Queues is new
         Prunt.Bounded_Indefinite_Queues (Element_Type => Aligned_Item, Storage_Size => 1024);
    begin
       T.Register;
-
-      --  TODO: Use a controlled type here so we can test the alignment in Initialize.
-
       Q : Aligned_Queues.Queue;
-      Item : Aligned_Item := (V => 123);
+      Item : Aligned_Item;
       Out_Item : Aligned_Item;
+      Head : Positive := 1;
+      Tail : Natural := 0;
+      Failures : Natural := 0;
 
-      Q.Enqueue (Item);
-      Q.Dequeue (Out_Item);
-      T.Assert (Out_Item.V = 123);
+      for I in 1 .. 200 loop
+         Item.V := Tail + 1;
+         begin
+            Before : constant Natural := Adjustments;
+            Q.Enqueue (Item);
+            T.Assert (Adjustments = Before + 1, "Must check the allocated element's address");
+            Tail := @ + 1;
+         exception
+            when Aligned_Queues.Out_Of_Space_Error =>
+               Failures := @ + 1;
+               Q.Dequeue (Out_Item);
+               T.Assert (Out_Item.V = Head, "Aligned queue payload corrupted");
+               Head := @ + 1;
+         end;
+      end loop;
+      T.Assert (Failures > 1, "Exercise exhaustion and wraparound repeatedly");
+      while not Q.Is_Empty loop
+         Q.Dequeue (Out_Item);
+         T.Assert (Out_Item.V = Head);
+         Head := @ + 1;
+      end loop;
+      T.Assert (Head = Tail + 1);
    end Test_Alignment;
 
    procedure Test_Alignment_Collision (T : in out Trendy_Test.Operation'Class) is
-      --  We need to construct a scenario where Current_Free is unaligned and just before the head address. We're just
-      --  relying on coverage testing to tell us we've hit the statement we're trying to test.
+      --  Distinct variable-sized payloads expose overwrites of still-live data,
+      --  including when a node fits but its element allocation must roll back.
+      package Small_Queues is new
+        Prunt.Bounded_Indefinite_Queues (Element_Type => String, Storage_Size => 256);
 
-      --  TODO: Improve this to check that there's no memory corruption.
-      package Address_Queues is new
-        Prunt.Bounded_Indefinite_Queues (Element_Type => System.Address, Storage_Size => 256);
+      function Payload (Index : Positive) return String is
+        (1 .. 1 + (Index * 17 mod 73) => Character'Val (33 + Index mod 90));
    begin
       T.Register;
+      Q : Small_Queues.Queue;
+      Head : Positive := 1;
+      Tail : Natural := 0;
+      Failures : Natural := 0;
 
-      Q : Address_Queues.Queue;
-      A : System.Address;
-
-      Q.Enqueue (System.Null_Address);
-
-      for I in 1 .. 5 loop
-         Q.Enqueue (System.Null_Address);
-      end loop;
-
-      Q.Dequeue (A);
-
-      declare
-         Full : Boolean := False;
-      begin
-         for I in 1 .. 100 loop
+      for I in 1 .. 1000 loop
+         declare
+            Value : constant String := Payload (Tail + 1);
+            Fits : constant Boolean := Q.Can_Enqueue (Value);
+         begin
             begin
-               Q.Enqueue (System.Null_Address);
+               Q.Enqueue (Value);
+               T.Assert (Fits, "Capacity probe disagrees with Enqueue");
+               Tail := @ + 1;
             exception
-               when Address_Queues.Out_Of_Space_Error =>
-                  Full := True;
-                  exit;
+               when Small_Queues.Out_Of_Space_Error =>
+                  T.Assert (not Fits);
+                  Failures := @ + 1;
+                  --  Drain only one item to keep live allocations across wraps.
+                  Actual : String (Payload (Head)'Range);
+                  Q.Dequeue (Actual);
+                  T.Assert (Actual = Payload (Head), "Live payload overwritten after exhaustion");
+                  Head := @ + 1;
             end;
-         end loop;
-         T.Assert (Full);
-      end;
+         end;
+         if not Q.Is_Empty then
+            T.Assert (Q.Peek = Payload (Head), "Head corrupted during allocation or rollback");
+         end if;
+      end loop;
+      T.Assert (Failures > 10);
+      Copy : Small_Queues.Queue := Q;
+      while not Q.Is_Empty loop
+         Actual : String (Payload (Head)'Range);
+         Q.Dequeue (Actual);
+         T.Assert (Actual = Payload (Head));
+         Copy.Dequeue (Actual);
+         T.Assert (Actual = Payload (Head), "Wrapped copy corrupted");
+         Head := @ + 1;
+      end loop;
+      T.Assert (Head = Tail + 1 and then Copy.Is_Empty);
    end Test_Alignment_Collision;
 
    procedure Test_Assign_Empty (T : in out Trendy_Test.Operation'Class) is
