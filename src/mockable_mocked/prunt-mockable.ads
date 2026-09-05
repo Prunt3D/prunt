@@ -21,6 +21,8 @@ pragma Extensions_Allowed (On);
 
 private with Ada.Containers.Indefinite_Ordered_Maps;
 private with Ada.Containers.Indefinite_Vectors;
+private with Ada.Strings.Unbounded;
+private with Ada.Task_Identification;
 
 package Prunt.Mockable is
 private
@@ -37,8 +39,23 @@ private
       function Exists (Name : String) return Boolean;
       procedure Delete (Name : String);
       procedure Rename (Old_Name, New_Name : String);
+      procedure Copy (Source, Target : String);
+      procedure Replace (Source, Target : String);
+      procedure Sync (Name : String);
+      procedure Sync_Parent;
+      procedure Fail_After (File_Name : String; Steps : Natural; Power_Loss : Boolean);
+      procedure Disable_Failure;
+      procedure Crash (File_Name : String);
    private
+      procedure Checkpoint;
       Store : File_Maps.Map;
+      Durable : File_Maps.Map;
+      Synced : File_Maps.Map;
+      Remaining : Natural := 0;
+      Failure_Enabled : Boolean := False;
+      Lose_Power : Boolean := False;
+      Failure_Name : Ada.Strings.Unbounded.Unbounded_String;
+      Failure_Task : Ada.Task_Identification.Task_Id := Ada.Task_Identification.Null_Task_Id;
    end Filesystem;
 
 end Prunt.Mockable;

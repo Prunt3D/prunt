@@ -1828,14 +1828,14 @@ package body Prunt.Controller is
          else
             Active_Config_File.Apply_Untrusted_Patch (Patch, Result, Errors);
             --  We apply the patch to the active config file so it will be used by the next reset and won't be
-            --  overwritten by modules but have the temporary modules use a new config file since we want them to
-            --  check the new values.
+            --  overwritten by modules. Temporary modules validate a snapshot of stored values without acquiring
+            --  another writer lease or changing the active modules' live configuration.
             if Errors.Is_Empty then
                declare
                   --  There is no point trying to load the modules if there are errors when testing against the schema
                   --  as no patch is applied in that case.
                   My_Config_File             : constant Config.Config_File :=
-                    Config.Create (Config_Path, Active_Module_Config_Schemas, Config_Overrides);
+                    Active_Config_File.Stored_Snapshot;
                   Temporary_Module_Instances : Module_Instance_Maps.Map :=
                     Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File);
                begin

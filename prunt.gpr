@@ -1,7 +1,7 @@
 with "config/prunt_config.gpr";
 project Prunt is
 
-   for Languages use ("Ada", "Fortran");
+   for Languages use ("Ada", "Fortran", "C");
 
    for Library_Name use "prunt";
    for Library_Version use Project'Library_Name & ".so." & Prunt_Config.Crate_Version;

@@ -18,6 +18,7 @@
 --------------------------------------------------
 
 with Ada.Exceptions;
+with Ada.IO_Exceptions;
 with Ada.Strings.Fixed;
 with Prunt.Mockable.Directories;
 with Prunt.Mockable.Text_IO;
@@ -1272,7 +1273,8 @@ package body Prunt.Config is
 
          Write_Required : Boolean := False;
       begin
-         File_Name := Conversions.To_Virtual_String (File_Name_In);
+         Mockable.Persistence.Acquire (Writer, File_Name_In);
+         File_Name := Conversions.To_Virtual_String (Mockable.Persistence.Name (Writer));
          Schemas := Schemas_In;
          Overrides := Overrides_In;
          Validate_Overrides (Schemas, Overrides);
@@ -1496,11 +1498,35 @@ package body Prunt.Config is
          end;
 
          if Write_Required then
-            Write_File;
+            Write_File (Stored_Config);
          end if;
 
          Cached_Schemas := Generate_Schemas_String (Visible_Schemas);
       end Initialize;
+
+      function Get_Snapshot return Snapshot_State is
+      begin
+         return
+           (Stored_Config   => Stored_Config.Clone,
+            Schemas         => Schemas,
+            Overrides       => Overrides,
+            Visible_Schemas => Visible_Schemas,
+            Cached_Schemas  => Cached_Schemas,
+            Save_Count      => Save_Count);
+      end Get_Snapshot;
+
+      procedure Initialize_Snapshot (State : Snapshot_State) is
+      begin
+         Read_Only := True;
+         Stored_Config := State.Stored_Config.Clone;
+         Schemas := State.Schemas;
+         Overrides := State.Overrides;
+         Visible_Schemas := State.Visible_Schemas;
+         Cached_Schemas := State.Cached_Schemas;
+         Save_Count := State.Save_Count;
+         Live_Config := Stored_Config.Clone;
+         Apply_Overrides_To_Config (Live_Config, Schemas, Overrides);
+      end Initialize_Snapshot;
 
       function Get (Owner : Virtual_String; Path : Config_Data_Paths.Vector) return JSON_Value is
       begin
@@ -1517,6 +1543,10 @@ package body Prunt.Config is
 
       procedure Set (Owner : Virtual_String; Path : Config_Data_Paths.Vector; Value : JSON_Value) is
       begin
+         if Read_Only then
+            raise Ada.IO_Exceptions.Use_Error with "Configuration snapshot is read-only.";
+         end if;
+
          if not Schemas.Contains (Owner) then
             raise Constraint_Error with Conversions.To_UTF_8_String ("Invalid config module (" & Owner & ").");
          end if;
@@ -1565,14 +1595,16 @@ package body Prunt.Config is
          Live_Config_Clone   : constant JSON_Value := Clone (Live_Config.Get ("Config").Get (Owner).Get ("Config"));
          Stored_Config_Clone : constant JSON_Value := Clone (Stored_Config.Get ("Config").Get (Owner).Get ("Config"));
       begin
+         if Read_Only then
+            raise Ada.IO_Exceptions.Use_Error with "Configuration snapshot is read-only.";
+         end if;
+
          if not Update_Deltas.Contains (Owner) then
             return;
          end if;
 
          Recursive_Left_Merge (Live_Config_Clone, Update_Deltas (Owner));
          Recursive_Left_Merge (Stored_Config_Clone, Update_Deltas (Owner));
-
-         Update_Deltas.Delete (Owner);
 
          --  Workaround below for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=123185
          Validate_Module_Config_To_Schema
@@ -1586,13 +1618,15 @@ package body Prunt.Config is
             Raise_Error_For_Module'Access,
             Check_For_Missing_Fields => True);
 
-         Live_Config.Get ("Config").Get (Owner).Set_Field ("Config", Live_Config_Clone);
-         Stored_Config.Get ("Config").Get (Owner).Set_Field ("Config", Stored_Config_Clone);
-         --  We use a clone here to avoid Stored_Config ever being in an invalid state. This is to avoid the case
-         --  where a module catches the Constraint_Error raised above then another module could still save after that
-         --  point, in that case an invalid Stored_Config would be saved to a file.
-
-         Write_File;
+         declare
+            Candidate : constant JSON_Value := Stored_Config.Clone;
+         begin
+            Candidate.Get ("Config").Get (Owner).Set_Field ("Config", Stored_Config_Clone);
+            Write_File (Candidate);
+            Stored_Config := Candidate;
+            Live_Config.Get ("Config").Get (Owner).Set_Field ("Config", Live_Config_Clone);
+            Update_Deltas.Delete (Owner);
+         end;
       end Save;
 
       procedure Apply_Untrusted_Patch
@@ -1617,6 +1651,10 @@ package body Prunt.Config is
             Error_Reported := True;
          end Report;
       begin
+         if Read_Only then
+            raise Ada.IO_Exceptions.Use_Error with "Configuration snapshot is read-only.";
+         end if;
+
          Errors := [];
 
          declare
@@ -1710,8 +1748,13 @@ package body Prunt.Config is
             return;
          end if;
 
-         Recursive_Left_Merge (Stored_Config, Patch);
-         Write_File;
+         declare
+            Candidate : constant JSON_Value := Stored_Config.Clone;
+         begin
+            Recursive_Left_Merge (Candidate, Patch);
+            Write_File (Candidate);
+            Stored_Config := Candidate;
+         end;
 
          Result := Get_Stored_Config;
       end Apply_Untrusted_Patch;
@@ -1731,7 +1774,7 @@ package body Prunt.Config is
          return Save_Count;
       end Last_Save;
 
-      procedure Write_File is
+      procedure Write_File (Value : JSON_Value) is
          File : Mockable.Text_IO.File_Type;
 
          function Trim (S : String) return String;
@@ -1741,6 +1784,13 @@ package body Prunt.Config is
             return Ada.Strings.Fixed.Trim (S, Side => Ada.Strings.Both);
          end Trim;
       begin
+         --  A leftover temporary file is never read on startup. The primary remains intact until the complete
+         --  replacement has reached stable storage.
+         Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Conversions.To_UTF_8_String (File_Name) & ".tmp");
+         Mockable.Text_IO.Put_Line (File, Conversions.To_UTF_8_String (Write (Value)));
+         Mockable.Text_IO.Close (File);
+         Mockable.Persistence.Sync (Conversions.To_UTF_8_String (File_Name) & ".tmp");
+
          if Mockable.Directories.Exists (Conversions.To_UTF_8_String (File_Name) & "_backup_20") then
             Mockable.Directories.Delete_File (Conversions.To_UTF_8_String (File_Name) & "_backup_20");
          end if;
@@ -1754,18 +1804,21 @@ package body Prunt.Config is
          end loop;
 
          if Mockable.Directories.Exists (Conversions.To_UTF_8_String (File_Name)) then
-            Mockable.Directories.Rename
-              (Old_Name => Conversions.To_UTF_8_String (File_Name),
-               New_Name => Conversions.To_UTF_8_String (File_Name) & "_backup_1");
+            Mockable.Persistence.Copy
+              (Conversions.To_UTF_8_String (File_Name), Conversions.To_UTF_8_String (File_Name) & "_backup_1");
+            Mockable.Persistence.Sync (Conversions.To_UTF_8_String (File_Name) & "_backup_1");
          end if;
 
-         Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Conversions.To_UTF_8_String (File_Name));
-         Mockable.Text_IO.Put_Line (File, Conversions.To_UTF_8_String (Write (Stored_Config)));
-         Mockable.Text_IO.Close (File);
-
-         pragma Unreferenced (File);
-
+         Mockable.Persistence.Replace
+           (Conversions.To_UTF_8_String (File_Name) & ".tmp", Conversions.To_UTF_8_String (File_Name));
+         Mockable.Persistence.Sync_Parent (Conversions.To_UTF_8_String (File_Name));
          Save_Count := @ + 1;
+      exception
+         when others =>
+            if Mockable.Text_IO.Is_Open (File) then
+               Mockable.Text_IO.Close (File);
+            end if;
+            raise;
       end Write_File;
 
       procedure Reset_Live_To_Stored (Check_Ref_Count : access procedure) is
@@ -1773,6 +1826,7 @@ package body Prunt.Config is
          Check_Ref_Count.all;
          Live_Config := Stored_Config.Clone;
          Apply_Overrides_To_Config (Live_Config, Schemas, Overrides);
+         Update_Deltas.Clear;
       end Reset_Live_To_Stored;
    end Config_File_Internal;
 
@@ -1796,7 +1850,7 @@ package body Prunt.Config is
       Ref_Count : constant Natural := Object.Internal.Get_Refcount;
    begin
       if Internal.Element /= null then
-         --  TODO: Figure out what to do here if there is still any unsaved data left in Update_Deltas.
+         --  Pending deltas are intentionally discarded: finalization is not an implicit Save.
          if Ref_Count /= 1 then
             raise Constraint_Error
               with Ref_Count'Image & " references to config file still exist during finalisation.";
@@ -1827,7 +1881,7 @@ package body Prunt.Config is
               (Module : Virtual_String; Old_Version : Config_Schema_Version; Old_Config : JSON_Value) return JSON_Value
             is
                Config : Config_Data :=
-                 (For_Migration    => True,
+                 (For_Migration    => (Ada.Finalization.Controlled with Active => True),
                   Module           => Module,
                   Internal         => Result.Internal,
                   Migration_Config => Clone (Old_Config));
@@ -1842,11 +1896,36 @@ package body Prunt.Config is
       end return;
    end Create;
 
+   function Stored_Snapshot (This : Config_File) return Config_File is
+      function Make_Config_File_Internal return Config_File_Internal;
+
+      function Make_Config_File_Internal return Config_File_Internal is
+      begin
+         return Result : Config_File_Internal;
+      end Make_Config_File_Internal;
+   begin
+      return Result : Config_File do
+         Result.Internal.Set (Make_Config_File_Internal'Access);
+         Result.Internal.Get.Initialize_Snapshot (This.Internal.Get.Get_Snapshot);
+      end return;
+   end Stored_Snapshot;
+
+   overriding
+   procedure Adjust (Object : in out Migration_Status) is
+   begin
+      if Object.Active then
+         raise Program_Error with "Migration Config_Data must not be copied.";
+      end if;
+   end Adjust;
+
    function Get_Data (This : Config_File; Module_Name : Virtual_String) return Config_Data is
    begin
       return
         Config_Data'
-          (For_Migration => False, Module => Module_Name, Internal => This.Internal, Migration_Config => JSON_Null);
+          (For_Migration    => (Ada.Finalization.Controlled with Active => False),
+           Module           => Module_Name,
+           Internal         => This.Internal,
+           Migration_Config => JSON_Null);
    end Get_Data;
 
    function Get_Schema_String (This : Config_File) return Virtual_String is
@@ -1875,7 +1954,7 @@ package body Prunt.Config is
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Boolean is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          return Get (Get_JSON_Node (Data.Migration_Config, Path, Data.Module));
       else
          return Get (Data.Internal.Get.Get (Data.Module, Path));
@@ -1884,7 +1963,7 @@ package body Prunt.Config is
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Long_Float is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          return Get (Get_JSON_Node (Data.Migration_Config, Path, Data.Module));
       else
          return Get (Data.Internal.Get.Get (Data.Module, Path));
@@ -1893,7 +1972,7 @@ package body Prunt.Config is
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Dimensionless is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          return Get (Get_JSON_Node (Data.Migration_Config, Path, Data.Module));
       else
          return Get (Data.Internal.Get.Get (Data.Module, Path));
@@ -1902,7 +1981,7 @@ package body Prunt.Config is
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Long_Long_Integer is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          return Get (Get_JSON_Node (Data.Migration_Config, Path, Data.Module));
       else
          return Get (Data.Internal.Get.Get (Data.Module, Path));
@@ -1911,7 +1990,7 @@ package body Prunt.Config is
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Virtual_String is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          return Get (Get_JSON_Node (Data.Migration_Config, Path, Data.Module));
       else
          return Get (Data.Internal.Get.Get (Data.Module, Path));
@@ -1926,7 +2005,7 @@ package body Prunt.Config is
 
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Boolean) is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
       else
          Data.Internal.Get.Set (Data.Module, Path, Create (Value));
@@ -1935,7 +2014,7 @@ package body Prunt.Config is
 
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Float) is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
       else
          Data.Internal.Get.Set (Data.Module, Path, Create (Value));
@@ -1944,7 +2023,7 @@ package body Prunt.Config is
 
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Dimensionless) is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Long_Float (Value)));
       else
          Data.Internal.Get.Set (Data.Module, Path, Create (Long_Float (Value)));
@@ -1953,7 +2032,7 @@ package body Prunt.Config is
 
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Long_Long_Integer) is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
       else
          Data.Internal.Get.Set (Data.Module, Path, Create (Value));
@@ -1962,7 +2041,7 @@ package body Prunt.Config is
 
    procedure Set (Data : in out Config_Data; Path : Config_Data_Paths.Vector; Value : Virtual_String) is
    begin
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          Set_JSON_Node (Data.Migration_Config, Path, Create (Value));
       else
          Data.Internal.Get.Set (Data.Module, Path, Create (Value));
@@ -1975,7 +2054,7 @@ package body Prunt.Config is
       Set_Field (Val, "Numerator", Value.Numerator);
       Set_Field (Val, "Denominator", Value.Denominator);
 
-      if Data.For_Migration then
+      if Data.For_Migration.Active then
          Set_JSON_Node (Data.Migration_Config, Path, Val);
       else
          Data.Internal.Get.Set (Data.Module, Path, Val);
@@ -1984,7 +2063,7 @@ package body Prunt.Config is
 
    procedure Save (Data : in out Config_Data) is
    begin
-      if not Data.For_Migration then
+      if not Data.For_Migration.Active then
          Data.Internal.Get.Save (Data.Module);
       end if;
    end Save;
@@ -2018,7 +2097,7 @@ package body Prunt.Config is
       end loop;
 
       begin
-         if Data.For_Migration then
+         if Data.For_Migration.Active then
             Ignored := Get_JSON_Node (Data.Migration_Config, Path.Path, Data.Module);
          else
             Ignored := Data.Internal.Get.Get (Data.Module, Path.Path);

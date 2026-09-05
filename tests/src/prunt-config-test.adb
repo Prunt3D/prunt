@@ -17,6 +17,9 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.IO_Exceptions;
+with Ada.Directories;
+with Prunt.Mockable.Faults;
 with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Tags;
@@ -28,6 +31,8 @@ with Prunt.Mockable.Text_IO;
 package body Prunt.Config.Test is
 
    pragma Extensions_Allowed (On);
+
+   package Fault_Test_Lock is new Generic_Lock;
 
    P : Config_Presentation_Condition renames No_Presentation_Condition;
    --  Short test-local name for the unconditional value required by hand-built schema aggregates.
@@ -42,7 +47,7 @@ package body Prunt.Config.Test is
    is (Paths.Append (Paths.Empty_Path, ["Missing"]));
 
    function Migration_Data (Input : Virtual_String) return Config_Data is
-     (For_Migration => True, Module => "Test", Migration_Config => Read (Input), others => <>);
+     (For_Migration => (Ada.Finalization.Controlled with Active => True), Module => "Test", Migration_Config => Read (Input), others => <>);
 
    function Homing_Method_Path return Config_Path is
      (Paths.Append (Paths.Empty_Path, ["Homing", "Axes", "X", "Homing_Method"]));
@@ -204,37 +209,43 @@ package body Prunt.Config.Test is
                    Config_Property_Parameters_Integer'
                      (Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
-      File : constant Config_File := Create (File_Name, Schemas);
-      Errors : Config_Error_Vectors.Vector;
-      Output : Virtual_String;
+      declare
+         File : constant Config_File := Create (File_Name, Schemas);
+         Errors : Config_Error_Vectors.Vector;
+         Output : Virtual_String;
+      begin
 
-      File.Internal.Get.Apply_Untrusted_Patch ("{", Output, Errors);
-      T.Assert (not Errors.Is_Empty, "Should report invalid JSON");
-      Errors.Clear;
+         File.Internal.Get.Apply_Untrusted_Patch ("{", Output, Errors);
+         T.Assert (not Errors.Is_Empty, "Should report invalid JSON");
+         Errors.Clear;
 
-      File.Internal.Get.Apply_Untrusted_Patch ("{""Config"": {""Unknown"": {}}}", Output, Errors);
-      T.Assert (not Errors.Is_Empty, "Should report unknown module");
-      Errors.Clear;
+         File.Internal.Get.Apply_Untrusted_Patch ("{""Config"": {""Unknown"": {}}}", Output, Errors);
+         T.Assert (not Errors.Is_Empty, "Should report unknown module");
+         Errors.Clear;
 
-      File.Internal.Get.Apply_Untrusted_Patch
-        ("{""Config"": {""M"": {""Version"": 2, ""Config"": {}}}}", Output, Errors);
-      T.Assert (not Errors.Is_Empty, "Should report wrong version");
-      Errors.Clear;
+         File.Internal.Get.Apply_Untrusted_Patch
+           ("{""Config"": {""M"": {""Version"": 2, ""Config"": {}}}}", Output, Errors);
+         T.Assert (not Errors.Is_Empty, "Should report wrong version");
+         Errors.Clear;
 
-      File.Internal.Get.Apply_Untrusted_Patch
-        ("{""Config"": {""M"": {""Version"": 1, ""Config"": {}, ""Extra"": 1}}}", Output, Errors);
-      T.Assert (not Errors.Is_Empty, "Should report extra field in module wrapper");
-      Errors.Clear;
+         File.Internal.Get.Apply_Untrusted_Patch
+           ("{""Config"": {""M"": {""Version"": 1, ""Config"": {}, ""Extra"": 1}}}", Output, Errors);
+         T.Assert (not Errors.Is_Empty, "Should report extra field in module wrapper");
+         Errors.Clear;
 
-      File.Internal.Get.Apply_Untrusted_Patch
-        ("{""Config"": {""M"": {""Version"": 1, ""Config"": {""i"": 5}}}, ""Prunt config version"": 1}",
-         Output,
-         Errors);
-      T.Assert (Errors.Is_Empty, "Should not report error for valid patch");
-      T.Assert (File.Get_Data ("M").Get (["i"]) = Long_Long_Integer'(0), "Patch not applied to live config");
-      T.Assert
-        (Create (File_Name, Schemas).Get_Data ("M").Get (["i"]) = Long_Long_Integer'(5),
-         "Patch applied to stored config");
+         File.Internal.Get.Apply_Untrusted_Patch
+           ("{""Config"": {""M"": {""Version"": 1, ""Config"": {""i"": 5}}}, ""Prunt config version"": 1}",
+            Output,
+            Errors);
+         T.Assert (Errors.Is_Empty, "Should not report error for valid patch");
+         T.Assert (File.Get_Data ("M").Get (["i"]) = Long_Long_Integer'(0), "Patch not applied to live config");
+      end;
+      declare
+         Reopened : constant Config_File := Create (File_Name, Schemas);
+         Data : constant Config_Data := Reopened.Get_Data ("M");
+      begin
+         T.Assert (Data.Get (["i"]) = Long_Long_Integer'(5), "Patch applied to stored config");
+      end;
    end Test_Apply_Patch_Errors;
 
    procedure Test_Apply_Untrusted_Patch_Empty (T : in out Trendy_Test.Operation'Class) is
@@ -1576,22 +1587,30 @@ package body Prunt.Config.Test is
               Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Experimental => False,
                       Present_When => P, Description => "", Default => False)])];
       Filename : constant String := Next_Test_Filename;
-      File : constant Config_File := Create (Filename, Schemas);
-      Data : Config_Data := File.Get_Data ("M");
+      declare
+         File : constant Config_File := Create (Filename, Schemas);
+         Data : Config_Data := File.Get_Data ("M");
 
-      Errors : Config_Error_Vectors.Vector;
+         Errors : Config_Error_Vectors.Vector;
 
-      Output : Virtual_String;
+         Output : Virtual_String;
+      begin
 
-      T.Assert (Data.Get ([1 => "b"]) = False);
+         T.Assert (Data.Get ([1 => "b"]) = False);
 
-      File.Internal.Get.Apply_Untrusted_Patch
-        ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": {""b"": true}}}}",
-         Output,
-         Errors);
+         File.Internal.Get.Apply_Untrusted_Patch
+           ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": {""b"": true}}}}",
+            Output,
+            Errors);
 
-      T.Assert (Errors.Is_Empty, "Should not report error for valid patch");
-      T.Assert (Create (Filename, Schemas).Get_Data ("M").Get ([1 => "b"]) = True, "Value updated by patch");
+         T.Assert (Errors.Is_Empty, "Should not report error for valid patch");
+      end;
+      declare
+         Reopened : constant Config_File := Create (Filename, Schemas);
+         Data : constant Config_Data := Reopened.Get_Data ("M");
+      begin
+         T.Assert (Data.Get ([1 => "b"]) = True, "Value updated by patch");
+      end;
    end Test_Patch_Success;
 
    procedure Test_Patch_Wrong_Version (T : in out Trendy_Test.Operation'Class) is
@@ -2769,7 +2788,7 @@ package body Prunt.Config.Test is
 
       Data : Config_Data;
 
-      Data.For_Migration := True;
+      Data.For_Migration.Active := True;
       Data.Migration_Config := Create (Integer'(123));
 
       begin
@@ -3471,10 +3490,366 @@ package body Prunt.Config.Test is
         (T, Missing_Fixed_Kind, TMC2240_Run_Current_Path);
    end Test_Config_Path_Missing_Conditional_Targets;
 
+   function Persistence_Schemas return Config_Schema_Maps.Map is
+     (["M" => Versioned_Config_Schema'
+         (Version => 1, Module_Instance_Tag => <>,
+          Top_Level_Items =>
+            ["i" => Config_Property_Parameters_Integer'
+                (Experimental => False, Present_When => P, Description => "",
+                 Min => 0, Max => 10, Unit => "", Default => 0)])]);
+
+   procedure Test_Migration_Copy_Rejected (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      declare
+         Data : Config_Data :=
+           (For_Migration => (Ada.Finalization.Controlled with Active => True),
+            Module => "M", Migration_Config => Create_Object, others => <>);
+      begin
+         begin
+            declare
+               Copied : Config_Data := Data;
+               pragma Unreferenced (Copied);
+            begin
+               T.Fail ("Migration data copy must raise Program_Error.");
+            end;
+         exception
+            when Program_Error => null;
+         end;
+         begin
+            declare
+               Assigned : Config_Data;
+            begin
+               Assigned := Data;
+               T.Fail ("Migration data assignment must raise Program_Error.");
+            end;
+         exception
+            when Program_Error => null;
+         end;
+      end;
+   end Test_Migration_Copy_Rejected;
+
+   procedure Test_Exclusive_Config_Writer (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Filename : constant String := Next_Test_Filename;
+      declare
+         File : constant Config_File := Create (Filename, Persistence_Schemas);
+      begin
+         for Alias in Boolean loop
+            begin
+               declare
+                  Duplicate : constant Config_File :=
+                    Create
+                      ((if Alias then Ada.Directories.Containing_Directory (Filename) & "/./"
+                         & Ada.Directories.Simple_Name (Filename) else Filename), Persistence_Schemas);
+                  pragma Unreferenced (Duplicate);
+               begin
+                  T.Fail ("A second configuration writer must be rejected.");
+               end;
+            exception
+               when Ada.IO_Exceptions.Use_Error => null;
+            end;
+         end loop;
+         T.Assert (File.Last_Save = 1);
+      end;
+      declare
+         Reopened : constant Config_File := Create (Filename, Persistence_Schemas);
+      begin
+         T.Assert (Reopened.Last_Save = 0, "Finalization must release the writer lease.");
+      end;
+      --  Failed initialization must release the lease too.
+      for Attempt in 1 .. 2 loop
+         begin
+            declare
+               Invalid : constant Config_File := Create (Filename, []);
+               pragma Unreferenced (Invalid);
+            begin
+               T.Fail ("Unknown module should reject initialization.");
+            end;
+         exception
+            when Constraint_Error => null;
+         end;
+      end loop;
+   end Test_Exclusive_Config_Writer;
+
+   procedure Test_Config_Write_Interruptions (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Lock : Fault_Test_Lock.Lock_Holder := Fault_Test_Lock.Lock with Unreferenced;
+      for Power_Loss in Boolean loop
+         for Step in 0 .. 150 loop
+            declare
+               Filename : constant String := Next_Test_Filename;
+               Failed : Boolean := False;
+            begin
+               declare
+                  File : constant Config_File := Create (Filename, Persistence_Schemas);
+                  Data : Config_Data := File.Get_Data ("M");
+               begin
+                  --  Fill the backup ring so deletion and every rotation are exercised.
+                  for I in 1 .. 22 loop
+                     Data.Set ([1 => "i"], Long_Long_Integer'(3));
+                     Data.Save;
+                  end loop;
+                  declare
+                     Before : constant Virtual_String := File.Get_Data_String;
+                     Count : constant Save_Counter := File.Last_Save;
+                  begin
+                     Data.Set ([1 => "i"], Long_Long_Integer'(7));
+                     Mockable.Faults.Fail_After (Filename, Step, Power_Loss);
+                     begin
+                        Data.Save;
+                     exception
+                        when Ada.IO_Exceptions.Use_Error => Failed := True;
+                     end;
+                     Mockable.Faults.Disable_Failure;
+                     if Failed then
+                        T.Assert (File.Get_Data_String = Before, "Failed write must not publish stored data.");
+                        T.Assert (File.Last_Save = Count, "Failed write must not advance save counter.");
+                        if not Power_Loss then
+                           Data.Save;
+                           T.Assert (File.Last_Save = Count + 1, "Failed write must retain retryable deltas.");
+                        end if;
+                     end if;
+                  end;
+               end;
+               if Power_Loss then
+                  Mockable.Faults.Crash (Filename);
+               end if;
+               T.Assert (Mockable.Directories.Exists (Filename), "Primary must survive every interruption.");
+               declare
+                  File : constant Config_File := Create (Filename, Persistence_Schemas);
+                  Data : constant Config_Data := File.Get_Data ("M");
+                  Value : constant Long_Long_Integer := Data.Get ([1 => "i"]);
+               begin
+                  T.Assert (Value = 3 or else Value = 7, "Recovery must contain a complete old or new value.");
+                  if not Failed or else not Power_Loss then
+                     T.Assert (Value = 7, "Successful saves must survive power loss.");
+                  end if;
+               end;
+               if not Failed then
+                  T.Assert (Step > 50, "Fault sweep must cover backup rotation and commit boundaries.");
+                  exit;
+               end if;
+               T.Assert (Step < 150, "Fault sweep must reach a successful write.");
+            end;
+         end loop;
+      end loop;
+   exception
+      when others =>
+         Mockable.Faults.Disable_Failure;
+         raise;
+   end Test_Config_Write_Interruptions;
+
+   procedure Test_Reset_Discards_Deltas (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      File : constant Config_File := Create (Next_Test_Filename, Persistence_Schemas);
+      declare
+         Data : Config_Data := File.Get_Data ("M");
+         Copy : Config_Data := Data;
+      begin
+         Data.Set ([1 => "i"], Long_Long_Integer'(3));
+         T.Assert (Copy.Get ([1 => "i"]) = Long_Long_Integer'(3), "Copies share live updates.");
+      end;
+      File.Reset_Live_To_Stored;
+      declare
+         Data : Config_Data := File.Get_Data ("M");
+         Count : constant Save_Counter := File.Last_Save;
+      begin
+         Data.Save;
+         T.Assert (File.Last_Save = Count, "Reset must discard pending deltas.");
+         T.Assert (Data.Get ([1 => "i"]) = Long_Long_Integer'(0));
+      end;
+   end Test_Reset_Discards_Deltas;
+
+   procedure Test_Config_Initial_Write_Interruptions (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Lock : Fault_Test_Lock.Lock_Holder := Fault_Test_Lock.Lock with Unreferenced;
+      for Power_Loss in Boolean loop
+         for Step in 0 .. 12 loop
+            declare
+               Filename : constant String := Next_Test_Filename;
+            begin
+               Mockable.Faults.Fail_After (Filename, Step, Power_Loss);
+               begin
+                  declare
+                     File : constant Config_File := Create (Filename, Persistence_Schemas);
+                     pragma Unreferenced (File);
+                  begin
+                     null;
+                  end;
+               exception
+                  when Ada.IO_Exceptions.Use_Error => null;
+               end;
+               Mockable.Faults.Disable_Failure;
+               if Power_Loss then
+                  Mockable.Faults.Crash (Filename);
+               end if;
+               declare
+                  File : constant Config_File := Create (Filename, Persistence_Schemas);
+                  Data : constant Config_Data := File.Get_Data ("M");
+               begin
+                  T.Assert (Data.Get ([1 => "i"]) = Long_Long_Integer'(0));
+               end;
+            end;
+         end loop;
+      end loop;
+   exception
+      when others =>
+         Mockable.Faults.Disable_Failure;
+         raise;
+   end Test_Config_Initial_Write_Interruptions;
+
+   procedure Test_Config_Failed_Patch_And_Validation (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Lock : Fault_Test_Lock.Lock_Holder := Fault_Test_Lock.Lock with Unreferenced;
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Persistence_Schemas);
+      Data : Config_Data := File.Get_Data ("M");
+      Before : constant Virtual_String := File.Get_Data_String;
+      Result : Virtual_String;
+      Errors : Config_Error_Vectors.Vector;
+      Patch : constant Virtual_String :=
+        "{""Prunt config version"":1,""Config"":{""M"":{""Version"":1,""Config"":{""i"":7}}}}";
+
+      Data.Set ([1 => "i"], Long_Long_Integer'(11));
+      for Attempt in 1 .. 2 loop
+         begin
+            Data.Save;
+            T.Fail ("Invalid deltas must remain pending until corrected or reset.");
+         exception
+            when Constraint_Error => null;
+         end;
+      end loop;
+      T.Assert (File.Get_Data_String = Before);
+      Mockable.Faults.Fail_After (Filename, 3, False);
+      begin
+         File.Apply_Untrusted_Patch (Patch, Result, Errors);
+         T.Fail ("Patch write must propagate IO failure.");
+      exception
+         when Ada.IO_Exceptions.Use_Error => null;
+      end;
+      Mockable.Faults.Disable_Failure;
+      T.Assert (File.Get_Data_String = Before, "A failed patch must not update stored state.");
+      File.Apply_Untrusted_Patch (Patch, Result, Errors);
+      T.Assert (Errors.Is_Empty);
+      T.Assert (File.Last_Save = 2);
+      Data.Set ([1 => "i"], Long_Long_Integer'(4));
+      Data.Save;
+      T.Assert (File.Last_Save = 3, "Corrected deltas must be saveable after validation failure.");
+   exception
+      when others =>
+         Mockable.Faults.Disable_Failure;
+         raise;
+   end Test_Config_Failed_Patch_And_Validation;
+
+   procedure Test_Stored_Snapshot_Isolation (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Filename : constant String := Next_Test_Filename;
+      File : constant Config_File := Create (Filename, Persistence_Schemas);
+      Data : Config_Data := File.Get_Data ("M");
+      Result : Virtual_String;
+      Errors : Config_Error_Vectors.Vector;
+      Patch : constant Virtual_String :=
+        "{""Prunt config version"":1,""Config"":{""M"":{""Version"":1,""Config"":{""i"":7}}}}";
+
+      Data.Set ([1 => "i"], Long_Long_Integer'(3));
+      Data.Save;
+      Data.Set ([1 => "i"], Long_Long_Integer'(9));
+      declare
+         Snapshot : constant Config_File := File.Stored_Snapshot;
+         Snapshot_Data : Config_Data := Snapshot.Get_Data ("M");
+         Before : constant Virtual_String := Snapshot.Get_Data_String;
+         Count : constant Save_Counter := File.Last_Save;
+      begin
+         T.Assert (Snapshot_Data.Get ([1 => "i"]) = Long_Long_Integer'(3), "Snapshot excludes unsaved edits.");
+         T.Assert (Snapshot.Get_Schema_String = File.Get_Schema_String);
+         T.Assert (Snapshot.Last_Save = Count);
+         for Operation in 1 .. 3 loop
+            begin
+               case Operation is
+                  when 1 => Snapshot_Data.Set ([1 => "i"], Long_Long_Integer'(5));
+                  when 2 => Snapshot_Data.Save;
+                  when 3 => Snapshot.Apply_Untrusted_Patch (Patch, Result, Errors);
+               end case;
+               T.Fail ("Snapshot must reject mutation.");
+            exception
+               when Ada.IO_Exceptions.Use_Error => null;
+            end;
+         end loop;
+         T.Assert (Snapshot.Get_Data_String = Before);
+         T.Assert (File.Last_Save = Count, "Snapshots must not write the source file.");
+         T.Assert (Data.Get ([1 => "i"]) = Long_Long_Integer'(9), "Snapshot must not reset active live edits.");
+         File.Apply_Untrusted_Patch (Patch, Result, Errors);
+         T.Assert (Errors.Is_Empty);
+         declare
+            Reloaded : constant Config_File := File.Stored_Snapshot;
+            Reloaded_Data : constant Config_Data := Reloaded.Get_Data ("M");
+         begin
+            T.Assert (Reloaded_Data.Get ([1 => "i"]) = Long_Long_Integer'(7), "Reload sees newly stored settings.");
+            T.Assert (Snapshot_Data.Get ([1 => "i"]) = Long_Long_Integer'(3), "Existing snapshots are isolated.");
+         end;
+         Data.Save;
+         T.Assert (Snapshot_Data.Get ([1 => "i"]) = Long_Long_Integer'(3), "Active writer remains usable.");
+      end;
+   end Test_Stored_Snapshot_Isolation;
+
+   procedure Test_Stored_Snapshot_Overrides (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      File : constant Config_File :=
+        Create (Next_Test_Filename, Persistence_Schemas,
+                [Config_Override'(Owner => "M", Path => [1 => "i"], Value => Create (Long_Long_Integer'(4)))]);
+      Snapshot : constant Config_File := File.Stored_Snapshot;
+      Data : constant Config_Data := Snapshot.Get_Data ("M");
+      Stored : constant JSON_Value := Read (Snapshot.Get_Data_String);
+
+      T.Assert (Data.Get ([1 => "i"]) = Long_Long_Integer'(4), "Validation must see startup overrides.");
+      T.Assert (not Stored.Get ("Config").Get ("M").Get ("Config").Has_Field ("i"));
+      T.Assert (Snapshot.Get_Schema_String = File.Get_Schema_String);
+   end Test_Stored_Snapshot_Overrides;
+
+   procedure Test_Stored_Snapshot_Ownership (T : in out Trendy_Test.Operation'Class) is
+      Filename : constant String := Next_Test_Filename;
+
+      function Capture return Config_File;
+
+      function Capture return Config_File is
+         File : constant Config_File := Create (Filename, Persistence_Schemas);
+         Data : Config_Data := File.Get_Data ("M");
+      begin
+         Data.Set ([1 => "i"], Long_Long_Integer'(3));
+         Data.Save;
+         return File.Stored_Snapshot;
+      end Capture;
+   begin
+      T.Register;
+      Snapshot : constant Config_File := Capture;
+      Data : constant Config_Data := Snapshot.Get_Data ("M");
+      Reopened : constant Config_File := Create (Filename, Persistence_Schemas);
+
+      T.Assert (Data.Get ([1 => "i"]) = Long_Long_Integer'(3), "Snapshot outlives its source.");
+      T.Assert (Reopened.Last_Save = 0, "Snapshot must not retain the source writer lease.");
+   end Test_Stored_Snapshot_Ownership;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Apply_Patch_Errors'Access,
+        [Test_Stored_Snapshot_Isolation'Access,
+         Test_Stored_Snapshot_Overrides'Access,
+         Test_Stored_Snapshot_Ownership'Access,
+         Test_Config_Initial_Write_Interruptions'Access,
+         Test_Config_Failed_Patch_And_Validation'Access,
+         Test_Migration_Copy_Rejected'Access,
+         Test_Exclusive_Config_Writer'Access,
+         Test_Config_Write_Interruptions'Access,
+         Test_Reset_Discards_Deltas'Access,
+         Test_Apply_Patch_Errors'Access,
          Test_Apply_Untrusted_Patch_Empty'Access,
          Test_Apply_Untrusted_Patch_Invalid_Module'Access,
          Test_Apply_Untrusted_Patch_Invalid_Module_Structure'Access,

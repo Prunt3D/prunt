@@ -60,6 +60,8 @@ private with Ada.Finalization;
 private with Prunt.Limited_Shared_Pointers;
 private with VSS.String_Vectors;
 
+private with Prunt.Mockable.Persistence;
+
 package Prunt.Config is
 
    package Discrete_String_Sets is new Ada.Containers.Ordered_Sets (Virtual_String);
@@ -266,8 +268,6 @@ package Prunt.Config is
    --  A copy or different instance of a Config_Data for the same module shares all values updated using Set with
    --  the original, including those set after the copy is made. Config_Data is just a wrapper around a reference to
    --  the Config_File except for those that come from Migrate, which should never be copied.
-   --
-   --  TODO: Enforce the above by making Config_Data a controlled type or giving it a controlled member.
 
    function Get (Data : Config_Data; Path : Config_Data_Paths.Vector) return Boolean;
    --  Retrieve the Boolean configuration value at Path.
@@ -319,7 +319,8 @@ package Prunt.Config is
    --  Persists the current state of Data to the underlying Config_File.
    --
    --  This writes the entire configuration to disk, but only with updates from the relevant module, not all modules.
-   --  Creates a backup of the previous file if it existed (appended with _backup_N).
+   --  Creates a backup of the previous file if it existed (appended with _backup_N). The replacement file and its
+   --  directory entry are synced before Save returns.
    --
    --  Raises Constraint_Error if the data does not match the schema.
 
@@ -345,17 +346,21 @@ package Prunt.Config is
    --
    --  Data must not be copied.
    --
-   --  TODO: Enforce the above by making Config_Data a controlled type or giving it a controlled member.
+   --  Copying Data, including assignment, raises Program_Error.
 
    package Config_Schema_Maps is new
      Ada.Containers.Indefinite_Ordered_Maps (Virtual_String, Versioned_Config_Schema'Class);
 
    type Config_File (<>) is limited private;
+   --  Finalization discards unsaved changes; only explicit Save persists them. Outstanding Config_Data references
+   --  cause a lifetime error at finalization.
 
    function Create
      (File_Name : String; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector := [])
       return Config_File;
-   --  Initializes access to a configuration file.
+   --  Initializes exclusive access to a configuration file. A second writer raises Use_Error. Path aliases are
+   --  normalized before acquiring a process-wide and cross-process lease. Hard-linked configuration files are
+   --  rejected. Do not remove the persistent .lock file.
    --
    --  Behaviour:
    --  - For each module in Schemas:
@@ -370,6 +375,11 @@ package Prunt.Config is
    --  - Overrides are module-local paths and JSON values which are validated against Schemas at startup.
    --  - Overrides are applied to the live configuration only. Overridden fields are removed from the stored
    --    configuration and generated schema, and attempts to modify them are rejected.
+
+   function Stored_Snapshot (This : Config_File) return Config_File;
+   --  Returns an isolated, read-only in-memory copy of the stored configuration, with overrides applied to its
+   --  live view. It excludes pending live edits and acquires no file lease. Set, Save, and patches raise Use_Error.
+   --  The snapshot owns its data independently, but its Config_Data references must finalize before the snapshot.
 
    function Get_Data (This : Config_File; Module_Name : Virtual_String) return Config_Data;
    --  Retrieves the configuration data for a specific module.
@@ -416,9 +426,7 @@ private
    use Prunt.JSON;
 
    package File_Access_Lock is new Generic_Lock;
-   --  Anything that touches a file uses this as multiple Config_File objects may refer to the same file.
-   --
-   --  TODO: We should only allow a single writer to exist for any given file.
+   --  Serializes file operations. Each Config_File also holds an exclusive writer lease.
 
    package JSON_Delta_Maps is new Ada.Containers.Indefinite_Ordered_Maps (Virtual_String, JSON_Value);
 
@@ -463,6 +471,15 @@ private
    --
    --  If Full_Join is False then no keys which only exist in Right will be added to Left.
 
+   type Snapshot_State is record
+      Stored_Config   : JSON_Value;
+      Schemas         : Config_Schema_Maps.Map;
+      Overrides       : Config_Override_Vectors.Vector;
+      Visible_Schemas : Config_Schema_Maps.Map;
+      Cached_Schemas  : Virtual_String;
+      Save_Count      : Save_Counter;
+   end record;
+
    protected type Config_File_Internal is
       --  The file IO in here is all potentially blocking, but the global lock means it should never cause an issue as
       --  long as nothing external accesses the config files.
@@ -477,6 +494,12 @@ private
          Lock         : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Reads the configuration file, validates it, performs migrations if necessary, and prepares the separate
       --  stored/UI and live/effective configuration views.
+
+      function Get_Snapshot return Snapshot_State;
+      --  Copies one consistent stored state while holding the source's protected lock.
+
+      procedure Initialize_Snapshot (State : Snapshot_State);
+      --  Initializes an independent read-only instance without accessing the filesystem.
 
       function Get (Owner : Virtual_String; Path : Config_Data_Paths.Vector) return JSON_Value;
       --  Gets a value from the live configuration. Owner specifies the module requesting the data.
@@ -512,7 +535,9 @@ private
       --  entry and may be used to raise an exception if there are still references to the configuration file which
       --  are not expecting the live configuration to change. Overrides are reapplied after the reset.
    private
-      procedure Write_File;
+      procedure Write_File (Value : JSON_Value);
+      Read_Only       : Boolean := False;
+      Writer          : Mockable.Persistence.Writer_Lease;
       File_Name       : Virtual_String := "";
       Live_Config     : JSON_Value := JSON_Null;
       Update_Deltas   : JSON_Delta_Maps.Map := [];
@@ -615,8 +640,16 @@ private
    procedure Merge_Default_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Default_Value : JSON_Value);
    --  Ensure Path contains Default_Value's structure while preserving any compatible existing object members.
 
+   type Migration_Status is new Ada.Finalization.Controlled with record
+      Active : Boolean := False;
+   end record;
+
+   overriding
+   procedure Adjust (Object : in out Migration_Status);
+   --  Reject copying a migration callback's temporary data.
+
    type Config_Data is record
-      For_Migration    : Boolean := False;
+      For_Migration    : Migration_Status;
       Module           : Virtual_String := "";
       Internal         : Config_File_Internal_Shared_Pointers.Ref := Config_File_Internal_Shared_Pointers.Null_Ref;
       --  Setting this to null by default means we will get an error if a Config_Data is default-initialized and

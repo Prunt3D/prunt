@@ -10,5 +10,6 @@
 /prebuild.o
 /prunt_simulator_config.json
 /prunt_simulator_config.json_backup_*
+/prunt_simulator_config.json.lock
 /.dir-locals.el
 /uploads
