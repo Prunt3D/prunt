@@ -538,6 +538,13 @@ package body Prunt.Default_Modules.Heaters is
       end Get_Config;
    end Module_Instance;
 
+   procedure Set_Hotend_Temperature (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless) is
+      Config : constant User_Config := This.Get_Config;
+   begin
+      Planner.Add_Corner_Data
+        (This.Build_Target_Command (This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"), S * celsius));
+   end Set_Hotend_Temperature;
+
    procedure Wait_For_Hotend_Temperature_Heat
      (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless)
    is

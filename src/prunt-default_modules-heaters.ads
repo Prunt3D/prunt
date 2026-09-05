@@ -271,6 +271,17 @@ private
 
    type Heater_Target_Array is array (Heater_Name) of Temperature;
 
+   procedure Set_Hotend_Temperature
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      S       : Dimensionless
+      --  Hotend target temperature in Celsius.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M104");
+   --  Set the hotend target temperature and continue without waiting for the hotend to reach the given temperature.
+   --
+   --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
+
    procedure Wait_For_Hotend_Temperature_Heat
      (This    : Module_Instance;
       Planner : Planner_Interface'Class;
