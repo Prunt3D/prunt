@@ -597,16 +597,17 @@ private
       Flush_Resetting_Data           : Flush_Resetting_Data_Type;
       Next_Block_Pos                 : Position;
       Params                         : Kinematic_Parameters;
-      Corners_Extra_Data             : Corner_Extra_Data_Vectors.Vector;
-      Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices (1 .. N_Corners);
-      Corners                        : Block_Plain_Corners (1 .. N_Corners);
-      Primitives                     : Block_Path_Primitives (2 .. N_Corners);
-      Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
       First_Corner_ID                : Planner_Corner_ID := 0;
       Associated_Overflow_Block      : Boolean := False;
       Is_Homing_Move                 : Boolean;
       Loop_Move_Minimum_Time         : Time := 0.0 * s;
       --  Earliest interpolation time at which the loop command of a homing block may be emitted.
+
+      Corners_Extra_Data             : Corner_Extra_Data_Vectors.Vector;
+      Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices (1 .. N_Corners);
+      Corners                        : Block_Plain_Corners (1 .. N_Corners);
+      Primitives                     : Block_Path_Primitives (2 .. N_Corners);
+      Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
       Limited_Segment_Feedrates      : Block_Segment_Feedrates (2 .. N_Corners);
       Corner_Dwell_Times             : Block_Corner_Dwell_Times (2 .. N_Corners);
 

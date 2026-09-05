@@ -357,7 +357,7 @@ private
          Index : Atomic_Command_Index := 0;
          --  Command index associated with this queued position.
 
-         Pos : Atomic_Position_Array;
+         Pos : Atomic_Position_Array := [others => Atomic_Length (0.0 * mm)];
          --  Queued cartesian position for this command.
       end record;
 
