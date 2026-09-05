@@ -824,10 +824,12 @@ package body Config_Generator is
       function Dynamic_Presentation_Association (Outer : Component_Data) return Virtual_String is
       begin
          if Outer.Dynamic_Present_When_Path.Is_Empty then
-            return ", Present_When => Prunt.Config.No_Presentation_Condition";
+            return ", Experimental => " & Virtual_String'(if Outer.Experimental then "True" else "False")
+              & ", Present_When => Prunt.Config.No_Presentation_Condition";
          else
             return
-              ", Present_When => (Controller_Tag => "
+              ", Experimental => " & Virtual_String'(if Outer.Experimental then "True" else "False")
+              & ", Present_When => (Controller_Tag => "
               & Outer.Dynamic_Present_When_Tag
               & ", Controller_Path => "
               & Outer.Dynamic_Present_When_Path
@@ -911,6 +913,15 @@ package body Config_Generator is
             return "";
          end if;
       end Variant_Case_Present_When;
+
+      function Variant_Experimental (Record_Val : Record_Data; Name : Virtual_String) return Virtual_String is
+      begin
+         return
+           (if Global_Config.Contains (Record_Val.Discriminant_Type)
+              and then Global_Config (Record_Val.Discriminant_Type).Kind = Enum_Kind
+              and then Global_Config (Record_Val.Discriminant_Type).Enum_Value.Experimental.Contains (Name)
+            then "True" else "False");
+      end Variant_Experimental;
 
       procedure Handle_Item
         (Item          : Config_Type;
@@ -1196,6 +1207,7 @@ package body Config_Generator is
              with delta
                Type_Name                      => Array_Val.Element_Type,
                Description                    => "",
+               Experimental                   => False,
                --  Avoid duplicated description with nested arrays.
                Default                        => Outer.Type_Name & "'" & Outer.Default & "(" & Loop_Index & ")",
                Min                            => Array_Val.Min,
@@ -1460,7 +1472,8 @@ package body Config_Generator is
                   & Record_Val.Discriminant
                   & """ => Prunt.Config.Config_Property_Parameters_Variant'(Default => """
                   & Record_Val.Discriminant_Default
-                  & """, Description => """", Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
+                  & """, Description => """", Experimental => False,"
+                  & " Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
                --  non-variant part. We can not simply place this code after the non-variant code generation as we use
                --  a delta aggregate to set the non-variant fields and delta aggregates can not set discriminants,
@@ -1484,7 +1497,8 @@ package body Config_Generator is
                            & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
                            & ", Description => """
                            & Variant_Case_Maps.Element (Variant_C).Description
-                           & """, Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
+                           & """, Experimental => " & Variant_Experimental (Record_Val, Name)
+                           & ", Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                         Emit_Reader
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
@@ -1541,7 +1555,8 @@ package body Config_Generator is
                            & Virtual_String'(if Record_Val.Tabbed then "True" else "False")
                            & ", Description => """
                            & Variant_Case_Maps.Element (Variant_C).Description
-                           & """, Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
+                           & """, Experimental => " & Variant_Experimental (Record_Val, Name)
+                           & ", Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                         Emit_Reader
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["

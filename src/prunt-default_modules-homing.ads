@@ -420,6 +420,7 @@ private
       --  Configure X, Y, and Z separately. This is displayed for Cartesian and CoreXY kinematics.
 
       Linear_Delta_Homing : User_Config_Linear_Delta_Homing := (others => <>) with
+        Annotate => (Prunt_Config, Experimental),
         Annotate =>
           (Prunt_Config,
            Dynamic_Present_When,

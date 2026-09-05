@@ -95,7 +95,7 @@ package body Config_Parser is
       elsif Decl.P_Fully_Qualified_Name = "Prunt.Dimensionless_Ratio" then
          Value := (Ratio_Kind, (Unit => (Conversion => "", Display => "")));
       elsif Is_Controller_Generic_Discrete_Type (Decl) then
-         Value := (Enum_Kind, (Present_When => []));
+         Value := (Enum_Kind, (Present_When => [], Experimental => []));
       else
          return False;
       end if;
@@ -365,7 +365,8 @@ package body Config_Parser is
                   Register_Implicit_Config_Type (Desig, Implicit_Config);
 
                   Component :=
-                    (Type_Name           => To_Virtual_String (Desig.P_Fully_Qualified_Name),
+                    (Experimental        => False,
+                     Type_Name           => To_Virtual_String (Desig.P_Fully_Qualified_Name),
                      Default             =>
                        (if Comp_Decl.F_Default_Expr.Is_Null
                         then ""
@@ -394,6 +395,8 @@ package body Config_Parser is
                               if Argument (Assocs, 1) = "Prunt_Config" then
                                  if Argument (Assocs, 2) = "Unit" then
                                     Component.Unit := Parse_Unit (Assocs);
+                                 elsif Argument (Assocs, 2) = "Experimental" then
+                                    Component.Experimental := True;
                                  elsif Argument (Assocs, 2) = "Fixed_Kind" then
                                     Component.Fixed_Kind := Strip (Argument (Assocs, 3));
                                  elsif Argument (Assocs, 2) = "Options_Expr" then
@@ -724,7 +727,7 @@ package body Config_Parser is
    end Parse_Array;
 
    function Parse_Enum (Decl : Base_Type_Decl) return Config_Type is
-      Data : Enum_Data := (Present_When => []);
+      Data : Enum_Data := (Present_When => [], Experimental => []);
    begin
       if not Decl.F_Aspects.Is_Null then
          for Assoc of
@@ -739,6 +742,8 @@ package body Config_Parser is
                if Argument (Assocs, 1) = "Prunt_Config" then
                   if Argument (Assocs, 2) = "Present_When" then
                      Data.Present_When.Insert (Strip (Argument (Assocs, 3)), Strip (Argument (Assocs, 4)));
+                  elsif Argument (Assocs, 2) = "Experimental" then
+                     Data.Experimental.Append (Strip (Argument (Assocs, 3)));
                   elsif Argument (Assocs, 2) = "User_Config" then
                      null;
                   else

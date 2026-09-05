@@ -111,6 +111,8 @@ package Prunt.Config is
 
    type Config_Property_Parameters is tagged record
       Description  : Virtual_String;
+      Experimental : Boolean := False;
+      --  UI visibility only; hiding experimental options does not change stored values.
       Present_When : Config_Presentation_Condition := No_Presentation_Condition;
    end record;
 

@@ -16,6 +16,7 @@ let dynamicPresentationControllerPaths = new Set<string>();
 
 let groupByModule = true;
 let devMode = false;
+let showExperimental = false;
 
 export async function initConfigView() {
     const btnSave = document.getElementById('btn-save-config');
@@ -118,6 +119,19 @@ export async function initConfigView() {
         });
     }
 
+    const experimentalToggle = document.getElementById('config-experimental-toggle') as HTMLInputElement;
+    if (experimentalToggle) {
+        showExperimental = experimentalToggle.checked;
+        experimentalToggle.addEventListener('change', () => {
+            const updatedValues = scrapeFormValues();
+            if (updatedValues) currentValues = updatedValues;
+            showExperimental = experimentalToggle.checked;
+            renderConfigForm();
+            handleErrors(currentErrors);
+            document.getElementById('config-form')?.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    }
+
     const devToggle = document.getElementById('config-dev-mode-toggle') as HTMLInputElement;
     if (devToggle) {
         devMode = devToggle.checked;
@@ -217,6 +231,7 @@ function valueAtConfigPath(owner: string, path: string[]): any {
 }
 
 function isDynamicallyPresented(schema: any): boolean {
+    if (schema?.Experimental && !showExperimental) return false;
     const condition = schema?.Present_When;
     if (!condition) return true;
     if (typeof condition.Owner !== 'string' || !Array.isArray(condition.Path) || !Array.isArray(condition.Values)) {
@@ -277,6 +292,7 @@ function renderConfigForm() {
 
 function mergeCombined(outSchema: any, outValues: any, outPaths: any, inSchema: any, inValues: any, pathPrefix: string[]) {
     for (const [propName, propSchema] of Object.entries(inSchema)) {
+        if (!isDynamicallyPresented(propSchema)) continue;
         if (!outSchema[propName]) {
             outSchema[propName] = JSON.parse(JSON.stringify(propSchema));
             outValues[propName] = inValues && inValues[propName] !== undefined ? JSON.parse(JSON.stringify(inValues[propName])) : undefined;
@@ -354,6 +370,7 @@ function createCombinedSequence(
     pathsDef: any,
     options: FieldRenderOptions = {}
 ): HTMLElement | null {
+    if (!isDynamicallyPresented(schema)) return null;
     if (!schema.Children || Object.keys(schema.Children).length === 0) {
         return null;
     }
@@ -369,6 +386,13 @@ function createCombinedSequence(
         const label = document.createElement('label');
         label.innerText = translateConfigLabel(basePath, name);
         fieldDiv.appendChild(label);
+    }
+
+    if (schema.Experimental) {
+        const badge = document.createElement('span');
+        badge.className = 'description';
+        badge.innerText = t('ui.config.experimental', 'Experimental');
+        fieldDiv.appendChild(badge);
     }
 
     const description = translateConfigDescription(basePath, schema.Description || '');
@@ -536,6 +560,13 @@ function createField(
         label.innerText = translateConfigLabel(path, name);
         fieldDiv.appendChild(label);
         hasContent = true;
+    }
+
+    if (schema.Experimental) {
+        const badge = document.createElement('span');
+        badge.className = 'description';
+        badge.innerText = t('ui.config.experimental', 'Experimental');
+        fieldDiv.appendChild(badge);
     }
 
     const description = translateConfigDescription(path, schema.Description || '');
@@ -781,15 +812,27 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
     wrap.className = 'variant-group';
 
     const selectedName = value?.Selected || schema.Default;
-    const selectStr = Object.keys(schema.Children);
+    // Keep the current choice visible so hiding options can never silently change it.
+    const selectStr = Object.keys(schema.Children).filter(option =>
+        showExperimental || !schema.Children[option].Experimental || option === selectedName);
 
     const select = createSelectInput(
         [...path, 'Selected'],
         selectedName,
         selectStr,
-        option => translateConfigLabel([...path, 'Children', option], option)
+        option => {
+            const label = translateConfigLabel([...path, 'Children', option], option);
+            return schema.Children[option].Experimental
+                ? t('ui.config.experimentalOption', '{label} (Experimental)', { label })
+                : label;
+        }
     );
     select.className = 'config-input-variant';
+    if (!showExperimental) {
+        for (const option of Array.from((select as HTMLSelectElement).options)) {
+            option.disabled = !!schema.Children[option.value].Experimental;
+        }
+    }
     wrap.appendChild(select);
 
     const childrenContainer = document.createElement('div');
@@ -839,6 +882,7 @@ function createSequenceInput(
     schema: any,
     redundantTitleContext: string | null = null
 ): HTMLElement | null {
+    if (!isDynamicallyPresented(schema)) return null;
     if (!schema.Children || Object.keys(schema.Children).length === 0) {
         return null;
     }

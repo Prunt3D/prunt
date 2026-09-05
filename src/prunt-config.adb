@@ -699,6 +699,7 @@ package body Prunt.Config is
          Result : constant JSON_Value := Create_Object;
       begin
          Result.Set_Field ("Description", Property.Description);
+         Result.Set_Field ("Experimental", Property.Experimental);
 
          if Property.Present_When.Controller_Tag /= Ada.Tags.No_Tag then
             declare

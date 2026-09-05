@@ -64,6 +64,8 @@ package Config_Types is
       --
       --  Schema_Default_Expr overrides the generated schema default expression.
 
+      Experimental        : Boolean := False;
+      --  Annotate => (Prunt_Config, Experimental) hides a component by default in the UI.
       Type_Name           : Virtual_String;
       --  Type name is fully qualified.
       Default             : Virtual_String;
@@ -136,6 +138,9 @@ package Config_Types is
    end record;
 
    type Enum_Data is record
+      Experimental : String_Vectors.Vector;
+      --  Annotate => (Prunt_Config, Experimental, "Literal") marks a variant choice.
+
       --  Keys are enum literal names. Values are expressions controlling whether the literal is present in the
       --  generated schema.
       Present_When : Virtual_String_Maps.Map;

@@ -158,7 +158,8 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Kinematics_Kind is (Cartesian, Core_XY, Linear_Delta) with Annotate => (Prunt_Config, User_Config);
+   type User_Config_Kinematics_Kind is (Cartesian, Core_XY, Linear_Delta)
+   with Annotate => (Prunt_Config, User_Config), Annotate => (Prunt_Config, Experimental, "Linear_Delta");
 
    type User_Config_Kinematics_Variant (Kind : User_Config_Kinematics_Kind := Cartesian) is record
       --  This setting defines the kinematic system of your machine. The kinematics determine how the movement of
