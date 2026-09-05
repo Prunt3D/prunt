@@ -493,11 +493,12 @@ private
    --  Integer representation used while combining Bernstein coefficients. All binomial coefficients needed through
    --  degree eighty-four fit in 128 bits, so coefficient ratios can be formed without first rounding the integers.
 
-   type Exact_Binomial_Table_Type is
-     array (Natural range 0 .. Maximum_Derivative_Bernstein_Degree,
-            Natural range 0 .. Maximum_Derivative_Bernstein_Degree)
-     of Exact_Binomial_Value;
-   --  Pascal's triangle at the higher degree required by V7 derivative certificates, stored exactly as integers.
+   subtype Packed_Binomial_Index is
+     Natural range 0 .. (Maximum_Derivative_Bernstein_Degree + 2) ** 2 / 4 - 1;
+   --  Each row stores only K <= N/2, using the symmetry C(N,K) = C(N,N-K).
+
+   type Exact_Binomial_Table_Type is array (Packed_Binomial_Index) of Exact_Binomial_Value;
+   --  The symmetric half of Pascal's triangle through the degree required by derivative certificates.
 
    function Build_Exact_Binomial_Table return Exact_Binomial_Table_Type;
    --  Construct the exact Pascal triangle once during package elaboration using integer additions.
@@ -505,6 +506,18 @@ private
    function Exact_Binomial (N, K : Natural) return Exact_Binomial_Value;
    --  Return the exact binomial coefficient "N choose K". Requests outside the stored triangle return zero, matching
    --  the bounded polynomial-summation convention used by Binomial.
+
+   type Interval_Polynomial is array (Natural range <>) of Interval;
+   --  Bernstein controls with outward-rounded coefficient enclosures.
+
+   function Multiply_Bernstein (Left, Right : Interval_Polynomial) return Interval_Polynomial
+   with
+     Pre =>
+       Left'First = 0 and then Right'First = 0
+       and then Left'Length > 0 and then Right'Length > 0
+       and then Left'Last + Right'Last <= Maximum_Derivative_Bernstein_Degree;
+   --  Multiply by convolving binomial-scaled controls. Fall back to individual enclosing weights when scaling
+   --  cannot produce finite intervals, so intermediate overflow does not reject an otherwise certifiable product.
 
    subtype Rational_Degree_Slot is Positive range 1 .. Maximum_Rational_Degree;
    --  Index of storage associated with one real pole or one component of a complex-conjugate pair.

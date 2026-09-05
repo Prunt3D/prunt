@@ -836,6 +836,302 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          Name & " point-distance upper bound is compatible with dense samples");
    end Assert_Geometry_Intervals_Cover_Dense_Samples;
 
+   procedure Test_Bernstein_Product_Enclosures (T : in out Trendy_Test.Operation'Class) is
+      Cases : constant Interval_Polynomial :=
+        [(Lower => -5.0, Upper => -2.0, Valid => True),
+         (Lower => -4.0, Upper => 0.0, Valid => True),
+         (Lower => -3.0, Upper => 7.0, Valid => True),
+         (Lower => 0.0, Upper => 4.0, Valid => True),
+         (Lower => 2.0, Upper => 11.0, Valid => True),
+         Interval_Exact (-1.0), Interval_Exact (0.0), Interval_Exact (1.0)];
+
+      function Choose (N, K : Natural) return Natural;
+
+      function Choose (N, K : Natural) return Natural is
+         Result : Natural := 1;
+      begin
+         for I in 1 .. K loop
+            Result := Result * (N + 1 - I) / I;
+         end loop;
+         return Result;
+      end Choose;
+   begin
+      T.Register;
+      --  Use direct Bernstein weights and all four corner products as an independent oracle. Integer endpoints,
+      --  weights and sums are exact at these degrees; only the final division needs extended-precision rounding.
+      --  Rotate every interval through every position to exercise all sign pairs, unit factors and sparse controls.
+      for Left_Degree in 1 .. 5 loop
+         for Right_Degree in 1 .. 5 loop
+            for Left_Shift in Cases'Range loop
+               for Right_Shift in Cases'Range loop
+                  declare
+                     Left : constant Interval_Polynomial :=
+                       [for I in 0 .. Left_Degree => Cases ((I + Left_Shift) mod Cases'Length)];
+                     Right : constant Interval_Polynomial :=
+                       [for J in 0 .. Right_Degree => Cases ((J + Right_Shift) mod Cases'Length)];
+                     Product : constant Interval_Polynomial := Multiply_Bernstein (Left, Right);
+                  begin
+                     for K in Product'Range loop
+                        declare
+                           Lower, Upper : Long_Long_Float := 0.0;
+                           Divisor : constant Long_Long_Float := Long_Long_Float (Choose (Product'Last, K));
+                        begin
+                           for I in Left'Range loop
+                              if K >= I and then K - I <= Right_Degree then
+                                 declare
+                                    J : constant Natural := K - I;
+                                    Weight : constant Long_Long_Float :=
+                                      Long_Long_Float (Choose (Left_Degree, I) * Choose (Right_Degree, J));
+                                    P1 : constant Long_Long_Float :=
+                                      Long_Long_Float (Left (I).Lower) * Long_Long_Float (Right (J).Lower);
+                                    P2 : constant Long_Long_Float :=
+                                      Long_Long_Float (Left (I).Lower) * Long_Long_Float (Right (J).Upper);
+                                    P3 : constant Long_Long_Float :=
+                                      Long_Long_Float (Left (I).Upper) * Long_Long_Float (Right (J).Lower);
+                                    P4 : constant Long_Long_Float :=
+                                      Long_Long_Float (Left (I).Upper) * Long_Long_Float (Right (J).Upper);
+                                 begin
+                                    Lower :=
+                                      Lower + Weight
+                                        * Long_Long_Float'Min
+                                            (Long_Long_Float'Min (P1, P2), Long_Long_Float'Min (P3, P4));
+                                    Upper :=
+                                      Upper + Weight
+                                        * Long_Long_Float'Max
+                                            (Long_Long_Float'Max (P1, P2), Long_Long_Float'Max (P3, P4));
+                                 end;
+                              end if;
+                           end loop;
+                           T.Assert
+                             (Product (K).Valid
+                              and then Long_Long_Float (Product (K).Lower) <= Lower / Divisor
+                              and then Long_Long_Float (Product (K).Upper) >= Upper / Divisor,
+                              "Bernstein control encloses the direct four-corner oracle"
+                              & Left_Degree'Image & Right_Degree'Image
+                              & Left_Shift'Image & Right_Shift'Image & K'Image);
+                        end;
+                     end loop;
+                  end;
+               end loop;
+            end loop;
+         end loop;
+      end loop;
+   end Test_Bernstein_Product_Enclosures;
+
+   procedure Test_Bernstein_Products (T : in out Trendy_Test.Operation'Class) is
+      use type Interfaces.Unsigned_128;
+      Zero : constant Interval := Interval_Exact (0.0);
+
+      procedure Assert_Contains (Value : Interval; Expected : Long_Long_Float; Name : String);
+
+      procedure Assert_Contains (Value : Interval; Expected : Long_Long_Float; Name : String) is
+      begin
+         T.Assert
+           (Value.Valid
+            and then Long_Long_Float (Value.Lower) <= Expected
+            and then Long_Long_Float (Value.Upper) >= Expected,
+            Name);
+      end Assert_Contains;
+   begin
+      T.Register;
+
+      --  Check the packed symmetric table against an independent multiplicative recurrence, including row ends
+      --  and the reflected half of each row. The largest intermediate here remains well within 128 bits.
+      for N in 0 .. Maximum_Derivative_Bernstein_Degree loop
+         declare
+            Expected : Interfaces.Unsigned_128 := 1;
+         begin
+            for K in 0 .. N loop
+               T.Assert (Exact_Binomial (N, K) = Expected, "Exact binomial table" & N'Image & K'Image);
+               if K < N then
+                  Expected := Expected * Interfaces.Unsigned_128 (N - K) / Interfaces.Unsigned_128 (K + 1);
+               end if;
+            end loop;
+            T.Assert (Exact_Binomial (N, N + 1) = 0, "Binomial lookup past a row returns zero");
+         end;
+      end loop;
+      T.Assert
+        (Exact_Binomial (Maximum_Derivative_Bernstein_Degree + 1, 0) = 0,
+         "Binomial lookup past the table returns zero");
+
+      declare
+         Product : constant Interval_Polynomial :=
+           Multiply_Bernstein
+             ([Interval_Exact (-1.0), Interval_Exact (2.0)],
+              [Interval_Exact (3.0), Interval_Exact (-4.0), Interval_Exact (5.0)]);
+      begin
+         Assert_Contains (Product (0), -3.0, "Mixed-sign product at its start");
+         Assert_Contains (Product (1), 14.0 / 3.0, "Mixed-sign product with a non-dyadic coefficient");
+         Assert_Contains (Product (2), -7.0, "Mixed-sign product with cancellation");
+         Assert_Contains (Product (3), 10.0, "Mixed-sign product at its finish");
+      end;
+
+      declare
+         Product : constant Interval_Polynomial :=
+           Multiply_Bernstein
+             ([(Lower => -2.0, Upper => -1.0, Valid => True),
+               (Lower => 0.0, Upper => 3.0, Valid => True),
+               (Lower => -1.0, Upper => 1.0, Valid => True)],
+              [(Lower => -3.0, Upper => 2.0, Valid => True), (Lower => 4.0, Upper => 5.0, Valid => True)]);
+      begin
+         Assert_Contains (Product (0), -4.0, "Interval product start lower endpoint");
+         Assert_Contains (Product (0), 6.0, "Interval product start upper endpoint");
+         Assert_Contains (Product (1), -28.0 / 3.0, "Interval product first interior lower endpoint");
+         Assert_Contains (Product (1), 8.0 / 3.0, "Interval product first interior upper endpoint");
+         Assert_Contains (Product (2), -1.0, "Interval product second interior lower endpoint");
+         Assert_Contains (Product (2), 11.0, "Interval product second interior upper endpoint");
+         Assert_Contains (Product (3), -5.0, "Interval product finish lower endpoint");
+         Assert_Contains (Product (3), 5.0, "Interval product finish upper endpoint");
+      end;
+
+      declare
+         Ones : constant Interval_Polynomial (0 .. 42) := [others => Interval_Exact (1.0)];
+         Linear : constant Interval_Polynomial (0 .. 42) :=
+           [for I in 0 .. 42 => Interval_Exact (Dimensionless (I) - 21.0)];
+         Constant_Product : constant Interval_Polynomial := Multiply_Bernstein (Ones, Ones);
+         Quadratic_Product : constant Interval_Polynomial := Multiply_Bernstein (Linear, Linear);
+      begin
+         for K in 0 .. 84 loop
+            Assert_Contains (Constant_Product (K), 1.0, "Degree-eighty-four constant product" & K'Image);
+            --  Linear represents 42*U - 21 exactly. Its square, elevated to degree 84, has these rational controls.
+            Assert_Contains
+              (Quadratic_Product (K),
+               Long_Long_Float (21 * K * (K - 1) - 1_743 * K + 36_603) / 83.0,
+               "Degree-eighty-four quadratic product" & K'Image);
+         end loop;
+      end;
+
+      --  Cover every cached scale row, including input degrees whose binomial coefficients exceed exact floating
+      --  integer precision. Constant interval controls give a direct oracle at every output control because the
+      --  positive Bernstein product weights sum to one.
+      for Left_Degree in 1 .. 83 loop
+         for Sign_Case in 1 .. 3 loop
+            declare
+               Left_Value : constant Interval :=
+                 (case Sign_Case is
+                    when 1 => (Lower => -5.0, Upper => -2.0, Valid => True),
+                    when 2 => (Lower => -3.0, Upper => 7.0, Valid => True),
+                    when 3 => (Lower => 2.0, Upper => 11.0, Valid => True));
+               Right_Value : constant Interval :=
+                 (if Sign_Case = 2 then (Lower => -4.0, Upper => 2.0, Valid => True)
+                  else (Lower => 3.0, Upper => 7.0, Valid => True));
+               Expected_Lower : constant Long_Long_Float :=
+                 (case Sign_Case is when 1 => -35.0, when 2 => -28.0, when 3 => 6.0);
+               Expected_Upper : constant Long_Long_Float :=
+                 (case Sign_Case is when 1 => -6.0, when 2 => 14.0, when 3 => 77.0);
+               Product : constant Interval_Polynomial :=
+                 Multiply_Bernstein
+                   (Interval_Polynomial'(0 .. Left_Degree => Left_Value),
+                    Interval_Polynomial'(0 .. 84 - Left_Degree => Right_Value));
+            begin
+               for K in Product'Range loop
+                  Assert_Contains (Product (K), Expected_Lower, "All-degree product lower endpoint");
+                  Assert_Contains (Product (K), Expected_Upper, "All-degree product upper endpoint");
+               end loop;
+            end;
+         end loop;
+      end loop;
+
+      --  The result is representable even when input scaling or the scaled convolution overflows. Both cases must
+      --  retain the original weighted-product path instead of rejecting a finite certificate.
+      for Case_Index in 1 .. 2 loop
+         declare
+            Left_Value : constant Dimensionless := (if Case_Index = 1 then 1.0E300 else 1.0E160);
+            Right_Value : constant Dimensionless := (if Case_Index = 1 then 1.0E-300 else 1.0E140);
+            Product : constant Interval_Polynomial :=
+              Multiply_Bernstein
+                (Interval_Polynomial'(0 .. 42 => Interval_Exact (Left_Value)),
+                 Interval_Polynomial'(0 .. 42 => Interval_Exact (Right_Value)));
+            Expected : constant Long_Long_Float := Long_Long_Float (Left_Value) * Long_Long_Float (Right_Value);
+         begin
+            for K in Product'Range loop
+               Assert_Contains (Product (K), Expected, "Overflow fallback product" & Case_Index'Image & K'Image);
+            end loop;
+         end;
+      end loop;
+
+      declare
+         Tiny : constant Dimensionless := Dimensionless'Model_Small / 8.0;
+         Tiny_Squared : constant Long_Long_Float := Long_Long_Float (Tiny) * Long_Long_Float (Tiny);
+         Tiny_Product : constant Interval_Polynomial :=
+           Multiply_Bernstein
+             (Interval_Polynomial'(0 .. 2 => (Lower => -Tiny, Upper => Tiny, Valid => True)),
+              Interval_Polynomial'(0 .. 2 => Interval_Exact (Tiny)));
+         Large : constant Dimensionless := 1.0E140;
+         Large_Squared : constant Long_Long_Float := Long_Long_Float (Large) * Long_Long_Float (Large);
+         Cancelling_Product : constant Interval_Polynomial :=
+           Multiply_Bernstein
+             ([Interval_Exact (Large), Interval_Exact (-Large)],
+              [Interval_Exact (Large), Interval_Exact (Large)]);
+      begin
+         for Value of Tiny_Product loop
+            Assert_Contains (Value, -Tiny_Squared, "Subnormal product lower endpoint");
+            Assert_Contains (Value, Tiny_Squared, "Subnormal product upper endpoint");
+         end loop;
+         Assert_Contains (Cancelling_Product (0), Large_Squared, "Large finite product at its start");
+         Assert_Contains (Cancelling_Product (1), 0.0, "Large finite products cancel conservatively");
+         Assert_Contains (Cancelling_Product (2), -Large_Squared, "Large finite product at its finish");
+      end;
+
+      --  Sweep the floating-point exponent range, including subnormals and the transition from absolute to relative
+      --  roundoff padding. The exact product controls are -V/2, -V/2 and 3V/2, evaluated in extended precision so even
+      --  a half-minimum-subnormal result remains visible to the oracle. Large cases remain inside the fast path's
+      --  preflight limit and exercise its finite-rounding guarantee near the upper end of the model.
+      for Exponent in Dimensionless'Model_Emin - Dimensionless'Machine_Mantissa .. Dimensionless'Machine_Emax - 6 loop
+         declare
+            Value : constant Dimensionless := Dimensionless'Scaling (1.0, Exponent);
+            Product : constant Interval_Polynomial :=
+              Multiply_Bernstein
+                ([Interval_Exact (-Value), Interval_Exact (Value)], [Interval_Exact (0.5), Interval_Exact (1.5)]);
+            Half : constant Long_Long_Float := Long_Long_Float (Value) / 2.0;
+         begin
+            T.Assert
+              (Down (Value) < Value and then Up (Value) > Value
+               and then Down (-Value) < -Value and then Up (-Value) > -Value,
+               "Rounding moves both signs outward" & Exponent'Image);
+            Assert_Contains (Product (0), -Half, "Exponent sweep start" & Exponent'Image);
+            Assert_Contains (Product (1), -Half, "Exponent sweep cancellation" & Exponent'Image);
+            Assert_Contains (Product (2), 3.0 * Half, "Exponent sweep finish" & Exponent'Image);
+         end;
+      end loop;
+
+      declare
+         Unsafe_Product : constant Interval_Polynomial :=
+           Multiply_Bernstein
+             (Interval_Polynomial'(0 .. 1 => Interval_Exact (1.0E200)),
+              Interval_Polynomial'(0 .. 1 => Interval_Exact (1.0E200)));
+         Unsafe_Scale : constant Interval_Polynomial :=
+           Multiply_Bernstein
+             (Interval_Polynomial'(0 => Interval_Exact (1.0E200)),
+              Interval_Polynomial'(0 .. 1 => Interval_Exact (1.0E200)));
+      begin
+         T.Assert
+           ((for all Value of Unsafe_Product => not Value.Valid),
+            "Overflow in the unscaled fallback cannot become a finite bound after weighting");
+         T.Assert
+           ((for all Value of Unsafe_Scale => not Value.Valid), "Degree-zero scaling rejects overflowing products");
+      end;
+
+      declare
+         Valid_Product : constant Interval_Polynomial :=
+           Multiply_Bernstein (Interval_Polynomial'(0 .. 8 => Zero), [Interval_Exact (3.0), Interval_Exact (-2.0)]);
+         Invalid_Product : constant Interval_Polynomial :=
+           Multiply_Bernstein
+             (Interval_Polynomial'(0 .. 8 => Zero),
+              [Interval_Exact (3.0), (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False)]);
+      begin
+         T.Assert ((for all Value of Valid_Product => Value = Zero), "Zero products remain exact");
+         T.Assert
+           ((for some Value of Invalid_Product => not Value.Valid), "Zero does not hide an invalid product operand");
+         T.Assert
+           (Multiply_Bernstein (Interval_Polynomial'(0 => Interval_Exact (1.0)), Valid_Product) = Valid_Product,
+            "A degree-zero unit factor preserves controls exactly");
+         T.Assert
+           (Multiply_Bernstein (Valid_Product, Interval_Polynomial'(0 => Interval_Exact (1.0))) = Valid_Product,
+            "A degree-zero unit factor preserves controls exactly on the right");
+      end;
+   end Test_Bernstein_Products;
+
    --  Exercise every pairing of negative, nonpositive, sign-spanning, nonnegative, and positive intervals. V7 selects
    --  extremal products by sign, so this compares each optimized branch with the full four-corner definition.
    procedure Test_Interval_Multiplication_Sign_Cases
@@ -3361,7 +3657,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Interval_Multiplication_Sign_Cases'Access,
+        [Test_Bernstein_Product_Enclosures'Access,
+         Test_Bernstein_Products'Access,
+         Test_Interval_Multiplication_Sign_Cases'Access,
          Test_Complex_Pole_Primitive_Cancellation'Access,
          Test_Default_And_Zero_State'Access,
          Test_Request_Validation'Access,

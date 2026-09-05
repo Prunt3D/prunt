@@ -45,21 +45,24 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
    Binomial_Table : constant Binomial_Table_Type := Build_Binomial_Table;
 
+   function Binomial_Index (N, K : Natural) return Natural
+   is ((N + 1) ** 2 / 4 + Natural'Min (K, N - K));
+   pragma Inline (Binomial_Index);
+   --  C(N,K) = C(N,N-K). Pack only K <= N/2; the preceding rows contain floor((N+1)**2/4) entries.
+
    function Build_Exact_Binomial_Table return Exact_Binomial_Table_Type is
       use type Interfaces.Unsigned_128;
-      Result : Exact_Binomial_Table_Type := [others => [others => 0]];
+      Result : Exact_Binomial_Table_Type := [others => 0];
    begin
-      --  Use the same Pascal recurrence as the floating-point table, but keep every entry as an integer. The V7
-      --  derivative certificate later combines several binomial coefficients before converting them to intervals;
-      --  delaying that conversion prevents rounded table values from invalidating the enclosure.
+      --  Use the same Pascal recurrence as the floating-point table, but keep every entry as an integer. The higher
+      --  degrees exceed floating-point integer precision, so each scaling factor must be enclosed when converted.
+      --  The fallback multiplication can also combine these exact integers before enclosing its product weights.
       for N in 0 .. Maximum_Derivative_Bernstein_Degree loop
-         Result (N, 0) := 1;
-         Result (N, N) := 1;
-         if N > 1 then
-            for K in 1 .. N - 1 loop
-               Result (N, K) := Result (N - 1, K - 1) + Result (N - 1, K);
-            end loop;
-         end if;
+         Result (Binomial_Index (N, 0)) := 1;
+         for K in 1 .. N / 2 loop
+            Result (Binomial_Index (N, K)) :=
+              Result (Binomial_Index (N - 1, K - 1)) + Result (Binomial_Index (N - 1, K));
+         end loop;
       end loop;
       return Result;
    end Build_Exact_Binomial_Table;
@@ -68,7 +71,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    --  Elaboration-time cache used by Bernstein multiplication and degree elevation without rounded table entries.
 
    function Exact_Binomial (N, K : Natural) return Exact_Binomial_Value
-   is (if K > N or else N > Maximum_Derivative_Bernstein_Degree then 0 else Exact_Binomial_Table (N, K));
+   is (if K > N or else N > Maximum_Derivative_Bernstein_Degree
+       then 0
+       else Exact_Binomial_Table (Binomial_Index (N, K)));
 
    function Binomial (N, K : Natural) return Dimensionless is
    begin
@@ -1128,23 +1133,20 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                end loop;
             end loop;
 
-            for J in Chart_Coefficient_Index loop
-               --  Elevate degree 7 to the fixed degree 8 without changing the represented polynomial:
-               --
-               --     b′ⱼ = Σᵢ C(7, i)·C(1, j-i)/C(8, j)·bᵢ.
-               for I in 0 .. 7 loop
-                  if J >= I and then J - I <= Fixed_Chart_Degree - 7 then
-                     declare
-                        Weight : constant Dimensionless :=
-                          Binomial (7, I)
-                          * Binomial (Fixed_Chart_Degree - 7, J - I)
-                          / Binomial (Fixed_Chart_Degree, J);
-                     begin
-                        Elevated (J) := Elevated (J) + Weight * Degree_7 (I);
-                        D_Elevated (J) := D_Elevated (J) + Weight * D_Degree_7 (I);
-                     end;
-                  end if;
-               end loop;
+            --  Elevating degree seven to eight only mixes adjacent controls. The weights J/8 and (8 - J)/8
+            --  are exact dyadic numbers, so no binomial lookup or general convolution is needed.
+            Elevated (0) := Degree_7 (0);
+            Elevated (Fixed_Chart_Degree) := Degree_7 (7);
+            D_Elevated (0) := D_Degree_7 (0);
+            D_Elevated (Fixed_Chart_Degree) := D_Degree_7 (7);
+            for J in 1 .. Fixed_Chart_Degree - 1 loop
+               declare
+                  Left_Weight  : constant Dimensionless := Dimensionless (J) / 8.0;
+                  Right_Weight : constant Dimensionless := Dimensionless (8 - J) / 8.0;
+               begin
+                  Elevated (J) := Left_Weight * Degree_7 (J - 1) + Right_Weight * Degree_7 (J);
+                  D_Elevated (J) := Left_Weight * D_Degree_7 (J - 1) + Right_Weight * D_Degree_7 (J);
+               end;
             end loop;
 
             --  Generic degree elevation is mathematically endpoint-jet preserving, but its rounded multiply/add
@@ -1346,31 +1348,47 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       return Result;
    end Integrate_GL16;
 
+   function Roundoff_Padding (Value : Dimensionless) return Dimensionless;
+   pragma Inline (Roundoff_Padding);
+
+   function Roundoff_Padding (Value : Dimensionless) return Dimensionless is
+      Relative : constant Dimensionless := 2.0 * Dimensionless'Model_Epsilon * abs Value;
+   begin
+      return (if Relative > Dimensionless'Model_Small then Relative else Dimensionless'Model_Small);
+   end Roundoff_Padding;
+
    function Down (Value : Dimensionless) return Dimensionless is
-      Inflation : Dimensionless;
       Candidate : Dimensionless;
    begin
       if Value <= -Dimensionless'Last then
          return -Dimensionless'Last;
       end if;
       --  Move by at least two model epsilons, falling back to Adjacent when subtraction rounds back to Value.
-      Inflation := Dimensionless'Max (Dimensionless'Model_Small, 2.0 * Dimensionless'Model_Epsilon * abs Value);
-      Candidate := Value - Inflation;
+      Candidate := Value - Roundoff_Padding (Value);
       return (if Candidate < Value then Candidate else Dimensionless'Adjacent (Value, -Dimensionless'Last));
    end Down;
 
    function Up (Value : Dimensionless) return Dimensionless is
-      Inflation : Dimensionless;
       Candidate : Dimensionless;
    begin
       if Value >= Dimensionless'Last then
          return Dimensionless'Last;
       end if;
       --  Move by at least two model epsilons, falling back to Adjacent when addition rounds back to Value.
-      Inflation := Dimensionless'Max (Dimensionless'Model_Small, 2.0 * Dimensionless'Model_Epsilon * abs Value);
-      Candidate := Value + Inflation;
+      Candidate := Value + Roundoff_Padding (Value);
       return (if Candidate > Value then Candidate else Dimensionless'Adjacent (Value, Dimensionless'Last));
    end Up;
+
+   procedure Inflate_Finite_Endpoints (Lower, Upper : in out Dimensionless);
+   pragma Inline (Inflate_Finite_Endpoints);
+   --  Callers must prove that both endpoints are finite and have magnitude below Last/2. The same padding used by
+   --  Down/Up then cannot overflow and exceeds one ulp, so neither saturation nor the Adjacent fallback is needed.
+
+   procedure Inflate_Finite_Endpoints (Lower, Upper : in out Dimensionless) is
+   begin
+      Lower := Lower - Roundoff_Padding (Lower);
+      Upper := Upper + Roundoff_Padding (Upper);
+   end Inflate_Finite_Endpoints;
 
    function Checked_Interval (Lower, Upper : Dimensionless; Valid : Boolean := True) return Interval is
    begin
@@ -1425,6 +1443,51 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       return Interval_Add (Left, Interval_Negate (Right));
    end Interval_Subtract;
 
+   procedure Interval_Product_Extrema
+     (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless);
+   pragma Inline (Interval_Product_Extrema);
+   --  Form the extremal floating-point corner products. Callers enclose roundoff and handle possible overflow.
+
+   procedure Interval_Product_Extrema
+     (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless) is
+   begin
+      --  Except when both intervals span zero, their signs identify the two corner products which attain the
+      --  product interval's extrema. Avoid forming the other two products and the four-way min/max in the common
+      --  cases; all binomial weights and denominator reciprocals take one of these two-product paths.
+      if Left.Lower >= 0.0 then
+         if Right.Lower >= 0.0 then
+            Lower_Product := Left.Lower * Right.Lower;
+            Upper_Product := Left.Upper * Right.Upper;
+         elsif Right.Upper <= 0.0 then
+            Lower_Product := Left.Upper * Right.Lower;
+            Upper_Product := Left.Lower * Right.Upper;
+         else
+            Lower_Product := Left.Upper * Right.Lower;
+            Upper_Product := Left.Upper * Right.Upper;
+         end if;
+      elsif Left.Upper <= 0.0 then
+         if Right.Lower >= 0.0 then
+            Lower_Product := Left.Lower * Right.Upper;
+            Upper_Product := Left.Upper * Right.Lower;
+         elsif Right.Upper <= 0.0 then
+            Lower_Product := Left.Upper * Right.Upper;
+            Upper_Product := Left.Lower * Right.Lower;
+         else
+            Lower_Product := Left.Lower * Right.Upper;
+            Upper_Product := Left.Lower * Right.Lower;
+         end if;
+      elsif Right.Lower >= 0.0 then
+         Lower_Product := Left.Lower * Right.Upper;
+         Upper_Product := Left.Upper * Right.Upper;
+      elsif Right.Upper <= 0.0 then
+         Lower_Product := Left.Upper * Right.Lower;
+         Upper_Product := Left.Lower * Right.Lower;
+      else
+         Lower_Product := Dimensionless'Min (Left.Lower * Right.Upper, Left.Upper * Right.Lower);
+         Upper_Product := Dimensionless'Max (Left.Lower * Right.Lower, Left.Upper * Right.Upper);
+      end if;
+   end Interval_Product_Extrema;
+
    function Interval_Multiply (Left, Right : Interval) return Interval is
    begin
       if not Left.Valid or else not Right.Valid then
@@ -1444,47 +1507,271 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Lower_Product : Dimensionless;
          Upper_Product : Dimensionless;
       begin
-         --  Except when both intervals span zero, their signs identify the two corner products which attain the
-         --  product interval's extrema. Avoid forming the other two products and the four-way min/max in the common
-         --  cases; all binomial weights and denominator reciprocals take one of these two-product paths.
-         if Left.Lower >= 0.0 then
-            if Right.Lower >= 0.0 then
-               Lower_Product := Left.Lower * Right.Lower;
-               Upper_Product := Left.Upper * Right.Upper;
-            elsif Right.Upper <= 0.0 then
-               Lower_Product := Left.Upper * Right.Lower;
-               Upper_Product := Left.Lower * Right.Upper;
-            else
-               Lower_Product := Left.Upper * Right.Lower;
-               Upper_Product := Left.Upper * Right.Upper;
-            end if;
-         elsif Left.Upper <= 0.0 then
-            if Right.Lower >= 0.0 then
-               Lower_Product := Left.Lower * Right.Upper;
-               Upper_Product := Left.Upper * Right.Lower;
-            elsif Right.Upper <= 0.0 then
-               Lower_Product := Left.Upper * Right.Upper;
-               Upper_Product := Left.Lower * Right.Lower;
-            else
-               Lower_Product := Left.Lower * Right.Upper;
-               Upper_Product := Left.Lower * Right.Lower;
-            end if;
-         elsif Right.Lower >= 0.0 then
-            Lower_Product := Left.Lower * Right.Upper;
-            Upper_Product := Left.Upper * Right.Upper;
-         elsif Right.Upper <= 0.0 then
-            Lower_Product := Left.Upper * Right.Lower;
-            Upper_Product := Left.Lower * Right.Lower;
-         else
-            Lower_Product := Dimensionless'Min (Left.Lower * Right.Upper, Left.Upper * Right.Lower);
-            Upper_Product := Dimensionless'Max (Left.Lower * Right.Lower, Left.Upper * Right.Upper);
-         end if;
+         Interval_Product_Extrema (Left, Right, Lower_Product, Upper_Product);
          return Checked_Interval (Down (Lower_Product), Up (Upper_Product));
       end;
    exception
       when Constraint_Error =>
          return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
    end Interval_Multiply;
+
+   --  Enclose the Bernstein product or degree-elevation weight
+   --
+   --     C(Left_N, Left_K) * C(Right_N, Right_K) / C(Denominator_N, Denominator_K).
+   --
+   --  The integer products are exact; only their final conversion and division need outward rounding.
+   function Bernstein_Product_Weight
+     (Left_N, Left_K, Right_N, Right_K, Denominator_N, Denominator_K : Natural) return Interval;
+   --  Enclose a ratio of exact binomial-coefficient products.
+
+   function Bernstein_Product_Weight
+     (Left_N, Left_K, Right_N, Right_K, Denominator_N, Denominator_K : Natural) return Interval
+   is
+      use type Interfaces.Unsigned_128;
+      Numerator   : constant Exact_Binomial_Value :=
+        Exact_Binomial (Left_N, Left_K) * Exact_Binomial (Right_N, Right_K);
+      Denominator : constant Exact_Binomial_Value := Exact_Binomial (Denominator_N, Denominator_K);
+   begin
+      if Denominator = 0 then
+         return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+      elsif Numerator = 0 then
+         return Interval_Exact (0.0);
+      elsif Numerator = Denominator then
+         return Interval_Exact (1.0);
+      end if;
+      declare
+         Numerator_Centre   : constant Dimensionless := Dimensionless (Numerator);
+         Denominator_Centre : constant Dimensionless := Dimensionless (Denominator);
+         Numerator_Bound    : constant Interval :=
+           Checked_Interval (Down (Numerator_Centre), Up (Numerator_Centre));
+         Denominator_Bound  : constant Interval :=
+           Checked_Interval (Down (Denominator_Centre), Up (Denominator_Centre));
+      begin
+         --  Both bounds are strictly positive. Specializing their quotient avoids constructing a reciprocal and
+         --  feeding it through the generic four-product interval multiplier for every Bernstein product weight.
+         return
+           Checked_Interval
+             (Down (Numerator_Bound.Lower / Denominator_Bound.Upper),
+              Up (Numerator_Bound.Upper / Denominator_Bound.Lower));
+      end;
+   exception
+      when Constraint_Error =>
+         return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+   end Bernstein_Product_Weight;
+
+   type Positive_Endpoints is record
+      Lower, Upper : Dimensionless;
+   end record;
+   --  The cached scales are finite and strictly positive, so no per-entry validity flag is needed.
+
+   type Binomial_Scale is record
+      Factor, Reciprocal : Positive_Endpoints;
+   end record;
+   type Binomial_Scale_Array is array (Packed_Binomial_Index) of Binomial_Scale;
+
+   function Build_Binomial_Scales return Binomial_Scale_Array;
+   --  Enclose the exact integer scales and their reciprocals once during package elaboration.
+
+   function Build_Binomial_Scales return Binomial_Scale_Array is
+      use type Interfaces.Unsigned_128;
+      Result : Binomial_Scale_Array;
+   begin
+      for N in 0 .. Maximum_Derivative_Bernstein_Degree loop
+         for K in 0 .. N / 2 loop
+            declare
+               Value  : constant Exact_Binomial_Value := Exact_Binomial (N, K);
+               Centre : constant Dimensionless := Dimensionless (Value);
+               Factor : constant Positive_Endpoints :=
+                 (if Value <= 2 ** Dimensionless'Machine_Mantissa
+                  then (Lower => Centre, Upper => Centre)
+                  else (Lower => Down (Centre), Upper => Up (Centre)));
+            begin
+               Result (Binomial_Index (N, K)) :=
+                 (Factor => Factor,
+                  Reciprocal =>
+                    (if Value = 1 then Factor
+                     else (Lower => Down (1.0 / Factor.Upper), Upper => Up (1.0 / Factor.Lower))));
+            end;
+         end loop;
+      end loop;
+      return Result;
+   end Build_Binomial_Scales;
+
+   Binomial_Scales : constant Binomial_Scale_Array := Build_Binomial_Scales;
+   --  These positive enclosures depend only on degree and index. Build them once, including their outward-rounded
+   --  reciprocals, instead of repeatedly converting 128-bit integers and dividing during every polynomial product.
+
+   function Multiply_Bernstein (Left, Right : Interval_Polynomial) return Interval_Polynomial is
+      Degree       : constant Natural := Left'Last + Right'Last;
+      Scaled_Left  : Interval_Polynomial (Left'Range);
+      Scaled_Right : Interval_Polynomial (Right'Range);
+      Result       : Interval_Polynomial (0 .. Degree) := [others => Interval_Exact (0.0)];
+      Left_Max     : Dimensionless := 0.0;
+      Right_Max    : Dimensionless := 0.0;
+
+      function Usable (Value : Interval) return Boolean
+      is (Value.Valid
+          and then Value.Lower > -Dimensionless'Last and then Value.Upper < Dimensionless'Last
+          and then Value.Lower <= Value.Upper);
+      --  Saturated endpoints must trigger fallback before a later scale or cancellation could make them finite.
+
+      function Scale_By_Positive (Value : Interval; Factor : Positive_Endpoints) return Interval;
+      pragma Inline (Scale_By_Positive);
+      --  Binomial scales and their reciprocals are valid and strictly positive. Each endpoint therefore chooses its
+      --  factor independently by sign; the generic multiplier's other sign combinations cannot occur here.
+
+      function Scale_By_Positive (Value : Interval; Factor : Positive_Endpoints) return Interval is
+         Lower, Upper : Dimensionless;
+      begin
+         if not Value.Valid
+           or else (Factor.Lower = 1.0 and then Factor.Upper = 1.0)
+           or else (Value.Lower = 0.0 and then Value.Upper = 0.0)
+         then
+            return Value;
+         elsif Value.Lower = 1.0 and then Value.Upper = 1.0 then
+            return (Lower => Factor.Lower, Upper => Factor.Upper, Valid => True);
+         elsif Value.Lower = -1.0 and then Value.Upper = -1.0 then
+            return (Lower => -Factor.Upper, Upper => -Factor.Lower, Valid => True);
+         end if;
+         Lower := Value.Lower * (if Value.Lower < 0.0 then Factor.Upper else Factor.Lower);
+         Upper := Value.Upper * (if Value.Upper < 0.0 then Factor.Lower else Factor.Upper);
+         if Lower > -Dimensionless'Last / 2.0 and then Upper < Dimensionless'Last / 2.0 and then Lower <= Upper then
+            Inflate_Finite_Endpoints (Lower, Upper);
+            return (Lower => Lower, Upper => Upper, Valid => True);
+         else
+            return Interval_Multiply (Value, (Lower => Factor.Lower, Upper => Factor.Upper, Valid => True));
+         end if;
+      end Scale_By_Positive;
+
+      procedure Accumulate_Product (Sum : in out Interval; Left, Right : Interval);
+      pragma Inline (Accumulate_Product);
+      --  Both operands and the accumulator are valid, and the convolution preflight proves that every product and
+      --  partial sum stays finite. Retain ordinary interval rounding and exact identities without rechecking those
+      --  invariants or constructing temporary interval records at each term.
+
+      procedure Accumulate_Product (Sum : in out Interval; Left, Right : Interval) is
+         Lower_Product, Upper_Product : Dimensionless;
+      begin
+         --  The outer loop already skips exact-zero left controls.
+         if Right.Lower = 0.0 and then Right.Upper = 0.0 then
+            return;
+         elsif Left.Lower = 1.0 and then Left.Upper = 1.0 then
+            Lower_Product := Right.Lower;
+            Upper_Product := Right.Upper;
+         elsif Right.Lower = 1.0 and then Right.Upper = 1.0 then
+            Lower_Product := Left.Lower;
+            Upper_Product := Left.Upper;
+         elsif Left.Lower = -1.0 and then Left.Upper = -1.0 then
+            Lower_Product := -Right.Upper;
+            Upper_Product := -Right.Lower;
+         elsif Right.Lower = -1.0 and then Right.Upper = -1.0 then
+            Lower_Product := -Left.Upper;
+            Upper_Product := -Left.Lower;
+         else
+            Interval_Product_Extrema (Left, Right, Lower_Product, Upper_Product);
+            Inflate_Finite_Endpoints (Lower_Product, Upper_Product);
+         end if;
+         if Sum.Lower = 0.0 and then Sum.Upper = 0.0 then
+            Sum.Lower := Lower_Product;
+            Sum.Upper := Upper_Product;
+         else
+            Sum.Lower := Sum.Lower + Lower_Product;
+            Sum.Upper := Sum.Upper + Upper_Product;
+            Inflate_Finite_Endpoints (Sum.Lower, Sum.Upper);
+         end if;
+      end Accumulate_Product;
+
+      function Unscaled_Product return Interval_Polynomial;
+      --  Preserve the original weighted convolution when the faster intermediate scaling overflows.
+
+      function Unscaled_Product return Interval_Polynomial is
+         Product : Interval_Polynomial (0 .. Degree) := [others => Interval_Exact (0.0)];
+      begin
+         for I in Left'Range loop
+            for J in Right'Range loop
+               declare
+                  Weight : constant Interval :=
+                    Bernstein_Product_Weight (Left'Last, I, Right'Last, J, Degree, I + J);
+                  Term : Interval := Interval_Multiply (Left (I), Right (J));
+               begin
+                  if not Usable (Term) then
+                     return
+                       [0 .. Degree => (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False)];
+                  end if;
+                  Term := Interval_Multiply (Weight, Term);
+                  if not Usable (Term) then
+                     return
+                       [0 .. Degree => (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False)];
+                  end if;
+                  Product (I + J) := Interval_Add (Product (I + J), Term);
+                  if not Usable (Product (I + J)) then
+                     return
+                       [0 .. Degree => (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False)];
+                  end if;
+               end;
+            end loop;
+         end loop;
+         return Product;
+      end Unscaled_Product;
+   begin
+      --  C(m+n,k) * (Left*Right)_k = sum_(i+j=k) (C(m,i)*Left_i) * (C(n,j)*Right_j).
+      --  All scales are positive. This retains Bernstein form without an alternating power-basis conversion.
+      --  Enclose each scale, product, sum and final quotient independently. Scaling costs O(m+n), and the quadratic
+      --  convolution needs only one interval multiplication per term instead of a product and a separate weight.
+      if Left'Last = 0 or else Right'Last = 0 then
+         return Unscaled_Product;
+      end if;
+      for I in Left'Range loop
+         Scaled_Left (I) := Scale_By_Positive (Left (I), Binomial_Scales (Binomial_Index (Left'Last, I)).Factor);
+         if not Usable (Scaled_Left (I)) then
+            return Unscaled_Product;
+         end if;
+         Left_Max := Dimensionless'Max (Left_Max, Interval_Abs_Max (Scaled_Left (I)));
+      end loop;
+      for J in Right'Range loop
+         Scaled_Right (J) := Scale_By_Positive (Right (J), Binomial_Scales (Binomial_Index (Right'Last, J)).Factor);
+         if not Usable (Scaled_Right (J)) then
+            return Unscaled_Product;
+         end if;
+         Right_Max := Dimensionless'Max (Right_Max, Interval_Abs_Max (Scaled_Right (J)));
+      end loop;
+      --  Both operands have been validated before skipping zero terms. In particular, zero must never conceal an
+      --  invalid coefficient in the other operand. The maxima also identify all-zero polynomials without rescanning.
+      if Left_Max = 0.0 or else Right_Max = 0.0 then
+         return Result;
+      end if;
+      declare
+         Larger  : constant Dimensionless := Dimensionless'Max (Left_Max, Right_Max);
+         Smaller : constant Dimensionless := Dimensionless'Min (Left_Max, Right_Max);
+         Limit   : constant Dimensionless :=
+           (Dimensionless'Last / 4.0) / Dimensionless (Natural'Min (Left'Length, Right'Length));
+      begin
+         --  At most min(m+1,n+1) terms contribute to one control. Reserve a factor of four for outward rounding so
+         --  no product or partial sum can overflow, even before cancellation. This also covers release builds where
+         --  floating overflow need not raise: a saturated intermediate must never be divided back into a bound.
+         if Larger > 1.0 and then Smaller > Limit / Larger then
+            return Unscaled_Product;
+         end if;
+      end;
+      for I in Left'Range loop
+         if Scaled_Left (I).Lower /= 0.0 or else Scaled_Left (I).Upper /= 0.0 then
+            for J in Right'Range loop
+               Accumulate_Product (Result (I + J), Scaled_Left (I), Scaled_Right (J));
+            end loop;
+         end if;
+      end loop;
+      for K in Result'Range loop
+         if not Usable (Result (K)) then
+            return Unscaled_Product;
+         end if;
+         Result (K) :=
+           Scale_By_Positive (Result (K), Binomial_Scales (Binomial_Index (Degree, K)).Reciprocal);
+      end loop;
+      return Result;
+   exception
+      when Constraint_Error =>
+         return Unscaled_Product;
+   end Multiply_Bernstein;
 
    function Interval_Abs_Max (Value : Interval) return Dimensionless is
    begin
@@ -2520,7 +2807,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --  to the requested range, and bounds it by outward-rounded De Casteljau subdivision. The smooth endpoint
       --  correction is bounded independently and added only after the rational part has been certified.
       subtype Polynomial_Index is Natural range 0 .. Maximum_Derivative_Bernstein_Degree;
-      type Polynomial is array (Polynomial_Index) of Interval;
+      subtype Polynomial is Interval_Polynomial (Polynomial_Index);
       type Axis_Polynomials is array (Axis_Name) of Polynomial;
       type Axis_Bounds is array (Axis_Name) of Dimensionless;
       type Axis_Flags is array (Axis_Name) of Boolean;
@@ -2580,78 +2867,17 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             return Invalid_Interval;
       end Divide_Intervals;
 
-      --  Enclose the Bernstein product or degree-elevation weight
-      --
-      --     C(Left_N, Left_K) * C(Right_N, Right_K) / C(Denominator_N, Denominator_K).
-      --
-      --  The integer products are exact; only their final conversion and division need outward rounding.
-      function Exact_Binomial_Product_Ratio
-        (Left_N, Left_K, Right_N, Right_K, Denominator_N, Denominator_K : Natural) return Interval;
-      --  Enclose a ratio of exact binomial-coefficient products.
-
-      function Exact_Binomial_Product_Ratio
-        (Left_N, Left_K, Right_N, Right_K, Denominator_N, Denominator_K : Natural) return Interval
-      is
-         use type Interfaces.Unsigned_128;
-         Numerator   : constant Exact_Binomial_Value :=
-           Exact_Binomial (Left_N, Left_K) * Exact_Binomial (Right_N, Right_K);
-         Denominator : constant Exact_Binomial_Value := Exact_Binomial (Denominator_N, Denominator_K);
-      begin
-         if Denominator = 0 then
-            return Invalid_Interval;
-         elsif Numerator = 0 then
-            return Interval_Exact (0.0);
-         elsif Numerator = Denominator then
-            return Interval_Exact (1.0);
-         end if;
-         declare
-            Numerator_Centre   : constant Dimensionless := Dimensionless (Numerator);
-            Denominator_Centre : constant Dimensionless := Dimensionless (Denominator);
-            Numerator_Bound    : constant Interval :=
-              Checked_Interval (Down (Numerator_Centre), Up (Numerator_Centre));
-            Denominator_Bound  : constant Interval :=
-              Checked_Interval (Down (Denominator_Centre), Up (Denominator_Centre));
-         begin
-            --  Both bounds are strictly positive. Specializing their quotient avoids constructing a reciprocal and
-            --  feeding it through the generic four-product interval multiplier for every Bernstein product weight.
-            return
-              Checked_Interval
-                (Down (Numerator_Bound.Lower / Denominator_Bound.Upper),
-                 Up (Numerator_Bound.Upper / Denominator_Bound.Lower));
-         end;
-      exception
-         when Constraint_Error =>
-            return Invalid_Interval;
-      end Exact_Binomial_Product_Ratio;
-
-      --  Multiply two Bernstein polynomials without converting through the cancellation-prone power basis. The
-      --  weighted convolution uses Exact_Binomial_Product_Ratio so every resulting control remains an enclosure.
       function Multiply_Bernstein
         (Left : Polynomial; Left_Degree : Natural; Right : Polynomial; Right_Degree : Natural) return Polynomial;
-      --  Multiply two Bernstein polynomials using exact combinatorial weights.
+      --  Multiply active controls and pad the shared kernel's result to the derivative workspace size.
 
       function Multiply_Bernstein
         (Left : Polynomial; Left_Degree : Natural; Right : Polynomial; Right_Degree : Natural) return Polynomial
       is
-         Result         : Polynomial := [others => Interval_Exact (0.0)];
-         Product_Degree : constant Natural := Left_Degree + Right_Degree;
+         Result : Polynomial := [others => Interval_Exact (0.0)];
       begin
-         if Product_Degree > Maximum_Derivative_Bernstein_Degree then
-            return [others => Invalid_Interval];
-         end if;
-         for I in 0 .. Left_Degree loop
-            for J in 0 .. Right_Degree loop
-               declare
-                  Product_Index : constant Natural := I + J;
-                  Weight        : constant Interval :=
-                    Exact_Binomial_Product_Ratio (Left_Degree, I, Right_Degree, J, Product_Degree, Product_Index);
-               begin
-                  Result (Product_Index) :=
-                    Interval_Add
-                      (Result (Product_Index), Interval_Multiply (Weight, Interval_Multiply (Left (I), Right (J))));
-               end;
-            end loop;
-         end loop;
+         Result (0 .. Left_Degree + Right_Degree) :=
+           Multiply_Bernstein (Left (0 .. Left_Degree), Right (0 .. Right_Degree));
          return Result;
       exception
          when Constraint_Error =>
@@ -2671,30 +2897,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          elsif Source_Degree = Target_Degree then
             return Source;
          end if;
-         for Target_Index in 0 .. Target_Degree loop
-            declare
-               Degree_Increase : constant Natural := Target_Degree - Source_Degree;
-               First_Source    : constant Natural :=
-                 (if Target_Index > Degree_Increase then Target_Index - Degree_Increase else 0);
-               Last_Source     : constant Natural := Natural'Min (Source_Degree, Target_Index);
-            begin
-               for Source_Index in First_Source .. Last_Source loop
-                  declare
-                     Weight : constant Interval :=
-                       Exact_Binomial_Product_Ratio
-                         (Source_Degree,
-                          Source_Index,
-                          Degree_Increase,
-                          Target_Index - Source_Index,
-                          Target_Degree,
-                          Target_Index);
-                  begin
-                     Result (Target_Index) :=
-                       Interval_Add (Result (Target_Index), Interval_Multiply (Weight, Source (Source_Index)));
-                  end;
-               end loop;
-            end;
-         end loop;
+         Result (0 .. Target_Degree) :=
+           Multiply_Bernstein
+             (Source (0 .. Source_Degree),
+              Interval_Polynomial'(0 .. Target_Degree - Source_Degree => Interval_Exact (1.0)));
          return Result;
       exception
          when Constraint_Error =>
@@ -2807,22 +3013,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Right := [others => Invalid_Interval];
       end Split_Bernstein;
 
-      --  Form the outward-rounded midpoint used by dyadic subdivision. Halving before addition avoids overflow and
-      --  equal inputs are preserved exactly so subdivision does not widen constant controls.
-      function Valid_Interval_Midpoint (First, Last : Interval) return Interval;
-      --  Construct a valid outward-rounded midpoint interval between two coefficients.
-
-      function Valid_Interval_Midpoint (First, Last : Interval) return Interval is
-      begin
-         if First.Lower = Last.Lower and then First.Upper = Last.Upper then
-            return First;
-         end if;
-         --  Halving first prevents overflow. The dyadic products are exact for normal model numbers, and the
-         --  Model_Small component of Down/Up covers possible subnormal loss, so only one outward expansion is needed.
-         return
-           Checked_Interval (Down (0.5 * First.Lower + 0.5 * Last.Lower), Up (0.5 * First.Upper + 0.5 * Last.Upper));
-      end Valid_Interval_Midpoint;
-
       --  Specialized De Casteljau split at one half for a single polynomial. It avoids repeated generic interval
       --  multiplication on the adaptive-certification path while retaining the generic fallback for invalid inputs.
       procedure Split_Bernstein_Midpoint (Source : Polynomial; Degree : Natural; Left, Right : out Polynomial);
@@ -2830,10 +3020,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       procedure Split_Bernstein_Midpoint (Source : Polynomial; Degree : Natural; Left, Right : out Polynomial) is
       begin
-         --  Invalid controls are not expected on the certified path. Retain the generic split's exact propagation
-         --  semantics for them rather than making the optimized loop pay a validity branch at every triangle node.
+         --  A convex midpoint cannot increase the endpoint magnitude before rounding. Starting below Last/4 leaves
+         --  ample room for the outward inflation at all 84 levels, including Model_Small padding. This establishes
+         --  finiteness for the entire triangle and avoids rechecking it at every node. Extreme or invalid controls
+         --  retain the generic splitter's checked arithmetic.
          for Index in 0 .. Degree loop
-            if not Source (Index).Valid then
+            if not Source (Index).Valid
+              or else not (abs Source (Index).Lower <= Dimensionless'Last / 4.0)
+              or else not (abs Source (Index).Upper <= Dimensionless'Last / 4.0)
+            then
                Split_Bernstein (Source, Degree, Interval_Exact (0.5), Left, Right);
                return;
             end if;
@@ -2850,7 +3045,16 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                --  Right doubles as the de Casteljau workspace. Updating in ascending order leaves Index + 1 intact
                --  until it has contributed and naturally leaves every right-child boundary in its final slot.
                for Index in 0 .. Degree - Level loop
-                  Right (Index) := Valid_Interval_Midpoint (Right (Index), Right (Index + 1));
+                  --  Every control is already valid. Updating the endpoints directly avoids constructing and
+                  --  copying a record, including its unchanged validity flag, at every node of the triangle.
+                  if Right (Index).Lower /= Right (Index + 1).Lower
+                    or else Right (Index).Upper /= Right (Index + 1).Upper
+                  then
+                     --  Halving is exact for normal model numbers; the padding also covers subnormal loss.
+                     Right (Index).Lower := 0.5 * Right (Index).Lower + 0.5 * Right (Index + 1).Lower;
+                     Right (Index).Upper := 0.5 * Right (Index).Upper + 0.5 * Right (Index + 1).Upper;
+                     Inflate_Finite_Endpoints (Right (Index).Lower, Right (Index).Upper);
+                  end if;
                end loop;
                Left (Level) := Right (0);
             end loop;
@@ -2860,108 +3064,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Left := [others => Invalid_Interval];
             Right := [others => Invalid_Interval];
       end Split_Bernstein_Midpoint;
-
-      --  Split a common denominator and all active axis numerators in one De Casteljau traversal. Sharing this work
-      --  preserves corresponding subranges and avoids repeating the denominator calculation for every machine axis.
-      procedure Split_Rational_Bernstein_Midpoint
-        (Source_Numerators                   : Axis_Polynomials;
-         Source_Denominator                  : Polynomial;
-         Active_Axes                         : Axis_Flags;
-         Degree                              : Natural;
-         Left_Numerators, Right_Numerators   : out Axis_Polynomials;
-         Left_Denominator, Right_Denominator : out Polynomial);
-      --  Split the active numerator and denominator polynomials at the midpoint.
-
-      procedure Split_Rational_Bernstein_Midpoint
-        (Source_Numerators                   : Axis_Polynomials;
-         Source_Denominator                  : Polynomial;
-         Active_Axes                         : Axis_Flags;
-         Degree                              : Natural;
-         Left_Numerators, Right_Numerators   : out Axis_Polynomials;
-         Left_Denominator, Right_Denominator : out Polynomial)
-      is
-         All_Valid : Boolean := True;
-      begin
-         for Index in 0 .. Degree loop
-            if not Source_Denominator (Index).Valid then
-               All_Valid := False;
-               exit;
-            end if;
-         end loop;
-         if All_Valid then
-            for Axis in Axis_Name loop
-               if Active_Axes (Axis) then
-                  for Index in 0 .. Degree loop
-                     if not Source_Numerators (Axis) (Index).Valid then
-                        All_Valid := False;
-                        exit;
-                     end if;
-                  end loop;
-               end if;
-               exit when not All_Valid;
-            end loop;
-         end if;
-
-         Left_Numerators := [others => [others => Interval_Exact (0.0)]];
-         Right_Numerators := [others => [others => Interval_Exact (0.0)]];
-         if not All_Valid then
-            Split_Bernstein_Midpoint (Source_Denominator, Degree, Left_Denominator, Right_Denominator);
-            for Axis in Axis_Name loop
-               if Active_Axes (Axis) then
-                  Split_Bernstein_Midpoint
-                    (Source_Numerators (Axis), Degree, Left_Numerators (Axis), Right_Numerators (Axis));
-               end if;
-            end loop;
-            return;
-         end if;
-
-         Left_Denominator := [others => Interval_Exact (0.0)];
-         Right_Denominator := [others => Interval_Exact (0.0)];
-         for Index in 0 .. Degree loop
-            Right_Denominator (Index) := Source_Denominator (Index);
-         end loop;
-         for Axis in Axis_Name loop
-            if Active_Axes (Axis) then
-               for Index in 0 .. Degree loop
-                  Right_Numerators (Axis) (Index) := Source_Numerators (Axis) (Index);
-               end loop;
-               Left_Numerators (Axis) (0) := Right_Numerators (Axis) (0);
-            end if;
-         end loop;
-         Left_Denominator (0) := Right_Denominator (0);
-
-         if Degree > 0 then
-            for Level in 1 .. Degree loop
-               for Index in 0 .. Degree - Level loop
-                  Right_Denominator (Index) :=
-                    Valid_Interval_Midpoint (Right_Denominator (Index), Right_Denominator (Index + 1));
-               end loop;
-               Left_Denominator (Level) := Right_Denominator (0);
-               for Axis in Axis_Name loop
-                  if Active_Axes (Axis) then
-                     for Index in 0 .. Degree - Level loop
-                        Right_Numerators (Axis) (Index) :=
-                          Valid_Interval_Midpoint
-                            (Right_Numerators (Axis) (Index), Right_Numerators (Axis) (Index + 1));
-                     end loop;
-                     Left_Numerators (Axis) (Level) := Right_Numerators (Axis) (0);
-                  end if;
-               end loop;
-            end loop;
-         end if;
-      exception
-         when Constraint_Error =>
-            Left_Denominator := [others => Invalid_Interval];
-            Right_Denominator := [others => Invalid_Interval];
-            Left_Numerators := [others => [others => Interval_Exact (0.0)]];
-            Right_Numerators := [others => [others => Interval_Exact (0.0)]];
-            for Axis in Axis_Name loop
-               if Active_Axes (Axis) then
-                  Left_Numerators (Axis) := [others => Invalid_Interval];
-                  Right_Numerators (Axis) := [others => Invalid_Interval];
-               end if;
-            end loop;
-      end Split_Rational_Bernstein_Midpoint;
 
       --  Evaluate Source at T by splitting it and taking the shared boundary control.
       function Evaluate_Bernstein (Source : Polynomial; Degree : Natural; T : Interval) return Interval;
@@ -3086,7 +3188,26 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Valid             : out Axis_Flags)
          is
             Denominator_Is_Valid : Boolean := True;
-            Reciprocals          : Polynomial := [others => Interval_Exact (0.0)];
+            Reciprocal_Uppers    : array (Polynomial_Index) of Dimensionless := [others => 0.0];
+
+            function Control_Bound (Numerator : Interval; Reciprocal_Upper : Dimensionless) return Dimensionless;
+            --  Only the absolute upper bound is needed for a hull; a full signed quotient interval is unnecessary.
+
+            function Control_Bound (Numerator : Interval; Reciprocal_Upper : Dimensionless) return Dimensionless is
+               Magnitude : constant Dimensionless := Interval_Abs_Max (Numerator);
+               Bound     : Dimensionless;
+            begin
+               if not Numerator.Valid then
+                  return Dimensionless'Last;
+               elsif Magnitude = 0.0 then
+                  return 0.0;
+               end if;
+               Bound := Up (Magnitude * Reciprocal_Upper);
+               return (if Is_Finite (Bound) then Bound else Dimensionless'Last);
+            exception
+               when Constraint_Error =>
+                  return Dimensionless'Last;
+            end Control_Bound;
          begin
             Bounds := [others => 0.0];
             Valid := [others => False];
@@ -3095,11 +3216,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   Denominator_Is_Valid := False;
                   exit;
                end if;
-               Reciprocals (Index) := Divide_Intervals (Interval_Exact (1.0), Local_Denominator (Index));
-               if not Reciprocals (Index).Valid then
-                  Denominator_Is_Valid := False;
-                  exit;
-               end if;
+               declare
+                  Reciprocal : constant Interval := Divide_Intervals (Interval_Exact (1.0), Local_Denominator (Index));
+               begin
+                  if not Reciprocal.Valid then
+                     Denominator_Is_Valid := False;
+                     exit;
+                  end if;
+                  Reciprocal_Uppers (Index) := Reciprocal.Upper;
+               end;
             end loop;
             if not Denominator_Is_Valid then
                for Axis in Axis_Name loop
@@ -3114,15 +3239,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   Valid (Axis) := True;
                   for Index in 0 .. Degree loop
                      declare
-                        Quotient : constant Interval :=
-                          Interval_Multiply (Local_Numerators (Axis) (Index), Reciprocals (Index));
+                        Bound : constant Dimensionless :=
+                          Control_Bound (Local_Numerators (Axis) (Index), Reciprocal_Uppers (Index));
                      begin
-                        if not Quotient.Valid then
+                        if Bound >= Dimensionless'Last then
                            Bounds (Axis) := Dimensionless'Last;
                            Valid (Axis) := False;
                            exit;
                         end if;
-                        Bounds (Axis) := Dimensionless'Max (Bounds (Axis), Interval_Abs_Max (Quotient));
+                        Bounds (Axis) := Dimensionless'Max (Bounds (Axis), Bound);
                      end;
                   end loop;
                   if Valid (Axis) then
@@ -3222,15 +3347,16 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   Left_Denominator, Right_Denominator : Polynomial;
                   Left_Bounds, Right_Bounds           : Axis_Bounds;
                begin
-                  Split_Rational_Bernstein_Midpoint
-                    (Local_Numerators,
-                     Local_Denominator,
-                     Need_Split,
-                     Degree,
-                     Left_Numerators,
-                     Right_Numerators,
-                     Left_Denominator,
-                     Right_Denominator);
+                  --  Split the denominator once and use the same polynomial splitter for each loose axis.
+                  Split_Bernstein_Midpoint (Local_Denominator, Degree, Left_Denominator, Right_Denominator);
+                  Left_Numerators := [others => [others => Interval_Exact (0.0)]];
+                  Right_Numerators := [others => [others => Interval_Exact (0.0)]];
+                  for Axis in Axis_Name loop
+                     if Need_Split (Axis) then
+                        Split_Bernstein_Midpoint
+                          (Local_Numerators (Axis), Degree, Left_Numerators (Axis), Right_Numerators (Axis));
+                     end if;
+                  end loop;
                   Left_Bounds := Refined_Bounds (Left_Numerators, Left_Denominator, Need_Split, Depth + 1);
                   Right_Bounds := Refined_Bounds (Right_Numerators, Right_Denominator, Need_Split, Depth + 1);
                   for Axis in Axis_Name loop
@@ -3402,11 +3528,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --  Advance the rational derivative numerator recurrence to Order.
 
       procedure Advance_Numerators (Order : Majorant_Order) is
-         Derivatives        : Axis_Polynomials := [others => [others => Interval_Exact (0.0)]];
-         First_Products     : Axis_Polynomials := [others => [others => Interval_Exact (0.0)]];
-         Second_Products    : Axis_Polynomials := [others => [others => Interval_Exact (0.0)]];
-         Differences        : Axis_Polynomials := [others => [others => Interval_Exact (0.0)]];
-         Next_Numerators    : Axis_Polynomials := [others => [others => Interval_Exact (0.0)]];
          Derivative_Degree  : Natural;
          Difference_Degree  : Natural;
          Next_Degree        : Natural;
@@ -3414,117 +3535,37 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Reciprocal_Divisor : constant Interval := Checked_Interval (Down (1.0 / Divisor), Up (1.0 / Divisor));
       begin
          if Q_Degree = 0 then
-            --  A degree-zero rational tangent is constant in V. Every higher derivative of its rational part is
-            --  therefore exactly zero; endpoint correction is still added independently below.
+            --  A constant rational tangent has no higher derivatives; endpoint correction is added separately.
             Numerators := [others => [others => Interval_Exact (0.0)]];
             Zero_Numerator_Axes := [others => True];
             Numerator_Degree := 0;
             return;
          end if;
 
-         Derivative_Degree := Numerator_Degree - 1;
-         for Axis in Axis_Name loop
-            if not Zero_Numerator_Axes (Axis) then
-               declare
-                  Computed_Degree : Natural;
-                  Derivative      : constant Polynomial :=
-                    Differentiate_Bernstein (Numerators (Axis), Numerator_Degree, Computed_Degree);
-               begin
-                  if Computed_Degree /= Derivative_Degree then
-                     raise Constraint_Error;
-                  end if;
-                  Derivatives (Axis) := Derivative;
-               end;
-            end if;
-         end loop;
-
-         Difference_Degree := Derivative_Degree + Q_Degree;
-         --  Accumulate N' * Q once in the same I/J order as Multiply_Bernstein, but reuse every binomial weight for
-         --  all axes. Scaling remains after the complete product so interval operation ordering is unchanged.
-         for I in 0 .. Derivative_Degree loop
-            for J in 0 .. Q_Degree loop
-               declare
-                  Product_Index : constant Natural := I + J;
-                  Weight        : constant Interval :=
-                    Exact_Binomial_Product_Ratio (Derivative_Degree, I, Q_Degree, J, Difference_Degree, Product_Index);
-               begin
-                  for Axis in Axis_Name loop
-                     if not Zero_Numerator_Axes (Axis) then
-                        First_Products (Axis) (Product_Index) :=
-                          Interval_Add
-                            (First_Products (Axis) (Product_Index),
-                             Interval_Multiply (Weight, Interval_Multiply (Derivatives (Axis) (I), Q (J))));
-                     end if;
-                  end loop;
-               end;
-            end loop;
-         end loop;
-
-         --  N * Q' has the same degree. Keep its independent accumulator so subtraction still happens only after
-         --  both complete Bernstein products have been outward-rounded.
-         for I in 0 .. Numerator_Degree loop
-            for J in 0 .. Q_Derivative_Degree loop
-               declare
-                  Product_Index : constant Natural := I + J;
-                  Weight        : constant Interval :=
-                    Exact_Binomial_Product_Ratio
-                      (Numerator_Degree, I, Q_Derivative_Degree, J, Difference_Degree, Product_Index);
-               begin
-                  for Axis in Axis_Name loop
-                     if not Zero_Numerator_Axes (Axis) then
-                        Second_Products (Axis) (Product_Index) :=
-                          Interval_Add
-                            (Second_Products (Axis) (Product_Index),
-                             Interval_Multiply (Weight, Interval_Multiply (Numerators (Axis) (I), Q_Derivative (J))));
-                     end if;
-                  end loop;
-               end;
-            end loop;
-         end loop;
-
-         for Axis in Axis_Name loop
-            if not Zero_Numerator_Axes (Axis) then
-               for Index in 0 .. Difference_Degree loop
-                  Differences (Axis) (Index) :=
-                    Interval_Subtract
-                      (Interval_Multiply (Reciprocal_Divisor, First_Products (Axis) (Index)),
-                       Second_Products (Axis) (Index));
-               end loop;
-            end if;
-         end loop;
-
+         Difference_Degree := Numerator_Degree - 1 + Q_Degree;
          Next_Degree := Difference_Degree + G_Degree;
-         if G_Degree = 0 then
-            Next_Numerators := Differences;
-         else
-            --  G is common to every axis. Preserve Multiply_Bernstein's common-polynomial-first accumulation order
-            --  while generating each product weight only once.
-            for I in 0 .. G_Degree loop
-               for J in 0 .. Difference_Degree loop
-                  declare
-                     Product_Index : constant Natural := I + J;
-                     Weight        : constant Interval :=
-                       Exact_Binomial_Product_Ratio (G_Degree, I, Difference_Degree, J, Next_Degree, Product_Index);
-                  begin
-                     for Axis in Axis_Name loop
-                        if not Zero_Numerator_Axes (Axis) then
-                           Next_Numerators (Axis) (Product_Index) :=
-                             Interval_Add
-                               (Next_Numerators (Axis) (Product_Index),
-                                Interval_Multiply (Weight, Interval_Multiply (G (I), Differences (Axis) (J))));
-                        end if;
-                     end loop;
-                  end;
-               end loop;
-            end loop;
-         end if;
-
          for Axis in Axis_Name loop
-            if Zero_Numerator_Axes (Axis) or else Is_Exact_Zero (Next_Numerators (Axis), Next_Degree) then
-               Numerators (Axis) := [others => Interval_Exact (0.0)];
-               Zero_Numerator_Axes (Axis) := True;
-            else
-               Numerators (Axis) := Next_Numerators (Axis);
+            if not Zero_Numerator_Axes (Axis) then
+               declare
+                  Derivative     : constant Polynomial :=
+                    Differentiate_Bernstein (Numerators (Axis), Numerator_Degree, Derivative_Degree);
+                  First_Product  : constant Polynomial :=
+                    Multiply_Bernstein (Derivative, Derivative_Degree, Q, Q_Degree);
+                  Second_Product : constant Polynomial :=
+                    Multiply_Bernstein (Numerators (Axis), Numerator_Degree, Q_Derivative, Q_Derivative_Degree);
+                  Difference     : Polynomial := [others => Interval_Exact (0.0)];
+               begin
+                  for Index in 0 .. Difference_Degree loop
+                     Difference (Index) :=
+                       Interval_Subtract
+                         (Interval_Multiply (Reciprocal_Divisor, First_Product (Index)), Second_Product (Index));
+                  end loop;
+                  Numerators (Axis) :=
+                    (if G_Degree = 0
+                     then Difference
+                     else Multiply_Bernstein (G, G_Degree, Difference, Difference_Degree));
+                  Zero_Numerator_Axes (Axis) := Is_Exact_Zero (Numerators (Axis), Next_Degree);
+               end;
             end if;
          end loop;
          Numerator_Degree := Next_Degree;
@@ -4574,7 +4615,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    --  The final representation certificate compares two rational tangent fields in Bernstein form. Degree sixteen
    --  is enough for either numerator or denominator; cross multiplication therefore needs degree thirty-two.
    subtype Certificate_Polynomial_Index is Natural range 0 .. 2 * Maximum_Rational_Degree;
-   type Certificate_Polynomial is array (Certificate_Polynomial_Index) of Interval;
+   subtype Certificate_Polynomial is Interval_Polynomial (Certificate_Polynomial_Index);
    type Certificate_Centres is array (Certificate_Polynomial_Index) of Dimensionless;
    type Quadratic_Factor_Coefficients is array (Natural range 0 .. 2) of Interval;
 
@@ -4590,7 +4631,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    function Multiply_Bernstein
      (Left : Certificate_Polynomial; Left_Degree : Natural; Right : Certificate_Polynomial; Right_Degree : Natural)
       return Certificate_Polynomial;
-   --  Multiply certificate polynomials in Bernstein form with interval coefficients.
+   --  Multiply active controls and pad to the tangent-certificate workspace size.
 
    function Multiply_Bernstein
      (Left : Certificate_Polynomial; Left_Degree : Natural; Right : Certificate_Polynomial; Right_Degree : Natural)
@@ -4598,21 +4639,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    is
       Result : Certificate_Polynomial := [others => Interval_Exact (0.0)];
    begin
-      for I in 0 .. Left_Degree loop
-         for J in 0 .. Right_Degree loop
-            declare
-               Product_Degree : constant Natural := Left_Degree + Right_Degree;
-               Product_Index  : constant Natural := I + J;
-               Raw_Weight     : constant Dimensionless :=
-                 Binomial (Left_Degree, I) * Binomial (Right_Degree, J) / Binomial (Product_Degree, Product_Index);
-               Weight         : constant Interval := Checked_Interval (Down (Raw_Weight), Up (Raw_Weight));
-            begin
-               Result (Product_Index) :=
-                 Interval_Add
-                   (Result (Product_Index), Interval_Multiply (Weight, Interval_Multiply (Left (I), Right (J))));
-            end;
-         end loop;
-      end loop;
+      Result (0 .. Left_Degree + Right_Degree) :=
+        Multiply_Bernstein (Left (0 .. Left_Degree), Right (0 .. Right_Degree));
       return Result;
    end Multiply_Bernstein;
 
@@ -6091,7 +6119,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       --  Closure is solved in chord-normalized coordinates. Tie both Newton tolerances to the available normalized
       --  position budget ε = Maximum_Position_Error/Chord_Length, while retaining an arithmetic noise floor.
-      First_Coarse_Solution : constant Closure_Solution :=
+      Coarse_Solution : constant Closure_Solution :=
         (if Initial_Closure.Valid
          then
            --  Select_Distance_Warp integrates the endpoint-flat chart in its natural coordinate, where even a strong
@@ -6110,7 +6138,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
               Initial     => (others => <>),
               Panel_Count => 1));
 
-      Coarse_Solution : constant Closure_Solution := First_Coarse_Solution;
       Solution        : constant Closure_Solution :=
         (if Initial_Closure.Valid
          then
