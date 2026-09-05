@@ -17,6 +17,7 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.IO_Exceptions;
 with Prunt.Mockable.Text_IO.Unbounded_IO;
 with VSS.Strings.Conversions;
 
@@ -33,8 +34,8 @@ package body Prunt.Gcode_Queues is
                Current_File.Open (Mode => Mockable.Text_IO.In_File, Name => Conversions.To_UTF_8_String (File_Name));
                Succeeded := True;
             exception
-               --  TODO: Handle specific exceptions.
-               when others =>
+               --  Expected filesystem failures are ordinary failed opens. Let unexpected exceptions propagate.
+               when Ada.IO_Exceptions.Name_Error | Ada.IO_Exceptions.Use_Error | Ada.IO_Exceptions.Device_Error =>
                   Succeeded := False;
             end;
          end if;

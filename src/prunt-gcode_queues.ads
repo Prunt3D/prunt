@@ -38,7 +38,7 @@ package Prunt.Gcode_Queues is
    protected type Queue is
       procedure Try_Set_File (File_Name : Virtual_String; Succeeded : out Boolean);
       --  Set the next file to run as soon as possible. Succeeded is set to False if a file is already enqueued or
-      --  running.
+      --  running, or if opening the file raises Name_Error, Use_Error, or Device_Error. Other exceptions propagate.
 
       procedure Stop_Waiting;
       --  Wake any task blocked in Get_Next_Line and have its next call return with Stopped = True.
