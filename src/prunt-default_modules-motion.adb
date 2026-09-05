@@ -408,6 +408,18 @@ package body Prunt.Default_Modules.Motion is
       Context.Log (This.Message);
    end Process_After_Block;
 
+   overriding
+   procedure Process_After_Block (This : Motion_Wait_Event; Context : Block_End_Context'Class) is
+      pragma Unreferenced (This);
+   begin
+      Context.Wait_For_Idle;
+   end Process_After_Block;
+
+   procedure Wait_For_Motion (Planner : Planner_Interface'Class) is
+   begin
+      Planner.Flush (Motion_Wait_Event'(null record));
+   end Wait_For_Motion;
+
    function Bounds_Checked_Position
      (Target             : Position;
       Behavior           : User_Config_Pause_Park_Out_Of_Bounds_Behavior;

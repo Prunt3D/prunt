@@ -440,6 +440,12 @@ private
    procedure Process_After_Block (This : Motion_Report_Event; Context : Block_End_Context'Class);
    --  Log a motion report.
 
+   type Motion_Wait_Event is new Extra_Block_Resetting_Data with null record;
+
+   overriding
+   procedure Process_After_Block (This : Motion_Wait_Event; Context : Block_End_Context'Class);
+   --  Wait for hardware execution to finish the preceding motion block.
+
    procedure Rapid_Linear_Move
      (This     : Module_Instance;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -882,6 +888,14 @@ private
       Planner  : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M221");
    --  Report flow percentage.
+
+   procedure Wait_For_Motion (Planner : Planner_Interface'Class)
+   with Annotate => (Prunt_Config, Gcode_Command, "M400");
+   --  Finish the current motion block and come to a complete stop.
+   --
+   --  This is mostly provided for compatibility as a zero second pause command will do the same thing. Prunt already
+   --  runs commands in the order they appear in files instead of running them out-of-order like other motion planners,
+   --  so using this for synchronization is unnecessary.
 
    protected type Module_Instance is new My_Modules.Module_Instance
    and Pause_Handler
