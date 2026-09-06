@@ -241,7 +241,10 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       R     : Position;
    begin
       for Axis in Axis_Name loop
-         R (Axis) := Arc.Centre (Axis) + Arc.Radius * (Arc.Radial_Start (Axis) * C + Arc.Tangent_Start (Axis) * Sine);
+         R (Axis) :=
+           (if Arc.Radial_Start (Axis) = 0.0 and then Arc.Tangent_Start (Axis) = 0.0
+            then Arc.Centre (Axis)
+            else Arc.Centre (Axis) + Arc.Radius * (Arc.Radial_Start (Axis) * C + Arc.Tangent_Start (Axis) * Sine));
       end loop;
       return R;
    end Arc_Point;
@@ -446,8 +449,13 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       A : constant Dimensionless := 1.0 - T;
    begin
       for Axis in Axis_Name loop
+         --  The Bernstein weights sum to one only in exact arithmetic. Preserve a constant coordinate directly
+         --  so rounding cannot introduce motion on an otherwise stationary axis.
          R (Axis) :=
-           A ** 2 * P.Start_Point (Axis) + 2.0 * A * T * P.Control_Point (Axis) + T ** 2 * P.Finish_Point (Axis);
+           (if P.Start_Point (Axis) = P.Control_Point (Axis) and then P.Control_Point (Axis) = P.Finish_Point (Axis)
+            then P.Start_Point (Axis)
+            else
+              A ** 2 * P.Start_Point (Axis) + 2.0 * A * T * P.Control_Point (Axis) + T ** 2 * P.Finish_Point (Axis));
       end loop;
       return R;
    end Bezier_Point;
@@ -898,7 +906,12 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          Q0 := Start_Point + T0 * D0;
          Q1 := Finish_Point - T1 * D1;
          for Axis in Axis_Name loop
-            Join (Axis) := (Ratio * Q0 (Axis) + Q1 (Axis)) / (Ratio + 1.0);
+            --  A rounded weighted average of identical coordinates can leave their plane. That would give both
+            --  arcs a spurious displacement and prevent structural constant-axis detection.
+            Join (Axis) :=
+              (if Q0 (Axis) = Q1 (Axis)
+               then Q0 (Axis)
+               else (Ratio * Q0 (Axis) + Q1 (Axis)) / (Ratio + 1.0));
          end loop;
          Arc_From_Start (Start_Point, Join, T0, First, Good_First);
          Arc_From_Start (Finish_Point, Join, T1 * (-1.0), Reverse_Second, Good_Second);

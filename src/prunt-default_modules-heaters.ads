@@ -26,6 +26,10 @@ with Prunt.Default_Modules.Thermistors;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
 
+private with Ada.Finalization;
+private with Ada.Real_Time;
+private with Prunt.Limited_Shared_Pointers;
+
 generic
    Heater_Hardware : My_Controller_Generic_Types.Heater_Hardware_Parameters_Array_Type;
    with package Thermistors_Module is new Default_Modules.Thermistors (Thermistor_Hardware => <>);
@@ -48,6 +52,9 @@ package Prunt.Default_Modules.Heaters is
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
    --  Return the status schema.
 
+   function Extrusion_Is_Allowed return Boolean;
+   --  Lock-free real-time query of the temperature sampler's cached permission.
+
    type Module_Instance_Interface is synchronized interface;
 
    function Heater_Is_Enabled_In_Config (This : Module_Instance_Interface; Heater : Heater_Name) return Boolean
@@ -65,7 +72,9 @@ package Prunt.Default_Modules.Heaters is
    type Module_Instance (<>) is synchronized
      new My_Modules.Module_Instance
      and Module_Instance_Interface
-     and Pause_Handler with private;
+     and Pause_Handler
+     and Extrusion_Setpoint_Validator
+     and Cancellation_Handler with private;
 
    overriding
    function Initialize
@@ -154,6 +163,23 @@ private
    with Pre => Action.Kind in Set_Pause_Target;
    --  Return the pause target.
 
+   type User_Config_Cold_Extrusion_Prevention_Kind is (Disabled, Enabled) with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Cold_Extrusion_Prevention (Kind : User_Config_Cold_Extrusion_Prevention_Kind := Disabled) is record
+      --  Require this heater to be hot before moving the extruder in either direction. Generally this should only be
+      --  enabled for hotends.
+
+      case Kind is
+         when Disabled =>
+            null;
+
+         when Enabled =>
+            Minimum_Temperature : Temperature range 0.0 * celsius .. 1.0E100 * celsius := 170.0 * celsius;
+            --  Extruder motion raises an error below this measured temperature.
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
    type User_Config_Heater (Kind : User_Config_Heater_Kind := Disabled) is record
       --  This section contains the configuration for a single heater.
 
@@ -186,6 +212,9 @@ private
 
             Control_Method : User_Config_Heater_Control_Method := (others => <>);
             --  Select the control method for this heater.
+
+            Cold_Extrusion_Prevention : User_Config_Cold_Extrusion_Prevention := (others => <>);
+            --  Configure the minimum measured temperature for extruder motion.
 
             Pause_Action : User_Config_Heater_Pause_Action := (others => <>);
             --  Select the target to use while paused. Targets changed for pause are restored during resume.
@@ -272,9 +301,9 @@ private
    type Heater_Target_Array is array (Heater_Name) of Temperature;
 
    procedure Set_Hotend_Temperature
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      S       : Dimensionless
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless
       --  Hotend target temperature in Celsius.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M104");
@@ -283,9 +312,9 @@ private
    --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
 
    procedure Wait_For_Hotend_Temperature_Heat
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      S       : Dimensionless
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless
       --  Hotend target temperature in Celsius.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M109");
@@ -295,9 +324,9 @@ private
    --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
 
    procedure Wait_For_Hotend_Temperature_Heat_Or_Cool
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      R       : Dimensionless
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      R        : Dimensionless
       --  Hotend target temperature in Celsius.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M109");
@@ -307,9 +336,9 @@ private
    --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
 
    procedure Set_Bed_Temperature
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      S       : Dimensionless
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless
       --  Bed target temperature in Celsius.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M140");
@@ -318,9 +347,9 @@ private
    --  This command differs from Marlin in that the I parameter is not available.
 
    procedure Set_Chamber_Temperature
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      S       : Dimensionless
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless
       --  Chamber target temperature in Celsius.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M141");
@@ -328,11 +357,11 @@ private
    --  temperature.
 
    procedure Wait_For_Bed_Temperature_Heat
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      S       : Dimensionless;
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless;
       --  Bed target temperature in Celsius.
-      T       : Dimensionless := 0.0
+      T        : Dimensionless := 0.0
       --  If present then spread out heating over this many seconds.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M190");
@@ -347,11 +376,11 @@ private
    --  for heating as well as cooling.
 
    procedure Wait_For_Bed_Temperature_Heat_Or_Cool
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      R       : Dimensionless;
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      R        : Dimensionless;
       --  Bed target temperature in Celsius.
-      T       : Dimensionless := 0.0
+      T        : Dimensionless := 0.0
       --  If present then spread out heating over this many seconds.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M190");
@@ -365,9 +394,9 @@ private
    --  for heating as well as cooling.
 
    procedure Wait_For_Chamber_Temperature_Heat
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      S       : Dimensionless
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless
       --  Chamber target temperature in Celsius.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M191");
@@ -375,9 +404,9 @@ private
    --  for the chamber to heat up, it does not wait for the chamber to cool down.
 
    procedure Wait_For_Chamber_Temperature_Heat_Or_Cool
-     (This    : Module_Instance;
-      Planner : Planner_Interface'Class;
-      R       : Dimensionless
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      R        : Dimensionless
       --  Chamber target temperature in Celsius.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M191");
@@ -389,9 +418,36 @@ private
    function To_Heater_Parameters (Config : User_Config_Heater) return Heater_Parameters;
    --  Convert a heater configuration.
 
+   Extrusion_Sample_Period       : constant Duration := 0.05;
+   Extrusion_Permission_Lifetime : constant Duration := 0.5;
+   Extrusion_Allowed_Until       : Ada.Real_Time.Time := Ada.Real_Time.Time_Last
+   with Atomic;
+   --  Time_Last disables the guard. Time_First denies extrusion.
+
+   function Extrusion_Temperature_Is_Safe
+     (Settings : User_Config; Thermistors_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref) return Boolean;
+   --  Sensor access for the background sampler only.
+
+   task type Extrusion_Temperature_Monitor is
+      entry Start (Settings : User_Config; Thermistors_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref);
+      entry Stop;
+   end Extrusion_Temperature_Monitor;
+
+   type Extrusion_Temperature_Monitor_Wrapper is new Ada.Finalization.Limited_Controlled with record
+      Monitor : Extrusion_Temperature_Monitor;
+   end record;
+
+   overriding
+   procedure Finalize (Object : in out Extrusion_Temperature_Monitor_Wrapper);
+
+   package Extrusion_Temperature_Monitor_Pointers is new
+     Prunt.Limited_Shared_Pointers (Extrusion_Temperature_Monitor_Wrapper);
+
    protected type Module_Instance is new My_Modules.Module_Instance
    and Module_Instance_Interface
-   and Pause_Handler with
+   and Pause_Handler
+   and Extrusion_Setpoint_Validator
+   and Cancellation_Handler with
       procedure Initialize
         (Config_In                           : User_Config;
          Status_Emitter_In                   : Status_Manager.Status_Emitter;
@@ -411,6 +467,19 @@ private
       function Build_Target_Command (Heater : Heater_Name; Target : Temperature) return Heater_Target_Command;
 
       procedure Record_Heater_Target (Heater : Heater_Name; Target : Temperature);
+
+      procedure Record_Planned_Target (Heater : Heater_Name; Target : Temperature);
+      --  Called by G-code handlers only after successfully queuing a target. Pause/resume commands leave the primary
+      --  planned targets unchanged; execution updates Current_Targets separately.
+
+      overriding
+      procedure Validate_Extrusion_Setpoints;
+
+      overriding
+      procedure Handle_Cancel
+        (Executed_Corner_ID      : Planner_Corner_ID;
+         Cancellation_Barrier_ID : Planner_Corner_ID;
+         Current_Position        : Position);
 
       procedure Save_Pause_Targets;
 
@@ -446,12 +515,14 @@ private
 
       function Get_Default_Heater (Selection : User_Config_Default_Heater; Display_Name : String) return Heater_Name;
    private
+      Monitor                              : Extrusion_Temperature_Monitor_Pointers.Ref;
       Config                               : User_Config;
       Self_Ref                             : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Thermistors_Module_Instance_Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Blocking_Tracker_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Target_Status_Setters                : Heater_Target_Status_Setters;
       Current_Targets                      : Heater_Target_Array := [others => 0.0 * celsius];
+      Planned_Targets                      : Heater_Target_Array := [others => 0.0 * celsius];
       Pause_Targets                        : Heater_Target_Array := [others => 0.0 * celsius];
       Pause_Targets_Valid                  : Boolean := False;
    end Module_Instance;

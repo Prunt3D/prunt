@@ -655,6 +655,7 @@ private
         Motor_Position               => Motor_Position,
         Motor_Delta_Limits           => Motor_Position,
         Maximum_Deltas_Per_Command   => Hardware_Maximum_Deltas_Per_Command,
+        Extrusion_Is_Allowed         => My_Default_Modules_Children.Heaters.Extrusion_Is_Allowed,
         Start_Planner_Block          => Start_Planner_Block,
         Start_Pause_Planner_Block    => Start_Planner_Block,
         Enqueue_Command              => Enqueue_Command_Internal,
@@ -842,6 +843,7 @@ private
    Config_Save_Preparer_Instances  : Handler_Instances;
    Cancellation_Handler_Instances  : Handler_Instances;
    Idle_Notification_Instances     : Handler_Instances;
+   Extrusion_Validator_Instances   : Handler_Instances;
    --  We use these wrappers because the instances need to be accessed from multiple threads.
 
    protected Gcode_Cancellation_Barrier is
@@ -1027,6 +1029,10 @@ private
    overriding
    procedure Log_If_Interactive (This : Planner_Block_End_Context; Message : Virtual_String);
    --  Route output only when This belongs to an interactive command.
+
+   overriding
+   procedure Validate_Extrusion (This : Planner_Wrapper; E_Delta : Length);
+   --  Check queued heater setpoints before accepting user extrusion commands.
 
    overriding
    procedure Add_Corner

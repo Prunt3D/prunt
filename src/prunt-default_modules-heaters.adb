@@ -242,6 +242,19 @@ package body Prunt.Default_Modules.Heaters is
                         end if;
                      end;
                   end if;
+                  if Parsed_Config.Heaters (H).Cold_Extrusion_Prevention.Kind = Enabled
+                    and then
+                      Thermistors_Module_Instance.Thermistor_Is_Enabled_In_Config
+                        (Parsed_Config.Heaters (H).Thermistor)
+                    and then
+                      Parsed_Config.Heaters (H).Cold_Extrusion_Prevention.Minimum_Temperature
+                      > Thermistors_Module_Instance.Get_Thermistor_Parameters (Parsed_Config.Heaters (H).Thermistor)
+                          .Maximum_Temperature
+                  then
+                     Report_Config_Error
+                       (My_Config_Paths.Root.Heaters (H).Cold_Extrusion_Prevention.Minimum_Temperature,
+                        "The minimum extrusion temperature is above the thermistor maximum.");
+                  end if;
                end if;
             end loop;
 
@@ -301,14 +314,102 @@ package body Prunt.Default_Modules.Heaters is
       end return;
    end Initialize;
 
+   function Extrusion_Is_Allowed return Boolean is
+      Deadline : constant Ada.Real_Time.Time := Extrusion_Allowed_Until;
+   begin
+      return Deadline = Ada.Real_Time.Time_Last or else Ada.Real_Time.Clock <= Deadline;
+   end Extrusion_Is_Allowed;
+
+   function Extrusion_Temperature_Is_Safe
+     (Settings : User_Config; Thermistors_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref) return Boolean
+   is
+      Thermistors_Instance : Thermistors_Module.Module_Instance_Interface'Class renames
+        Thermistors_Module.Module_Instance_Interface'Class (Thermistors_Ref.Get.Element.all);
+   begin
+      for H in Heater_Name loop
+         if Settings.Heaters (H).Kind = Enabled
+           and then Settings.Heaters (H).Cold_Extrusion_Prevention.Kind = Enabled
+           and then
+             not (Thermistors_Instance.Get_Temperature (Settings.Heaters (H).Thermistor, Requires_Fresh => True)
+                  >= Settings.Heaters (H).Cold_Extrusion_Prevention.Minimum_Temperature)
+         then
+            return False;
+         end if;
+      end loop;
+      return True;
+   end Extrusion_Temperature_Is_Safe;
+
+   task body Extrusion_Temperature_Monitor is
+      Config  : User_Config;
+      Sensors : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Stopped : Boolean := False;
+   begin
+      select
+         accept Stop;
+         Stopped := True;
+      or
+         accept Start (Settings : User_Config; Thermistors_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref) do
+            Config := Settings;
+            Sensors := Thermistors_Ref;
+            Extrusion_Allowed_Until := Ada.Real_Time.Time_First;
+         end Start;
+      end select;
+
+      while not Stopped loop
+         declare
+            Sample_Start : constant Ada.Real_Time.Time := Ada.Real_Time.Clock;
+         begin
+            if Extrusion_Temperature_Is_Safe (Config, Sensors) then
+               --  Date the permission before sampling: a stalled sensor call cannot publish a fresh permission.
+               Extrusion_Allowed_Until := Sample_Start + Ada.Real_Time.To_Time_Span (Extrusion_Permission_Lifetime);
+            else
+               Extrusion_Allowed_Until := Ada.Real_Time.Time_First;
+            end if;
+         end;
+
+         select
+            accept Stop do
+               Stopped := True;
+               Extrusion_Allowed_Until := Ada.Real_Time.Time_First;
+            end Stop;
+         or
+            delay Extrusion_Sample_Period;
+         end select;
+      end loop;
+   exception
+      when others =>
+         Extrusion_Allowed_Until := Ada.Real_Time.Time_First;
+         raise;
+   end Extrusion_Temperature_Monitor;
+
+   overriding
+   procedure Finalize (Object : in out Extrusion_Temperature_Monitor_Wrapper) is
+   begin
+      if not Object.Monitor'Terminated then
+         Object.Monitor.Stop;
+      end if;
+   end Finalize;
+
    protected body Module_Instance is
       procedure Initialize
         (Config_In                           : User_Config;
          Status_Emitter_In                   : Status_Manager.Status_Emitter;
          Thermistors_Module_Instance_In      : My_Modules.Module_Instance_Shared_Pointers.Ref;
-         Blocking_Tracker_Module_Instance_In : My_Modules.Module_Instance_Shared_Pointers.Ref) is
+         Blocking_Tracker_Module_Instance_In : My_Modules.Module_Instance_Shared_Pointers.Ref)
+      is
+         function Make_Monitor return Extrusion_Temperature_Monitor_Wrapper;
+
+         function Make_Monitor return Extrusion_Temperature_Monitor_Wrapper is
+         begin
+            return Result : Extrusion_Temperature_Monitor_Wrapper;
+         end Make_Monitor;
       begin
          Config := Config_In;
+         if (for some H in Heater_Name =>
+               Config.Heaters (H).Kind = Enabled and then Config.Heaters (H).Cold_Extrusion_Prevention.Kind = Enabled)
+         then
+            Monitor.Set (Make_Monitor'Access);
+         end if;
 
          Thermistors_Module_Instance_Ref := Thermistors_Module_Instance_In;
          Blocking_Tracker_Module_Instance_Ref := Blocking_Tracker_Module_Instance_In;
@@ -345,8 +446,14 @@ package body Prunt.Default_Modules.Heaters is
                Heater_Hardware (H).Set_Temperature (H, Min_Temp);
                Target_Status_Setters (H).Set_Value (Min_Temp / celsius);
                Current_Targets (H) := Min_Temp;
+               Planned_Targets (H) := Min_Temp;
             end;
          end loop;
+         if Monitor.Is_Null then
+            Extrusion_Allowed_Until := Ada.Real_Time.Time_Last;
+         else
+            Monitor.Get.Monitor.Start (Config, Thermistors_Module_Instance_Ref);
+         end if;
       end Start;
 
       procedure Handle_Pause (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class) is
@@ -409,6 +516,43 @@ package body Prunt.Default_Modules.Heaters is
       begin
          Current_Targets (Heater) := Target;
       end Record_Heater_Target;
+
+      procedure Record_Planned_Target (Heater : Heater_Name; Target : Temperature) is
+      begin
+         Planned_Targets (Heater) := Target;
+      end Record_Planned_Target;
+
+      procedure Validate_Extrusion_Setpoints is
+      begin
+         for H in Heater_Name loop
+            if Config.Heaters (H).Kind = Enabled
+              and then Config.Heaters (H).Cold_Extrusion_Prevention.Kind = Enabled
+              and then Planned_Targets (H) < Config.Heaters (H).Cold_Extrusion_Prevention.Minimum_Temperature
+            then
+               raise Gcode_Bad_Inputs_Error
+                 with
+                   "Cold extrusion prevented: heater "
+                   & H'Image
+                   & " has a queued setpoint of "
+                   & Dimensionless'Image (Planned_Targets (H) / celsius)
+                   & " C; minimum extrusion temperature is "
+                   & Dimensionless'Image (Config.Heaters (H).Cold_Extrusion_Prevention.Minimum_Temperature / celsius)
+                   & " C.";
+            end if;
+         end loop;
+      end Validate_Extrusion_Setpoints;
+
+      procedure Handle_Cancel
+        (Executed_Corner_ID      : Planner_Corner_ID;
+         Cancellation_Barrier_ID : Planner_Corner_ID;
+         Current_Position        : Position)
+      is
+         pragma Unreferenced (Executed_Corner_ID, Cancellation_Barrier_ID, Current_Position);
+      begin
+         --  Hardware target commands take effect when processed, so Current_Targets is authoritative after the
+         --  cancellation barrier. If paused, resume will restore the targets saved before the pause override.
+         Planned_Targets := (if Pause_Targets_Valid then Pause_Targets else Current_Targets);
+      end Handle_Cancel;
 
       procedure Save_Pause_Targets is
       begin
@@ -538,59 +682,82 @@ package body Prunt.Default_Modules.Heaters is
       end Get_Config;
    end Module_Instance;
 
-   procedure Set_Hotend_Temperature (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless) is
+   procedure Set_Hotend_Temperature
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
+   is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend");
    begin
-      Planner.Add_Corner_Data
-        (This.Build_Target_Command (This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"), S * celsius));
+      Planner.Add_Corner_Data (This.Build_Target_Command (Heater, S * celsius));
+      This.Record_Planned_Target (Heater, S * celsius);
    end Set_Hotend_Temperature;
 
    procedure Wait_For_Hotend_Temperature_Heat
-     (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
    is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend");
    begin
       Planner.Flush
         (This.Build_Temperature_Wait
-           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"),
+           (Heater               => Heater,
             Target               => S * celsius,
             Wait_Only_If_Heating => True,
             Ramp_Duration        => 0.0 * Prunt.s,
             Ramp_Only_If_Heating => True));
+      This.Record_Planned_Target (Heater, S * celsius);
    end Wait_For_Hotend_Temperature_Heat;
 
    procedure Wait_For_Hotend_Temperature_Heat_Or_Cool
-     (This : Module_Instance; Planner : Planner_Interface'Class; R : Dimensionless)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; R : Dimensionless)
    is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend");
    begin
       Planner.Flush
         (This.Build_Temperature_Wait
-           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend"),
+           (Heater               => Heater,
             Target               => R * celsius,
             Wait_Only_If_Heating => False,
             Ramp_Duration        => 0.0 * Prunt.s,
             Ramp_Only_If_Heating => True));
+      This.Record_Planned_Target (Heater, R * celsius);
    end Wait_For_Hotend_Temperature_Heat_Or_Cool;
 
-   procedure Set_Bed_Temperature (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless) is
+   procedure Set_Bed_Temperature
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
+   is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed");
    begin
-      Planner.Add_Corner_Data
-        (This.Build_Target_Command (This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"), S * celsius));
+      Planner.Add_Corner_Data (This.Build_Target_Command (Heater, S * celsius));
+      This.Record_Planned_Target (Heater, S * celsius);
    end Set_Bed_Temperature;
 
-   procedure Set_Chamber_Temperature (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless) is
+   procedure Set_Chamber_Temperature
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
+   is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber");
    begin
-      Planner.Add_Corner_Data
-        (This.Build_Target_Command (This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"), S * celsius));
+      Planner.Add_Corner_Data (This.Build_Target_Command (Heater, S * celsius));
+      This.Record_Planned_Target (Heater, S * celsius);
    end Set_Chamber_Temperature;
 
    procedure Wait_For_Bed_Temperature_Heat
-     (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless; T : Dimensionless := 0.0)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless;
+      T        : Dimensionless := 0.0)
    is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed");
    begin
       if T < 0.0 then
          raise Gcode_Bad_Inputs_Error with "The T parameter must not be less than 0.";
@@ -598,17 +765,23 @@ package body Prunt.Default_Modules.Heaters is
 
       Planner.Flush
         (This.Build_Temperature_Wait
-           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"),
+           (Heater               => Heater,
             Target               => S * celsius,
             Wait_Only_If_Heating => True,
             Ramp_Duration        => T * Prunt.s,
             Ramp_Only_If_Heating => True));
+      This.Record_Planned_Target (Heater, S * celsius);
    end Wait_For_Bed_Temperature_Heat;
 
    procedure Wait_For_Bed_Temperature_Heat_Or_Cool
-     (This : Module_Instance; Planner : Planner_Interface'Class; R : Dimensionless; T : Dimensionless := 0.0)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      R        : Dimensionless;
+      T        : Dimensionless := 0.0)
    is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed");
    begin
       if T < 0.0 then
          raise Gcode_Bad_Inputs_Error with "The T parameter must not be less than 0.";
@@ -616,39 +789,46 @@ package body Prunt.Default_Modules.Heaters is
 
       Planner.Flush
         (This.Build_Temperature_Wait
-           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Bed, "bed"),
+           (Heater               => Heater,
             Target               => R * celsius,
             Wait_Only_If_Heating => False,
             Ramp_Duration        => T * Prunt.s,
             Ramp_Only_If_Heating => False));
+      This.Record_Planned_Target (Heater, R * celsius);
    end Wait_For_Bed_Temperature_Heat_Or_Cool;
 
    procedure Wait_For_Chamber_Temperature_Heat
-     (This : Module_Instance; Planner : Planner_Interface'Class; S : Dimensionless)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
    is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber");
    begin
       Planner.Flush
         (This.Build_Temperature_Wait
-           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"),
+           (Heater               => Heater,
             Target               => S * celsius,
             Wait_Only_If_Heating => True,
             Ramp_Duration        => 0.0 * Prunt.s,
             Ramp_Only_If_Heating => False));
+      This.Record_Planned_Target (Heater, S * celsius);
    end Wait_For_Chamber_Temperature_Heat;
 
    procedure Wait_For_Chamber_Temperature_Heat_Or_Cool
-     (This : Module_Instance; Planner : Planner_Interface'Class; R : Dimensionless)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; R : Dimensionless)
    is
+      This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
+      Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber");
    begin
       Planner.Flush
         (This.Build_Temperature_Wait
-           (Heater               => This.Get_Default_Heater (Config.Gcode_Defaults.Chamber, "chamber"),
+           (Heater               => Heater,
             Target               => R * celsius,
             Wait_Only_If_Heating => False,
             Ramp_Duration        => 0.0 * Prunt.s,
             Ramp_Only_If_Heating => False));
+      This.Record_Planned_Target (Heater, R * celsius);
    end Wait_For_Chamber_Temperature_Heat_Or_Cool;
 
 end Prunt.Default_Modules.Heaters;

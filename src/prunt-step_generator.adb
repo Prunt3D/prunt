@@ -245,6 +245,20 @@ package body Prunt.Step_Generator is
             end if;
          end loop;
 
+         if State.Extrusion_Check_Cycles_Remaining > 0 then
+            State.Extrusion_Check_Cycles_Remaining := @ - 1;
+         elsif Emit_Pos (E_Axis) /= State.Last_Queued_Position (E_Axis) then
+            for Motor in Motor_Name loop
+               if not Pin_To_Block_Start (Motor) and then Transform_Motor_Affects_Axis (Transform, Motor, E_Axis) then
+                  if not Extrusion_Is_Allowed then
+                     raise Constraint_Error with "Cold extrusion prevented.";
+                  end if;
+                  State.Extrusion_Check_Cycles_Remaining := Extrusion_Check_Interval_Cycles - 1;
+                  exit;
+               end if;
+            end loop;
+         end if;
+
          State.Current_Command_Index := @ + 1;
          State.Last_Queued_Position := Emit_Pos;
          Enqueue_Command
@@ -523,6 +537,7 @@ package body Prunt.Step_Generator is
          Do_Halt := False;
          Reset_Control.Acknowledge;
          Commands.Last_Queued_Position := [others => Zero_Length];
+         Commands.Extrusion_Check_Cycles_Remaining := 0;
 
          accept Setup (Transform : Kinematic_Transform) do
             Active_Transform := Transform;

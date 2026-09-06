@@ -23,6 +23,10 @@ with Prunt.Bounded_Indefinite_Vectors_Test;
 with Prunt.Config.Test;
 with Prunt.Controller_Generic_Types;
 with Prunt.Default_Modules;
+with Prunt.Default_Modules.Blocking_Tracker;
+with Prunt.Default_Modules.Thermistors;
+with Prunt.Default_Modules.Heaters;
+with Prunt.Default_Modules.Heaters.Test;
 with Prunt.Default_Modules.Config_Saving;
 with Prunt.Default_Modules.Idle_Emitter;
 with Prunt.Default_Modules.Machine_Idle_Timeout;
@@ -65,6 +69,14 @@ procedure Tests is
        (My_Controller_Generic_Types => Machine_Idle_Timeout_Test_Controller_Types,
         My_Logger                   => Machine_Idle_Timeout_Test_Logger);
    package Machine_Idle_Timeout_Test_Config_Saving is new Machine_Idle_Timeout_Test_Default_Modules.Config_Saving;
+   package Cold_Extrusion_Thermistors is new Machine_Idle_Timeout_Test_Default_Modules.Thermistors
+     (Thermistor_Hardware => [others => (Reconfigure => null, Get_Temperature => null)]);
+   package Cold_Extrusion_Blocking_Tracker is new Machine_Idle_Timeout_Test_Default_Modules.Blocking_Tracker;
+   package Cold_Extrusion_Heaters is new Machine_Idle_Timeout_Test_Default_Modules.Heaters
+     (Heater_Hardware => [others => (Reconfigure => null, Set_Temperature => null, Autotune => null)],
+      Thermistors_Module => Cold_Extrusion_Thermistors,
+      Blocking_Tracker_Module => Cold_Extrusion_Blocking_Tracker);
+   package Cold_Extrusion_Test is new Cold_Extrusion_Heaters.Test;
    Timeout_Report_Count : Natural := 0 with Atomic, Volatile;
 
    function Get_Timeout_Report_Count return Natural is (Timeout_Report_Count);
@@ -126,6 +138,7 @@ procedure Tests is
 begin
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);
+   Trendy_Test.Register (Cold_Extrusion_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Long_Float_Test.All_Tests);
    Trendy_Test.Register (Prunt.Bounded_Indefinite_Queues_Test.All_Tests);

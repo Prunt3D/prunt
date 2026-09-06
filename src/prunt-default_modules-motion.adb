@@ -919,6 +919,11 @@ package body Prunt.Default_Modules.Motion is
                    ((E_Delta < 0.0 * mm and then not Planned_State.Is_Retracted)
                     or else (E_Delta > 0.0 * mm and then Planned_State.Is_Retracted))
                then
+                  Planner.Validate_Extrusion
+                    ((if E_Delta < 0.0 * mm
+                      then -Planned_State.Retract_Length
+                      else Planned_State.Retract_Length + Planned_State.Recover_Extra_Length)
+                     * Planned_State.Flow_Scale);
                   if Persistent_Feedrate_Change then
                      Planned_State.Feedrate := Command_Feedrate;
                      Maybe_Queue_Planned_State (Planner);
@@ -940,6 +945,7 @@ package body Prunt.Default_Modules.Motion is
            + (Target_Logical (E_Axis) - Logical_Position (E_Axis)) * Planned_State.Flow_Scale;
 
          Target_Physical (Z_Axis) := Target_Physical (Z_Axis) + Planned_State.Current_Z_Hop;
+         Planner.Validate_Extrusion (Target_Physical (E_Axis) - Physical_Position (E_Axis));
 
          if Persistent_Feedrate_Change then
             Planned_State.Feedrate := Command_Feedrate;
@@ -1182,6 +1188,7 @@ package body Prunt.Default_Modules.Motion is
             end if;
          end;
 
+         Planner.Validate_Extrusion (Target_Physical (E_Axis) - Physical_Position (E_Axis));
          Commit_Persistent_Feedrate_Change;
 
          if Use_Linear_Fallback then
@@ -1223,6 +1230,7 @@ package body Prunt.Default_Modules.Motion is
             Target            : Position := Physical_Position;
          begin
             Target (E_Axis) := Target (E_Axis) - Planned_State.Retract_Length * Planned_State.Flow_Scale;
+            Planner.Validate_Extrusion (Target (E_Axis) - Physical_Position (E_Axis));
             if Target /= Physical_Position or else Planned_State.Retract_Z_Lift > 0.0 * mm then
                Ensure_Can_Queue_Planned_State (Planner);
             end if;
@@ -1257,6 +1265,7 @@ package body Prunt.Default_Modules.Motion is
             E_Delta           : constant Length :=
               (Planned_State.Retract_Length + Planned_State.Recover_Extra_Length) * Planned_State.Flow_Scale;
          begin
+            Planner.Validate_Extrusion (E_Delta);
             if Planned_State.Current_Z_Hop /= 0.0 * mm or else E_Delta /= 0.0 * mm then
                Ensure_Can_Queue_Planned_State (Planner);
             end if;
@@ -1393,6 +1402,7 @@ package body Prunt.Default_Modules.Motion is
          end if;
 
          Target_Physical (Z_Axis) := Target_Physical (Z_Axis) + Planned_State.Current_Z_Hop;
+         Planner.Validate_Extrusion (Target_Physical (E_Axis) - Physical_Position (E_Axis));
 
          Ensure_Can_Queue_Planned_State (Planner);
 

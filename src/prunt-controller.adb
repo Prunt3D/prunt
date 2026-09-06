@@ -564,6 +564,25 @@ package body Prunt.Controller is
    end Process_After_Block;
 
    overriding
+   procedure Validate_Extrusion (This : Planner_Wrapper; E_Delta : Length) is
+      Handlers : Module_Instance_Vectors.Vector;
+   begin
+      if E_Delta = 0.0 * mm or else This.Target /= Primary_Planner_Target then
+         return;
+      end if;
+      if not (for some Motor in Motor_Name =>
+                Transforms.Motor_Affects_Axis (Current_Kinematic_Transform, Motor, E_Axis))
+      then
+         return;
+      end if;
+
+      Extrusion_Validator_Instances.Snapshot (Handlers);
+      for Instance of Handlers loop
+         Extrusion_Setpoint_Validator'Class (Instance.Get.Element.all).Validate_Extrusion_Setpoints;
+      end loop;
+   end Validate_Extrusion;
+
+   overriding
    procedure Add_Corner
      (This          : Planner_Wrapper;
       Pos           : Position;
@@ -1041,6 +1060,12 @@ package body Prunt.Controller is
             Started := False;
          else
             Setup_Runtime_Pipeline;
+            Extrusion_Validator_Instances.Load
+              (Module_Instance_Vectors.Vector'
+                 [for Instance of
+                      Active_Module_Instances
+                      when Instance.Get.Element.all in Extrusion_Setpoint_Validator'Class =>
+                    Instance]);
             Pause_Handler_Instances.Load
               (Module_Instance_Vectors.Vector'
                  [for Instance of Active_Module_Instances when Instance.Get.Element.all in Pause_Handler'Class =>
@@ -1087,6 +1112,7 @@ package body Prunt.Controller is
 
       procedure Clear_Active_Modules is
       begin
+         Extrusion_Validator_Instances.Clear;
          Pause_Handler_Instances.Clear;
          Planner_State_Handler_Instances.Clear;
          Config_Save_Preparer_Instances.Clear;
@@ -1834,8 +1860,7 @@ package body Prunt.Controller is
                declare
                   --  There is no point trying to load the modules if there are errors when testing against the schema
                   --  as no patch is applied in that case.
-                  My_Config_File             : constant Config.Config_File :=
-                    Active_Config_File.Stored_Snapshot;
+                  My_Config_File             : constant Config.Config_File := Active_Config_File.Stored_Snapshot;
                   Temporary_Module_Instances : Module_Instance_Maps.Map :=
                     Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File);
                begin

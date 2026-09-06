@@ -765,10 +765,111 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
       Assert_Evaluator_Matches (Sharp, "Sharp SCV", T);
    end Test_Zero_Length_Policy_Separation;
 
+   procedure Test_Constant_Axes (T : in out Trendy_Test.Operation'Class) is
+      Values : constant array (Positive range <>) of Length :=
+        [100.0 * mm, 0.1 * mm, -123.456 * mm, 1.0E6 * mm];
+
+      procedure Check (Curve : Corner_Transition; Axis : Axis_Name; Expected : Length);
+
+      procedure Check (Curve : Corner_Transition; Axis : Axis_Name; Expected : Length) is
+         Evaluator : constant Corner_Transition_Evaluator := To_Evaluator (Curve);
+         Exact : Boolean := True;
+      begin
+         T.Assert
+           (Axis_Is_Structurally_Constant (Curve, Axis)
+            and then Axis_Is_Structurally_Constant (Evaluator, Axis),
+            Transition_Kind (Curve)'Image & " identifies constant " & Axis'Image);
+         for Sample in 0 .. 1_000 loop
+            declare
+               U : constant Transition_Parameter := Dimensionless (Sample) / 1_000.0;
+               D : constant Length := Arc_Length (Curve) * U;
+            begin
+               Exact := Exact
+                 and then Point_At_Distance (Curve, D) (Axis) = Expected
+                 and then Point_At_Distance (Evaluator, D) (Axis) = Expected
+                 and then Point_At_Parameter (Curve, U) (Axis) = Expected
+                 and then Point_At_Parameter (Evaluator, U) (Axis) = Expected;
+            end;
+         end loop;
+         Exact := Exact
+           and then Point_At_Distance (Curve, Split_Distance (Curve)) (Axis) = Expected
+           and then Point_At_Distance (Evaluator, Split_Distance (Evaluator)) (Axis) = Expected;
+         T.Assert
+           (Exact, Transition_Kind (Curve)'Image & " preserves " & Axis'Image & " exactly at" & Expected'Image);
+      end Check;
+   begin
+      T.Register;
+      for Axis in Axis_Name loop
+         for Value of Values loop
+            declare
+               First_Axis : constant Axis_Name := Axis_Name'Val ((Axis_Name'Pos (Axis) + 1) mod 4);
+               Second_Axis : constant Axis_Name := Axis_Name'Val ((Axis_Name'Pos (Axis) + 2) mod 4);
+               Start : Position := [others => 0.0 * mm];
+               Corner, Finish : Position;
+               Incoming, Outgoing : Position_Scale := [others => 0.0];
+               Request : Stereographic_Curves.Blend_Request;
+               Result : Construction_Result;
+            begin
+               Start (Axis) := Value;
+               Corner := Start;
+               Corner (First_Axis) := 10.0 * mm;
+               Finish := Corner;
+               Finish (Second_Axis) := 10.0 * mm;
+               Incoming (First_Axis) := 1.0;
+               Outgoing (Second_Axis) := 1.0;
+
+               Check (Stop_At (Start), Axis, Value);
+               Check (Passthrough_At (Start), Axis, Value);
+               Check (Sharp_At (Start, 1.0 * mm / s), Axis, Value);
+               for Kind in Circular_Transition .. Biarc_Transition loop
+                  Result :=
+                    (case Kind is
+                       when Circular_Transition => Create_Circular (Start, Corner, Finish),
+                       when Parabolic_Transition => Create_Parabolic (Start, Corner, Finish),
+                       when Biarc_Transition =>
+                         Create_Biarc (Start, Finish, Incoming, Outgoing, Preferred_Trim_Ratio => 0.1));
+                  Assert_Construction_Succeeded (Result, Kind'Image, T);
+                  Check (Result.Transition, Axis, Value);
+               end loop;
+
+               Request.Start.Point := Start;
+               Request.Start.Jet.Tangent := Incoming;
+               Request.Finish.Point := Finish;
+               Request.Finish.Jet.Tangent := Outgoing;
+               Request.Maximum_Position_Error := 1.0E-3 * mm;
+               Request.Maximum_Arc_Length := 40.0 * mm;
+               Result := Create_Stereographic (Request);
+               Assert_Construction_Succeeded (Result, "constant-axis stereographic", T);
+               Check (Result.Transition, Axis, Value);
+            end;
+         end loop;
+      end loop;
+      declare
+         Start : constant Position := [E_Axis => 100.0 * mm, others => 0.0 * mm];
+         Corner : Position := Start;
+         Finish : Position := Start;
+         Result : Construction_Result;
+      begin
+         Corner (X_Axis) := 10.0 * mm;
+         Finish (X_Axis) := 10.0 * mm;
+         Finish (Y_Axis) := 10.0 * mm;
+         for I in 1 .. 4 loop
+            Corner (E_Axis) := Length'Adjacent (Corner (E_Axis), Length'Last);
+         end loop;
+         Result := Create_Parabolic (Start, Corner, Finish);
+         Assert_Construction_Succeeded (Result, "four-ULP E excursion", T);
+         T.Assert
+           (not Axis_Is_Structurally_Constant (Result.Transition, E_Axis)
+            and then Point_At_Distance (Result.Transition, Split_Distance (Result.Transition)) (E_Axis) /= Start (E_Axis),
+            "equal endpoints must not suppress a genuine four-ULP control-point excursion");
+      end;
+   end Test_Constant_Axes;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Zero_Length_Policy_Separation'Access,
+        [Test_Constant_Axes'Access,
+         Test_Zero_Length_Policy_Separation'Access,
          Test_SCV_Angles_And_Axis_Selection'Access,
          Test_Circular_R4_Geometry_And_Bounds'Access,
          Test_Parabolic_R4_Geometry_And_Bounds'Access,

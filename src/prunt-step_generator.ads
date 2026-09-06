@@ -67,6 +67,10 @@ generic
         Safe_Stop_After : Boolean;
         Vel_Ratio       : Dimensionless);
 
+   with function Extrusion_Is_Allowed return Boolean;
+   --  Called on extrusion at most once per 100 ms worth of interpolation cycles, with an immediate first check after
+   --  setup. Called in the real-time path, so avoid long waits and locks.
+
    with procedure Start_Corner (Last_Command_Index : Command_Index; Data : Planner.Corner_Extra_Data_Type);
 
    with procedure Start_Pause_Corner (Last_Command_Index : Command_Index; Data : Pause_Planner.Corner_Extra_Data_Type);
@@ -138,9 +142,13 @@ private
 
    type Motor_Pin_Selection is array (Motor_Name) of Boolean;
 
+   Extrusion_Check_Interval_Cycles : constant Positive :=
+     Positive (Dimensionless'Ceiling (0.1 * s / Interpolation_Time));
+
    type Command_State is record
-      Current_Command_Index : Command_Index := 0;
-      Last_Queued_Position  : Position := [others => 0.0 * mm];
+      Current_Command_Index            : Command_Index := 0;
+      Last_Queued_Position             : Position := [others => 0.0 * mm];
+      Extrusion_Check_Cycles_Remaining : Natural range 0 .. Extrusion_Check_Interval_Cycles := 0;
    end record;
    --  Tracks the shared command-index stream and last queued position across primary and pause execution.
 

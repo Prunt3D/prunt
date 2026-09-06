@@ -272,6 +272,12 @@ package Prunt.Module_Types is
    is null;
    --  Discard or commit pending module state at a cancellation barrier and synchronize it with Current_Position.
 
+   type Extrusion_Setpoint_Validator is synchronized interface;
+
+   procedure Validate_Extrusion_Setpoints (This : in out Extrusion_Setpoint_Validator) is abstract;
+   --  Reject extrusion against insufficient queued heater setpoints with Gcode_Bad_Inputs_Error. This is a
+   --  command-planning check; it must not consult the current measured temperature or run in the real-time path.
+
    procedure Mark_Axis_Homed (This : Planner_Interface; Axis : Axis_Name) is abstract;
    --  Mark Axis as homed. Primary planners block on an execution marker so cancellation leaves Axis unhomed; isolated
    --  pause planners update only their speculative pause state.
@@ -285,6 +291,10 @@ package Prunt.Module_Types is
 
    function Cancellation_Is_Active (This : Planner_Interface) return Boolean is abstract;
    --  Return whether processing through This is being interrupted by cancellation.
+
+   procedure Validate_Extrusion (This : Planner_Interface; E_Delta : Length) is null;
+   --  Preflight user-command extrusion before changing motion state or queuing any part of a compound move.  Zero
+   --  displacement and machines without an extruder motor do not require a setpoint check.
 
    procedure Add_Corner
      (This          : Planner_Interface;
