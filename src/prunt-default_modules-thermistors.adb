@@ -333,8 +333,8 @@ package body Prunt.Default_Modules.Thermistors is
                end if;
             end Set_Auto_Report_Interval;
          or
-            when Current_Auto_Report_Interval > 0.0 =>
-            delay until Next_Auto_Report;
+            when Current_Auto_Report_Interval > 0.0
+            =>delay until Next_Auto_Report;
 
             Log_Temperatures (Enabled_Thermistors_Ref, Requires_Fresh => False);
 
@@ -407,8 +407,10 @@ package body Prunt.Default_Modules.Thermistors is
       end Get_Enabled_Thermistors;
    end Module_Instance;
 
-   procedure Report_Temperatures (This : Module_Instance; Planner : Planner_Interface'Class) is
+   procedure Report_Temperatures
+     (This : Module_Instance; Planner : Planner_Interface'Class; T : Gcode_Arguments.Argument_Integer := 0) is
    begin
+      Validate_Tool_Zero (T);
       Planner.Flush (Temperature_Report_Event'(Enabled_Thermistors => This.Get_Enabled_Thermistors));
    end Report_Temperatures;
 

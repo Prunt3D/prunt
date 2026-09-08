@@ -362,9 +362,10 @@ private
 
    type Thermistor_Enabled_Array is array (Thermistor_Name) of Boolean;
 
-   procedure Report_Temperatures (This : Module_Instance; Planner : Planner_Interface'Class)
+   procedure Report_Temperatures
+     (This : Module_Instance; Planner : Planner_Interface'Class; T : Gcode_Arguments.Argument_Integer := 0)
    with Annotate => (Prunt_Config, Gcode_Command, "M105");
-   --  Report temperatures to the logger.
+   --  Report temperatures to the logger. T selects the hotend; only omitted or T0 is supported.
 
    procedure Set_Temperature_Auto_Report
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;

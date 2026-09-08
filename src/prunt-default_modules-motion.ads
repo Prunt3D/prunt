@@ -876,8 +876,10 @@ private
      (This     : Module_Instance;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Planner  : Planner_Interface'Class;
-      S        : Dimensionless
+      S        : Dimensionless;
       --  New flow percentage for future E deltas.
+      T        : Gcode_Arguments.Argument_Integer := 0
+      --  Tool index. Only zero is supported; omitted selects tool zero.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M221");
    --  Set flow percentage.
@@ -885,9 +887,10 @@ private
    procedure Report_Flow_Percentage
      (This     : Module_Instance;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Planner  : Planner_Interface'Class)
+      Planner  : Planner_Interface'Class;
+      T        : Gcode_Arguments.Argument_Integer := 0)
    with Annotate => (Prunt_Config, Gcode_Command, "M221");
-   --  Report flow percentage.
+   --  Report flow percentage. T selects the extruder; only omitted or T0 is supported.
 
    procedure Wait_For_Motion (Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M400");

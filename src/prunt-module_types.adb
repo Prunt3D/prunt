@@ -21,6 +21,13 @@ package body Prunt.Module_Types is
 
    pragma Extensions_Allowed (On);
 
+   procedure Validate_Tool_Zero (Tool : Gcode_Arguments.Argument_Integer) is
+   begin
+      if Tool /= 0 then
+         raise Gcode_Bad_Inputs_Error with "Only tool zero (T0) is supported.";
+      end if;
+   end Validate_Tool_Zero;
+
    overriding
    procedure Process_After_Block (This : Gcode_Message_Event; Context : Block_End_Context'Class) is
    begin

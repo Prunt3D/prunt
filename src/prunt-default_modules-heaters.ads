@@ -303,37 +303,43 @@ private
    procedure Set_Hotend_Temperature
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Planner  : Planner_Interface'Class;
-      S        : Dimensionless
+      S        : Dimensionless;
       --  Hotend target temperature in Celsius.
+      T        : Gcode_Arguments.Argument_Integer := 0
+      --  Tool index. Only zero is supported; omitted selects tool zero.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M104");
    --  Set the hotend target temperature and continue without waiting for the hotend to reach the given temperature.
    --
-   --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
+   --  This command differs from Marlin in that the B, F, and I parameters are not available.
 
    procedure Wait_For_Hotend_Temperature_Heat
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Planner  : Planner_Interface'Class;
-      S        : Dimensionless
+      S        : Dimensionless;
       --  Hotend target temperature in Celsius.
+      T        : Gcode_Arguments.Argument_Integer := 0
+      --  Tool index. Only zero is supported; omitted selects tool zero.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M109");
    --  Set the hotend target temperature and wait for the hotend to go over the given temperature. This only waits
    --  for the hotend to heat up, it does not wait for the hotend to cool down.
    --
-   --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
+   --  This command differs from Marlin in that the B, F, and I parameters are not available.
 
    procedure Wait_For_Hotend_Temperature_Heat_Or_Cool
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Planner  : Planner_Interface'Class;
-      R        : Dimensionless
+      R        : Dimensionless;
       --  Hotend target temperature in Celsius.
+      T        : Gcode_Arguments.Argument_Integer := 0
+      --  Tool index. Only zero is supported; omitted selects tool zero.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M109");
    --  Set the hotend target temperature and wait for the hotend to reach the given temperature. This applies to
    --  heating or cooling.
    --
-   --  This command differs from Marlin in that the B, F, I, and T parameters are not available.
+   --  This command differs from Marlin in that the B, F, and I parameters are not available.
 
    procedure Set_Bed_Temperature
      (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;

@@ -2147,10 +2147,12 @@ package body Prunt.Default_Modules.Motion is
      (This     : Module_Instance;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Planner  : Planner_Interface'Class;
-      S        : Dimensionless)
+      S        : Dimensionless;
+      T        : Gcode_Arguments.Argument_Integer := 0)
    is
       pragma Unreferenced (This);
    begin
+      Validate_Tool_Zero (T);
       Module_Instance (Self_Ref.Get.Element.all).Apply_Set_Flow_Percentage (Planner => Planner, S => S);
       --  We need to bypass the usual enqueue/execute separation since we have state that needs to be fed into the
       --  planner. Other modules should normally not do this.
@@ -2159,10 +2161,12 @@ package body Prunt.Default_Modules.Motion is
    procedure Report_Flow_Percentage
      (This     : Module_Instance;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Planner  : Planner_Interface'Class)
+      Planner  : Planner_Interface'Class;
+      T        : Gcode_Arguments.Argument_Integer := 0)
    is
       pragma Unreferenced (This);
    begin
+      Validate_Tool_Zero (T);
       Planner.Flush (Motion_Report_Event'(Message => Module_Instance (Self_Ref.Get.Element.all).Flow_Scale_Report));
    end Report_Flow_Percentage;
 

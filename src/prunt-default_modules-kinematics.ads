@@ -494,13 +494,15 @@ private
       --  If present, set the Y axis maximum feedrate in mm/s.
       Z        : Gcode_Optional_Float;
       --  If present, set the Z axis maximum feedrate in mm/s.
-      E        : Gcode_Optional_Float
+      E        : Gcode_Optional_Float;
       --  If present, set the E axis maximum feedrate in mm/s.
+      T        : Gcode_Arguments.Argument_Integer := 0
+      --  Tool index. Only zero is supported; omitted selects tool zero.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M203");
    --  Set maximum axial feedrates. May be saved using `M500`.
    --
-   --  The `T` parameter from Marlin is not present.
+   --  Only tool zero is supported by the `T` parameter.
 
    procedure Set_Dynamic_Kinematic_Limits
      (This     : Module_Instance;

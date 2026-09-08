@@ -683,23 +683,31 @@ package body Prunt.Default_Modules.Heaters is
    end Module_Instance;
 
    procedure Set_Hotend_Temperature
-     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless;
+      T        : Gcode_Arguments.Argument_Integer := 0)
    is
       This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
       Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend");
    begin
+      Validate_Tool_Zero (T);
       Planner.Add_Corner_Data (This.Build_Target_Command (Heater, S * celsius));
       This.Record_Planned_Target (Heater, S * celsius);
    end Set_Hotend_Temperature;
 
    procedure Wait_For_Hotend_Temperature_Heat
-     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; S : Dimensionless)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      S        : Dimensionless;
+      T        : Gcode_Arguments.Argument_Integer := 0)
    is
       This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
       Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend");
    begin
+      Validate_Tool_Zero (T);
       Planner.Flush
         (This.Build_Temperature_Wait
            (Heater               => Heater,
@@ -711,12 +719,16 @@ package body Prunt.Default_Modules.Heaters is
    end Wait_For_Hotend_Temperature_Heat;
 
    procedure Wait_For_Hotend_Temperature_Heat_Or_Cool
-     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Planner_Interface'Class; R : Dimensionless)
+     (Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      R        : Dimensionless;
+      T        : Gcode_Arguments.Argument_Integer := 0)
    is
       This   : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Config : constant User_Config := This.Get_Config;
       Heater : constant Heater_Name := This.Get_Default_Heater (Config.Gcode_Defaults.Hotend, "hotend");
    begin
+      Validate_Tool_Zero (T);
       Planner.Flush
         (This.Build_Temperature_Wait
            (Heater               => Heater,

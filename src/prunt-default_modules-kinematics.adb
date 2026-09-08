@@ -615,7 +615,8 @@ package body Prunt.Default_Modules.Kinematics is
       X        : Gcode_Optional_Float;
       Y        : Gcode_Optional_Float;
       Z        : Gcode_Optional_Float;
-      E        : Gcode_Optional_Float)
+      E        : Gcode_Optional_Float;
+      T        : Gcode_Arguments.Argument_Integer := 0)
    is
       pragma Unsuppress (All_Checks);
       --  Required so we get a Constraint_Error when we try to set an invalid value.
@@ -645,6 +646,7 @@ package body Prunt.Default_Modules.Kinematics is
          end if;
       end Handle_Axis;
    begin
+      Validate_Tool_Zero (T);
       Handle_Axis (X_Axis, X);
       Handle_Axis (Y_Axis, Y);
       Handle_Axis (Z_Axis, Z);

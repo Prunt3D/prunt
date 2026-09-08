@@ -65,6 +65,10 @@ package Prunt.Module_Types is
       Number   : Gcode_Arguments.Argument_Integer;
    end record;
 
+   procedure Validate_Tool_Zero (Tool : Gcode_Arguments.Argument_Integer);
+   --  Reject tool numbers other than zero until multiple toolheads are supported. When they are, this procedure can be
+   --  removed to find all commands that need to be edited.
+
    type Gcode_Command is record
       Identifier  : Gcode_Command_Identifier;
       Name        : Virtual_String;
