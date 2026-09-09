@@ -1,0 +1,11 @@
+{
+  "node_configs": {
+    "StmtList": {
+      "node": {
+        "kind": "group",
+        "document": "recurse",
+        "bubbleUpTrailingTrivias": false
+      }
+    }
+  }
+}
