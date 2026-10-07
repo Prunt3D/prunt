@@ -27,18 +27,126 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
    use Prunt.Motion_Planner.Stereographic_Curves.Geometry;
 
    procedure Run
-     (Block     : aliased in out Execution_Block;
-      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace : not null access Planning_Workspace) is
+     (Block       : aliased in out Execution_Block;
+      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace   : not null access Planning_Workspace;
+      Force_Stops : Boolean := False)
+   is
+      Original_E              : Block_Segment_Lengths renames
+        Workspace.Original_Extrusion_Positions (Block.Corners'Range);
+      Original_Params         : constant Kinematic_Parameters := Block.Params;
+      Spatial_Map             : Prunt.Motion_Planner.Planner.Motor_Position_Map := Motor_Map;
+      Extrusion_Reduction     : Length := 0.0 * mm;
+      Reduction_Roundoff      : Length := 0.0 * mm;
+      Stop_At_Density_Changes : constant Boolean :=
+        (case Block.Params.Extrusion_Cornering.Kind is
+           when Smooth_Deviation              => Extrusion_Deviation (Block'Access) = 0.0 * mm,
+           when Instantaneous_Velocity_Change => Block.Params.Extrusion_Cornering.Velocity_Change_Max = 0.0 * mm / s);
    begin
-      Runner.Run (Block, Motor_Map, Workspace);
+      for I in Block.Corners'Range loop
+         Original_E (I) := Block.Corners (I) (E_Axis);
+      end loop;
+      --  Extrusion_Density_Normalizer has already assigned the authoritative densities. In particular, a geometry
+      --  retry must retain their exact values instead of reconstructing nearly equal ratios from the corners.
+      for I in Block.Corners'Range loop
+         Block.Corners (I) (E_Axis) := 0.0 * mm;
+      end loop;
+      for M in Motor_Name loop
+         Spatial_Map (E_Axis, M) := 0.0 / mm;
+      end loop;
+      Block.Params.Bounds.Lower_E := -Length'Last;
+      Block.Params.Bounds.Upper_E := Length'Last;
+      case Block.Params.Cornering.Kind is
+         when Stereographic =>
+            Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
+
+         when Circular      =>
+            Block.Params.Cornering.Circular_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
+
+         when Parabolic     =>
+            Block.Params.Cornering.Parabolic_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
+
+         when Biarc         =>
+            Block.Params.Cornering.Biarc_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
+
+         when Sharp_SCV     =>
+            null;
+      end case;
+      if Force_Stops then
+         for I in Block.Corners'Range loop
+            Block.Corner_Transitions (I) := To_Evaluator (Stop_At (Block.Corners (I)));
+            Workspace.Corner_Derivative_Bounds (I) := Derivative_Bounds (Block.Corner_Transitions (I));
+         end loop;
+         for I in Block.Primitives'Range loop
+            Block.Primitive_Start_Distances (I) := 0.0 * mm;
+            Block.Primitive_Distances (I) := Primitive_Length (Block'Access, I);
+         end loop;
+      else
+         Runner.Run (Block, Spatial_Map, Workspace, Stop_At_Density_Changes);
+      end if;
+      Block.Params := Original_Params;
+      for I in Block.Corners'Range loop
+         Block.Corners (I) (E_Axis) := Original_E (I);
+      end loop;
+      for I in Block.Primitives'Range loop
+         if Block.Primitive_Distances (I) = 0.0 * mm
+           and then Policy (Block.Corner_Transitions (I - 1)) = Hard_Stop
+           and then Policy (Block.Corner_Transitions (I)) = Hard_Stop
+         then
+            Block.Primitive_Distances (I) := Primitive_Length (Block'Access, I);
+         end if;
+      end loop;
+      Block.Extrusion_Reference_Positions (1) := Block.Corners (1) (E_Axis);
+      for I in Block.Primitives'Range loop
+         declare
+            Reduction     : constant Length :=
+              (if Force_Stops
+               then 0.0 * mm
+               else
+                 Block.Extrusion_Densities (I)
+                 * (Workspace.Unblended_Segment_Lengths (I) - Segment_Total_Distance (Block'Access, I)));
+            Adjusted      : constant Length := Reduction - Reduction_Roundoff;
+            New_Reduction : constant Length := Extrusion_Reduction + Adjusted;
+         begin
+            Reduction_Roundoff := (New_Reduction - Extrusion_Reduction) - Adjusted;
+            Extrusion_Reduction := New_Reduction;
+            Block.Extrusion_Reference_Positions (I) :=
+              Workspace.Unblended_Extrusion_Positions (I) - Extrusion_Reduction;
+         end;
+      end loop;
+
+      --  Bounds bypasses are used by homing. If all commanded E coordinates are in bounds, shortening must not
+      --  create an out-of-bounds E reference (for example printing followed by a retraction to the lower bound).
+      --  Restore the original path with stops if shortening would make the corrected reference infeasible.
+      if (for all I in Block.Corners'Range =>
+            Block.Corners (I) (E_Axis) in Block.Params.Bounds.Lower_E .. Block.Params.Bounds.Upper_E)
+      then
+         for I in Block.Extrusion_Reference_Positions'Range loop
+            if Block.Extrusion_Reference_Positions (I)
+               not in Block.Params.Bounds.Lower_E .. Block.Params.Bounds.Upper_E
+            then
+               --  The normalized unshortened reference stays between each run's commanded endpoints.
+               --  The recursive call is bounded: Force_Stops uses that reference without shortening it.
+               Run (Block, Motor_Map, Workspace, Force_Stops => True);
+               return;
+            end if;
+         end loop;
+      end if;
+   exception
+      when others =>
+         Block.Params := Original_Params;
+         for I in Block.Corners'Range loop
+            Block.Corners (I) (E_Axis) := Original_E (I);
+         end loop;
+         raise;
    end Run;
 
    protected body Runner is
       procedure Run
-        (Block     : aliased in out Execution_Block;
-         Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-         Workspace : not null access Planning_Workspace)
+        (Block                   : aliased in out Execution_Block;
+         Motor_Map               : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+         Workspace               : not null access Planning_Workspace;
+         Stop_At_Density_Changes : Boolean)
       is
          Transition_Samples   : constant Positive := 65;
          Primitive_Samples    : constant Positive := 17;
@@ -46,6 +154,12 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          Repair_Shrink_Factor : constant Dimensionless := 0.55;
          Motor_Error_Fraction : constant Dimensionless := 0.25;
          Straight_Tolerance   : constant Dimensionless := 1.0E-9;
+
+         function Extrusion_Stop (I : Corners_Index) return Boolean
+         is (Stop_At_Density_Changes
+             and then I > Block.Corners'First
+             and then I < Block.Corners'Last
+             and then Block.Extrusion_Densities (I) /= Block.Extrusion_Densities (I + 1));
 
          function Active_Axial_Deviation_Maxes return Axial_Deviation_Limits;
          function Active_Circularity return Dimensionless;
@@ -395,9 +509,12 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             Any_Deviation_Allowed : Boolean := False;
          begin
             for Axis in Axis_Name loop
-               Any_Deviation_Allowed := Any_Deviation_Allowed or else Active_Axial_Deviation_Maxes (Axis) > 0.0 * mm;
+               if Axis /= E_Axis then
+                  Any_Deviation_Allowed :=
+                    Any_Deviation_Allowed or else Active_Axial_Deviation_Maxes (Axis) > 0.0 * mm;
+               end if;
             end loop;
-            if I = Block.Corners'First or else I = Block.Corners'Last then
+            if I = Block.Corners'First or else I = Block.Corners'Last or else Extrusion_Stop (I) then
                return True;
             elsif Is_Passthrough_Corner (I) then
                return True;
@@ -436,6 +553,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          begin
             if I = Block.Corners'First
               or else I = Block.Corners'Last
+              or else Extrusion_Stop (I)
               or else Primitive_Length (Block'Access, I) <= 0.0 * mm
               or else Primitive_Length (Block'Access, I + 1) <= 0.0 * mm
               or else Block.Corner_Dwell_Times (I) /= 0.0 * s
@@ -471,6 +589,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             for I in Block.Corners'Range loop
                if I = Block.Corners'First
                  or else I = Block.Corners'Last
+                 or else Extrusion_Stop (I)
                  or else Primitive_Length (Block'Access, I) <= 0.0 * mm
                  or else Primitive_Length (Block'Access, I + 1) <= 0.0 * mm
                  or else Block.Corner_Dwell_Times (I) /= 0.0 * s

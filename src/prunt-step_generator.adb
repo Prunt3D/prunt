@@ -535,6 +535,8 @@ package body Prunt.Step_Generator is
          Paused := False;
          Do_Pause := False;
          Do_Halt := False;
+         Planner.Clear_Block_Extra_Data (Block);
+         Pause_Planner.Clear_Block_Extra_Data (Pause_Block);
          Reset_Control.Acknowledge;
          Commands.Last_Queued_Position := [others => Zero_Length];
          Commands.Extrusion_Check_Cycles_Remaining := 0;

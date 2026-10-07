@@ -23,10 +23,14 @@ private generic
 package Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
    procedure Run
-     (Block : aliased in out Execution_Block; Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map);
+     (Block               : aliased in out Execution_Block;
+      Motor_Map           : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Normalize_Feedrates : Boolean := True);
    --  Apply early kinematic limitations to the execution block. The programmed feed-rate is adjusted if
-   --  Ignore_E_In_XYZE is set so that it is equal to the desired feedrate when the E axis movement is included.
+   --  Ignore_E_In_XYZE is False, converting the programmed XYZE feedrate to the planner's XYZ distance coordinates.
    --  After this the total time of each move is adjusted such that no move will be less than Interpolation_Time.
    --  Finally the axial limits defined in Axial_Velocity_Maxes are applied.
+   --
+   --  Set Normalize_Feedrates to False when rebuilding geometry after feedrates have already been converted.
 
 end Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;

@@ -17,12 +17,18 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Numerics.Generic_Elementary_Functions;
+
 package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
    pragma Extensions_Allowed (On);
 
-   procedure Run (Block : aliased in out Execution_Block; Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map)
-   is
+   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+
+   procedure Run
+     (Block               : aliased in out Execution_Block;
+      Motor_Map           : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Normalize_Feedrates : Boolean := True) is
    begin
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
@@ -35,9 +41,7 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
            Velocity'Min (Block.Original_Segment_Feedrates (I), 299_792_458_000.1 * mm / s);
 
          declare
-            Primitive          : constant Derived_Path_Primitive :=
-              Derive_Path_Primitive (Block.Primitives (I), Block.Corners (I - 1), Block.Corners (I));
-            Path_Length        : constant Length := Primitive.Length;
+            Primitive          : constant Derived_Path_Primitive := Spatial_Primitive (Block'Access, I);
             Segment_Distance   : constant Length := Segment_Total_Distance (Block'Access, I);
             Primitive_Distance : constant Length := Block.Primitive_Distances (I);
             Bounds             : constant Unit_Speed_Axial_Derivative_Bounds :=
@@ -60,15 +64,26 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                     * abs Primitive.Theta_Delta;
             end case;
 
-            if Block.Params.Ignore_E_In_XYZE and then XYZ_Path_Length > 0.0 * mm then
+            if Normalize_Feedrates and then not Block.Params.Ignore_E_In_XYZE and then XYZ_Path_Length > 0.0 * mm then
                declare
-                  Full_Path_Scale : constant Dimensionless := Path_Length / XYZ_Path_Length;
+                  --  Convert using the accepted density, not the rounded E coordinates. Scale the norm before squaring
+                  --  so E-dominated moves cannot overflow this calculation.
+                  Density       : constant Dimensionless := Block.Extrusion_Densities (I);
+                  Scale         : constant Dimensionless := Dimensionless'Max (1.0, abs Density);
+                  Spatial_Scale : constant Dimensionless :=
+                    (1.0 / Scale) / Dimensionless_Math.Sqrt ((1.0 / Scale) ** 2 + (Density / Scale) ** 2);
                begin
-                  Feedrate := Feedrate * Full_Path_Scale;
-                  --  Segment_Vel_Ratio_At_Time operates on the planner's full-path scalar velocity. Keep its
-                  --  programmed reference in the same coordinates so a move at the requested XYZ speed reports 1.0.
-                  Block.Original_Segment_Feedrates (I) := Block.Original_Segment_Feedrates (I) * Full_Path_Scale;
+                  Feedrate := Feedrate * Spatial_Scale;
+                  Block.Original_Segment_Feedrates (I) := Block.Original_Segment_Feedrates (I) * Spatial_Scale;
                end;
+            end if;
+
+            if Block.Extrusion_Densities (I) /= 0.0 then
+               --  Only the constant-density part is common to every candidate profile window. Density-transition
+               --  limits belong to the windows and junction coasts that actually overlap them.
+               Feedrate :=
+                 Velocity'Min
+                   (Feedrate, 0.999 * Block.Params.Axial_Velocity_Maxes (E_Axis) / abs Block.Extrusion_Densities (I));
             end if;
 
             --  Enforce a minimum segment time to prevent any possible issues in the step generator.

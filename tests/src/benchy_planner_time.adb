@@ -19,6 +19,8 @@
 
 pragma Extensions_Allowed (On);
 
+with Ada.Command_Line;
+with Ada.Real_Time;
 with Ada.Strings.Fixed;
 with Ada.Text_IO;
 with Prunt;                        use Prunt;
@@ -27,7 +29,15 @@ with Prunt.Motion_Planner;         use Prunt.Motion_Planner;
 with Prunt.Motion_Planner.Planner;
 
 procedure Benchy_Planner_Time is
-   Gcode_Path : constant String := "../prunt_simulator/uploads/benchy.gcode";
+   type Benchmark_Case is
+     (Baseline, Tight_E_Deviation, Zero_E_Deviation, E_Acceleration, X_Crackle, Mixed_Limits, Circular_Corners,
+      XYZ_Only, Relaxed_E_Limits, Stopped_Path, E_Jump_Zero, E_Jump_One, E_Jump_Five, Rounding_Stress);
+   Selected_Case : constant Benchmark_Case :=
+     (if Ada.Command_Line.Argument_Count >= 1 then Benchmark_Case'Value (Ada.Command_Line.Argument (1)) else Baseline);
+   Gcode_Path : constant String :=
+     (if Ada.Command_Line.Argument_Count >= 2 then Ada.Command_Line.Argument (2)
+      else "../prunt_simulator/uploads/benchy.gcode");
+   use type Ada.Real_Time.Time;
 
    type Motor_Name is (X_Motor, Y_Motor, Z_Motor, E_Motor);
    type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
@@ -45,11 +55,13 @@ procedure Benchy_Planner_Time is
         Home_Move_Minimum_Coast_Time       => 0.000_25 * s,
         Home_Move_Maximum_Tail_Time        => 1.0E100 * s,
         Interpolation_Time                 => 0.000_05 * s,
-        Max_Corners                        => 50_000);
+        --  Keep one spare corner so the stress fixture's terminal flush joins the motion block instead of
+        --  following an automatic capacity flush with an empty block.
+        Max_Corners                        => 50_002);
 
    use type Planner.Corners_Index;
 
-   Params : constant Kinematic_Parameters :=
+   Params : Kinematic_Parameters :=
      (Bounds                   =>
         (Kind    => Rectangular_Workspace,
          Lower_Z => 0.0 * mm,
@@ -75,6 +87,8 @@ procedure Benchy_Planner_Time is
             Corner_Miss_Distance_Max => 0.02 * mm,
             Shape_Bias               => 0.0,
             Circularity              => 0.0)),
+      Extrusion_Cornering      => <>,
+      Extrusion_Rounding_Tolerance => <>,
       Axial_Shapers            => [others => (Kind => Prunt.Input_Shapers.No_Shaper)]);
 
    Motor_Map : constant Motor_Position_Map :=
@@ -102,6 +116,8 @@ procedure Benchy_Planner_Time is
    end Value_Of;
 
    File          : Ada.Text_IO.File_Type;
+   Segment_Output : Ada.Text_IO.File_Type;
+   Write_Segments : constant Boolean := Ada.Command_Line.Argument_Count >= 3;
    Line          : String (1 .. 1_024);
    Last          : Natural;
    Current_Pos   : Position := [others => 0.0 * mm];
@@ -121,7 +137,60 @@ procedure Benchy_Planner_Time is
    Segment_Count : Natural := 0;
    Timeout_Count : Natural := 0;
    Final_Pos     : Position := [others => 0.0 * mm];
+   Started       : Ada.Real_Time.Time;
 begin
+   case Selected_Case is
+      when Baseline | XYZ_Only => null;
+      when Rounding_Stress =>
+         Params.Bounds.Upper_X := 6000.0 * mm;
+         Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0 * mm;
+      when E_Jump_Zero | E_Jump_One | E_Jump_Five =>
+         Params.Extrusion_Cornering :=
+           (Kind => Instantaneous_Velocity_Change,
+            Velocity_Change_Max =>
+              (case Selected_Case is
+                 when E_Jump_One => 1.0 * mm / s,
+                 when E_Jump_Five => 5.0 * mm / s,
+                 when others => 0.0 * mm / s));
+      when Relaxed_E_Limits =>
+         Params.Axial_Velocity_Maxes (E_Axis) := 1.0E6 * mm / s;
+         Params.Axial_Acceleration_Maxes (E_Axis) := 1.0E12 * mm / s ** 2;
+         Params.Axial_Jerk_Maxes (E_Axis) := 1.0E18 * mm / s ** 3;
+         Params.Axial_Snap_Maxes (E_Axis) := 1.0E24 * mm / s ** 4;
+         Params.Axial_Crackle_Maxes (E_Axis) := 1.0E30 * mm / s ** 5;
+      when Stopped_Path =>
+         --  Match the geometry used when the old planner's zero E allowance prevents corner construction.
+         Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.0 * mm];
+         Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.0 * mm;
+      when Tight_E_Deviation =>
+         Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0002 * mm;
+      when Zero_E_Deviation =>
+         Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0 * mm;
+      when E_Acceleration =>
+         Params.Axial_Acceleration_Maxes (E_Axis) := 50.0 * mm / s ** 2;
+      when X_Crackle =>
+         Params.Axial_Crackle_Maxes (X_Axis) := 500_000_000.0 * mm / s ** 5;
+      when Mixed_Limits =>
+         Params.Axial_Acceleration_Maxes (E_Axis) := 50.0 * mm / s ** 2;
+         Params.Axial_Crackle_Maxes (X_Axis) := 500_000_000.0 * mm / s ** 5;
+      when Circular_Corners =>
+         Params.Cornering :=
+           (Kind => Circular,
+            Circular_Params =>
+              (Axial_Deviation_Maxes => [others => 0.02 * mm],
+               Corner_Miss_Distance_Max => 0.02 * mm, others => <>));
+   end case;
+   if Ada.Command_Line.Argument_Count >= 4 then
+      Params.Extrusion_Rounding_Tolerance := Dimensionless'Value (Ada.Command_Line.Argument (4)) * mm;
+   end if;
+   Ada.Text_IO.Put_Line ("case=" & Selected_Case'Image);
+   Ada.Text_IO.Put_Line ("rounding_tolerance_mm=" & Dimensionless'Image (Params.Extrusion_Rounding_Tolerance / mm));
+   Ada.Text_IO.Flush;
+   if Write_Segments then
+      Ada.Text_IO.Create (Segment_Output, Ada.Text_IO.Out_File, Ada.Command_Line.Argument (3));
+      Ada.Text_IO.Put_Line (Segment_Output, "segment,time_s,commanded_distance_mm,midpoint_velocity_ratio");
+   end if;
+   Started := Ada.Real_Time.Clock;
    Planner.Runner.Setup (Params, Motor_Map);
    Ada.Text_IO.Open (File, Ada.Text_IO.In_File, Gcode_Path);
 
@@ -160,6 +229,9 @@ begin
                if Has_Value (Command, 'F') then
                   Feedrate := Dimensionless (Value_Of (Command, 'F') / 60.0) * mm / s;
                end if;
+               if Selected_Case = XYZ_Only then
+                  Current_Pos (E_Axis) := 0.0 * mm;
+               end if;
                if Current_Pos /= Previous_Pos then
                   Moving_Count := Moving_Count + 1;
                   Planner.Enqueue_Move (Current_Pos, Feedrate);
@@ -170,7 +242,11 @@ begin
    end loop;
 
    Ada.Text_IO.Close (File);
-   if G1_Count /= 48_649 or else Moving_Count /= 47_924 then
+   if Selected_Case = Rounding_Stress then
+      if G1_Count /= 50_000 or else Moving_Count /= 50_000 then
+         raise Program_Error with "rounding stress fixture must contain exactly 50000 moving segments";
+      end if;
+   elsif G1_Count /= 48_649 or else (Selected_Case /= XYZ_Only and then Moving_Count /= 47_924) then
       raise Program_Error with "uploaded Benchy parse count changed";
    end if;
 
@@ -192,6 +268,29 @@ begin
             for Corner in Planner.Finishing_Corners_Index'First .. Block.N_Corners loop
                Total := Total + Planner.Segment_Time (Block'Access, Corner);
                Segment_Count := Segment_Count + 1;
+               if Selected_Case = Rounding_Stress then
+                  declare
+                     At_End : constant Time := Planner.Segment_Time (Block'Access, Corner);
+                     P : constant Position := Planner.Segment_Pos_At_Time (Block'Access, Corner, At_End);
+                  begin
+                     if abs (P (E_Axis) - 0.05 * P (X_Axis)) > 1.0E-8 * mm then
+                        raise Program_Error with "normalized E execution drifted in the 50000-segment run";
+                     end if;
+                     if Corner < Block.N_Corners
+                       and then Planner.Segment_Vel_Ratio_At_Time (Block'Access, Corner, At_End) <= 0.0
+                     then
+                        raise Program_Error with "a density mismatch introduced a stop in the normalized run";
+                     end if;
+                  end;
+               end if;
+               if Write_Segments then
+                  Ada.Text_IO.Put_Line
+                    (Segment_Output,
+                     Segment_Count'Image & "," & Dimensionless'Image (Planner.Segment_Time (Block'Access, Corner) / s)
+                     & "," & Dimensionless'Image (Planner.Segment_Corner_Distance (Block, Corner) / mm)
+                     & "," & Dimensionless'Image (Planner.Segment_Vel_Ratio_At_Time
+                       (Block'Access, Corner, Planner.Segment_Time (Block'Access, Corner) / 2.0)));
+               end if;
             end loop;
          end if;
          exit when Planner.Flush_Resetting_Data (Block'Access);
@@ -201,11 +300,20 @@ begin
    if Final_Pos /= Current_Pos then
       raise Program_Error with "terminal planner position differs from the parsed Benchy position";
    end if;
+   if Selected_Case = Rounding_Stress and then (Block_Count /= 1 or else Segment_Count /= 50_000) then
+      raise Program_Error with "rounding stress fixture was not handled as one complete 50000-segment block";
+   end if;
+   Ada.Text_IO.Put_Line
+     ("planning_wall_seconds="
+      & Long_Float'Image (Long_Float (Ada.Real_Time.To_Duration (Ada.Real_Time.Clock - Started))));
    Ada.Text_IO.Put_Line ("g1_commands=" & G1_Count'Image);
    Ada.Text_IO.Put_Line ("position_changing_moves=" & Moving_Count'Image);
    Ada.Text_IO.Put_Line ("planned_blocks=" & Block_Count'Image);
    Ada.Text_IO.Put_Line ("planned_segments=" & Segment_Count'Image);
    Ada.Text_IO.Put_Line ("total_planned_seconds=" & Long_Float'Image (Long_Float (Total / s)));
+   if Write_Segments then
+      Ada.Text_IO.Close (Segment_Output);
+   end if;
    Planner.Reset;
    abort Planner.Runner;
 end Benchy_Planner_Time;

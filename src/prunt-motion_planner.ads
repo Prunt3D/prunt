@@ -32,6 +32,10 @@ package Prunt.Motion_Planner is
    --  Raised when a planner reset invalidates an in-progress homing-move position handshake.
 
    type Axial_Deviation_Limits is array (Axis_Name) of Length range 0.0 * mm .. Length'Last;
+   --  XYZ entries constrain corner geometry for the purposes of corner blending. E deviation limits how far E position
+   --  may differ from the extrusion reference after density normalization and path length correction in
+   --  Smooth_Deviation mode. Zero E allowance disables blending at remaining density changes and requires a stop.  The
+   --  E entry is unused in Instantaneous_Velocity_Change mode.
 
    type Cornering_Kind is (Stereographic, Circular, Parabolic, Biarc, Sharp_SCV);
 
@@ -110,7 +114,23 @@ package Prunt.Motion_Planner is
    --  and crackle limits are waived. Biarc is C1 for certifiable line/helix corners and has the same waiver at both
    --  endpoints and its internal splice. Sharp_SCV is C0 for primitives with usable tangents, so acceleration and
    --  every higher derivative limit are waived at its junction. Unsupported or uncertifiable geometry becomes a hard
-   --  stop.
+   --  stop. These derivative waivers apply to XYZ; Extrusion_Cornering selects E's junction behavior.
+
+   type Extrusion_Cornering_Kind is (Smooth_Deviation, Instantaneous_Velocity_Change);
+
+   type Extrusion_Cornering_Parameters (Kind : Extrusion_Cornering_Kind := Smooth_Deviation) is record
+      case Kind is
+         when Smooth_Deviation =>
+            null;
+            --  Use the E deviation entry of Cornering; Sharp_SCV has zero E deviation allowance.
+
+         when Instantaneous_Velocity_Change =>
+            Velocity_Change_Max : Velocity range 0.0 * mm / s .. Velocity'Last := 0.0 * mm / s;
+            --  Maximum absolute E velocity jump at a segment junction, including stops and reversals.
+            --  E follows the path-length-corrected reference exactly. Acceleration and higher derivative limits
+            --  are waived only at the instantaneous jump; all E limits still apply between junctions.
+      end case;
+   end record;
 
    type Kinematic_Parameters is record
       Bounds : Workspace_Bounds := (Kind => Rectangular_Workspace, others => <>);
@@ -119,14 +139,19 @@ package Prunt.Motion_Planner is
       --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
       --  planners do.
 
-      Tangential_Velocity_Max  : Velocity := 0.0 * mm / s;
-      Axial_Velocity_Maxes     : Axial_Velocities := [others => 0.0 * mm / s];
-      Axial_Acceleration_Maxes : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
-      Axial_Jerk_Maxes         : Axial_Jerks := [others => 0.0 * mm / s ** 3];
-      Axial_Snap_Maxes         : Axial_Snaps := [others => 0.0 * mm / s ** 4];
-      Axial_Crackle_Maxes      : Axial_Crackles := [others => 0.0 * mm / s ** 5];
-      Cornering                : Cornering_Parameters := (others => <>);
-      Axial_Shapers            : Input_Shapers.Axial_Shaper_Parameters :=
+      Tangential_Velocity_Max      : Velocity := 0.0 * mm / s;
+      Axial_Velocity_Maxes         : Axial_Velocities := [others => 0.0 * mm / s];
+      Axial_Acceleration_Maxes     : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
+      Axial_Jerk_Maxes             : Axial_Jerks := [others => 0.0 * mm / s ** 3];
+      Axial_Snap_Maxes             : Axial_Snaps := [others => 0.0 * mm / s ** 4];
+      Axial_Crackle_Maxes          : Axial_Crackles := [others => 0.0 * mm / s ** 5];
+      Cornering                    : Cornering_Parameters := (others => <>);
+      Extrusion_Cornering          : Extrusion_Cornering_Parameters := (others => <>);
+      Extrusion_Rounding_Tolerance : Length range 0.0 * mm .. Length'Last := 0.000_1 * mm;
+      --  Maximum change to a segment's commanded E displacement when assigning a common density to a run.
+      --  Runs retain their total extrusion before corner shortening. Zero disables density normalization.
+      --  This input-rounding allowance is separate from E's deviation during junction smoothing.
+      Axial_Shapers                : Input_Shapers.Axial_Shaper_Parameters :=
         [others => (Kind => Input_Shapers.No_Shaper)];
    end record;
 
@@ -182,11 +207,13 @@ package Prunt.Motion_Planner is
    --  Return the maximum constant tangential speed that keeps velocity through crackle within axial limits.
 
    function Mixed_Derivative_Limits
-     (Params  : Kinematic_Parameters;
-      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
-      Max_Vel : Velocity;
-      Safety  : Dimensionless := 0.999) return Mixed_Derivative_Limit_Result;
+     (Params       : Kinematic_Parameters;
+      Bounds       : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel      : Velocity;
+      Safety       : Dimensionless := 0.999;
+      Scalar_Maxes : Scalar_Derivative_Limits := (others => <>)) return Mixed_Derivative_Limit_Result;
    --  Return scalar tangential limits after reserving axial derivative budget for unit-speed path curvature terms.
+   --  Scalar_Maxes can restrict the budget to the derivative envelope of a particular generated profile.
 
    type Max_Corners_Type is range 2 .. 2 ** 63 - 1;
 

@@ -20,16 +20,12 @@
 pragma Extensions_Allowed (On);
 
 private generic
-package Prunt.Motion_Planner.Planner.Kinematic_Limiter is
+package Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
 
-   procedure Run
-     (Block     : aliased in out Execution_Block;
-      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace : not null access Planning_Workspace;
-      Result    : out Profile_Planning_Result);
-   --  Fill Block.Corner_Velocity_Limits with velocity limits, that when enforced at corners, will prevent other
-   --  limits from being violated.
-   --
-   --  Result reports an E transition that cannot be certified at the solved junction speed, allowing a slower retry.
+   procedure Run (Block : aliased in out Execution_Block; Workspace : not null access Planning_Workspace);
+   --  Assign densities once, before corner blending. Each same-direction XYZ/E run uses its total E divided by total
+   --  original path length only while every segment's E adjustment fits Extrusion_Rounding_Tolerance.  Travel,
+   --  reversals, E-only moves and dwells terminate runs. Zero tolerance preserves the original ratios.  The pass is
+   --  linear in the segment count; all corner-sized storage belongs to Block or Workspace.
 
-end Prunt.Motion_Planner.Planner.Kinematic_Limiter;
+end Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer;

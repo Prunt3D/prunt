@@ -265,6 +265,44 @@ package body Prunt.Motion_Planner.Test is
       T.Assert
         (abs (Ceiling - Expected) <= 1.0E-12 * Expected,
          "Constant-speed ceiling should take the root without underflowing the ratio");
+      Bounds := (others => <>);
+      Bounds.Velocity (Z_Axis) := Dimensionless'Adjacent (0.0, 1.0);
+      Ceiling := Constant_Speed_Axial_Ceiling (Params, Bounds, 100.0 * mm / s);
+      T.Assert (Ceiling = 100.0 * mm / s, "A subnormal zero-axis bound cannot overflow the speed ceiling");
+      T.Assert
+        (Nth_Root_Ratio (100.0, Bounds.Velocity (Z_Axis), 1) = Dimensionless'Last,
+         "An unrepresentable ratio saturates at the largest finite result");
+      T.Assert
+        (Nth_Root_Ratio (Dimensionless'Last, 1.0, 1) = Dimensionless'Last,
+         "The largest finite result remains representable at the exponent boundary");
+      T.Assert
+        (Nth_Root_Ratio (Dimensionless'Last, 0.5, 1) = Dimensionless'Last,
+         "A result beyond the exponent boundary saturates without an exception");
+      T.Assert
+        (Nth_Root_Ratio (Bounds.Velocity (Z_Axis), 1.0, 1) = Bounds.Velocity (Z_Axis),
+         "The smallest subnormal result is preserved");
+      T.Assert
+        (Nth_Root_Ratio (Bounds.Velocity (Z_Axis), 4.0, 1) = 0.0,
+         "An unrepresentably small result underflows to zero without an exception");
+
+      for Degree in 1 .. 5 loop
+         for Sign in -1 .. 1 loop
+            if Sign /= 0 then
+               declare
+                  Numerator   : constant Dimensionless := Dimensionless'Scaling (1.0, Sign * 900);
+                  Denominator : constant Dimensionless := Dimensionless'Scaling (1.0, -Sign * 900);
+                  Root        : constant Dimensionless := Nth_Root_Ratio (Numerator, Denominator, Degree);
+                  Expected    : constant Dimensionless :=
+                    (if Degree = 1 then (if Sign > 0 then Dimensionless'Last else 0.0)
+                     else Dimensionless'Scaling (1.0, Sign * (1800 / Degree)));
+               begin
+                  T.Assert
+                    (abs (Root - Expected) <= 1.0E-12 * Expected,
+                     "All derivative orders handle ratios outside the floating-point range without exceptions");
+               end;
+            end if;
+         end loop;
+      end loop;
    end Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios;
 
    procedure Test_Mixed_Derivative_Does_Not_Floor_Residual (T : in out Trendy_Test.Operation'Class) is

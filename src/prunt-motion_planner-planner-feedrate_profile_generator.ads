@@ -23,10 +23,16 @@ private generic
 package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
    procedure Run
-     (Block     : aliased in out Execution_Block;
-      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace : not null access constant Planning_Workspace);
+     (Block       : aliased in out Execution_Block;
+      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace   : not null access constant Planning_Workspace;
+      Result      : out Profile_Planning_Result;
+      Limit_Scale : Dimensionless := 1.0);
    --  Fills Block.Feedrate_Profiles with profiles based on Block.Corner_Velocity_Limits and Block.Params.
+   --
+   --  Result identifies the first segment that could not be certified. Only a valid result completes the block.
+   --
+   --  Limit_Scale reserves additional derivative and velocity margin for the stopped recovery path.
 
 private
 
@@ -45,7 +51,9 @@ private
      (Block            : not null access Execution_Block;
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Workspace        : not null access constant Planning_Workspace;
-      Finishing_Corner : Finishing_Corners_Index);
+      Finishing_Corner : Finishing_Corners_Index;
+      Result           : out Profile_Planning_Result;
+      Limit_Scale      : Dimensionless);
    --  Select and store the first feasible fixed profile-window candidate in profile-time order.
 
 end Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;

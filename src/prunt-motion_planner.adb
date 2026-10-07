@@ -220,10 +220,12 @@ package body Prunt.Motion_Planner is
          Mantissa : constant Dimensionless :=
            (if Degree = 1 then Radicand else Dimensionless_Math."**" (Radicand, 1.0 / Dimensionless (Degree)));
       begin
+         --  Check the normalized exponent first to avoid infinity, including subnormal denominators produced by
+         --  outward-rounded geometric bounds.
+         if Root_Exponent + Dimensionless'Exponent (Mantissa) > Dimensionless'Exponent (Dimensionless'Last) then
+            return Dimensionless'Last;
+         end if;
          return Dimensionless'Scaling (Mantissa, Root_Exponent);
-      exception
-         when Constraint_Error =>
-            return (if Root_Exponent > 0 then Dimensionless'Last else 0.0);
       end;
    end Nth_Root_Ratio;
 
@@ -295,10 +297,11 @@ package body Prunt.Motion_Planner is
    end Constant_Speed_Axial_Ceiling;
 
    function Mixed_Derivative_Limits
-     (Params  : Kinematic_Parameters;
-      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
-      Max_Vel : Velocity;
-      Safety  : Dimensionless := 0.999) return Mixed_Derivative_Limit_Result
+     (Params       : Kinematic_Parameters;
+      Bounds       : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel      : Velocity;
+      Safety       : Dimensionless := 0.999;
+      Scalar_Maxes : Scalar_Derivative_Limits := (others => <>)) return Mixed_Derivative_Limit_Result
    is
       Base : Scalar_Derivative_Limits :=
         (Acceleration_Max => 1.0E100 * mm / s ** 2,
@@ -562,6 +565,12 @@ package body Prunt.Motion_Planner is
             end if;
          end;
       end loop;
+
+      Base_Acceleration_Raw :=
+        Dimensionless'Min (Base_Acceleration_Raw, Scalar_Maxes.Acceleration_Max / (mm / s ** 2));
+      Base_Jerk_Raw := Dimensionless'Min (Base_Jerk_Raw, Scalar_Maxes.Jerk_Max / (mm / s ** 3));
+      Base_Snap_Raw := Dimensionless'Min (Base_Snap_Raw, Scalar_Maxes.Snap_Max / (mm / s ** 4));
+      Base_Crackle_Raw := Dimensionless'Min (Base_Crackle_Raw, Scalar_Maxes.Crackle_Max / (mm / s ** 5));
 
       Base :=
         (Acceleration_Max => Base_Acceleration_Raw * mm / s ** 2,
@@ -1679,8 +1688,8 @@ package body Prunt.Motion_Planner is
       for I in reverse Cases'Range loop
          if I = Cases'First or else D > Fast_Distance_At_Max_Time (Cases (I), Cm, Vs) then
             return Solve_Distance_At_Time (Cases (I), I);
-         --  There are simple analytical solutions for a lot of these, but this is already fast so there is no
-         --  reason to optimise it.
+            --  There are simple analytical solutions for a lot of these, but this is already fast so there is no
+            --  reason to optimise it.
 
          end if;
       end loop;

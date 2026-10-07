@@ -103,6 +103,20 @@ package body Prunt.Default_Modules.Kinematics is
       end case;
    end Build_Cornering_Parameters;
 
+   function Build_Extrusion_Cornering_Parameters
+     (Cornering : User_Config_Extrusion_Cornering) return Motion_Planner.Extrusion_Cornering_Parameters is
+   begin
+      case Cornering.Kind is
+         when Smooth_Deviation              =>
+            return (Kind => Motion_Planner.Smooth_Deviation);
+
+         when Instantaneous_Velocity_Change =>
+            return
+              (Kind                => Motion_Planner.Instantaneous_Velocity_Change,
+               Velocity_Change_Max => Cornering.Maximum_Velocity_Change);
+      end case;
+   end Build_Extrusion_Cornering_Parameters;
+
    function Planner_Workspace_Bounds (Config : User_Config_Workspace_Bounds) return Motion_Planner.Workspace_Bounds is
    begin
       case Config.Kind is
@@ -168,16 +182,19 @@ package body Prunt.Default_Modules.Kinematics is
       Result : Motion_Planner_Configuration :=
         (Parameters =>
            Motion_Planner.Kinematic_Parameters'
-             (Bounds                   => Planner_Workspace_Bounds (Config.Kinematics.Workspace_Bounds),
-              Ignore_E_In_XYZE         => Config.Kinematics.Ignore_E_In_XYZE,
-              Tangential_Velocity_Max  => Config.Kinematics.Maximum_Tangential_Velocity,
-              Axial_Velocity_Maxes     => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
-              Axial_Acceleration_Maxes => [for X of Config.Kinematics.Axial_Acceleration_Limits => X],
-              Axial_Jerk_Maxes         => [for X of Config.Kinematics.Axial_Jerk_Limits => X],
-              Axial_Snap_Maxes         => [for X of Config.Kinematics.Axial_Snap_Limits => X],
-              Axial_Crackle_Maxes      => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
-              Cornering                => Build_Cornering_Parameters (Config.Kinematics.Cornering),
-              Axial_Shapers            => <>),
+             (Bounds                       => Planner_Workspace_Bounds (Config.Kinematics.Workspace_Bounds),
+              Ignore_E_In_XYZE             => Config.Kinematics.Ignore_E_In_XYZE,
+              Tangential_Velocity_Max      => Config.Kinematics.Maximum_Tangential_Velocity,
+              Axial_Velocity_Maxes         => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
+              Axial_Acceleration_Maxes     => [for X of Config.Kinematics.Axial_Acceleration_Limits => X],
+              Axial_Jerk_Maxes             => [for X of Config.Kinematics.Axial_Jerk_Limits => X],
+              Axial_Snap_Maxes             => [for X of Config.Kinematics.Axial_Snap_Limits => X],
+              Axial_Crackle_Maxes          => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
+              Cornering                    => Build_Cornering_Parameters (Config.Kinematics.Cornering),
+              Extrusion_Cornering          =>
+                Build_Extrusion_Cornering_Parameters (Config.Kinematics.Extrusion_Cornering),
+              Extrusion_Rounding_Tolerance => Config.Kinematics.Extrusion_Rounding_Tolerance,
+              Axial_Shapers                => <>),
          Transform  => (Kind => Linear_Transform, others => <>));
    begin
       for M in Motor_Name loop

@@ -24,14 +24,12 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    procedure Run
      (Block     : aliased in out Execution_Block;
       Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace : not null access constant Planning_Workspace)
+      Workspace : not null access Planning_Workspace;
+      Result    : out Profile_Planning_Result)
    is
       Velocity_Change_Tolerance : constant Velocity := 1.0E-3 * mm / s;
       Cleanup_Iterations        : constant Positive := 4;
-
-      type Profile_Window_Evaluation_Set is array (Profile_Window_Candidate_Index) of Profile_Window_Evaluation;
-      type Profile_Window_Evaluation_Cache is
-        array (Finishing_Corners_Index range <>) of Profile_Window_Evaluation_Set;
+      Deviation                 : constant Length := Extrusion_Deviation (Block'Access);
 
       procedure Clamp_Corner (Corner : Corners_Index; Limit : Velocity; Changed : in out Boolean);
       --  Clamp Limit according to the selected transition's explicit junction policy.
@@ -44,8 +42,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       procedure Reverse_Pass (Changed : in out Boolean);
       function Static_Corner_Limit (Corner : Corners_Index) return Velocity;
 
-      Static_Corner_Limits : Block_Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Range);
-      Window_Evaluations   : Profile_Window_Evaluation_Cache (Block.Limited_Segment_Feedrates'Range);
+      Static_Corner_Limits : Block_Corner_Velocity_Limits renames
+        Workspace.Static_Corner_Limits (Block.Corner_Velocity_Limits'Range);
+      Window_Evaluations   : Profile_Window_Evaluation_Cache renames
+        Workspace.Window_Evaluations (Block.Limited_Segment_Feedrates'Range);
 
       procedure Apply_Corner_Transition_Limits (Corner : Corners_Index; Limit : in out Velocity) is
          Transition : constant Corner_Transition_Evaluator := Block.Corner_Transitions (Corner);
@@ -66,9 +66,37 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                   Limit := 0.0 * mm / s;
                else
                   Limit := Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Limit);
-                  Limit := Motor_Delta_Ceiling_For_Projection (Block.Params, Motor_Map, Limit);
+                  Limit := Motor_Delta_Ceiling_For_Projection (Block.Params, Spatial_Motor_Map (Motor_Map), Limit);
                end if;
          end case;
+         if Workspace.Extrusion_Stops (Corner) then
+            Limit := 0.0 * mm / s;
+         else
+            --  Bound both possible junction coasts, including motor deltas. Unrelated density transitions at the far
+            --  ends of these segments must not constrain this corner's velocity.
+            for I in Corner .. Corner + 1 loop
+               declare
+                  Total  : constant Length := Segment_Total_Distance (Block'Access, I);
+                  Width  : constant Length :=
+                    Length'Min
+                      (Total,
+                       Length'Max
+                         (Workspace.Extrusion_Widths (Corner),
+                          (if I = Corner
+                           then Segment_End_Transition_Distance (Block'Access, I)
+                           else Segment_Start_Transition_Distance (Block'Access, I))));
+                  Window : constant Profile_Window :=
+                    (Start_Distance => (if I = Corner then Total - Width else 0.0 * mm), Distance => Width);
+               begin
+                  Limit :=
+                    Constant_Speed_Axial_Ceiling
+                      (Block.Params,
+                       Extrusion_Bounds (Block'Access, Workspace, I, Window.Start_Distance, Window.Distance),
+                       Limit);
+                  Limit := Motor_Delta_Ceiling_For_Window (Block'Access, Workspace, Motor_Map, I, Window, Limit);
+               end;
+            end loop;
+         end if;
       end Apply_Corner_Transition_Limits;
 
       procedure Clamp_Corner (Corner : Corners_Index; Limit : Velocity; Changed : in out Boolean) is
@@ -86,6 +114,23 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
            Velocity'Min (Block.Limited_Segment_Feedrates (Corner), Block.Limited_Segment_Feedrates (Corner + 1));
       begin
          Apply_Corner_Transition_Limits (Corner, Limit);
+         Limit := Velocity'Min (Limit, Workspace.Extrusion_Ceilings (Corner));
+
+         --  A junction speed must be admissible for a profile on both sides. Otherwise the forward pass can arrive
+         --  faster than every next-window ceiling, report zero reachability, and permanently clamp the following
+         --  junction to a stop even though lowering this junction slightly gives a through profile.
+         for I in Corner .. Corner + 1 loop
+            declare
+               Ceiling : Velocity := 0.0 * mm / s;
+            begin
+               for Eval of Window_Evaluations (I) loop
+                  if Eval.Valid then
+                     Ceiling := Velocity'Max (Ceiling, Eval.Max_Vel);
+                  end if;
+               end loop;
+               Limit := Velocity'Min (Limit, Ceiling);
+            end;
+         end loop;
 
          if Block.Corner_Dwell_Times (Corner) /= 0.0 * s then
             pragma Assert (Limit = 0.0 * mm / s);
@@ -118,20 +163,28 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       begin
          Static_Corner_Limits := [others => 0.0 * mm / s];
 
-         for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
-            Static_Corner_Limits (I) := Static_Corner_Limit (I);
-         end loop;
-
          for I in Block.Limited_Segment_Feedrates'Range loop
             declare
-               Windows : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block'Access, I);
+               Windows : constant Profile_Window_Candidates :=
+                 Segment_Profile_Window_Candidates (Block'Access, Workspace, I);
             begin
                for W in Profile_Window_Candidate_Index loop
-                  Window_Evaluations (I) (W) :=
-                    Evaluate_Profile_Window
-                      (Block'Access, Workspace, Motor_Map, I, Windows (W), Block.Limited_Segment_Feedrates (I));
+                  if (for all Previous in Profile_Window_Candidate_Index'First .. W - 1 =>
+                        Windows (Previous) /= Windows (W))
+                  then
+                     Window_Evaluations (I) (W) :=
+                       Evaluate_Profile_Window
+                         (Block'Access, Workspace, Motor_Map, I, Windows (W), Block.Limited_Segment_Feedrates (I));
+                  else
+                     --  Geometry and E cuts often coincide. Do not repeat certification or reachability solves.
+                     Window_Evaluations (I) (W) := (others => <>);
+                  end if;
                end loop;
             end;
+         end loop;
+
+         for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
+            Static_Corner_Limits (I) := Static_Corner_Limit (I);
          end loop;
       end Fill_Static_Caches;
 
@@ -179,6 +232,46 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    begin
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
       Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
+      --  Reset junction state for each solve, including replans after homing feedrate adjustments.
+      Workspace.Extrusion_Widths (Block.Corners'Range) := [others => 0.0 * mm];
+      Workspace.Check_Extrusion_Position :=
+        (for all I in Block.Corners'Range =>
+           Block.Corners (I) (E_Axis) in Block.Params.Bounds.Lower_E .. Block.Params.Bounds.Upper_E);
+      Workspace.Extrusion_Stops (Block.Corners'Range) := [others => False];
+      Workspace.Extrusion_Ceilings (Block.Corners'Range) := [others => 0.0 * mm / s];
+      Block.Extrusion_Junction_Corrections := [others => <>];
+      Workspace.Extrusion_Deviations (Block.Corners'Range) := [others => 0.0 * mm];
+      for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
+         declare
+            Change : constant Dimensionless := abs (Block.Extrusion_Densities (I + 1) - Block.Extrusion_Densities (I));
+         begin
+            if Block.Params.Extrusion_Cornering.Kind = Smooth_Deviation
+              and then Change > 0.0
+              and then Policy (Block.Corner_Transitions (I)) /= Hard_Stop
+            then
+               --  Reserve a nonoverlapping extent for each side of the junction. The joint speed solver will reduce
+               --  this to the extent of E's generated velocity transition, enforcing its exact deviation.
+               Workspace.Extrusion_Widths (I) :=
+                 0.5
+                 * Length'Min (Segment_Total_Distance (Block'Access, I), Segment_Total_Distance (Block'Access, I + 1));
+               Workspace.Extrusion_Stops (I) :=
+                 Deviation <= 0.0 * mm or else Workspace.Extrusion_Widths (I) <= 1.0E-12 * mm;
+               if Workspace.Extrusion_Stops (I) then
+                  Workspace.Extrusion_Widths (I) := 0.0 * mm;
+               end if;
+            end if;
+         end;
+      end loop;
+
+      for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
+         declare
+            Ceiling : Velocity :=
+              Velocity'Min (Block.Limited_Segment_Feedrates (I), Block.Limited_Segment_Feedrates (I + 1));
+         begin
+            Apply_Corner_Transition_Limits (I, Ceiling);
+            Plan_Extrusion_Junction (Block, Workspace, I, Ceiling);
+         end;
+      end loop;
       Fill_Static_Caches;
 
       --  Forward pass: Iterate from the second corner to the second-to-last corner. This pass calculates the maximum
@@ -208,6 +301,20 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
          Reverse_Pass (Changed);
          exit when not Changed;
       end loop;
+      for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
+         declare
+            Transition : constant Extrusion_Transition_Result :=
+              Extrusion_Transition (Block'Access, Workspace, I, Block.Corner_Velocity_Limits (I));
+         begin
+            if not Transition.Valid or else Transition.Half_Distance > Workspace.Extrusion_Widths (I) then
+               Result := (Valid => False, Failed_Segment => I);
+               return;
+            end if;
+            Block.Extrusion_Junction_Corrections (I) := Transition.Profile;
+            Workspace.Extrusion_Deviations (I) := Transition.Deviation;
+         end;
+      end loop;
+      Result := (Valid => True);
    end Run;
 
 end Prunt.Motion_Planner.Planner.Kinematic_Limiter;

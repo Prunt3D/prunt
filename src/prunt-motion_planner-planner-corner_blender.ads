@@ -26,13 +26,16 @@ private generic
 package Prunt.Motion_Planner.Planner.Corner_Blender is
 
    procedure Run
-     (Block     : aliased in out Execution_Block;
-      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace : not null access Planning_Workspace);
+     (Block       : aliased in out Execution_Block;
+      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace   : not null access Planning_Workspace;
+      Force_Stops : Boolean := False);
    --  Select and certify the configured Stereographic, Circular, Parabolic, Biarc, or Sharp_SCV representation at each
    --  corner, storing compact evaluators and transient planning summaries. Stereographic preserves derivatives through
    --  order four; Circular and Parabolic are C1; Biarc is C1 at its endpoints and internal splice; Sharp_SCV is C0.
    --  Unsupported, out-of-bounds, or uncertifiable geometry retains the commanded path and inserts a hard stop.
+   --  Extrusion_Density_Normalizer must run first. Geometry recovery retains its exact stored densities. Force_Stops
+   --  restores the original primitives and normalized E reference, stopping at every boundary.
 
 private
 
@@ -66,9 +69,10 @@ private
 
    protected Runner is
       procedure Run
-        (Block     : aliased in out Execution_Block;
-         Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-         Workspace : not null access Planning_Workspace);
+        (Block                   : aliased in out Execution_Block;
+         Motor_Map               : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+         Workspace               : not null access Planning_Workspace;
+         Stop_At_Density_Changes : Boolean);
    private
       Target_Incoming_Trims    : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
       Target_Outgoing_Trims    : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);

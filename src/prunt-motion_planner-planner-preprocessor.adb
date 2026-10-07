@@ -309,6 +309,8 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          In_Dequeue := False;
          Next_Read := Command_Queue_Array_Type'First;
          Next_Write := Command_Queue_Array_Type'First;
+         --  Consumed flush commands also retain their callback data until their slots are overwritten.
+         Elements.all := [others => (Kind => Corner_Extra_Data_Kind)];
          Extra_Data_Storage.all.Clear;
          Retry_High_Priority := True;
          Has_Current_Corner_ID := False;
@@ -633,6 +635,21 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Next_Block_Pos := Last_Pos;
          Block.Is_Homing_Move := Is_Homing_Move;
 
+         --  Updating the discriminant above bypasses default initialization and changes the offsets of the
+         --  variable-sized arrays. Initialize every later-stage field in the new layout before returning it.
+         Block.Loop_Move_Minimum_Time := 0.0 * s;
+         Block.Extrusion_Reference_Positions := [others => 0.0 * mm];
+         Block.Extrusion_Densities := [others => 0.0];
+         Block.Extrusion_Junction_Corrections := [others => <>];
+         Block.Primitive_Distances := [others => 0.0 * mm];
+         Block.Primitive_Start_Distances := [others => 0.0 * mm];
+         Block.Corner_Velocity_Limits := [others => 0.0 * mm / s];
+         Block.Feedrate_Profiles :=
+           [others => (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s])];
+         Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
+         Block.Profile_Windows := [others => <>];
+         Block.Profile_Ends := [others => <>];
+
          if Is_Homing_Move then
             Block.Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];
          end if;
@@ -645,6 +662,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       procedure Reset (Last_Assigned_ID : Planner_Corner_ID) is
       begin
          Setup_Done := False;
+         Corners_Extra_Data.Clear;
          Last_Assigned_Corner_ID := Last_Assigned_ID;
          Current_Input_Corner_ID := 0;
       end Reset;

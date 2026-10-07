@@ -31,7 +31,13 @@
 --     The preprocessor is responsible for taking the incoming commands and converting them in to a series of corners
 --     that can be used by the later stages.
 --
---  2. Corner-transition construction:
+--  2. Extrusion_Density_Normalizer:
+--
+--     Adjacent same-direction spatial extrusion segments can share one density if each segment's extrusion adjustment
+--     fits Extrusion_Rounding_Tolerance. Runs retain their total extrusion before path shortening. The assigned
+--     densities remain authoritative through all later stages, including geometry recovery.
+--
+--  3. Corner-transition construction:
 --
 --     The configured family is constructed without per-corner allocation. Stereographic transitions support the
 --     existing line/helix combinations and match position through its fourth distance derivative at their endpoints.
@@ -41,15 +47,15 @@
 --     is C0, and waives acceleration and every higher derivative limit at the junction. Unsupported or uncertifiable
 --     geometry becomes a hard stop; nearly straight geometry is represented explicitly as a passthrough.
 --
---  3. Early_Kinematic_Limiter:
+--  4. Early_Kinematic_Limiter:
 --
---     The programmed feed-rate is adjusted if Ignore_E_In_XYZE is set so that it is equal to the desired feedrate
---     when the E axis movement is included. After this the total time of each move is adjusted such that no move will
+--     Feedrate uses XYZ distance, or E distance for E-only moves. When Ignore_E_In_XYZE is False, the programmed
+--     XYZE feedrate is converted to these coordinates. The total time of each move is adjusted such that no move will
 --     be less than Interpolation_Time, This ensures that the step generator will not have to skip over many segments
 --     in a row, which could cause the command queue to run dry. Finally the axial limits defined in
 --     Axial_Velocity_Maxes are applied.
 --
---  4. Kinematic_Limiter:
+--  5. Kinematic_Limiter:
 --
 --     A forward and backward pass are performed to generate corner velocities that conform to the specified kinematic
 --     limits. The forward pass starts from zero velocity and generates a series of time-optimal profiles for each
@@ -58,16 +64,16 @@
 --     goes back one corner at a time, limiting the corner velocities such that the next corner can be reached without
 --     violating the kinematic limits.
 --
---  5. Feedrate_Profile_Generator:
+--  6. Feedrate_Profile_Generator:
 --
 --     Using the corner velocities, an optimal velocity profile is generated for each segment.
 --
---  6. Homing move limits:
+--  7. Homing move limits:
 --
 --     If the move is a homing sequence, an inner loop first checks that the generated profile has a sufficiently long
 --     constant-velocity (coast) phase and that the complete tail after the loop command fits within
 --     Home_Move_Maximum_Tail_Time. If either check fails, the segment's maximum velocity is reduced before going back
---     to stage 4 (Kinematic_Limiter).
+--     to stage 5 (Kinematic_Limiter).
 --
 --  The fully processed Execution_Block is then made available via the Dequeue procedure.
 
@@ -162,6 +168,9 @@ package Prunt.Motion_Planner.Planner is
    type Execution_Block (N_Corners : Corners_Index := 1) is private;
    --  N_Corners may be 1, in which case there are no segments.
 
+   procedure Clear_Block_Extra_Data (Block : in out Execution_Block);
+   --  Release callback/configuration references when discarding a block. The block must not be executed afterwards.
+
    --  First Finishing_Corner = 2. If N_Corners < 2 then these functions must not be called.
 
    function Segment_Time
@@ -196,7 +205,8 @@ package Prunt.Motion_Planner.Planner is
 
    function Next_Block_Pos (Block : not null access constant Execution_Block) return Position;
    --  Returns the start position of the next block. At the end of a block, the motion executor should assume it is at
-   --  this position, even if is not.
+   --  this position, even if it is not. This also rebases E after path-length extrusion correction so subsequent
+   --  blocks continue to accept the commanded absolute E coordinates.
 
    function Block_Start_Pos (Block : not null access constant Execution_Block) return Position;
    --  Returns the start position of this block.
@@ -413,22 +423,52 @@ private
 
    type Block_Segment_Lengths is array (Corners_Index range <>) of Length;
    type Block_Primitive_Derivative_Bounds is array (Corners_Index range <>) of Unit_Speed_Axial_Derivative_Bounds;
+   type Block_Extrusion_Densities is array (Corners_Index range <>) of Dimensionless;
+   --  Signed E displacement per unit of commanded path length. E-only moves use |Delta_E| as path length.
+   type Block_Extrusion_Stops is array (Corners_Index range <>) of Boolean;
+
+   type Extrusion_Junction_Correction is record
+      Times       : Feedrate_Profile_Times := [others => 0.0 * s];
+      Max_Crackle : Crackle := 0.0 * mm / s ** 5;
+   end record;
+   --  A generated velocity change between adjacent extrusion densities. This stores the full transition's timings and
+   --  signed crackle, but execution uses its zero-initial-velocity displacement as a correction: Distance_At_Time
+   --  (Times, H - abs (time from junction), Max_Crackle, 0), where H = Total_Time (Times) / 2. The correction is zero
+   --  outside that interval. The moving reference supplies the base E position/velocity.
+
+   type Block_Extrusion_Junction_Corrections is array (Corners_Index range <>) of Extrusion_Junction_Correction;
+
+   type Extrusion_Transition_Result is record
+      Valid         : Boolean := True;
+      Profile       : Extrusion_Junction_Correction;
+      Half_Distance : Length := 0.0 * mm;
+      Deviation     : Length := 0.0 * mm;
+   end record;
+
    type Profile_Window is record
       Start_Distance : Length := 0.0 * mm;
       Distance       : Length := 0.0 * mm;
    end record;
 
-   type Profile_Window_Candidate_Index is range 1 .. 4;
+   type Profile_Window_Candidate_Index is range 1 .. 16;
    type Profile_Window_Candidates is array (Profile_Window_Candidate_Index) of Profile_Window;
-   type Stored_Profile_Window_Selection is mod 2 ** 8 with Size => 8;
-   type Block_Profile_Window_Selections is array (Corners_Index range <>) of Stored_Profile_Window_Selection;
+   type Block_Profile_Windows is array (Corners_Index range <>) of Profile_Window;
    type Block_Profile_Crackles is array (Corners_Index range <>) of Crackle;
 
-   type Planning_Workspace is record
-      Corner_Derivative_Bounds : Block_Primitive_Derivative_Bounds (Corners_Index);
+   type Profile_End is record
+      Profile           : Feedrate_Profile :=
+        (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
+      Max_Crackle       : Crackle := 0.0 * mm / s ** 5;
+      Boundary_Velocity : Velocity := 0.0 * mm / s;
    end record;
-   --  Data needed while planning a block but not while executing it. One workspace is allocated per planner instance
-   --  and reused after the corresponding Execution_Block has been dequeued.
+   --  Generated motion outside the central profile window. Boundary_Velocity is the velocity at the join with the
+   --  central profile; its acceleration, jerk and snap are zero, as at every full-profile endpoint.
+
+   type Profile_End_Pair is record
+      Enabled        : Boolean := False;
+      Prefix, Suffix : Profile_End;
+   end record;
+   type Block_Profile_Ends is array (Corners_Index range <>) of Profile_End_Pair;
 
    type Profile_Window_Evaluation is record
       Valid   : Boolean := False;
@@ -436,6 +476,111 @@ private
       Limits  : Scalar_Derivative_Limits;
       Max_Vel : Velocity := 0.0 * mm / s;
    end record;
+
+   type Profile_Window_Evaluation_Set is array (Profile_Window_Candidate_Index) of Profile_Window_Evaluation;
+   type Profile_Window_Evaluation_Cache is array (Finishing_Corners_Index range <>) of Profile_Window_Evaluation_Set;
+   type Block_Planning_Attempts is array (Finishing_Corners_Index range <>) of Natural;
+
+   type Planning_Workspace is record
+      --  Extrusion_Density_Normalizer
+      Unblended_Segment_Lengths     : Block_Segment_Lengths (Finishing_Corners_Index);
+      Unblended_Extrusion_Positions : Block_Segment_Lengths (Corners_Index);
+      --  Original scalar path lengths and normalized E boundary positions, before XYZ corner shortening.
+      --  Corner_Blender uses these on the initial pass and on geometry recovery without rederiving densities.
+
+      --  Kinematic_Limiter
+      Check_Extrusion_Position : Boolean := True;
+      --  Whether all commanded E coordinates are in bounds. Compute once per pass; homing can bypass bounds.
+      Static_Corner_Limits     : Block_Corner_Velocity_Limits (Corners_Index);
+      Window_Evaluations       : Profile_Window_Evaluation_Cache (Finishing_Corners_Index);
+      --  Cache the limits for each corner and candidate window across forward/reverse lookahead passes.
+      Extrusion_Widths         : Block_Segment_Lengths (Corners_Index) := [others => 0.0 * mm];
+      Extrusion_Stops          : Block_Extrusion_Stops (Corners_Index) := [others => False];
+      Extrusion_Ceilings       : Block_Corner_Velocity_Limits (Corners_Index) := [others => 0.0 * mm / s];
+      Extrusion_Deviations     : Block_Segment_Lengths (Corners_Index) := [others => 0.0 * mm];
+
+      --  Corner_Blender
+      Original_Extrusion_Positions : Block_Segment_Lengths (Corners_Index);
+      --  Preserve commanded E while constructing geometry from XYZ alone, including exception recovery.
+      Corner_Derivative_Bounds     : Block_Primitive_Derivative_Bounds (Corners_Index);
+
+      --  Planner
+      Planning_Attempts : Block_Planning_Attempts (Finishing_Corners_Index);
+      --  Count certification retries per segment. Reset for each block and when falling back to a stopped path.
+   end record;
+   --  Data needed while planning a block but not while executing it. One workspace is allocated per planner instance
+   --  and reused after the corresponding Execution_Block has been dequeued.
+
+   type Profile_Planning_Result (Valid : Boolean := True) is record
+      case Valid is
+         when True =>
+            null;
+
+         when False =>
+            Failed_Segment : Finishing_Corners_Index;
+      end case;
+   end record;
+
+   procedure Plan_Kinematics
+     (Block     : aliased in out Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace : not null access Planning_Workspace);
+   --  Solve junctions and profiles together, retrying failed certification at lower speeds and then with stops.
+
+   function Extrusion_Deviation (Block : not null access constant Execution_Block) return Length;
+
+   function Extrusion_Transition
+     (Block     : not null access constant Execution_Block;
+      Workspace : not null access constant Planning_Workspace;
+      Corner    : Corners_Index;
+      Speed     : Velocity) return Extrusion_Transition_Result;
+   --  Generate the minimum-time E velocity transition at a proposed common path speed. Its analytical deviation is
+   --  measured against the unsmoothed reference, with the reference corner at the transition's time midpoint.
+
+   procedure Plan_Extrusion_Junction
+     (Block     : aliased in out Execution_Block;
+      Workspace : not null access Planning_Workspace;
+      Corner    : Corners_Index;
+      Ceiling   : Velocity);
+
+   function Apply_Extrusion_Junction_Correction
+     (Block     : not null access constant Execution_Block;
+      Corner    : Finishing_Corners_Index;
+      Elapsed   : Time;
+      Reference : Length) return Length;
+   --  Add the active junction correction to the unsmoothed E reference at this segment time.
+
+   function Extrusion_Reference_At_Distance
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Distance : Length)
+      return Length;
+   --  E position after correction for path shortening, before junction smoothing.
+
+   function Extrusion_Bounds
+     (Block          : not null access constant Execution_Block;
+      Workspace      : not null access constant Planning_Workspace;
+      Corner         : Finishing_Corners_Index;
+      Start_Distance : Length := 0.0 * mm;
+      Distance       : Length := Length'Last) return Unit_Speed_Axial_Derivative_Bounds;
+
+   type Extrusion_Polynomial is array (Natural range <>) of Dimensionless;
+
+   function Extrusion_Polynomial_In_Range
+     (Coefficients : Extrusion_Polynomial; Lower, Upper : Dimensionless) return Boolean;
+
+   function Spatial_Primitive
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index)
+      return Derived_Path_Primitive;
+
+   function Extrusion_Segment_Valid
+     (Block       : not null access constant Execution_Block;
+      Workspace   : not null access constant Planning_Workspace;
+      Corner      : Finishing_Corners_Index;
+      Profile     : Feedrate_Profile;
+      Window      : Profile_Window;
+      Max_Crackle : Crackle;
+      Max_Vel     : Velocity;
+      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Ends        : Profile_End_Pair := (others => <>)) return Boolean;
 
    function Point_At_Segment_Distance
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index; Distance : Length)
@@ -447,6 +592,7 @@ private
 
    function Motor_Delta_Ceiling_For_Window
      (Block            : not null access constant Execution_Block;
+      Workspace        : not null access constant Planning_Workspace;
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Finishing_Corner : Finishing_Corners_Index;
       Window           : Profile_Window;
@@ -459,6 +605,11 @@ private
       Finishing_Corner : Finishing_Corners_Index;
       Window           : Profile_Window) return Unit_Speed_Axial_Derivative_Bounds;
    --  Merge the axial derivative bounds of every transition or primitive portion overlapped by Window.
+
+   function Spatial_Motor_Map
+     (Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map)
+      return Prunt.Motion_Planner.Planner.Motor_Position_Map;
+   --  Project XYZ independently; E's reference and junction corrections are bounded separately.
 
    function Motor_Projection_Coefficients
      (Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map; Motor : Motor_Name) return Projection_Coefficients;
@@ -491,18 +642,29 @@ private
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length;
    --  Return the full profileable path distance between the family-specific splits of adjacent corner transitions.
 
+   function Segment_Prefix_Time
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Time;
+
+   function Segment_Suffix_Time
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Time;
+
+   function Central_Profile_Start_Velocity
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Velocity;
+
    function Segment_Profile_Window_Candidates
-     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
-      return Profile_Window_Candidates;
+     (Block            : not null access constant Execution_Block;
+      Workspace        : not null access constant Planning_Workspace;
+      Finishing_Corner : Finishing_Corners_Index) return Profile_Window_Candidates;
    --  Return the deterministic candidate profile windows for a segment.
 
    function Evaluate_Profile_Window
-     (Block            : not null access constant Execution_Block;
-      Workspace        : not null access constant Planning_Workspace;
-      Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Finishing_Corner : Finishing_Corners_Index;
-      Window           : Profile_Window;
-      Max_Vel          : Velocity) return Profile_Window_Evaluation;
+     (Block                   : not null access constant Execution_Block;
+      Workspace               : not null access constant Planning_Workspace;
+      Motor_Map               : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Finishing_Corner        : Finishing_Corners_Index;
+      Window                  : Profile_Window;
+      Max_Vel                 : Velocity;
+      Allow_Extrusion_Overlap : Boolean := False) return Profile_Window_Evaluation;
    --  Return mixed chain-rule limits and velocity ceiling for a candidate profile window.
 
    function Motor_Delta_Ceiling_For_Projection
@@ -593,14 +755,14 @@ private
       --  faster than the same code without discriminated types (refer to the no-discriminated-records branch).
 
       --  Preprocessor
-      Kind                           : Execution_Block_Kind := Motion_Block_Kind;
-      Flush_Resetting_Data           : Flush_Resetting_Data_Type;
-      Next_Block_Pos                 : Position;
-      Params                         : Kinematic_Parameters;
-      First_Corner_ID                : Planner_Corner_ID := 0;
-      Associated_Overflow_Block      : Boolean := False;
-      Is_Homing_Move                 : Boolean;
-      Loop_Move_Minimum_Time         : Time := 0.0 * s;
+      Kind                      : Execution_Block_Kind := Motion_Block_Kind;
+      Flush_Resetting_Data      : Flush_Resetting_Data_Type;
+      Next_Block_Pos            : Position;
+      Params                    : Kinematic_Parameters;
+      First_Corner_ID           : Planner_Corner_ID := 0;
+      Associated_Overflow_Block : Boolean := False;
+      Is_Homing_Move            : Boolean;
+      Loop_Move_Minimum_Time    : Time := 0.0 * s;
       --  Earliest interpolation time at which the loop command of a homing block may be emitted.
 
       Corners_Extra_Data             : Corner_Extra_Data_Vectors.Vector;
@@ -608,23 +770,41 @@ private
       Corners                        : Block_Plain_Corners (1 .. N_Corners);
       Primitives                     : Block_Path_Primitives (2 .. N_Corners);
       Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
-      Limited_Segment_Feedrates      : Block_Segment_Feedrates (2 .. N_Corners);
       Corner_Dwell_Times             : Block_Corner_Dwell_Times (2 .. N_Corners);
 
-      --  Corner-transition construction
-      Corner_Transitions  : Block_Corner_Transitions (1 .. N_Corners);
-      Primitive_Distances : Block_Segment_Lengths (2 .. N_Corners);
+      --  Extrusion_Density_Normalizer
+      Extrusion_Densities : Block_Extrusion_Densities (2 .. N_Corners);
+      --  Authoritative E displacement per unit path distance for segment I, ending at corner I. Accepted runs share
+      --  one stored floating-point value exactly; later stages must never reconstruct it from Corners. At distance D,
+      --  E = Extrusion_Reference_Positions (I - 1) + Extrusion_Densities (I) * D before junction correction. Negative
+      --  densities represent retraction; E-only moves retain their original signed density.
 
-      --  Early_Kinematic_Limiter
+      --  Corner_Blender
+      Corner_Transitions        : Block_Corner_Transitions (1 .. N_Corners);
+      Primitive_Distances       : Block_Segment_Lengths (2 .. N_Corners);
       Primitive_Start_Distances : Block_Segment_Lengths (2 .. N_Corners);
 
+      Extrusion_Reference_Positions : Block_Segment_Lengths (1 .. N_Corners);
+      --  Entry I is the E coordinate at boundary I after density normalization and path shortening, before
+      --  applying junction corrections. Entry 1 is the block's starting E coordinate.
+
+      --  Early_Kinematic_Limiter
+      Limited_Segment_Feedrates : Block_Segment_Feedrates (2 .. N_Corners);
+
       --  Kinematic_Limiter
-      Corner_Velocity_Limits : Block_Corner_Velocity_Limits (1 .. N_Corners);
+      Corner_Velocity_Limits         : Block_Corner_Velocity_Limits (1 .. N_Corners);
+      Extrusion_Junction_Corrections : Block_Extrusion_Junction_Corrections (1 .. N_Corners);
+      --  These are corrections to the reference, not complete E trajectories. Entry I is centred on the boundary
+      --  between segments I and I+1. With H = Total_Time (Times) / 2, it applies during the final H of segment I's
+      --  motion and the first H of segment I+1.
 
       --  Feedrate_Profile_Generator
-      Feedrate_Profiles         : Block_Feedrate_Profiles (2 .. N_Corners);
-      Profile_Crackles          : Block_Profile_Crackles (2 .. N_Corners);
-      Profile_Window_Selections : Block_Profile_Window_Selections (2 .. N_Corners);
+      Feedrate_Profiles : Block_Feedrate_Profiles (2 .. N_Corners);
+      Profile_Crackles  : Block_Profile_Crackles (2 .. N_Corners);
+      Profile_Windows   : Block_Profile_Windows (2 .. N_Corners);
+      Profile_Ends      : Block_Profile_Ends (2 .. N_Corners) := [others => <>];
+      --  Enabled entries replace the coasts outside Profile_Windows with generated acceleration profiles. This lets
+      --  the retained primitive accelerate independently of tight bounds on the curved ends.
    end record;
 
 end Prunt.Motion_Planner.Planner;
