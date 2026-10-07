@@ -541,8 +541,11 @@ package body Prunt.Step_Generator is
          Commands.Last_Queued_Position := [others => Zero_Length];
          Commands.Extrusion_Check_Cycles_Remaining := 0;
 
-         accept Setup (Transform : Kinematic_Transform) do
+         accept Setup (Transform : Kinematic_Transform; Reset_Command_Index : Boolean := False) do
             Active_Transform := Transform;
+            if Reset_Command_Index then
+               Commands.Current_Command_Index := 0;
+            end if;
             Reset_Control.Mark_Running;
          end Setup;
 

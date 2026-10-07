@@ -873,7 +873,9 @@ package body Prunt.Controller is
    end Prompt_For_Update;
 
    procedure Setup_Planner_Runners
-     (Params : Motion_Planner.Kinematic_Parameters; Transform : Transforms.Kinematic_Transform)
+     (Params              : Motion_Planner.Kinematic_Parameters;
+      Transform           : Transforms.Kinematic_Transform;
+      Reset_Command_Index : Boolean)
    is
       Motor_Map      : constant Transforms.Motor_Position_Map := Transforms.Transform_Linear_Map (Transform);
       Limited_Params : constant Motion_Planner.Kinematic_Parameters :=
@@ -881,7 +883,7 @@ package body Prunt.Controller is
    begin
       My_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
       My_Pause_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
-      My_Step_Generator.Runner.Setup (Transform);
+      My_Step_Generator.Runner.Setup (Transform, Reset_Command_Index);
    end Setup_Planner_Runners;
 
    function Apply_Global_Delta_Velocity_Limit
@@ -1031,7 +1033,9 @@ package body Prunt.Controller is
               Startup_Transform);
       begin
          Current_Kinematic_Transform := Startup_Transform;
-         Setup_Planner_Runners (Startup_Parameters, Current_Kinematic_Transform);
+         --  Hardware command history starts over on a reload. Startup's empty homing-update block must not wait
+         --  for the last command from the previous run before the G-code processor can start.
+         Setup_Planner_Runners (Startup_Parameters, Current_Kinematic_Transform, Reset_Command_Index => True);
 
          Primary_Planner_State.Set_Last_Kinematic_Parameters (Startup_Parameters);
          Primary_Planner_State.Set_Last_Position (Startup_Position);
@@ -2027,7 +2031,7 @@ package body Prunt.Controller is
          Last_Command_Executed.Reset (Current_Position);
          Idle_Notification_State.Abandon_Activities (Last_Command_Executed.Get);
 
-         Setup_Planner_Runners (Params, Current_Kinematic_Transform);
+         Setup_Planner_Runners (Params, Current_Kinematic_Transform, Reset_Command_Index => False);
 
          Primary_Planner_State.Set_Last_Position (Current_Position);
          Pause_Planner_State.Set_Last_Position (Current_Position);
