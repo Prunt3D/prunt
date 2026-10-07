@@ -213,6 +213,10 @@ package Prunt.Controller_Generic_Types is
       --  Params.Kind will always be PID_Autotune_Kind.
       --
       --  TODO: Save the results to the config file.
+      Get_Current : access function (Heater : Heater_Name; Requires_Fresh : Boolean) return Current := null;
+      --  Optional measured load current, including when the heater is disabled. Null means this heater has no current
+      --  sensor. May be called from any task. With Requires_Fresh = False, return the latest available measurement
+      --  without waiting for hardware; it may represent a hardware averaging window.
    end record;
 
    type Heater_Hardware_Parameters_Array_Type is array (Heater_Name) of Heater_Hardware_Parameters;

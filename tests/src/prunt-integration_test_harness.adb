@@ -278,7 +278,8 @@ package body Prunt.Integration_Test_Harness is
         [others =>
            (Reconfigure     => Reconfigure_Heater'Access,
             Set_Temperature => Set_Heater_Temperature'Access,
-            Autotune        => Autotune_Heater'Access)],
+            Autotune        => Autotune_Heater'Access,
+            others          => <>)],
       Thermistor_Hardware              =>
         [others =>
            (Reconfigure     => Reconfigure_Thermistor'Access,

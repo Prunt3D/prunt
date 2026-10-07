@@ -73,7 +73,8 @@ procedure Tests is
      (Thermistor_Hardware => [others => (Reconfigure => null, Get_Temperature => null)]);
    package Cold_Extrusion_Blocking_Tracker is new Machine_Idle_Timeout_Test_Default_Modules.Blocking_Tracker;
    package Cold_Extrusion_Heaters is new Machine_Idle_Timeout_Test_Default_Modules.Heaters
-     (Heater_Hardware => [others => (Reconfigure => null, Set_Temperature => null, Autotune => null)],
+     (Heater_Hardware =>
+        [others => (Reconfigure => null, Set_Temperature => null, Autotune => null, others => <>)],
       Thermistors_Module => Cold_Extrusion_Thermistors,
       Blocking_Tracker_Module => Cold_Extrusion_Blocking_Tracker);
    package Cold_Extrusion_Test is new Cold_Extrusion_Heaters.Test;

@@ -449,6 +449,22 @@ private
    package Extrusion_Temperature_Monitor_Pointers is new
      Prunt.Limited_Shared_Pointers (Extrusion_Temperature_Monitor_Wrapper);
 
+   type Heater_Current_Status_Setters is array (Heater_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
+
+   task type Current_Reporter is
+      entry Start (Setters : Heater_Current_Status_Setters);
+      entry Stop;
+   end Current_Reporter;
+
+   type Current_Reporter_Wrapper is new Ada.Finalization.Limited_Controlled with record
+      Reporter : Current_Reporter;
+   end record;
+
+   overriding
+   procedure Finalize (Object : in out Current_Reporter_Wrapper);
+
+   package Current_Reporter_Pointers is new Prunt.Limited_Shared_Pointers (Current_Reporter_Wrapper);
+
    protected type Module_Instance is new My_Modules.Module_Instance
    and Module_Instance_Interface
    and Pause_Handler
@@ -522,6 +538,8 @@ private
       function Get_Default_Heater (Selection : User_Config_Default_Heater; Display_Name : String) return Heater_Name;
    private
       Monitor                              : Extrusion_Temperature_Monitor_Pointers.Ref;
+      Current_Reporting                    : Current_Reporter_Pointers.Ref;
+      Current_Status_Setters               : Heater_Current_Status_Setters;
       Config                               : User_Config;
       Self_Ref                             : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
       Thermistors_Module_Instance_Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;

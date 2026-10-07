@@ -104,14 +104,33 @@ package body Prunt.Default_Modules.Heaters is
    overriding
    function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
       pragma Unreferenced (This);
-   begin
-      return
+
+      Result   : Status_Manager.Status_Group_Maps.Map :=
         ["Target" =>
            [for H in Heater_Name use+H'Image =>
               (Kind        => Status_Manager.Real_Kind,
                Unit        => "°C",
                Description => "Requested target temperature of heater " & (+H'Image),
                Condition   => "")]];
+      Currents : Status_Manager.Status_Value_Maps.Map;
+   begin
+      for H in Heater_Name loop
+         if Heater_Hardware (H).Get_Current /= null then
+            Currents.Insert
+              (+H'Image,
+               (Kind        => Status_Manager.Real_Kind,
+                Unit        => "A",
+                Description =>
+                  "Last measured load current of heater "
+                  & (+H'Image)
+                  & ". Reported even when disabled; the hardware may average measurements over time.",
+                Condition   => ""));
+         end if;
+      end loop;
+      if not Currents.Is_Empty then
+         Result.Insert ("Current", Currents);
+      end if;
+      return Result;
    end Status_Schema;
 
    overriding
@@ -142,11 +161,11 @@ package body Prunt.Default_Modules.Heaters is
    begin
 
       Context.Log_If_Interactive
-        (+("Waiting for heater "
-           & This.Heater'Image
-           & " to reach "
-           & Dimensionless'Image (This.Target / celsius)
-           & " °C."));
+        ("Waiting for heater "
+         & (+This.Heater'Image)
+         & " to reach "
+         & (+Dimensionless'Image (This.Target / celsius))
+         & " °C.");
 
       if This.Ramp_Duration > 0.0 * s
         and then (not This.Ramp_Only_If_Heating or else Ramp_Start_Temperature < This.Target)
@@ -390,6 +409,42 @@ package body Prunt.Default_Modules.Heaters is
       end if;
    end Finalize;
 
+   task body Current_Reporter is
+      Status_Setters : Heater_Current_Status_Setters;
+      Stopped        : Boolean := False;
+   begin
+      select
+         accept Stop;
+         Stopped := True;
+      or
+         accept Start (Setters : Heater_Current_Status_Setters) do
+            Status_Setters := Setters;
+         end Start;
+      end select;
+
+      while not Stopped loop
+         for H in Heater_Name loop
+            if Heater_Hardware (H).Get_Current /= null then
+               Status_Setters (H).Set_Value (Heater_Hardware (H).Get_Current (H, Requires_Fresh => False) / amp);
+            end if;
+         end loop;
+         select
+            accept Stop;
+            Stopped := True;
+         or
+            delay 0.5;
+         end select;
+      end loop;
+   end Current_Reporter;
+
+   overriding
+   procedure Finalize (Object : in out Current_Reporter_Wrapper) is
+   begin
+      if not Object.Reporter'Terminated then
+         Object.Reporter.Stop;
+      end if;
+   end Finalize;
+
    protected body Module_Instance is
       procedure Initialize
         (Config_In                           : User_Config;
@@ -398,11 +453,17 @@ package body Prunt.Default_Modules.Heaters is
          Blocking_Tracker_Module_Instance_In : My_Modules.Module_Instance_Shared_Pointers.Ref)
       is
          function Make_Monitor return Extrusion_Temperature_Monitor_Wrapper;
+         function Make_Current_Reporter return Current_Reporter_Wrapper;
 
          function Make_Monitor return Extrusion_Temperature_Monitor_Wrapper is
          begin
             return Result : Extrusion_Temperature_Monitor_Wrapper;
          end Make_Monitor;
+
+         function Make_Current_Reporter return Current_Reporter_Wrapper is
+         begin
+            return Result : Current_Reporter_Wrapper;
+         end Make_Current_Reporter;
       begin
          Config := Config_In;
          if (for some H in Heater_Name =>
@@ -416,7 +477,13 @@ package body Prunt.Default_Modules.Heaters is
 
          for H in Heater_Name loop
             Target_Status_Setters (H) := Status_Emitter_In.Get_Lock_Free_Setter ("Target", +H'Image);
+            if Heater_Hardware (H).Get_Current /= null then
+               Current_Status_Setters (H) := Status_Emitter_In.Get_Lock_Free_Setter ("Current", +H'Image);
+            end if;
          end loop;
+         if (for some H in Heater_Name => Heater_Hardware (H).Get_Current /= null) then
+            Current_Reporting.Set (Make_Current_Reporter'Access);
+         end if;
       end Initialize;
 
       procedure Start
@@ -453,6 +520,9 @@ package body Prunt.Default_Modules.Heaters is
             Extrusion_Allowed_Until := Ada.Real_Time.Time_Last;
          else
             Monitor.Get.Monitor.Start (Config, Thermistors_Module_Instance_Ref);
+         end if;
+         if not Current_Reporting.Is_Null then
+            Current_Reporting.Get.Reporter.Start (Current_Status_Setters);
          end if;
       end Start;
 
@@ -615,17 +685,19 @@ package body Prunt.Default_Modules.Heaters is
             if Target < Thermistor_Params.Minimum_Temperature then
                raise Gcode_Bad_Inputs_Error
                  with
-                   "Target temperature must not be less than "
-                   & Dimensionless'Image (Thermistor_Params.Minimum_Temperature / celsius)
-                   & " °C.";
+                   Conversions.To_UTF_8_String
+                     ("Target temperature must not be less than "
+                      & (+Dimensionless'Image (Thermistor_Params.Minimum_Temperature / celsius))
+                      & " °C.");
             end if;
 
             if Target > Thermistor_Params.Maximum_Temperature then
                raise Gcode_Bad_Inputs_Error
                  with
-                   "Target temperature must not be greater than "
-                   & Dimensionless'Image (Thermistor_Params.Maximum_Temperature / celsius)
-                   & " °C.";
+                   Conversions.To_UTF_8_String
+                     ("Target temperature must not be greater than "
+                      & (+Dimensionless'Image (Thermistor_Params.Maximum_Temperature / celsius))
+                      & " °C.");
             end if;
          end;
 
