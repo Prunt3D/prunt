@@ -41,6 +41,19 @@ package body Prunt.Default_Modules.Thermistors is
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
 
    overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map is
+      pragma Unreferenced (This);
+   begin
+      return
+        ["Temperature" =>
+           [for T in Thermistor_Name use+T'Image =>
+              (Kind        => Status_Manager.Real_Kind,
+               Unit        => "°C",
+               Description => "Measured temperature of thermistor " & (+T'Image),
+               Condition   => "")]];
+   end Status_Schema;
+
+   overriding
    procedure Gcode_Dispatch
      (This               : Module_Instance;
       Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
@@ -180,12 +193,12 @@ package body Prunt.Default_Modules.Thermistors is
          if Enabled_Thermistors (T) then
             Found_Enabled_Thermistor := True;
             My_Logger.Log
-              (+(T'Image
-                 & ": "
-                 & Trim
+              ((+T'Image)
+               & ": "
+               & (+Trim
                      (Dimensionless'Image (Thermistor_Hardware (T).Get_Temperature (T, Requires_Fresh) / celsius),
-                      Both)
-                 & " °C"));
+                      Both))
+               & " °C");
          end if;
       end loop;
 
@@ -211,12 +224,12 @@ package body Prunt.Default_Modules.Thermistors is
       Get_Other_Instance  : access function (Tag : Ada.Tags.Tag) return My_Modules.Module_Instance_Shared_Pointers.Ref)
       return My_Modules.Module_Instance'Class
    is
-      pragma Unreferenced (This, Status_Emitter, Get_Other_Instance);
+      pragma Unreferenced (This, Get_Other_Instance);
 
       Parsed_Config : constant User_Config := Config_Data_To_User_Config (Config_Data);
    begin
       return Result : Module_Instance do
-         Result.Initialize (Parsed_Config);
+         Result.Initialize (Parsed_Config, Status_Emitter);
 
          for T in Thermistor_Name loop
             if Parsed_Config.Thermistors (T).Sensor_Model.Kind /= Disabled then
@@ -271,13 +284,13 @@ package body Prunt.Default_Modules.Thermistors is
          if This.Enabled_Thermistors (T) then
             Found_Enabled_Thermistor := True;
             Context.Log
-              (+(T'Image
-                 & ": "
-                 & Trim
+              ((+T'Image)
+               & ": "
+               & (+Trim
                      (Dimensionless'Image
                         (Thermistor_Hardware (T).Get_Temperature (T, Requires_Fresh => True) / celsius),
-                      Both)
-                 & " °C"));
+                      Both))
+               & " °C");
          end if;
       end loop;
 
@@ -306,17 +319,24 @@ package body Prunt.Default_Modules.Thermistors is
    end Process_After_Block;
 
    task body Temperature_Reporter is
-      Enabled_Thermistors_Ref      : Thermistor_Enabled_Array;
-      Stop_Received                : Boolean := False;
-      Current_Auto_Report_Interval : Duration := 0.0;
-      Next_Auto_Report             : Ada.Real_Time.Time := Ada.Real_Time.Time_First;
+      Enabled_Thermistors_Ref        : Thermistor_Enabled_Array;
+      Temperature_Status_Setters_Ref : Thermistor_Temperature_Status_Setters;
+      Stop_Received                  : Boolean := False;
+      Current_Auto_Report_Interval   : Duration := 0.0;
+      Next_Status_Report             : Ada.Real_Time.Time := Ada.Real_Time.Time_First;
+      Next_Auto_Report               : Ada.Real_Time.Time := Ada.Real_Time.Time_First;
    begin
       select
          accept Stop;
          Stop_Received := True;
       or
-         accept Start (Enabled_Thermistors : Thermistor_Enabled_Array) do
+         accept Start
+           (Enabled_Thermistors        : Thermistor_Enabled_Array;
+            Temperature_Status_Setters : Thermistor_Temperature_Status_Setters)
+         do
             Enabled_Thermistors_Ref := Enabled_Thermistors;
+            Temperature_Status_Setters_Ref := Temperature_Status_Setters;
+            Next_Status_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Status_Report_Period);
          end Start;
       end select;
 
@@ -332,6 +352,22 @@ package body Prunt.Default_Modules.Thermistors is
                   Next_Auto_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
                end if;
             end Set_Auto_Report_Interval;
+         or
+            delay until Next_Status_Report;
+
+            for T in Thermistor_Name loop
+               if Enabled_Thermistors_Ref (T) then
+                  Temperature_Status_Setters_Ref (T).Set_Value
+                    (Thermistor_Hardware (T).Get_Temperature (T, Requires_Fresh => False) / celsius);
+               else
+                  Temperature_Status_Setters_Ref (T).Set_Value (0.0);
+               end if;
+            end loop;
+
+            Next_Status_Report := Next_Status_Report + Ada.Real_Time.To_Time_Span (Status_Report_Period);
+            if Ada.Real_Time.Clock > Next_Status_Report then
+               Next_Status_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Status_Report_Period);
+            end if;
          or
             when Current_Auto_Report_Interval > 0.0
             =>delay until Next_Auto_Report;
@@ -353,7 +389,7 @@ package body Prunt.Default_Modules.Thermistors is
    end Finalize;
 
    protected body Module_Instance is
-      procedure Initialize (Config_In : User_Config) is
+      procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter) is
          function Make_Reporter_Task return Temperature_Reporter_Wrapper;
 
          function Make_Reporter_Task return Temperature_Reporter_Wrapper is
@@ -362,6 +398,11 @@ package body Prunt.Default_Modules.Thermistors is
          end Make_Reporter_Task;
       begin
          Config := Config_In;
+
+         for T in Thermistor_Name loop
+            Temperature_Status_Setters (T) := Status_Emitter_In.Get_Lock_Free_Setter ("Temperature", +T'Image);
+         end loop;
+
          Reporter.Set (Make_Reporter_Task'Access);
       end Initialize;
 
@@ -377,7 +418,8 @@ package body Prunt.Default_Modules.Thermistors is
          end loop;
 
          Reporter.Get.Reporter.Start
-           ([for T in Thermistor_Name => Config.Thermistors (T).Sensor_Model.Kind /= Disabled]);
+           ([for T in Thermistor_Name => Config.Thermistors (T).Sensor_Model.Kind /= Disabled],
+            Temperature_Status_Setters);
       end Start;
 
       function Thermistor_Is_Enabled_In_Config (Thermistor : Thermistor_Name) return Boolean is

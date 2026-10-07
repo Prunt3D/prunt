@@ -44,6 +44,10 @@ package Prunt.Default_Modules.Thermistors is
    function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
    --  Return the supported G-code commands.
 
+   overriding
+   function Status_Schema (This : Module) return Status_Manager.Status_Group_Maps.Map;
+   --  Return the status schema.
+
    type Module_Instance_Interface is synchronized interface;
 
    function Thermistor_Is_Enabled_In_Config
@@ -362,6 +366,11 @@ private
 
    type Thermistor_Enabled_Array is array (Thermistor_Name) of Boolean;
 
+   type Thermistor_Temperature_Status_Setters is
+     array (Thermistor_Name) of Status_Manager.Lock_Free_Dimensionless_Setter;
+
+   Status_Report_Period : constant Duration := 0.5;
+
    procedure Report_Temperatures
      (This : Module_Instance; Planner : Planner_Interface'Class; T : Gcode_Arguments.Argument_Integer := 0)
    with Annotate => (Prunt_Config, Gcode_Command, "M105");
@@ -400,7 +409,9 @@ private
    --  Log all enabled thermistor temperatures.
 
    task type Temperature_Reporter is
-      entry Start (Enabled_Thermistors : Thermistor_Enabled_Array);
+      entry Start
+        (Enabled_Thermistors        : Thermistor_Enabled_Array;
+         Temperature_Status_Setters : Thermistor_Temperature_Status_Setters);
       entry Stop;
       entry Set_Auto_Report_Interval (Value : Duration);
    end Temperature_Reporter;
@@ -416,7 +427,7 @@ private
    package Temperature_Reporter_Wrapper_Pointers is new Limited_Shared_Pointers (Temperature_Reporter_Wrapper);
 
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
-      procedure Initialize (Config_In : User_Config);
+      procedure Initialize (Config_In : User_Config; Status_Emitter_In : Status_Manager.Status_Emitter);
 
       overriding
       procedure Start
@@ -435,9 +446,10 @@ private
 
       function Get_Enabled_Thermistors return Thermistor_Enabled_Array;
    private
-      Config   : User_Config;
-      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-      Reporter : Temperature_Reporter_Wrapper_Pointers.Ref;
+      Config                     : User_Config;
+      Temperature_Status_Setters : Thermistor_Temperature_Status_Setters;
+      Self_Ref                   : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Reporter                   : Temperature_Reporter_Wrapper_Pointers.Ref;
    end Module_Instance;
 
 end Prunt.Default_Modules.Thermistors;
