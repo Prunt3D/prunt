@@ -46,6 +46,11 @@ package body Prunt.Gcode_Queues is
          Stop_Requested := True;
       end Stop_Waiting;
 
+      procedure Reset_Stop_Request is
+      begin
+         Stop_Requested := False;
+      end Reset_Stop_Request;
+
       procedure Cancel_File is
       begin
          if Current_File.Is_Open then

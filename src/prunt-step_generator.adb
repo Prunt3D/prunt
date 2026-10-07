@@ -555,6 +555,17 @@ package body Prunt.Step_Generator is
 
                Primary_Block_Executor.Execute_Block (Block'Access, Active_Transform, Commands, Reset_Requested);
                exit Main when Reset_Requested;
+            exception
+               when Hardware_Communication_Error =>
+                  --  The hardware adapter has already reported the error. Abandon this block without running its
+                  --  completion callbacks or waiting for hardware that can no longer acknowledge commands. Keep
+                  --  acknowledging halt until Reset arrives, including when Soft_Halt starts after this handler.
+                  loop
+                     Halt_Control.Acknowledge;
+                     exit when Reset_Control.Requested;
+                     delay 0.01;
+                  end loop;
+                  exit Main;
             end;
          end loop Main;
       end loop;

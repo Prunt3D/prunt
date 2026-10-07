@@ -190,6 +190,7 @@ package body Prunt.Controller is
       procedure Clear is
       begin
          Handlers.Clear;
+         Handlers.Reserve_Capacity (0);
       end Clear;
 
       procedure Snapshot (Result : out Module_Instance_Vectors.Vector) is
@@ -441,6 +442,11 @@ package body Prunt.Controller is
             while not Primary_Planner_State.Homing_Update_Completed (Axis, Generation)
               and then not Gcode_Cancellation_Barrier.Is_Cancellation_Active
             loop
+               if Exception_Occurrence_Holder.Is_Set then
+                  --  The step generator may have abandoned the block after a hardware failure. In particular, startup
+                  --  must leave this wait before the controller can halt the pipeline and handle the error.
+                  raise Hardware_Communication_Error with "Homing update cancelled after a controller error.";
+               end if;
                delay 0.01;
             end loop;
 
@@ -523,6 +529,9 @@ package body Prunt.Controller is
             while not Primary_Planner_State.Homing_Update_Completed (Axis, Generation)
               and then not Gcode_Cancellation_Barrier.Is_Cancellation_Active
             loop
+               if Exception_Occurrence_Holder.Is_Set then
+                  raise Hardware_Communication_Error with "Homing update cancelled after a controller error.";
+               end if;
                delay 0.01;
             end loop;
 
@@ -1036,6 +1045,8 @@ package body Prunt.Controller is
       end Setup_Runtime_Pipeline;
 
       procedure Attempt_Start (Started : out Boolean) is
+         use type Ada.Tags.Tag;
+
          Had_Error : Boolean := False;
 
          procedure Report_Config_Error (Path : Config.Config_Data_Paths.Vector; Message : Virtual_String);
@@ -1095,8 +1106,17 @@ package body Prunt.Controller is
                       when Instance.Get.Element.all in Controller_Interfaces.Idle_Notification_Receiver'Class =>
                     Instance]);
 
+            --  Enable temperature limits before slower hardware setup such as motor-driver register writes.
+            --  The thermistor module has no module dependencies, so it can start ahead of the dependency order.
             for M of Active_Module_Instances loop
-               My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
+               if M.Get.Element'Tag = My_Default_Modules_Children.Thermistors.Module_Instance'Tag then
+                  My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
+               end if;
+            end loop;
+            for M of Active_Module_Instances loop
+               if M.Get.Element'Tag /= My_Default_Modules_Children.Thermistors.Module_Instance'Tag then
+                  My_Modules.Module_Instance'Class (M.Get.Element.all).Start (M.Weak, Startup_Planner);
+               end if;
             end loop;
 
             Idle_Notification_State.Publish_Completion_When_Inactive (Last_Command_Executed.Get);
@@ -1104,6 +1124,10 @@ package body Prunt.Controller is
             Started := True;
          end if;
       exception
+         when Hardware_Communication_Error =>
+            Reset_Runtime_State;
+            Clear_Active_Modules;
+            Started := False;
          when others =>
             Reset_Runtime_State;
             Clear_Active_Modules;
@@ -1433,6 +1457,10 @@ package body Prunt.Controller is
                   Process_Gcode_Queue;
                   Gcode_Processor_Is_Running := False;
                exception
+                  when Hardware_Communication_Error =>
+                     --  The hardware adapter has already reported the failure; stop this run without promoting it
+                     --  to a fatal task error.
+                     Gcode_Processor_Is_Running := False;
                   when E : others =>
                      Gcode_Processor_Is_Running := False;
                      My_Logger.Log
@@ -1464,6 +1492,9 @@ package body Prunt.Controller is
                      Notify_Idle_Start (Completion);
                   end loop;
                exception
+                  when Hardware_Communication_Error =>
+                     --  An unavailable reply must not publish a successful idle notification.
+                     null;
                   when E : others =>
                      My_Logger.Log
                        (Conversions.To_Virtual_String
@@ -1507,6 +1538,9 @@ package body Prunt.Controller is
             Started   : Boolean;
             Exit_Main : Boolean;
          begin
+            --  The previous G-code task may have exited on an error before consuming Stop_Waiting. All workers
+            --  from that run have terminated before we reach here, so a new consumer must not inherit its stop.
+            My_Gcode_Queue.Reset_Stop_Request;
             Attempt_Start (Started);
             Wait_For_Run_End (Started, Exit_Main);
             exit Main when Exit_Main;

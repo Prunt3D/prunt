@@ -439,6 +439,7 @@ private
 
    task type UART_Motor_Manager is
       entry Setup (Regs : TMC2240_Registers; Motor : Motor_Name; Status_Emitter : Status_Manager.Status_Emitter);
+      entry Start_Polling;
       entry Enable;
       entry Disable;
       entry Stop;

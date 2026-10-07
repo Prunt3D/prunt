@@ -43,6 +43,9 @@ package Prunt.Gcode_Queues is
       procedure Stop_Waiting;
       --  Wake any task blocked in Get_Next_Line and have its next call return with Stopped = True.
 
+      procedure Reset_Stop_Request;
+      --  Clear an unconsumed stop request between controller runs, after the previous consumer has terminated.
+
       procedure Cancel_File;
       --  Cancel the currently enqueued or running file.
 

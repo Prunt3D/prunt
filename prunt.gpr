@@ -126,6 +126,12 @@ project Prunt is
            "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
            "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
 
+      case Prunt_Config.Build_Profile is
+         when "release" =>
+            for Default_Switches ("Fortran") use ("-O2");
+         when others =>
+            null;
+      end case;
    end Compiler;
 
    package Naming is

@@ -279,6 +279,11 @@ package Prunt is
 
    TMC_UART_Error : exception;
 
+   Hardware_Communication_Error : exception;
+   --  Hardware callbacks may raise this after reporting a communications failure with Report_External_Error. It
+   --  cancels the current operation without treating an unavailable reply as successful completion. The controller
+   --  stops the current run, and the step generator remains available for an in-process reload.
+
    type Update_Check_Method is (None, Github);
 
    type Update_Check_Details (Method : Update_Check_Method := None) is record

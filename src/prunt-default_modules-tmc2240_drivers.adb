@@ -528,12 +528,6 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          end if;
 
          return Reply;
-      exception
-         when TMC_UART_Error =>
-            My_Logger.Log ("Data from TMC2240 Read after error:");
-            My_Logger.Log (+("Sent: " & Query.Content'Image));
-            My_Logger.Log (+("Received: " & Reply.Content'Image));
-            raise;
       end;
    end Read;
 
@@ -552,177 +546,214 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    task body UART_Motor_Manager is
       use type Ada.Real_Time.Time;
 
-      My_Regs        : TMC2240_Registers;
-      My_Motor       : Motor_Name;
-      Status_Ref     : Status_Manager.Status_Emitter;
-      Stop_Requested : Boolean := False;
-      Next_Poll_Time : Ada.Real_Time.Time := Ada.Real_Time.Clock;
+      My_Regs         : TMC2240_Registers;
+      My_Motor        : Motor_Name;
+      Status_Ref      : Status_Manager.Status_Emitter;
+      Stop_Requested  : Boolean := False;
+      Polling_Started : Boolean := False;
+      Hardware_Failed : Boolean := False;
+      Next_Poll_Time  : Ada.Real_Time.Time := Ada.Real_Time.Time_Last;
+
+      procedure Check_Connection is
+      begin
+         if Hardware_Failed then
+            raise Hardware_Communication_Error with "Motor-driver connection is unavailable.";
+         end if;
+      end Check_Connection;
    begin
-      select
-         accept Setup (Regs : TMC2240_Registers; Motor : Motor_Name; Status_Emitter : Status_Manager.Status_Emitter) do
-            My_Regs := Regs;
-            My_Motor := Motor;
-            Status_Ref := Status_Emitter;
-
-            if Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind then
-               --  This is always going to be a slow procedure so it is fine to have a check here in release builds.
-               raise Constraint_Error;
-            end if;
-
-            Write_And_Validate
-              ((Bytes_Mode => False, Content => (Register => GCONF_Address, GCONF_Data => Regs.GCONF, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => DRV_CONF_Address, DRV_CONF_Data => Regs.DRV_CONF, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    =>
-                  (Register => GLOBAL_SCALER_Address, GLOBAL_SCALER_Data => Regs.GLOBAL_SCALER, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => IHOLD_IRUN_Address, IHOLD_IRUN_Data => Regs.IHOLD_IRUN, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => TPOWERDOWN_Address, TPOWERDOWN_Data => Regs.TPOWERDOWN, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => TPWMTHRS_Address, TPWMTHRS_Data => Regs.TPWMTHRS, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => TCOOLTHRS_Address, TCOOLTHRS_Data => Regs.TCOOLTHRS, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False, Content => (Register => THIGH_Address, THIGH_Data => Regs.THIGH, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => PWMCONF_Address, PWMCONF_Data => Regs.PWMCONF, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => CHOPCONF_Address, CHOPCONF_Data => Regs.CHOPCONF, others => <>)),
-               Motor);
-         end Setup;
-      or
-         accept Stop;
-         Stop_Requested := True;
-      end select;
-
-      while not Stop_Requested loop
+      begin
          select
-            accept Enable do
-               if My_Regs.CHOPCONF.TOFF = Disable_Driver then
-                  raise Constraint_Error with "Tried to enable motor which is disabled in config.";
+            accept Setup
+              (Regs : TMC2240_Registers; Motor : Motor_Name; Status_Emitter : Status_Manager.Status_Emitter)
+            do
+               My_Regs := Regs;
+               My_Motor := Motor;
+               Status_Ref := Status_Emitter;
+
+               if Motor_Hardware (Motor).Kind /= TMC2240_UART_Kind then
+                  --  This is always going to be a slow procedure so it is fine to have a check here in release builds.
+                  raise Constraint_Error;
                end if;
 
                Write_And_Validate
                  ((Bytes_Mode => False,
-                   Content    => (Register => CHOPCONF_Address, CHOPCONF_Data => My_Regs.CHOPCONF, others => <>)),
-                  My_Motor);
-            end Enable;
-         or
-            accept Disable do
+                   Content    => (Register => GCONF_Address, GCONF_Data => Regs.GCONF, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => DRV_CONF_Address, DRV_CONF_Data => Regs.DRV_CONF, others => <>)),
+                  Motor);
                Write_And_Validate
                  ((Bytes_Mode => False,
                    Content    =>
-                     (Register      => CHOPCONF_Address,
-                      CHOPCONF_Data => (My_Regs.CHOPCONF with delta TOFF => Disable_Driver),
-                      others        => <>)),
-                  My_Motor);
-            end Disable;
+                     (Register => GLOBAL_SCALER_Address, GLOBAL_SCALER_Data => Regs.GLOBAL_SCALER, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => IHOLD_IRUN_Address, IHOLD_IRUN_Data => Regs.IHOLD_IRUN, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => TPOWERDOWN_Address, TPOWERDOWN_Data => Regs.TPOWERDOWN, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => TPWMTHRS_Address, TPWMTHRS_Data => Regs.TPWMTHRS, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => TCOOLTHRS_Address, TCOOLTHRS_Data => Regs.TCOOLTHRS, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => THIGH_Address, THIGH_Data => Regs.THIGH, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => PWMCONF_Address, PWMCONF_Data => Regs.PWMCONF, others => <>)),
+                  Motor);
+               Write_And_Validate
+                 ((Bytes_Mode => False,
+                   Content    => (Register => CHOPCONF_Address, CHOPCONF_Data => Regs.CHOPCONF, others => <>)),
+                  Motor);
+            end Setup;
          or
             accept Stop;
             Stop_Requested := True;
-         or
-            delay until Next_Poll_Time;
-            Next_Poll_Time := Next_Poll_Time + Ada.Real_Time.Milliseconds (500);
-
-            declare
-               GSTAT_Reply : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               GSTAT_Reply := Read (TMC_Types.TMC2240.GSTAT_Address, My_Motor);
-               Status_Ref.Set_Value
-                 ("Driver error", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.Drv_Err));
-               Status_Ref.Set_Value
-                 ("Undervoltage charge pump", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.UV_CP));
-               Status_Ref.Set_Value
-                 ("VM undervoltage", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.VM_UVLO));
-            exception
-               when TMC_UART_Error =>
-                  null;
-            end;
-
-            declare
-               ADC_VSUPPLY_AIN_Reply : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               ADC_VSUPPLY_AIN_Reply := Read (TMC_Types.TMC2240.ADC_VSUPPLY_AIN_Address, My_Motor);
-               Status_Ref.Set_Value
-                 ("Supply voltage",
-                  +My_Motor'Image,
-                  Dimensionless (ADC_VSUPPLY_AIN_Reply.Content.ADC_VSUPPLY_AIN_Data.ADC_V_Supply));
-            exception
-               when TMC_UART_Error =>
-                  null;
-            end;
-
-            declare
-               ADC_TEMP_Reply : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               ADC_TEMP_Reply := Read (TMC_Types.TMC2240.ADC_TEMP_Address, My_Motor);
-               Status_Ref.Set_Value
-                 ("Temperature",
-                  +My_Motor'Image,
-                  Dimensionless (ADC_TEMP_Reply.Content.ADC_TEMP_Data.ADC_Temp) - 2038.0 * (10.0 / 77.0));
-            exception
-               when TMC_UART_Error =>
-                  null;
-            end;
-
-            declare
-               DRV_STATUS_Reply : TMC_Types.TMC2240.UART_Data_Message;
-            begin
-               DRV_STATUS_Reply := Read (TMC_Types.TMC2240.DRV_STATUS_Address, My_Motor);
-               Status_Ref.Set_Value
-                 ("StallGuard value",
-                  +My_Motor'Image,
-                  Long_Long_Integer (DRV_STATUS_Reply.Content.DRV_STATUS_Data.SG_Result));
-               Status_Ref.Set_Value
-                 ("Short to VS phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2VSA));
-               Status_Ref.Set_Value
-                 ("Short to VS phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2VSB));
-               Status_Ref.Set_Value
-                 ("StealthChop active", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.Stealth));
-               Status_Ref.Set_Value
-                 ("Full step active", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.FSActive));
-               Status_Ref.Set_Value
-                 ("Stall detected", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.StallGuard));
-               Status_Ref.Set_Value
-                 ("Overtemperature", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OT));
-               Status_Ref.Set_Value
-                 ("Overtemperature pre-warning",
-                  +My_Motor'Image,
-                  Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OTPW));
-               Status_Ref.Set_Value
-                 ("Short to GND phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2GA));
-               Status_Ref.Set_Value
-                 ("Short to GND phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2GB));
-               Status_Ref.Set_Value
-                 ("Open load phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OLA));
-               Status_Ref.Set_Value
-                 ("Open load phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OLB));
-               Status_Ref.Set_Value
-                 ("Motor standstill", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.STST));
-            exception
-               when TMC_UART_Error =>
-                  null;
-            end;
          end select;
+      exception
+         when Hardware_Communication_Error =>
+            Hardware_Failed := True;
+      end;
+
+      while not Stop_Requested loop
+         begin
+            select
+               accept Start_Polling do
+                  Check_Connection;
+                  Polling_Started := True;
+                  Next_Poll_Time := Ada.Real_Time.Clock;
+               end Start_Polling;
+            or
+               accept Enable do
+                  Check_Connection;
+                  if My_Regs.CHOPCONF.TOFF = Disable_Driver then
+                     raise Constraint_Error with "Tried to enable motor which is disabled in config.";
+                  end if;
+
+                  Write_And_Validate
+                    ((Bytes_Mode => False,
+                      Content    => (Register => CHOPCONF_Address, CHOPCONF_Data => My_Regs.CHOPCONF, others => <>)),
+                     My_Motor);
+               end Enable;
+            or
+               accept Disable do
+                  Check_Connection;
+                  Write_And_Validate
+                    ((Bytes_Mode => False,
+                      Content    =>
+                        (Register      => CHOPCONF_Address,
+                         CHOPCONF_Data => (My_Regs.CHOPCONF with delta TOFF => Disable_Driver),
+                         others        => <>)),
+                     My_Motor);
+               end Disable;
+            or
+               accept Stop;
+               Stop_Requested := True;
+            or
+               when Polling_Started and not Hardware_Failed
+               =>delay until Next_Poll_Time;
+
+               declare
+                  GSTAT_Reply : TMC_Types.TMC2240.UART_Data_Message;
+               begin
+                  GSTAT_Reply := Read (TMC_Types.TMC2240.GSTAT_Address, My_Motor);
+                  Status_Ref.Set_Value
+                    ("Driver error", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.Drv_Err));
+                  Status_Ref.Set_Value
+                    ("Undervoltage charge pump", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.UV_CP));
+                  Status_Ref.Set_Value
+                    ("VM undervoltage", +My_Motor'Image, Boolean (GSTAT_Reply.Content.GSTAT_Data.VM_UVLO));
+               exception
+                  when TMC_UART_Error =>
+                     null;
+               end;
+
+               declare
+                  ADC_VSUPPLY_AIN_Reply : TMC_Types.TMC2240.UART_Data_Message;
+               begin
+                  ADC_VSUPPLY_AIN_Reply := Read (TMC_Types.TMC2240.ADC_VSUPPLY_AIN_Address, My_Motor);
+                  Status_Ref.Set_Value
+                    ("Supply voltage",
+                     +My_Motor'Image,
+                     Dimensionless (ADC_VSUPPLY_AIN_Reply.Content.ADC_VSUPPLY_AIN_Data.ADC_V_Supply));
+               exception
+                  when TMC_UART_Error =>
+                     null;
+               end;
+
+               declare
+                  ADC_TEMP_Reply : TMC_Types.TMC2240.UART_Data_Message;
+               begin
+                  ADC_TEMP_Reply := Read (TMC_Types.TMC2240.ADC_TEMP_Address, My_Motor);
+                  Status_Ref.Set_Value
+                    ("Temperature",
+                     +My_Motor'Image,
+                     Dimensionless (ADC_TEMP_Reply.Content.ADC_TEMP_Data.ADC_Temp) - 2038.0 * (10.0 / 77.0));
+               exception
+                  when TMC_UART_Error =>
+                     null;
+               end;
+
+               declare
+                  DRV_STATUS_Reply : TMC_Types.TMC2240.UART_Data_Message;
+               begin
+                  DRV_STATUS_Reply := Read (TMC_Types.TMC2240.DRV_STATUS_Address, My_Motor);
+                  Status_Ref.Set_Value
+                    ("StallGuard value",
+                     +My_Motor'Image,
+                     Long_Long_Integer (DRV_STATUS_Reply.Content.DRV_STATUS_Data.SG_Result));
+                  Status_Ref.Set_Value
+                    ("Short to VS phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2VSA));
+                  Status_Ref.Set_Value
+                    ("Short to VS phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2VSB));
+                  Status_Ref.Set_Value
+                    ("StealthChop active",
+                     +My_Motor'Image,
+                     Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.Stealth));
+                  Status_Ref.Set_Value
+                    ("Full step active", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.FSActive));
+                  Status_Ref.Set_Value
+                    ("Stall detected", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.StallGuard));
+                  Status_Ref.Set_Value
+                    ("Overtemperature", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OT));
+                  Status_Ref.Set_Value
+                    ("Overtemperature pre-warning",
+                     +My_Motor'Image,
+                     Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OTPW));
+                  Status_Ref.Set_Value
+                    ("Short to GND phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2GA));
+                  Status_Ref.Set_Value
+                    ("Short to GND phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.S2GB));
+                  Status_Ref.Set_Value
+                    ("Open load phase A", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OLA));
+                  Status_Ref.Set_Value
+                    ("Open load phase B", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.OLB));
+                  Status_Ref.Set_Value
+                    ("Motor standstill", +My_Motor'Image, Boolean (DRV_STATUS_Reply.Content.DRV_STATUS_Data.STST));
+               exception
+                  when TMC_UART_Error =>
+                     null;
+               end;
+               --  Schedule from completion: a busy shared bus must not cause endless catch-up polling.
+               Next_Poll_Time := Ada.Real_Time.Clock + Ada.Real_Time.Milliseconds (500);
+            end select;
+         exception
+            when Hardware_Communication_Error =>
+               --  The adapter has reported the failure. Reject further operations but still accept Stop during
+               --  cleanup, without promoting a recoverable connection failure to an unhandled task exception.
+               Hardware_Failed := True;
+         end;
       end loop;
    end UART_Motor_Manager;
 
@@ -789,6 +820,13 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                when others            =>
                   null;
             end case;
+         end loop;
+
+         --  Finish all register writes before any driver competes for the bus with background status reads.
+         for M in Motor_Name loop
+            if Managers (M).Kind = TMC2240_UART_Kind then
+               Managers (M).UART.Get.Start_Polling;
+            end if;
          end loop;
       end Start;
 

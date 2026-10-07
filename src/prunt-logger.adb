@@ -88,6 +88,7 @@ package body Prunt.Logger is
          Message_Queue.Dequeue (Message);
          List_Handler.Update_If_Required (Receivers);
          Ada.Text_IO.Put_Line (Conversions.To_UTF_8_String (Message));
+         Ada.Text_IO.Flush;
          for R of Receivers loop
             if R /= null then
                begin

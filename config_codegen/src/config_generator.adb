@@ -990,6 +990,7 @@ package body Config_Generator is
          Path_Str : constant Virtual_String := Path_To_Vector_Access_String (Path);
          Min_Expr : constant Virtual_String := Expand_Index_Level (Outer.Min);
          Max_Expr : constant Virtual_String := Expand_Index_Level (Outer.Max);
+         Read_Expr : Virtual_String := "Data.Get (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "])";
       begin
          Emit_Config_Map
            ("Prunt.Config.Config_Property_Parameters_Float'(Description => """
@@ -1014,13 +1015,15 @@ package body Config_Generator is
             & """"
             & Dynamic_Presentation_Association (Outer)
             & ")");
-         Emit_Reader
-           (Reader_Prefix
-            & " := Data.Get(Prunt.Config.Config_Data_Paths.Vector'["
-            & Path_Str
-            & "])"
-            & (if Float_Val.Unit.Conversion /= "" then " * (" & Float_Val.Unit.Conversion & ")" else "")
-            & ";");
+         if Float_Val.Unit.Conversion /= "" then
+            --  Config_Data is already schema-validated in display units. Converting a valid endpoint back to base
+            --  units can round just outside the component's range, so keep the converted value within its bounds.
+            Read_Expr :=
+              Outer.Type_Name & "'Min ((" & Max_Expr & "), "
+              & Outer.Type_Name & "'Max ((" & Min_Expr & "), "
+              & Read_Expr & " * (" & Float_Val.Unit.Conversion & ")))";
+         end if;
+         Emit_Reader (Reader_Prefix & " := " & Read_Expr & ";");
          Emit_Setter
            ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'["
             & Path_Str
