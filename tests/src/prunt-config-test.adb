@@ -159,17 +159,20 @@ package body Prunt.Config.Test is
               Top_Level_Items =>
                 ["s" =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["i" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 1),
                          "j" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])];
    end Override_Test_Schemas;
 
@@ -207,7 +210,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
       declare
          File : constant Config_File := Create (File_Name, Schemas);
@@ -274,7 +278,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
       Output : Virtual_String;
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
@@ -296,7 +301,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Errors : Config_Error_Vectors.Vector;
@@ -333,7 +339,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 100, Unit => "", Default => 0)])];
       Filename : constant String := Next_Test_Filename;
       File : constant Config_File := Create (Filename, Schemas);
@@ -364,7 +371,8 @@ package body Prunt.Config.Test is
            Versioned_Config_Schema'
              (Version             => 1,
               Module_Instance_Tag => <>,
-              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Experimental => False,
+              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False)])];
       Filename : constant String := Next_Test_Filename;
 
@@ -418,7 +426,8 @@ package body Prunt.Config.Test is
            Versioned_Config_Schema'
              (Version             => 1,
               Module_Instance_Tag => <>,
-              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Experimental => False,
+              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False)])];
       Filename : constant String := Next_Test_Filename;
 
@@ -452,7 +461,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["f" =>
                    Config_Property_Parameters_Float'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 5.5)])];
       Filename : constant String := Next_Test_Filename;
 
@@ -494,7 +504,8 @@ package body Prunt.Config.Test is
               Module_Instance_Tag => <>,
               Top_Level_Items     =>
                 ["d" =>
-                   Config_Property_Parameters_Discrete'(Experimental => False,
+                   Config_Property_Parameters_Discrete'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "a", Options => ["a", "b"])])];
       Filename : constant String := Next_Test_Filename;
 
@@ -537,7 +548,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["f" =>
                    Config_Property_Parameters_Float'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 5.5)])];
       Filename : constant String := Next_Test_Filename;
 
@@ -580,7 +592,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["r" =>
                    Config_Property_Parameters_Float_Ratio'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0.0, Max => 2.0, Default => (Numerator => 1.0, Denominator => 2.0))])];
       Filename : constant String := Next_Test_Filename;
 
@@ -628,7 +641,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 5)])];
       Filename : constant String := Next_Test_Filename;
 
@@ -671,13 +685,15 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["v" =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "a",
                       Children    =>
                         ["a" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 1)])])];
       Filename : constant String := Next_Test_Filename;
 
@@ -705,39 +721,48 @@ package body Prunt.Config.Test is
       T.Register;
 
       Schema : constant Config_Property_Maps.Map :=
-        ["b"  => Config_Property_Parameters_Boolean'(Experimental => False,
+        ["b"  => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => True),
-         "d"  => Config_Property_Parameters_Discrete'(Experimental => False,
+         "d"  => Config_Property_Parameters_Discrete'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "a", Options => ["a", "b"]),
          "i"  =>
-           Config_Property_Parameters_Integer'(Experimental => False,
+           Config_Property_Parameters_Integer'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => -10, Max => 10, Unit => "", Default => 5),
          "f"  =>
-           Config_Property_Parameters_Float'(Experimental => False,
+           Config_Property_Parameters_Float'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => -10.0, Max => 10.0, Unit => "", Default => 2.5),
          "fr" =>
            Config_Property_Parameters_Float_Ratio'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "", Min => 0.0, Max => 2.0, Default => (Numerator => 1.0, Denominator => 2.0)),
          "s"  =>
            Config_Property_Parameters_Sequence'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "",
               Tabbed      => False,
               Children    =>
                 ["c" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 3)]),
          "v"  =>
            Config_Property_Parameters_Variant'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "",
               Default     => "c",
               Children    =>
                 ["c" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 4)])];
       Default : constant JSON_Value := Create_Default_Module_Config (Schema);
 
@@ -757,7 +782,8 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schema : constant Config_Property_Maps.Map := ["u" => Config_Property_Parameters_Unknown'(Experimental => False,
+      Schema : constant Config_Property_Maps.Map := ["u" => Config_Property_Parameters_Unknown'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "")];
 
       declare
@@ -783,15 +809,18 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["v" =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "a",
                       Children    =>
-                        ["a" => Config_Property_Parameters_Boolean'(Experimental => False,
+                        ["a" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False),
                          "b" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Data : Config_Data := File.Get_Data ("M");
@@ -826,7 +855,8 @@ package body Prunt.Config.Test is
              (Version             => 1,
               Module_Instance_Tag => <>,
               Top_Level_Items     =>
-                ["u" => Config_Property_Parameters_Unknown'(Experimental => False,
+                ["u" => Config_Property_Parameters_Unknown'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "")])];
       File : Config_File := Create (Next_Test_Filename, Schemas)
       with Unreferenced;
@@ -847,7 +877,8 @@ package body Prunt.Config.Test is
              (Version             => 1,
               Module_Instance_Tag => <>,
               Top_Level_Items     =>
-                ["u" => Config_Property_Parameters_Unknown'(Experimental => False,
+                ["u" => Config_Property_Parameters_Unknown'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "")])];
       S : constant Virtual_String := Generate_Schemas_String (Schemas)
       with Unreferenced;
@@ -857,6 +888,32 @@ package body Prunt.Config.Test is
       when Constraint_Error =>
          null;
    end Test_Generate_Schemas_String_Unhandled_Property;
+
+   procedure Test_Config_Category_Schema (T : in out Trendy_Test.Operation'Class) is
+      Schemas : constant Config_Schema_Maps.Map :=
+        ["Custom owner" =>
+           Versioned_Config_Schema'
+             (Version => 1, Module_Instance_Tag => <>, Top_Level_Items =>
+                ["Annotated" => Config_Property_Parameters_Boolean'
+                   (Category => (Id => "custom.tools", Label => "Custom tools", Order => 1000),
+                    Description => "Help text", Experimental => False, Present_When => P, Default => True),
+                 "Plain" => Config_Property_Parameters_Boolean'
+                   (Category => <>, Description => "", Experimental => False, Present_When => P, Default => False)])];
+      Properties : constant JSON_Value := Read (Generate_Schemas_String (Schemas))
+        .Get ("Config").Get ("Custom owner").Get ("Config");
+      Category : constant JSON_Value := Properties.Get ("Annotated").Get ("Category");
+   begin
+      T.Register;
+      T.Assert (Virtual_String'(Category.Get ("Id")) = "custom.tools");
+      T.Assert (Virtual_String'(Category.Get ("Label")) = "Custom tools");
+      T.Assert (Integer'(Category.Get ("Order")) = 1000);
+      T.Assert (Virtual_String'(Properties.Get ("Annotated").Get ("Description")) = "Help text");
+      T.Assert (not Properties.Get ("Plain").Has_Field ("Category"));
+      T.Assert (not Create_Default_Module_Config (Schemas ("Custom owner").Element.Top_Level_Items)
+        .Has_Field ("Category"), "Category metadata belongs only to the schema.");
+      T.Assert (Boolean'(Create_Default_Module_Config (Schemas ("Custom owner").Element.Top_Level_Items)
+        .Get ("Annotated").Get), "Category metadata does not change config values.");
+   end Test_Config_Category_Schema;
 
    procedure Test_Get_Data_String (T : in out Trendy_Test.Operation'Class) is
    begin
@@ -870,7 +927,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "Test Integer", Min => 0, Max => 10, Unit => "", Default => 5)])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Data_JSON : constant JSON_Value := Read (File.Get_Data_String);
@@ -927,7 +985,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => True,
+                     (Category => <>,
+                      Experimental => True,
                       Present_When => P, Description => "Test Integer", Min => 0, Max => 10, Unit => "", Default => 5)])];
 
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
@@ -955,23 +1014,28 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["Controller" =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "A",
                       Children    =>
-                        ["A" => Config_Property_Parameters_Sequence'(Experimental => False,
+                        ["A" => Config_Property_Parameters_Sequence'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Tabbed => False, Children => []),
-                         "B" => Config_Property_Parameters_Sequence'(Experimental => False,
+                         "B" => Config_Property_Parameters_Sequence'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Tabbed => False, Children => [])]),
                  "s" =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["i" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When =>
                                  (Controller_Tag  => Presentation_Controller_Tag_Source'Tag,
                                  Controller_Path => Presentation_Controller_Path,
@@ -1013,10 +1077,12 @@ package body Prunt.Config.Test is
          Controller_Tag  : Ada.Tags.Tag := Presentation_Controller_Tag_Source'Tag) return Config_Schema_Maps.Map
       is
          Controller : constant Config_Property_Parameters_Discrete :=
-           (Experimental => False,
+           (Category => <>,
+            Experimental => False,
             Present_When => P, Description => "", Default => "A", Options => ["A", "B"]);
          Target : constant Config_Property_Parameters_Integer :=
-           (Experimental => False,
+           (Category => <>,
+            Experimental => False,
             Present_When =>
               (Controller_Tag => Controller_Tag, Controller_Path => Controller_Path, Values => Values),
             Description  => "",
@@ -1113,11 +1179,13 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 5),
                  "j" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 5)])];
 
       Filename : constant String := Next_Test_Filename;
@@ -1321,7 +1389,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
 
       File_Name : constant String := Next_Test_Filename;
@@ -1359,7 +1428,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
       File_Name : constant String := Next_Test_Filename;
 
@@ -1421,7 +1491,8 @@ package body Prunt.Config.Test is
            Versioned_Config_Schema'
              (Version             => 1,
               Module_Instance_Tag => <>,
-              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Experimental => False,
+              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => True)])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Data : Config_Data := File.Get_Data ("M");
@@ -1446,13 +1517,15 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["s" =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["x" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 1)])]),
          "M2" =>
            Versioned_Config_Schema'
@@ -1461,13 +1534,15 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["s" =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["y" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])];
       Filename : constant String := Next_Test_Filename;
 
@@ -1488,13 +1563,15 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["x" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)]),
          "M2" =>
            Versioned_Config_Schema'
              (Version             => 1,
               Module_Instance_Tag => <>,
-              Top_Level_Items     => ["x" => Config_Property_Parameters_Boolean'(Experimental => False,
+              Top_Level_Items     => ["x" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False)])];
       Filename : constant String := Next_Test_Filename;
 
@@ -1518,14 +1595,16 @@ package body Prunt.Config.Test is
              (Version             => 1,
               Module_Instance_Tag => <>,
               Top_Level_Items     =>
-                ["v" => Config_Property_Parameters_Variant'(Experimental => False,
+                ["v" => Config_Property_Parameters_Variant'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "a", Children => [])]),
          "M2" =>
            Versioned_Config_Schema'
              (Version             => 1,
               Module_Instance_Tag => <>,
               Top_Level_Items     =>
-                ["v" => Config_Property_Parameters_Variant'(Experimental => False,
+                ["v" => Config_Property_Parameters_Variant'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "b", Children => [])])];
       Filename : constant String := Next_Test_Filename;
 
@@ -1584,7 +1663,8 @@ package body Prunt.Config.Test is
            Versioned_Config_Schema'
              (Version             => 1,
               Module_Instance_Tag => <>,
-              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Experimental => False,
+              Top_Level_Items     => ["b" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False)])];
       Filename : constant String := Next_Test_Filename;
       declare
@@ -1642,26 +1722,32 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["v"    =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "a",
-                      Children    => ["a" => Config_Property_Parameters_Boolean'(Experimental => False,
+                      Children    => ["a" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => True)]),
                  "r"    =>
                    Config_Property_Parameters_Float_Ratio'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0.0, Max => 1.0, Default => (Numerator => 0.5, Denominator => 1.0)),
                  "s"    =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["i" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)]),
-                 "leaf" => Config_Property_Parameters_Boolean'(Experimental => False,
+                 "leaf" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => True)])];
       File : constant Config_File := Create (Next_Test_Filename, Schemas);
       Data : Config_Data := File.Get_Data ("M");
@@ -1835,7 +1921,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
       Filename : constant String := Next_Test_Filename;
       File : constant Config_File := Create (Filename, Schemas);
@@ -1856,7 +1943,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)]),
          "M2" =>
            Versioned_Config_Schema'
@@ -1865,7 +1953,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["f" =>
                    Config_Property_Parameters_Float'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 0.0)])];
 
       File : Config_File := Create (Next_Test_Filename, Schemas)
@@ -1884,13 +1973,15 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["s" =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["i" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])]),
          "M2" =>
            Versioned_Config_Schema'
@@ -1899,13 +1990,15 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["s" =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["f" =>
                            Config_Property_Parameters_Float'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 0.0)])])];
 
       File : Config_File := Create (Next_Test_Filename, Schemas)
@@ -1924,7 +2017,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)]),
          "M2" =>
            Versioned_Config_Schema'
@@ -1933,7 +2027,8 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Float'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0.0, Max => 10.0, Unit => "", Default => 0.0)])];
 
       begin
@@ -1958,14 +2053,16 @@ package body Prunt.Config.Test is
              (Version             => 1,
               Module_Instance_Tag => <>,
               Top_Level_Items     =>
-                ["v" => Config_Property_Parameters_Variant'(Experimental => False,
+                ["v" => Config_Property_Parameters_Variant'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "a", Children => [])]),
          "M2" =>
            Versioned_Config_Schema'
              (Version             => 1,
               Module_Instance_Tag => <>,
               Top_Level_Items     =>
-                ["v" => Config_Property_Parameters_Variant'(Experimental => False,
+                ["v" => Config_Property_Parameters_Variant'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "b", Children => [])])];
 
       begin
@@ -1990,11 +2087,13 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["v" =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "a",
                       Children    =>
-                        ["a" => Config_Property_Parameters_Boolean'(Experimental => False,
+                        ["a" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False)])]),
          "M2" =>
            Versioned_Config_Schema'
@@ -2003,11 +2102,13 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["v" =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "a",
                       Children    =>
-                        ["b" => Config_Property_Parameters_Boolean'(Experimental => False,
+                        ["b" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False)])])];
 
       begin
@@ -2039,7 +2140,8 @@ package body Prunt.Config.Test is
       T.Register;
 
       Schema : constant Config_Property_Maps.Map :=
-        ["b" => Config_Property_Parameters_Boolean'(Experimental => False,
+        ["b" => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => False)];
 
       T.Assert
@@ -2056,21 +2158,25 @@ package body Prunt.Config.Test is
 
       Schema : constant Config_Property_Maps.Map :=
         ["i" =>
-           Config_Property_Parameters_Integer'(Experimental => False,
+           Config_Property_Parameters_Integer'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => -10, Max => 10, Unit => "", Default => 0),
          "v" =>
            Config_Property_Parameters_Variant'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "",
               Default     => "c",
               Children    =>
                 ["c" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0),
                  "d" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
 
       T.Assert (not Reports_Error_Module_Config_To_Schema ("{}", Schema, Check_For_Missing_Fields => False));
@@ -2108,7 +2214,8 @@ package body Prunt.Config.Test is
       T.Register;
 
       Schema : constant Config_Property_Maps.Map :=
-        ["d" => Config_Property_Parameters_Discrete'(Experimental => False,
+        ["d" => Config_Property_Parameters_Discrete'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "a", Options => ["a", "b"])];
 
       T.Assert
@@ -2141,7 +2248,8 @@ package body Prunt.Config.Test is
       T.Register;
 
       Schema : constant Config_Property_Maps.Map :=
-        ["s" => Config_Property_Parameters_String'(Experimental => False,
+        ["s" => Config_Property_Parameters_String'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "default")];
 
       T.Assert
@@ -2159,7 +2267,8 @@ package body Prunt.Config.Test is
       Schema : constant Config_Property_Maps.Map :=
         ["f" =>
            Config_Property_Parameters_Float'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "", Min => -10.0, Max => 10.0, Unit => "", Default => 0.0)];
 
       T.Assert
@@ -2198,7 +2307,8 @@ package body Prunt.Config.Test is
       Schema : constant Config_Property_Maps.Map :=
         ["fr" =>
            Config_Property_Parameters_Float_Ratio'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "", Min => -2.0, Max => 2.0, Default => (Numerator => 1.0, Denominator => 1.0))];
 
       T.Assert
@@ -2328,7 +2438,8 @@ package body Prunt.Config.Test is
 
       Schema : constant Config_Property_Maps.Map :=
         ["i" =>
-           Config_Property_Parameters_Integer'(Experimental => False,
+           Config_Property_Parameters_Integer'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => -10, Max => 10, Unit => "", Default => 0)];
 
       T.Assert
@@ -2358,17 +2469,20 @@ package body Prunt.Config.Test is
       Schema : constant Config_Property_Maps.Map :=
         ["s" =>
            Config_Property_Parameters_Sequence'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "",
               Tabbed      => False,
               Children    =>
                 ["c" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0),
                  "d" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
 
       T.Assert
@@ -2413,17 +2527,20 @@ package body Prunt.Config.Test is
       Schema : constant Config_Property_Maps.Map :=
         ["v" =>
            Config_Property_Parameters_Variant'
-             (Experimental => False,
+             (Category => <>,
+              Experimental => False,
               Present_When => P, Description => "",
               Default     => "c",
               Children    =>
                 ["c" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0),
                  "d" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0)])];
 
       T.Assert
@@ -2520,7 +2637,8 @@ package body Prunt.Config.Test is
    begin
       T.Register;
 
-      Schema : constant Config_Property_Maps.Map := ["u" => Config_Property_Parameters_Unknown'(Experimental => False,
+      Schema : constant Config_Property_Maps.Map := ["u" => Config_Property_Parameters_Unknown'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "")];
 
       begin
@@ -2580,11 +2698,13 @@ package body Prunt.Config.Test is
            Module_Instance_Tag => <>,
            Top_Level_Items =>
              ["i"              =>
-                Config_Property_Parameters_Integer'(Experimental => False,
+                Config_Property_Parameters_Integer'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 5),
               "migrated_field" =>
                 Config_Property_Parameters_Integer'
-                  (Experimental => False,
+                  (Category => <>,
+                   Experimental => False,
                    Present_When => P, Description => "", Min => 0, Max => 1000, Unit => "", Default => 0)])];
 
    Migration_Error_Schemas : constant Config_Schema_Maps.Map :=
@@ -2596,24 +2716,30 @@ package body Prunt.Config.Test is
           (Version         => 2,
            Module_Instance_Tag => <>,
            Top_Level_Items =>
-             ["b"   => Config_Property_Parameters_Boolean'(Experimental => False,
+             ["b"   => Config_Property_Parameters_Boolean'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => True),
               "i"   =>
-                Config_Property_Parameters_Integer'(Experimental => False,
+                Config_Property_Parameters_Integer'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 5),
               "f"   =>
                 Config_Property_Parameters_Float'
-                  (Experimental => False,
+                  (Category => <>,
+                   Experimental => False,
                    Present_When => P, Description => "", Min => 0.0, Max => 100.0, Unit => "", Default => 5.0),
-              "d"   => Config_Property_Parameters_Discrete'(Experimental => False,
+              "d"   => Config_Property_Parameters_Discrete'(Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Default => "a", Options => ["a", "b"]),
               "dim" =>
                 Config_Property_Parameters_Float'
-                  (Experimental => False,
+                  (Category => <>,
+                   Experimental => False,
                    Present_When => P, Description => "", Min => 0.0, Max => 100.0, Unit => "", Default => 5.0),
               "r"   =>
                 Config_Property_Parameters_Float_Ratio'
-                  (Experimental => False,
+                  (Category => <>,
+                   Experimental => False,
                    Present_When => P, Description => "", Min => 0.0, Max => 10.0, Default => (Numerator => 1.0, Denominator => 1.0))])];
 
    procedure Test_Initialize_Real_Migration (T : in out Trendy_Test.Operation'Class) is
@@ -2924,17 +3050,20 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["v" =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "a",
                       Children    =>
                         ["a" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 1),
                          "b" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])];
       Overrides : constant Config_Override_Vectors.Vector :=
         [Config_Override'
@@ -3099,43 +3228,51 @@ package body Prunt.Config.Test is
               Top_Level_Items     =>
                 ["i" =>
                    Config_Property_Parameters_Integer'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 0),
                  "s" =>
                    Config_Property_Parameters_Sequence'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Tabbed      => False,
                       Children    =>
                         ["v" =>
                            Config_Property_Parameters_Variant'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "",
                               Default     => "a",
                               Children    =>
                                 ["a" =>
                                    Config_Property_Parameters_Integer'
-                                     (Experimental => False,
+                                     (Category => <>,
+                                      Experimental => False,
                                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 1)])]),
                  "v" =>
                    Config_Property_Parameters_Variant'
-                     (Experimental => False,
+                     (Category => <>,
+                      Experimental => False,
                       Present_When => P, Description => "",
                       Default     => "a",
                       Children    =>
                         ["a" =>
                            Config_Property_Parameters_Integer'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 1),
                          "child" =>
                            Config_Property_Parameters_Variant'
-                             (Experimental => False,
+                             (Category => <>,
+                              Experimental => False,
                               Present_When => P, Description => "",
                               Default     => "leaf",
                               Children    =>
                                 ["leaf" =>
                                    Config_Property_Parameters_Integer'
-                                     (Experimental => False,
+                                     (Category => <>,
+                                      Experimental => False,
                                       Present_When => P, Description => "", Min => 0, Max => 10, Unit => "", Default => 2)])])])];
       Helper_Schema : constant Config_Property_Maps.Map := Helper_Schemas.Element ("M").Top_Level_Items;
       Default_Value : JSON_Value;
@@ -3495,7 +3632,8 @@ package body Prunt.Config.Test is
          (Version => 1, Module_Instance_Tag => <>,
           Top_Level_Items =>
             ["i" => Config_Property_Parameters_Integer'
-                (Experimental => False, Present_When => P, Description => "",
+                (Category => <>,
+                 Experimental => False, Present_When => P, Description => "",
                  Min => 0, Max => 10, Unit => "", Default => 0)])]);
 
    procedure Test_Migration_Copy_Rejected (T : in out Trendy_Test.Operation'Class) is
@@ -3876,6 +4014,7 @@ package body Prunt.Config.Test is
          Test_Get_Dynamically_Presented_Schema_String'Access,
          Test_Get_Empty_Path'Access,
          Test_Get_Schemas_String'Access,
+         Test_Config_Category_Schema'Access,
          Test_Initialize_Corrupt_File'Access,
          Test_Initialize_Default_Migration'Access,
          Test_Initialize_Extra_Modules'Access,
