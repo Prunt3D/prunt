@@ -69,7 +69,7 @@ private
    type User_Config_Machine_Name is record
       --  This section contains identity information for your machine.
 
-      Name : Virtual_String := "";
+      Name : Virtual_String := "Printer";
       --  The machine name reported by M550 and used by M16 checks.
    end record
    with Annotate => (Prunt_Config, User_Config);
