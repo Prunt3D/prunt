@@ -253,8 +253,10 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Heaters        : User_Config_Heater_Array := [others => <>];
-      Gcode_Defaults : User_Config_Gcode_Defaults := (others => <>);
+      Heaters        : User_Config_Heater_Array := [others => <>] with
+        Annotate => (Prunt_Config, Category, "heating", "Heating & sensors", 50);
+      Gcode_Defaults : User_Config_Gcode_Defaults := (others => <>) with
+        Annotate => (Prunt_Config, Category, "heating", "Heating & sensors", 50);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

@@ -434,7 +434,8 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Homing : User_Config_Homing_Configuration := (others => <>);
+      Homing : User_Config_Homing_Configuration := (others => <>) with
+        Annotate => (Prunt_Config, Category, "homing", "Homing", 30);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

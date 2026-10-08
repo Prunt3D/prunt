@@ -85,7 +85,8 @@ private
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Tachometers : User_Config_Tachometer_Array := [others => <>];
+      Tachometers : User_Config_Tachometer_Array := [others => <>] with
+        Annotate => (Prunt_Config, Category, "fans", "Fans", 60);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

@@ -33,6 +33,12 @@ package Config_Types is
       Display    : Virtual_String;
    end record;
 
+   type Category_Data is record
+      Id    : Virtual_String;
+      Label : Virtual_String;
+      Order : Natural := 0;
+   end record;
+
    type Component_Data is record
       --  The members of this record represent the following parts of a record component declaration:
       --
@@ -41,6 +47,7 @@ package Config_Types is
       --    [Annotate (Prunt_Config, Max, `Max`),]
       --    [Annotate (Prunt_Config, Fixed_Kind, "`Fixed_Kind`"),]
       --    [Annotate (Prunt_Config, Options_Expr, "`Options_Expr`"),]
+      --    [Annotate (Prunt_Config, Category, "`Id`", "`Label`", `Order`),]
       --    [Annotate (Prunt_Config, Present_When, "`Present_When`"),]
       --    [Annotate (Prunt_Config, Dynamic_Present_When, `Controller_Tag`, `Controller_Path`, "`Value`"
       --      [, "`Value`" ...]),]
@@ -63,6 +70,8 @@ package Config_Types is
       --  values.
       --
       --  Schema_Default_Expr overrides the generated schema default expression.
+      --  Category assigns a root component to a browser category, independently of its name or module owner.
+      --  Components sharing an Id must use the same Label and Order. Lower Order values appear first.
 
       Experimental        : Boolean := False;
       --  Annotate => (Prunt_Config, Experimental) hides a component by default in the UI.
@@ -70,6 +79,7 @@ package Config_Types is
       --  Type name is fully qualified.
       Default             : Virtual_String;
       Description         : Virtual_String;
+      Category            : Category_Data;
       Min                 : Virtual_String;
       Max                 : Virtual_String;
       Fixed_Kind          : Virtual_String;

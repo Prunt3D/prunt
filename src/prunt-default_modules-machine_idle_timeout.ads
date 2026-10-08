@@ -81,7 +81,8 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Machine_Idle_Timeout : User_Config_Machine_Idle_Timeout := (others => <>);
+      Machine_Idle_Timeout : User_Config_Machine_Idle_Timeout := (others => <>) with
+        Annotate => (Prunt_Config, Category, "machine", "Machine", 10);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

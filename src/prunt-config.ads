@@ -111,8 +111,19 @@ package Prunt.Config is
 
    package Config_Error_Vectors is new Ada.Containers.Vectors (Positive, Config_Error);
 
+   type Config_Category is record
+      Id    : Virtual_String;
+      Label : Virtual_String;
+      Order : Natural := 0;
+   end record;
+   --  Browser category metadata declared with Annotate => (Prunt_Config, Category, "id", "label", order).
+   --  An empty Id leaves the property in the UI's fallback category. Lower Order values appear first.
+
    type Config_Property_Parameters is tagged record
+      --  All property schemas include Description and Experimental. Category is included when Id is nonempty,
+      --  as an object with Id (string), Label (string), and Order (number). It is presentation metadata only.
       Description  : Virtual_String;
+      Category     : Config_Category;
       Experimental : Boolean := False;
       --  UI visibility only; hiding experimental options does not change stored values.
       Present_When : Config_Presentation_Condition := No_Presentation_Condition;

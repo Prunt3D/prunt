@@ -186,8 +186,10 @@ private
 
    type User_Config is record
       Fans           : User_Config_Fan_Array := [others => <>]with
-        Annotate => (Prunt_Config, Fixed_Kind, "Fan_Hardware (Index_?).Kind");
-      Gcode_Defaults : User_Config_Gcode_Defaults;
+        Annotate => (Prunt_Config, Fixed_Kind, "Fan_Hardware (Index_?).Kind"),
+        Annotate => (Prunt_Config, Category, "fans", "Fans", 60);
+      Gcode_Defaults : User_Config_Gcode_Defaults with
+        Annotate => (Prunt_Config, Category, "fans", "Fans", 60);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

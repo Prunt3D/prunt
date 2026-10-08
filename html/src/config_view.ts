@@ -1,9 +1,12 @@
 import { fetchConfigSchema, fetchConfigValues, patchConfigValues } from './api.js';
 import { renderDescription } from './description_markup.js';
+import { ConfigCategory, configCategoriesFromSchema, configCategoryForProperty, matchesConfigSearch } from './config_browser.js';
+import { revealConfigElement } from './navigation.js';
 import {
     onLocaleChange,
     t,
     translateConfigDescription,
+    translateConfigCategory,
     translateConfigLabel,
     translateConfigOption,
     translateConfigUnit
@@ -14,9 +17,26 @@ let currentValues: any = null;
 let currentErrors: any[] = [];
 let dynamicPresentationControllerPaths = new Set<string>();
 
-let groupByModule = true;
 let devMode = false;
 let showExperimental = false;
+let configCategories: ConfigCategory[] = [];
+let selectedCategory: string | null = null;
+let searchQuery = '';
+let showHelp = true;
+const selectedConfigTabs = new Map<string, string>();
+
+function configInputInvalid(input: HTMLInputElement | HTMLSelectElement): boolean {
+    return !input.checkValidity() || !!input.closest('.config-value-field')?.querySelector('.range-hint.has-error');
+}
+
+function groupContainsError(group: HTMLElement, path: string[]): boolean {
+    return Array.from(group.children).some(child => {
+        const encoded = (child as HTMLElement).dataset.path;
+        if (!encoded) return false;
+        const root: string[] = JSON.parse(encoded);
+        return root.slice(0, Math.min(root.length, path.length)).every((segment, index) => segment === path[index]);
+    });
+}
 
 export async function initConfigView() {
     const btnSave = document.getElementById('btn-save-config');
@@ -28,21 +48,10 @@ export async function initConfigView() {
         const inputs = Array.from(container.querySelectorAll('input, select')) as (HTMLInputElement | HTMLSelectElement)[];
         const frontendErrors: any[] = [];
         for (const input of inputs) {
-            // Need to manually check valid state for our custom ranges since we aren't using setCustomValidity
-            let isInvalid = !input.checkValidity();
-
-            // For ratio, check range hint color which we use for invalid state
-            const rangeHint = input.parentElement?.parentElement?.querySelector('.range-hint') as HTMLElement;
-            if (rangeHint && rangeHint.style.color !== '') {
-                isInvalid = true;
-            }
-            // For numbers
-            const numRangeHint = (input.parentElement?.querySelector('.range-hint') || input.parentElement?.parentElement?.querySelector('.range-hint')) as HTMLElement;
-            if (numRangeHint && numRangeHint.style.color !== '') {
-                isInvalid = true;
-            }
-
-            if (isInvalid && input.dataset.path) {
+            const invalid = configInputInvalid(input);
+            if (invalid) input.setAttribute('aria-invalid', 'true');
+            else input.removeAttribute('aria-invalid');
+            if (invalid && input.dataset.path) {
                 frontendErrors.push({
                     Path: JSON.parse(input.dataset.path),
                     Message: input.validationMessage || "Invalid value" // We won't show it but we need it for handleErrors structure
@@ -73,7 +82,7 @@ export async function initConfigView() {
                     const elPathStr = (el as HTMLElement).dataset.groupPath;
                     if (elPathStr) {
                         const elPath = JSON.parse(elPathStr);
-                        if (elPath.length === 0 || isPrefix(elPath, err.Path)) {
+                        if (elPath.length === 0 || (isPrefix(elPath, err.Path) && groupContainsError(el as HTMLElement, err.Path))) {
                             el.classList.add(className);
                         }
                     }
@@ -92,6 +101,7 @@ export async function initConfigView() {
 
         applyErrorClass(currentErrors, 'has-server-error');
         applyErrorClass(frontendErrors, 'has-error');
+        updateCategoryErrorIndicators();
 
         // Update nav item
         const configNavItem = document.querySelector('.config-nav-item');
@@ -103,21 +113,16 @@ export async function initConfigView() {
         }
     };
 
-    const toggle = document.getElementById('config-group-toggle') as HTMLInputElement;
-    if (toggle) {
-        groupByModule = toggle.checked;
-        toggle.addEventListener('change', (e) => {
-            if (currentSchema && currentValues) {
-                const updatedValues = scrapeFormValues();
-                if (updatedValues) currentValues = updatedValues;
-            }
-            groupByModule = (e.target as HTMLInputElement).checked;
-            renderConfigForm();
-            if (currentErrors && currentErrors.length > 0) {
-                handleErrors(currentErrors);
-            }
-        });
-    }
+    const search = document.getElementById('config-search') as HTMLInputElement | null;
+    search?.addEventListener('input', () => {
+        searchQuery = search.value;
+        updateConfigBrowser();
+    });
+
+    document.getElementById('config-help-toggle')?.addEventListener('click', () => {
+        showHelp = !showHelp;
+        updateConfigBrowser();
+    });
 
     const experimentalToggle = document.getElementById('config-experimental-toggle') as HTMLInputElement;
     if (experimentalToggle) {
@@ -143,8 +148,6 @@ export async function initConfigView() {
             devMode = (e.target as HTMLInputElement).checked;
             renderConfigForm();
             if (currentErrors && currentErrors.length > 0) {
-                // Ignore missing definition of handleErrors since it is globally bound
-                // @ts-ignore
                 handleErrors(currentErrors);
             }
         });
@@ -152,13 +155,7 @@ export async function initConfigView() {
 
     const form = document.getElementById('config-form');
     if (form) {
-        form.addEventListener('input', (e: Event) => {
-            const target = e.target as HTMLInputElement;
-            if (target && target.tagName === 'INPUT') {
-                if (!target.checkValidity()) {
-                    target.reportValidity();
-                }
-            }
+        form.addEventListener('input', () => {
             updateRealtimeFrontendErrors();
         });
 
@@ -166,7 +163,10 @@ export async function initConfigView() {
             const target = e.target as HTMLInputElement | HTMLSelectElement;
             if (!target?.dataset.path) return;
             const targetPath = JSON.parse(target.dataset.path);
-            if (!dynamicPresentationControllerPaths.has(JSON.stringify(targetPath))) return;
+            if (!dynamicPresentationControllerPaths.has(JSON.stringify(targetPath))) {
+                updateConfigBrowser();
+                return;
+            }
 
             const updatedValues = scrapeFormValues();
             if (updatedValues) currentValues = updatedValues;
@@ -240,116 +240,143 @@ function isDynamicallyPresented(schema: any): boolean {
     return condition.Values.includes(valueAtConfigPath(condition.Owner, condition.Path));
 }
 
+function categoryLabel(id: string): string {
+    const category = configCategories.find(item => item.id === id);
+    if (!category) return '';
+    return category.id ? translateConfigCategory(category.id, category.label) : t('ui.config.otherCategory', category.label);
+}
+
 function renderConfigForm() {
     const container = document.getElementById('config-form');
-    if (!container || !currentSchema) return;
+    const navigation = document.getElementById('config-categories');
+    if (!container || !navigation || !currentSchema) return;
+    navigation.setAttribute('aria-label', t('ui.config.categoriesLabel', 'Categories'));
 
-    container.innerHTML = '';
+    container.replaceChildren();
+    navigation.replaceChildren();
+    configCategories = configCategoriesFromSchema(currentSchema);
+    for (const category of configCategories) {
+        const panel = document.createElement('section');
+        panel.className = 'config-category-panel';
+        panel.dataset.category = category.id;
+        panel.setAttribute('aria-label', categoryLabel(category.id));
 
-    const modules = currentSchema.Config || {};
-
-    if (groupByModule) {
-        for (const [modName, modSchema] of Object.entries(modules)) {
-            const modContainer = document.createElement('div');
-            modContainer.className = 'config-group';
-            modContainer.dataset.groupPath = JSON.stringify(["Config", modName, "Config"]);
+        for (const [moduleName, moduleSchema] of Object.entries(currentSchema.Config || {})) {
+            const properties = (moduleSchema as any).Config || {};
+            const path = ['Config', moduleName, 'Config'];
+            const values = currentValues?.Config?.[moduleName]?.Config || {};
+            const group = document.createElement('div');
+            group.className = 'config-group';
+            group.dataset.groupPath = JSON.stringify(path);
 
             const title = document.createElement('h3');
-            title.innerText = translateConfigLabel(["Config", modName, "Config"], modName);
-            modContainer.appendChild(title);
-
-            const modConfig = (modSchema as any).Config || {};
-            const modVals = currentValues.Config?.[modName]?.Config || {};
-
-            const hasProperties = buildProperties(modConfig, modVals, modContainer, ["Config", modName, "Config"]);
-
-            if (hasProperties) {
-                container.appendChild(modContainer);
+            title.textContent = translateConfigLabel(path, moduleName);
+            group.appendChild(title);
+            for (const [name, schema] of Object.entries(properties)) {
+                if (configCategoryForProperty(schema as any) !== category.id) continue;
+                const field = createField(name, schema, values[name], [...path, name], {
+                    showLabel: translateConfigLabel([...path, name], name) !== categoryLabel(category.id)
+                });
+                if (field) group.appendChild(field);
             }
+            if (group.children.length > 1) panel.appendChild(group);
         }
-    } else {
-        const combinedContainer = document.createElement('div');
-        combinedContainer.className = 'config-group';
-        combinedContainer.dataset.groupPath = JSON.stringify([]);
+        if (!panel.children.length) continue;
+        // The category heading supplies the title when there is only one contributing module.
+        if (panel.children.length === 1) panel.querySelector('h3')?.remove();
+        container.appendChild(panel);
 
-        // Merge schemas and values
-        const combinedSchema: any = {};
-        const combinedValues: any = {};
-        const combinedPaths: any = {};
-
-        for (const [modName, modSchema] of Object.entries(modules)) {
-            const modConfig = (modSchema as any).Config || {};
-            const modVals = currentValues.Config?.[modName]?.Config || {};
-            mergeCombined(combinedSchema, combinedValues, combinedPaths, modConfig, modVals, ["Config", modName, "Config"]);
-        }
-
-        const hasProperties = buildPropertiesCombined(combinedSchema, combinedValues, combinedPaths, combinedContainer);
-        if (hasProperties) {
-            container.appendChild(combinedContainer);
-        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'config-category-button';
+        button.dataset.category = category.id;
+        const label = document.createElement('span');
+        label.textContent = categoryLabel(category.id);
+        const indicator = document.createElement('span');
+        indicator.className = 'config-category-error';
+        indicator.setAttribute('aria-hidden', 'true');
+        button.append(label, indicator);
+        button.addEventListener('click', () => {
+            selectedCategory = category.id;
+            searchQuery = '';
+            const search = document.getElementById('config-search') as HTMLInputElement | null;
+            if (search) search.value = '';
+            updateConfigBrowser();
+            const content = document.querySelector<HTMLElement>('.content-area');
+            if (content) content.scrollTop = 0;
+        });
+        navigation.appendChild(button);
     }
+    updateConfigBrowser();
 }
 
-function mergeCombined(outSchema: any, outValues: any, outPaths: any, inSchema: any, inValues: any, pathPrefix: string[]) {
-    for (const [propName, propSchema] of Object.entries(inSchema)) {
-        if (!isDynamicallyPresented(propSchema)) continue;
-        if (!outSchema[propName]) {
-            outSchema[propName] = JSON.parse(JSON.stringify(propSchema));
-            outValues[propName] = inValues && inValues[propName] !== undefined ? JSON.parse(JSON.stringify(inValues[propName])) : undefined;
-            outPaths[propName] = [...pathPrefix, propName];
-        } else {
-            if (outSchema[propName].Kind === "Sequence" && (propSchema as any).Kind === "Sequence") {
-                if (!outValues[propName]) outValues[propName] = {};
-                // Upgrade string path to object tracking children
-                if (Array.isArray(outPaths[propName])) {
-                    const base = outPaths[propName];
-                    const childrenPaths: any = {};
-                    if (outSchema[propName].Children) {
-                        for (const childKey of Object.keys(outSchema[propName].Children)) {
-                            childrenPaths[childKey] = [...base, childKey];
-                        }
-                    }
-                    outPaths[propName] = { Base: base, ChildrenPaths: childrenPaths };
-                }
-
-                mergeCombined(
-                    outSchema[propName].Children,
-                    outValues[propName],
-                    outPaths[propName].ChildrenPaths,
-                    (propSchema as any).Children,
-                    inValues ? inValues[propName] : {},
-                    [...pathPrefix, propName]
-                );
-            } else {
-                console.warn(`Conflict in combined view for property: ${propName}`);
-            }
+function updateConfigBrowser() {
+    const container = document.getElementById('config-form');
+    const results = document.getElementById('config-search-results');
+    const heading = document.getElementById('config-category-title');
+    if (!container || !results || !heading) return;
+    const panels = Array.from(container.querySelectorAll<HTMLElement>('.config-category-panel'));
+    if (!panels.some(panel => panel.dataset.category === selectedCategory)) {
+        selectedCategory = panels[0]?.dataset.category || '';
+    }
+    const searching = searchQuery.trim().length > 0;
+    for (const panel of panels) panel.hidden = panel.dataset.category !== selectedCategory;
+    for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('.config-category-button'))) {
+        button.setAttribute('aria-pressed', String(!searching && button.dataset.category === selectedCategory));
+    }
+    heading.textContent = searching ? t('ui.config.searchResults', 'Search results') : categoryLabel(selectedCategory ?? '');
+    const help = document.getElementById('config-help-toggle');
+    if (help) {
+        help.hidden = searching;
+        help.textContent = showHelp ? t('ui.config.hideHelp', 'Hide help') : t('ui.config.showHelp', 'Show help');
+        help.setAttribute('aria-pressed', String(showHelp));
+    }
+    container.classList.toggle('config-hide-help', !showHelp);
+    container.hidden = searching;
+    results.hidden = !searching;
+    results.replaceChildren();
+    if (searching) {
+        const matches = Array.from(container.querySelectorAll<HTMLElement>('.form-group[data-search-label]'))
+            .filter(field => {
+                const text = [field.dataset.searchLabel, field.dataset.searchDescription, field.dataset.searchBreadcrumb, field.dataset.path].join(' ');
+                return matchesConfigSearch(text, searchQuery);
+            });
+        const count = document.createElement('p');
+        count.className = 'config-search-count';
+        count.setAttribute('role', 'status');
+        count.textContent = matches.length
+            ? t('ui.config.searchCount', 'Matching settings: {count}', { count: matches.length })
+            : t('ui.config.noSearchResults', 'No matching settings.');
+        results.appendChild(count);
+        for (const field of matches) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'config-search-result';
+            const label = document.createElement('span');
+            label.textContent = field.dataset.searchLabel!;
+            const breadcrumb = document.createElement('small');
+            breadcrumb.textContent = field.dataset.searchBreadcrumb!;
+            button.append(label, breadcrumb);
+            button.addEventListener('click', () => revealConfigElement(field));
+            results.appendChild(button);
         }
     }
+    updateCategoryErrorIndicators();
 }
 
-function buildPropertiesCombined(schemaMap: any, valuesMap: any, pathsMap: any, parentEl: HTMLElement): boolean {
-    let hasAdded = false;
-    for (const [propName, propSchema] of Object.entries(schemaMap)) {
-        const val = valuesMap ? valuesMap[propName] : undefined;
-        let p = pathsMap[propName];
-        if (p && !Array.isArray(p) && p.ChildrenPaths) {
-            p = p.Base; // Extract base path if it was converted to an object
-        }
-
-        let fieldEl: HTMLElement | null = null;
-
-        if ((propSchema as any).Kind === "Sequence") {
-            fieldEl = createCombinedSequence(propName, propSchema, val, pathsMap[propName]);
-        } else {
-            fieldEl = createField(propName, propSchema, val, p);
-        }
-
-        if (fieldEl) {
-            parentEl.appendChild(fieldEl);
-            hasAdded = true;
-        }
+function updateCategoryErrorIndicators() {
+    for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('.config-category-button'))) {
+        const panel = document.querySelector<HTMLElement>(`.config-category-panel[data-category='${CSS.escape(button.dataset.category!)}']`);
+        const invalid = !!panel?.querySelector('.config-group.has-error');
+        const serverError = !!panel?.querySelector('.config-group.has-server-error');
+        button.classList.toggle('has-error', invalid);
+        button.classList.toggle('has-server-error', serverError);
+        const label = categoryLabel(button.dataset.category!);
+        button.setAttribute('aria-label', invalid || serverError
+            ? t('ui.config.categoryErrors', '{category}: contains errors', { category: label }) : label);
+        const indicator = button.querySelector('.config-category-error');
+        if (indicator) indicator.textContent = invalid || serverError ? '!' : '';
     }
-    return hasAdded;
 }
 
 type FieldRenderOptions = {
@@ -361,170 +388,6 @@ function getOnlyChildName(schema: any): string | null {
     if (!schema?.Children) return null;
     const childNames = Object.keys(schema.Children);
     return childNames.length === 1 ? childNames[0] : null;
-}
-
-function createCombinedSequence(
-    name: string,
-    schema: any,
-    value: any,
-    pathsDef: any,
-    options: FieldRenderOptions = {}
-): HTMLElement | null {
-    if (!isDynamicallyPresented(schema)) return null;
-    if (!schema.Children || Object.keys(schema.Children).length === 0) {
-        return null;
-    }
-
-    const fieldDiv = document.createElement('div');
-    fieldDiv.className = 'form-group';
-
-    // Use the base path for dataset.path if possible, or omit it because children will have actual paths
-    let basePath = Array.isArray(pathsDef) ? pathsDef : pathsDef.Base;
-    if (basePath) fieldDiv.dataset.path = JSON.stringify(basePath);
-
-    if (name && options.showLabel !== false) {
-        const label = document.createElement('label');
-        label.innerText = translateConfigLabel(basePath, name);
-        fieldDiv.appendChild(label);
-    }
-
-    if (schema.Experimental) {
-        const badge = document.createElement('span');
-        badge.className = 'description';
-        badge.innerText = t('ui.config.experimental', 'Experimental');
-        fieldDiv.appendChild(badge);
-    }
-
-    const description = translateConfigDescription(basePath, schema.Description || '');
-    if (description) {
-        renderDescription(fieldDiv, description);
-    }
-
-    if (devMode && basePath && basePath.length > 0) {
-        const pathDesc = document.createElement('p');
-        pathDesc.className = 'description dev-mode-path';
-        pathDesc.innerText = JSON.stringify(basePath).replace(/,/g, ', ');
-        fieldDiv.appendChild(pathDesc);
-    }
-
-
-    const wrap = document.createElement('div');
-    wrap.classList.add('mt-8');
-
-    if (schema.Tabbed) {
-        wrap.className = 'sequence-group tabbed';
-        const tabContainer = document.createElement('div');
-        tabContainer.className = 'config-tabs';
-        const contentContainer = document.createElement('div');
-        contentContainer.className = 'tab-content';
-
-        let first = true;
-        let hasAnyTab = false;
-        for (const [childName, childSchema] of Object.entries(schema.Children)) {
-            const childVal = value ? value[childName] : undefined;
-            
-            const pane = document.createElement('div');
-
-            const childPathsMap = pathsDef.ChildrenPaths || {};
-            let cp = childPathsMap[childName];
-            if (!cp && basePath) { // Fallback if this child didn't have a conflict
-                cp = [...basePath, childName];
-            }
-
-            let f: HTMLElement | null = null;
-            if ((childSchema as any).Kind === "Sequence") {
-                f = createCombinedSequence(childName, childSchema, childVal, cp, {
-                    showLabel: false,
-                    redundantTitleContext: childName
-                });
-            } else {
-                f = createField(childName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base, {
-                    showLabel: false,
-                    redundantTitleContext: childName
-                });
-            }
-
-            if (f) {
-                pane.appendChild(f);
-
-                const tabBtn = document.createElement('div');
-                tabBtn.className = `config-tab ${first ? 'active' : ''}`;
-                tabBtn.innerText = translateConfigLabel(Array.isArray(cp) ? cp : (cp ? cp.Base : []), childName);
-                tabBtn.dataset.tabPath = JSON.stringify(Array.isArray(cp) ? cp : (cp ? cp.Base : null));
-                pane.className = `tab-pane ${first ? 'active' : ''}`;
-                pane.dataset.tabPath = JSON.stringify(Array.isArray(cp) ? cp : (cp ? cp.Base : null));
-
-                tabBtn.addEventListener('click', () => {
-                    Array.from(tabContainer.children).forEach(c => c.classList.remove('active'));
-                    Array.from(contentContainer.children).forEach((c: any) => c.classList.remove('active'));
-                    tabBtn.classList.add('active');
-                    pane.classList.add('active');
-                });
-
-                tabContainer.appendChild(tabBtn);
-                contentContainer.appendChild(pane);
-                first = false;
-                hasAnyTab = true;
-            }
-        }
-
-        if (!hasAnyTab) return null;
-
-        wrap.appendChild(tabContainer);
-        wrap.appendChild(contentContainer);
-    } else {
-        wrap.className = 'sequence-group';
-        const childPathsMap = pathsDef.ChildrenPaths || {};
-        let hasAnyChild = false;
-
-        const onlyChildName = getOnlyChildName(schema);
-        const shouldSuppressOnlyChildTitle = onlyChildName !== null && onlyChildName === options.redundantTitleContext;
-
-        if (shouldSuppressOnlyChildTitle) {
-            const childSchema = schema.Children[onlyChildName];
-            const childVal = value ? value[onlyChildName] : undefined;
-            const cp = childPathsMap[onlyChildName] || (basePath ? [...basePath, onlyChildName] : undefined);
-
-            let f: HTMLElement | null = null;
-            if ((childSchema as any).Kind === "Sequence") {
-                f = createCombinedSequence(onlyChildName, childSchema, childVal, cp, {
-                    showLabel: false,
-                    redundantTitleContext: onlyChildName
-                });
-            } else {
-                f = createField(onlyChildName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base, {
-                    showLabel: false,
-                    redundantTitleContext: onlyChildName
-                });
-            }
-
-            if (f) {
-                wrap.appendChild(f);
-                hasAnyChild = true;
-            }
-        } else {
-            for (const [childName, childSchema] of Object.entries(schema.Children)) {
-                const childVal = value ? value[childName] : undefined;
-                let cp = childPathsMap[childName] || (basePath ? [...basePath, childName] : undefined);
-
-                let f: HTMLElement | null = null;
-                if ((childSchema as any).Kind === "Sequence") {
-                    f = createCombinedSequence(childName, childSchema, childVal, cp);
-                } else {
-                    f = createField(childName, childSchema, childVal, Array.isArray(cp) ? cp : cp.Base);
-                }
-                if (f) {
-                    wrap.appendChild(f);
-                    hasAnyChild = true;
-                }
-            }
-        }
-
-        if (!hasAnyChild) return null;
-    }
-
-    fieldDiv.appendChild(wrap);
-    return fieldDiv;
 }
 
 // Recursively builds the form fields
@@ -554,6 +417,15 @@ function createField(
     fieldDiv.className = 'form-group';
     fieldDiv.dataset.path = JSON.stringify(path);
     let hasContent = false;
+    if (schema.Kind !== 'Sequence') {
+        fieldDiv.dataset.searchLabel = translateConfigLabel(path, name || path[path.length - 1]);
+        fieldDiv.dataset.searchDescription = translateConfigDescription(path, schema.Description || '');
+        fieldDiv.dataset.searchBreadcrumb = path
+            .map((segment, index) => ({ segment, index }))
+            .filter(({ segment, index }) => !(segment === 'Config' && (index === 0 || index === 2)) && segment !== 'Children' && segment !== 'Selected')
+            .map(({ segment, index }) => translateConfigLabel(path.slice(0, index + 1), segment))
+            .join(' › ');
+    }
 
     if (name && options.showLabel !== false) {
         const label = document.createElement('label');
@@ -565,6 +437,7 @@ function createField(
     if (schema.Experimental) {
         const badge = document.createElement('span');
         badge.className = 'description';
+        badge.classList.add('config-experimental-badge');
         badge.innerText = t('ui.config.experimental', 'Experimental');
         fieldDiv.appendChild(badge);
     }
@@ -619,6 +492,22 @@ function createField(
     }
 
     if (inputArea) {
+        if (schema.Kind !== 'Sequence' && schema.Kind !== 'Variant') {
+            fieldDiv.classList.add('config-value-field');
+            const copy = document.createElement('div');
+            copy.className = 'config-field-copy';
+            copy.append(...Array.from(fieldDiv.childNodes));
+            fieldDiv.appendChild(copy);
+            inputArea.classList.add('config-field-control');
+        }
+        if (schema.Kind !== 'Sequence') {
+            const control = inputArea.matches('input, select') ? inputArea : inputArea.querySelector('input, select');
+            if (control) {
+                control.id = `config-input-${encodeURIComponent(JSON.stringify(path))}`;
+                const label = fieldDiv.querySelector<HTMLLabelElement>('label:not(.toggle-switch)');
+                if (label) label.htmlFor = control.id;
+            }
+        }
         fieldDiv.appendChild(inputArea);
         fieldDiv.appendChild(errorSpan);
         return fieldDiv;
@@ -634,6 +523,7 @@ function createBooleanInput(path: string[], value: boolean): HTMLElement {
     input.checked = !!value;
     input.dataset.path = JSON.stringify(path);
     input.className = 'config-input-bool';
+    input.setAttribute('aria-label', translateConfigLabel(path, path[path.length - 1]));
 
     const slider = document.createElement('span');
     slider.className = 'slider';
@@ -650,6 +540,7 @@ function createStringInput(path: string[], value: string): HTMLElement {
     input.value = value ?? '';
     input.dataset.path = JSON.stringify(path);
     input.className = 'config-input-string';
+    input.setAttribute('aria-label', translateConfigLabel(path, path[path.length - 1]));
     return input;
 }
 
@@ -667,6 +558,7 @@ function createNumberInput(path: string[], value: number, schema: any): HTMLElem
     if (schema.Max !== undefined) input.max = schema.Max;
     input.dataset.path = JSON.stringify(path);
     input.className = schema.Kind === 'Integer' ? 'config-input-int' : 'config-input-float';
+    input.setAttribute('aria-label', translateConfigLabel(path, path[path.length - 1]));
     wrap.appendChild(input);
 
     if (schema.Unit) {
@@ -724,6 +616,7 @@ function createSelectInput(
     const select = document.createElement('select');
     select.dataset.path = JSON.stringify(path);
     select.className = 'config-input-discrete';
+    select.setAttribute('aria-label', translateConfigLabel(path, path[path.length - 1]));
     options.forEach(opt => {
         const option = document.createElement('option');
         option.value = opt;
@@ -747,6 +640,7 @@ function createRatioInput(path: string[], value: any, schema: any): HTMLElement 
     num.value = value.Numerator?.toString() || '0';
     num.dataset.path = JSON.stringify([...path, 'Numerator']);
     num.className = 'config-input-ratio-num';
+    num.setAttribute('aria-label', t('ui.config.ratioNumerator', '{label}: numerator', { label: translateConfigLabel(path, path[path.length - 1]) }));
 
     const sep = document.createElement('span');
     sep.innerText = ':';
@@ -758,6 +652,7 @@ function createRatioInput(path: string[], value: any, schema: any): HTMLElement 
     den.value = value.Denominator?.toString() || '1';
     den.dataset.path = JSON.stringify([...path, 'Denominator']);
     den.className = 'config-input-ratio-den';
+    den.setAttribute('aria-label', t('ui.config.ratioDenominator', '{label}: denominator', { label: translateConfigLabel(path, path[path.length - 1]) }));
 
     wrap.appendChild(num);
     wrap.appendChild(sep);
@@ -828,6 +723,7 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
         }
     );
     select.className = 'config-input-variant';
+    select.setAttribute('aria-label', translateConfigLabel(path, path[path.length - 1]));
     if (!showExperimental) {
         for (const option of Array.from((select as HTMLSelectElement).options)) {
             option.disabled = !!schema.Children[option.value].Experimental;
@@ -868,6 +764,7 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
             });
             if (childEl) childrenContainer.appendChild(childEl);
         }
+        if (!isInit) updateConfigBrowser();
     };
 
     select.addEventListener('change', () => renderActiveChild(false));
@@ -894,6 +791,8 @@ function createSequenceInput(
         wrap.className = 'sequence-group tabbed';
         const tabContainer = document.createElement('div');
         tabContainer.className = 'config-tabs';
+        tabContainer.setAttribute('role', 'tablist');
+        tabContainer.setAttribute('aria-label', translateConfigLabel(path, path[path.length - 1]));
         const contentContainer = document.createElement('div');
         contentContainer.className = 'tab-content';
 
@@ -910,18 +809,39 @@ function createSequenceInput(
             if (f) {
                 pane.appendChild(f);
 
-                const tabBtn = document.createElement('div');
+                const tabBtn = document.createElement('button');
+                tabBtn.type = 'button';
+                tabBtn.setAttribute('role', 'tab');
+                tabBtn.setAttribute('aria-selected', String(first));
                 tabBtn.className = `config-tab ${first ? 'active' : ''}`;
                 tabBtn.innerText = translateConfigLabel([...path, childName], childName);
                 tabBtn.dataset.tabPath = JSON.stringify([...path, childName]);
                 pane.className = `tab-pane ${first ? 'active' : ''}`;
                 pane.dataset.tabPath = JSON.stringify([...path, childName]);
+                pane.id = `config-pane-${encodeURIComponent(pane.dataset.tabPath)}`;
+                tabBtn.id = `${pane.id}-tab`;
+                tabBtn.setAttribute('aria-controls', pane.id);
+                pane.setAttribute('role', 'tabpanel');
+                pane.setAttribute('aria-labelledby', tabBtn.id);
 
                 tabBtn.addEventListener('click', () => {
-                    Array.from(tabContainer.children).forEach(c => c.classList.remove('active'));
+                    Array.from(tabContainer.children).forEach(c => {
+                        c.classList.remove('active');
+                        c.setAttribute('aria-selected', 'false');
+                    });
                     Array.from(contentContainer.children).forEach((c: any) => c.classList.remove('active'));
                     tabBtn.classList.add('active');
+                    tabBtn.setAttribute('aria-selected', 'true');
                     pane.classList.add('active');
+                    selectedConfigTabs.set(JSON.stringify(path), childName);
+                });
+                tabBtn.addEventListener('keydown', event => {
+                    const tabs = Array.from(tabContainer.querySelectorAll<HTMLButtonElement>('button'));
+                    const index = tabs.indexOf(tabBtn);
+                    const next = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length]
+                        : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length]
+                        : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : null;
+                    if (next) { event.preventDefault(); next.click(); next.focus(); }
                 });
 
                 tabContainer.appendChild(tabBtn);
@@ -932,6 +852,11 @@ function createSequenceInput(
         }
 
         if (!hasAnyTab) return null;
+        const remembered = selectedConfigTabs.get(JSON.stringify(path));
+        if (remembered) {
+            Array.from(tabContainer.querySelectorAll<HTMLButtonElement>('button'))
+                .find(button => button.dataset.tabPath === JSON.stringify([...path, remembered]))?.click();
+        }
 
         wrap.appendChild(tabContainer);
         wrap.appendChild(contentContainer);
@@ -1081,14 +1006,10 @@ async function saveConfiguration() {
         const inputs = Array.from(container.querySelectorAll('input, select')) as (HTMLInputElement | HTMLSelectElement)[];
         for (const input of inputs) {
             // Check native HTML5 validation
-            if (!input.checkValidity()) {
+            if (configInputInvalid(input)) {
+                revealConfigElement(input.closest<HTMLElement>('.form-group') || input);
+                input.focus();
                 input.reportValidity();
-                validationFailed = true;
-                break;
-            }
-            // Check custom range visual marker
-            const numRangeHint = (input.parentElement?.querySelector('.range-hint') || input.parentElement?.parentElement?.querySelector('.range-hint')) as HTMLElement;
-            if (numRangeHint && numRangeHint.style.color !== '') {
                 validationFailed = true;
                 break;
             }
@@ -1172,6 +1093,13 @@ async function saveConfiguration() {
 
 function handleErrors(errors: any[]) {
     const globalErrors = document.getElementById('config-global-errors');
+    globalErrors?.replaceChildren();
+    globalErrors?.classList.remove('active', 'server-error');
+    document.querySelectorAll<HTMLElement>('#config-form .error-message').forEach(span => {
+        span.textContent = '';
+        span.classList.add('d-none');
+        span.classList.remove('d-block', 'server-error');
+    });
     let hasGlobal = false;
 
     const configNavItem = document.querySelector('.config-nav-item');
@@ -1229,7 +1157,7 @@ function handleErrors(errors: any[]) {
             const elPathStr = (el as HTMLElement).dataset.groupPath;
             if (elPathStr) {
                 const elPath = JSON.parse(elPathStr);
-                if (elPath.length === 0 || isPrefix(elPath, err.Path)) {
+                if (elPath.length === 0 || (isPrefix(elPath, err.Path) && groupContainsError(el as HTMLElement, err.Path))) {
                     el.classList.add('has-server-error');
                 }
             }
@@ -1248,4 +1176,5 @@ function handleErrors(errors: any[]) {
     if (hasGlobal && globalErrors) {
         globalErrors.classList.add('active', 'server-error');
     }
+    updateCategoryErrorIndicators();
 }

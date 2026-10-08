@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title data-i18n="ui.app.title">Prunt User Interface</title>
     <!-- Main Styles -->
     <link rel="stylesheet" href="style.css">
@@ -28,7 +28,13 @@
     </dialog>
 
     <header class="topbar">
-        <div class="brand">Prunt</div>
+        <div class="brand-controls">
+            <button type="button" id="btn-toggle-navigation" class="btn btn-secondary navigation-toggle" aria-expanded="false" aria-controls="primary-navigation">
+                <span aria-hidden="true">☰</span>
+                <span data-i18n="ui.nav.menu">Menu</span>
+            </button>
+            <div class="brand">Prunt</div>
+        </div>
         <div class="global-controls">
             <button id="btn-pause" class="btn btn-warning" data-i18n="ui.global.pause">Pause</button>
             <button id="btn-resume" class="btn btn-success" data-i18n="ui.global.resume">Resume</button>
@@ -37,23 +43,24 @@
     </header>
 
     <div class="app-container">
-        <nav class="sidebar">
+        <div id="navigation-backdrop" class="navigation-backdrop" aria-hidden="true"></div>
+        <nav id="primary-navigation" class="sidebar">
             <ul class="nav-links">
-                <li class="nav-item active" data-target="status-view" data-i18n="ui.nav.status">Status Dashboard</li>
-                <li class="nav-item config-nav-item" data-target="config-view">
+                <li><button type="button" class="nav-item active" data-target="status-view" data-i18n="ui.nav.status" aria-current="page">Status Dashboard</button></li>
+                <li><button type="button" class="nav-item config-nav-item" data-target="config-view">
                     <span data-i18n="ui.nav.config">Configuration</span>
                     <span class="nav-error-icon" title="Configuration contains errors" data-i18n-title="ui.nav.configErrors"></span>
-                </li>
-                <li class="nav-item" data-target="control-view" data-i18n="ui.nav.control">Machine Control</li>
-                <li class="nav-item" data-target="gcode-entry-view" data-i18n="ui.nav.gcodeEntry">G-Code Entry</li>
-                <li class="nav-item" data-target="gcode-explorer-view" data-i18n="ui.nav.gcode">G-Code Explorer</li>
-                <li class="nav-item" data-target="log-view">
+                </button></li>
+                <li><button type="button" class="nav-item" data-target="control-view" data-i18n="ui.nav.control">Machine Control</button></li>
+                <li><button type="button" class="nav-item" data-target="gcode-entry-view" data-i18n="ui.nav.gcodeEntry">G-Code Entry</button></li>
+                <li><button type="button" class="nav-item" data-target="gcode-explorer-view" data-i18n="ui.nav.gcode">G-Code Explorer</button></li>
+                <li><button type="button" class="nav-item" data-target="log-view">
                     <span data-i18n="ui.nav.log">Log</span>
                     <span id="log-unread-count" class="log-unread-count" hidden></span>
-                </li>
+                </button></li>
             </ul>
             <div class="sidebar-footer">
-                <div class="sidebar-footer-title" data-i18n="ui.sidebar.theme">Theme</div>
+                <label for="theme-select" class="sidebar-footer-title" data-i18n="ui.sidebar.theme">Theme</label>
                 <select id="theme-select" class="theme-select">
                     <option value="auto" data-i18n="ui.theme.auto">System Auto</option>
                     <option value="light" data-i18n="ui.theme.light">Light Mode</option>
@@ -61,7 +68,7 @@
                 </select>
             </div>
             <div class="sidebar-footer">
-                <div class="sidebar-footer-title" data-i18n="ui.sidebar.language">Language</div>
+                <label for="locale-select" class="sidebar-footer-title" data-i18n="ui.sidebar.language">Language</label>
                 <select id="locale-select" class="theme-select"></select>
             </div>
         </nav>
@@ -84,31 +91,36 @@
             <section id="config-view" class="view">
                 <div class="view-header">
                     <h2 data-i18n="ui.config.title">Configuration</h2>
-                    <div class="header-actions">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="config-group-toggle" checked>
-                            <span class="slider"></span>
+                    <div class="header-actions config-header-actions">
+                        <label class="config-search-label">
+                            <span class="sr-only" data-i18n="ui.config.searchLabel">Search all settings</span>
+                            <input type="search" id="config-search" placeholder="Find a setting…" data-i18n-placeholder="ui.config.searchPlaceholder">
                         </label>
-                        <span class="toggle-label" data-i18n="ui.config.groupByModule">Group by Module</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="config-dev-mode-toggle">
-                            <span class="slider"></span>
-                        </label>
-                        <span class="toggle-label" data-i18n="ui.config.devMode">Dev Mode</span>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="config-experimental-toggle" aria-labelledby="config-experimental-label">
-                            <span class="slider"></span>
-                        </label>
-                        <span id="config-experimental-label" class="toggle-label" data-i18n="ui.config.showExperimental">Show experimental options</span>
                         <button id="btn-save-config" class="btn btn-primary" data-i18n="ui.config.saveChanges">Save Changes</button>
                     </div>
                 </div>
                 <!-- Schema errors holder -->
                 <div id="config-global-errors" class="global-errors"></div>
                 
-                <div class="config-view-container">
-                    <div id="config-form" class="config-form">
-                        <!-- Config fields will be injected here -->
+                <div class="config-browser">
+                    <aside class="config-category-sidebar">
+                        <h3 data-i18n="ui.config.categoriesLabel">Categories</h3>
+                        <nav id="config-categories" aria-label="Configuration categories"></nav>
+                        <details class="config-display-options">
+                            <summary data-i18n="ui.config.displayOptions">Display options</summary>
+                            <label><input type="checkbox" id="config-dev-mode-toggle"><span data-i18n="ui.config.devMode">Dev Mode</span></label>
+                            <label><input type="checkbox" id="config-experimental-toggle"><span data-i18n="ui.config.showExperimental">Show experimental options</span></label>
+                        </details>
+                    </aside>
+                    <div class="config-view-container">
+                        <div class="config-editor-header">
+                            <h3 id="config-category-title"></h3>
+                            <button type="button" id="config-help-toggle" class="btn btn-secondary btn-sm" aria-pressed="true" data-i18n="ui.config.hideHelp">Hide help</button>
+                        </div>
+                        <div id="config-search-results" hidden></div>
+                        <div id="config-form" class="config-form">
+                            <!-- Config fields will be injected here -->
+                        </div>
                     </div>
                 </div>
             </section>
@@ -121,10 +133,10 @@
                 <div class="machine-control-layout">
                     <section class="machine-control-section file-upload-section">
                         <h3 data-i18n="ui.control.fileUpload">File Upload</h3>
-                        <div class="drop-zone" id="drop-zone">
-                            <p data-i18n="ui.control.dropZone">Drag & Drop G-Code file here or click to select</p>
-                            <input type="file" id="file-input" hidden>
-                        </div>
+                        <button type="button" class="drop-zone" id="drop-zone">
+                            <span data-i18n="ui.control.dropZone">Drag & Drop G-Code file here or click to select</span>
+                        </button>
+                        <input type="file" id="file-input" hidden>
                     </section>
 
                     <section class="machine-control-section uploaded-files-section">
@@ -174,11 +186,13 @@
                 <div class="view-header">
                     <h2 data-i18n="ui.gcode.title">G-Code Explorer</h2>
                     <div class="header-actions">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="gcode-group-toggle" checked>
-                            <span class="slider"></span>
+                        <label class="gcode-group-control">
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="gcode-group-toggle" checked>
+                                <span class="slider"></span>
+                            </span>
+                            <span class="toggle-label" data-i18n="ui.gcode.groupByModule">Group by Module</span>
                         </label>
-                        <span class="toggle-label" data-i18n="ui.gcode.groupByModule">Group by Module</span>
                     </div>
                 </div>
                 <div id="gcode-explorer-content" class="gcode-explorer-content">

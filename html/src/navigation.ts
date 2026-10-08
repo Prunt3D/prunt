@@ -120,16 +120,40 @@ function retryNavigation(navigate: () => boolean, attempts = 20) {
     window.setTimeout(() => retryNavigation(navigate, attempts - 1), 100);
 }
 
+export function setNavigationOpen(open: boolean) {
+    const mobile = window.matchMedia('(max-width: 720px)').matches;
+    const expanded = mobile && open;
+    document.querySelector('.app-container')?.classList.toggle('navigation-open', expanded);
+    document.getElementById('btn-toggle-navigation')?.setAttribute('aria-expanded', String(expanded));
+    const sidebar = document.getElementById('primary-navigation');
+    const content = document.querySelector<HTMLElement>('.content-area');
+    if (sidebar) sidebar.inert = mobile && !expanded;
+    if (content) content.inert = expanded;
+}
+
 export function activateView(targetId: string) {
+    const view = document.getElementById(targetId);
+    if (!view?.classList.contains('view')) return;
+    const wasNavigationOpen = document.getElementById('btn-toggle-navigation')?.getAttribute('aria-expanded') === 'true';
     const navItems = document.querySelectorAll<HTMLElement>('.nav-item');
     const views = document.querySelectorAll<HTMLElement>('.view');
 
-    navItems.forEach(item => item.classList.remove('active'));
+    navItems.forEach(item => {
+        item.classList.remove('active');
+        item.removeAttribute('aria-current');
+    });
     views.forEach(view => view.classList.remove('active'));
 
     const navItem = document.querySelector<HTMLElement>(`.nav-item[data-target='${CSS.escape(targetId)}']`);
     navItem?.classList.add('active');
-    document.getElementById(targetId)?.classList.add('active');
+    navItem?.setAttribute('aria-current', 'page');
+    view.classList.add('active');
+    setNavigationOpen(false);
+    if (wasNavigationOpen) {
+        const heading = view.querySelector<HTMLElement>('h2');
+        heading?.setAttribute('tabindex', '-1');
+        heading?.focus({ preventScroll: true });
+    }
 }
 
 export function navigateToConfigTarget(target: string) {
@@ -141,10 +165,21 @@ export function navigateToConfigTarget(target: string) {
         const element = findConfigTarget(targetPath);
         if (!element) return false;
 
-        activateConfigTabs(element);
-        revealTarget(element);
+        revealConfigElement(element);
         return true;
     });
+}
+
+export function revealConfigElement(element: HTMLElement) {
+    activateView('config-view');
+    const category = element.closest<HTMLElement>('.config-category-panel');
+    if (category && category.dataset.category !== undefined) {
+        document.querySelector<HTMLButtonElement>(
+            `.config-category-button[data-category='${CSS.escape(category.dataset.category)}']`
+        )?.click();
+    }
+    activateConfigTabs(element);
+    revealTarget(element);
 }
 
 export function navigateToGcodeTarget(target: string) {

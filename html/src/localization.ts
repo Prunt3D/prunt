@@ -191,6 +191,10 @@ export function translateConfigDescription(path: string[] | undefined, fallback:
     return t(buildPathKey('config.path', path, 'description'), fallback);
 }
 
+export function translateConfigCategory(id: string, fallback: string): string {
+    return t(`config.category.${escapeKeySegment(id)}.label`, fallback);
+}
+
 export function translateConfigUnit(path: string[] | undefined, fallback: string): string {
     return t(buildPathKey('config.path', path, 'unit'), fallback);
 }

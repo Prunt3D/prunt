@@ -263,8 +263,10 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Motion_Gcode : User_Config_Motion_Gcode := (others => <>);
-      Pause_Park   : User_Config_Pause_Park := (others => <>);
+      Motion_Gcode : User_Config_Motion_Gcode := (others => <>) with
+        Annotate => (Prunt_Config, Category, "motion", "Motion & travel", 20);
+      Pause_Park   : User_Config_Pause_Park := (others => <>) with
+        Annotate => (Prunt_Config, Category, "motion", "Motion & travel", 20);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

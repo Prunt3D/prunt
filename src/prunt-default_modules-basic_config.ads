@@ -65,7 +65,8 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Prunt : User_Config_Prunt := (others => <>);
+      Prunt : User_Config_Prunt := (others => <>) with
+        Annotate => (Prunt_Config, Category, "machine", "Machine", 10);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

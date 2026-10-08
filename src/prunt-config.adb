@@ -702,6 +702,17 @@ package body Prunt.Config is
          Result.Set_Field ("Description", Property.Description);
          Result.Set_Field ("Experimental", Property.Experimental);
 
+         if not Property.Category.Id.Is_Empty then
+            declare
+               Category : constant JSON_Value := Create_Object;
+            begin
+               Category.Set_Field ("Id", Property.Category.Id);
+               Category.Set_Field ("Label", Property.Category.Label);
+               Category.Set_Field ("Order", Property.Category.Order);
+               Result.Set_Field ("Category", Category);
+            end;
+         end if;
+
          if Property.Present_When.Controller_Tag /= Ada.Tags.No_Tag then
             declare
                Parameters      : constant JSON_Value := Create_Object;

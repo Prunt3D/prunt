@@ -21,9 +21,25 @@ let statusSchema: any = null;
 let currentStatus: any = null;
 
 let dashboardLayout: any[] = [];
-let plots: Record<string, { plot: uPlot, paths: StatusPath[], data: number[][] }> = {};
+let plots: Record<string, { plot: uPlot, container: HTMLElement, paths: StatusPath[], data: number[][] }> = {};
+const plotResizeObserver = new ResizeObserver(entries => {
+    for (const entry of entries) {
+        const width = Math.floor(entry.contentRect.width);
+        if (width <= 0) continue; // Hidden views are resized when they become visible again.
+        for (const { plot, container } of Object.values(plots)) {
+            if (container === entry.target && plot.width !== width) {
+                plot.setSize({ width, height: 150 });
+            }
+        }
+    }
+});
 
 export async function initStatusView() {
+    const themeObserver = new MutationObserver(() => {
+        Object.values(plots).forEach(({ plot }) => plot.redraw(false));
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
     const btnAddWidget = document.getElementById('btn-add-widget');
     btnAddWidget?.addEventListener('click', openAddWidgetModal);
 
@@ -216,6 +232,7 @@ function renderDashboard() {
     const grid = document.getElementById('dashboard-grid');
     if (!grid) return;
 
+    plotResizeObserver.disconnect();
     Object.values(plots).forEach(p => p.plot.destroy());
     plots = {};
     grid.innerHTML = '';
@@ -247,6 +264,7 @@ function renderDashboard() {
                 renderDashboard();
             };
             header.appendChild(delBtn);
+            header.appendChild(createLayoutControls(index));
 
             grid.appendChild(header);
         } else if (item.type === 'widget' || item.type === 'widget-group') {
@@ -337,17 +355,18 @@ function renderDashboard() {
                 });
 
                 const opts = {
-                    width: 280,
+                    width: 1, // The observer sizes the plot after the card is attached to the grid.
                     height: 150,
                     series: seriesOpts,
                     axes: [
                         { show: false },
-                        { stroke: "var(--text-main)", grid: { show: false } }
+                        { stroke: () => getComputedStyle(contentDiv).color, grid: { show: false } }
                     ]
                 };
                 const u = new uPlot(opts, plotData as any, contentDiv);
                 const uKey = actualGroupKey + "_" + index; // Ensure unique plot instance keys if duplicate groups exist
-                plots[uKey] = { plot: u, paths: item.paths, data: plotData };
+                plots[uKey] = { plot: u, container: contentDiv, paths: item.paths, data: plotData };
+                plotResizeObserver.observe(contentDiv);
 
                 card.appendChild(legendContainer);
             } else {
@@ -360,11 +379,60 @@ function renderDashboard() {
                 });
             }
 
+            card.appendChild(createLayoutControls(index));
             grid.appendChild(card);
         }
     });
 
     updateWidgets();
+}
+
+function createLayoutControls(index: number): HTMLElement {
+    const controls = document.createElement('div');
+    controls.className = 'widget-layout-controls';
+    for (const direction of [-1, 1]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-sm btn-secondary';
+        button.textContent = direction < 0 ? '↑' : '↓';
+        button.title = direction < 0
+            ? t('ui.status.moveEarlier', 'Move earlier')
+            : t('ui.status.moveLater', 'Move later');
+        button.setAttribute('aria-label', button.title);
+        button.disabled = index + direction < 0 || index + direction >= dashboardLayout.length;
+        button.addEventListener('click', () => {
+            const destination = index + direction;
+            const [item] = dashboardLayout.splice(index, 1);
+            dashboardLayout.splice(destination, 0, item);
+            saveDashboardLayout();
+            renderDashboard();
+            const moved = document.querySelector<HTMLElement>(`#dashboard-grid > [data-index="${destination}"]`);
+            moved?.scrollIntoView({ block: 'nearest' });
+            moved?.querySelector<HTMLButtonElement>('.widget-layout-controls button:not(:disabled)')?.focus({ preventScroll: true });
+        });
+        controls.appendChild(button);
+    }
+
+    const item = dashboardLayout[index];
+    const groupKey = item.groupKey || item.key;
+    const matching = groupKey ? dashboardLayout.filter(other =>
+        other !== item && (other.type === 'widget' || other.type === 'widget-group') &&
+        (other.groupKey || other.key) === groupKey) : [];
+    if (matching.length > 0) {
+        const group = document.createElement('button');
+        group.type = 'button';
+        group.className = 'btn btn-sm btn-secondary';
+        group.textContent = t('ui.status.groupMatching', 'Group matching');
+        group.title = t('ui.status.groupMatchingTitle', 'Combine all widgets with the same module, group and unit');
+        group.addEventListener('click', () => {
+            item.paths = [item, ...matching].flatMap(widget => widget.paths);
+            dashboardLayout = dashboardLayout.filter(other => !matching.includes(other));
+            saveDashboardLayout();
+            renderDashboard();
+        });
+        controls.appendChild(group);
+    }
+    return controls;
 }
 
 function updateWidgets() {

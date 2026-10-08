@@ -462,7 +462,8 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Kinematics : User_Config_Kinematics := (others => <>);
+      Kinematics : User_Config_Kinematics := (others => <>) with
+        Annotate => (Prunt_Config, Category, "motion", "Motion & travel", 20);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

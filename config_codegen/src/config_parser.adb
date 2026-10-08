@@ -372,6 +372,7 @@ package body Config_Parser is
                         then ""
                         else To_Virtual_String (Comp_Decl.F_Default_Expr.Text)),
                      Description         => Get_Comments_Starting_After (Item.Token_End),
+                     Category            => (others => <>),
                      Min                 => "",
                      Max                 => "",
                      Fixed_Kind          => "",
@@ -397,6 +398,17 @@ package body Config_Parser is
                                     Component.Unit := Parse_Unit (Assocs);
                                  elsif Argument (Assocs, 2) = "Experimental" then
                                     Component.Experimental := True;
+                                 elsif Argument (Assocs, 2) = "Category" then
+                                    if not Has_Argument (Assocs, 5) or else Has_Argument (Assocs, 6) then
+                                       Raise_Error (Assoc, "Category requires an id, label, and order.");
+                                    end if;
+                                    Component.Category :=
+                                      (Id    => Strip (Argument (Assocs, 3)),
+                                       Label => Strip (Argument (Assocs, 4)),
+                                       Order => Natural'Wide_Wide_Value (Argument (Assocs, 5)));
+                                    if Component.Category.Id.Is_Empty or else Component.Category.Label.Is_Empty then
+                                       Raise_Error (Assoc, "Category id and label must not be empty.");
+                                    end if;
                                  elsif Argument (Assocs, 2) = "Fixed_Kind" then
                                     Component.Fixed_Kind := Strip (Argument (Assocs, 3));
                                  elsif Argument (Assocs, 2) = "Options_Expr" then

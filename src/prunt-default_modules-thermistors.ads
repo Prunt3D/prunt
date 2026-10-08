@@ -348,7 +348,8 @@ private
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Thermistors : User_Config_Thermistor_Array := [others => <>];
+      Thermistors : User_Config_Thermistor_Array := [others => <>] with
+        Annotate => (Prunt_Config, Category, "heating", "Heating & sensors", 50);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

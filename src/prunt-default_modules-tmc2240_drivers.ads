@@ -389,7 +389,8 @@ private
 
    type User_Config is record
       Motors : User_Config_Motor_Array := [others => <>]with
-        Annotate => (Prunt_Config, Fixed_Kind, "Motor_Hardware (Index_?).Kind");
+        Annotate => (Prunt_Config, Fixed_Kind, "Motor_Hardware (Index_?).Kind"),
+        Annotate => (Prunt_Config, Category, "motors", "Motors & drivers", 40);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

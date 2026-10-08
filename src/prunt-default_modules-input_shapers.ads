@@ -163,7 +163,8 @@ private
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Input_Shaping : User_Config_Input_Shaping_Array := [others => <>];
+      Input_Shaping : User_Config_Input_Shaping_Array := [others => <>] with
+        Annotate => (Prunt_Config, Category, "shaping", "Input shaping", 80);
       --  Configure the default input shaper used for each axis.
    end record
    with Annotate => (Prunt_Config, Root_User_Config);

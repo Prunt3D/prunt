@@ -229,7 +229,8 @@ private
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Motors : User_Config_Motor_Array := [others => <>];
+      Motors : User_Config_Motor_Array := [others => <>] with
+        Annotate => (Prunt_Config, Category, "motors", "Motors & drivers", 40);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 

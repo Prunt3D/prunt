@@ -821,14 +821,20 @@ package body Config_Generator is
          return Result;
       end Path_To_Vector_Access_String;
 
-      function Dynamic_Presentation_Association (Outer : Component_Data) return Virtual_String is
+      function Presentation_Associations (Outer : Component_Data) return Virtual_String is
+         Category : constant Virtual_String :=
+           (if Outer.Category.Id.Is_Empty
+            then ", Category => <>"
+            else ", Category => (Id => """ & Outer.Category.Id
+              & """, Label => """ & Outer.Category.Label
+              & """, Order =>" & To_Virtual_String (Outer.Category.Order'Wide_Wide_Image) & ")");
       begin
          if Outer.Dynamic_Present_When_Path.Is_Empty then
-            return ", Experimental => " & Virtual_String'(if Outer.Experimental then "True" else "False")
+            return Category & ", Experimental => " & Virtual_String'(if Outer.Experimental then "True" else "False")
               & ", Present_When => Prunt.Config.No_Presentation_Condition";
          else
             return
-              ", Experimental => " & Virtual_String'(if Outer.Experimental then "True" else "False")
+              Category & ", Experimental => " & Virtual_String'(if Outer.Experimental then "True" else "False")
               & ", Present_When => (Controller_Tag => "
               & Outer.Dynamic_Present_When_Tag
               & ", Controller_Path => "
@@ -837,7 +843,7 @@ package body Config_Generator is
               & Path_To_Vector_Access_String (Outer.Dynamic_Present_When_Values)
               & "])";
          end if;
-      end Dynamic_Presentation_Association;
+      end Presentation_Associations;
 
       function Effective_Schema_Default (Outer : Component_Data; Fallback : Virtual_String) return Virtual_String is
       begin
@@ -945,7 +951,7 @@ package body Config_Generator is
             & Outer.Description
             & """, Default => "
             & Effective_Schema_Default (Outer, Outer.Default)
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -970,7 +976,7 @@ package body Config_Generator is
             & Outer.Description
             & """, Default => "
             & Effective_Schema_Default (Outer, Outer.Default)
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -1013,7 +1019,7 @@ package body Config_Generator is
             & ", Unit => """
             & Effective_Display_Unit (Float_Val.Unit, Outer.Unit)
             & """"
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ")");
          if Float_Val.Unit.Conversion /= "" then
             --  Config_Data is already schema-validated in display units. Converting a valid endpoint back to base
@@ -1055,7 +1061,7 @@ package body Config_Generator is
             & Min_Expr
             & ", Max => "
             & Max_Expr
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ")");
          Emit_Reader (Reader_Prefix & " := Data.Get (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "]);");
          Emit_Setter ("Data.Set (Prunt.Config.Config_Data_Paths.Vector'[" & Path_Str & "], " & Ada_Expr & ");");
@@ -1088,7 +1094,7 @@ package body Config_Generator is
             & ", Unit => """
             & Effective_Display_Unit (Integer_Val.Unit, Outer.Unit)
             & """"
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -1155,7 +1161,7 @@ package body Config_Generator is
             & Effective_Schema_Default (Outer, "+" & Outer.Default & "'Image")
             & ", Options => "
             & Options
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ")");
          Emit_Reader
            (Reader_Prefix
@@ -1187,7 +1193,7 @@ package body Config_Generator is
             & Outer.Description
             & """, Tabbed => "
             & Virtual_String'(if Array_Val.Tabbed then "True" else "False")
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ", Children => [for "
             & Loop_Index
             & " in "
@@ -1211,6 +1217,7 @@ package body Config_Generator is
                Type_Name                      => Array_Val.Element_Type,
                Description                    => "",
                Experimental                   => False,
+               Category                       => (others => <>),
                --  Avoid duplicated description with nested arrays.
                Default                        => Outer.Type_Name & "'" & Outer.Default & "(" & Loop_Index & ")",
                Min                            => Array_Val.Min,
@@ -1401,7 +1408,7 @@ package body Config_Generator is
             & Record_Val.Description
             & """"
             & Fixed_Desc_Suffix
-            & Dynamic_Presentation_Association (Outer)
+            & Presentation_Associations (Outer)
             & ", Children => Prunt.Config.Config_Property_Maps.""&"" (");
          --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
          --  non-variant part. We can not simply place the variant code after the non-variant code generation as we use
@@ -1476,7 +1483,7 @@ package body Config_Generator is
                   & """ => Prunt.Config.Config_Property_Parameters_Variant'(Default => """
                   & Record_Val.Discriminant_Default
                   & """, Description => """", Experimental => False,"
-                  & " Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
+                  & " Category => <>, Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                --  Call `&` as a regular function so we can swap the arguments and place the variant part after the
                --  non-variant part. We can not simply place this code after the non-variant code generation as we use
                --  a delta aggregate to set the non-variant fields and delta aggregates can not set discriminants,
@@ -1501,7 +1508,7 @@ package body Config_Generator is
                            & ", Description => """
                            & Variant_Case_Maps.Element (Variant_C).Description
                            & """, Experimental => " & Variant_Experimental (Record_Val, Name)
-                           & ", Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
+                           & ", Category => <>, Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                         Emit_Reader
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["
@@ -1559,7 +1566,7 @@ package body Config_Generator is
                            & ", Description => """
                            & Variant_Case_Maps.Element (Variant_C).Description
                            & """, Experimental => " & Variant_Experimental (Record_Val, Name)
-                           & ", Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
+                           & ", Category => <>, Present_When => Prunt.Config.No_Presentation_Condition, Children => ");
                         Emit_Reader
                           (Virtual_String'(if Is_First then "" else "els")
                            & "if Data.Get (Prunt.Config.Config_Data_Paths.Vector'["

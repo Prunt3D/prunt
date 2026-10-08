@@ -7,7 +7,7 @@ import { initGcodeEntryView } from './gcode_entry_view.js';
 import { initGcodeExplorerView } from './gcode_explorer_view.js';
 import { initLogView } from './log_view.js';
 import { initLocalization, onLocaleChange, t } from './localization.js';
-import { activateView } from './navigation.js';
+import { activateView, setNavigationOpen } from './navigation.js';
 
 export async function initUI() {
     await initLocalization();
@@ -140,6 +140,27 @@ function updateServerExceptionBanner(serverException: ServerException | null) {
 }
 
 function setupNavigation() {
+    const toggle = document.getElementById('btn-toggle-navigation');
+    const closeNavigation = () => {
+        setNavigationOpen(false);
+        toggle?.focus({ preventScroll: true });
+    };
+    toggle?.addEventListener('click', () => {
+        setNavigationOpen(toggle.getAttribute('aria-expanded') !== 'true');
+    });
+    document.getElementById('navigation-backdrop')?.addEventListener('click', closeNavigation);
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && toggle?.getAttribute('aria-expanded') === 'true') {
+            closeNavigation();
+        }
+    });
+    window.matchMedia('(max-width: 720px)').addEventListener('change', () => {
+        const sidebar = document.getElementById('primary-navigation');
+        const focusedInSidebar = sidebar?.contains(document.activeElement);
+        setNavigationOpen(false);
+        if (sidebar?.inert && focusedInSidebar) toggle?.focus({ preventScroll: true });
+    });
+    setNavigationOpen(false);
     const navItems = document.querySelectorAll('.nav-item');
 
     navItems.forEach(item => {

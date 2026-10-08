@@ -101,7 +101,8 @@ private
    with Annotate => (Prunt_Config, Tabbed), Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Switches : User_Config_Input_Switch_Array := [others => <>];
+      Switches : User_Config_Input_Switch_Array := [others => <>] with
+        Annotate => (Prunt_Config, Category, "inputs", "Inputs & switches", 70);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
 
