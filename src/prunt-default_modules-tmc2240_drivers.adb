@@ -152,6 +152,16 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       Motor               : Motor_Name;
       Distance_Per_Step   : Length) return TMC2240_Registers is
    begin
+      if Motor_Hardware (Motor).TMC2240_Diag_0_Push_Pull
+        and then
+          (for some Other in Motor_Name =>
+             Other /= Motor
+             and then Motor_Hardware (Other).Kind = TMC2240_UART_Kind
+             and then Motor_Hardware (Other).TMC2240_Diag_0 = Motor_Hardware (Motor).TMC2240_Diag_0)
+      then
+         raise Constraint_Error with "Drivers sharing a DIAG0 input must use open-collector outputs.";
+      end if;
+
       return
          Result : TMC2240_Registers :=
            (GCONF         =>
@@ -169,7 +179,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                Diag1_Index      => False,
                Diag1_On_State   => False,
                Reserved_2       => 0,
-               Diag_0_Push_Pull => False,
+               Diag_0_Push_Pull => TMC_Boolean (Motor_Hardware (Motor).TMC2240_Diag_0_Push_Pull),
                Diag_1_Push_Pull => False,
                Small_Hysteresis => True,
                Stop_Enable      => False,

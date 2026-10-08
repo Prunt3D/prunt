@@ -36,6 +36,25 @@ package body Prunt.Default_Modules.Homing is
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
+   function Detector_Stop_State (This : Module_Instance; Detector : User_Config_Homing_Detector) return Boolean is
+   begin
+      case Detector.Kind is
+         when Disabled     =>
+            raise Constraint_Error with "A homing detector must be selected.";
+
+         when Input_Switch =>
+            return not This.Switch_Is_Normally_Closed (Detector.Switch);
+
+         when StallGuard2  =>
+            return
+              TMC2240_Drivers_Module.Motor_Hardware (Detector.StallGuard2_Parameters.Motor).TMC2240_Diag_0_Push_Pull;
+
+         when StallGuard4  =>
+            return
+              TMC2240_Drivers_Module.Motor_Hardware (Detector.StallGuard4_Parameters.Motor).TMC2240_Diag_0_Push_Pull;
+      end case;
+   end Detector_Stop_State;
+
    function Required_Loop_Count (Maximum_Travel : Length; Approach_Velocity : Velocity) return Dimensionless
    is (Dimensionless'Max
          (1.0, Dimensionless'Ceiling (Maximum_Travel / (Approach_Velocity * Interpolation_Time) + 2.0)));
@@ -327,18 +346,18 @@ package body Prunt.Default_Modules.Homing is
                   declare
                      Configured_Detector : constant User_Config_Homing_Detector := Detector (Tower);
                      Switch              : Input_Switch_Name;
-                     Has_Detector        : Boolean := True;
                   begin
                      case Configured_Detector.Kind is
                         when Disabled                  =>
-                           Has_Detector := False;
-                           Switch := Input_Switch_Name'First;
                            Report_Detector_Error (Tower, "A homing detector must be selected for this tower.");
 
                         when Input_Switch              =>
                            Switch := Configured_Detector.Switch;
                            if not Input_Switches_Module.Input_Switch_Hardware (Switch).Visible_To_User then
                               Report_Detector_Error (Tower, "This input is not exposed as a physical user switch.");
+                           end if;
+                           if not Input_Switches_Instance.Switch_Is_Enabled_In_Config (Switch) then
+                              Report_Detector_Error (Tower, "This detector input is disabled.");
                            end if;
 
                         when StallGuard2 | StallGuard4 =>
@@ -353,18 +372,9 @@ package body Prunt.Default_Modules.Homing is
                               end if;
                               if TMC2240_Drivers_Module.Motor_Hardware (Detector_Motor).Kind /= TMC2240_UART_Kind then
                                  Report_Detector_Error (Tower, "The selected motor does not support StallGuard.");
-                                 Switch := Input_Switch_Name'First;
-                              else
-                                 Switch := TMC2240_Drivers_Module.Motor_Hardware (Detector_Motor).TMC2240_Diag_0;
                               end if;
                            end;
                      end case;
-
-                     if Has_Detector then
-                        if not Input_Switches_Instance.Switch_Is_Enabled_In_Config (Switch) then
-                           Report_Detector_Error (Tower, "This detector input is disabled.");
-                        end if;
-                     end if;
                   end;
                end loop;
 
@@ -503,8 +513,6 @@ package body Prunt.Default_Modules.Homing is
                                       .Detector
                                       .Kind,
                                     "The selected motor does not support StallGuard.");
-                              else
-                                 Validate_Switch (TMC2240_Drivers_Module.Motor_Hardware (Motor).TMC2240_Diag_0);
                               end if;
                            end;
                      end case;
@@ -799,14 +807,14 @@ package body Prunt.Default_Modules.Homing is
 
             procedure Add_Stop_Condition (Switch : Input_Switch_Name) is
             begin
-               if not This.Switch_Is_Enabled (Switch) then
+               if Detector.Kind = Input_Switch and then not This.Switch_Is_Enabled (Switch) then
                   raise Constraint_Error with "A homing detector input is disabled.";
                end if;
 
                for Motor in Motor_Name loop
                   if This.Motor_Affects_Axis (Motor, Axis) then
                      Result.Stop_Conditions (Motor) :=
-                       (Input_Switch => Switch, Stop_State => not This.Switch_Is_Normally_Closed (Switch));
+                       (Input_Switch => Switch, Stop_State => Detector_Stop_State (This, Detector));
                   end if;
                end loop;
             end Add_Stop_Condition;
@@ -1045,14 +1053,14 @@ package body Prunt.Default_Modules.Homing is
                declare
                   Switch : constant Input_Switch_Name := Detector_Switch (Tower);
                begin
-                  if not This.Switch_Is_Enabled (Switch) then
+                  if Detector (Tower).Kind = Input_Switch and then not This.Switch_Is_Enabled (Switch) then
                      raise Constraint_Error with "A delta homing detector input is disabled.";
                   end if;
 
                   for Motor in Motor_Name loop
                      if Kinematics_Config.Tower_Motors (Tower, Motor) then
                         Result.Stop_Conditions (Motor) :=
-                          (Input_Switch => Switch, Stop_State => not This.Switch_Is_Normally_Closed (Switch));
+                          (Input_Switch => Switch, Stop_State => Detector_Stop_State (This, Detector (Tower)));
                      end if;
                   end loop;
                end;

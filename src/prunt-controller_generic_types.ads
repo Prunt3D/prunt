@@ -110,6 +110,9 @@ package Prunt.Controller_Generic_Types is
             TMC2240_Diag_0 : Input_Switch_Name;
             --  Pin to which the driver's DIAG_0 pin is attached.
 
+            TMC2240_Diag_0_Push_Pull : Boolean;
+            --  False selects open-collector, active-low DIAG0; True selects push-pull, active-high DIAG0.
+
             TMC2240_UART_Write : access procedure (Message : TMC_Types.TMC2240.UART_Data_Byte_Array);
             --  Bytes sent in reverse order. Least significant bit sent first.
             --

@@ -268,7 +268,7 @@ private
 
       Detector : User_Config_Homing_Detector := (others => <>);
       --  Detector used by the motors participating in this axis. A physical input is shared by those motors, while
-      --  sensorless homing uses each participating motor's own DIAG0 input.
+      --  sensorless homing uses the selected detector motor's DIAG0 input, which may be shared with other drivers.
 
       Move_Towards_Negative_Infinity : Boolean := True;
       --  Select the approach direction.
@@ -443,6 +443,9 @@ private
 
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
    --  Convert validated configuration data.
+
+   function Detector_Stop_State (This : Module_Instance; Detector : User_Config_Homing_Detector) return Boolean;
+   --  Use physical-switch polarity for endstops and the hardware DIAG0 output mode for StallGuard.
 
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
    --  Store the configuration in Data.
