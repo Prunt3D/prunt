@@ -187,6 +187,48 @@ private
    type E_Positioning_Mode is (Follow_XYZ_Positioning_Mode, Absolute_E_Positioning_Mode, Relative_E_Positioning_Mode)
    with Annotate => (Prunt_Config, User_Config);
 
+   type User_Config_Extrusion_Limit_Kind is (Disabled, Enabled) with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Extrusion_Only_Limit (Kind : User_Config_Extrusion_Limit_Kind := Disabled) is record
+      --  Limit positive extrusion per move when there is no XY travel, including moves that only change Z and E.
+      --  Retractions are unrestricted. The limit uses physical E movement after applying the flow scale.
+
+      case Kind is
+         when Disabled =>
+            null;
+
+         when Enabled =>
+            Maximum_Length : Length range 0.0 * mm .. 1.0E100 * mm := 50.0 * mm;
+            --  Maximum positive E movement without XY travel. Zero prevents all such extrusion.
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Extrusion_Ratio_Limit (Kind : User_Config_Extrusion_Limit_Kind := Disabled) is record
+      --  Limit positive extrusion relative to XY travel. Retractions are unrestricted. Z movement does not count
+      --  towards XY travel. Arcs use their XY arc length, and extrusion uses physical E movement after flow scaling.
+
+      case Kind is
+         when Disabled =>
+            null;
+
+         when Enabled =>
+            Maximum_Ratio : Dimensionless range 0.0 .. 1.0E100 := 1.0;
+            --  Maximum mm of positive E movement per mm of XY travel. Moves without XY travel use the separate
+            --  extrusion-only limit.
+      end case;
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
+   type User_Config_Excessive_Extrusion_Prevention is record
+      Extrusion_Only : User_Config_Extrusion_Only_Limit := (others => <>);
+      --  Optional limit for extrusion without XY travel, including firmware recovery and pause/return moves.
+
+      Extrusion_To_XY_Ratio : User_Config_Extrusion_Ratio_Limit := (others => <>);
+      --  Optional limit for extrusion during XY travel.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
    type User_Config_Motion_Gcode is record
       --  This section contains settings which impact G-code commands contained within the motion module.
 
@@ -263,9 +305,11 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Motion_Gcode : User_Config_Motion_Gcode := (others => <>) with
+      Motion_Gcode                   : User_Config_Motion_Gcode := (others => <>) with
         Annotate => (Prunt_Config, Category, "motion", "Motion & travel", 20);
-      Pause_Park   : User_Config_Pause_Park := (others => <>) with
+      Pause_Park                     : User_Config_Pause_Park := (others => <>) with
+        Annotate => (Prunt_Config, Category, "motion", "Motion & travel", 20);
+      Excessive_Extrusion_Prevention : User_Config_Excessive_Extrusion_Prevention := (others => <>) with
         Annotate => (Prunt_Config, Category, "motion", "Motion & travel", 20);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);
@@ -360,6 +404,16 @@ private
       Target   : Position;
       Feedrate : Velocity);
    --  Add Target to Planner and update Current, but only if Target differs from Current.
+
+   function Linear_XY_Distance (Start_Pos, Finish_Pos : Position) return Length;
+   --  Return the XY travel distance of a linear move, ignoring Z and E.
+
+   function Helix_XY_Distance (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean) return Length;
+   --  Return the XY travel distance of a helix, matching the planner's full-circle and linear-fallback behavior.
+
+   procedure Validate_Extrusion_Limits
+     (Config : User_Config_Excessive_Extrusion_Prevention; E_Delta, XY_Distance : Length);
+   --  Reject excessive positive physical E movement before changing state or queuing any part of a compound move.
 
    function Unit_Scale (Units : Linear_Units_Mode) return Length;
    --  Return the length represented by one g-code unit in Units.

@@ -31,6 +31,10 @@ with Prunt.Default_Modules.Config_Saving;
 with Prunt.Default_Modules.Idle_Emitter;
 with Prunt.Default_Modules.Machine_Idle_Timeout;
 with Prunt.Default_Modules.Machine_Idle_Timeout.Test;
+with Prunt.Default_Modules.Motor_Drivers;
+with Prunt.Default_Modules.Kinematics;
+with Prunt.Default_Modules.Motion;
+with Prunt.Default_Modules.Motion.Test;
 with Prunt.Dummy_Allocator.Test;
 with Prunt.Exception_Occurrence_Holders.Test;
 with Prunt.Gcode_Arguments.Test;
@@ -39,6 +43,7 @@ with Prunt.Generic_Lock.Test;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test;
 with Prunt.Integration_Config_Overlays.Test;
 with Prunt.Kinematic_Transforms_Test;
+with Prunt.Kinematic_Transforms;
 with Prunt.Logger;
 with Prunt.Logger.Test_Control;
 with Prunt.Motion_Planner.Corner_Transitions.Test;
@@ -80,6 +85,18 @@ procedure Tests is
       Thermistors_Module => Cold_Extrusion_Thermistors,
       Blocking_Tracker_Module => Cold_Extrusion_Blocking_Tracker);
    package Cold_Extrusion_Test is new Cold_Extrusion_Heaters.Test;
+   package Excessive_Extrusion_Motor_Drivers is new Machine_Idle_Timeout_Test_Default_Modules.Motor_Drivers;
+   package Excessive_Extrusion_Transforms is new Prunt.Kinematic_Transforms
+     (Machine_Idle_Timeout_Test_Name, Machine_Idle_Timeout_Test_Controller_Types.Motor_Position);
+   package Excessive_Extrusion_Kinematics is new Machine_Idle_Timeout_Test_Default_Modules.Kinematics
+     (Transforms => Excessive_Extrusion_Transforms,
+      Config_Saving_Module => Machine_Idle_Timeout_Test_Config_Saving,
+      Motor_Drivers_Module => Excessive_Extrusion_Motor_Drivers);
+   package Excessive_Extrusion_Motion is new Machine_Idle_Timeout_Test_Default_Modules.Motion
+     (Config_Saving_Module => Machine_Idle_Timeout_Test_Config_Saving,
+      Kinematics_Module => Excessive_Extrusion_Kinematics,
+      Pending_State_Queue_Length => 10);
+   package Excessive_Extrusion_Test is new Excessive_Extrusion_Motion.Test;
    Timeout_Report_Count : Natural := 0 with Atomic, Volatile;
 
    function Get_Timeout_Report_Count return Natural is (Timeout_Report_Count);
@@ -142,6 +159,7 @@ begin
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);
    Trendy_Test.Register (Cold_Extrusion_Test.All_Tests);
+   Trendy_Test.Register (Excessive_Extrusion_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Long_Float_Test.All_Tests);
    Trendy_Test.Register (Prunt.Bounded_Indefinite_Queues_Test.All_Tests);

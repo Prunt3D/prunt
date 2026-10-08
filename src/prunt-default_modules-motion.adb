@@ -263,6 +263,84 @@ package body Prunt.Default_Modules.Motion is
       end if;
    end Add_Corner_If_Moved;
 
+   function Linear_XY_Distance (Start_Pos, Finish_Pos : Position) return Length is
+      DX    : constant Length := Finish_Pos (X_Axis) - Start_Pos (X_Axis);
+      DY    : constant Length := Finish_Pos (Y_Axis) - Start_Pos (Y_Axis);
+      Scale : constant Length := Length'Max (abs DX, abs DY);
+   begin
+      if Scale = 0.0 * mm then
+         return 0.0 * mm;
+      end if;
+      return Scale * Dimensionless_Math.Sqrt ((DX / Scale) ** 2 + (DY / Scale) ** 2);
+   end Linear_XY_Distance;
+
+   function Helix_XY_Distance (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean) return Length is
+      Start_Radius  : constant Length := Linear_XY_Distance (Center, Start_Pos);
+      Finish_Radius : constant Length := Linear_XY_Distance (Center, Finish_Pos);
+      Two_Pi        : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
+      Theta_Delta   : Dimensionless;
+   begin
+      if Start_Radius <= 0.0 * mm or else abs (Start_Radius - Finish_Radius) > 1.0E-6 * mm then
+         return Linear_XY_Distance (Start_Pos, Finish_Pos);
+      end if;
+
+      if Start_Pos (X_Axis) = Finish_Pos (X_Axis) and then Start_Pos (Y_Axis) = Finish_Pos (Y_Axis) then
+         return Start_Radius * Two_Pi;
+      end if;
+
+      declare
+         Start_X  : constant Dimensionless := (Start_Pos (X_Axis) - Center (X_Axis)) / Start_Radius;
+         Start_Y  : constant Dimensionless := (Start_Pos (Y_Axis) - Center (Y_Axis)) / Start_Radius;
+         Finish_X : constant Dimensionless := (Finish_Pos (X_Axis) - Center (X_Axis)) / Start_Radius;
+         Finish_Y : constant Dimensionless := (Finish_Pos (Y_Axis) - Center (Y_Axis)) / Start_Radius;
+      begin
+         Theta_Delta :=
+           Dimensionless_Math.Arctan
+             (Start_X * Finish_Y - Start_Y * Finish_X, Start_X * Finish_X + Start_Y * Finish_Y);
+      end;
+
+      if Theta_Delta = 0.0 then
+         return Linear_XY_Distance (Start_Pos, Finish_Pos);
+      elsif Clockwise and then Theta_Delta > 0.0 then
+         Theta_Delta := Theta_Delta - Two_Pi;
+      elsif not Clockwise and then Theta_Delta < 0.0 then
+         Theta_Delta := Theta_Delta + Two_Pi;
+      end if;
+      return Start_Radius * abs Theta_Delta;
+   end Helix_XY_Distance;
+
+   procedure Validate_Extrusion_Limits
+     (Config : User_Config_Excessive_Extrusion_Prevention; E_Delta, XY_Distance : Length) is
+   begin
+      if E_Delta <= 0.0 * mm then
+         return;
+      end if;
+
+      if XY_Distance = 0.0 * mm then
+         if Config.Extrusion_Only.Kind = Enabled and then E_Delta > Config.Extrusion_Only.Maximum_Length then
+            raise Gcode_Bad_Inputs_Error
+              with
+                "Excessive extrusion prevented: extrusion without XY travel is"
+                & Dimensionless'Image (E_Delta / mm)
+                & " mm; maximum is"
+                & Dimensionless'Image (Config.Extrusion_Only.Maximum_Length / mm)
+                & " mm.";
+         end if;
+      elsif Config.Extrusion_To_XY_Ratio.Kind = Enabled
+        and then E_Delta > Config.Extrusion_To_XY_Ratio.Maximum_Ratio * XY_Distance
+      then
+         raise Gcode_Bad_Inputs_Error
+           with
+             "Excessive extrusion prevented:"
+             & Dimensionless'Image (E_Delta / mm)
+             & " mm of extrusion over"
+             & Dimensionless'Image (XY_Distance / mm)
+             & " mm of XY travel exceeds the maximum ratio of"
+             & Dimensionless'Image (Config.Extrusion_To_XY_Ratio.Maximum_Ratio)
+             & ".";
+      end if;
+   end Validate_Extrusion_Limits;
+
    function Trimmed_Image (Value : Dimensionless) return String
    is (Ada.Strings.Fixed.Trim (Dimensionless'Image (Value), Ada.Strings.Both));
 
@@ -919,6 +997,13 @@ package body Prunt.Default_Modules.Motion is
                    ((E_Delta < 0.0 * mm and then not Planned_State.Is_Retracted)
                     or else (E_Delta > 0.0 * mm and then Planned_State.Is_Retracted))
                then
+                  Validate_Extrusion_Limits
+                    (Config.Excessive_Extrusion_Prevention,
+                     (if E_Delta < 0.0 * mm
+                      then -Planned_State.Retract_Length
+                      else Planned_State.Retract_Length + Planned_State.Recover_Extra_Length)
+                     * Planned_State.Flow_Scale,
+                     0.0 * mm);
                   Planner.Validate_Extrusion
                     ((if E_Delta < 0.0 * mm
                       then -Planned_State.Retract_Length
@@ -945,6 +1030,14 @@ package body Prunt.Default_Modules.Motion is
            + (Target_Logical (E_Axis) - Logical_Position (E_Axis)) * Planned_State.Flow_Scale;
 
          Target_Physical (Z_Axis) := Target_Physical (Z_Axis) + Planned_State.Current_Z_Hop;
+         if Config.Excessive_Extrusion_Prevention.Extrusion_Only.Kind = Enabled
+           or else Config.Excessive_Extrusion_Prevention.Extrusion_To_XY_Ratio.Kind = Enabled
+         then
+            Validate_Extrusion_Limits
+              (Config.Excessive_Extrusion_Prevention,
+               Target_Physical (E_Axis) - Physical_Position (E_Axis),
+               Linear_XY_Distance (Physical_Position, Target_Physical));
+         end if;
          Planner.Validate_Extrusion (Target_Physical (E_Axis) - Physical_Position (E_Axis));
 
          if Persistent_Feedrate_Change then
@@ -1188,6 +1281,16 @@ package body Prunt.Default_Modules.Motion is
             end if;
          end;
 
+         if Config.Excessive_Extrusion_Prevention.Extrusion_Only.Kind = Enabled
+           or else Config.Excessive_Extrusion_Prevention.Extrusion_To_XY_Ratio.Kind = Enabled
+         then
+            Validate_Extrusion_Limits
+              (Config.Excessive_Extrusion_Prevention,
+               Target_Physical (E_Axis) - Physical_Position (E_Axis),
+               (if Use_Linear_Fallback
+                then Linear_XY_Distance (Physical_Position, Target_Physical)
+                else Helix_XY_Distance (Physical_Position, Arc_Target_Physical, Center_Physical, Clockwise)));
+         end if;
          Planner.Validate_Extrusion (Target_Physical (E_Axis) - Physical_Position (E_Axis));
          Commit_Persistent_Feedrate_Change;
 
@@ -1265,6 +1368,7 @@ package body Prunt.Default_Modules.Motion is
             E_Delta           : constant Length :=
               (Planned_State.Retract_Length + Planned_State.Recover_Extra_Length) * Planned_State.Flow_Scale;
          begin
+            Validate_Extrusion_Limits (Config.Excessive_Extrusion_Prevention, E_Delta, 0.0 * mm);
             Planner.Validate_Extrusion (E_Delta);
             if Planned_State.Current_Z_Hop /= 0.0 * mm or else E_Delta /= 0.0 * mm then
                Ensure_Can_Queue_Planned_State (Planner);
@@ -1651,6 +1755,8 @@ package body Prunt.Default_Modules.Motion is
                Current : Position := Pause_Position;
                Next    : Position := Current;
             begin
+               Validate_Extrusion_Limits
+                 (Config.Excessive_Extrusion_Prevention, Target (E_Axis) - Current (E_Axis), 0.0 * mm);
                Next (E_Axis) := Target (E_Axis);
                Add_Corner_If_Moved (Planner, Current, Next, Feed);
 
@@ -1673,6 +1779,8 @@ package body Prunt.Default_Modules.Motion is
                Current : Position := Planner.Get_Last_Position;
                Next    : Position := Current;
             begin
+               Validate_Extrusion_Limits
+                 (Config.Excessive_Extrusion_Prevention, Pause_Position (E_Axis) - Current (E_Axis), 0.0 * mm);
                Next (X_Axis) := Pause_Position (X_Axis);
                Next (Y_Axis) := Pause_Position (Y_Axis);
                Add_Corner_If_Moved (Planner, Current, Next, Feed);
