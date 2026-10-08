@@ -191,7 +191,7 @@ private
 
    type User_Config_Extrusion_Only_Limit (Kind : User_Config_Extrusion_Limit_Kind := Disabled) is record
       --  Limit positive extrusion per move when there is no XY travel, including moves that only change Z and E.
-      --  Retractions are unrestricted. The limit uses physical E movement after applying the flow scale.
+      --  Retractions are unrestricted. The limit uses physical E movement after volume conversion and flow scaling.
 
       case Kind is
          when Disabled =>
@@ -206,7 +206,8 @@ private
 
    type User_Config_Extrusion_Ratio_Limit (Kind : User_Config_Extrusion_Limit_Kind := Disabled) is record
       --  Limit positive extrusion relative to XY travel. Retractions are unrestricted. Z movement does not count
-      --  towards XY travel. Arcs use their XY arc length, and extrusion uses physical E movement after flow scaling.
+      --  towards XY travel. Arcs use their XY arc length, and extrusion uses physical E movement after volume
+      --  conversion and flow scaling.
 
       case Kind is
          when Disabled =>
@@ -268,7 +269,8 @@ private
       --  Initial logical Z offset applied before a `G92` command is executed.
 
       Default_G92_E_Offset : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
-      --  Initial logical E offset applied before a `G92` command is executed.
+      --  Initial logical E offset applied before a `G92` command is executed. In volumetric mode, the numeric value
+      --  represents cubic millimeters.
 
       Default_Auto_Retract_Enabled : Boolean := False;
       --  Sets whether automatic retract detection is enabled before an `M209` command is executed.
@@ -278,6 +280,14 @@ private
 
       Default_Flow_Scale : Dimensionless range 1.0E-100 .. 1.0E100 := 1.0;
       --  Sets the initial E-axis flow scale used before an `M221` command is executed. A value of 1.0 means 100%.
+
+      Default_Volumetric_Enabled : Boolean := False;
+      --  Interpret E coordinates as volumes before an `M200` command is executed. Volumes use cubic millimeters
+      --  with `G21` and cubic inches with `G20`. Firmware retract settings remain lengths.
+
+      Default_Filament_Diameter : Length range 1.0E-100 * mm .. 1.0E100 * mm := 1.75 * mm;
+      --  Filament diameter used to convert E volumes to filament lengths. Saved by `M500`, together with whether
+      --  volumetric extrusion is enabled.
 
       Firmware_Retract_Length : Length range 0.0 * mm .. 1.0E100 * mm := 0.0 * mm;
       --  Default length used by `G10` firmware retract moves.
@@ -297,10 +307,12 @@ private
       --  Default feedrate used by `G11` firmware recover moves.
 
       Auto_Retract_Min_Length : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
-      --  Minimum E-only move length converted to firmware retract/recover when `M209` is enabled.
+      --  Minimum E-only move length converted to firmware retract/recover when `M209` is enabled. Volumetric E moves
+      --  use their equivalent filament length before flow scaling.
 
       Auto_Retract_Max_Length : Length range 0.0 * mm .. 1.0E100 * mm := 10.0 * mm;
-      --  Maximum E-only move length converted to firmware retract/recover when `M209` is enabled.
+      --  Maximum E-only move length converted to firmware retract/recover when `M209` is enabled. Volumetric E moves
+      --  use their equivalent filament length before flow scaling.
    end record
    with Annotate => (Prunt_Config, User_Config);
 
@@ -339,6 +351,8 @@ private
       Feedrate_Scale        : Dimensionless := 1.0;
       Backup_Feedrate_Scale : Dimensionless := 1.0;
       Flow_Scale            : Dimensionless := 1.0;
+      Volumetric_Enabled    : Boolean := False;
+      Filament_Diameter     : Length := 1.75 * mm;
       Retract_Length        : Length := 0.0 * mm;
       Retract_Feedrate      : Velocity := 1.0 * mm / s;
       Retract_Z_Lift        : Length := 0.0 * mm;
@@ -421,6 +435,14 @@ private
    function To_Current_Units_Length (Value : Dimensionless; Units : Linear_Units_Mode) return Length;
    --  Convert a g-code length argument in Units to an internal length.
 
+   function To_Current_Units_Axis_Position
+     (Value : Dimensionless; Axis : Axis_Name; State : Motion_State) return Length;
+   --  Convert an axis coordinate to logical g-code space. Logical E uses Length storage, with its numeric value in mm
+   --  representing cubic mm when volumetric extrusion is enabled; planner E always remains a length.
+
+   function Volumetric_Multiplier (State : Motion_State) return Dimensionless;
+   --  Convert the numeric value of a logical E displacement to filament length in millimeters.
+
    function To_Current_Units_Feedrate (Value : Dimensionless; Units : Linear_Units_Mode) return Velocity;
    --  Convert a g-code feedrate argument in Units per minute to an internal velocity.
 
@@ -442,6 +464,8 @@ private
       Backup_Feedrate_Scale : Status_Manager.Lock_Free_Dimensionless_Setter;
       Effective_Feedrate    : Status_Manager.Lock_Free_Dimensionless_Setter;
       Flow_Scale            : Status_Manager.Lock_Free_Dimensionless_Setter;
+      Volumetric_Enabled    : Status_Manager.Lock_Free_Boolean_Setter;
+      Filament_Diameter     : Status_Manager.Lock_Free_Dimensionless_Setter;
       Retract_Length        : Status_Manager.Lock_Free_Dimensionless_Setter;
       Retract_Feedrate      : Status_Manager.Lock_Free_Dimensionless_Setter;
       Retract_Z_Lift        : Status_Manager.Lock_Free_Dimensionless_Setter;
@@ -513,7 +537,7 @@ private
       Z        : Gcode_Optional_Float;
       --  Absolute or relative Z coordinate in the current units.
       E        : Gcode_Optional_Float;
-      --  Absolute or relative E coordinate in the current units.
+      --  Absolute or relative E coordinate in the current units (cubic units in volumetric mode).
       F        : Gcode_Optional_Float
       --  Feedrate in current units per minute for this rapid move only.
       )
@@ -544,7 +568,7 @@ private
       Z        : Gcode_Optional_Float;
       --  Absolute or relative Z coordinate in the current units.
       E        : Gcode_Optional_Float;
-      --  Absolute or relative E coordinate in the current units.
+      --  Absolute or relative E coordinate in the current units (cubic units in volumetric mode).
       F        : Gcode_Optional_Float
       --  Feedrate in current units per minute. Positive values update the stored feedrate immediately.
       )
@@ -571,7 +595,7 @@ private
       Z        : Gcode_Optional_Float;
       --  Absolute or relative Z endpoint in the current units.
       E        : Gcode_Optional_Float;
-      --  Absolute or relative E endpoint in the current units.
+      --  Absolute or relative E endpoint in the current units (cubic units in volumetric mode).
       F        : Gcode_Optional_Float;
       --  Feedrate in current units per minute.
       I        : Gcode_Optional_Float;
@@ -612,7 +636,7 @@ private
       Z        : Gcode_Optional_Float;
       --  Absolute or relative Z endpoint in the current units.
       E        : Gcode_Optional_Float;
-      --  Absolute or relative E endpoint in the current units.
+      --  Absolute or relative E endpoint in the current units (cubic units in volumetric mode).
       F        : Gcode_Optional_Float;
       --  Feedrate in current units per minute.
       R        : Dimensionless
@@ -645,7 +669,7 @@ private
       Z        : Gcode_Optional_Float;
       --  Absolute or relative Z endpoint in the current units.
       E        : Gcode_Optional_Float;
-      --  Absolute or relative E endpoint in the current units.
+      --  Absolute or relative E endpoint in the current units (cubic units in volumetric mode).
       F        : Gcode_Optional_Float;
       --  Feedrate in current units per minute. A positive value updates the stored feedrate when the command is
       --  accepted.
@@ -687,7 +711,7 @@ private
       Z        : Gcode_Optional_Float;
       --  Absolute or relative Z endpoint in the current units.
       E        : Gcode_Optional_Float;
-      --  Absolute or relative E endpoint in the current units.
+      --  Absolute or relative E endpoint in the current units (cubic units in volumetric mode).
       F        : Gcode_Optional_Float;
       --  Feedrate in current units per minute. A positive value updates the stored feedrate when the command is
       --  accepted.
@@ -779,7 +803,7 @@ private
       Z        : Gcode_Optional_Float_Or_No_Value;
       --  Optional Z restore offset in current units. Bare `Z` means zero offset.
       E        : Gcode_Optional_Float_Or_No_Value
-      --  Optional E restore offset in current units. Bare `E` means zero offset.
+      --  Optional E restore offset in current units (cubic units in volumetric mode). Bare `E` means zero offset.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "G60");
    --  Move to a stored position using `G61` behavior.
@@ -806,7 +830,7 @@ private
       Z        : Gcode_Optional_Float_Or_No_Value;
       --  Optional Z restore offset in current units. Bare `Z` means zero offset.
       E        : Gcode_Optional_Float_Or_No_Value
-      --  Optional E restore offset in current units. Bare `E` means zero offset.
+      --  Optional E restore offset in current units (cubic units in volumetric mode). Bare `E` means zero offset.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "G61");
    --  Restore a saved physical position. If no axes are specified, `XYZ` are moved to the stored position and `E` is
@@ -837,7 +861,7 @@ private
       Z        : Gcode_Optional_Float;
       --  New logical Z coordinate in current units.
       E        : Gcode_Optional_Float
-      --  New logical E coordinate in current units.
+      --  New logical E coordinate in current units (cubic units in volumetric mode).
       )
    with Annotate => (Prunt_Config, Gcode_Command, "G92");
    --  Set logical g-code position without physical motion.
@@ -855,6 +879,24 @@ private
       Planner  : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M83");
    --  Override E axis to relative positioning until `G90` or `G91`.
+
+   procedure Volumetric_Settings
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      D        : Gcode_Optional_Float_Or_No_Value;
+      --  Filament diameter in current linear units. A positive diameter enables volumetric extrusion; zero or a
+      --  bare D disables it while retaining the configured diameter.
+      S        : Gcode_Optional_Integer_Or_No_Value;
+      --  Enable with S1 or a bare S, or disable with S0. Overrides a positive D; D0 always disables.
+      T        : Gcode_Arguments.Argument_Integer := 0
+      --  Tool index. Only zero is supported; omitted selects tool zero.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M200");
+   --  Set or report volumetric extrusion settings. No D or S reports the current settings. In volumetric mode, E
+   --  coordinates specify volumes converted to filament lengths using the diameter and M221 flow scale.
+   --
+   --  Saved by `M500`.
 
    procedure Retraction_Settings
      (This     : Module_Instance;
@@ -1045,6 +1087,13 @@ private
       procedure Set_E_Axis_Absolute (Planner : Planner_Interface'Class);
 
       procedure Set_E_Axis_Relative (Planner : Planner_Interface'Class);
+
+      procedure Apply_Volumetric_Settings
+        (Planner : Planner_Interface'Class;
+         D       : Gcode_Optional_Float_Or_No_Value;
+         S       : Gcode_Optional_Integer_Or_No_Value);
+
+      function Volumetric_Settings_Report return Virtual_String;
 
       procedure Apply_Retraction_Settings
         (Planner : Planner_Interface'Class;

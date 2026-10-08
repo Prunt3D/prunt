@@ -195,10 +195,20 @@ package body Prunt.Default_Modules.Motion is
                Description => "Stored feedrate after applying the feedrate scale.",
                Condition   => "")],
          "Flow"             =>
-           ["Flow scale" =>
+           ["Flow scale"         =>
               (Kind        => Status_Manager.Real_Kind,
                Unit        => "×",
                Description => "Scale applied to newly planned E-axis movement by M221.",
+               Condition   => ""),
+            "Volumetric enabled" =>
+              (Kind        => Status_Manager.Boolean_Kind,
+               Unit        => "",
+               Description => "Whether volumetric extrusion is enabled.",
+               Condition   => ""),
+            "Filament diameter"  =>
+              (Kind        => Status_Manager.Real_Kind,
+               Unit        => "mm",
+               Description => "Filament diameter used to convert E volumes to filament lengths.",
                Condition   => "")],
          "Firmware retract" =>
            ["Retract length"       =>
@@ -379,6 +389,17 @@ package body Prunt.Default_Modules.Motion is
    function To_Current_Units_Length (Value : Dimensionless; Units : Linear_Units_Mode) return Length
    is (Value * Unit_Scale (Units));
 
+   function To_Current_Units_Axis_Position
+     (Value : Dimensionless; Axis : Axis_Name; State : Motion_State) return Length
+   is (if Axis = E_Axis and then State.Volumetric_Enabled
+       then Value * (Unit_Scale (State.Units) / mm) ** 3 * mm
+       else To_Current_Units_Length (Value, State.Units));
+
+   function Volumetric_Multiplier (State : Motion_State) return Dimensionless
+   is (if State.Volumetric_Enabled
+       then 1.0 / (Ada.Numerics.Pi * (State.Filament_Diameter / (2.0 * mm)) ** 2)
+       else 1.0);
+
    function To_Current_Units_Feedrate (Value : Dimensionless; Units : Linear_Units_Mode) return Velocity
    is (Value * Unit_Scale (Units) / min);
 
@@ -409,6 +430,8 @@ package body Prunt.Default_Modules.Motion is
       Status_Emitter.Set_Value ("Feedrate", "Effective feedrate", State.Feedrate * State.Feedrate_Scale / (mm / s));
 
       Status_Emitter.Set_Value ("Flow", "Flow scale", State.Flow_Scale);
+      Status_Emitter.Set_Value ("Flow", "Volumetric enabled", State.Volumetric_Enabled);
+      Status_Emitter.Set_Value ("Flow", "Filament diameter", State.Filament_Diameter / mm);
 
       Status_Emitter.Set_Value ("Firmware retract", "Retract length", State.Retract_Length / mm);
       Status_Emitter.Set_Value ("Firmware retract", "Retract feedrate", State.Retract_Feedrate / (mm / s));
@@ -432,6 +455,8 @@ package body Prunt.Default_Modules.Motion is
       Setters.Backup_Feedrate_Scale := Status_Emitter.Get_Lock_Free_Setter ("Feedrate", "Backup feedrate scale");
       Setters.Effective_Feedrate := Status_Emitter.Get_Lock_Free_Setter ("Feedrate", "Effective feedrate");
       Setters.Flow_Scale := Status_Emitter.Get_Lock_Free_Setter ("Flow", "Flow scale");
+      Setters.Volumetric_Enabled := Status_Emitter.Get_Lock_Free_Setter ("Flow", "Volumetric enabled");
+      Setters.Filament_Diameter := Status_Emitter.Get_Lock_Free_Setter ("Flow", "Filament diameter");
       Setters.Retract_Length := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Retract length");
       Setters.Retract_Feedrate := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Retract feedrate");
       Setters.Retract_Z_Lift := Status_Emitter.Get_Lock_Free_Setter ("Firmware retract", "Retract Z lift");
@@ -458,6 +483,8 @@ package body Prunt.Default_Modules.Motion is
       Setters.Backup_Feedrate_Scale.Set_Value (State.Backup_Feedrate_Scale);
       Setters.Effective_Feedrate.Set_Value (State.Feedrate * State.Feedrate_Scale / (mm / s));
       Setters.Flow_Scale.Set_Value (State.Flow_Scale);
+      Setters.Volumetric_Enabled.Set_Value (State.Volumetric_Enabled);
+      Setters.Filament_Diameter.Set_Value (State.Filament_Diameter / mm);
       Setters.Retract_Length.Set_Value (State.Retract_Length / mm);
       Setters.Retract_Feedrate.Set_Value (State.Retract_Feedrate / (mm / s));
       Setters.Retract_Z_Lift.Set_Value (State.Retract_Z_Lift / mm);
@@ -721,6 +748,8 @@ package body Prunt.Default_Modules.Motion is
             Feedrate_Scale        => Config.Motion_Gcode.Default_Feedrate_Scale,
             Backup_Feedrate_Scale => Config.Motion_Gcode.Default_Feedrate_Scale,
             Flow_Scale            => Config.Motion_Gcode.Default_Flow_Scale,
+            Volumetric_Enabled    => Config.Motion_Gcode.Default_Volumetric_Enabled,
+            Filament_Diameter     => Config.Motion_Gcode.Default_Filament_Diameter,
             Retract_Length        => Config.Motion_Gcode.Firmware_Retract_Length,
             Retract_Feedrate      => Config.Motion_Gcode.Firmware_Retract_Feedrate,
             Retract_Z_Lift        => Config.Motion_Gcode.Firmware_Retract_Z_Lift,
@@ -782,6 +811,8 @@ package body Prunt.Default_Modules.Motion is
 
       procedure Prepare_Config_For_Save is
       begin
+         Config.Motion_Gcode.Default_Volumetric_Enabled := Committed_State.Volumetric_Enabled;
+         Config.Motion_Gcode.Default_Filament_Diameter := Committed_State.Filament_Diameter;
          Config.Motion_Gcode.Firmware_Retract_Length := Committed_State.Retract_Length;
          Config.Motion_Gcode.Firmware_Retract_Feedrate := Committed_State.Retract_Feedrate;
          Config.Motion_Gcode.Firmware_Retract_Z_Lift := Committed_State.Retract_Z_Lift;
@@ -962,7 +993,7 @@ package body Prunt.Default_Modules.Motion is
                Relative  : Boolean;
             begin
                if Value.Present then
-                  Converted := To_Current_Units_Length (Value.Value, Planned_State.Units);
+                  Converted := To_Current_Units_Axis_Position (Value.Value, Axis, Planned_State);
                   Relative :=
                     (if Axis = E_Axis
                      then E_Is_Relative (Planned_State.Positioning, Planned_State.E_Positioning)
@@ -989,7 +1020,8 @@ package body Prunt.Default_Modules.Motion is
            and then not Z.Present
          then
             declare
-               E_Delta : constant Length := Target_Logical (E_Axis) - Logical_Position (E_Axis);
+               E_Delta : constant Length :=
+                 (Target_Logical (E_Axis) - Logical_Position (E_Axis)) * Volumetric_Multiplier (Planned_State);
             begin
                if abs E_Delta >= Config.Motion_Gcode.Auto_Retract_Min_Length
                  and then abs E_Delta <= Config.Motion_Gcode.Auto_Retract_Max_Length
@@ -1027,7 +1059,9 @@ package body Prunt.Default_Modules.Motion is
 
          Target_Physical (E_Axis) :=
            Physical_Position (E_Axis)
-           + (Target_Logical (E_Axis) - Logical_Position (E_Axis)) * Planned_State.Flow_Scale;
+           + (Target_Logical (E_Axis) - Logical_Position (E_Axis))
+             * Volumetric_Multiplier (Planned_State)
+             * Planned_State.Flow_Scale;
 
          Target_Physical (Z_Axis) := Target_Physical (Z_Axis) + Planned_State.Current_Z_Hop;
          if Config.Excessive_Extrusion_Prevention.Extrusion_Only.Kind = Enabled
@@ -1152,7 +1186,7 @@ package body Prunt.Default_Modules.Motion is
             Relative  : Boolean;
          begin
             if Value.Present then
-               Converted := To_Current_Units_Length (Value.Value, Planned_State.Units);
+               Converted := To_Current_Units_Axis_Position (Value.Value, Axis, Planned_State);
                Relative :=
                  (if Axis = E_Axis
                   then E_Is_Relative (Planned_State.Positioning, Planned_State.E_Positioning)
@@ -1187,7 +1221,9 @@ package body Prunt.Default_Modules.Motion is
 
          Target_Physical (E_Axis) :=
            Physical_Position (E_Axis)
-           + (Target_Logical (E_Axis) - Logical_Position (E_Axis)) * Planned_State.Flow_Scale;
+           + (Target_Logical (E_Axis) - Logical_Position (E_Axis))
+             * Volumetric_Multiplier (Planned_State)
+             * Planned_State.Flow_Scale;
 
          Target_Physical (Z_Axis) := Target_Physical (Z_Axis) + Planned_State.Current_Z_Hop;
          Arc_Target_Physical := Target_Physical;
@@ -1462,7 +1498,10 @@ package body Prunt.Default_Modules.Motion is
          procedure Restore_Axis (Axis : Axis_Name; Arg : Gcode_Optional_Float_Or_No_Value);
 
          procedure Restore_Axis (Axis : Axis_Name; Arg : Gcode_Optional_Float_Or_No_Value) is
-            Offset : constant Length := Optional_Float_Length (Arg, Planned_State.Units);
+            Offset : constant Length :=
+              (if Arg.Kind = Gcode_Value_Present
+               then To_Current_Units_Axis_Position (Arg.Value, Axis, Planned_State)
+               else 0.0 * mm);
          begin
             if Axis = E_Axis then
                Logical_Position (E_Axis) := Planned_Stored_Positions (Slot).Pos (E_Axis) + Offset;
@@ -1545,7 +1584,7 @@ package body Prunt.Default_Modules.Motion is
          begin
             if Arg.Present then
                Planned_State.G92_Offset (Axis) :=
-                 To_Current_Units_Length (Arg.Value, Planned_State.Units) - Physical_Position (Axis);
+                 To_Current_Units_Axis_Position (Arg.Value, Axis, Planned_State) - Physical_Position (Axis);
                if Axis = Z_Axis then
                   Planned_State.G92_Offset (Axis) := Planned_State.G92_Offset (Axis) + Planned_State.Current_Z_Hop;
                end if;
@@ -1570,6 +1609,50 @@ package body Prunt.Default_Modules.Motion is
          Planned_State.E_Positioning := Relative_E_Positioning_Mode;
          Maybe_Queue_Planned_State (Planner);
       end Set_E_Axis_Relative;
+
+      procedure Apply_Volumetric_Settings
+        (Planner : Planner_Interface'Class;
+         D       : Gcode_Optional_Float_Or_No_Value;
+         S       : Gcode_Optional_Integer_Or_No_Value)
+      is
+         Diameter : constant Length := Optional_Float_Length (D, Planned_State.Units);
+         Enabled  : Boolean := Planned_State.Volumetric_Enabled;
+      begin
+         if D.Kind /= Gcode_Value_Not_Present then
+            if Diameter < 0.0 * mm
+              or else Diameter > 1.0E100 * mm
+              or else (Diameter > 0.0 * mm and then Diameter < 1.0E-100 * mm)
+            then
+               raise Gcode_Bad_Inputs_Error with "Filament diameter must be zero or between 1.0E-100 and 1.0E100 mm.";
+            end if;
+            Enabled := Diameter > 0.0 * mm;
+         end if;
+
+         if S.Kind /= Gcode_Value_Not_Present then
+            Enabled := S.Kind = Gcode_No_Value_Present or else S.Value /= 0;
+         end if;
+         if D.Kind /= Gcode_Value_Not_Present and then Diameter = 0.0 * mm then
+            Enabled := False;
+         end if;
+
+         if D.Kind /= Gcode_Value_Not_Present and then Diameter > 0.0 * mm then
+            Planned_State.Filament_Diameter := Diameter;
+         end if;
+         Planned_State.Volumetric_Enabled := Enabled;
+         Maybe_Queue_Planned_State (Planner);
+      end Apply_Volumetric_Settings;
+
+      function Volumetric_Settings_Report return Virtual_String is
+         Unit : constant String := (if Planned_State.Units = Inch_Units_Mode then "in" else "mm");
+      begin
+         return
+           +("M200: S = "
+             & (if Planned_State.Volumetric_Enabled then "1" else "0")
+             & ", D = "
+             & Trimmed_Image (Planned_State.Filament_Diameter / Unit_Scale (Planned_State.Units))
+             & " "
+             & Unit);
+      end Volumetric_Settings_Report;
 
       procedure Apply_Retraction_Settings
         (Planner : Planner_Interface'Class;
@@ -2144,6 +2227,25 @@ package body Prunt.Default_Modules.Motion is
       --  We need to bypass the usual enqueue/execute separation since we have state that needs to be fed into the
       --  planner. Other modules should normally not do this.
    end E_Axis_Relative;
+
+   procedure Volumetric_Settings
+     (This     : Module_Instance;
+      Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Planner_Interface'Class;
+      D        : Gcode_Optional_Float_Or_No_Value;
+      S        : Gcode_Optional_Integer_Or_No_Value;
+      T        : Gcode_Arguments.Argument_Integer := 0)
+   is
+      pragma Unreferenced (This);
+   begin
+      Validate_Tool_Zero (T);
+      if D.Kind = Gcode_Value_Not_Present and then S.Kind = Gcode_Value_Not_Present then
+         Planner.Flush
+           (Motion_Report_Event'(Message => Module_Instance (Self_Ref.Get.Element.all).Volumetric_Settings_Report));
+      else
+         Module_Instance (Self_Ref.Get.Element.all).Apply_Volumetric_Settings (Planner, D, S);
+      end if;
+   end Volumetric_Settings;
 
    procedure Retraction_Settings
      (This     : Module_Instance;
