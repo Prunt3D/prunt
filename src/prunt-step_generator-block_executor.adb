@@ -266,13 +266,23 @@ package body Prunt.Step_Generator.Block_Executor is
                                   (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Shapers));
                            begin
                               for J in 0 .. Extra_Loops_Required loop
+                                 if J > 0 then
+                                    Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
+                                 end if;
+
+                                 if J = Extra_Loops_Required then
+                                    --  The filters have settled, but their arithmetic can leave a rounding residual.
+                                    --  End at the exact input position so a shaped park/return plan can satisfy the
+                                    --  resume position check. Queue_Block_Command also completes any pressure-advance
+                                    --  catch-up before marking this command safe to stop after.
+                                    Shaped_Pos := Unshaped_Pos;
+                                 end if;
+
                                  Queue_Block_Command
                                    (Pos             => Shaped_Pos,
                                     Safe_Stop_After => J = Extra_Loops_Required,
                                     Vel_Ratio       => Vel_Ratio,
                                     Catch_Up_Axes   => Catch_Up_Axes);
-
-                                 Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
                               end loop;
                            end;
                         else

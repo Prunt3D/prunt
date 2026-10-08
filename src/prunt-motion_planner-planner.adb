@@ -1975,7 +1975,13 @@ package body Prunt.Motion_Planner.Planner is
       Motion_Time  : constant Time := Prefix_Time + Profile_Time + Segment_Suffix_Time (Block, Finishing_Corner);
       Distance     : Length;
    begin
-      if Time_Into_Segment >= Motion_Time then
+      if Finishing_Corner = Block.N_Corners and then Time_Into_Segment >= Motion_Time then
+         --  Reconstructing the endpoint from direction and distance can leave a rounding residual. Shaper draining
+         --  and pause/return plans need the exact stopped position, including any path-length extrusion correction.
+         return
+           [Block.Corners (Finishing_Corner) with delta
+              E_Axis => Block.Extrusion_Reference_Positions (Finishing_Corner)];
+      elsif Time_Into_Segment >= Motion_Time then
          Distance := Segment_Total_Distance (Block, Finishing_Corner);
       elsif Time_Into_Segment < Prefix_Time then
          Distance :=

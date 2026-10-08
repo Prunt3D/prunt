@@ -1462,6 +1462,11 @@ package body Prunt.Motion_Planner.Planner.Test is
               "XYZE feedrate conversion uses the shared density rather than each original E ratio");
          end loop;
          Plan_Kinematics (Block, Motor_Map, Workspace);
+         T.Assert
+           (Segment_Pos_At_Time (Block'Access, Block.N_Corners, Segment_Time (Block'Access, Block.N_Corners))
+            = [Block.Corners (Block.N_Corners) with delta
+                 E_Axis => Block.Extrusion_Reference_Positions (Block.N_Corners)],
+            "The stopped endpoint is exact and retains the path-length extrusion correction");
          T.Assert (Block.Extrusion_Densities = Densities,
            "Every planning stage retains the exact stored density values");
          for I in Block.Primitives'Range loop
