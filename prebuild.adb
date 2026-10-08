@@ -427,6 +427,8 @@ procedure Prebuild is
       VSS_Text_Old  : constant String := Getenv ("VSS_TEXT_ALIRE_PREFIX").all;
       XMLAda_Old    : constant String := Getenv ("XMLADA_ALIRE_PREFIX").all;
       LibGPR_Old    : constant String := Getenv ("LIBGPR_ALIRE_PREFIX").all;
+      LibGMP_Old    : constant String := Getenv ("LIBGMP_ALIRE_PREFIX").all;
+      Libadalang_Prebuilt_Old : constant String := Getenv ("LIBADALANG_PREBUILT_ALIRE_PREFIX").all;
       GNATCOLL_Old  : constant String := Getenv ("GNATCOLL_ALIRE_PREFIX").all;
       GNATCOLL_Minimal_Old : constant String := Getenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX").all;
    begin
@@ -448,10 +450,13 @@ procedure Prebuild is
          Delete_File (Target);
       end if;
 
+      --  The nested Alire workspace may use different paths for dependencies inherited from the caller.
       Setenv ("VSS_EXTRA_ALIRE_PREFIX", "");
       Setenv ("VSS_TEXT_ALIRE_PREFIX", "");
       Setenv ("XMLADA_ALIRE_PREFIX", "");
       Setenv ("LIBGPR_ALIRE_PREFIX", "");
+      Setenv ("LIBGMP_ALIRE_PREFIX", "");
+      Setenv ("LIBADALANG_PREBUILT_ALIRE_PREFIX", "");
       Setenv ("GNATCOLL_ALIRE_PREFIX", "");
       Setenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX", "");
       Run ("alr", ["--chdir=config_codegen", "build", "--development"]);
@@ -459,6 +464,8 @@ procedure Prebuild is
       Setenv ("VSS_TEXT_ALIRE_PREFIX", VSS_Text_Old);
       Setenv ("XMLADA_ALIRE_PREFIX", XMLAda_Old);
       Setenv ("LIBGPR_ALIRE_PREFIX", LibGPR_Old);
+      Setenv ("LIBGMP_ALIRE_PREFIX", LibGMP_Old);
+      Setenv ("LIBADALANG_PREBUILT_ALIRE_PREFIX", Libadalang_Prebuilt_Old);
       Setenv ("GNATCOLL_ALIRE_PREFIX", GNATCOLL_Old);
       Setenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX", GNATCOLL_Minimal_Old);
    end Build_Config_Codegen;

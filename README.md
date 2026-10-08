@@ -2,7 +2,7 @@ Prunt currently requires a custom GCC version with some backported and WIP patch
 
 Our GCC version may be found here: https://github.com/Prunt3D/gcc
 
-To use an ALire version of our GCC build:
+To use Alire packages of our GCC build and the prebuilt static Libadalang bundle used by `config_codegen`:
 
 ```
 alr index --add git+https://github.com/Prunt3D/prunt_alire_index.git --name prunt --before community
