@@ -764,7 +764,11 @@ function createVariantInput(path: string[], value: any, schema: any): HTMLElemen
             });
             if (childEl) childrenContainer.appendChild(childEl);
         }
-        if (!isInit) updateConfigBrowser();
+        if (!isInit) {
+            updateConfigBrowser();
+            // Refresh validation after removing inputs from the previous variant.
+            wrap.dispatchEvent(new Event('input', { bubbles: true }));
+        }
     };
 
     select.addEventListener('change', () => renderActiveChild(false));

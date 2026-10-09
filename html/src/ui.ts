@@ -5,6 +5,7 @@ import { initStatusView } from './status_view.js';
 import { initControlView } from './control_view.js';
 import { initGcodeEntryView } from './gcode_entry_view.js';
 import { initGcodeExplorerView } from './gcode_explorer_view.js';
+import { initSmartPlug } from './smart_plugs.js';
 import { initLogView } from './log_view.js';
 import { initLocalization, onLocaleChange, t } from './localization.js';
 import { activateView, setNavigationOpen } from './navigation.js';
@@ -14,6 +15,7 @@ export async function initUI() {
 
     setupNavigation();
     setupGlobalControls();
+    initSmartPlug();
     setupUpdatePrompt();
 
     // Initialize individual views

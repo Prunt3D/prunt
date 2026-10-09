@@ -35,6 +35,9 @@ with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Default_Modules.Kinematics;
 with Prunt.Default_Modules.Motion;
 with Prunt.Default_Modules.Motion.Test;
+with Prunt.Default_Modules.Smart_Plugs;
+with Prunt.Default_Modules.Smart_Plugs.Test;
+with Prunt.Smart_Plugs.Test;
 with Prunt.Dummy_Allocator.Test;
 with Prunt.Exception_Occurrence_Holders.Test;
 with Prunt.Gcode_Arguments.Test;
@@ -97,6 +100,8 @@ procedure Tests is
       Kinematics_Module => Excessive_Extrusion_Kinematics,
       Pending_State_Queue_Length => 10);
    package Excessive_Extrusion_Test is new Excessive_Extrusion_Motion.Test;
+   package Smart_Plugs_Module is new Machine_Idle_Timeout_Test_Default_Modules.Smart_Plugs;
+   package Smart_Plugs_Test is new Smart_Plugs_Module.Test;
    Timeout_Report_Count : Natural := 0 with Atomic, Volatile;
 
    function Get_Timeout_Report_Count return Natural is (Timeout_Report_Count);
@@ -156,6 +161,8 @@ procedure Tests is
       pragma Annotate (Xcov, Reset_Buffers);
    end Xcov_Dump;
 begin
+   Trendy_Test.Register (Smart_Plugs_Test.All_Tests);
+   Trendy_Test.Register (Prunt.Smart_Plugs.Test.All_Tests);
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);
    Trendy_Test.Register (Cold_Extrusion_Test.All_Tests);

@@ -635,6 +635,17 @@ package body Prunt.Web_Server is
          elsif Status.File = "pause/resume" then
             Resume_Stepgen;
             Reply_Text (Client, 204, "No Content", "", True);
+         elsif Status.File = "smart-plug/on" or else Status.File = "smart-plug/off" then
+            declare
+               Accepted : Boolean;
+            begin
+               Switch_Smart_Plug (Status.File = "smart-plug/on", Accepted);
+               if Accepted then
+                  Reply_Text (Client, 202, "Accepted", "", True);
+               else
+                  Reply_Text (Client, 400, "Bad Request", "Smart plug is disabled or its host is invalid.", True);
+               end if;
+            end;
          elsif Status.File = "cancel" then
             declare
                Succeeded : Boolean;
@@ -1105,6 +1116,8 @@ package body Prunt.Web_Server is
             Send_To_All_WebSocket_Receivers
               ("{""Status_Values"":"
                & Conversions.To_UTF_8_String (Get_Status_Values_String)
+               & ", ""Smart_Plug"":"
+               & Conversions.To_UTF_8_String (Get_Smart_Plug)
                & ", ""Server_Exception"":"
                & Server_Exception_JSON
                & ", ""Startup"": """

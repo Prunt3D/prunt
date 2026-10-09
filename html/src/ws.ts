@@ -3,6 +3,17 @@ export type ServerException = {
     Fatal: boolean;
 };
 
+export type SmartPlugStatus = {
+    Enabled: boolean;
+    Host: string;
+    Provider: string;
+    Power: 'UNKNOWN' | 'OFF' | 'ON';
+    Watchdog_Active: boolean;
+    Watchdog_Seconds: number;
+    Busy: boolean;
+    Error: string;
+};
+
 export type GcodeCommandUpdate = {
     ID: string;
     Kind: 'Running' | 'Output' | 'Completed' | 'Cancelled' | 'Failed';

@@ -52,6 +52,7 @@ private with Prunt.Default_Modules.Machine_Name;
 private with Prunt.Default_Modules.Motion;
 private with Prunt.Default_Modules.Motor_Drivers;
 private with Prunt.Default_Modules.Power_Control;
+private with Prunt.Default_Modules.Smart_Plugs;
 private with Prunt.Default_Modules.TMC2240_Drivers;
 private with Prunt.Default_Modules.Tachometers;
 private with Prunt.Default_Modules.Thermistors;
@@ -62,6 +63,7 @@ private with Prunt.Logger;
 private with Prunt.Module_Types;
 private with Prunt.Motion_Planner.Planner;
 private with Prunt.Status_Manager;
+private with Prunt.Smart_Plugs;
 private with Prunt.Step_Generator;
 private with Prunt.Update_Checker;
 private with Prunt.Web_Server;
@@ -308,6 +310,7 @@ private
           (Heater_Hardware         => Hardware.Heater_Hardware,
            Thermistors_Module      => Thermistors,
            Blocking_Tracker_Module => Blocking_Tracker);
+      package Smart_Plugs is new My_Default_Modules.Smart_Plugs;
    end My_Default_Modules_Children;
 
    procedure Setup_Planner_Runners
@@ -456,6 +459,8 @@ private
             My_Default_Modules_Children.Machine_Idle_Timeout.Module'(My_Modules.Module with null record))
        & Module_If
            (True, "Machine Name", My_Default_Modules_Children.Machine_Name.Module'(My_Modules.Module with null record))
+       & Module_If
+           (True, "Smart Plug", My_Default_Modules_Children.Smart_Plugs.Module'(My_Modules.Module with null record))
        & Module_If (True, "Motion", My_Default_Modules_Children.Motion.Module'(My_Modules.Module with null record))
        & Module_If
            (True,
@@ -512,6 +517,12 @@ private
 
    Active_Config_File : constant Config.Config_File :=
      Config.Create (Config_Path, Active_Module_Config_Schemas, Config_Overrides);
+
+   Smart_Plug_Control : aliased Prunt.Smart_Plugs.Controller;
+   Smart_Plug_Worker  : Prunt.Smart_Plugs.Worker (Smart_Plug_Control'Access);
+
+   procedure Configure_Smart_Plug;
+   --  Apply the configuration module's live settings to the plug controller.
 
    package My_Update_Checker is new Update_Checker (My_Logger, Update_Check);
 
@@ -702,6 +713,8 @@ private
         Status_Schema_String        => My_Status_Data.JSON_Schema,
         Gcode_JSON_String           => Active_Module_Gcode_JSON_String,
         Get_Status_Values_String    => Get_Status_Values_String,
+        Get_Smart_Plug              => Smart_Plug_Control.Status_JSON,
+        Switch_Smart_Plug           => Smart_Plug_Control.Switch,
         Port                        => Web_Server_Port);
 
    function Recursive_Module_Initialization
@@ -724,6 +737,7 @@ private
       entry Wait;
       procedure Signal;
       procedure Mark_Startup_Done;
+      procedure Reset_Configuration;
    private
       Reload_Requested : Boolean := False;
       Startup_Done     : Boolean := False;

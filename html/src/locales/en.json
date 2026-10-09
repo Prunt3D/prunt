@@ -139,5 +139,13 @@
   "schema.kind.Discrete": "Discrete",
   "schema.kind.Sequence": "Sequence",
   "schema.kind.Variant": "Variant",
-  "schema.kind.Real": "Real"
+  "schema.kind.Real": "Real",
+  "ui.smartPlugs.title": "Smart plug",
+  "ui.smartPlugs.on": "On",
+  "ui.smartPlugs.off": "Off",
+  "ui.smartPlugs.switching": "Switching…",
+  "ui.smartPlugs.armed": "On · watchdog active",
+  "ui.smartPlugs.unarmed": "On · watchdog inactive",
+  "ui.smartPlugs.unknown": "Unknown",
+  "ui.smartPlugs.switchFailed": "Unable to switch smart plug"
 }

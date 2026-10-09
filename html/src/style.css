@@ -737,3 +737,17 @@ input:focus-visible + .slider { outline: 2px solid var(--primary); outline-offse
 .u-cursor-pt.u-off {
     display: none;
 }
+
+.smart-plug {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.smart-plug[hidden] { display: none; }
+.smart-plug h2 { margin: 0; font-size: 1rem; }
+#smart-plug-state { max-width: 30rem; overflow-wrap: anywhere; }
+#smart-plug-error { width: 100%; }

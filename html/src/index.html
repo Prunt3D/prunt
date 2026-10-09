@@ -42,6 +42,14 @@
         </div>
     </header>
 
+    <section id="smart-plug" class="smart-plug" aria-labelledby="smart-plug-title" hidden>
+        <h2 id="smart-plug-title" data-i18n="ui.smartPlugs.title">Smart plug</h2>
+        <span id="smart-plug-state" aria-live="polite"></span>
+        <button type="button" id="btn-smart-plug-on" class="btn btn-success btn-sm" data-i18n="ui.smartPlugs.on">On</button>
+        <button type="button" id="btn-smart-plug-off" class="btn btn-secondary btn-sm" data-i18n="ui.smartPlugs.off">Off</button>
+        <p id="smart-plug-error" role="alert" hidden></p>
+    </section>
+
     <div class="app-container">
         <div id="navigation-backdrop" class="navigation-backdrop" aria-hidden="true"></div>
         <nav id="primary-navigation" class="sidebar">

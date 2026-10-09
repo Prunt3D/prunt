@@ -21,7 +21,7 @@ with Ada.Characters.Latin_1;
 with Ada.Exceptions;
 with Ada.Real_Time; use Ada.Real_Time;
 with GNATCOLL.JSON; use GNATCOLL.JSON;
-with Util.Http.Clients.Curl;
+with Prunt.Curl;
 with Util.Http.Clients;
 with VSS.Strings.Conversions;
 
@@ -31,7 +31,7 @@ package body Prunt.Update_Checker is
 
    task body Checker is
    begin
-      Util.Http.Clients.Curl.Register;
+      Curl.Initializer.Wait_For_Initialization;
 
       case Details.Method is
          when None   =>
@@ -49,7 +49,7 @@ package body Prunt.Update_Checker is
                   Client          : Util.Http.Clients.Client;
                   Response        : Util.Http.Clients.Response;
                begin
-                  Client.Add_Header ("User-Agent", "Prunt3D-Update-Checker");
+                  Client.Add_Header ("User-Agent", "Prunt3D");
                   Client.Get
                     ("https://api.github.com/repos/"
                      & Conversions.To_UTF_8_String (Details.Repository)

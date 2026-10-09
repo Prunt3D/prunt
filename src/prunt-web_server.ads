@@ -55,6 +55,8 @@ generic
    Status_Schema_String : Virtual_String;
    Gcode_JSON_String : Virtual_String;
    with function Get_Status_Values_String return Virtual_String;
+   with function Get_Smart_Plug return Virtual_String;
+   with procedure Switch_Smart_Plug (Enabled : Boolean; Accepted : out Boolean);
    Port : GNAT.Sockets.Port_Type;
 package Prunt.Web_Server is
 

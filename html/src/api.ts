@@ -109,3 +109,11 @@ export async function uploadFile(file: File) {
     });
     if (!res.ok) throw new Error("Failed to upload file");
 }
+
+export async function switchSmartPlug(enabled: boolean): Promise<void> {
+    const res = await fetch(`${API_BASE}/smart-plug/${enabled ? 'on' : 'off'}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) throw new Error(await res.text());
+}

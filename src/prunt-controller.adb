@@ -32,6 +32,19 @@ package body Prunt.Controller is
 
    pragma Extensions_Allowed (On);
 
+   procedure Configure_Smart_Plug is
+      use type Ada.Tags.Tag;
+   begin
+      for C in Active_Modules.Iterate loop
+         if Module_Maps.Element (C)'Tag = My_Default_Modules_Children.Smart_Plugs.Module'Tag then
+            Smart_Plug_Control.Configure
+              (My_Default_Modules_Children.Smart_Plugs.Read_Configuration
+                 (Active_Config_File.Get_Data (Module_Maps.Key (C))));
+            return;
+         end if;
+      end loop;
+   end Configure_Smart_Plug;
+
    protected body Gcode_Command_Lifecycle is
       procedure Prepare_Submission (Command_ID : out Gcode_Command_ID) is
       begin
@@ -1372,7 +1385,7 @@ package body Prunt.Controller is
          end if;
 
          Exception_Occurrence_Holder.Reset;
-         Active_Config_File.Reset_Live_To_Stored;
+         Reset_Live_Config_To_Stored;
          Reset_Hardware;
          My_Web_Server.Reset;
       end Handle_Reload_Request;
@@ -1927,7 +1940,7 @@ package body Prunt.Controller is
 
    procedure Reset_Live_Config_To_Stored is
    begin
-      Active_Config_File.Reset_Live_To_Stored;
+      Reload_Signal.Reset_Configuration;
    end Reset_Live_Config_To_Stored;
 
    procedure Submit_Gcode_Command
@@ -2419,6 +2432,12 @@ package body Prunt.Controller is
    end Last_Command_Executed;
 
    protected body Reload_Signal is
+      procedure Reset_Configuration is
+      begin
+         Active_Config_File.Reset_Live_To_Stored;
+         Configure_Smart_Plug;
+      end Reset_Configuration;
+
       entry Wait when Reload_Requested is
       begin
          Reload_Requested := False;
@@ -2429,10 +2448,9 @@ package body Prunt.Controller is
          if Startup_Done then
             Reload_Requested := True;
          else
-            --  Nothing has actually started yet, so there's nothing to restart. We reload the web server anyway to
-            --  prevent any confusion when the reload button does nothing.
+            --  Apply saved configuration even while startup is waiting for the board to connect.
+            Reset_Configuration;
             My_Web_Server.Reset;
-            null;
          end if;
       end Signal;
 
@@ -2470,4 +2488,5 @@ package body Prunt.Controller is
 
 begin
    Ada.Task_Termination.Set_Dependents_Fallback_Handler (Exception_Occurrence_Holder.all.Set_Fatal'Access);
+   Configure_Smart_Plug;
 end Prunt.Controller;
