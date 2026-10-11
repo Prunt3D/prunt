@@ -51,6 +51,9 @@ package Prunt.Default_Modules.Machine_Idle_Timeout is
      and Idle_Emitter_Module.Idle_Notification_Receiver with private;
 
    overriding
+   procedure Finalize (This : in out Module_Instance) is null;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;

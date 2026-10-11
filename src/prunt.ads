@@ -279,6 +279,10 @@ package Prunt is
 
    TMC_UART_Error : exception;
 
+   Controller_Shutdown_Requested : exception;
+   --  A block-end handler raises this after motion stops to hand shutdown to the controller. The step generator
+   --  abandons the block and waits for teardown without issuing any further hardware commands.
+
    Hardware_Communication_Error : exception;
    --  Hardware callbacks may raise this after reporting a communications failure with Report_External_Error. It
    --  cancels the current operation without treating an unavailable reply as successful completion. The controller

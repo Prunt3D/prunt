@@ -88,10 +88,12 @@ package body Prunt.Step_Generator is
 
    protected Halt_Control is
       procedure Request;
-      procedure Acknowledge;
-      entry Wait_For_Acknowledgement;
+      procedure Acknowledge (Idle_Confirmed : Boolean; Last_Command_Index : Command_Index);
+      entry Wait_For_Acknowledgement (Idle_Confirmed : out Boolean; Last_Command_Index : out Command_Index);
    private
-      Halt_Acknowledged : Boolean := False;
+      Halt_Acknowledged   : Boolean := False;
+      Hardware_Is_Idle    : Boolean := False;
+      Final_Command_Index : Command_Index := 0;
    end Halt_Control;
 
    protected body Halt_Control is
@@ -100,14 +102,19 @@ package body Prunt.Step_Generator is
          Halt_Acknowledged := False;
       end Request;
 
-      procedure Acknowledge is
+      procedure Acknowledge (Idle_Confirmed : Boolean; Last_Command_Index : Command_Index) is
       begin
+         Hardware_Is_Idle := Idle_Confirmed;
+         Final_Command_Index := Last_Command_Index;
          Halt_Acknowledged := True;
       end Acknowledge;
 
-      entry Wait_For_Acknowledgement when Halt_Acknowledged is
+      entry Wait_For_Acknowledgement (Idle_Confirmed : out Boolean; Last_Command_Index : out Command_Index)
+        when Halt_Acknowledged
+      is
       begin
-         null;
+         Idle_Confirmed := Hardware_Is_Idle;
+         Last_Command_Index := Final_Command_Index;
       end Wait_For_Acknowledgement;
    end Halt_Control;
 
@@ -141,14 +148,26 @@ package body Prunt.Step_Generator is
    end Reset;
 
    procedure Soft_Halt is
+      Idle_Confirmed     : Boolean;
+      Last_Command_Index : Command_Index;
    begin
+      Soft_Halt (Idle_Confirmed, Last_Command_Index);
+      if not Idle_Confirmed then
+         raise Hardware_Communication_Error with "Step generator stopped without confirming physical idle.";
+      end if;
+   end Soft_Halt;
+
+   procedure Soft_Halt (Idle_Confirmed : out Boolean; Last_Command_Index : out Command_Index) is
+   begin
+      Idle_Confirmed := False;
+      Last_Command_Index := 0;
       Halt_Control.Request;
       Do_Halt := True;
       Do_Pause := True;
 
       loop
          select
-            Halt_Control.Wait_For_Acknowledgement;
+            Halt_Control.Wait_For_Acknowledgement (Idle_Confirmed, Last_Command_Index);
             exit;
          or
             delay 0.1;
@@ -160,6 +179,9 @@ package body Prunt.Step_Generator is
       end loop;
 
       Reset;
+      if Runner'Terminated then
+         Idle_Confirmed := False;
+      end if;
    end Soft_Halt;
 
    procedure Pause is
@@ -443,7 +465,7 @@ package body Prunt.Step_Generator is
          procedure Enter_Halted_State is
          begin
             Wait_Until_Idle (Commands.Current_Command_Index);
-            Halt_Control.Acknowledge;
+            Halt_Control.Acknowledge (True, Commands.Current_Command_Index);
 
             loop
                Check_Reset (Reset_Requested);
@@ -535,8 +557,8 @@ package body Prunt.Step_Generator is
          Paused := False;
          Do_Pause := False;
          Do_Halt := False;
-         Planner.Clear_Block_Extra_Data (Block);
-         Pause_Planner.Clear_Block_Extra_Data (Pause_Block);
+         Planner.Clear_Block_Extra_Data (Block'Access);
+         Pause_Planner.Clear_Block_Extra_Data (Pause_Block'Access);
          Reset_Control.Acknowledge;
          Commands.Last_Queued_Position := [others => Zero_Length];
          Commands.Extrusion_Check_Cycles_Remaining := 0;
@@ -560,11 +582,16 @@ package body Prunt.Step_Generator is
                exit Main when Reset_Requested;
             exception
                when Hardware_Communication_Error =>
-                  --  The hardware adapter has already reported the error. Abandon this block without running its
-                  --  completion callbacks or waiting for hardware that can no longer acknowledge commands. Keep
-                  --  acknowledging halt until Reset arrives, including when Soft_Halt starts after this handler.
                   loop
-                     Halt_Control.Acknowledge;
+                     Halt_Control.Acknowledge (False, Commands.Current_Command_Index);
+                     exit when Reset_Control.Requested;
+                     delay 0.01;
+                  end loop;
+                  exit Main;
+               when Controller_Shutdown_Requested =>
+                  --  This exception is only raised after the shutdown block has confirmed hardware idle.
+                  loop
+                     Halt_Control.Acknowledge (True, Commands.Current_Command_Index);
                      exit when Reset_Control.Requested;
                      delay 0.01;
                   end loop;

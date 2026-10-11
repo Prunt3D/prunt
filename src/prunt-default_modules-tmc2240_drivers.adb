@@ -138,7 +138,16 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
    begin
       case Object.Kind is
          when TMC2240_UART_Kind =>
-            Object.UART.Get.Stop;
+            if not Object.UART.Is_Null then
+               Object.UART.Get.Stop;
+               while not Object.UART.Get.Element.all'Terminated loop
+                  delay 0.001;
+               end loop;
+            end if;
+            if Object.Started then
+               Object.Started := False;
+               Disable_Hardware (Object.Motor);
+            end if;
 
          when others            =>
             null;
@@ -547,6 +556,18 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       This.Manager.Get.Enable;
    end Enable_Motor;
 
+   procedure Disable_Hardware (Motor : Motor_Name) is
+      Register_Data : UART_Data_Message;
+   begin
+      Register_Data := Read (CHOPCONF_Address, Motor);
+      Register_Data.Content.Is_Write := TMC_Types.True;
+      Register_Data.Content.CHOPCONF_Data.TOFF := Disable_Driver;
+      Write_And_Validate (Register_Data, Motor);
+   exception
+      when TMC_UART_Error =>
+         raise Hardware_Communication_Error with "Unable to confirm motor disable for " & Motor'Image;
+   end Disable_Hardware;
+
    overriding
    procedure Disable_Motor (This : in out UART_Motor_Handler) is
    begin
@@ -792,6 +813,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
             case Config.Motors (M).Fixed_Kind is
                when TMC2240_UART_Kind =>
                   Managers (M).Kind := TMC2240_UART_Kind;
+                  Managers (M).Motor := M;
                   Managers (M).UART.Set (Create_UART_Manager'Access);
 
                   Motor_Drivers_Module_Instance.Provide_Motor_Configuration
@@ -821,6 +843,9 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          pragma Unreferenced (Planner);
       begin
          Self_Ref := Self_Ref_In;
+         for Manager of Managers loop
+            Manager.Started := True;
+         end loop;
 
          for M in Motor_Name loop
             case Managers (M).Kind is

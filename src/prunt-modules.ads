@@ -98,7 +98,16 @@ package Prunt.Modules is
 
    type Module_Instance_Parent is synchronized interface;
 
-   package Module_Instance_Shared_Pointers is new Limited_Shared_Pointers (Module_Instance_Parent'Class);
+   procedure Finalize (This : in out Module_Instance_Parent) is null;
+   --  Optional cleanup, called when the last shared reference is released, before the instance and its components are
+   --  finalized. This hook is not called for an unmanaged instance leaving scope. This primarily exists so that module
+   --  instances don't need to get creative with nested objects to get finalization since they're usually POs.
+
+   procedure Release_Module_Instance (This : in out Module_Instance_Parent'Class);
+   --  Dispatch Finalize for the shared-pointer release hook.
+
+   package Module_Instance_Shared_Pointers is new
+     Limited_Shared_Pointers (Module_Instance_Parent'Class, Release => Release_Module_Instance);
    --  We need this outer type so that we can use it in a primitive on Module_Instance. This is a bit messy, but
    --  users of Module_Instance_Shared_Pointers are always going to cast the result to a more specific type anyway.
 
@@ -106,8 +115,7 @@ package Prunt.Modules is
    --  Children of Module_Instance should be declared with an unknown discriminant part to prevent accidental
    --  instantiation without a constructor.
    --
-   --  Finalization should reset motors/heaters/etc. to their initial power-on state iff the module instance has been
-   --  started.
+   --  Override the inherited Finalize hook for instance cleanup when the last shared reference is released.
 
    procedure Gcode_Dispatch
      (This               : Module_Instance;

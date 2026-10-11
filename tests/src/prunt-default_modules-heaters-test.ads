@@ -20,6 +20,8 @@
 with Trendy_Test;
 
 generic
+   Heater_Disable_Count : in out Natural;
+   Fail_Heater_Start : in out Boolean;
 package Prunt.Default_Modules.Heaters.Test is
    function All_Tests return Trendy_Test.Test_Group;
 end Prunt.Default_Modules.Heaters.Test;

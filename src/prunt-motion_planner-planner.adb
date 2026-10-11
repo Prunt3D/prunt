@@ -70,7 +70,7 @@ package body Prunt.Motion_Planner.Planner is
       return Scaled_Curvature_Norm ([X_Axis => Left, Y_Axis => Right, others => 0.0 / mm]);
    end Scaled_Curvature_Hypot;
 
-   procedure Clear_Block_Extra_Data (Block : in out Execution_Block) is
+   procedure Clear_Block_Extra_Data (Block : not null access Execution_Block) is
    begin
       Block.Corners_Extra_Data.Clear;
       Block.Flush_Resetting_Data := Flush_Resetting_Data_Type_Default;
@@ -1739,7 +1739,7 @@ package body Prunt.Motion_Planner.Planner is
 
             if Reset_Called then
                accept Reset_Do_Not_Call_From_Other_Packages do
-                  Clear_Block_Extra_Data (Block);
+                  Clear_Block_Extra_Data (Block'Access);
                end Reset_Do_Not_Call_From_Other_Packages;
                exit Planning_Loop;
             end if;
@@ -1826,7 +1826,7 @@ package body Prunt.Motion_Planner.Planner is
                      My_Preprocessor.Wait_For_Resolved_Homing_Position (Resolved_Position, Reset_Called);
                      if Reset_Called then
                         accept Reset_Do_Not_Call_From_Other_Packages do
-                           Clear_Block_Extra_Data (Block);
+                           Clear_Block_Extra_Data (Block'Access);
                         end Reset_Do_Not_Call_From_Other_Packages;
                         exit Planning_Loop;
                      end if;
@@ -1843,7 +1843,7 @@ package body Prunt.Motion_Planner.Planner is
                end Dequeue_Do_Not_Call_From_Other_Packages;
             or
                accept Reset_Do_Not_Call_From_Other_Packages do
-                  Clear_Block_Extra_Data (Block);
+                  Clear_Block_Extra_Data (Block'Access);
                end Reset_Do_Not_Call_From_Other_Packages;
                exit Planning_Loop;
             end select;

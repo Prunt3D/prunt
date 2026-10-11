@@ -26,7 +26,6 @@ with Ada.Tags;
 with Prunt.Config;
 with Prunt.Gcode_Arguments;
 with Prunt.Module_Types; use Prunt.Module_Types;
-with Prunt.Controller_Interfaces;
 
 generic
 package Prunt.Default_Modules.Idle_Emitter is
@@ -54,7 +53,10 @@ package Prunt.Default_Modules.Idle_Emitter is
    type Module_Instance (<>) is synchronized
      new My_Modules.Module_Instance
      and Idle_Notification_Emitter
-     and Controller_Interfaces.Idle_Notification_Receiver with private;
+     and Module_Types.Idle_Notification_Receiver with private;
+
+   overriding
+   procedure Finalize (This : in out Module_Instance) is null;
 
    overriding
    function Initialize
@@ -85,7 +87,7 @@ private
 
    protected type Module_Instance is new My_Modules.Module_Instance
    and Idle_Notification_Emitter
-   and Controller_Interfaces.Idle_Notification_Receiver with
+   and Module_Types.Idle_Notification_Receiver with
       overriding
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);

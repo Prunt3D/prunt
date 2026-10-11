@@ -50,6 +50,9 @@ package Prunt.Default_Modules.Tachometers is
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
 
    overriding
+   procedure Finalize (This : in out Module_Instance) is null;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;

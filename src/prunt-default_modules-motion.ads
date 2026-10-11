@@ -54,6 +54,9 @@ package Prunt.Default_Modules.Motion is
      and Cancellation_Handler with private;
 
    overriding
+   procedure Finalize (This : in out Module_Instance) is null;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;

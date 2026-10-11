@@ -107,6 +107,10 @@ package body Prunt.Default_Modules.Heaters.Test is
       Failed : Boolean := False;
    end Mock_Thermistors;
 
+   --  Avoid GNAT's crash when this test type inherits the null interface primitive.
+   overriding
+   procedure Finalize (This : in out Mock_Thermistors) is null;
+
    protected body Mock_Thermistors is
       procedure Set_Temperature (Value : Temperature) is
       begin
@@ -380,8 +384,86 @@ package body Prunt.Default_Modules.Heaters.Test is
       end;
    end Test_Cold_Extrusion_Setpoints;
 
+   procedure Test_Heater_Release (T : in out Trendy_Test.Operation'Class) is
+      Device : constant Module := (My_Modules.Module with null record);
+      Status : constant Status_Manager.Status_Data_Collection :=
+        Status_Manager.Build_Collection (["Heaters" => Device.Status_Schema]);
+      Settings : User_Config;
+      Sensor_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Sensor_Weak : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
+      Planner : Mock_Planner;
+      type Startup_State is (Unstarted, Started, Failed_Start, Failed_Release);
+
+      function Create_Heater return My_Modules.Module_Instance_Parent'Class;
+      function Create_Sensor return My_Modules.Module_Instance_Parent'Class;
+
+      function Create_Heater return My_Modules.Module_Instance_Parent'Class is
+      begin
+         return Instance : Module_Instance do
+            Instance.Initialize
+              (Settings, Status.Get_Emitter ("Heaters"), Sensor_Ref,
+               My_Modules.Module_Instance_Shared_Pointers.Null_Ref);
+         end return;
+      end Create_Heater;
+
+      function Create_Sensor return My_Modules.Module_Instance_Parent'Class is
+      begin
+         return Result : Mock_Thermistors;
+      end Create_Sensor;
+   begin
+      T.Register (Parallelize => False);
+      Sensor_Ref.Set (Create_Sensor'Access);
+      Sensor_Weak := Sensor_Ref.Weak;
+      Settings.Heaters (Heater_Name'First) := (Kind => Enabled, others => <>);
+      Settings.Heaters (Heater_Name'First).Cold_Extrusion_Prevention :=
+        (Kind => Enabled, Minimum_Temperature => 170.0 * celsius);
+      for State in Startup_State loop
+         declare
+            Release_Failed : Boolean := False;
+         begin
+            begin
+               declare
+                  Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+                  Retained_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+               begin
+                  Instance_Ref.Set (Create_Heater'Access);
+                  Fail_Heater_Start := State = Failed_Start;
+                  if State /= Unstarted then
+                     begin
+                        Module_Instance (Instance_Ref.Get.Element.all).Start (Instance_Ref.Weak, Planner);
+                        T.Assert (State /= Failed_Start, "startup failure must be exercised");
+                     exception
+                        when Hardware_Communication_Error => T.Assert (State = Failed_Start);
+                     end;
+                  end if;
+                  Fail_Heater_Start := State = Failed_Release;
+                  Heater_Disable_Count := 0;
+                  Retained_Ref := Instance_Ref;
+                  Instance_Ref := My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+                  T.Assert (Heater_Disable_Count = 0, "cleanup must wait for the last shared reference");
+               end;
+            exception
+               when Hardware_Communication_Error | Program_Error => Release_Failed := True;
+            end;
+            Fail_Heater_Start := False;
+            T.Assert (Release_Failed = (State = Failed_Release), "release must propagate cleanup failures");
+         end;
+         T.Assert
+           (Heater_Disable_Count = (if State in Unstarted | Failed_Release then 0 else Heater_Name'Range_Length),
+            "release disables heaters after full or partial startup and leaves unstarted hardware alone");
+         if State = Started then
+            T.Assert (not Extrusion_Is_Allowed, "release joins the temperature monitor");
+         end if;
+      end loop;
+      Sensor_Ref := My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+      Sensor_Ref.Set (Sensor_Weak);
+      T.Assert (Sensor_Ref.Is_Null, "instance components must be finalized even when the release hook fails");
+      Extrusion_Allowed_Until := Ada.Real_Time.Time_Last;
+   end Test_Heater_Release;
+
    function All_Tests return Trendy_Test.Test_Group is
      (Trendy_Test.Test_Group'
-        [Test_Cold_Extrusion'Unrestricted_Access, Test_Cold_Extrusion_Setpoints'Unrestricted_Access]);
+        [Test_Cold_Extrusion'Unrestricted_Access, Test_Cold_Extrusion_Setpoints'Unrestricted_Access,
+         Test_Heater_Release'Unrestricted_Access]);
 
 end Prunt.Default_Modules.Heaters.Test;

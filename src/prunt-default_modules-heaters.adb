@@ -404,9 +404,10 @@ package body Prunt.Default_Modules.Heaters is
    overriding
    procedure Finalize (Object : in out Extrusion_Temperature_Monitor_Wrapper) is
    begin
-      if not Object.Monitor'Terminated then
-         Object.Monitor.Stop;
-      end if;
+      Object.Monitor.Stop;
+      while not Object.Monitor'Terminated loop
+         delay 0.001;
+      end loop;
    end Finalize;
 
    task body Current_Reporter is
@@ -440,12 +441,36 @@ package body Prunt.Default_Modules.Heaters is
    overriding
    procedure Finalize (Object : in out Current_Reporter_Wrapper) is
    begin
-      if not Object.Reporter'Terminated then
-         Object.Reporter.Stop;
-      end if;
+      Object.Reporter.Stop;
+      while not Object.Reporter'Terminated loop
+         delay 0.001;
+      end loop;
    end Finalize;
 
    protected body Module_Instance is
+      procedure Finalize is
+         Failed : Boolean := False;
+      begin
+         Monitor := Extrusion_Temperature_Monitor_Pointers.Null_Ref;
+         Current_Reporting := Current_Reporter_Pointers.Null_Ref;
+         if not Started then
+            return;
+         end if;
+         Started := False;
+         for H in Heater_Name loop
+            begin
+               --  Disable control itself: a zero target can still leave an accumulated PID output active.
+               Heater_Hardware (H).Reconfigure (H, (Kind => Disabled_Kind), Thermistor_Name'First);
+            exception
+               when Hardware_Communication_Error =>
+                  Failed := True;
+            end;
+         end loop;
+         if Failed then
+            raise Hardware_Communication_Error with "Unable to disable every heater.";
+         end if;
+      end Finalize;
+
       procedure Initialize
         (Config_In                           : User_Config;
          Status_Emitter_In                   : Status_Manager.Status_Emitter;
@@ -491,6 +516,7 @@ package body Prunt.Default_Modules.Heaters is
       is
          pragma Unreferenced (Planner);
       begin
+         Started := True;
          Self_Ref := Self_Ref_In;
 
          for H in Heater_Name loop

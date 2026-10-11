@@ -27,9 +27,14 @@ with Prunt.Module_Types; use Prunt.Module_Types;
 with Prunt.Smart_Plugs;
 
 generic
+   with procedure Request_Smart_Plug_Shutdown;
 package Prunt.Default_Modules.Smart_Plugs is
 
    type Module is new My_Modules.Module with null record;
+
+   overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector;
+   --  Return the smart plug G-code commands.
 
    overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class;
@@ -39,6 +44,9 @@ package Prunt.Default_Modules.Smart_Plugs is
    --  Read server-level configuration without initializing board modules.
 
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance with private;
+
+   overriding
+   procedure Finalize (This : in out Module_Instance) is null;
 
    overriding
    function Initialize
@@ -96,6 +104,17 @@ private
    function Build_Schema return Config.Config_Property_Maps.Map;
    function Config_Data_To_User_Config (Data : Config.Config_Data) return User_Config;
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config);
+
+   type Smart_Plug_Power_Off_Event is new Extra_Block_Resetting_Data with null record;
+
+   overriding
+   procedure Process_After_Block (This : Smart_Plug_Power_Off_Event; Context : Block_End_Context'Class);
+   --  Wait for physical motion to stop before requesting controller and board shutdown.
+
+   procedure Power_Off_Smart_Plug (Planner : Planner_Interface'Class; P : Gcode_No_Value)
+   with Annotate => (Prunt_Config, Gcode_Command, "M81");
+   --  Safely shut down the board, then turn off the configured smart plug. The board still shuts down if the plug is
+   --  disabled or unavailable.
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding

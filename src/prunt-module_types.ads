@@ -255,6 +255,17 @@ package Prunt.Module_Types is
    is null;
    --  Add any module-specific restoration work to Planner before normal motion resumes.
 
+   type Idle_Notification_Receiver is synchronized interface;
+
+   procedure Idle_Start (This : in out Idle_Notification_Receiver) is abstract;
+   --  Called when command execution catches up to the last emitted command and there is no end-of-block handler
+   --  running.
+
+   procedure Idle_End (This : in out Idle_Notification_Receiver) is abstract;
+   --  Called before a new command is emitted after command execution catches up to the last emitted command. This
+   --  procedure is allowed to block to stop the given command from being enqueued until the machine is in a state
+   --  where it is ready to do so. For example, a module might need to wait for heaters to heat back up.
+
    type Planner_State_Handler is synchronized interface;
 
    procedure Catch_Up_Planner_State (This : in out Planner_State_Handler; Executed_Corner_ID : Planner_Corner_ID)

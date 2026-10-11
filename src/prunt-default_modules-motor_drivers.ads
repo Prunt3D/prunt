@@ -105,6 +105,9 @@ package Prunt.Default_Modules.Motor_Drivers is
    type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
 
    overriding
+   procedure Finalize (This : in out Module_Instance) is null;
+
+   overriding
    procedure Gcode_Dispatch
      (This               : Module_Instance;
       Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;

@@ -24,7 +24,6 @@ with Ada.Strings.Fixed;
 with Ada.Tags;
 with Ada.Task_Identification;
 with Ada.Task_Termination;
-with Prunt.Controller_Interfaces;
 with Prunt.Gcode_Arguments;
 with VSS.Strings.Conversions;
 
@@ -44,6 +43,35 @@ package body Prunt.Controller is
          end if;
       end loop;
    end Configure_Smart_Plug;
+
+   procedure Request_Smart_Plug_Shutdown is
+   begin
+      raise Controller_Shutdown_Requested;
+   end Request_Smart_Plug_Shutdown;
+
+   procedure Cut_Smart_Plug_Power is
+      Accepted : Boolean;
+   begin
+      Smart_Plug_Control.Switch (False, Accepted);
+      if Accepted then
+         My_Logger.Log ("Smart plug power off requested. Reload after powering on.");
+      else
+         My_Logger.Log ("Unable to switch off smart plug power: the plug is disabled or not ready.");
+      end if;
+   end Cut_Smart_Plug_Power;
+
+   procedure Switch_Smart_Plug (Enabled : Boolean; Accepted : out Boolean) is
+      Queued : Boolean;
+   begin
+      if not Enabled then
+         Reload_Signal.Request_Power_Off (Queued);
+         if Queued then
+            Accepted := True;
+            return;
+         end if;
+      end if;
+      Smart_Plug_Control.Switch (Enabled, Accepted);
+   end Switch_Smart_Plug;
 
    protected body Gcode_Command_Lifecycle is
       procedure Prepare_Submission (Command_ID : out Gcode_Command_ID) is
@@ -223,7 +251,7 @@ package body Prunt.Controller is
 
       Idle_Notification_Instances.Snapshot (Handlers);
       for Instance of Handlers loop
-         Controller_Interfaces.Idle_Notification_Receiver'Class (Instance.Get.Element.all).Idle_End;
+         Idle_Notification_Receiver'Class (Instance.Get.Element.all).Idle_End;
       end loop;
       Idle_Notification_State.Finish_Idle_End;
    exception
@@ -243,7 +271,7 @@ package body Prunt.Controller is
 
       Idle_Notification_Instances.Snapshot (Handlers);
       for Instance of Handlers loop
-         Controller_Interfaces.Idle_Notification_Receiver'Class (Instance.Get.Element.all).Idle_Start;
+         Idle_Notification_Receiver'Class (Instance.Get.Element.all).Idle_Start;
       end loop;
       Idle_Notification_State.Finish_Idle;
    exception
@@ -890,13 +918,38 @@ package body Prunt.Controller is
       Transform           : Transforms.Kinematic_Transform;
       Reset_Command_Index : Boolean)
    is
-      Motor_Map      : constant Transforms.Motor_Position_Map := Transforms.Transform_Linear_Map (Transform);
-      Limited_Params : constant Motion_Planner.Kinematic_Parameters :=
+      Motor_Map       : constant Transforms.Motor_Position_Map := Transforms.Transform_Linear_Map (Transform);
+      Limited_Params  : constant Motion_Planner.Kinematic_Parameters :=
         Apply_Global_Delta_Velocity_Limit (Params, Transform);
+      Primary_Started : Boolean := False;
+      Pause_Started   : Boolean := False;
    begin
       My_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
+      Primary_Started := True;
       My_Pause_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
+      Pause_Started := True;
       My_Step_Generator.Runner.Setup (Transform, Reset_Command_Index);
+   exception
+      when others =>
+         --  Pipeline_Is_Set_Up is still false on partial startup. Stop every planner that did start before the caller
+         --  enters the shutdown path.
+         if Primary_Started then
+            begin
+               My_Motion_Planner.Reset;
+            exception
+               when Tasking_Error =>
+                  null;
+            end;
+         end if;
+         if Pause_Started then
+            begin
+               My_Pause_Motion_Planner.Reset;
+            exception
+               when Tasking_Error =>
+                  null;
+            end;
+         end if;
+         raise;
    end Setup_Planner_Runners;
 
    function Apply_Global_Delta_Velocity_Limit
@@ -977,6 +1030,12 @@ package body Prunt.Controller is
 
    procedure Run is
       Active_Module_Instances : Module_Instance_Maps.Map := [];
+      Motion_Idle_Confirmed   : Boolean := False;
+      Shutdown_Command_Index  : Command_Index := 0;
+      Runtime_Workers_Stopped : Boolean := True;
+
+      procedure Stop_Runtime_Pipeline;
+      --  Release blocked planner calls and halt motion before joining the per-run workers.
 
       procedure Reset_Runtime_State;
       --  Reset runtime queues, planner state, and execution tracking for a fresh controller run.
@@ -993,27 +1052,35 @@ package body Prunt.Controller is
       procedure Process_Gcode_Queue;
       --  Process queued G-code items until the surrounding task is aborted.
 
-      procedure Handle_Reload_Request (Modules_Started : Boolean);
-      --  Reset runtime and configuration state after a reload request.
+      type Run_End_Reason is (Reload_Requested, Power_Off_Requested, Error_Reported);
 
-      procedure Handle_Error (Modules_Started : Boolean; Is_Fatal : out Boolean);
-      --  Wait for an error, report its severity, and soft-halt the runtime.
+      procedure Safe_Shutdown (Power_Off : Boolean; Reset_Succeeded : out Boolean; Reconnect : Boolean := False);
+      --  Stop all remaining hardware users and settle disabled outputs. Then cut smart plug power if requested,
+      --  otherwise reset the board. Also cut smart plug power if shutdown fails.
 
-      procedure Wait_For_Reload_Or_Error (Modules_Started : Boolean; Exit_Main : out Boolean);
-      --  Wait for either a reload request or an error.
+      procedure Wait_For_Reload_Or_Error (Reason : out Run_End_Reason; Already_Stopped : Boolean := False);
+      --  Wait for a control request or error without performing teardown in an abortable region.
 
-      procedure Wait_For_Run_End (Started : Boolean; Exit_Main : out Boolean);
-      --  Wait for the current controller run to end, starting the G-code processor when needed.
+      procedure Wait_For_Run_End (Started : Boolean; Reason : out Run_End_Reason);
+      --  Join all per-run workers before shutting down hardware.
 
-      procedure Reset_Runtime_State is
+      procedure Stop_Runtime_Pipeline is
       begin
          if Pipeline_Is_Set_Up then
             My_Motion_Planner.Reset;
+            My_Step_Generator.Soft_Halt (Motion_Idle_Confirmed, Shutdown_Command_Index);
             My_Pause_Motion_Planner.Reset;
-            My_Step_Generator.Soft_Halt;
             Pipeline_Is_Set_Up := False;
          end if;
+      exception
+         when others =>
+            Cut_Smart_Plug_Power;
+            raise;
+      end Stop_Runtime_Pipeline;
 
+      procedure Reset_Runtime_State is
+      begin
+         Stop_Runtime_Pipeline;
          Gcode_Processor_Is_Running := False;
          Primary_Planner_State.Reset;
          Pause_Planner_State.Reset;
@@ -1049,6 +1116,9 @@ package body Prunt.Controller is
          --  Hardware command history starts over on a reload. Startup's empty homing-update block must not wait
          --  for the last command from the previous run before the G-code processor can start.
          Setup_Planner_Runners (Startup_Parameters, Current_Kinematic_Transform, Reset_Command_Index => True);
+         --  Track the running worker before the first hardware call, so a startup communications failure still
+         --  halts it before shutdown tries to execute operations on the stopped worker.
+         Pipeline_Is_Set_Up := True;
 
          Primary_Planner_State.Set_Last_Kinematic_Parameters (Startup_Parameters);
          Primary_Planner_State.Set_Last_Position (Startup_Position);
@@ -1058,7 +1128,6 @@ package body Prunt.Controller is
          Pause_Default_State.Set_Last_Position (Startup_Position);
          Last_Command_Executed.Reset (Startup_Position);
          Reset_Position ([others => 0.0]);
-         Pipeline_Is_Set_Up := True;
       end Setup_Runtime_Pipeline;
 
       procedure Attempt_Start (Started : out Boolean) is
@@ -1120,7 +1189,7 @@ package body Prunt.Controller is
               (Module_Instance_Vectors.Vector'
                  [for Instance of
                       Active_Module_Instances
-                      when Instance.Get.Element.all in Controller_Interfaces.Idle_Notification_Receiver'Class =>
+                      when Instance.Get.Element.all in Idle_Notification_Receiver'Class =>
                     Instance]);
 
             --  Enable temperature limits before slower hardware setup such as motor-driver register writes.
@@ -1142,16 +1211,16 @@ package body Prunt.Controller is
          end if;
       exception
          when Hardware_Communication_Error =>
-            Reset_Runtime_State;
-            Clear_Active_Modules;
+            --  The adapter has already reported the error. Use the common shutdown path even if startup only
+            --  configured part of the hardware.
             Started := False;
-         when others =>
-            Reset_Runtime_State;
-            Clear_Active_Modules;
-            raise;
+         when E : others =>
+            Report_External_Error (E);
+            Started := False;
       end Attempt_Start;
 
       procedure Clear_Active_Modules is
+         Failed : Boolean := False;
       begin
          Extrusion_Validator_Instances.Clear;
          Pause_Handler_Instances.Clear;
@@ -1159,7 +1228,27 @@ package body Prunt.Controller is
          Config_Save_Preparer_Instances.Clear;
          Cancellation_Handler_Instances.Clear;
          Idle_Notification_Instances.Clear;
-         Active_Module_Instances.Reverse_Clear;
+         while not Active_Module_Instances.Is_Empty loop
+            begin
+               declare
+                  Instance : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+                    Active_Module_Instances.Last_Element;
+                  pragma Unreferenced (Instance);
+               begin
+                  --  Remove the map entry before releasing the last reference, so a failing finalizer cannot prevent
+                  --  the remaining modules from being released.
+                  Active_Module_Instances.Delete (Active_Module_Instances.Last_Key);
+               end;
+            exception
+               when E : others =>
+                  Report_External_Error (E, Is_Fatal => False);
+                  Motion_Idle_Confirmed := False;
+                  if not Failed then
+                     Cut_Smart_Plug_Power;
+                  end if;
+                  Failed := True;
+            end;
+         end loop;
       end Clear_Active_Modules;
 
       procedure Process_Gcode_Queue is
@@ -1370,74 +1459,76 @@ package body Prunt.Controller is
          end loop;
       end Process_Gcode_Queue;
 
-      procedure Handle_Reload_Request (Modules_Started : Boolean) is
+      procedure Safe_Shutdown (Power_Off : Boolean; Reset_Succeeded : out Boolean; Reconnect : Boolean := False) is
       begin
-         My_Logger.Log ("Reload requested. Resetting...");
-
-         if Modules_Started then
-            My_Gcode_Queue.Stop_Waiting;
-         end if;
-
+         Reset_Succeeded := False;
          Reset_Runtime_State;
-
-         if Modules_Started then
-            Clear_Active_Modules;
+         if not Runtime_Workers_Stopped or Pipeline_Is_Set_Up then
+            Motion_Idle_Confirmed := False;
+            Cut_Smart_Plug_Power;
+            return;
          end if;
 
-         Exception_Occurrence_Holder.Reset;
-         Reset_Live_Config_To_Stored;
-         Reset_Hardware;
-         My_Web_Server.Reset;
-      end Handle_Reload_Request;
+         if Reconnect then
+            --  A later explicit reload has no live modules; reconnect and confirm the board's state.
+            Reset_Hardware;
+            Shutdown_Command_Index := 0;
+         elsif not Motion_Idle_Confirmed then
+            raise Hardware_Communication_Error with "Unable to confirm idle before shutdown.";
+         end if;
 
-      procedure Handle_Error (Modules_Started : Boolean; Is_Fatal : out Boolean) is
+         --  The stopped generator cannot emit anything beyond the index returned by Soft_Halt.
+         Wait_Until_Idle (Shutdown_Command_Index);
+         Motion_Idle_Confirmed := True;
+         Clear_Active_Modules;
+         if not Motion_Idle_Confirmed then
+            return;
+         end if;
+
+         --  Wait for a stationary command after all output changes, then allow one second to settle.
+         Reset_Position ([others => 0.0]);
+         Shutdown_Command_Index := @ + 1;
+         Enqueue_Command ((Index => Shutdown_Command_Index, Pos => [others => 0.0], Safe_Stop_After => True));
+         Wait_Until_Idle (Shutdown_Command_Index);
+         delay 1.0;
+         if Power_Off then
+            --  Reset may reconnect and configure the board. Keep outputs disabled until power is removed; a later
+            --  explicit reload will reset the board, including when the plug is unavailable.
+            Cut_Smart_Plug_Power;
+         else
+            Reset_Hardware;
+            Shutdown_Command_Index := 0;
+            Reset_Succeeded := True;
+         end if;
+      exception
+         when others =>
+            Cut_Smart_Plug_Power;
+            raise;
+      end Safe_Shutdown;
+
+      procedure Wait_For_Reload_Or_Error (Reason : out Run_End_Reason; Already_Stopped : Boolean := False) is
+         Power_Off  : Boolean;
          Occurrence : Ada.Exceptions.Exception_Occurrence;
-         pragma Unreferenced (Occurrence);
-      begin
-         Exception_Occurrence_Holder.Get (Occurrence, Is_Fatal);
-
-         if Modules_Started then
-            My_Gcode_Queue.Stop_Waiting;
-         end if;
-
-         Reset_Runtime_State;
-
-         if Modules_Started then
-            Clear_Active_Modules;
-         end if;
-      end Handle_Error;
-
-      procedure Wait_For_Reload_Or_Error (Modules_Started : Boolean; Exit_Main : out Boolean) is
-         Recoverable_Error_Handled : Boolean := False;
-         Is_Fatal                  : Boolean;
+         Is_Fatal   : Boolean;
+         pragma Unreferenced (Occurrence, Is_Fatal);
       begin
          select
-            Reload_Signal.Wait;
-            Handle_Reload_Request (Modules_Started);
-            Exit_Main := False;
+            Reload_Signal.Wait (Power_Off);
+            Reason := (if Power_Off then Power_Off_Requested else Reload_Requested);
          then abort
-            Handle_Error (Modules_Started, Is_Fatal);
-            Exit_Main := Is_Fatal;
-            Recoverable_Error_Handled := not Is_Fatal;
-         end select;
-
-         if Recoverable_Error_Handled then
-            --  The machine is stopped but the web server remains available so the user can request an in-process
-            --  reload. A fatal error reported while waiting still takes precedence and shuts the controller down.
-            select
-               Reload_Signal.Wait;
-               Handle_Reload_Request (Modules_Started => False);
-               Exit_Main := False;
-            then abort
+            if Already_Stopped then
                Exception_Occurrence_Holder.Enter_When_Fatal_Set;
-               Exit_Main := True;
-            end select;
-         end if;
+            else
+               Exception_Occurrence_Holder.Get (Occurrence, Is_Fatal);
+            end if;
+            Reason := Error_Reported;
+         end select;
       end Wait_For_Reload_Or_Error;
 
-      procedure Wait_For_Run_End (Started : Boolean; Exit_Main : out Boolean) is
+      procedure Wait_For_Run_End (Started : Boolean; Reason : out Run_End_Reason) is
       begin
          if Started then
+            Runtime_Workers_Stopped := False;
             declare
                protected Catch_Up_Stop is
                   procedure Stop;
@@ -1471,7 +1562,12 @@ package body Prunt.Controller is
                task body Gcode_Processor is
                begin
                   Gcode_Processor_Is_Running := True;
-                  Process_Gcode_Queue;
+                  select
+                     Catch_Up_Stop.Wait_Until_Stopped;
+                  then abort
+                     Process_Gcode_Queue;
+                  end select;
+                  Gcode_Cancellation_Barrier.Finish_Line;
                   Gcode_Processor_Is_Running := False;
                exception
                   when Hardware_Communication_Error =>
@@ -1538,11 +1634,20 @@ package body Prunt.Controller is
                        (Ada.Task_Termination.Unhandled_Exception, Ada.Task_Identification.Current_Task, E);
                end Planner_State_Catch_Up;
             begin
-               Wait_For_Reload_Or_Error (Modules_Started => True, Exit_Main => Exit_Main);
+               Wait_For_Reload_Or_Error (Reason);
+               Shutdown_In_Progress := True;
                Catch_Up_Stop.Stop;
+               Gcode_Cancellation_Barrier.Start_Cancellation;
+               Gcode_Cancellation_Barrier.Wait_Until_Not_Submitting;
+               Stop_Runtime_Pipeline;
             end;
+            --  Leaving the task master joins the G-code planner and both per-run notification workers.
+            Runtime_Workers_Stopped := True;
          else
-            Wait_For_Reload_Or_Error (Modules_Started => False, Exit_Main => Exit_Main);
+            Wait_For_Reload_Or_Error (Reason);
+            Shutdown_In_Progress := True;
+            Gcode_Cancellation_Barrier.Start_Cancellation;
+            Gcode_Cancellation_Barrier.Wait_Until_Not_Submitting;
          end if;
       end Wait_For_Run_End;
 
@@ -1552,15 +1657,47 @@ package body Prunt.Controller is
 
       Main : loop
          declare
-            Started   : Boolean;
-            Exit_Main : Boolean;
+            Started         : Boolean;
+            Reason          : Run_End_Reason;
+            Reset_Succeeded : Boolean;
+            Occurrence      : Ada.Exceptions.Exception_Occurrence;
+            Is_Fatal        : Boolean;
          begin
-            --  The previous G-code task may have exited on an error before consuming Stop_Waiting. All workers
-            --  from that run have terminated before we reach here, so a new consumer must not inherit its stop.
             My_Gcode_Queue.Reset_Stop_Request;
+            Gcode_Cancellation_Barrier.Finish_Cancellation;
+            Shutdown_In_Progress := False;
             Attempt_Start (Started);
-            Wait_For_Run_End (Started, Exit_Main);
-            exit Main when Exit_Main;
+            Wait_For_Run_End (Started, Reason);
+            Safe_Shutdown (Power_Off => Reason = Power_Off_Requested, Reset_Succeeded => Reset_Succeeded);
+
+            loop
+               Exception_Occurrence_Holder.Get_Snapshot (Occurrence, Is_Fatal);
+               exit Main when Is_Fatal;
+
+               case Reason is
+                  when Reload_Requested                     =>
+                     if Reset_Succeeded then
+                        My_Logger.Log ("Reload requested. Restarting...");
+                        Exception_Occurrence_Holder.Reset;
+                        Reset_Live_Config_To_Stored;
+                        My_Web_Server.Reset;
+                        exit;
+                     else
+                        My_Logger.Log ("Unable to reload because the board could not be reset.");
+                     end if;
+
+                  when Power_Off_Requested | Error_Reported =>
+                     null;
+               end case;
+
+               Wait_For_Reload_Or_Error (Reason, Already_Stopped => True);
+               if Reason in Reload_Requested | Power_Off_Requested then
+                  Safe_Shutdown
+                    (Power_Off       => Reason = Power_Off_Requested,
+                     Reset_Succeeded => Reset_Succeeded,
+                     Reconnect       => Reason = Reload_Requested);
+               end if;
+            end loop;
          end;
       end loop Main;
    end Run;
@@ -1947,6 +2084,10 @@ package body Prunt.Controller is
      (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID) is
    begin
       Command_ID := 0;
+      if Shutdown_In_Progress then
+         Succeeded := False;
+         return;
+      end if;
       select
          Gcode_Cancellation_Barrier.Start_Submission;
       else
@@ -1975,6 +2116,10 @@ package body Prunt.Controller is
 
    procedure Submit_Gcode_File (Path : Virtual_String; Succeeded : out Boolean) is
    begin
+      if Shutdown_In_Progress then
+         Succeeded := False;
+         return;
+      end if;
       select
          Gcode_Cancellation_Barrier.Start_Submission;
       else
@@ -1999,7 +2144,7 @@ package body Prunt.Controller is
       Params                  : Motion_Planner.Kinematic_Parameters;
       Cancelled_Command_IDs   : Gcode_Command_ID_Vectors.Vector;
    begin
-      if not Pipeline_Is_Set_Up then
+      if Shutdown_In_Progress or else not Pipeline_Is_Set_Up then
          Succeeded := False;
          return;
       end if;
@@ -2011,9 +2156,12 @@ package body Prunt.Controller is
          return;
       end select;
 
-      --  TODO: We need protection against a reload happening here.
-
       while not My_Step_Generator.Is_Paused loop
+         if Shutdown_In_Progress then
+            Gcode_Cancellation_Barrier.Finish_Cancellation;
+            Succeeded := False;
+            return;
+         end if;
          My_Step_Generator.Pause;
          delay 0.1;
       end loop;
@@ -2023,7 +2171,19 @@ package body Prunt.Controller is
       begin
          Gcode_Cancellation_Barrier.Wait_Until_Not_Submitting;
          My_Gcode_Queue.Cancel_All;
-         Gcode_Cancellation_Barrier.Wait_Until_Not_Processing;
+         loop
+            if Shutdown_In_Progress then
+               Gcode_Cancellation_Barrier.Finish_Cancellation;
+               Succeeded := False;
+               return;
+            end if;
+            select
+               Gcode_Cancellation_Barrier.Wait_Until_Not_Processing;
+               exit;
+            or
+               delay 0.01;
+            end select;
+         end loop;
          Gcode_Command_Lifecycle.Cancel_All (Cancelled_Command_IDs);
 
          for Command_ID of Cancelled_Command_IDs loop
@@ -2072,7 +2232,7 @@ package body Prunt.Controller is
 
    function Ready_For_Gcode return Boolean is
    begin
-      return Gcode_Processor_Is_Running;
+      return Gcode_Processor_Is_Running and then not Shutdown_In_Progress;
    end Ready_For_Gcode;
 
    procedure Reload_Server is
@@ -2273,6 +2433,24 @@ package body Prunt.Controller is
 
       Reset_Position (Next_Block_Pos);
       Idle_Notification_State.Complete_Activity (Last_Command_Index);
+   exception
+      when Controller_Shutdown_Requested =>
+         declare
+            Source  : constant Gcode_Source := Block_Source;
+            Changed : Boolean;
+            Queued  : Boolean;
+         begin
+            Shutdown_In_Progress := True;
+            if Source.Kind = Interactive_Source then
+               Gcode_Command_Lifecycle.Mark_Terminal (Source.Command_ID, Changed);
+               if Changed then
+                  Publish_Gcode_Command_Update (Source.Command_ID, Completed);
+               end if;
+            end if;
+            Reload_Signal.Request_Power_Off (Queued);
+            pragma Assert (Queued);
+         end;
+         raise;
    end Finish_Planner_Block;
 
    procedure Report_Last_Command_Executed (Index : Command_Index) is
@@ -2438,10 +2616,21 @@ package body Prunt.Controller is
          Configure_Smart_Plug;
       end Reset_Configuration;
 
-      entry Wait when Reload_Requested is
+      entry Wait (Power_Off : out Boolean) when Reload_Requested or else Power_Off_Requested is
       begin
+         Power_Off := Power_Off_Requested;
+         Power_Off_Requested := False;
+         --  A power-off request wins over a simultaneous reload. Require a new reload after shutdown.
          Reload_Requested := False;
       end Wait;
+
+      procedure Request_Power_Off (Queued : out Boolean) is
+      begin
+         Queued := Startup_Done;
+         if Queued then
+            Power_Off_Requested := True;
+         end if;
+      end Request_Power_Off;
 
       procedure Signal is
       begin

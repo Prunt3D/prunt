@@ -30,6 +30,9 @@ package body Prunt.Default_Modules.Smart_Plugs is
    procedure User_Config_To_Config_Data (Data : in out Config.Config_Data; Config : User_Config) is separate;
 
    overriding
+   function Gcode_Commands (This : Module) return Gcode_Command_Vectors.Vector is separate;
+
+   overriding
    function Config_Schema (This : Module) return Config.Versioned_Config_Schema'Class is
       pragma Unreferenced (This);
    begin
@@ -76,12 +79,7 @@ package body Prunt.Default_Modules.Smart_Plugs is
       Self_Ref           : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Args               : in out Gcode_Arguments.Arguments;
       Planner            : Planner_Interface'Class;
-      Command_Identifier : Gcode_Command_Identifier)
-   is
-      pragma Unreferenced (This, Self_Ref, Args, Planner, Command_Identifier);
-   begin
-      raise Constraint_Error;
-   end Gcode_Dispatch;
+      Command_Identifier : Gcode_Command_Identifier) is separate;
 
    protected body Module_Instance is
       procedure Start
@@ -92,5 +90,19 @@ package body Prunt.Default_Modules.Smart_Plugs is
          null;
       end Start;
    end Module_Instance;
+
+   overriding
+   procedure Process_After_Block (This : Smart_Plug_Power_Off_Event; Context : Block_End_Context'Class) is
+      pragma Unreferenced (This);
+   begin
+      Context.Wait_For_Idle;
+      Request_Smart_Plug_Shutdown;
+   end Process_After_Block;
+
+   procedure Power_Off_Smart_Plug (Planner : Planner_Interface'Class; P : Gcode_No_Value) is
+      pragma Unreferenced (P);
+   begin
+      Planner.Flush (Smart_Plug_Power_Off_Event'(null record));
+   end Power_Off_Smart_Plug;
 
 end Prunt.Default_Modules.Smart_Plugs;

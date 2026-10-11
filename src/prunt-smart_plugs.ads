@@ -47,6 +47,9 @@ package Prunt.Smart_Plugs is
 
    procedure Switch (This : in out Controller; Enabled : Boolean; Accepted : out Boolean);
 
+   function Can_Switch (This : Controller) return Boolean;
+   --  Return whether configuration has been applied and power requests can be accepted.
+
    function Valid_Host (Host : Virtual_String) return Boolean;
    --  Accept a DNS name or IPv4 address, optionally followed by a port. No URL paths or credentials.
 
@@ -82,6 +85,7 @@ private
       procedure Take (Config_Out : out Plug_Config; Action : out Power_Request);
       procedure Publish (Value : Plug_Status);
       function Snapshot return Plug_Status;
+      function Can_Switch return Boolean;
    private
       Config          : Plug_Config;
       Status          : Plug_Status;

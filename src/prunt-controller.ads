@@ -102,11 +102,16 @@ generic
 
    with procedure Wait_Until_Idle (Last_Command_Index : Command_Index);
    --  Block until all queued commands are completed. This procedure will not be called if the last call to
-   --  Enqueue_Command had the Safe_Stop_After parameter set to False. Will only be called from the same task as
-   --  Enqueue_Command.
+   --  Enqueue_Command had the Safe_Stop_After parameter set to False. Must support callers other than the task
+   --  executing Enqueue_Command.
+   --
+   --  Executing a command also confirms execution of all output changes queued before that command. Shutdown uses
+   --  a stationary command to fence module shutdown changes before its settling delay.
 
    with procedure Reset_Hardware;
-   --  Reset the device to power-on state.
+   --  Reset the device to power-on state after controller and module workers stop. Normal shutdown disables and
+   --  settles the outputs first; emergency shutdown and reconnection may proceed without confirmed physical idle.
+   --  Explicit smart plug power-off skips this reset and leaves outputs disabled until a subsequent reload.
 
    Config_Path : String;
    --  Path of the printer configuration file.
@@ -251,6 +256,11 @@ private
    procedure Request_Machine_Idle_Timeout_Shutdown (Message : String);
    --  Report a recoverable controller error after an M85 timeout.
 
+   procedure Request_Smart_Plug_Shutdown;
+   --  Leave the current block without allowing subsequent hardware commands to run.
+
+   procedure Cut_Smart_Plug_Power;
+
    package My_Default_Modules_Children is
       package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
       --  TODO: Idle emitter needs to be connected to controller idle interface.
@@ -310,7 +320,8 @@ private
           (Heater_Hardware         => Hardware.Heater_Hardware,
            Thermistors_Module      => Thermistors,
            Blocking_Tracker_Module => Blocking_Tracker);
-      package Smart_Plugs is new My_Default_Modules.Smart_Plugs;
+      package Smart_Plugs is new
+        My_Default_Modules.Smart_Plugs (Request_Smart_Plug_Shutdown => Request_Smart_Plug_Shutdown);
    end My_Default_Modules_Children;
 
    procedure Setup_Planner_Runners
@@ -524,6 +535,8 @@ private
    procedure Configure_Smart_Plug;
    --  Apply the configuration module's live settings to the plug controller.
 
+   procedure Switch_Smart_Plug (Enabled : Boolean; Accepted : out Boolean);
+
    package My_Update_Checker is new Update_Checker (My_Logger, Update_Check);
 
    package Extra_Block_Resetting_Data_Holders is new
@@ -714,7 +727,7 @@ private
         Gcode_JSON_String           => Active_Module_Gcode_JSON_String,
         Get_Status_Values_String    => Get_Status_Values_String,
         Get_Smart_Plug              => Smart_Plug_Control.Status_JSON,
-        Switch_Smart_Plug           => Smart_Plug_Control.Switch,
+        Switch_Smart_Plug           => Switch_Smart_Plug,
         Port                        => Web_Server_Port);
 
    function Recursive_Module_Initialization
@@ -734,13 +747,15 @@ private
    end Patch_Processor;
 
    protected Reload_Signal is
-      entry Wait;
+      entry Wait (Power_Off : out Boolean);
       procedure Signal;
+      procedure Request_Power_Off (Queued : out Boolean);
       procedure Mark_Startup_Done;
       procedure Reset_Configuration;
    private
-      Reload_Requested : Boolean := False;
-      Startup_Done     : Boolean := False;
+      Reload_Requested    : Boolean := False;
+      Power_Off_Requested : Boolean := False;
+      Startup_Done        : Boolean := False;
    end Reload_Signal;
 
    procedure Signal_Reload;
@@ -1124,6 +1139,8 @@ private
       Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
    --  Queue a flush that resets the selected planner's tracked and planned position to New_Position.
 
+   Shutdown_In_Progress        : Boolean := False
+   with Atomic, Volatile;
    Pipeline_Is_Set_Up          : Boolean := False;
    Gcode_Processor_Is_Running  : Boolean := False
    with Atomic, Volatile;

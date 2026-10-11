@@ -81,6 +81,9 @@ package Prunt.Default_Modules.TMC2240_Drivers is
      and Cancellation_Handler with private;
 
    overriding
+   procedure Finalize (This : in out Module_Instance) is null;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
@@ -429,6 +432,9 @@ private
    function MRES_To_Dimensionless (MRES : TMC_Types.TMC2240.Microstep_Resolution_Type) return Dimensionless;
    --  Convert MRES to a microstep count.
 
+   procedure Disable_Hardware (Motor : Motor_Name);
+   --  Clear CHOPCONF.TOFF and validate the write after the UART manager has stopped.
+
    procedure Write_And_Validate (Message : TMC_Types.TMC2240.UART_Data_Message; Motor : Motor_Name)
    with Pre => Motor_Hardware (Motor).Kind = TMC2240_UART_Kind;
    --  Sets address and checksum.
@@ -453,8 +459,10 @@ private
       --  the same thing. Specifically, if we had a discriminant then we would have to initialize these in the
       --  `Module_Instance` declaration, which is broken by the unfixed part of this bug:
       --  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124282
-      Kind : Motor_Hardware_Kind := Basic_Motor_Kind;
-      UART : UART_Motor_Manager_Pointers.Ref := UART_Motor_Manager_Pointers.Null_Ref;
+      Kind    : Motor_Hardware_Kind := Basic_Motor_Kind;
+      Motor   : Motor_Name := Motor_Name'First;
+      Started : Boolean := False;
+      UART    : UART_Motor_Manager_Pointers.Ref := UART_Motor_Manager_Pointers.Null_Ref;
    end record
    with
      Dynamic_Predicate =>
@@ -463,7 +471,7 @@ private
 
    overriding
    procedure Finalize (Object : in out TMC_Motor_Manager);
-   --  Stop the UART manager.
+   --  Stop the UART manager and disable the driver if the module was started.
 
    type Motor_Manager_Map is array (Motor_Name) of TMC_Motor_Manager;
 

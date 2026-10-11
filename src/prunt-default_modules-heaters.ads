@@ -483,6 +483,9 @@ private
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
 
       overriding
+      procedure Finalize;
+
+      overriding
       procedure Handle_Pause (Planner : Prunt.Module_Types.Planner_Interface'Class; Context : Pause_Context'Class);
 
       overriding
@@ -539,6 +542,7 @@ private
 
       function Get_Default_Heater (Selection : User_Config_Default_Heater; Display_Name : String) return Heater_Name;
    private
+      Started                              : Boolean := False;
       Monitor                              : Extrusion_Temperature_Monitor_Pointers.Ref;
       Current_Reporting                    : Current_Reporter_Pointers.Ref;
       Current_Status_Setters               : Heater_Current_Status_Setters;

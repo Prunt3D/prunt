@@ -245,7 +245,7 @@ package body Prunt.Smart_Plugs is
 
       procedure Submit (Action : Power_Request; Accepted : out Boolean) is
       begin
-         Accepted := Config = Status.Config and then Config.Enabled and then Valid_Host (Config.Host);
+         Accepted := Can_Switch;
          if Accepted then
             Pending_Request := Action;
             Status.Busy := True;
@@ -272,7 +272,17 @@ package body Prunt.Smart_Plugs is
          end if;
          return Status;
       end Snapshot;
+
+      function Can_Switch return Boolean is
+      begin
+         return Config = Status.Config and then Config.Enabled and then Valid_Host (Config.Host);
+      end Can_Switch;
    end Shared_State;
+
+   function Can_Switch (This : Controller) return Boolean is
+   begin
+      return This.State.Can_Switch;
+   end Can_Switch;
 
    procedure Switch (This : in out Controller; Enabled : Boolean; Accepted : out Boolean) is
    begin

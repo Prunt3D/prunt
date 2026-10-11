@@ -72,8 +72,18 @@ package body Prunt.Step_Generator_Restart_Test is
             procedure Complete_Block (Index : Command_Index);
             procedure Execute (Index : Command_Index);
             procedure Reset;
+            procedure Request_Shutdown;
+            procedure Fail_Next_Idle;
+            function Accessed_After_Shutdown return Boolean;
+            function Last_Command return Command_Index;
+            entry Wait_For_Shutdown;
+            entry Wait_For_Idle_Failure;
             entry Wait_For_Block (Index : out Command_Index; Invalid_Wait : out Boolean);
          private
+            Shut_Down : Boolean := False;
+            Unexpected_Access : Boolean := False;
+            Fail_Idle : Boolean := False;
+            Idle_Failed : Boolean := False;
             Last_Executed              : Command_Index := 0;
             Last_Block                 : Command_Index := 0;
             Block_Complete             : Boolean := False;
@@ -83,25 +93,60 @@ package body Prunt.Step_Generator_Restart_Test is
          protected body Hardware is
             procedure Check_Idle (Index : Command_Index) is
             begin
+               Unexpected_Access := @ or else Shut_Down;
                --  Record the impossible wait instead of hanging the test like real hardware would.
                Waited_For_Missing_Command := @ or else Index > Last_Executed;
+               if Fail_Idle then
+                  Idle_Failed := True;
+                  raise Hardware_Communication_Error;
+               end if;
             end Check_Idle;
 
             procedure Complete_Block (Index : Command_Index) is
             begin
+               Unexpected_Access := @ or else Shut_Down;
                Last_Block := Index;
                Block_Complete := True;
             end Complete_Block;
 
             procedure Execute (Index : Command_Index) is
             begin
+               Unexpected_Access := @ or else Shut_Down;
                Last_Executed := Index;
             end Execute;
 
             procedure Reset is
             begin
                Last_Executed := 0;
+               Shut_Down := False;
+               Unexpected_Access := False;
+               Fail_Idle := False;
+               Idle_Failed := False;
             end Reset;
+
+            procedure Request_Shutdown is
+            begin
+               Shut_Down := True;
+            end Request_Shutdown;
+
+            procedure Fail_Next_Idle is
+            begin
+               Fail_Idle := True;
+            end Fail_Next_Idle;
+
+            entry Wait_For_Idle_Failure when Idle_Failed is
+            begin
+               null;
+            end Wait_For_Idle_Failure;
+
+            function Accessed_After_Shutdown return Boolean is (Unexpected_Access);
+
+            function Last_Command return Command_Index is (Last_Executed);
+
+            entry Wait_For_Shutdown when Shut_Down is
+            begin
+               null;
+            end Wait_For_Shutdown;
 
             entry Wait_For_Block (Index : out Command_Index; Invalid_Wait : out Boolean) when Block_Complete is
             begin
@@ -135,20 +180,69 @@ package body Prunt.Step_Generator_Restart_Test is
          function Extrusion_Is_Allowed return Boolean is (True);
 
          procedure Finish_Block (Data : Boolean; Pos : Motor_Position; Index : Command_Index) is
-            pragma Unreferenced (Data, Pos);
+            pragma Unreferenced (Pos);
          begin
             --  Homing and other blocking commands wait here, before any following block can execute.
             Wait_Until_Idle (Index);
+            if Data then
+               Hardware.Request_Shutdown;
+               raise Controller_Shutdown_Requested;
+            end if;
             Hardware.Complete_Block (Index);
          end Finish_Block;
 
-         procedure Handle_Pause (Pos : Position; Index : Command_Index) is null;
+         protected Pause_Gate is
+            procedure Enter_Block;
+            entry Wait_For_Block;
+            procedure Release;
+            entry Wait_For_Release;
+         private
+            Entered : Boolean := False;
+            Released : Boolean := False;
+         end Pause_Gate;
 
-         function Is_Pause_Plan_Done (Data : Boolean) return Boolean is
-            pragma Unreferenced (Data);
+         protected body Pause_Gate is
+            procedure Enter_Block is
+            begin
+               Entered := True;
+            end Enter_Block;
+            entry Wait_For_Block when Entered is
+            begin
+               null;
+            end Wait_For_Block;
+            procedure Release is
+            begin
+               Released := True;
+            end Release;
+            entry Wait_For_Release when Released is
+            begin
+               null;
+            end Wait_For_Release;
+         end Pause_Gate;
+
+         procedure Start_Pause_Block (Data : Boolean; Index : Command_Index) is
+            pragma Unreferenced (Index);
          begin
-            return True;
-         end Is_Pause_Plan_Done;
+            if not Data then
+               Pause_Gate.Enter_Block;
+               Pause_Gate.Wait_For_Release;
+            end if;
+         end Start_Pause_Block;
+
+         procedure Handle_Pause (Pos : Position; Index : Command_Index) is
+            pragma Unreferenced (Pos, Index);
+         begin
+            Pause_Planner.Enqueue_Flush (False);
+            Pause_Planner.Enqueue_Flush (True);
+         end Handle_Pause;
+
+         procedure Finish_Pause_Block (Data : Boolean; Pos : Motor_Position; Index : Command_Index) is
+            pragma Unreferenced (Data, Pos);
+         begin
+            Wait_Until_Idle (Index);
+         end Finish_Pause_Block;
+
+         function Is_Pause_Plan_Done (Data : Boolean) return Boolean is (Data);
 
          function Pin_Motor (Data, Transform : Boolean; Motor : Motor_Name) return Boolean is
             pragma Unreferenced (Data, Transform, Motor);
@@ -184,13 +278,13 @@ package body Prunt.Step_Generator_Restart_Test is
             Motor_Delta_Limits             => Motor_Delta_Limits,
             Maximum_Deltas_Per_Command     => [others => 1.0],
             Start_Planner_Block            => Start_Block,
-            Start_Pause_Planner_Block      => Start_Block,
+            Start_Pause_Planner_Block      => Start_Pause_Block,
             Enqueue_Command                => Enqueue_Command,
             Extrusion_Is_Allowed           => Extrusion_Is_Allowed,
             Start_Corner                   => Start_Corner,
             Start_Pause_Corner             => Start_Corner,
             Finish_Planner_Block           => Finish_Block,
-            Finish_Pause_Planner_Block     => Finish_Block,
+            Finish_Pause_Planner_Block     => Finish_Pause_Block,
             Is_Pause_Plan_Done             => Is_Pause_Plan_Done,
             Handle_Pause                   => Handle_Pause,
             Handle_Resume                  => Handle_Pause,
@@ -210,6 +304,11 @@ package body Prunt.Step_Generator_Restart_Test is
            [X_Axis => [others => 1.0 / mm], others => [others => 0.0 / mm]];
          Previous_Index : Command_Index;
          Current_Index  : Command_Index;
+         Idle_Confirmed : Boolean;
+         Halt_Index : Command_Index;
+         Primary_Running : Boolean := False;
+         Pause_Running : Boolean := False;
+         Runners_Stopped : Boolean := False;
 
          procedure Move is
          begin
@@ -220,16 +319,35 @@ package body Prunt.Step_Generator_Restart_Test is
          procedure Setup (Reset_Command_Index : Boolean := False) is
          begin
             Planner.Runner.Setup (Params, Motor_Map);
+            Primary_Running := True;
             Pause_Planner.Runner.Setup (Params, Motor_Map);
+            Pause_Running := True;
             Stepgen.Runner.Setup (False, Reset_Command_Index);
          end Setup;
 
+         procedure Reset_Planners (Include_Pause : Boolean := True) is
+         begin
+            if Primary_Running then
+               Planner.Reset;
+               Primary_Running := False;
+            end if;
+            if Include_Pause and Pause_Running then
+               Pause_Planner.Reset;
+               Pause_Running := False;
+            end if;
+         end Reset_Planners;
+
          procedure Stop_Runners is
          begin
-            --  Reset releases the planners' protected preprocessing calls before aborting their tasks.
+            if Runners_Stopped then
+               return;
+            end if;
+            Runners_Stopped := True;
+            Pause_Gate.Release;
+            --  Release preprocessing before stopping the step generator, and do not reset planners already
+            --  awaiting Setup after a halt. This also permits cleanup after a failed assertion.
+            Reset_Planners;
             Stepgen.Reset;
-            Planner.Reset;
-            Pause_Planner.Reset;
             abort Stepgen.Runner, Planner.Runner, Pause_Planner.Runner;
          end Stop_Runners;
 
@@ -254,8 +372,7 @@ package body Prunt.Step_Generator_Restart_Test is
 
          --  Cancellation resets the planners without resetting the hardware command stream.
          Stepgen.Reset;
-         Planner.Reset;
-         Pause_Planner.Reset;
+         Reset_Planners;
          Setup;
          Planner.Enqueue_Flush (False);
          Wait_For_Block (Current_Index);
@@ -266,9 +383,12 @@ package body Prunt.Step_Generator_Restart_Test is
 
          for Restart in 1 .. 2 loop
             --  Match the controller's web-restart sequence, including the hardware losing its command history.
-            Planner.Reset;
-            Pause_Planner.Reset;
-            Stepgen.Soft_Halt;
+            Reset_Planners (Include_Pause => False);
+            Stepgen.Soft_Halt (Idle_Confirmed, Halt_Index);
+            Reset_Planners;
+            T.Assert (Idle_Confirmed, "normal halt must confirm physical idle");
+            T.Assert (Halt_Index = Hardware.Last_Command, "halt must return the last emitted command index");
+            Wait_Until_Idle (Halt_Index);
             Hardware.Reset;
             Setup (Reset_Command_Index => True);
 
@@ -280,6 +400,85 @@ package body Prunt.Step_Generator_Restart_Test is
             Wait_For_Block (Current_Index);
             T.Assert (Current_Index > 0, "Motion must execute after each restart");
          end loop;
+
+         --  A shutdown block must prevent the next queued block and the normal block-completion callback from
+         --  touching hardware, even before the controller gets around to halting the pipeline.
+         Planner.Enqueue_Flush (True);
+         Move;
+         select
+            Hardware.Wait_For_Shutdown;
+         or
+            delay 5.0;
+            T.Fail ("Timed out waiting for shutdown block");
+         end select;
+         delay 0.05;
+         Reset_Planners (Include_Pause => False);
+         select
+            delay 5.0;
+            T.Fail ("Shutdown must allow soft halt to finish without waiting for hardware");
+         then abort
+            Stepgen.Soft_Halt (Idle_Confirmed, Halt_Index);
+         end select;
+         Reset_Planners;
+         T.Assert (not Hardware.Accessed_After_Shutdown, "No hardware calls may follow a shutdown block");
+         T.Assert (Idle_Confirmed, "the shutdown block already confirmed physical idle");
+         T.Assert
+           (not Stepgen.Runner'Terminated, "Orderly shutdown must keep the step generator available for reload");
+         Hardware.Reset;
+         Setup (Reset_Command_Index => True);
+         Move;
+         Wait_For_Block (Current_Index);
+         T.Assert (Current_Index > 0, "Motion must work after reloading a shut down controller");
+
+         Hardware.Fail_Next_Idle;
+         Planner.Enqueue_Flush (False);
+         select
+            Hardware.Wait_For_Idle_Failure;
+         or
+            delay 5.0;
+            T.Fail ("Timed out waiting for simulated hardware failure");
+         end select;
+         Reset_Planners (Include_Pause => False);
+         Stepgen.Soft_Halt (Idle_Confirmed, Halt_Index);
+         Reset_Planners;
+         T.Assert (not Idle_Confirmed, "hardware failure must not masquerade as confirmed idle");
+         T.Assert (Halt_Index = Current_Index, "failure must retain the last submitted command index");
+         Hardware.Reset;
+         Setup (Reset_Command_Index => True);
+         Move;
+         Wait_For_Block (Current_Index);
+         T.Assert (Current_Index > 0, "communication failure must leave the worker available for reload");
+
+         --  Keep the pause completion marker available until the step generator acknowledges the halt.
+         Stepgen.Pause;
+         select
+            Pause_Gate.Wait_For_Block;
+         or
+            delay 5.0;
+            T.Fail ("Timed out entering the pause block");
+         end select;
+         Reset_Planners (Include_Pause => False);
+         Pause_Gate.Release;
+         select
+            delay 1.0;
+            T.Fail ("Soft halt deadlocked while executing a pause plan");
+         then abort
+            Stepgen.Soft_Halt (Idle_Confirmed, Halt_Index);
+            T.Assert (Idle_Confirmed, "halting a pause plan must confirm physical idle");
+         end select;
+         Reset_Planners;
+         Hardware.Reset;
+         Setup (Reset_Command_Index => True);
+
+         abort Stepgen.Runner;
+         Stepgen.Soft_Halt (Idle_Confirmed, Halt_Index);
+         T.Assert (not Idle_Confirmed, "a terminated worker must not be reported as physically idle");
+         begin
+            Stepgen.Soft_Halt;
+            T.Fail ("the legacy halt API must also report a failed stop");
+         exception
+            when Hardware_Communication_Error => null;
+         end;
 
          Stop_Runners;
       exception

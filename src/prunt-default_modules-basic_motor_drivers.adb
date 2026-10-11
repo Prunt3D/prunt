@@ -86,6 +86,28 @@ package body Prunt.Default_Modules.Basic_Motor_Drivers is
    end Disable_Motor;
 
    protected body Module_Instance is
+      procedure Finalize is
+         Failed : Boolean := False;
+      begin
+         if not Started then
+            return;
+         end if;
+         Started := False;
+         for M in Motor_Name loop
+            if Motor_Hardware (M).Kind = Basic_Motor_Kind then
+               begin
+                  Motor_Hardware (M).Disable (M);
+               exception
+                  when Hardware_Communication_Error =>
+                     Failed := True;
+               end;
+            end if;
+         end loop;
+         if Failed then
+            raise Hardware_Communication_Error with "Unable to disable every basic motor driver.";
+         end if;
+      end Finalize;
+
       procedure Initialize
         (Config_In : User_Config; Motor_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref)
       is
@@ -111,7 +133,7 @@ package body Prunt.Default_Modules.Basic_Motor_Drivers is
       is
          pragma Unreferenced (Self_Ref_In, Planner);
       begin
-         null;
+         Started := True;
       end Start;
    end Module_Instance;
 

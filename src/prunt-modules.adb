@@ -17,21 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
---  This package contains various interfaces for modules which require special handling by the controller.
+package body Prunt.Modules is
 
-pragma Extensions_Allowed (On);
+   procedure Release_Module_Instance (This : in out Module_Instance_Parent'Class) is
+   begin
+      This.Finalize;
+   end Release_Module_Instance;
 
-package Prunt.Controller_Interfaces is
-
-   type Idle_Notification_Receiver is synchronized interface;
-
-   procedure Idle_Start (This : in out Idle_Notification_Receiver) is abstract;
-   --  Called when command execution catches up to the last emitted command and there is no end-of-block handler
-   --  running.
-
-   procedure Idle_End (This : in out Idle_Notification_Receiver) is abstract;
-   --  Called before a new command is emitted after command execution catches up to the last emitted command. This
-   --  procedure is allowed to block to stop the given command from being enqueued until the machine is in a state
-   --  where it is ready to do so. For example, a module might need to wait for heaters to heat back up.
-
-end Prunt.Controller_Interfaces;
+end Prunt.Modules;

@@ -305,10 +305,13 @@ package body Prunt.Smart_Plugs.Test is
    begin
       T.Register;
       State.Configure (Test_Config);
+      T.Assert (not State.Can_Switch, "readiness must wait for the worker to apply configuration");
       State.Publish ((Config => Test_Config, Power => Off, others => <>));
+      T.Assert (State.Can_Switch, "applied plug configuration must allow power requests");
       State.Submit (Turn_On, Accepted);
       T.Assert (Accepted);
       State.Configure (Replacement);
+      T.Assert (not State.Can_Switch, "changed configuration must disable readiness until applied");
       State.Take (Config, Action);
       T.Assert (Config = Replacement and then Action = No_Request,
                 "a queued command for the old device must not operate its replacement");
@@ -367,6 +370,7 @@ package body Prunt.Smart_Plugs.Test is
       Accepted : Boolean;
    begin
       T.Register;
+      T.Assert (not Control.Can_Switch, "an unconfigured plug must not be ready");
       Control.Switch (True, Accepted);
       T.Assert (not Accepted, "an absent configuration module cannot switch power");
       T.Assert (not Boolean'(Read (VSS.Strings.Conversions.To_UTF_8_String (Control.Status_JSON)).Get ("Enabled")));

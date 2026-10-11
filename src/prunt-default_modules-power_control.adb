@@ -65,11 +65,22 @@ package body Prunt.Default_Modules.Power_Control is
    end Initialize;
 
    protected body Module_Instance is
+      procedure Finalize is
+      begin
+         if Started then
+            Started := False;
+            if Power_Control_Hardware.Turn_Off /= null then
+               Power_Control_Hardware.Turn_Off.all;
+            end if;
+         end if;
+      end Finalize;
+
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class)
       is
          pragma Unreferenced (Planner);
       begin
+         Started := True;
          Self_Ref := Self_Ref_In;
       end Start;
    end Module_Instance;

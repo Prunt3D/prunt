@@ -91,7 +91,11 @@ private
       overriding
       procedure Start
         (Self_Ref_In : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref; Planner : Planner_Interface'Class);
+
+      overriding
+      procedure Finalize;
    private
+      Started : Boolean := False;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 

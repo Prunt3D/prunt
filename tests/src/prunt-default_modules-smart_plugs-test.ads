@@ -20,9 +20,10 @@
 with Trendy_Test;
 
 generic
+   Trace : in out Virtual_String;
 package Prunt.Default_Modules.Smart_Plugs.Test is
 
    function All_Tests return Trendy_Test.Test_Group;
-   --  Return smart plug configuration restart tests.
+   --  Return smart plug configuration and shutdown tests.
 
 end Prunt.Default_Modules.Smart_Plugs.Test;

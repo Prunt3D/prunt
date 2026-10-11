@@ -168,8 +168,10 @@ package Prunt.Motion_Planner.Planner is
    type Execution_Block (N_Corners : Corners_Index := 1) is private;
    --  N_Corners may be 1, in which case there are no segments.
 
-   procedure Clear_Block_Extra_Data (Block : in out Execution_Block);
+   procedure Clear_Block_Extra_Data (Block : not null access Execution_Block);
    --  Release callback/configuration references when discarding a block. The block must not be executed afterwards.
+   --  Accept an access value because discarded blocks may be only partly initialized; only their initialized
+   --  reference-holding fields are needed for cleanup.
 
    --  First Finishing_Corner = 2. If N_Corners < 2 then these functions must not be called.
 
