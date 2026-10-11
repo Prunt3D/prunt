@@ -377,8 +377,9 @@ package Prunt.TMC_Types.TMC2240 is
       SEDN       : Unsigned_2;
       SEIMIN     : Unsigned_1;
       SGT        : Unsigned_7;
+      Reserved_4 : Unsigned_1;
       SFILT      : TMC_Boolean;
-      Reserved_4 : Unsigned_7;
+      Reserved_5 : Unsigned_7;
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
