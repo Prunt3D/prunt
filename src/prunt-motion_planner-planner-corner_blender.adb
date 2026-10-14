@@ -34,7 +34,6 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
    is
       Original_E              : Block_Segment_Lengths renames
         Workspace.Original_Extrusion_Positions (Block.Corners'Range);
-      Original_Params         : constant Kinematic_Parameters := Block.Params;
       Spatial_Map             : Prunt.Motion_Planner.Planner.Motor_Position_Map := Motor_Map;
       Extrusion_Reduction     : Length := 0.0 * mm;
       Reduction_Roundoff      : Length := 0.0 * mm;
@@ -54,24 +53,6 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       for M in Motor_Name loop
          Spatial_Map (E_Axis, M) := 0.0 / mm;
       end loop;
-      Block.Params.Bounds.Lower_E := -Length'Last;
-      Block.Params.Bounds.Upper_E := Length'Last;
-      case Block.Params.Cornering.Kind is
-         when Stereographic =>
-            Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
-
-         when Circular      =>
-            Block.Params.Cornering.Circular_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
-
-         when Parabolic     =>
-            Block.Params.Cornering.Parabolic_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
-
-         when Biarc         =>
-            Block.Params.Cornering.Biarc_Params.Axial_Deviation_Maxes (E_Axis) := Length'Last;
-
-         when Sharp_SCV     =>
-            null;
-      end case;
       if Force_Stops then
          for I in Block.Corners'Range loop
             Block.Corner_Transitions (I) := To_Evaluator (Stop_At (Block.Corners (I)));
@@ -84,7 +65,6 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       else
          Runner.Run (Block, Spatial_Map, Workspace, Stop_At_Density_Changes);
       end if;
-      Block.Params := Original_Params;
       for I in Block.Corners'Range loop
          Block.Corners (I) (E_Axis) := Original_E (I);
       end loop;
@@ -134,7 +114,6 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       end if;
    exception
       when others =>
-         Block.Params := Original_Params;
          for I in Block.Corners'Range loop
             Block.Corners (I) (E_Axis) := Original_E (I);
          end loop;
@@ -397,7 +376,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             if Turn_Norm <= 128.0 * Dimensionless'Model_Epsilon then
                return Length'Last;
             end if;
-            for Axis in Axis_Name loop
+            for Axis in Axis_Name when Axis /= E_Axis loop
                if abs Turn (Axis) > 128.0 * Dimensionless'Model_Epsilon * Turn_Norm then
                   Constrained := True;
                   Result := Length'Min (Result, Active_Axial_Deviation_Maxes (Axis) * (Turn_Norm / abs Turn (Axis)));
@@ -818,7 +797,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                Q_Lower : Dimensionless := 0.0;
                Q_Upper : Dimensionless := 1.0;
             begin
-               for Axis in Axis_Name loop
+               for Axis in Axis_Name when Axis /= E_Axis loop
                   declare
                      Structurally_Constant : constant Boolean := Axis_Is_Structurally_Constant (Curve, Axis);
                      Margin                : constant Length :=
@@ -906,12 +885,13 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                   Ratio     : constant Dimensionless := Sample_Ratio (Point_At_Parameter (Curve, Parameter));
                begin
                   Worst := Dimensionless'Max (Worst, Ratio);
-                  if Worst > 1.0 then
+                  --  Repair needs the worst ratio over the entire curve.
+                  if Worst >= Dimensionless'Last then
                      return (Pass => False, Worst_Ratio => Worst);
                   end if;
                end;
             end loop;
-            return (Pass => True, Worst_Ratio => Worst);
+            return (Pass => Worst <= 1.0, Worst_Ratio => Worst);
          exception
             when Constraint_Error =>
                return (Pass => False, Worst_Ratio => Dimensionless'Last);
@@ -1146,9 +1126,8 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                           when Z_Axis =>
                             Expanded_Lower < Block.Params.Bounds.Lower_Z
                             or else Expanded_Upper > Block.Params.Bounds.Upper_Z,
-                          when E_Axis =>
-                            Expanded_Lower < Block.Params.Bounds.Lower_E
-                            or else Expanded_Upper > Block.Params.Bounds.Upper_E);
+                          when E_Axis => False);
+                     --  E's shortened-path reference and time-domain correction are checked separately.
                   begin
                      Expanded_Envelope (Axis) := (Lower => Expanded_Lower, Upper => Expanded_Upper);
                      if not Finite_Length (Expanded_Lower)
@@ -1227,7 +1206,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
 
             if not Line_Line then
                Deviation_Passes := True;
-               for Axis in Axis_Name loop
+               for Axis in Axis_Name when Axis /= E_Axis loop
                   Deviation_Passes := Deviation_Passes and then Primitive_Deviation <= Deviation_Limits (Axis);
                end loop;
                Failure_Upper := Primitive_Deviation;

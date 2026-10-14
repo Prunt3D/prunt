@@ -634,7 +634,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Workspace : constant Workspace_Access := new Planning_Workspace;
       Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
       Radius    : constant Length := 20.0 * mm;
-      Deviation : constant Axial_Deviation_Limits := [others => 100.0 * mm];
+      Deviation : constant Axial_Deviation_Limits := [E_Axis => 0.0 * mm, others => 100.0 * mm];
 
       procedure Configure;
       procedure Assert_Dispatched (Name : String; Helix_Segment : Finishing_Corners_Index);
@@ -1653,6 +1653,146 @@ package body Prunt.Motion_Planner.Planner.Test is
       end loop;
    end Test_Extrusion_Instantaneous_Velocity_Change;
 
+   procedure Test_Extrusion_Tangential_Limit (T : in out Trendy_Test.Operation'Class) is
+      type Workspace_Access is access Planning_Workspace;
+      Workspace : constant Workspace_Access := new Planning_Workspace;
+      Block : aliased Execution_Block (4);
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+   begin
+      T.Register;
+      Reset_Early_Limiter_Block (Block);
+      Block.Params.Ignore_E_In_XYZE := False;
+      Block.Params.Tangential_Velocity_Max := 10.0 * mm / s;
+      Block.Params.Axial_Velocity_Maxes := [others => 1000.0 * mm / s];
+      Block.Params.Axial_Acceleration_Maxes := [E_Axis => 5.0 * mm / s ** 2, others => 1.0E6 * mm / s ** 2];
+      Block.Params.Axial_Jerk_Maxes := [E_Axis => 50.0 * mm / s ** 3, others => 1.0E7 * mm / s ** 3];
+      Block.Params.Axial_Snap_Maxes := [E_Axis => 500.0 * mm / s ** 4, others => 1.0E8 * mm / s ** 4];
+      Block.Params.Axial_Crackle_Maxes := [E_Axis => 5000.0 * mm / s ** 5, others => 1.0E9 * mm / s ** 5];
+      Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 10.0 * mm;
+      Block.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+      Block.Corners :=
+        [1 => [others => 0.0 * mm],
+         2 => [X_Axis => 20.0 * mm, others => 0.0 * mm],
+         3 => [X_Axis => 40.0 * mm, E_Axis => 20.0 * mm, others => 0.0 * mm],
+         4 => [X_Axis => 60.0 * mm, E_Axis => 20.0 * mm, others => 0.0 * mm]];
+      Normalize_And_Blend (Block, Motor_Map, Workspace);
+      Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
+      Plan_Kinematics (Block, Motor_Map, Workspace);
+      T.Assert (Total_Time (Block.Extrusion_Junction_Corrections (2).Times) > 0.0 * s,
+        "The XYZE tangential limit retains a moving extrusion transition");
+      for I in Block.Primitives'Range loop
+         declare
+            Segment_Duration : constant Time := Segment_Time (Block'Access, I);
+            DT : constant Time := Segment_Duration / 1000.0;
+         begin
+            for K in 0 .. 999 loop
+               declare
+                  First : constant Position :=
+                    Segment_Pos_At_Time (Block'Access, I, Segment_Duration * (Dimensionless (K) / 1000.0));
+                  Last : constant Position :=
+                    Segment_Pos_At_Time (Block'Access, I, Segment_Duration * (Dimensionless (K + 1) / 1000.0));
+               begin
+                  T.Assert (Point_Distance (First, Last) / DT <= 10.00001 * mm / s,
+                    "Combined XYZE speed respects the tangential limit during density transitions");
+               end;
+            end loop;
+         end;
+      end loop;
+   end Test_Extrusion_Tangential_Limit;
+
+   procedure Test_Extrusion_Feedrate_Retry (T : in out Trendy_Test.Operation'Class) is
+      type Workspace_Access is access Planning_Workspace;
+      Workspace : constant Workspace_Access := new Planning_Workspace;
+      Block : aliased Execution_Block (2);
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+   begin
+      T.Register;
+      for Ignore_E in Boolean loop
+         Reset_Early_Limiter_Block (Block);
+         Block.Params.Ignore_E_In_XYZE := Ignore_E;
+         Block.Params.Tangential_Velocity_Max := 10.0 * mm / s;
+         Block.Params.Axial_Velocity_Maxes := [others => 1000.0 * mm / s];
+         Block.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+         Block.Corners :=
+           [1 => [others => 0.0 * mm], 2 => [X_Axis | E_Axis => 20.0 * mm, others => 0.0 * mm]];
+         Normalize_And_Blend (Block, Motor_Map, Workspace);
+         Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
+         declare
+            Original : constant Velocity := Block.Original_Segment_Feedrates (2);
+            Initial_Limit : constant Velocity := Block.Limited_Segment_Feedrates (2);
+         begin
+            Tested_Corner_Blender.Run (Block, Motor_Map, Workspace, Force_Stops => True);
+            Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map, Normalize_Feedrates => False);
+            T.Assert (Block.Original_Segment_Feedrates (2) = Original,
+              "Geometry retries do not normalize the commanded feedrate twice");
+            T.Assert (Block.Limited_Segment_Feedrates (2) = Initial_Limit,
+              "Geometry retries retain the tangential velocity cap in the same scalar coordinates");
+            T.Assert (Initial_Limit <= (if Ignore_E then 10.0 else 10.0 / Dimensionless (Sqrt (2.0))) * mm / s,
+              "The tangential cap uses the configured XYZ or XYZE metric");
+         end;
+      end loop;
+   end Test_Extrusion_Feedrate_Retry;
+
+   procedure Test_Extrusion_Corner_Repair (T : in out Trendy_Test.Operation'Class) is
+      type Workspace_Access is access Planning_Workspace;
+      Workspace : constant Workspace_Access := new Planning_Workspace;
+      Block : aliased Execution_Block (3);
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Limits : constant Axial_Deviation_Limits := [E_Axis => 0.0 * mm, others => 0.1 * mm];
+   begin
+      T.Register;
+      for Family in Cornering_Kind loop
+         if Family /= Sharp_SCV then
+            Reset_Early_Limiter_Block (Block);
+            case Family is
+               when Stereographic =>
+                  Block.Params.Cornering :=
+                    (Kind => Stereographic, Stereographic_Params =>
+                       (Axial_Deviation_Maxes => Limits, Corner_Miss_Distance_Max => 100.0 * mm, others => <>));
+               when Circular =>
+                  Block.Params.Cornering :=
+                    (Kind => Circular, Circular_Params =>
+                       (Axial_Deviation_Maxes => Limits, Corner_Miss_Distance_Max => 100.0 * mm,
+                        Radius_Max => 5.0 * mm));
+               when Parabolic =>
+                  Block.Params.Cornering :=
+                    (Kind => Parabolic, Parabolic_Params =>
+                       (Axial_Deviation_Maxes => Limits, Corner_Miss_Distance_Max => 100.0 * mm,
+                        Trim_Max => 5.0 * mm, others => <>));
+               when Biarc =>
+                  Block.Params.Cornering :=
+                    (Kind => Biarc, Biarc_Params =>
+                       (Axial_Deviation_Maxes => Limits, Corner_Miss_Distance_Max => 100.0 * mm,
+                        Trim_Max => 5.0 * mm, others => <>));
+               when Sharp_SCV =>
+                  null;
+            end case;
+            Block.Corners :=
+              [1 => [X_Axis => -20.0 * mm, E_Axis => 10.0 * mm, others => 0.0 * mm],
+               2 => [E_Axis => 12.0 * mm, others => 0.0 * mm],
+               3 => [Y_Axis => 20.0 * mm, E_Axis => 14.0 * mm, others => 0.0 * mm]];
+            --  Zero is outside the real E bounds, but spatial blending temporarily sets E coordinates to zero.
+            Block.Params.Bounds.Lower_E := 10.0 * mm;
+            Block.Params.Bounds.Upper_E := 14.0 * mm;
+            Normalize_And_Blend (Block, Motor_Map, Workspace);
+            T.Assert (Policy (Block.Corner_Transitions (2)) = Derivative_Bounded,
+              Family'Image & " repairs an oversized blend without a false E-axis overflow");
+            for K in 0 .. 128 loop
+               declare
+                  P : constant Position := Point_At_Distance
+                    (Block.Corner_Transitions (2), Arc_Length (Block.Corner_Transitions (2))
+                       * (Dimensionless (K) / 128.0));
+               begin
+                  T.Assert (Length'Min (abs P (X_Axis), abs P (Y_Axis)) <= 0.1 * mm,
+                    Family'Image & " repaired blend obeys the spatial deviation corridor");
+               end;
+            end loop;
+            T.Assert (Block.Params.Bounds.Lower_E = 10.0 * mm and then Block.Corners (2) (E_Axis) = 12.0 * mm,
+              "Blending preserves the commanded E coordinates and bounds");
+         end if;
+      end loop;
+   end Test_Extrusion_Corner_Repair;
+
    procedure Test_Extrusion_Geometry_And_Compensation (T : in out Trendy_Test.Operation'Class) is
       type Workspace_Access is access Planning_Workspace;
       Workspace : constant Workspace_Access := new Planning_Workspace;
@@ -2532,6 +2672,9 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Extrusion_Generated_Profile'Unrestricted_Access,
          Test_Extrusion_Transition_Locality'Unrestricted_Access,
          Test_Extrusion_Position_Bounds'Unrestricted_Access,
+         Test_Extrusion_Tangential_Limit'Unrestricted_Access,
+         Test_Extrusion_Feedrate_Retry'Unrestricted_Access,
+         Test_Extrusion_Corner_Repair'Unrestricted_Access,
          Test_Extrusion_Geometry_And_Compensation'Unrestricted_Access,
          Test_Extrusion_Stops_And_Dominated_Moves'Unrestricted_Access,
          Test_Early_Limiter_Helix_Ignore_E'Unrestricted_Access,

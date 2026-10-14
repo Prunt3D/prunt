@@ -801,6 +801,31 @@ package body Prunt.Motion_Planner.Planner is
                      return False;
                   end if;
                end loop;
+               if not Block.Params.Ignore_E_In_XYZE and then Correction_Direction /= 0.0 then
+                  --  The early limiter converts the XYZE cap using each segment's nominal density. During an E
+                  --  correction that ratio no longer describes the executed velocity. Certify the sum of the squared
+                  --  spatial and E velocities over the whole phase, normalized to avoid squaring the cap.
+                  declare
+                     Cap           : constant Dimensionless := Block.Params.Tangential_Velocity_Max / (mm / s);
+                     Spatial_Speed : constant Extrusion_Polynomial := Polynomial (XYZ, 1, Interval_Time);
+                     E_Speed       : constant Extrusion_Polynomial := Polynomial (E, 1, Interval_Time);
+                     Speed_Squared : Extrusion_Polynomial (0 .. 2 * Spatial_Speed'Last) := [others => 0.0];
+                  begin
+                     if Cap <= 0.0 then
+                        return False;
+                     end if;
+                     for J in Spatial_Speed'Range loop
+                        for K in Spatial_Speed'Range loop
+                           Speed_Squared (J + K) :=
+                             @ + (Spatial_Speed (J) / Cap) * (Spatial_Speed (K) / Cap)
+                             + (E_Speed (J) / Cap) * (E_Speed (K) / Cap);
+                        end loop;
+                     end loop;
+                     if not Extrusion_Polynomial_In_Range (Speed_Squared, -Dimensionless'Last, 1.0) then
+                        return False;
+                     end if;
+                  end;
+               end if;
                --  The monotone segment reference is already inside the position bounds. A positive correction
                --  cannot violate the lower bound, nor a negative correction the upper bound. Retain that exact
                --  sign proof at endpoints instead of reconstructing a zero position by polynomial cancellation.

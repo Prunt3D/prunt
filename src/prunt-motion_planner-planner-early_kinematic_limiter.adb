@@ -50,8 +50,8 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
             Offset             : constant Position_Offset := Block.Corners (I - 1) - Block.Corners (I);
             XYZ_Path_Length    : Length;
 
-            Feedrate : Velocity :=
-              Velocity'Min (Block.Original_Segment_Feedrates (I), Block.Params.Tangential_Velocity_Max);
+            Tangential_Max : Velocity := Block.Params.Tangential_Velocity_Max;
+            Feedrate       : Velocity;
          begin
             case Primitive.Kind is
                when Line_Primitive_Kind  =>
@@ -64,7 +64,7 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                     * abs Primitive.Theta_Delta;
             end case;
 
-            if Normalize_Feedrates and then not Block.Params.Ignore_E_In_XYZE and then XYZ_Path_Length > 0.0 * mm then
+            if not Block.Params.Ignore_E_In_XYZE and then XYZ_Path_Length > 0.0 * mm then
                declare
                   --  Convert using the accepted density, not the rounded E coordinates. Scale the norm before squaring
                   --  so E-dominated moves cannot overflow this calculation.
@@ -73,10 +73,15 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                   Spatial_Scale : constant Dimensionless :=
                     (1.0 / Scale) / Dimensionless_Math.Sqrt ((1.0 / Scale) ** 2 + (Density / Scale) ** 2);
                begin
-                  Feedrate := Feedrate * Spatial_Scale;
-                  Block.Original_Segment_Feedrates (I) := Block.Original_Segment_Feedrates (I) * Spatial_Scale;
+                  --  The programmed feedrate is normalized once, but the configured cap remains in XYZE units and must
+                  --  be converted on every run, including geometry recovery with stopped corners.
+                  Tangential_Max := Tangential_Max * Spatial_Scale;
+                  if Normalize_Feedrates then
+                     Block.Original_Segment_Feedrates (I) := Block.Original_Segment_Feedrates (I) * Spatial_Scale;
+                  end if;
                end;
             end if;
+            Feedrate := Velocity'Min (Block.Original_Segment_Feedrates (I), Tangential_Max);
 
             if Block.Extrusion_Densities (I) /= 0.0 then
                --  Only the constant-density part is common to every candidate profile window. Density-transition
