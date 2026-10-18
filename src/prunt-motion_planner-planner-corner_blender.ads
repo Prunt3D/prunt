@@ -17,6 +17,8 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 pragma Extensions_Allowed (On);
 
 private with Ada.Numerics.Generic_Elementary_Functions;
@@ -24,6 +26,10 @@ private with System.Pool_Local;
 
 private generic
 package Prunt.Motion_Planner.Planner.Corner_Blender is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    procedure Run
      (Block       : aliased in out Execution_Block;
@@ -50,6 +56,7 @@ private
       Requires_Hard_Anchor : Boolean := False;
       Trim_In              : Length := 0.0 * mm;
       Trim_Out             : Length := 0.0 * mm;
+      --  Attempted allocation used as the cache key. A retained transition can use smaller accepted trims.
       Failure_Limit        : Length := 0.0 * mm;
       Failure_Upper        : Length := Length'Last;
    end record;
@@ -78,6 +85,8 @@ private
       Target_Outgoing_Trims    : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
       Allocated_Incoming_Trims : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
       Allocated_Outgoing_Trims : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
+      Accepted_Incoming_Trims  : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
+      Accepted_Outgoing_Trims  : Corner_Lengths_Access := new Corner_Lengths'(others => 0.0 * mm);
       Hard_Anchors             : Corner_Flags_Access := new Corner_Flags'(others => True);
       Cached_Attempts          : Corner_Transition_Attempts_Access :=
         new Corner_Transition_Attempts'(others => (others => <>));

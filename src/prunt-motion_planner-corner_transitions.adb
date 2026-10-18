@@ -17,6 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+pragma Unsuppress (Overflow_Check);
+pragma Unsuppress (Range_Check);
+pragma Unsuppress (Division_Check);
+
 with Ada.Numerics;
 
 package body Prunt.Motion_Planner.Corner_Transitions is
@@ -835,26 +840,32 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       Maximum_Length                : Length := 1.0E100 * mm;
       Preferred_Trim_Ratio          : Dimensionless := 1.0) return Construction_Result
    is
-      G0, G1 : Boolean;
-      T0     : constant Position_Scale := Unit (Start_Tangent, G0);
-      T1     : constant Position_Scale := Unit (Finish_Tangent, G1);
-      V      : constant Position_Offset := Finish_Point - Start_Point;
-      VV     : Dimensionless := 0.0;
-      TT     : Dimensionless;
+      G0, G1          : Boolean;
+      T0              : constant Position_Scale := Unit (Start_Tangent, G0);
+      T1              : constant Position_Scale := Unit (Finish_Tangent, G1);
+      V               : constant Position_Offset := Finish_Point - Start_Point;
+      VV              : Dimensionless := 0.0;
+      TT              : Dimensionless;
+      Chord_Length    : Length;
+      Chord_Direction : Position_Scale;
       type Candidate is record
          Valid                                          : Boolean := False;
          Data                                           : Biarc_Data;
          Peak_Curvature, Curvature_Jump, Ratio_Distance : Dimensionless := Dimensionless'Last;
       end record;
-      Best   : Candidate;
-      Env    : Position_Envelope;
-      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Best            : Candidate;
+      Env             : Position_Envelope;
+      Bounds          : Unit_Speed_Axial_Derivative_Bounds;
 
       function Better (Left, Right : Candidate) return Boolean;
       function Evaluate (Ratio : Dimensionless) return Candidate;
 
       function Better (Left, Right : Candidate) return Boolean is
-         Slack : constant Dimensionless := 64.0 * Dimensionless'Model_Epsilon;
+         --  Radii are formed from cancellation-prone chord projections, so their rounding noise far exceeds a few
+         --  ulps. When the endpoints are cocircular every member lies on the same circle and only that noise would
+         --  separate them; treat smaller differences as ties so the preferred trim ratio decides.
+         Slack    : constant Dimensionless := 1.0E-9;
+         Jump_Tie : Dimensionless;
       begin
          if not Left.Valid then
             return False;
@@ -864,9 +875,12 @@ package body Prunt.Motion_Planner.Corner_Transitions is
             return True;
          elsif Right.Peak_Curvature < Left.Peak_Curvature * (1.0 - Slack) then
             return False;
-         elsif Left.Curvature_Jump < Right.Curvature_Jump * (1.0 - Slack) then
+         end if;
+         --  A curvature jump of zero has no relative scale, so compare jumps against the shared peak curvature.
+         Jump_Tie := Slack * Dimensionless'Max (Left.Peak_Curvature, Right.Peak_Curvature);
+         if Left.Curvature_Jump < Right.Curvature_Jump - Jump_Tie then
             return True;
-         elsif Right.Curvature_Jump < Left.Curvature_Jump * (1.0 - Slack) then
+         elsif Right.Curvature_Jump < Left.Curvature_Jump - Jump_Tie then
             return False;
          else
             return Left.Ratio_Distance < Right.Ratio_Distance;
@@ -881,17 +895,19 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          Good_First, Good_Second       : Boolean;
          Result                        : Candidate;
          First_End_Tangent             : Position_Scale;
-         Chord_Direction               : Position_Scale;
          C                             : Dimensionless;
          Sine                          : Dimensionless;
       begin
          if Ratio < 1.0 / 20.0 or else Ratio > 20.0 then
             return Result;
          end if;
+         --  With D1 = Ratio * D0, the arcs share a tangent at the join exactly when |Q1 - Q0| = D0 + D1, i.e.
+         --
+         --     2·Ratio·(1 - T0·T1)·D0² + 2·V·(T0 + Ratio·T1)·D0 - V·V = 0.
          A := 2.0 * Ratio * TT;
          B := 0.0;
          for Axis in Axis_Name loop
-            B := B + 2.0 * Dimensionless (V (Axis) / mm) * (Ratio * T0 (Axis) + T1 (Axis));
+            B := B + 2.0 * Dimensionless (V (Axis) / mm) * (T0 (Axis) + Ratio * T1 (Axis));
          end loop;
          Discriminant := B ** 2 + 4.0 * A * VV;
          if A <= 1.0E-14 or else Discriminant <= 0.0 then
@@ -909,9 +925,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
             --  A rounded weighted average of identical coordinates can leave their plane. That would give both
             --  arcs a spurious displacement and prevent structural constant-axis detection.
             Join (Axis) :=
-              (if Q0 (Axis) = Q1 (Axis)
-               then Q0 (Axis)
-               else (Ratio * Q0 (Axis) + Q1 (Axis)) / (Ratio + 1.0));
+              (if Q0 (Axis) = Q1 (Axis) then Q0 (Axis) else (Ratio * Q0 (Axis) + Q1 (Axis)) / (Ratio + 1.0));
          end loop;
          Arc_From_Start (Start_Point, Join, T0, First, Good_First);
          Arc_From_Start (Finish_Point, Join, T1 * (-1.0), Reverse_Second, Good_Second);
@@ -927,7 +941,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          if Dot (First_End_Tangent, Second.Tangent_Start) < 1.0 - 1.0E-7 then
             return Result;
          end if;
-         Chord_Direction := V / (abs V);
          if not Arc_Has_Nonnegative_Progress (First, Chord_Direction)
            or else not Arc_Has_Nonnegative_Progress (Second, Chord_Direction)
          then
@@ -936,7 +949,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
             return Result;
          end if;
          Result.Data := (First => First, Second => Second, Length_Value => First.Length_Value + Second.Length_Value);
-         if Result.Data.Length_Value > Maximum_Length or else Result.Data.Length_Value > 1_000.0 * abs V then
+         if Result.Data.Length_Value > Maximum_Length or else Result.Data.Length_Value > 1_000.0 * Chord_Length then
             return (others => <>);
          end if;
          Result.Peak_Curvature :=
@@ -966,6 +979,8 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       if VV <= 1.0E-20 or else TT <= 1.0E-12 then
          return (Status => Unsupported_Geometry, Transition => <>);
       end if;
+      Chord_Length := abs V;
+      Chord_Direction := V / Chord_Length;
       --  Search every one of 32 log-space intervals.  Each interval receives a fixed 32-step golden refinement;
       --  infeasible samples simply compare worse than feasible ones.  This bounds construction time independently of
       --  geometry and catches every feasible sampled local-minimum bracket.
@@ -981,21 +996,32 @@ package body Prunt.Motion_Planner.Corner_Transitions is
             X1, X2    : Dimensionless;
             C1, C2    : Candidate;
          begin
+            X1 := Right - Phi * (Right - Left);
+            X2 := Left + Phi * (Right - Left);
+            C1 := Evaluate (Math.Exp (X1));
+            C2 := Evaluate (Math.Exp (X2));
             for Iteration in 1 .. 32 loop
-               X1 := Right - Phi * (Right - Left);
-               X2 := Left + Phi * (Right - Left);
-               C1 := Evaluate (Math.Exp (X1));
-               C2 := Evaluate (Math.Exp (X2));
                if Better (C1, Best) then
                   Best := C1;
                end if;
                if Better (C2, Best) then
                   Best := C2;
                end if;
+               exit when Iteration = 32;
+               --  Golden-section refinement retains one interior point. Reuse its fully checked candidate;
+               --  reconstructing both arcs at both points doubles the dominant construction work.
                if Better (C1, C2) then
                   Right := X2;
+                  X2 := X1;
+                  C2 := C1;
+                  X1 := Right - Phi * (Right - Left);
+                  C1 := Evaluate (Math.Exp (X1));
                else
                   Left := X1;
+                  X1 := X2;
+                  C1 := C2;
+                  X2 := Left + Phi * (Right - Left);
+                  C2 := Evaluate (Math.Exp (X2));
                end if;
             end loop;
          end;

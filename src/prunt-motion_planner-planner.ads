@@ -17,6 +17,8 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 --  This package provides a 5th-order (bounded crackle) motion planner with adjustable velocity, acceleration, jerk,
 --  snap, and crackle limits. Corners use an explicitly selected geometric transition and junction policy; the selected
 --  family determines which derivative limits remain meaningful at its joins.
@@ -46,6 +48,7 @@
 --     their endpoints; Biarc also waives them at its internal splice. Sharp_SCV retains the commanded corner exactly,
 --     is C0, and waives acceleration and every higher derivative limit at the junction. Unsupported or uncertifiable
 --     geometry becomes a hard stop; nearly straight geometry is represented explicitly as a passthrough.
+--     Stereographic passthroughs also require matching distance derivatives through order four.
 --
 --  4. Early_Kinematic_Limiter:
 --
@@ -159,6 +162,12 @@ generic
 
    Initial_Position : Position := [others => 0.0 * mm];
 package Prunt.Motion_Planner.Planner is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
+   --  These local pragmas survive instantiation; configuration pragmas above the generic do not.
+   --  The instantiating compilation unit must also enable floating-point checking with -gnateF.
 
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
    subtype Finishing_Corners_Index is Corners_Index range 2 .. Corners_Index'Last;
@@ -477,38 +486,66 @@ private
       Window  : Profile_Window;
       Limits  : Scalar_Derivative_Limits;
       Max_Vel : Velocity := 0.0 * mm / s;
+      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+      Curved  : Boolean := False;
+   end record;
+   --  Limits contains the tangent-only envelope. Curved windows retain geometry so each candidate velocity
+   --  change can be certified at its own speed and derivative peaks, rather than at an unreachable ceiling.
+
+   type Window_Profile_Result is record
+      Valid : Boolean := False;
+      Profile : Feedrate_Profile :=
+        (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
+      Max_Crackle : Crackle := 0.0 * mm / s ** 5;
    end record;
 
    type Profile_Window_Evaluation_Set is array (Profile_Window_Candidate_Index) of Profile_Window_Evaluation;
    type Profile_Window_Evaluation_Cache is array (Finishing_Corners_Index range <>) of Profile_Window_Evaluation_Set;
    type Block_Planning_Attempts is array (Finishing_Corners_Index range <>) of Natural;
 
-   type Planning_Workspace is record
+   type Reachable_Velocity_Memo is record
+      Fixed_Vel : Velocity := 0.0 * mm / s;
+      Reachable : Velocity := 0.0 * mm / s;
+      Valid     : Boolean := False;
+   end record;
+   type Reachable_Velocity_Memo_Pair is array (Boolean) of Reachable_Velocity_Memo;
+   --  Indexed by whether the fixed velocity is at the start of the segment.
+   type Reachable_Velocity_Memo_Cache is array (Finishing_Corners_Index range <>) of Reachable_Velocity_Memo_Pair;
+
+   type Planning_Workspace (Last_Corner : Corners_Index) is record
+      Check_Extrusion_Position : Boolean := True;
+      --  Whether all commanded E coordinates are in bounds. Compute once per pass; homing can bypass bounds.
+      Local_Comparison_Corners : Natural := 0;
+      Local_Stops_Selected : Natural := 0;
+
       --  Extrusion_Density_Normalizer
-      Unblended_Segment_Lengths     : Block_Segment_Lengths (Finishing_Corners_Index);
-      Unblended_Extrusion_Positions : Block_Segment_Lengths (Corners_Index);
+      Unblended_Segment_Lengths     : Block_Segment_Lengths (2 .. Last_Corner);
+      Unblended_Extrusion_Positions : Block_Segment_Lengths (1 .. Last_Corner);
       --  Original scalar path lengths and normalized E boundary positions, before XYZ corner shortening.
       --  Corner_Blender uses these on the initial pass and on geometry recovery without rederiving densities.
 
       --  Kinematic_Limiter
-      Check_Extrusion_Position : Boolean := True;
-      --  Whether all commanded E coordinates are in bounds. Compute once per pass; homing can bypass bounds.
-      Static_Corner_Limits     : Block_Corner_Velocity_Limits (Corners_Index);
-      Window_Evaluations       : Profile_Window_Evaluation_Cache (Finishing_Corners_Index);
+      Static_Corner_Limits     : Block_Corner_Velocity_Limits (1 .. Last_Corner);
+      Window_Evaluations       : Profile_Window_Evaluation_Cache (2 .. Last_Corner);
       --  Cache the limits for each corner and candidate window across forward/reverse lookahead passes.
-      Extrusion_Widths         : Block_Segment_Lengths (Corners_Index) := [others => 0.0 * mm];
-      Extrusion_Stops          : Block_Extrusion_Stops (Corners_Index) := [others => False];
-      Extrusion_Ceilings       : Block_Corner_Velocity_Limits (Corners_Index) := [others => 0.0 * mm / s];
-      Extrusion_Deviations     : Block_Segment_Lengths (Corners_Index) := [others => 0.0 * mm];
+      Reachable_Velocity_Memos : Reachable_Velocity_Memo_Cache (2 .. Last_Corner);
+      --  The latest reachability across each segment in each direction. Lookahead cleanup passes revisit most
+      --  segments with an unchanged neighbouring junction speed.
+      Extrusion_Widths         : Block_Segment_Lengths (1 .. Last_Corner) := [others => 0.0 * mm];
+      Extrusion_Stops          : Block_Extrusion_Stops (1 .. Last_Corner) := [others => False];
+      Extrusion_Ceilings       : Block_Corner_Velocity_Limits (1 .. Last_Corner) := [others => 0.0 * mm / s];
+      Extrusion_Deviations     : Block_Segment_Lengths (1 .. Last_Corner) := [others => 0.0 * mm];
 
       --  Corner_Blender
-      Original_Extrusion_Positions : Block_Segment_Lengths (Corners_Index);
+      Original_Extrusion_Positions : Block_Segment_Lengths (1 .. Last_Corner);
       --  Preserve commanded E while constructing geometry from XYZ alone, including exception recovery.
-      Corner_Derivative_Bounds     : Block_Primitive_Derivative_Bounds (Corners_Index);
+      Corner_Derivative_Bounds     : Block_Primitive_Derivative_Bounds (1 .. Last_Corner);
 
       --  Planner
-      Planning_Attempts : Block_Planning_Attempts (Finishing_Corners_Index);
+      Planning_Attempts : Block_Planning_Attempts (2 .. Last_Corner);
       --  Count certification retries per segment. Reset for each block and when falling back to a stopped path.
+      Suffix_E_Min, Suffix_E_Max : Block_Segment_Lengths (2 .. Last_Corner);
+      --  Bounds on the original remaining E trajectory, used to certify cumulative shifts after local untrimming.
    end record;
    --  Data needed while planning a block but not while executing it. One workspace is allocated per planner instance
    --  and reused after the corresponding Execution_Block has been dequeued.
@@ -523,11 +560,21 @@ private
       end case;
    end record;
 
+   procedure Plan_Fixed_Geometry
+     (Block     : aliased in out Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace : not null access Planning_Workspace);
+   --  Certify the supplied geometry, retaining the bounded retry and stopped recovery policy.
+
    procedure Plan_Kinematics
      (Block     : aliased in out Execution_Block;
       Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Workspace : not null access Planning_Workspace);
-   --  Solve junctions and profiles together, retrying failed certification at lower speeds and then with stops.
+   --  Certify junctions and profiles, then try stopping at each stereographic corner in a forward sweep.
+   --  Replan its two adjoining segments with the outer junctions fixed; keep only certified, faster pairs.
+   --  If that fails after the first segment, try stopping at the next corner as well, replanning three segments.
+   --  Keep the pair only if it beats both the current plan and stopping at the next corner alone.
+   --  Homing bypasses selection. This local search need not find the best combination of corner policies.
 
    function Extrusion_Deviation (Block : not null access constant Execution_Block) return Length;
 
@@ -572,6 +619,14 @@ private
    function Spatial_Primitive
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index)
       return Derived_Path_Primitive;
+
+   function Derived_Primitive_Point_At_Distance
+     (Block            : not null access constant Execution_Block;
+      Finishing_Corner : Finishing_Corners_Index;
+      Primitive        : Derived_Path_Primitive;
+      Distance         : Length) return Position;
+   --  Primitive_Point_At_Distance for a Primitive already returned by Spatial_Primitive (Block, Finishing_Corner), so
+   --  that callers sampling one primitive many times derive its helix once.
 
    function Extrusion_Segment_Valid
      (Block       : not null access constant Execution_Block;
@@ -667,7 +722,30 @@ private
       Window                  : Profile_Window;
       Max_Vel                 : Velocity;
       Allow_Extrusion_Overlap : Boolean := False) return Profile_Window_Evaluation;
-   --  Return mixed chain-rule limits and velocity ceiling for a candidate profile window.
+   --  Cache geometry, tangent-only limits and the constant-speed/motor ceiling for a candidate window.
+
+   function Profile_At_Peak
+     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity) return Window_Profile_Result;
+   --  Construct and certify a fixed-peak profile using a common time stretch of its velocity transitions.
+
+   function Profile_At_Peak
+     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity; Cache : in out Mixed_Derivative_Cache) return Window_Profile_Result;
+   --  Identical to the uncached form. Cache must only be shared between calls with the same Params and Eval.
+
+   function Generate_Window_Profile
+     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation;
+      Start_Vel, End_Vel : Velocity) return Window_Profile_Result;
+   --  Search feasible peak speeds for a fast certified profile, retaining the maximum-speed coast candidate.
+
+   function Reachable_Window_Velocity
+     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel : Velocity) return Velocity;
+   --  Search velocity changes using the same trajectory certificate as final profile generation.
+
+   function Identical (Left, Right : Velocity) return Boolean;
+   --  Compare representations, including the sign of zero, so a deterministic result is reused only for the
+   --  exact input that produced it.
 
    function Motor_Delta_Ceiling_For_Projection
      (Params : Kinematic_Parameters; Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map; Max_Vel : Velocity)

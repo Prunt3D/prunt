@@ -1,6 +1,17 @@
 with "config/prunt_config.gpr";
 project Prunt is
 
+   type Benchmark_Mode_Type is ("disabled", "enabled");
+   Benchmark_Mode : Benchmark_Mode_Type := external ("PRUNT_BENCHMARK_MODE", "disabled");
+   type Build_Profile_Kind is ("release", "validation", "development");
+   Build_Profile : Build_Profile_Kind := Prunt_Config.Build_Profile;
+   case Benchmark_Mode is
+      when "disabled" =>
+         null;
+      when "enabled" =>
+         Build_Profile := "release";
+   end case;
+
    for Languages use ("Ada", "Fortran", "C");
 
    for Library_Name use "prunt";
@@ -14,7 +25,7 @@ project Prunt is
       "gnatcoll_modifications_src/",
       "lapack_src/");
 
-   for Object_Dir use "obj/" & Prunt_Config.Build_Profile;
+   for Object_Dir use "obj/" & Build_Profile;
    for Create_Missing_Dirs use "True";
    for Library_Dir use "lib";
 
@@ -30,16 +41,14 @@ project Prunt is
          for Source_Dirs use Project'Source_Dirs & ("src/mockable_mocked");
    end case;
 
-   type Benchmark_Mode_Type is ("disabled", "enabled");
-   Benchmark_Mode : Benchmark_Mode_Type := external ("PRUNT_BENCHMARK_MODE", "disabled");
-
    Prunt_Release_Ada_Compiler_Switches :=
-     (--  TODO: Benchmark with -gnatp (disable all runtime checks)
+     ("-gnatp",  --  Planner units explicitly restore the checks needed for numerical recovery
+      "-gnateF", --  Enable floating-point overflow checking where unsuppressed
       "-flto=auto",
       "-fuse-linker-plugin",
       "-ffat-lto-objects",
-      "-gnatn", --  Enable inlining
-      "-O2");   --  TODO: Benchmark with O2 vs O3
+      "-gnatn2", --  Enable cross-unit inlining
+      "-O3");   --  Keep numerical kernels optimized with runtime checks enabled
 
    case Benchmark_Mode is
       when "disabled" =>
@@ -50,7 +59,7 @@ project Prunt is
    end case;
 
    Prunt_Extra_Ada_Compiler_Switches := ();
-   case Prunt_Config.Build_Profile is
+   case Build_Profile is
       when "release" =>
          Prunt_Extra_Ada_Compiler_Switches := Prunt_Release_Ada_Compiler_Switches;
 
@@ -126,7 +135,7 @@ project Prunt is
            "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
            "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
 
-      case Prunt_Config.Build_Profile is
+      case Build_Profile is
          when "release" =>
             for Default_Switches ("Fortran") use ("-O2");
          when others =>
@@ -145,7 +154,7 @@ project Prunt is
 
    package Binder is
       --  TODO: Do these propagate out or are they useless here?
-      case Prunt_Config.Build_Profile is
+      case Build_Profile is
          when "release" =>
             for Switches ("Ada") use
               ("-Es"); --  Symbolic traceback
@@ -160,7 +169,7 @@ project Prunt is
    end Binder;
 
    -- package Linker is
-   --    case Prunt_Config.Build_Profile is
+   --    case Build_Profile is
    --    when "release" =>
    --       for Switches ("Ada") use
    --         ("-flto=auto", --  Link time optimization

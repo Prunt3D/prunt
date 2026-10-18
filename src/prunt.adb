@@ -24,6 +24,9 @@ package body Prunt is
 
    pragma Extensions_Allowed (On);
 
+   --  Planner callers recover from overflow in these shared vector operations.
+   pragma Unsuppress (Overflow_Check);
+
    package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
    use Math;
 

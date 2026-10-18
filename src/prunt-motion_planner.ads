@@ -17,6 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+pragma Unsuppress (Overflow_Check);
+pragma Unsuppress (Range_Check);
+pragma Unsuppress (Division_Check);
+
 pragma Extensions_Allowed (On);
 
 --  This package provides the framework for the 5th-order (bounded crackle) motion planner implemented in the Planner
@@ -214,6 +219,16 @@ package Prunt.Motion_Planner is
       Scalar_Maxes : Scalar_Derivative_Limits := (others => <>)) return Mixed_Derivative_Limit_Result;
    --  Return scalar tangential limits after reserving axial derivative budget for unit-speed path curvature terms.
    --  Scalar_Maxes can restrict the budget to the derivative envelope of a particular generated profile.
+
+   function Mixed_Derivative_Time_Scale
+     (Params  : Kinematic_Parameters;
+      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel : Velocity;
+      Peaks   : Scalar_Derivative_Limits) return Dimensionless;
+   --  Return a certified inverse time stretch in [0, 1] for a fixed velocity change. Stretching every ramp
+   --  duration by 1 / Scale and multiplying crackle by Scale**4 preserves its velocity change. Its acceleration,
+   --  jerk, snap and crackle peaks scale by Scale, Scale**2, Scale**3 and Scale**4 respectively. Max_Vel is fixed;
+   --  zero means no positive time scale could be certified. Products are evaluated without intermediate overflow.
 
    type Max_Corners_Type is range 2 .. 2 ** 63 - 1;
 
@@ -427,6 +442,61 @@ private
       Region  : Constraint_Region;
       Index   : Integer;
    end record;
+
+   type Scaled_Nonnegative is record
+      Fraction : Dimensionless := 0.0;
+      Exponent : Integer := 0;
+   end record;
+   --  Fraction * Dimensionless'Machine_Radix ** Exponent. A nonzero Fraction is normalized as by 'Fraction.
+
+   type Mixed_Derivative_Axis_Coefficients is record
+      X1, X2, X3, X4, X5   : Scaled_Nonnegative;
+      Acceleration_Maximum : Scaled_Nonnegative;
+      Jerk_Maximum         : Scaled_Nonnegative;
+      Snap_Maximum         : Scaled_Nonnegative;
+      Crackle_Maximum      : Scaled_Nonnegative;
+   end record;
+   --  Decomposed unit-speed path derivative bounds and axial limits for one axis.
+
+   type Mixed_Derivative_Axis_Coefficient_Array is array (Axis_Name) of Mixed_Derivative_Axis_Coefficients;
+   type Mixed_Derivative_Axis_Flags is array (Axis_Name) of Boolean;
+
+   type Mixed_Derivative_Cache is record
+      Axes               : Mixed_Derivative_Axis_Coefficient_Array;
+      Axes_Filled        : Mixed_Derivative_Axis_Flags := [others => False];
+      Dimensionless_Axes : Mixed_Derivative_Axis_Flags := [others => False];
+      Velocity_Ceiling   : Velocity := 0.0 * mm / s;
+      Ceiling_Filled     : Boolean := False;
+      Ceiling_Usable     : Boolean := False;
+   end record;
+   --  Values that depend only on the kinematic parameters and path bounds, filled as a solve first needs them.
+   --  A cache must only be reused with identical parameters and bounds, such as across a search over one window.
+   --  Dimensionless_Axes marks coefficients whose nonzero values are in [2**-64, 2**64).
+
+   function Mixed_Derivative_Time_Scale
+     (Params  : Kinematic_Parameters;
+      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel : Velocity;
+      Peaks   : Scalar_Derivative_Limits;
+      Cache   : in out Mixed_Derivative_Cache) return Dimensionless;
+   --  Identical to the uncached form, but reuses decompositions across calls for the same Params and Bounds.
+
+   function Profile_Is_Valid
+     (Profile : Feedrate_Profile; Distance : Length; Start_Vel, End_Vel : Velocity; Max_Crackle : Crackle)
+      return Boolean;
+   --  Reject nonfinite or negative times, empty motion, and profiles that miss their distance or endpoint velocity.
+
+   function Profile_Is_Valid
+     (Profile                        : Feedrate_Profile;
+      Distance                       : Length;
+      Start_Vel, End_Vel             : Velocity;
+      Max_Crackle                    : Crackle;
+      Peak                           : Velocity;
+      Accel_Distance, Decel_Distance : Length) return Boolean;
+   --  Reuse the checked ramp evaluations when the caller already needed them to calculate coast time.
+
+   function Derivative_Limits_Are_Valid (Am : Acceleration; Jm : Jerk; Sm : Snap; Cm : Crackle) return Boolean;
+   --  Zero limits permit coasting, but negative or nonfinite limits are never meaningful.
 
    function Optimal_Profile_For_Distance_Internal
      (Start_Vel        : Velocity;

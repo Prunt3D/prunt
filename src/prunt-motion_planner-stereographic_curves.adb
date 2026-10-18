@@ -17,6 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+pragma Unsuppress (Overflow_Check);
+pragma Unsuppress (Range_Check);
+pragma Unsuppress (Division_Check);
+
 with Ada.Numerics;
 with Ada.Numerics.Generic_Complex_Types;
 with Prunt.LAPACK;
@@ -125,530 +130,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end loop;
       return Result;
    end Power_Basis;
-
-   function Base_Tangent_Range_Majorants
-     (Curve         : Stereographic_Curve;
-      Start_V       : Dimensionless;
-      End_V         : Dimensionless;
-      Highest_Order : Majorant_Order := Maximum_Majorant_Order)
-      return Axis_Majorants
-   is
-      Y                   : Chart_Majorants := [others => [others => 0.0]];
-      R2                  : Scalar_Majorants := [others => 0.0];
-      Inverse_Denominator : Scalar_Majorants := [others => 0.0];
-      Local               : Frame_Majorants := [others => [others => 0.0]];
-      Result              : Axis_Majorants := [others => [others => 0.0]];
-      Constant_Chart      : Boolean := True;
-
-      function Add_Product (Sum, Left, Right : Dimensionless) return Dimensionless;
-      --  Return Sum + Left * Right with upward rounding and saturation on overflow.
-
-      function Add_Product (Sum, Left, Right : Dimensionless) return Dimensionless is
-      begin
-         if Sum >= Dimensionless'Last or else Left >= Dimensionless'Last or else Right >= Dimensionless'Last then
-            return Dimensionless'Last;
-         elsif Left = 0.0 or else Right = 0.0 then
-            return Sum;
-         else
-            declare
-               --  Every quantity entering the majorant recurrences is nonnegative. Round each primitive upward: a
-               --  final blanket inflation cannot repair an underestimate that has already propagated through a
-               --  reciprocal or composition recurrence.
-               Product : constant Dimensionless := Up (Left * Right);
-               Value   : constant Dimensionless := Up (Sum + Product);
-            begin
-               if not Is_Finite (Product) or else not Is_Finite (Value) then
-                  return Dimensionless'Last;
-               else
-                  return Value;
-               end if;
-            end;
-         end if;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Add_Product;
-
-      function Divide_By_Positive (Numerator, Denominator : Interval) return Interval;
-      --  Enclose division by an interval that is known to be strictly positive.
-
-      function Divide_By_Positive (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Numerator.Valid or else not Denominator.Valid or else Denominator.Lower <= 0.0 then
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-         end if;
-         declare
-            --  The numerator may straddle zero, so evaluate all four endpoint quotients before taking the hull.
-            Q1 : constant Dimensionless := Numerator.Lower / Denominator.Lower;
-            Q2 : constant Dimensionless := Numerator.Lower / Denominator.Upper;
-            Q3 : constant Dimensionless := Numerator.Upper / Denominator.Lower;
-            Q4 : constant Dimensionless := Numerator.Upper / Denominator.Upper;
-         begin
-            return
-              Checked_Interval
-                (Down (Dimensionless'Min (Dimensionless'Min (Q1, Q2), Dimensionless'Min (Q3, Q4))),
-                 Up (Dimensionless'Max (Dimensionless'Max (Q1, Q2), Dimensionless'Max (Q3, Q4))));
-         end;
-      exception
-         when Constraint_Error =>
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-      end Divide_By_Positive;
-
-      function Constant_Tangent_Component_Bound (Axis : Axis_Name) return Dimensionless;
-      --  Bound one physical tangent component when the stereographic chart is constant.
-
-      function Constant_Tangent_Component_Bound (Axis : Axis_Name) return Dimensionless is
-         Y     : constant array (Chart_Component_Index) of Interval :=
-           [for C in Chart_Component_Index => Interval_Exact (Curve.Coefficients (0, C))];
-         R2    : Interval := Interval_Exact (0.0);
-         Local : array (Frame_Component_Index) of Interval := [others => Interval_Exact (0.0)];
-         Value : Interval := Interval_Exact (0.0);
-      begin
-         for C in Chart_Component_Index loop
-            R2 := Interval_Add (R2, Interval_Multiply (Y (C), Y (C)));
-         end loop;
-         --  Preserve the analytic nonnegative lower bound when squaring values very close to zero.
-         R2.Lower := Dimensionless'Max (0.0, R2.Lower);
-         declare
-            Denominator : constant Interval := Interval_Add (Interval_Exact (1.0), R2);
-         begin
-            Local (0) := Divide_By_Positive (Interval_Subtract (Interval_Exact (1.0), R2), Denominator);
-            for C in Chart_Component_Index loop
-               Local (C) := Divide_By_Positive (Interval_Multiply (Interval_Exact (2.0), Y (C)), Denominator);
-            end loop;
-         end;
-         for C in Frame_Component_Index loop
-            Value := Interval_Add (Value, Interval_Multiply (Interval_Exact (Curve.Frame (C) (Axis)), Local (C)));
-         end loop;
-         return Interval_Abs_Max (Value);
-      end Constant_Tangent_Component_Bound;
-
-      function Frame_Axis_Speed_Bound (Axis : Axis_Name) return Dimensionless;
-      --  Bound a physical-axis component by the outward-rounded norm of its frame row.
-
-      function Frame_Axis_Speed_Bound (Axis : Axis_Name) return Dimensionless is
-         Square_Sum : Interval := Interval_Exact (0.0);
-      begin
-         --  For a unit local tangent, Cauchy--Schwarz bounds one physical component by the norm of the corresponding
-         --  stored frame row.
-         for C in Frame_Component_Index loop
-            declare
-               Value : constant Interval := Interval_Exact (Curve.Frame (C) (Axis));
-            begin
-               Square_Sum := Interval_Add (Square_Sum, Interval_Multiply (Value, Value));
-            end;
-         end loop;
-         if not Square_Sum.Valid or else Square_Sum.Upper < 0.0 then
-            return Dimensionless'Last;
-         else
-            return Certified_Upper_Square_Root (Dimensionless'Max (0.0, Square_Sum.Upper));
-         end if;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Frame_Axis_Speed_Bound;
-
-      function Chart_Derivative_Bound (Component : Chart_Component_Index; Order : Natural) return Dimensionless;
-      --  Bound a chart component derivative over the requested parameter interval.
-
-      function Chart_Derivative_Bound (Component : Chart_Component_Index; Order : Natural) return Dimensionless is
-         type Interval_Bernstein is array (Chart_Coefficient_Index) of Interval;
-
-         Work   : Interval_Bernstein :=
-           [for I in Chart_Coefficient_Index => Interval_Exact (Curve.Coefficients (I, Component))];
-         Degree : Natural := Fixed_Chart_Degree;
-
-         function Unit_Interval (Value : Interval) return Interval;
-         --  Intersect a valid interval with the analytically known unit interval.
-
-         function Unit_Interval (Value : Interval) return Interval is
-         begin
-            if not Value.Valid or else Value.Upper < 0.0 or else Value.Lower > 1.0 then
-               return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-            else
-               --  The subdivision parameters are analytically in [0, 1]. Intersecting with that known domain avoids
-               --  retaining the harmless one-ulp spill introduced by outward subtraction.
-               return Checked_Interval (Dimensionless'Max (0.0, Value.Lower), Dimensionless'Min (1.0, Value.Upper));
-            end if;
-         end Unit_Interval;
-
-         function Divide_Positive (Numerator, Denominator : Interval) return Interval;
-         --  Divide nonnegative intervals while requiring a strictly positive denominator.
-
-         function Divide_Positive (Numerator, Denominator : Interval) return Interval is
-         begin
-            if not Numerator.Valid
-              or else not Denominator.Valid
-              or else Numerator.Lower < 0.0
-              or else Denominator.Lower <= 0.0
-            then
-               return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-            else
-               return
-                 Checked_Interval
-                   (Down (Numerator.Lower / Denominator.Upper), Up (Numerator.Upper / Denominator.Lower));
-            end if;
-         exception
-            when Constraint_Error =>
-               return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-         end Divide_Positive;
-
-         function Scale_Nonnegative (Value, Scale : Interval) return Interval;
-         --  Multiply an interval by a scale interval whose lower bound is nonnegative.
-
-         function Scale_Nonnegative (Value, Scale : Interval) return Interval is
-         begin
-            if not Value.Valid or else not Scale.Valid or else Scale.Lower < 0.0 then
-               return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-            elsif Scale.Upper = 0.0 or else (Value.Lower = 0.0 and then Value.Upper = 0.0) then
-               return Interval_Exact (0.0);
-            elsif Value.Lower >= 0.0 then
-               return Checked_Interval (Down (Value.Lower * Scale.Lower), Up (Value.Upper * Scale.Upper));
-            elsif Value.Upper <= 0.0 then
-               return Checked_Interval (Down (Value.Lower * Scale.Upper), Up (Value.Upper * Scale.Lower));
-            else
-               return Checked_Interval (Down (Value.Lower * Scale.Upper), Up (Value.Upper * Scale.Upper));
-            end if;
-         exception
-            when Constraint_Error =>
-               return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-         end Scale_Nonnegative;
-
-         function Interpolate (Left, Right, T : Interval) return Interval;
-         --  Interpolate two intervals at an interval parameter constrained to [0, 1].
-
-         function Interpolate (Left, Right, T : Interval) return Interval is
-            Clamped_T   : constant Interval := Unit_Interval (T);
-            One_Minus_T : constant Interval := Unit_Interval (Interval_Subtract (Interval_Exact (1.0), Clamped_T));
-         begin
-            return Interval_Add (Scale_Nonnegative (Left, One_Minus_T), Scale_Nonnegative (Right, Clamped_T));
-         end Interpolate;
-
-         procedure Keep_Left (T : Interval);
-         --  Replace Work with the left part of its de Casteljau subdivision at T.
-
-         procedure Keep_Left (T : Interval) is
-            Triangle : array (Chart_Coefficient_Index, Chart_Coefficient_Index) of Interval :=
-              [others => [others => Interval_Exact (0.0)]];
-         begin
-            for I in 0 .. Degree loop
-               Triangle (0, I) := Work (I);
-            end loop;
-            for Level in 1 .. Degree loop
-               for I in 0 .. Degree - Level loop
-                  Triangle (Level, I) := Interpolate (Triangle (Level - 1, I), Triangle (Level - 1, I + 1), T);
-               end loop;
-            end loop;
-            for I in 0 .. Degree loop
-               Work (I) := Triangle (I, 0);
-            end loop;
-         end Keep_Left;
-
-         procedure Keep_Right (T : Interval);
-         --  Replace Work with the right part of its de Casteljau subdivision at T.
-
-         procedure Keep_Right (T : Interval) is
-            Triangle : array (Chart_Coefficient_Index, Chart_Coefficient_Index) of Interval :=
-              [others => [others => Interval_Exact (0.0)]];
-         begin
-            for I in 0 .. Degree loop
-               Triangle (0, I) := Work (I);
-            end loop;
-            for Level in 1 .. Degree loop
-               for I in 0 .. Degree - Level loop
-                  Triangle (Level, I) := Interpolate (Triangle (Level - 1, I), Triangle (Level - 1, I + 1), T);
-               end loop;
-            end loop;
-            for I in 0 .. Degree loop
-               Work (Degree - I) := Triangle (I, Degree - I);
-            end loop;
-         end Keep_Right;
-      begin
-         if Order > Fixed_Chart_Degree then
-            return 0.0;
-         end if;
-         --  Repeated Bernstein differences form the requested derivative control polygon:
-         --
-         --     bᵏᵢ = n!/(n-k)! · Δᵏbᵢ.
-         --
-         --  The stored majorants use Taylor coefficients, so divide the final hull by k!.
-         for K in 1 .. Order loop
-            for I in 0 .. Degree - 1 loop
-               Work (I) :=
-                 Scale_Nonnegative
-                   (Interval_Subtract (Work (I + 1), Work (I)), Interval_Exact (Dimensionless (Degree)));
-            end loop;
-            Degree := Degree - 1;
-         end loop;
-         if Start_V > 0.0 then
-            --  First retain [Start_V, 1], then map End_V into that restricted polynomial and retain its left part.
-            Keep_Right (Interval_Exact (Start_V));
-         end if;
-         if End_V < 1.0 then
-            Keep_Left
-              (Unit_Interval
-                 (Divide_Positive
-                    (Unit_Interval (Interval_Subtract (Interval_Exact (End_V), Interval_Exact (Start_V))),
-                     Interval_Subtract (Interval_Exact (1.0), Interval_Exact (Start_V)))));
-         end if;
-         declare
-            Bound : Dimensionless := 0.0;
-         begin
-            for I in 0 .. Degree loop
-               if not Work (I).Valid then
-                  return Dimensionless'Last;
-               end if;
-               Bound := Dimensionless'Max (Bound, Up (Interval_Abs_Max (Work (I)) / Factorial (Order)));
-            end loop;
-            return Bound;
-         end;
-      end Chart_Derivative_Bound;
-   begin
-      if Curve.Evaluator_Data.Kind = Zero_Curve_Kind then
-         return Result;
-      end if;
-
-      for C in Chart_Component_Index loop
-         for I in 1 .. Fixed_Chart_Degree loop
-            Constant_Chart := Constant_Chart and then Curve.Coefficients (I, C) = Curve.Coefficients (0, C);
-         end loop;
-      end loop;
-
-      --  Restrict each derivative control polygon directly to the requested range. This is fixed work (three de
-      --  Casteljau triangles), unlike the former 128-way interval-Taylor subdivision.
-      for C in Chart_Component_Index loop
-         for K in 0 .. Natural'Min (Fixed_Chart_Degree, Highest_Order) loop
-            Y (C) (K) := Chart_Derivative_Bound (C, K);
-         end loop;
-      end loop;
-
-      --  For r²(V) = Y(V)·Y(V), the Taylor-majorant product recurrence is
-      --
-      --     [r²]ₖ ≤ Σ꜀ Σⱼ₌₀ᵏ [Y꜀]ⱼ·[Y꜀]ₖ₋ⱼ.
-      for K in 0 .. Highest_Order loop
-         for C in Chart_Component_Index loop
-            for J in 0 .. K loop
-               R2 (K) := Add_Product (R2 (K), Y (C) (J), Y (C) (K - J));
-            end loop;
-         end loop;
-      end loop;
-
-      --  D = 1 + dot(Y,Y) is at least one everywhere. The reciprocal recurrence can therefore omit division by D(0)
-      --  when forming an upper majorant.
-      Inverse_Denominator (0) := 1.0;
-      for K in 1 .. Highest_Order loop
-         for J in 1 .. K loop
-            Inverse_Denominator (K) := Add_Product (Inverse_Denominator (K), R2 (J), Inverse_Denominator (K - J));
-         end loop;
-      end loop;
-
-      --  Apply the inverse-stereographic formula
-      --
-      --     S(Y) = ((1 - Y·Y), 2Y) / (1 + Y·Y).
-      --
-      --  For derivative orders k > 0, (1 - r²)/(1 + r²) = 2/(1 + r²) - 1, so the constant -1 disappears.
-      Local (0) (0) := 1.0;
-      for K in 1 .. Highest_Order loop
-         Local (0) (K) := Up (2.0 * Inverse_Denominator (K));
-      end loop;
-      for C in Chart_Component_Index loop
-         for K in 0 .. Highest_Order loop
-            for J in 0 .. K loop
-               Local (C) (K) := Add_Product (Local (C) (K), 2.0 * Y (C) (J), Inverse_Denominator (K - J));
-            end loop;
-         end loop;
-      end loop;
-
-      for Axis in Axis_Name loop
-         if Constant_Chart then
-            Result (Axis) (0) := Constant_Tangent_Component_Bound (Axis);
-         else
-            --  The local inverse-stereographic vector is exactly unit length, but the stored floating-point frame is
-            --  only certified to be approximately orthonormal. Its outward row norm is the tight physical-axis bound;
-            --  an exact 1.0 shortcut can otherwise miss by a few ulps.
-            Result (Axis) (0) := Frame_Axis_Speed_Bound (Axis);
-         end if;
-         for K in 1 .. Highest_Order loop
-            for C in Frame_Component_Index loop
-               Result (Axis) (K) := Add_Product (Result (Axis) (K), abs Curve.Frame (C) (Axis), Local (C) (K));
-            end loop;
-         end loop;
-      end loop;
-      return Result;
-   exception
-      when Constraint_Error =>
-         return [others => [others => Dimensionless'Last]];
-   end Base_Tangent_Range_Majorants;
-
-   function Tangent_Range_Majorants
-     (Curve          : Stereographic_Curve;
-      Start_U, End_U : Dimensionless;
-      Highest_Order  : Majorant_Order := Maximum_Majorant_Order;
-      Base_Majorants : access constant Axis_Majorants := null) return Axis_Majorants
-   is
-      Warp        : constant Dimensionless := Curve.Warp_Factor;
-      Result      : Axis_Majorants := [others => [others => 0.0]];
-      Warp_Series : Scalar_Majorants := [others => 0.0];
-
-      function Add_Product (Sum, Left, Right : Dimensionless) return Dimensionless;
-      --  Return Sum + Left * Right with upward rounding and saturation on overflow.
-
-      function Add_Product (Sum, Left, Right : Dimensionless) return Dimensionless is
-      begin
-         if Sum >= Dimensionless'Last or else Left >= Dimensionless'Last or else Right >= Dimensionless'Last then
-            return Dimensionless'Last;
-         elsif Left = 0.0 or else Right = 0.0 then
-            return Sum;
-         else
-            declare
-               Product : constant Dimensionless := Up (Left * Right);
-               Value   : constant Dimensionless := Up (Sum + Product);
-            begin
-               return (if Is_Finite (Product) and then Is_Finite (Value) then Value else Dimensionless'Last);
-            end;
-         end if;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Add_Product;
-
-      function Divide_Positive (Numerator, Denominator : Interval) return Interval;
-      --  Divide nonnegative intervals while requiring a strictly positive denominator.
-
-      function Divide_Positive (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Numerator.Valid
-           or else not Denominator.Valid
-           or else Numerator.Lower < 0.0
-           or else Denominator.Lower <= 0.0
-         then
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-         else
-            return
-              Checked_Interval (Down (Numerator.Lower / Denominator.Upper), Up (Numerator.Upper / Denominator.Lower));
-         end if;
-      exception
-         when Constraint_Error =>
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-      end Divide_Positive;
-
-      function Warp_Value_Interval (U : Dimensionless) return Interval;
-      --  Enclose the warped chart parameter corresponding to U.
-
-      function Warp_Value_Interval (U : Dimensionless) return Interval is
-         U_Value     : constant Interval := Interval_Exact (U);
-         Warp_Value  : constant Interval := Interval_Exact (Warp);
-         Denominator : Interval;
-      begin
-         if U <= 0.0 then
-            return Interval_Exact (0.0);
-         elsif U >= 1.0 then
-            return Interval_Exact (1.0);
-         end if;
-         --  Evaluate V(U) = W·U/(1 + (W - 1)·U) with outward-rounded interval primitives.
-         Denominator :=
-           Interval_Add
-             (Interval_Exact (1.0), Interval_Multiply (Interval_Subtract (Warp_Value, Interval_Exact (1.0)), U_Value));
-         return Divide_Positive (Interval_Multiply (Warp_Value, U_Value), Denominator);
-      end Warp_Value_Interval;
-
-      function Base_For_Range return Axis_Majorants;
-      --  Return supplied base majorants or construct them for the warped range.
-
-      function Base_For_Range return Axis_Majorants is
-      begin
-         if Base_Majorants /= null then
-            return Base_Majorants.all;
-         end if;
-
-         declare
-            Start_V_Interval : constant Interval := Warp_Value_Interval (Start_U);
-            End_V_Interval   : constant Interval := Warp_Value_Interval (End_U);
-            Start_V          : constant Dimensionless := Dimensionless'Max (0.0, Start_V_Interval.Lower);
-            End_V            : constant Dimensionless := Dimensionless'Min (1.0, End_V_Interval.Upper);
-         begin
-            if Start_V_Interval.Valid and then End_V_Interval.Valid and then Start_V <= End_V then
-               return Base_Tangent_Range_Majorants (Curve, Start_V, End_V, Highest_Order);
-            else
-               return [others => [others => Dimensionless'Last]];
-            end if;
-         end;
-      end Base_For_Range;
-
-      Base : constant Axis_Majorants := Base_For_Range;
-   begin
-      if not Is_Finite (Warp) or else Warp <= 0.0 then
-         return [others => [others => Dimensionless'Last]];
-      end if;
-      if Curve.Evaluator_Data.Kind = Zero_Curve_Kind or else Warp = 1.0 then
-         return Base;
-      end if;
-
-      declare
-         Warp_Offset     : constant Interval := Interval_Subtract (Interval_Exact (Warp), Interval_Exact (1.0));
-         Q_Left          : constant Interval :=
-           Interval_Add (Interval_Exact (1.0), Interval_Multiply (Warp_Offset, Interval_Exact (Start_U)));
-         Q_Right         : constant Interval :=
-           Interval_Add (Interval_Exact (1.0), Interval_Multiply (Warp_Offset, Interval_Exact (End_U)));
-         --  Q(U) = 1 + (W - 1)·U is affine, so the lesser outward-rounded endpoint lower bound applies over the
-         --  complete requested range.
-         Q_Min           : constant Dimensionless := Dimensionless'Min (Q_Left.Lower, Q_Right.Lower);
-         Warp_Difference : constant Dimensionless :=
-           Interval_Abs_Max (Interval_Subtract (Interval_Exact (1.0), Interval_Exact (Warp)));
-         Delta_Power     : Dimensionless := 1.0;
-         Q_Power         : Dimensionless := Down (Q_Min * Q_Min);
-      begin
-         if not Q_Left.Valid
-           or else not Q_Right.Valid
-           or else Warp <= 0.0
-           or else Q_Min <= 0.0
-           or else not Is_Finite (Warp_Difference)
-         then
-            return [others => [others => Dimensionless'Last]];
-         end if;
-         --  For k ≥ 1, the Taylor coefficient of V(U) = W·U/Q(U) has magnitude
-         --
-         --     [V]ₖ ≤ W·|1 - W|ᵏ⁻¹ / Q_Minᵏ⁺¹.
-         for K in 1 .. Highest_Order loop
-            if Q_Power <= 0.0 then
-               return [others => [others => Dimensionless'Last]];
-            end if;
-            Warp_Series (K) := Up (Up (Warp * Delta_Power) / Q_Power);
-            Delta_Power := Up (Delta_Power * Warp_Difference);
-            Q_Power := Down (Q_Power * Q_Min);
-         end loop;
-      end;
-
-      declare
-         type Composition_Power_Array is array (Majorant_Order) of Scalar_Majorants;
-         Powers : Composition_Power_Array := [others => [others => 0.0]];
-      begin
-         --  Powers(j, n) bounds the nth Taylor coefficient of (V(U) - V₀)ʲ. Composing the base tangent series uses
-         --
-         --     [T∘V]ₙ ≤ Σⱼ₌₀ⁿ [T]ⱼ·[ΔVʲ]ₙ.
-         Powers (0) (0) := 1.0;
-         for J in 1 .. Highest_Order loop
-            for N in J .. Highest_Order loop
-               for K in 1 .. N loop
-                  Powers (J) (N) := Add_Product (Powers (J) (N), Powers (J - 1) (N - K), Warp_Series (K));
-               end loop;
-            end loop;
-         end loop;
-
-         for Axis in Axis_Name loop
-            Result (Axis) (0) := Base (Axis) (0);
-            for J in 1 .. Highest_Order loop
-               for N in J .. Highest_Order loop
-                  Result (Axis) (N) := Add_Product (Result (Axis) (N), Base (Axis) (J), Powers (J) (N));
-               end loop;
-            end loop;
-         end loop;
-      end;
-      return Result;
-   exception
-      when Constraint_Error =>
-         return [others => [others => Dimensionless'Last]];
-   end Tangent_Range_Majorants;
 
    function Is_Finite (Value : Dimensionless) return Boolean is
    begin
@@ -1299,21 +780,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end if;
    end Warp_Parameter;
 
-   function Unwarp_Parameter (V, Warp_Factor : Dimensionless) return Dimensionless is
-   begin
-      if V <= 0.0 then
-         return 0.0;
-      elsif V >= 1.0 then
-         return 1.0;
-      else
-         declare
-            Result : constant Dimensionless := V / (Warp_Factor * (1.0 - V) + V);
-         begin
-            return Dimensionless'Max (0.0, Dimensionless'Min (1.0, Result));
-         end;
-      end if;
-   end Unwarp_Parameter;
-
    function Tangent_At
      (Frame : Frame_Vector_Array; Coefficients : Bernstein_Chart; Warp_Factor, U : Dimensionless) return Position_Scale
    is
@@ -1321,32 +787,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    begin
       return Frame_Vector (Frame, Stereographic (Chart_Value (Coefficients, V)));
    end Tangent_At;
-
-   function Integrate_GL16
-     (Frame : Frame_Vector_Array; Coefficients : Bernstein_Chart; Warp_Factor, A, B : Dimensionless)
-      return Position_Scale
-   is
-      Result : Position_Scale := [others => 0.0];
-      Middle : constant Dimensionless := 0.5 * (A + B);
-      Half   : constant Dimensionless := 0.5 * (B - A);
-   begin
-      if A = B then
-         return Result;
-      end if;
-
-      --  Map the positive and negative GL16 nodes from [-1, 1] onto [A, B]. Pairing them preserves symmetry.
-      for I in GL16_Positive_Index loop
-         declare
-            Left  : constant Position_Scale :=
-              Tangent_At (Frame, Coefficients, Warp_Factor, Middle - Half * GL16_Nodes (I));
-            Right : constant Position_Scale :=
-              Tangent_At (Frame, Coefficients, Warp_Factor, Middle + Half * GL16_Nodes (I));
-         begin
-            Result := Result + (Left + Right) * Dimensionless (Half * GL16_Weights (I));
-         end;
-      end loop;
-      return Result;
-   end Integrate_GL16;
 
    function Roundoff_Padding (Value : Dimensionless) return Dimensionless;
    pragma Inline (Roundoff_Padding);
@@ -1357,10 +797,25 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       return (if Relative > Dimensionless'Model_Small then Relative else Dimensionless'Model_Small);
    end Roundoff_Padding;
 
+   function Inflate_Finite (Value : Dimensionless; Upward : Boolean) return Dimensionless;
+   pragma Inline (Inflate_Finite);
+   --  Callers establish |Value| <= Last/2. Two model epsilons (or Model_Small near zero) exceed one ulp,
+   --  so this bounded kernel needs neither an overflow check nor an Adjacent fallback.
+
+   function Inflate_Finite (Value : Dimensionless; Upward : Boolean) return Dimensionless is
+      pragma Suppress (Overflow_Check);
+      Padding : constant Dimensionless :=
+        Dimensionless'Max (2.0 * Dimensionless'Model_Epsilon * abs Value, Dimensionless'Model_Small);
+   begin
+      return (if Upward then Value + Padding else Value - Padding);
+   end Inflate_Finite;
+
    function Down (Value : Dimensionless) return Dimensionless is
       Candidate : Dimensionless;
    begin
-      if Value <= -Dimensionless'Last then
+      if Value >= -Dimensionless'Last / 2.0 and then Value <= Dimensionless'Last / 2.0 then
+         return Inflate_Finite (Value, False);
+      elsif Value <= -Dimensionless'Last then
          return -Dimensionless'Last;
       end if;
       --  Move by at least two model epsilons, falling back to Adjacent when subtraction rounds back to Value.
@@ -1371,7 +826,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    function Up (Value : Dimensionless) return Dimensionless is
       Candidate : Dimensionless;
    begin
-      if Value >= Dimensionless'Last then
+      if Value >= -Dimensionless'Last / 2.0 and then Value <= Dimensionless'Last / 2.0 then
+         return Inflate_Finite (Value, True);
+      elsif Value >= Dimensionless'Last then
          return Dimensionless'Last;
       end if;
       --  Move by at least two model epsilons, falling back to Adjacent when addition rounds back to Value.
@@ -1386,8 +843,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
    procedure Inflate_Finite_Endpoints (Lower, Upper : in out Dimensionless) is
    begin
-      Lower := Lower - Roundoff_Padding (Lower);
-      Upper := Upper + Roundoff_Padding (Upper);
+      Lower := Inflate_Finite (Lower, False);
+      Upper := Inflate_Finite (Upper, True);
    end Inflate_Finite_Endpoints;
 
    function Checked_Interval (Lower, Upper : Dimensionless; Valid : Boolean := True) return Interval is
@@ -1443,13 +900,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       return Interval_Add (Left, Interval_Negate (Right));
    end Interval_Subtract;
 
-   procedure Interval_Product_Extrema
-     (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless);
+   procedure Interval_Product_Extrema (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless);
    pragma Inline (Interval_Product_Extrema);
    --  Form the extremal floating-point corner products. Callers enclose roundoff and handle possible overflow.
 
-   procedure Interval_Product_Extrema
-     (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless) is
+   procedure Interval_Product_Extrema (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless) is
    begin
       --  Except when both intervals span zero, their signs identify the two corner products which attain the
       --  product interval's extrema. Avoid forming the other two products and the four-way min/max in the common
@@ -1542,8 +997,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       declare
          Numerator_Centre   : constant Dimensionless := Dimensionless (Numerator);
          Denominator_Centre : constant Dimensionless := Dimensionless (Denominator);
-         Numerator_Bound    : constant Interval :=
-           Checked_Interval (Down (Numerator_Centre), Up (Numerator_Centre));
+         Numerator_Bound    : constant Interval := Checked_Interval (Down (Numerator_Centre), Up (Numerator_Centre));
          Denominator_Bound  : constant Interval :=
            Checked_Interval (Down (Denominator_Centre), Up (Denominator_Centre));
       begin
@@ -1587,9 +1041,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   else (Lower => Down (Centre), Upper => Up (Centre)));
             begin
                Result (Binomial_Index (N, K)) :=
-                 (Factor => Factor,
+                 (Factor     => Factor,
                   Reciprocal =>
-                    (if Value = 1 then Factor
+                    (if Value = 1
+                     then Factor
                      else (Lower => Down (1.0 / Factor.Upper), Upper => Up (1.0 / Factor.Lower))));
             end;
          end loop;
@@ -1602,16 +1057,19 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    --  reciprocals, instead of repeatedly converting 128-bit integers and dividing during every polynomial product.
 
    function Multiply_Bernstein (Left, Right : Interval_Polynomial) return Interval_Polynomial is
-      Degree       : constant Natural := Left'Last + Right'Last;
-      Scaled_Left  : Interval_Polynomial (Left'Range);
-      Scaled_Right : Interval_Polynomial (Right'Range);
-      Result       : Interval_Polynomial (0 .. Degree) := [others => Interval_Exact (0.0)];
-      Left_Max     : Dimensionless := 0.0;
-      Right_Max    : Dimensionless := 0.0;
+      Degree          : constant Natural := Left'Last + Right'Last;
+      Scaled_Left     : Interval_Polynomial (Left'Range);
+      Scaled_Right    : Interval_Polynomial (Right'Range);
+      Result          : Interval_Polynomial (0 .. Degree) := [others => Interval_Exact (0.0)];
+      Left_Max        : Dimensionless := 0.0;
+      Right_Max       : Dimensionless := 0.0;
+      Invalid_Product : constant Interval :=
+        (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
 
       function Usable (Value : Interval) return Boolean
       is (Value.Valid
-          and then Value.Lower > -Dimensionless'Last and then Value.Upper < Dimensionless'Last
+          and then Value.Lower > -Dimensionless'Last
+          and then Value.Upper < Dimensionless'Last
           and then Value.Lower <= Value.Upper);
       --  Saturated endpoints must trigger fallback before a later scale or cancellation could make them finite.
 
@@ -1623,11 +1081,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       function Scale_By_Positive (Value : Interval; Factor : Positive_Endpoints) return Interval is
          Lower, Upper : Dimensionless;
       begin
-         if not Value.Valid
-           or else (Factor.Lower = 1.0 and then Factor.Upper = 1.0)
-           or else (Value.Lower = 0.0 and then Value.Upper = 0.0)
-         then
+         if not Value.Valid or else (Value.Lower = 0.0 and then Value.Upper = 0.0) then
             return Value;
+         elsif Factor.Lower = 1.0 and then Factor.Upper = 1.0 then
+            return (if Usable (Value) then Value else Invalid_Product);
          elsif Value.Lower = 1.0 and then Value.Upper = 1.0 then
             return (Lower => Factor.Lower, Upper => Factor.Upper, Valid => True);
          elsif Value.Lower = -1.0 and then Value.Upper = -1.0 then
@@ -1639,9 +1096,37 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Inflate_Finite_Endpoints (Lower, Upper);
             return (Lower => Lower, Upper => Upper, Valid => True);
          else
-            return Interval_Multiply (Value, (Lower => Factor.Lower, Upper => Factor.Upper, Valid => True));
+            declare
+               Product : constant Interval :=
+                 Interval_Multiply (Value, (Lower => Factor.Lower, Upper => Factor.Upper, Valid => True));
+            begin
+               return (if Usable (Product) then Product else Invalid_Product);
+            end;
          end if;
       end Scale_By_Positive;
+
+      function Scale_Bounded_By_Reciprocal (Value : Interval; Factor : Positive_Endpoints) return Interval;
+      pragma Inline (Scale_Bounded_By_Reciprocal);
+
+      function Scale_Bounded_By_Reciprocal (Value : Interval; Factor : Positive_Endpoints) return Interval is
+         pragma Suppress (Overflow_Check);
+         Lower, Upper : Dimensionless;
+         --  The convolution preflight and outward padding leave every result below Last/2 in magnitude.
+         --  Binomial reciprocals lie in (0, 1], so this final scaling cannot overflow or invalidate an interval.
+      begin
+         if (Factor.Lower = 1.0 and then Factor.Upper = 1.0) or else (Value.Lower = 0.0 and then Value.Upper = 0.0)
+         then
+            return Value;
+         elsif Value.Lower = 1.0 and then Value.Upper = 1.0 then
+            return (Lower => Factor.Lower, Upper => Factor.Upper, Valid => True);
+         elsif Value.Lower = -1.0 and then Value.Upper = -1.0 then
+            return (Lower => -Factor.Upper, Upper => -Factor.Lower, Valid => True);
+         end if;
+         Lower := Value.Lower * (if Value.Lower < 0.0 then Factor.Upper else Factor.Lower);
+         Upper := Value.Upper * (if Value.Upper < 0.0 then Factor.Lower else Factor.Upper);
+         Inflate_Finite_Endpoints (Lower, Upper);
+         return (Lower => Lower, Upper => Upper, Valid => True);
+      end Scale_Bounded_By_Reciprocal;
 
       procedure Accumulate_Product (Sum : in out Interval; Left, Right : Interval);
       pragma Inline (Accumulate_Product);
@@ -1650,7 +1135,49 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --  invariants or constructing temporary interval records at each term.
 
       procedure Accumulate_Product (Sum : in out Interval; Left, Right : Interval) is
+         pragma Suppress (Overflow_Check);
          Lower_Product, Upper_Product : Dimensionless;
+
+         procedure Bounded_Product_Extrema (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless);
+         pragma Inline (Bounded_Product_Extrema);
+         --  The convolution preflight bounds every corner product, including products not selected as extrema.
+
+         procedure Bounded_Product_Extrema (Left, Right : Interval; Lower_Product, Upper_Product : out Dimensionless)
+         is
+         begin
+            if Left.Lower >= 0.0 then
+               if Right.Lower >= 0.0 then
+                  Lower_Product := Left.Lower * Right.Lower;
+                  Upper_Product := Left.Upper * Right.Upper;
+               elsif Right.Upper <= 0.0 then
+                  Lower_Product := Left.Upper * Right.Lower;
+                  Upper_Product := Left.Lower * Right.Upper;
+               else
+                  Lower_Product := Left.Upper * Right.Lower;
+                  Upper_Product := Left.Upper * Right.Upper;
+               end if;
+            elsif Left.Upper <= 0.0 then
+               if Right.Lower >= 0.0 then
+                  Lower_Product := Left.Lower * Right.Upper;
+                  Upper_Product := Left.Upper * Right.Lower;
+               elsif Right.Upper <= 0.0 then
+                  Lower_Product := Left.Upper * Right.Upper;
+                  Upper_Product := Left.Lower * Right.Lower;
+               else
+                  Lower_Product := Left.Lower * Right.Upper;
+                  Upper_Product := Left.Lower * Right.Lower;
+               end if;
+            elsif Right.Lower >= 0.0 then
+               Lower_Product := Left.Lower * Right.Upper;
+               Upper_Product := Left.Upper * Right.Upper;
+            elsif Right.Upper <= 0.0 then
+               Lower_Product := Left.Upper * Right.Lower;
+               Upper_Product := Left.Lower * Right.Lower;
+            else
+               Lower_Product := Dimensionless'Min (Left.Lower * Right.Upper, Left.Upper * Right.Lower);
+               Upper_Product := Dimensionless'Max (Left.Lower * Right.Lower, Left.Upper * Right.Upper);
+            end if;
+         end Bounded_Product_Extrema;
       begin
          --  The outer loop already skips exact-zero left controls.
          if Right.Lower = 0.0 and then Right.Upper = 0.0 then
@@ -1668,7 +1195,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Lower_Product := -Left.Upper;
             Upper_Product := -Left.Lower;
          else
-            Interval_Product_Extrema (Left, Right, Lower_Product, Upper_Product);
+            Bounded_Product_Extrema (Left, Right, Lower_Product, Upper_Product);
             Inflate_Finite_Endpoints (Lower_Product, Upper_Product);
          end if;
          if Sum.Lower = 0.0 and then Sum.Upper = 0.0 then
@@ -1690,9 +1217,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          for I in Left'Range loop
             for J in Right'Range loop
                declare
-                  Weight : constant Interval :=
-                    Bernstein_Product_Weight (Left'Last, I, Right'Last, J, Degree, I + J);
-                  Term : Interval := Interval_Multiply (Left (I), Right (J));
+                  Weight : constant Interval := Bernstein_Product_Weight (Left'Last, I, Right'Last, J, Degree, I + J);
+                  Term   : Interval := Interval_Multiply (Left (I), Right (J));
                begin
                   if not Usable (Term) then
                      return
@@ -1723,14 +1249,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end if;
       for I in Left'Range loop
          Scaled_Left (I) := Scale_By_Positive (Left (I), Binomial_Scales (Binomial_Index (Left'Last, I)).Factor);
-         if not Usable (Scaled_Left (I)) then
+         if not Scaled_Left (I).Valid then
             return Unscaled_Product;
          end if;
          Left_Max := Dimensionless'Max (Left_Max, Interval_Abs_Max (Scaled_Left (I)));
       end loop;
       for J in Right'Range loop
          Scaled_Right (J) := Scale_By_Positive (Right (J), Binomial_Scales (Binomial_Index (Right'Last, J)).Factor);
-         if not Usable (Scaled_Right (J)) then
+         if not Scaled_Right (J).Valid then
             return Unscaled_Product;
          end if;
          Right_Max := Dimensionless'Max (Right_Max, Interval_Abs_Max (Scaled_Right (J)));
@@ -1753,19 +1279,24 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             return Unscaled_Product;
          end if;
       end;
-      for I in Left'Range loop
-         if Scaled_Left (I).Lower /= 0.0 or else Scaled_Left (I).Upper /= 0.0 then
-            for J in Right'Range loop
-               Accumulate_Product (Result (I + J), Scaled_Left (I), Scaled_Right (J));
-            end loop;
-         end if;
-      end loop;
+      declare
+         pragma Suppress (Index_Check);
+         pragma Suppress (Range_Check);
+         pragma Suppress (Overflow_Check);
+         --  I and J stay in the corresponding operand ranges; 0 <= I+J <= Degree, whose checked sum was
+         --  computed above. The finite-product preflight also bounds every intermediate of Accumulate_Product.
+      begin
+         for I in Left'Range loop
+            if Scaled_Left (I).Lower /= 0.0 or else Scaled_Left (I).Upper /= 0.0 then
+               for J in Right'Range loop
+                  Accumulate_Product (Result (I + J), Scaled_Left (I), Scaled_Right (J));
+               end loop;
+            end if;
+         end loop;
+      end;
       for K in Result'Range loop
-         if not Usable (Result (K)) then
-            return Unscaled_Product;
-         end if;
          Result (K) :=
-           Scale_By_Positive (Result (K), Binomial_Scales (Binomial_Index (Degree, K)).Reciprocal);
+           Scale_Bounded_By_Reciprocal (Result (K), Binomial_Scales (Binomial_Index (Degree, K)).Reciprocal);
       end loop;
       return Result;
    exception
@@ -1940,9 +1471,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Panel_Count             : Positive := 8)
    is
       Power_Coefficients, D_Power_Coefficients : Power_Chart;
-      Integral                                 : Position_Scale := [others => 0.0];
-      D_Integral_D_Lambda                      : Position_Scale := [others => 0.0];
-      D_Integral_D_C                           : array (Chart_Component_Index) of Position_Scale :=
+      Integral                                 : Raw_Vector_4 := [others => 0.0];
+      D_Integral_D_Lambda                      : Raw_Vector_4 := [others => 0.0];
+      D_Integral_D_C                           : array (Chart_Component_Index) of Raw_Vector_4 :=
         [others => [others => 0.0]];
 
       function Power_Chart_Value (Value : Power_Chart; U : Dimensionless) return Chart_Vector;
@@ -1994,7 +1525,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          V                : constant Dimensionless := Warp_Parameter (U, Warp_Factor);
          Y                : constant Chart_Vector := Power_Chart_Value (Power_Coefficients, V);
          T_Local          : constant Raw_Vector_4 := Stereographic (Y);
-         T_Global         : constant Position_Scale := Frame_Vector (Frame, T_Local);
          Stereo_Jac       : constant Raw_Stereo_Jacobian := Stereographic_Jacobian (Y);
          D_Y_Lambda       : constant Chart_Vector := Power_Chart_Value (D_Power_Coefficients, V);
          Envelope         : constant Dimensionless := Closure_Envelope_Value (V);
@@ -2005,23 +1535,17 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          --     ∂T/∂x = Jₛ(Y)·∂Y/∂x,
          --
          --  where Jₛ is the inverse-stereographic Jacobian.
-         Integral := Integral + T_Global * Weight;
          for I in Frame_Component_Index loop
+            Integral (I) := Integral (I) + T_Local (I) * Weight;
             for J in Chart_Component_Index loop
                D_T_Lambda_Local (I) := D_T_Lambda_Local (I) + Stereo_Jac (I, J) * D_Y_Lambda (J);
             end loop;
          end loop;
-         D_Integral_D_Lambda := D_Integral_D_Lambda + Frame_Vector (Frame, D_T_Lambda_Local) * Weight;
-
-         for J in Chart_Component_Index loop
-            declare
-               Local : Raw_Vector_4 := [others => 0.0];
-            begin
-               for I in Frame_Component_Index loop
-                  Local (I) := Stereo_Jac (I, J) * Envelope;
-               end loop;
-               D_Integral_D_C (J) := D_Integral_D_C (J) + Frame_Vector (Frame, Local) * Weight;
-            end;
+         for I in Frame_Component_Index loop
+            D_Integral_D_Lambda (I) := D_Integral_D_Lambda (I) + D_T_Lambda_Local (I) * Weight;
+            for J in Chart_Component_Index loop
+               D_Integral_D_C (J) (I) := D_Integral_D_C (J) (I) + (Stereo_Jac (I, J) * Envelope) * Weight;
+            end loop;
          end loop;
       end Accumulate;
    begin
@@ -2041,8 +1565,12 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end loop;
 
       declare
-         Global_Residual : constant Position_Scale := Integral * Lambda - Chord_Direction;
-         Global_D_Lambda : constant Position_Scale := Integral + D_Integral_D_Lambda * Lambda;
+         Global_Integral : constant Position_Scale := Frame_Vector (Frame, Integral);
+         Global_Residual : constant Position_Scale := Global_Integral * Lambda - Chord_Direction;
+         Global_D_Lambda : constant Position_Scale :=
+           Global_Integral + Frame_Vector (Frame, D_Integral_D_Lambda) * Lambda;
+         Global_D_C      : constant array (Chart_Component_Index) of Position_Scale :=
+           [for J in Chart_Component_Index => Frame_Vector (Frame, D_Integral_D_C (J))];
       begin
          --  Closure in chord-normalized coordinates is
          --
@@ -2053,7 +1581,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Residual (I) := Frame_Coordinate (Closure_Frame, I, Global_Residual);
             D_Residual_D_Lambda (I) := Frame_Coordinate (Closure_Frame, I, Global_D_Lambda);
             for J in Chart_Component_Index loop
-               Jacobian_C (I, J) := Lambda * Frame_Coordinate (Closure_Frame, I, D_Integral_D_C (J));
+               Jacobian_C (I, J) := Lambda * Frame_Coordinate (Closure_Frame, I, Global_D_C (J));
             end loop;
          end loop;
       end;
@@ -2068,12 +1596,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Initial                   : Closure_Solution;
       Panel_Count               : Positive := 1) return Closure_Solution
    is
-      Closure_Frame  : Frame_Vector_Array;
-      Frame_OK       : constant Boolean :=
+      Closure_Frame : Frame_Vector_Array;
+      Frame_OK      : constant Boolean :=
         Complete_Frame (Chord_Direction, Frame (1), Frame (2), Frame (3), Closure_Frame);
-      Seed_Fractions : constant array (Positive range 1 .. 1) of Dimensionless := [0.1];
-      Best           : Closure_Solution := (Success => False, others => <>);
-      Best_C_Norm    : Dimensionless := Dimensionless'Last;
 
       function Norm (Value : Raw_Vector_4) return Dimensionless
       is (Dimensionless_Math.Sqrt (Value (0) ** 2 + Value (1) ** 2 + Value (2) ** 2 + Value (3) ** 2));
@@ -2147,109 +1672,97 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       if not Frame_OK or else Maximum_Lambda < 1.0 then
          return (Success => False, others => <>);
       end if;
-      for Seed of Seed_Fractions loop
-         declare
-            --  λ is constrained to [1, Maximum_Lambda] because a unit-speed curve cannot be shorter than its chord.
-            --  Start just inside that interval unless the caller supplied a previous solution.
-            Lambda : Dimensionless :=
-              (if Initial.Success then Initial.Lambda else 1.0 + Seed * Dimensionless'Min (Maximum_Lambda - 1.0, 1.0));
-            C0     : Raw_Vector_3 := (if Initial.Success then Initial.C0 else [others => 0.0]);
-         begin
-            Iteration_Loop : for Iteration in 1 .. 20 loop
+      declare
+         --  λ is constrained to [1, Maximum_Lambda] because a unit-speed curve cannot be shorter than its chord.
+         --  Start just inside that interval unless the caller supplied a previous solution.
+         Lambda             : Dimensionless :=
+           (if Initial.Success then Initial.Lambda else 1.0 + 0.1 * Dimensionless'Min (Maximum_Lambda - 1.0, 1.0));
+         C0                 : Raw_Vector_3 := (if Initial.Success then Initial.C0 else [others => 0.0]);
+         Residual, D_Lambda : Raw_Vector_4;
+         Jacobian_C         : Raw_Matrix_4_3;
+      begin
+         Closure_Residual
+           (Frame,
+            Closure_Frame,
+            Start_Jets,
+            Finish_Jets,
+            Chord_Direction,
+            Lambda,
+            C0,
+            Warp_Factor,
+            Residual,
+            Jacobian_C,
+            D_Lambda,
+            Panel_Count => Panel_Count);
+         Iteration_Loop : for Iteration in 1 .. 20 loop
+            if Norm (Residual) <= Tolerance then
+               return (Success => True, Lambda => Lambda, C0 => C0, others => <>);
+            end if;
+            declare
+               Jacobian    : Raw_Matrix_4 := [others => [others => 0.0]];
+               Right       : Raw_Vector_4;
+               Newton_Step : Raw_Vector_4;
+               Solved      : Boolean;
+            begin
+               for Row in Frame_Component_Index loop
+                  Jacobian (Row, 0) := D_Lambda (Row);
+                  Right (Row) := -Residual (Row);
+                  for Column in Chart_Component_Index loop
+                     Jacobian (Row, Column) := Jacobian_C (Row, Column);
+                  end loop;
+               end loop;
+               Solved := Solve_Linear (Jacobian, Right, Newton_Step);
+               exit Iteration_Loop when not Solved;
                declare
-                  Residual, D_Lambda : Raw_Vector_4;
-                  Jacobian_C         : Raw_Matrix_4_3;
+                  Scale        : Dimensionless := 1.0;
+                  Accepted     : Boolean := False;
+                  Current_Norm : constant Dimensionless := Norm (Residual);
                begin
-                  Closure_Residual
-                    (Frame,
-                     Closure_Frame,
-                     Start_Jets,
-                     Finish_Jets,
-                     Chord_Direction,
-                     Lambda,
-                     C0,
-                     Warp_Factor,
-                     Residual,
-                     Jacobian_C,
-                     D_Lambda,
-                     Panel_Count => Panel_Count);
-                  if Norm (Residual) <= Tolerance then
+                  --  Backtrack Δ by powers of two until ‖R(x + α·Δ)‖ < ‖R(x)‖. Clamp λ but leave C₀
+                  --  unconstrained so all three closure modes remain available.
+                  for Trial in 1 .. 8 loop
                      declare
-                        C_Norm : constant Dimensionless :=
-                          Dimensionless_Math.Sqrt (C0 (1) ** 2 + C0 (2) ** 2 + C0 (3) ** 2);
+                        Trial_Lambda                   : constant Dimensionless :=
+                          Dimensionless'Max
+                            (1.0, Dimensionless'Min (Maximum_Lambda, Lambda + Scale * Newton_Step (0)));
+                        Trial_C0                       : Raw_Vector_3 := C0;
+                        Trial_Residual, Trial_D_Lambda : Raw_Vector_4;
+                        Trial_Jacobian                 : Raw_Matrix_4_3;
                      begin
-                        --  If multiple seeds converge, retain the smallest closure bubble ‖C₀‖.
-                        if C_Norm < Best_C_Norm then
-                           Best := (Success => True, Lambda => Lambda, C0 => C0, others => <>);
-                           Best_C_Norm := C_Norm;
+                        for Column in Chart_Component_Index loop
+                           Trial_C0 (Column) := Trial_C0 (Column) + Scale * Newton_Step (Column);
+                        end loop;
+                        Closure_Residual
+                          (Frame,
+                           Closure_Frame,
+                           Start_Jets,
+                           Finish_Jets,
+                           Chord_Direction,
+                           Trial_Lambda,
+                           Trial_C0,
+                           Warp_Factor,
+                           Trial_Residual,
+                           Trial_Jacobian,
+                           Trial_D_Lambda,
+                           Panel_Count => Panel_Count);
+                        if Norm (Trial_Residual) < Current_Norm then
+                           Lambda := Trial_Lambda;
+                           C0 := Trial_C0;
+                           Residual := Trial_Residual;
+                           D_Lambda := Trial_D_Lambda;
+                           Jacobian_C := Trial_Jacobian;
+                           Accepted := True;
+                           exit;
                         end if;
                      end;
-                     exit Iteration_Loop;
-                  end if;
-                  declare
-                     Jacobian    : Raw_Matrix_4 := [others => [others => 0.0]];
-                     Right       : Raw_Vector_4;
-                     Newton_Step : Raw_Vector_4;
-                     Solved      : Boolean;
-                  begin
-                     for Row in Frame_Component_Index loop
-                        Jacobian (Row, 0) := D_Lambda (Row);
-                        Right (Row) := -Residual (Row);
-                        for Column in Chart_Component_Index loop
-                           Jacobian (Row, Column) := Jacobian_C (Row, Column);
-                        end loop;
-                     end loop;
-                     Solved := Solve_Linear (Jacobian, Right, Newton_Step);
-                     exit Iteration_Loop when not Solved;
-                     declare
-                        Scale        : Dimensionless := 1.0;
-                        Accepted     : Boolean := False;
-                        Current_Norm : constant Dimensionless := Norm (Residual);
-                     begin
-                        --  Backtrack Δ by powers of two until ‖R(x + α·Δ)‖ < ‖R(x)‖. Clamp λ but leave C₀
-                        --  unconstrained so all three closure modes remain available.
-                        for Trial in 1 .. 8 loop
-                           declare
-                              Trial_Lambda                   : constant Dimensionless :=
-                                Dimensionless'Max
-                                  (1.0, Dimensionless'Min (Maximum_Lambda, Lambda + Scale * Newton_Step (0)));
-                              Trial_C0                       : Raw_Vector_3 := C0;
-                              Trial_Residual, Trial_D_Lambda : Raw_Vector_4;
-                              Trial_Jacobian                 : Raw_Matrix_4_3;
-                           begin
-                              for Column in Chart_Component_Index loop
-                                 Trial_C0 (Column) := Trial_C0 (Column) + Scale * Newton_Step (Column);
-                              end loop;
-                              Closure_Residual
-                                (Frame,
-                                 Closure_Frame,
-                                 Start_Jets,
-                                 Finish_Jets,
-                                 Chord_Direction,
-                                 Trial_Lambda,
-                                 Trial_C0,
-                                 Warp_Factor,
-                                 Trial_Residual,
-                                 Trial_Jacobian,
-                                 Trial_D_Lambda,
-                                 Panel_Count => Panel_Count);
-                              if Norm (Trial_Residual) < Current_Norm then
-                                 Lambda := Trial_Lambda;
-                                 C0 := Trial_C0;
-                                 Accepted := True;
-                                 exit;
-                              end if;
-                           end;
-                           Scale := 0.5 * Scale;
-                        end loop;
-                        exit Iteration_Loop when not Accepted;
-                     end;
-                  end;
+                     Scale := 0.5 * Scale;
+                  end loop;
+                  exit Iteration_Loop when not Accepted;
                end;
-            end loop Iteration_Loop;
-         end;
-      end loop;
-      return Best;
+            end;
+         end loop Iteration_Loop;
+      end;
+      return (Success => False, others => <>);
    exception
       when Constraint_Error =>
          return (Success => False, Numerically_Unsafe => True, others => <>);
@@ -2262,6 +1775,203 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    --  remains as a fail-closed fallback and is still sharper for a point-sized query, where partial-fraction terms can
    --  cancel before their absolute values are bounded.
    ----------------------------------------------------------------------------------------------------------------
+
+   --  Enclose division by an interval that excludes zero.
+
+   function Interval_Divide (Numerator, Denominator : Interval) return Interval is
+   begin
+      if not Numerator.Valid
+        or else not Denominator.Valid
+        or else (Denominator.Lower <= 0.0 and then Denominator.Upper >= 0.0)
+      then
+         return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+      elsif Numerator.Lower = 0.0 and then Numerator.Upper = 0.0 then
+         return Interval_Exact (0.0);
+      end if;
+      declare
+         Q1 : constant Dimensionless := Numerator.Lower / Denominator.Lower;
+         Q2 : constant Dimensionless := Numerator.Lower / Denominator.Upper;
+         Q3 : constant Dimensionless := Numerator.Upper / Denominator.Lower;
+         Q4 : constant Dimensionless := Numerator.Upper / Denominator.Upper;
+      begin
+         return
+           Checked_Interval
+             (Down (Dimensionless'Min (Dimensionless'Min (Q1, Q2), Dimensionless'Min (Q3, Q4))),
+              Up (Dimensionless'Max (Dimensionless'Max (Q1, Q2), Dimensionless'Max (Q3, Q4))));
+      end;
+   exception
+      when Constraint_Error =>
+         return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+   end Interval_Divide;
+
+   function Divide_By_Positive (Numerator, Denominator : Interval) return Interval;
+
+   function Divide_By_Positive (Numerator, Denominator : Interval) return Interval is
+   begin
+      if not Denominator.Valid or else Denominator.Lower <= 0.0 then
+         return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+      end if;
+      return Interval_Divide (Numerator, Denominator);
+   end Divide_By_Positive;
+
+   type Interval_Complex is record
+      Real_Part      : Interval;
+      Imaginary_Part : Interval;
+   end record;
+   function Complex_Multiply (Left, Right : Interval_Complex) return Interval_Complex;
+   --  Return an interval enclosure of the product of two complex intervals.
+
+   function Complex_Multiply (Left, Right : Interval_Complex) return Interval_Complex is
+   begin
+      return
+        (Real_Part      =>
+           Interval_Subtract
+             (Interval_Multiply (Left.Real_Part, Right.Real_Part),
+              Interval_Multiply (Left.Imaginary_Part, Right.Imaginary_Part)),
+         Imaginary_Part =>
+           Interval_Add
+             (Interval_Multiply (Left.Real_Part, Right.Imaginary_Part),
+              Interval_Multiply (Left.Imaginary_Part, Right.Real_Part)));
+   end Complex_Multiply;
+   function Complex_Reciprocal (U, Pole_Real, Pole_Imaginary : Dimensionless) return Interval_Complex;
+   --  Enclose the reciprocal of U minus the supplied complex pole.
+
+   function Complex_Reciprocal (U, Pole_Real, Pole_Imaginary : Dimensionless) return Interval_Complex is
+      Real_Difference  : constant Interval := Interval_Subtract (Interval_Exact (U), Interval_Exact (Pole_Real));
+      Imaginary        : constant Interval := Interval_Exact (Pole_Imaginary);
+      Real_Square      : Interval := Interval_Multiply (Real_Difference, Real_Difference);
+      Imaginary_Square : Interval := Interval_Multiply (Imaginary, Imaginary);
+      Denominator      : Interval;
+   begin
+      --  Dependency can give a slightly negative lower endpoint for X*X. The analytic square is nonnegative.
+      Real_Square.Lower := Dimensionless'Max (0.0, Real_Square.Lower);
+      Imaginary_Square.Lower := Dimensionless'Max (0.0, Imaginary_Square.Lower);
+      Denominator := Interval_Add (Real_Square, Imaginary_Square);
+      Denominator.Lower := Dimensionless'Max (0.0, Denominator.Lower);
+      return
+        (Real_Part      => Divide_By_Positive (Real_Difference, Denominator),
+         Imaginary_Part => Divide_By_Positive (Imaginary, Denominator));
+   exception
+      when Constraint_Error =>
+         return
+           (Real_Part      => (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False),
+            Imaginary_Part => (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False));
+   end Complex_Reciprocal;
+
+   function Lower_Power (Base : Dimensionless; Exponent : Positive) return Dimensionless;
+   --  Compute a downward-rounded positive integer power.
+
+   function Lower_Power (Base : Dimensionless; Exponent : Positive) return Dimensionless is
+      Value : Dimensionless := 1.0;
+   begin
+      if Base <= 0.0 or else not Is_Finite (Base) then
+         return 0.0;
+      end if;
+      for I in 1 .. Exponent loop
+         Value := Down (Value * Base);
+         if Value <= 0.0 or else not Is_Finite (Value) then
+            return 0.0;
+         end if;
+      end loop;
+      return Value;
+   exception
+      when Constraint_Error =>
+         return 0.0;
+   end Lower_Power;
+
+   function Elevate_Bernstein
+     (Source : Interval_Polynomial; Source_Degree, Target_Degree : Natural) return Interval_Polynomial;
+   --  Elevate a Bernstein polynomial to Target_Degree without changing its value.
+
+   function Elevate_Bernstein
+     (Source : Interval_Polynomial; Source_Degree, Target_Degree : Natural) return Interval_Polynomial
+   is
+      Result : Interval_Polynomial (Source'Range) := [others => Interval_Exact (0.0)];
+   begin
+      if Source_Degree > Target_Degree or else Target_Degree > Source'Last then
+         return [Source'Range => (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False)];
+      elsif Source_Degree = Target_Degree then
+         return Source;
+      end if;
+      Result (0 .. Target_Degree) :=
+        Multiply_Bernstein
+          (Source (0 .. Source_Degree),
+           Interval_Polynomial'(0 .. Target_Degree - Source_Degree => Interval_Exact (1.0)));
+      return Result;
+   exception
+      when Constraint_Error =>
+         return [Source'Range => (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False)];
+   end Elevate_Bernstein;
+
+   subtype Correction_Order is Natural range 0 .. Maximum_Majorant_Order + 2;
+   subtype Correction_Controls is Interval_Polynomial (0 .. 11);
+   type Correction_Control_Table is array (Correction_Order) of Correction_Controls;
+
+   function Build_Correction_Controls return Correction_Control_Table;
+
+   function Build_Correction_Controls return Correction_Control_Table is
+      Result : Correction_Control_Table;
+   begin
+      for Order in Correction_Order loop
+         declare
+            Work   : Correction_Controls := [for Index in 0 .. 11 => Interval_Exact (if Index <= 5 then 0.0 else 1.0)];
+            Degree : Natural := 11;
+         begin
+            for Derivative in 1 .. Order + 1 loop
+               for Index in 0 .. Degree - 1 loop
+                  Work (Index) :=
+                    Interval_Multiply
+                      (Interval_Exact (Dimensionless (Degree)), Interval_Subtract (Work (Index + 1), Work (Index)));
+               end loop;
+               Degree := Degree - 1;
+            end loop;
+            if Order > 1 then
+               for Index in 0 .. Degree loop
+                  Work (Index) :=
+                    Interval_Multiply
+                      (Work (Index), Checked_Interval (Down (1.0 / Factorial (Order)), Up (1.0 / Factorial (Order))));
+               end loop;
+            end if;
+            Result (Order) := Work;
+         end;
+      end loop;
+      return Result;
+   end Build_Correction_Controls;
+
+   Correction_Derivatives : constant Correction_Control_Table := Build_Correction_Controls;
+
+   function Correction_Hull_Bound (Value : Correction_Controls; Degree, Depth : Natural) return Dimensionless;
+
+   function Correction_Hull_Bound (Value : Correction_Controls; Degree, Depth : Natural) return Dimensionless is
+      Left  : Correction_Controls := [others => Interval_Exact (0.0)];
+      Right : Correction_Controls := Value;
+      Bound : Dimensionless := 0.0;
+   begin
+      if Depth = 0 then
+         for Index in 0 .. Degree loop
+            Bound := Dimensionless'Max (Bound, Interval_Abs_Max (Value (Index)));
+         end loop;
+         return Up (Bound);
+      end if;
+      Left (0) := Right (0);
+      for Level in 1 .. Degree loop
+         for Index in 0 .. Degree - Level loop
+            if Right (Index).Lower /= Right (Index + 1).Lower or else Right (Index).Upper /= Right (Index + 1).Upper
+            then
+               Right (Index).Lower := 0.5 * Right (Index).Lower + 0.5 * Right (Index + 1).Lower;
+               Right (Index).Upper := 0.5 * Right (Index).Upper + 0.5 * Right (Index + 1).Upper;
+               Inflate_Finite_Endpoints (Right (Index).Lower, Right (Index).Upper);
+            end if;
+         end loop;
+         Left (Level) := Right (0);
+      end loop;
+      return
+        Dimensionless'Max
+          (Correction_Hull_Bound (Left, Degree, Depth - 1), Correction_Hull_Bound (Right, Degree, Depth - 1));
+   end Correction_Hull_Bound;
+
+   Full_Correction_Bounds : constant array (Correction_Order) of Dimensionless :=
+     [for Order in Correction_Order => Correction_Hull_Bound (Correction_Derivatives (Order), 10 - Order, 4)];
 
    function Pole_Taylor_Tangent_Range_Majorants
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless) return Axis_Majorants
@@ -2281,78 +1991,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Cache      : Rational_Antiderivative renames Curve.Evaluator_Data.Antiderivative_Cache;
       Length_Raw : constant Dimensionless := Dimensionless (Curve.Evaluator_Data.Length_Value / mm);
 
-      type Interval_Complex is record
-         Real_Part      : Interval;
-         Imaginary_Part : Interval;
-      end record;
-
       function Unbounded_Interval return Interval
       is ((Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False));
-
-      function Divide_By_Positive (Numerator, Denominator : Interval) return Interval;
-      --  Enclose division by an interval that is known to be strictly positive.
-
-      function Divide_By_Positive (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Numerator.Valid or else not Denominator.Valid or else Denominator.Lower <= 0.0 then
-            return Unbounded_Interval;
-         elsif Numerator.Lower = 0.0 and then Numerator.Upper = 0.0 then
-            return Interval_Exact (0.0);
-         end if;
-         declare
-            Q1 : constant Dimensionless := Numerator.Lower / Denominator.Lower;
-            Q2 : constant Dimensionless := Numerator.Lower / Denominator.Upper;
-            Q3 : constant Dimensionless := Numerator.Upper / Denominator.Lower;
-            Q4 : constant Dimensionless := Numerator.Upper / Denominator.Upper;
-         begin
-            return
-              Checked_Interval
-                (Down (Dimensionless'Min (Dimensionless'Min (Q1, Q2), Dimensionless'Min (Q3, Q4))),
-                 Up (Dimensionless'Max (Dimensionless'Max (Q1, Q2), Dimensionless'Max (Q3, Q4))));
-         end;
-      exception
-         when Constraint_Error =>
-            return Unbounded_Interval;
-      end Divide_By_Positive;
-
-      function Complex_Multiply (Left, Right : Interval_Complex) return Interval_Complex;
-      --  Return an interval enclosure of the product of two complex intervals.
-
-      function Complex_Multiply (Left, Right : Interval_Complex) return Interval_Complex is
-      begin
-         return
-           (Real_Part      =>
-              Interval_Subtract
-                (Interval_Multiply (Left.Real_Part, Right.Real_Part),
-                 Interval_Multiply (Left.Imaginary_Part, Right.Imaginary_Part)),
-            Imaginary_Part =>
-              Interval_Add
-                (Interval_Multiply (Left.Real_Part, Right.Imaginary_Part),
-                 Interval_Multiply (Left.Imaginary_Part, Right.Real_Part)));
-      end Complex_Multiply;
-
-      function Reciprocal_At (U, Pole_Real, Pole_Imaginary : Dimensionless) return Interval_Complex;
-      --  Enclose the reciprocal of U minus the supplied complex pole.
-
-      function Reciprocal_At (U, Pole_Real, Pole_Imaginary : Dimensionless) return Interval_Complex is
-         Real_Difference  : constant Interval := Interval_Subtract (Interval_Exact (U), Interval_Exact (Pole_Real));
-         Imaginary        : constant Interval := Interval_Exact (Pole_Imaginary);
-         Real_Square      : Interval := Interval_Multiply (Real_Difference, Real_Difference);
-         Imaginary_Square : Interval := Interval_Multiply (Imaginary, Imaginary);
-         Denominator      : Interval;
-      begin
-         --  Dependency can give a slightly negative lower endpoint for X*X. The analytic square is nonnegative.
-         Real_Square.Lower := Dimensionless'Max (0.0, Real_Square.Lower);
-         Imaginary_Square.Lower := Dimensionless'Max (0.0, Imaginary_Square.Lower);
-         Denominator := Interval_Add (Real_Square, Imaginary_Square);
-         Denominator.Lower := Dimensionless'Max (0.0, Denominator.Lower);
-         return
-           (Real_Part      => Divide_By_Positive (Real_Difference, Denominator),
-            Imaginary_Part => Divide_By_Positive (Imaginary, Denominator));
-      exception
-         when Constraint_Error =>
-            return (Real_Part => Unbounded_Interval, Imaginary_Part => Unbounded_Interval);
-      end Reciprocal_At;
 
       function Safe_Add (Left, Right : Dimensionless) return Dimensionless;
       --  Add nonnegative bounds with upward rounding and saturation.
@@ -2399,27 +2039,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          when Constraint_Error =>
             return Dimensionless'Last;
       end Safe_Multiply;
-
-      function Lower_Power (Base : Dimensionless; Exponent : Positive) return Dimensionless;
-      --  Compute a downward-rounded positive integer power.
-
-      function Lower_Power (Base : Dimensionless; Exponent : Positive) return Dimensionless is
-         Value : Dimensionless := 1.0;
-      begin
-         if Base <= 0.0 or else not Is_Finite (Base) then
-            return 0.0;
-         end if;
-         for I in 1 .. Exponent loop
-            Value := Down (Value * Base);
-            if Value <= 0.0 or else not Is_Finite (Value) then
-               return 0.0;
-            end if;
-         end loop;
-         return Value;
-      exception
-         when Constraint_Error =>
-            return 0.0;
-      end Lower_Power;
 
       function Safe_Quotient (Numerator, Denominator : Dimensionless) return Dimensionless;
       --  Divide nonnegative bounds with upward rounding and saturation.
@@ -2474,27 +2093,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --  Enclose one correction-series coefficient at U.
 
       function Correction_Coefficient (Order : Internal_Order; U : Dimensionless) return Interval is
-         type Controls is array (Natural range 0 .. 11) of Interval;
-         Work        : Controls := [for Index in 0 .. 11 => Interval_Exact (if Index <= 5 then 0.0 else 1.0)];
-         Degree      : Natural := 11;
+         Work        : Correction_Controls := Correction_Derivatives (Order);
+         Degree      : constant Natural := 10 - Order;
          T           : constant Interval := Interval_Exact (U);
          One_Minus_T : constant Interval := Interval_Subtract (Interval_Exact (1.0), T);
       begin
-         --  H has degree-eleven Bernstein controls [0,0,0,0,0,0,1,1,1,1,1,1]. Repeated differences form
-         --  H^(Order + 1), and division by Order! converts it to the coefficient contributed to A_Order.
-         for Derivative in 1 .. Order + 1 loop
-            for Index in 0 .. Degree - 1 loop
-               Work (Index) :=
-                 Interval_Multiply
-                   (Interval_Exact (Dimensionless (Degree)), Interval_Subtract (Work (Index + 1), Work (Index)));
-            end loop;
-            Degree := Degree - 1;
-         end loop;
-         if Order > 1 then
-            for Index in 0 .. Degree loop
-               Work (Index) := Divide_By_Positive (Work (Index), Interval_Exact (Factorial (Order)));
-            end loop;
-         end if;
          for Level in 1 .. Degree loop
             for Index in 0 .. Degree - Level loop
                Work (Index) :=
@@ -2511,24 +2114,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --  Bound one correction coefficient over the full parameter interval.
 
       function Correction_Coefficient_Bound (Order : Internal_Order) return Dimensionless is
-         type Controls is array (Natural range 0 .. 11) of Interval;
-         Work   : Controls := [for Index in 0 .. 11 => Interval_Exact (if Index <= 5 then 0.0 else 1.0)];
-         Degree : Natural := 11;
+         Work   : Correction_Controls renames Correction_Derivatives (Order);
+         Degree : constant Natural := 10 - Order;
          Bound  : Dimensionless := 0.0;
       begin
-         for Derivative in 1 .. Order + 1 loop
-            for Index in 0 .. Degree - 1 loop
-               Work (Index) :=
-                 Interval_Multiply
-                   (Interval_Exact (Dimensionless (Degree)), Interval_Subtract (Work (Index + 1), Work (Index)));
-            end loop;
-            Degree := Degree - 1;
-         end loop;
-         if Order > 1 then
-            for Index in 0 .. Degree loop
-               Work (Index) := Divide_By_Positive (Work (Index), Interval_Exact (Factorial (Order)));
-            end loop;
-         end if;
          for Index in 0 .. Degree loop
             Bound := Dimensionless'Max (Bound, Interval_Abs_Max (Work (Index)));
          end loop;
@@ -2555,7 +2144,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Real_Residue, Imaginary_Residue : Dimensionless_Axis_Vector;
             Pair                            : Boolean)
          is
-            Reciprocal : constant Interval_Complex := Reciprocal_At (U, Pole_Real, Pole_Imaginary);
+            Reciprocal : constant Interval_Complex := Complex_Reciprocal (U, Pole_Real, Pole_Imaginary);
             Power      : Interval_Complex := Reciprocal;
          begin
             for Order in Internal_Order loop
@@ -2843,30 +2432,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       function Invalid_Interval return Interval
       is (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
 
-      --  Divide two intervals with outward rounding. A denominator which is invalid or may contain zero cannot prove
-      --  a finite quotient and therefore produces Invalid_Interval.
-      function Divide_Intervals (Numerator, Denominator : Interval) return Interval;
-      --  Enclose general interval division when the denominator excludes zero.
-
-      function Divide_Intervals (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Numerator.Valid
-           or else not Denominator.Valid
-           or else (Denominator.Lower <= 0.0 and then Denominator.Upper >= 0.0)
-         then
-            return Invalid_Interval;
-         end if;
-         declare
-            Reciprocal : constant Interval :=
-              Checked_Interval (Down (1.0 / Denominator.Upper), Up (1.0 / Denominator.Lower));
-         begin
-            return Interval_Multiply (Numerator, Reciprocal);
-         end;
-      exception
-         when Constraint_Error =>
-            return Invalid_Interval;
-      end Divide_Intervals;
-
       function Multiply_Bernstein
         (Left : Polynomial; Left_Degree : Natural; Right : Polynomial; Right_Degree : Natural) return Polynomial;
       --  Multiply active controls and pad the shared kernel's result to the derivative workspace size.
@@ -2883,29 +2448,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          when Constraint_Error =>
             return [others => Invalid_Interval];
       end Multiply_Bernstein;
-
-      --  Re-express Source at Target_Degree while preserving the represented polynomial. Degree elevation lets
-      --  independently derived numerators and denominators share an index before interval hull operations.
-      function Elevate_Bernstein (Source : Polynomial; Source_Degree, Target_Degree : Natural) return Polynomial;
-      --  Elevate a Bernstein polynomial to Target_Degree without changing its value.
-
-      function Elevate_Bernstein (Source : Polynomial; Source_Degree, Target_Degree : Natural) return Polynomial is
-         Result : Polynomial := [others => Interval_Exact (0.0)];
-      begin
-         if Source_Degree > Target_Degree or else Target_Degree > Maximum_Derivative_Bernstein_Degree then
-            return [others => Invalid_Interval];
-         elsif Source_Degree = Target_Degree then
-            return Source;
-         end if;
-         Result (0 .. Target_Degree) :=
-           Multiply_Bernstein
-             (Source (0 .. Source_Degree),
-              Interval_Polynomial'(0 .. Target_Degree - Source_Degree => Interval_Exact (1.0)));
-         return Result;
-      exception
-         when Constraint_Error =>
-            return [others => Invalid_Interval];
-      end Elevate_Bernstein;
 
       --  Differentiate a Bernstein polynomial by taking scaled forward differences of adjacent controls.
       function Differentiate_Bernstein
@@ -2936,17 +2478,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end Differentiate_Bernstein;
 
       --  Multiply every active control by the same enclosing scale.
-      function Scale_Bernstein (Source : Polynomial; Degree : Natural; Scale : Interval) return Polynomial;
-      --  Multiply the active Bernstein coefficients by an interval scale.
-
-      function Scale_Bernstein (Source : Polynomial; Degree : Natural; Scale : Interval) return Polynomial is
-         Result : Polynomial := [others => Interval_Exact (0.0)];
-      begin
-         for Index in 0 .. Degree loop
-            Result (Index) := Interval_Multiply (Scale, Source (Index));
-         end loop;
-         return Result;
-      end Scale_Bernstein;
 
       --  Recognize an algebraically zero interval polynomial. This is deliberately exact: a merely small numerator
       --  still needs normal certification and must not be discarded as numerical noise.
@@ -3019,7 +2550,17 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --  Split a Bernstein polynomial at the exact midpoint.
 
       procedure Split_Bernstein_Midpoint (Source : Polynomial; Degree : Natural; Left, Right : out Polynomial) is
+         pragma Suppress (Overflow_Check);
+         type Endpoint_Workspace is array (Polynomial'Range) of Dimensionless;
+         Lower, Upper : Endpoint_Workspace;
+         --  The preflight bounds the entire midpoint triangle and validates its workspace indices;
+         --  extreme controls go through Split_Bernstein, whose arithmetic retains overflow checks.
       begin
+         if Degree not in Polynomial'Range then
+            Left := [others => Invalid_Interval];
+            Right := [others => Invalid_Interval];
+            return;
+         end if;
          --  A convex midpoint cannot increase the endpoint magnitude before rounding. Starting below Last/4 leaves
          --  ample room for the outward inflation at all 84 levels, including Model_Small padding. This establishes
          --  finiteness for the entire triangle and avoids rechecking it at every node. Extreme or invalid controls
@@ -3034,31 +2575,35 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             end if;
          end loop;
 
-         Left := [others => Interval_Exact (0.0)];
-         Right := [others => Interval_Exact (0.0)];
-         for Index in 0 .. Degree loop
-            Right (Index) := Source (Index);
-         end loop;
-         Left (0) := Right (0);
-         if Degree > 0 then
+         declare
+            pragma Suppress (Index_Check);
+            pragma Suppress (Range_Check);
+            --  The explicit degree guard proves that Source(0..Degree) is in the fixed workspace range.
+            --  Each triangle row has Index+1 <= Degree and 1 <= Level <= Degree.
+         begin
+            Left := [others => Interval_Exact (0.0)];
+            Right := [others => Interval_Exact (0.0)];
+            for Index in 0 .. Degree loop
+               Lower (Index) := Source (Index).Lower;
+               Upper (Index) := Source (Index).Upper;
+            end loop;
+            Left (0) := Source (0);
+            Right (Degree) := Source (Degree);
             for Level in 1 .. Degree loop
-               --  Right doubles as the de Casteljau workspace. Updating in ascending order leaves Index + 1 intact
-               --  until it has contributed and naturally leaves every right-child boundary in its final slot.
+               --  Separate endpoint arrays keep validity flags out of the quadratic workspace.
+               --  Every active source control is already valid.
                for Index in 0 .. Degree - Level loop
-                  --  Every control is already valid. Updating the endpoints directly avoids constructing and
-                  --  copying a record, including its unchanged validity flag, at every node of the triangle.
-                  if Right (Index).Lower /= Right (Index + 1).Lower
-                    or else Right (Index).Upper /= Right (Index + 1).Upper
-                  then
-                     --  Halving is exact for normal model numbers; the padding also covers subnormal loss.
-                     Right (Index).Lower := 0.5 * Right (Index).Lower + 0.5 * Right (Index + 1).Lower;
-                     Right (Index).Upper := 0.5 * Right (Index).Upper + 0.5 * Right (Index + 1).Upper;
-                     Inflate_Finite_Endpoints (Right (Index).Lower, Right (Index).Upper);
+                  if Lower (Index) /= Lower (Index + 1) or else Upper (Index) /= Upper (Index + 1) then
+                     Lower (Index) := 0.5 * Lower (Index) + 0.5 * Lower (Index + 1);
+                     Upper (Index) := 0.5 * Upper (Index) + 0.5 * Upper (Index + 1);
+                     Inflate_Finite_Endpoints (Lower (Index), Upper (Index));
                   end if;
                end loop;
-               Left (Level) := Right (0);
+               Left (Level) := (Lower => Lower (0), Upper => Upper (0), Valid => True);
+               Right (Degree - Level) :=
+                 (Lower => Lower (Degree - Level), Upper => Upper (Degree - Level), Valid => True);
             end loop;
-         end if;
+         end;
       exception
          when Constraint_Error =>
             Left := [others => Invalid_Interval];
@@ -3100,7 +2645,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          if Range_End < 1.0 then
             declare
                Local_End : constant Interval :=
-                 Divide_Intervals
+                 Interval_Divide
                    (Interval_Subtract (Interval_Exact (Range_End), Interval_Exact (Range_Start)),
                     Interval_Subtract (Interval_Exact (1.0), Interval_Exact (Range_Start)));
             begin
@@ -3217,7 +2762,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   exit;
                end if;
                declare
-                  Reciprocal : constant Interval := Divide_Intervals (Interval_Exact (1.0), Local_Denominator (Index));
+                  Reciprocal : constant Interval := Interval_Divide (Interval_Exact (1.0), Local_Denominator (Index));
                begin
                   if not Reciprocal.Valid then
                      Denominator_Is_Valid := False;
@@ -3262,9 +2807,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             return Axis_Bounds
          is
             Result           : Axis_Bounds := [others => 0.0];
-            First_Reciprocal : constant Interval := Divide_Intervals (Interval_Exact (1.0), Local_Denominator (0));
-            Last_Reciprocal  : constant Interval :=
-              Divide_Intervals (Interval_Exact (1.0), Local_Denominator (Degree));
+            First_Reciprocal : constant Interval := Interval_Divide (Interval_Exact (1.0), Local_Denominator (0));
+            Last_Reciprocal  : constant Interval := Interval_Divide (Interval_Exact (1.0), Local_Denominator (Degree));
          begin
             for Axis in Axis_Name loop
                if Local_Active (Axis) then
@@ -3382,7 +2926,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          if Range_Start = Range_End then
             declare
                Result     : Axis_Bounds := [others => 0.0];
-               Reciprocal : constant Interval := Divide_Intervals (Interval_Exact (1.0), Restricted_Denominator (0));
+               Reciprocal : constant Interval := Interval_Divide (Interval_Exact (1.0), Restricted_Denominator (0));
             begin
                for Axis in Axis_Name loop
                   if Active_Axes (Axis) then
@@ -3435,25 +2979,12 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       function Correction_Coefficient_Bound (Order : Majorant_Order) return Dimensionless is
          Work   : Polynomial := [others => Interval_Exact (0.0)];
-         Degree : Natural := 11;
+         Degree : constant Natural := 10 - Order;
       begin
-         for Index in 6 .. 11 loop
-            Work (Index) := Interval_Exact (1.0);
-         end loop;
-         for Derivative in 1 .. Natural (Order) + 1 loop
-            declare
-               Next_Degree : Natural;
-               Next        : constant Polynomial := Differentiate_Bernstein (Work, Degree, Next_Degree);
-            begin
-               Work := Next;
-               Degree := Next_Degree;
-            end;
-         end loop;
-         if Order > 1 then
-            Work :=
-              Scale_Bernstein
-                (Work, Degree, Checked_Interval (Down (1.0 / Factorial (Order)), Up (1.0 / Factorial (Order))));
+         if Start_U = 0.0 and then End_U = 1.0 then
+            return Full_Correction_Bounds (Order);
          end if;
+         Work (0 .. Degree) := Correction_Derivatives (Order) (0 .. Degree);
          Work := Restrict_Bernstein (Work, Degree, Start_U, End_U);
          if Start_U = End_U then
             return Interval_Abs_Max (Work (0));
@@ -3464,29 +2995,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          when Constraint_Error =>
             return Dimensionless'Last;
       end Correction_Coefficient_Bound;
-
-      --  Compute a nonnegative downward-rounded lower bound for Base**Exponent. Returning zero on underflow or unsafe
-      --  arithmetic forces the caller to reject a denominator-based fallback instead of overstating its safety.
-      function Lower_Power (Base : Dimensionless; Exponent : Positive) return Dimensionless;
-      --  Compute a downward-rounded positive integer power.
-
-      function Lower_Power (Base : Dimensionless; Exponent : Positive) return Dimensionless is
-         Value : Dimensionless := 1.0;
-      begin
-         if Base <= 0.0 or else not Is_Finite (Base) then
-            return 0.0;
-         end if;
-         for Count in 1 .. Exponent loop
-            Value := Down (Value * Base);
-            if Value <= 0.0 or else not Is_Finite (Value) then
-               return 0.0;
-            end if;
-         end loop;
-         return Value;
-      exception
-         when Constraint_Error =>
-            return 0.0;
-      end Lower_Power;
 
       --  Map normalized physical distance U to polynomial chart coordinate V with an outward-rounded enclosure of the
       --  endpoint-preserving Möbius warp. Exact endpoints remain exact to avoid widening full-range queries.
@@ -3506,7 +3014,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          end if;
          Numerator := Interval_Multiply (W_Interval, U_Interval);
          Denominator := Interval_Add (Interval_Subtract (Interval_Exact (1.0), U_Interval), Numerator);
-         return Divide_Intervals (Numerator, Denominator);
+         return Interval_Divide (Numerator, Denominator);
       exception
          when Constraint_Error =>
             return Invalid_Interval;
@@ -3640,7 +3148,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          G_Degree := 2;
          G (0) := Interval_Exact (Curve.Warp_Factor);
          G (1) := Interval_Exact (1.0);
-         G (2) := Divide_Intervals (Interval_Exact (1.0), Interval_Exact (Curve.Warp_Factor));
+         G (2) := Interval_Divide (Interval_Exact (1.0), Interval_Exact (Curve.Warp_Factor));
       end if;
 
       for Order in Majorant_Order loop
@@ -3688,8 +3196,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   declare
                      Rational_Bound   : constant Dimensionless := Rational_Bounds (Axis);
                      Correction       : constant Interval := Finish_Correction_Interval (Curve.Evaluator_Data, Axis);
-                     Correction_Ratio : constant Interval :=
-                       Divide_Intervals (Correction, Interval_Exact (Length_Raw));
+                     Correction_Ratio : constant Interval := Interval_Divide (Correction, Interval_Exact (Length_Raw));
                      Correction_Bound : constant Dimensionless :=
                        (if Correction_Ratio.Valid
                         then Up (Interval_Abs_Max (Correction_Ratio) * Correction_Bounds (Order))
@@ -3853,31 +3360,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Correction_Numerator  : Interval := Interval_Exact (0.0);
       Component_Bound       : Dimensionless := 0.0;
 
-      function Divide_Interval_By_Positive (Numerator, Denominator : Interval) return Interval;
-      --  Enclose interval division while requiring a strictly positive denominator.
-
-      function Divide_Interval_By_Positive (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Numerator.Valid or else not Denominator.Valid or else Denominator.Lower <= 0.0 then
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-         elsif Numerator.Lower = 0.0 and then Numerator.Upper = 0.0 then
-            return Interval_Exact (0.0);
-         end if;
-         declare
-            Q1 : constant Dimensionless := Numerator.Lower / Denominator.Lower;
-            Q2 : constant Dimensionless := Numerator.Lower / Denominator.Upper;
-            Q3 : constant Dimensionless := Numerator.Upper / Denominator.Lower;
-            Q4 : constant Dimensionless := Numerator.Upper / Denominator.Upper;
-         begin
-            return
-              Checked_Interval
-                (Down (Dimensionless'Min (Dimensionless'Min (Q1, Q2), Dimensionless'Min (Q3, Q4))),
-                 Up (Dimensionless'Max (Dimensionless'Max (Q1, Q2), Dimensionless'Max (Q3, Q4))));
-         end;
-      exception
-         when Constraint_Error =>
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-      end Divide_Interval_By_Positive;
    begin
       if Curve.Evaluator_Data.Kind = Zero_Curve_Kind or else Is_Zero_Projection (Coefficients) then
          return 0.0 / mm;
@@ -3945,7 +3427,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       declare
          Correction_Projection : constant Interval :=
-           Divide_Interval_By_Positive
+           Interval_Divide
              (Correction_Numerator, Interval_Exact (Dimensionless (Curve.Evaluator_Data.Length_Value / mm)));
          Ideal_Bound           : constant Dimensionless := Certified_Upper_Square_Root (Frame_Square_Sum);
          Projection_Norm       : constant Dimensionless := Certified_Upper_Square_Root (Projection_Square_Sum);
@@ -4372,85 +3854,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Order : Endpoint_Tangent_Derivative_Order;
       Value : out Interval_Position_Scale) return Boolean
    is
-      type Interval_Complex is record
-         Real_Part      : Interval;
-         Imaginary_Part : Interval;
-      end record;
 
       function Unbounded_Interval return Interval
       is ((Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False));
-
-      function Divide_By_Nonzero (Numerator, Denominator : Interval) return Interval;
-      --  Enclose division by an interval that excludes zero.
-
-      function Divide_By_Nonzero (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Numerator.Valid
-           or else not Denominator.Valid
-           or else (Denominator.Lower <= 0.0 and then Denominator.Upper >= 0.0)
-         then
-            return Unbounded_Interval;
-         end if;
-         declare
-            Q1 : constant Dimensionless := Numerator.Lower / Denominator.Lower;
-            Q2 : constant Dimensionless := Numerator.Lower / Denominator.Upper;
-            Q3 : constant Dimensionless := Numerator.Upper / Denominator.Lower;
-            Q4 : constant Dimensionless := Numerator.Upper / Denominator.Upper;
-         begin
-            return
-              Checked_Interval
-                (Down (Dimensionless'Min (Dimensionless'Min (Q1, Q2), Dimensionless'Min (Q3, Q4))),
-                 Up (Dimensionless'Max (Dimensionless'Max (Q1, Q2), Dimensionless'Max (Q3, Q4))));
-         end;
-      exception
-         when Constraint_Error =>
-            return Unbounded_Interval;
-      end Divide_By_Nonzero;
-
-      function Divide_By_Positive (Numerator, Denominator : Interval) return Interval;
-      --  Enclose division by an interval that is strictly positive.
-
-      function Divide_By_Positive (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Denominator.Valid or else Denominator.Lower <= 0.0 then
-            return Unbounded_Interval;
-         else
-            return Divide_By_Nonzero (Numerator, Denominator);
-         end if;
-      end Divide_By_Positive;
-
-      function Multiply (Left, Right : Interval_Complex) return Interval_Complex
-      is (Real_Part      =>
-            Interval_Subtract
-              (Interval_Multiply (Left.Real_Part, Right.Real_Part),
-               Interval_Multiply (Left.Imaginary_Part, Right.Imaginary_Part)),
-          Imaginary_Part =>
-            Interval_Add
-              (Interval_Multiply (Left.Real_Part, Right.Imaginary_Part),
-               Interval_Multiply (Left.Imaginary_Part, Right.Real_Part)));
-
-      function Complex_Reciprocal (Point, Pole_Real, Pole_Imaginary : Dimensionless) return Interval_Complex;
-      --  Enclose the reciprocal distance from Point to a complex pole.
-
-      function Complex_Reciprocal (Point, Pole_Real, Pole_Imaginary : Dimensionless) return Interval_Complex is
-         Offset           : constant Interval :=
-           Interval_Subtract (Interval_Exact (Point), Interval_Exact (Pole_Real));
-         Imaginary        : constant Interval := Interval_Exact (Pole_Imaginary);
-         Offset_Square    : Interval := Interval_Multiply (Offset, Offset);
-         Imaginary_Square : Interval := Interval_Multiply (Imaginary, Imaginary);
-         Denominator      : Interval;
-      begin
-         Offset_Square.Lower := Dimensionless'Max (0.0, Offset_Square.Lower);
-         Imaginary_Square.Lower := Dimensionless'Max (0.0, Imaginary_Square.Lower);
-         Denominator := Interval_Add (Offset_Square, Imaginary_Square);
-         Denominator.Lower := Dimensionless'Max (0.0, Denominator.Lower);
-         return
-           (Real_Part      => Divide_By_Positive (Offset, Denominator),
-            Imaginary_Part => Divide_By_Positive (Imaginary, Denominator));
-      exception
-         when Constraint_Error =>
-            return (Real_Part => Unbounded_Interval, Imaginary_Part => Unbounded_Interval);
-      end Complex_Reciprocal;
 
       Signed_Factor : constant Dimensionless := (if Order mod 2 = 0 then Factorial (Order) else -Factorial (Order));
    begin
@@ -4462,7 +3868,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          declare
             Slot       : Rational_Pole_Slot renames Cache.Pole_Slots (Index);
             Reciprocal : constant Interval :=
-              Divide_By_Nonzero
+              Interval_Divide
                 (Interval_Exact (1.0), Interval_Subtract (Interval_Exact (U), Interval_Exact (Slot.Pole_Component)));
             Power      : Interval := Interval_Exact (1.0);
          begin
@@ -4492,7 +3898,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
               (Real_Part => Interval_Exact (1.0), Imaginary_Part => Interval_Exact (0.0));
          begin
             for Exponent in 1 .. Order + 1 loop
-               Reciprocal_Power := Multiply (Reciprocal_Power, Reciprocal);
+               Reciprocal_Power := Complex_Multiply (Reciprocal_Power, Reciprocal);
             end loop;
             for Axis in Axis_Name loop
                Value (Axis) :=
@@ -4644,38 +4050,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       return Result;
    end Multiply_Bernstein;
 
-   function Elevate_Bernstein
-     (Source : Certificate_Polynomial; Source_Degree : Natural; Target_Degree : Natural) return Certificate_Polynomial;
-   --  Elevate a certificate polynomial to Target_Degree without changing its value.
-
-   function Elevate_Bernstein
-     (Source : Certificate_Polynomial; Source_Degree : Natural; Target_Degree : Natural) return Certificate_Polynomial
-   is
-      Result : Certificate_Polynomial := [others => Interval_Exact (0.0)];
-   begin
-      if Source_Degree > Target_Degree then
-         raise Constraint_Error;
-      end if;
-
-      for Target_Index in 0 .. Target_Degree loop
-         for Source_Index in 0 .. Source_Degree loop
-            if Target_Index >= Source_Index and then Target_Index - Source_Index <= Target_Degree - Source_Degree then
-               declare
-                  Raw_Weight : constant Dimensionless :=
-                    Binomial (Source_Degree, Source_Index)
-                    * Binomial (Target_Degree - Source_Degree, Target_Index - Source_Index)
-                    / Binomial (Target_Degree, Target_Index);
-                  Weight     : constant Interval := Checked_Interval (Down (Raw_Weight), Up (Raw_Weight));
-               begin
-                  Result (Target_Index) :=
-                    Interval_Add (Result (Target_Index), Interval_Multiply (Weight, Source (Source_Index)));
-               end;
-            end if;
-         end loop;
-      end loop;
-      return Result;
-   end Elevate_Bernstein;
-
    function Power_To_Bernstein
      (Power : Quadratic_Factor_Coefficients; Degree : Positive) return Quadratic_Factor_Coefficients;
    --  Convert a quadratic-factor polynomial from power to Bernstein coefficients.
@@ -4762,8 +4136,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Coefficients  : Quadratic_Factor_Coefficients;
          Normalization : Interval);
 
-      function Divide_Intervals (Numerator, Denominator : Interval) return Interval;
-
       procedure Product_Of_Other_Factors
         (Excluded : Positive; Product : out Certificate_Polynomial; Degree : out Natural);
 
@@ -4795,23 +4167,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Coefficients  => Coefficients,
             Normalization => Normalization);
       end Append_Factor;
-
-      function Divide_Intervals (Numerator, Denominator : Interval) return Interval is
-      begin
-         if not Numerator.Valid
-           or else not Denominator.Valid
-           or else (Denominator.Lower <= 0.0 and then Denominator.Upper >= 0.0)
-         then
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-         end if;
-
-         return
-           Interval_Multiply
-             (Numerator, Checked_Interval (Down (1.0 / Denominator.Upper), Up (1.0 / Denominator.Lower)));
-      exception
-         when Constraint_Error =>
-            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-      end Divide_Intervals;
 
       procedure Product_Of_Other_Factors
         (Excluded : Positive; Product : out Certificate_Polynomial; Degree : out Natural) is
@@ -4952,7 +4307,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Factor_Power (1) := Interval_Add (Interval_Exact (1.0), Interval_Multiply (Pole, Warp_Difference));
             Normalization := Factor_Power (0);
             Normalized_Power (0) := Interval_Exact (1.0);
-            Normalized_Power (1) := Divide_Intervals (Factor_Power (1), Normalization);
+            Normalized_Power (1) := Interval_Divide (Factor_Power (1), Normalization);
             Append_Factor
               (Degree        => 1,
                Is_Real       => True,
@@ -4993,7 +4348,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Normalization := Factor_Power (0);
             Normalized_Power (0) := Interval_Exact (1.0);
             for Index in 1 .. 2 loop
-               Normalized_Power (Index) := Divide_Intervals (Factor_Power (Index), Normalization);
+               Normalized_Power (Index) := Interval_Divide (Factor_Power (Index), Normalization);
             end loop;
             Append_Factor
               (Degree        => 2,
@@ -5050,7 +4405,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                      begin
                         for Index in 0 .. 1 loop
                            Numerator_Power (Index) :=
-                             Divide_Intervals
+                             Interval_Divide
                                (Interval_Multiply (Residue, H (Index)), Factors (Factor_Index).Normalization);
                         end loop;
                         Numerator_Bernstein := Power_To_Bernstein (Numerator_Power, 1);
@@ -5107,7 +4462,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
                         for Index in 0 .. 2 loop
                            Numerator_Power (Index) :=
-                             Divide_Intervals (Numerator_Power (Index), Factors (Factor_Index).Normalization);
+                             Interval_Divide (Numerator_Power (Index), Factors (Factor_Index).Normalization);
                         end loop;
                         Numerator_Bernstein := Power_To_Bernstein (Numerator_Power, 2);
                         for Index in 0 .. 2 loop
@@ -5871,20 +5226,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                      then
                         return Realtime_Representation_Insufficient;
                      end if;
-                     declare
-                        Endpoint_Jet_Error : Endpoint_Jet_Error_Bounds;
-                     begin
-                        if Measure_Evaluator_Endpoint_Jet_Error
-                             (Curve.Evaluator_Data, Start_Jet, Finish_Jet, Endpoint_Jet_Error)
-                        then
-                           Curve.Certified_Endpoint_Jet_Error := Endpoint_Jet_Error;
-                        else
-                           --  Endpoint diagnostics must not veto a cache already accepted by the uniform retained
-                           --  tangent and position certificates. Saturate the optional per-order report instead;
-                           --  callers can distinguish this explicit unavailable marker from every finite enclosure.
-                           Curve.Certified_Endpoint_Jet_Error := [others => Dimensionless'Last];
-                        end if;
-                     end;
+                     Curve.Requested_Start_Jet := Start_Jet;
+                     Curve.Requested_Finish_Jet := Finish_Jet;
                      Curve.Certified_Position_Error := Physical_Error;
                      Curve.Certified_Tangent_Error := Certificate.Error_Bound;
                      --  Keep the construction-only common-denominator proof beside the installed cache. Later range
@@ -6101,6 +5444,64 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return Length'Last;
    end Realtime_Point_Roundoff_Bound;
 
+   function No_Bulge_Is_Possible (Request : Blend_Request; Chord_Direction : Position_Scale) return Boolean;
+   --  Check first-order conditions which every curve inside the endpoint cone satisfies: the cone has not collapsed,
+   --  the chord lies inside it, and each endpoint curvature turns the tangent into it. A False result proves that the
+   --  no-bulge certificate cannot succeed; a True result leaves the decision to that certificate.
+
+   function No_Bulge_Is_Possible (Request : Blend_Request; Chord_Direction : Position_Scale) return Boolean is
+      Start_Tangent   : Position_Scale renames Request.Start.Jet.Tangent;
+      Finish_Tangent  : Position_Scale renames Request.Finish.Jet.Tangent;
+      Turn_Tolerance  : constant Dimensionless := 1.0E-9;
+      Chord_Tolerance : constant Dimensionless := 1.0E-6;
+      --  Only clear violations count. The chord allowance exceeds every closure tolerance, because the endpoint
+      --  correction absorbs the closure residual of an ideal curve which is itself inside the cone.
+   begin
+      declare
+         Start_Turn_Rate  : constant Position_Scale :=
+           [for Axis in Axis_Name => Dimensionless (Request.Start.Jet.Tangent_Derivative_1 (Axis) * mm)];
+         Finish_Turn_Rate : constant Position_Scale :=
+           [for Axis in Axis_Name => Dimensionless (Request.Finish.Jet.Tangent_Derivative_1 (Axis) * mm)];
+         Start_Square     : constant Dimensionless := Dot (Start_Tangent, Start_Tangent);
+         Finish_Square    : constant Dimensionless := Dot (Finish_Tangent, Finish_Tangent);
+         Cross            : constant Dimensionless := Dot (Start_Tangent, Finish_Tangent);
+         Determinant      : constant Dimensionless := Start_Square * Finish_Square - Cross ** 2;
+         --  In the endpoint plane, Start_Dual is orthogonal to the finish tangent and Finish_Dual to the start
+         --  tangent. A tangent a·s + b·f + (normal part) projects onto them as a·Δ and b·Δ, where Δ is the Gram
+         --  determinant.
+         Start_Dual       : constant Position_Scale := Start_Tangent * Finish_Square - Finish_Tangent * Cross;
+         Finish_Dual      : constant Position_Scale := Finish_Tangent * Start_Square - Start_Tangent * Cross;
+         Start_Dual_Norm  : constant Dimensionless := Dimensionless_Math.Sqrt (Dot (Start_Dual, Start_Dual));
+         Finish_Dual_Norm : constant Dimensionless := Dimensionless_Math.Sqrt (Dot (Finish_Dual, Finish_Dual));
+      begin
+         if not (Determinant > 256.0 * Dimensionless'Model_Epsilon * Start_Square * Finish_Square) then
+            --  A collapsed cone admits only a straight curve along the shared tangent, which the planar control-hull
+            --  certificate accepts. Anything leaving that line is impossible.
+            declare
+               Along : constant Dimensionless := Dot (Chord_Direction, Start_Tangent) / Start_Square;
+               Off   : constant Position_Scale := Chord_Direction - Start_Tangent * Along;
+            begin
+               return Cross > 0.0 and then Along > 0.0 and then Dot (Off, Off) <= Chord_Tolerance ** 2;
+            end;
+         end if;
+         --  Near the start the tangent is s + u·κₛ, whose finish-dual projection u·κₛ·Finish_Dual must not be
+         --  negative. Near the finish it is f - u·κꜰ, whose start-dual projection -u·κꜰ·Start_Dual must not be
+         --  negative either.
+         return
+           Dot (Chord_Direction, Start_Dual) >= -Chord_Tolerance * Start_Dual_Norm
+           and then Dot (Chord_Direction, Finish_Dual) >= -Chord_Tolerance * Finish_Dual_Norm
+           and then
+             Dot (Start_Turn_Rate, Finish_Dual)
+             >= -Turn_Tolerance * Dimensionless_Math.Sqrt (Dot (Start_Turn_Rate, Start_Turn_Rate)) * Finish_Dual_Norm
+           and then
+             Dot (Finish_Turn_Rate, Start_Dual)
+             <= Turn_Tolerance * Dimensionless_Math.Sqrt (Dot (Finish_Turn_Rate, Finish_Turn_Rate)) * Start_Dual_Norm;
+      end;
+   exception
+      when Constraint_Error =>
+         return False;
+   end No_Bulge_Is_Possible;
+
    function Build_Candidate
      (Request                             : Blend_Request;
       Chord_Length                        : Length;
@@ -6116,6 +5517,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
         Dimensionless'Max (Closure_Absolute_Floor, Dimensionless'Min (1.0E-8, Epsilon / 2_048.0));
       Fine_Tolerance   : constant Dimensionless :=
         Dimensionless'Max (Closure_Absolute_Floor, Dimensionless'Min (1.0E-11, Epsilon / 4_096.0));
+      Bulge_Allowed    : constant Boolean :=
+        (case Request.Bulge is
+           when Never            => False,
+           when When_Unavoidable => not No_Bulge_Is_Possible (Request, Chord_Direction),
+           when Always           => True);
 
       --  Closure is solved in chord-normalized coordinates. Tie both Newton tolerances to the available normalized
       --  position budget ε = Maximum_Position_Error/Chord_Length, while retaining an arithmetic noise floor.
@@ -6138,7 +5544,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
               Initial     => (others => <>),
               Panel_Count => 1));
 
-      Solution        : constant Closure_Solution :=
+      Solution : constant Closure_Solution :=
         (if Initial_Closure.Valid
          then
            --  The final global tangent certificate and continuous endpoint correction still verify the proposal. If
@@ -6181,10 +5587,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          --  The no-bulge certificates treat the last two chart coordinates as normal components. For flat endpoint
          --  jets and a chord in the endpoint-tangent plane up to stored-coordinate resolution, cancellation can leave
          --  roundoff-sized residues there, and the closure solve can amplify them into a spurious normal mode.
-         --  Canonicalize the structurally planar result before deriving any runtime representation. A no-bulge
-         --  request may remove a normal closure mode which is forbidden by the request; an allow-bulge request removes
-         --  it only when every coefficient proves that it is numerical noise. The representation and continuous
-         --  endpoint-correction certificates below still gate the resulting production curve.
+         --  Canonicalize the structurally planar result before deriving any runtime representation. When bulging is
+         --  not allowed, the normal closure mode is removed outright: flat in-plane endpoint jets and an in-plane
+         --  chord give it no source. Otherwise it is removed only when every coefficient proves that it is numerical
+         --  noise. The representation and continuous endpoint-correction certificates below still gate the resulting
+         --  production curve.
          declare
             Endpoint_Derivatives_Are_Flat : constant Boolean :=
               (for all K in 1 .. Start_Chart_Jets'Last =>
@@ -6205,7 +5612,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                       (abs Frame_Coordinate (Frame, C, Chord_Direction) <= Frame_Residual_Tolerance
                        or else Chord_Is_Structurally_Planar)
                     and then
-                      (not Request.Allow_Bulge
+                      (not Bulge_Allowed
                        or else
                          (for all K in Chart_Coefficient_Index => abs Coefficients (K, C) <= Frame_Residual_Tolerance))
                   then
@@ -6216,6 +5623,17 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   end if;
                end loop;
             end if;
+
+            --  A frame built from the endpoint-tangent plane leaves only roundoff in the endpoint normal coordinates.
+            --  Remove it so the spatial no-bulge certificate sees both endpoint tangents exactly in the frame plane.
+            for C in 2 .. 3 loop
+               if abs Coefficients (0, C) <= Frame_Residual_Tolerance then
+                  Coefficients (0, C) := 0.0;
+               end if;
+               if abs Coefficients (Fixed_Chart_Degree, C) <= Frame_Residual_Tolerance then
+                  Coefficients (Fixed_Chart_Degree, C) := 0.0;
+               end if;
+            end loop;
          end;
 
          declare
@@ -6235,7 +5653,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Certified_Frame_Speed_Upper  => Frame_Speed_Upper,
                Certified_Position_Error     => 0.0 * mm,
                Certified_Tangent_Error      => 0.0,
-               Certified_Endpoint_Jet_Error => [others => 0.0],
+               Requested_Start_Jet          => Request.Start.Jet,
+               Requested_Finish_Jet         => Request.Finish.Jet,
                Retained_Tangent_Certificate => (others => <>),
                Whole_Curve_Majorants        => [others => [others => 0.0]],
                Has_Whole_Curve_Majorants    => False,
@@ -6266,26 +5685,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             end loop;
 
             declare
-               type Interval_Bernstein is array (Natural range <>) of Interval;
+               subtype Interval_Bernstein is Interval_Polynomial;
 
                function Strict_Bernstein_Nonnegative
                  (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean;
                function Certify_Planar_Control_Hull (Applicable : out Boolean) return Boolean;
                function Certify_Planar_No_Bulge (Applicable : out Boolean) return Boolean;
-               function Exact_Dot_Interval (Left, Right : Position_Scale) return Interval;
-               function Certify_Nonnegative_Projection (Direction : Interval_Position_Scale) return Boolean;
+               function Certify_Spatial_No_Bulge return Boolean;
                function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean;
-
-               function Exact_Dot_Interval (Left, Right : Position_Scale) return Interval is
-                  Result : Interval := Interval_Exact (0.0);
-               begin
-                  for Axis in Axis_Name loop
-                     Result :=
-                       Interval_Add
-                         (Result, Interval_Multiply (Interval_Exact (Left (Axis)), Interval_Exact (Right (Axis))));
-                  end loop;
-                  return Result;
-               end Exact_Dot_Interval;
 
                function Strict_Bernstein_Nonnegative
                  (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean
@@ -6328,6 +5735,22 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                        and then Strict_Bernstein_Nonnegative (Right, Depth - 1);
                   end;
                end Strict_Bernstein_Nonnegative;
+
+               function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval;
+               --  Enclose a ratio whose numerator is nonnegative and denominator is positive.
+
+               function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval is
+                  Value : Dimensionless;
+               begin
+                  if Numerator < 0.0 or else Denominator <= 0.0 then
+                     return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+                  end if;
+                  Value := Numerator / Denominator;
+                  return Checked_Interval (Down (Value), Up (Value));
+               exception
+                  when Constraint_Error =>
+                     return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+               end Positive_Ratio;
 
                function Certify_Planar_Control_Hull (Applicable : out Boolean) return Boolean is
                   Start_Value  : constant Dimensionless := Curve.Coefficients (0, 1);
@@ -6386,50 +5809,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                       [others => Interval_Exact (0.0)];
                   Start_Value                 : constant Dimensionless := Curve.Coefficients (0, 1);
                   Finish_Value                : constant Dimensionless := Curve.Coefficients (Fixed_Chart_Degree, 1);
-
-                  function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval;
-                  --  Enclose a ratio whose numerator is nonnegative and denominator is positive.
-
-                  function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval is
-                     Value : Dimensionless;
-                  begin
-                     if Numerator < 0.0 or else Denominator <= 0.0 then
-                        return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-                     end if;
-                     Value := Numerator / Denominator;
-                     return Checked_Interval (Down (Value), Up (Value));
-                  exception
-                     when Constraint_Error =>
-                        return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-                  end Positive_Ratio;
-
-                  procedure Build_Product
-                    (Left : Interval_Bernstein; Right : Interval_Bernstein; Result : out Interval_Bernstein);
-
-                  procedure Build_Product
-                    (Left : Interval_Bernstein; Right : Interval_Bernstein; Result : out Interval_Bernstein)
-                  is
-                     Left_Degree    : constant Natural := Left'Length - 1;
-                     Right_Degree   : constant Natural := Right'Length - 1;
-                     Product_Degree : constant Natural := Left_Degree + Right_Degree;
-                  begin
-                     Result := [others => Interval_Exact (0.0)];
-                     for I in Left'Range loop
-                        for J in Right'Range loop
-                           declare
-                              K      : constant Natural := I + J;
-                              Weight : constant Interval :=
-                                Positive_Ratio
-                                  (Binomial (Left_Degree, I) * Binomial (Right_Degree, J),
-                                   Binomial (Product_Degree, K));
-                           begin
-                              Result (K) :=
-                                Interval_Add
-                                  (Result (K), Interval_Multiply (Weight, Interval_Multiply (Left (I), Right (J))));
-                           end;
-                        end loop;
-                     end loop;
-                  end Build_Product;
 
                   Orientation      : Interval;
                   Orientation_Sign : Dimensionless;
@@ -6501,8 +5880,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                           Interval_Multiply
                             (Interval_Exact (Finish_Value), Interval_Exact (Curve.Coefficients (I, 1))));
                   end loop;
-                  Build_Product (Start_Quotient, Start_Factor, Start_Product);
-                  Build_Product (Finish_Quotient, Finish_Factor, Finish_Product);
+                  Start_Product := Multiply_Bernstein (Start_Quotient, Start_Factor);
+                  Finish_Product := Multiply_Bernstein (Finish_Quotient, Finish_Factor);
                   for I in Start_Product'Range loop
                      Start_Product (I) := Interval_Multiply (Interval_Exact (Orientation_Sign), Start_Product (I));
                   end loop;
@@ -6518,69 +5897,196 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                      return False;
                end Certify_Planar_No_Bulge;
 
-               function Certify_Nonnegative_Projection (Direction : Interval_Position_Scale) return Boolean is
+               function Certify_Spatial_No_Bulge return Boolean is
+                  Start_Value  : constant Dimensionless := Curve.Coefficients (0, 1);
+                  Finish_Value : constant Dimensionless := Curve.Coefficients (Fixed_Chart_Degree, 1);
+
+                  function Root_Order (C : Chart_Component_Index; At_Start : Boolean) return Positive;
+                  --  Return k such that the endpoint root of Y꜀ - Y꜀(endpoint) has order at least k. Equal leading
+                  --  controls expose higher orders, as for structurally flat endpoint jets.
+
+                  function Root_Order (C : Chart_Component_Index; At_Start : Boolean) return Positive is
+                     Endpoint : constant Chart_Coefficient_Index := (if At_Start then 0 else Fixed_Chart_Degree);
+                     Order    : Positive := 1;
+                  begin
+                     while Order < 4
+                       and then
+                         Curve.Coefficients ((if At_Start then Order else Fixed_Chart_Degree - Order), C)
+                         = Curve.Coefficients (Endpoint, C)
+                     loop
+                        Order := Order + 1;
+                     end loop;
+                     return Order;
+                  end Root_Order;
+
+                  procedure Quotient
+                    (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein);
+                  --  Divide out the exact endpoint root in Bernstein form: (Y꜀ - Y꜀(0))/Vᵏ at the start, or
+                  --  (Y꜀(1) - Y꜀)/(1 - V)ᵏ at the finish. Result has degree eight minus Order.
+
+                  procedure Quotient
+                    (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein)
+                  is
+                  begin
+                     for J in Result'Range loop
+                        if At_Start then
+                           Result (J) :=
+                             Interval_Multiply
+                               (Interval_Subtract
+                                  (Interval_Exact (Curve.Coefficients (J + Order, C)),
+                                   Interval_Exact (Curve.Coefficients (0, C))),
+                                Positive_Ratio
+                                  (Binomial (Fixed_Chart_Degree, J + Order),
+                                   Binomial (Fixed_Chart_Degree - Order, J)));
+                        else
+                           Result (J) :=
+                             Interval_Multiply
+                               (Interval_Subtract
+                                  (Interval_Exact (Curve.Coefficients (Fixed_Chart_Degree, C)),
+                                   Interval_Exact (Curve.Coefficients (J, C))),
+                                Positive_Ratio
+                                  (Binomial (Fixed_Chart_Degree, J), Binomial (Fixed_Chart_Degree - Order, J)));
+                        end if;
+                     end loop;
+                  end Quotient;
+
+                  procedure Raise_Degree
+                    (Polynomial : Interval_Bernstein;
+                     Power      : Natural;
+                     At_Start   : Boolean;
+                     Result     : out Interval_Bernstein);
+                  --  Multiply by Vᵖ at the start, or by (1 - V)ᵖ at the finish. Result has Power more degrees.
+
+                  procedure Raise_Degree
+                    (Polynomial : Interval_Bernstein;
+                     Power      : Natural;
+                     At_Start   : Boolean;
+                     Result     : out Interval_Bernstein)
+                  is
+                     Degree : constant Natural := Polynomial'Length - 1;
+                  begin
+                     if Power = 0 then
+                        Result := Polynomial;
+                        return;
+                     end if;
+                     Result := [others => Interval_Exact (0.0)];
+                     --  Vᵖ·Bⱼ,ₙ = C(n,j)/C(n+p,j+p)·Bⱼ₊ₚ,ₙ₊ₚ and (1 - V)ᵖ·Bⱼ,ₙ = C(n,j)/C(n+p,j)·Bⱼ,ₙ₊ₚ.
+                     for J in Polynomial'Range loop
+                        if At_Start then
+                           Result (J + Power) :=
+                             Interval_Multiply
+                               (Polynomial (J),
+                                Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J + Power)));
+                        else
+                           Result (J) :=
+                             Interval_Multiply
+                               (Polynomial (J), Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J)));
+                        end if;
+                     end loop;
+                  end Raise_Degree;
+
+                  function Certify_End (At_Start : Boolean; Orientation_Sign : Dimensionless) return Boolean;
+                  --  Certify the cone determinant at one end after dividing out its endpoint root.
+
+                  function Certify_End (At_Start : Boolean; Orientation_Sign : Dimensionless) return Boolean is
+                     Value            : constant Dimensionless := (if At_Start then Start_Value else Finish_Value);
+                     Tangent_Order    : constant Positive := Root_Order (1, At_Start);
+                     Normal_Order     : constant Positive :=
+                       Positive'Min (Root_Order (2, At_Start), Root_Order (3, At_Start));
+                     Shared_Order     : constant Positive := Positive'Min (Tangent_Order, 2 * Normal_Order);
+                     In_Plane         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Tangent_Order);
+                     Normal_2         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Normal_Order);
+                     Normal_3         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Normal_Order);
+                     Factor           : Interval_Bernstein (Chart_Coefficient_Index);
+                     In_Plane_Product : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Tangent_Order);
+                     Normal_Square    : Interval_Bernstein (0 .. 2 * (Fixed_Chart_Degree - Normal_Order));
+                     Normal_Square_3  : Interval_Bernstein (0 .. 2 * (Fixed_Chart_Degree - Normal_Order));
+                     Raised_In_Plane  : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Shared_Order);
+                     Raised_Normal    : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Shared_Order);
+                  begin
+                     Quotient (1, Tangent_Order, At_Start, In_Plane);
+                     Quotient (2, Normal_Order, At_Start, Normal_2);
+                     Quotient (3, Normal_Order, At_Start, Normal_3);
+                     for I in Chart_Coefficient_Index loop
+                        Factor (I) :=
+                          Interval_Add
+                            (Interval_Exact (1.0),
+                             Interval_Multiply (Interval_Exact (Value), Interval_Exact (Curve.Coefficients (I, 1))));
+                     end loop;
+                     In_Plane_Product := Multiply_Bernstein (In_Plane, Factor);
+                     Normal_Square := Multiply_Bernstein (Normal_2, Normal_2);
+                     Normal_Square_3 := Multiply_Bernstein (Normal_3, Normal_3);
+                     for K in Normal_Square'Range loop
+                        Normal_Square (K) :=
+                          Interval_Multiply
+                            (Interval_Exact (if At_Start then Value else -Value),
+                             Interval_Add (Normal_Square (K), Normal_Square_3 (K)));
+                     end loop;
+                     Raise_Degree (In_Plane_Product, Tangent_Order - Shared_Order, At_Start, Raised_In_Plane);
+                     Raise_Degree (Normal_Square, 2 * Normal_Order - Shared_Order, At_Start, Raised_Normal);
+                     for K in Raised_In_Plane'Range loop
+                        Raised_In_Plane (K) :=
+                          Interval_Multiply
+                            (Interval_Exact (Orientation_Sign), Interval_Add (Raised_In_Plane (K), Raised_Normal (K)));
+                     end loop;
+                     return Strict_Bernstein_Nonnegative (Raised_In_Plane, 8);
+                  end Certify_End;
+
+                  Orientation : Interval;
+               begin
+                  --  The frame-plane projection of the tangent numerator is (1 - |Y|², 2·Y₁). With both endpoint
+                  --  tangents in that plane (Y₂ = Y₃ = 0 at both ends) and W = Y₂² + Y₃², the cone determinants are
+                  --
+                  --     (Y₁ - Yₛ)·(1 + Yₛ·Y₁) + Yₛ·W,   (Yꜰ - Y₁)·(1 + Yꜰ·Y₁) - Yꜰ·W.
+                  --
+                  --  They reduce to the planar factors when W = 0. Every term has an exact endpoint root:
+                  --  Y₁ - Yₛ = Vᵏ·Q and Y₂, Y₃ = Vᵐ·P at the start, and likewise in 1 - V at the finish. Divide out
+                  --  the common power so that a curve which leaves an endpoint along the cone boundary still
+                  --  certifies.
+                  for C in 2 .. 3 loop
+                     if Curve.Coefficients (0, C) /= 0.0 or else Curve.Coefficients (Fixed_Chart_Degree, C) /= 0.0 then
+                        --  This frame plane does not contain both endpoint tangents.
+                        return False;
+                     end if;
+                  end loop;
+                  Orientation :=
+                    Interval_Multiply
+                      (Interval_Subtract (Interval_Exact (Finish_Value), Interval_Exact (Start_Value)),
+                       Interval_Add
+                         (Interval_Exact (1.0),
+                          Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value))));
+                  if Orientation.Lower > 0.0 then
+                     return Certify_End (True, 1.0) and then Certify_End (False, 1.0);
+                  elsif Orientation.Upper < 0.0 then
+                     return Certify_End (True, -1.0) and then Certify_End (False, -1.0);
+                  else
+                     return False;
+                  end if;
+               exception
+                  when Constraint_Error =>
+                     return False;
+               end Certify_Spatial_No_Bulge;
+
+               function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean is
                   Numerator : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
                   R2        : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
                   Ones      : constant Interval_Bernstein (Chart_Coefficient_Index) :=
                     [others => Interval_Exact (1.0)];
 
-                  function Dot_Interval (Left : Position_Scale; Right : Interval_Position_Scale) return Interval;
-                  --  Enclose the dot product of an exact vector and an interval vector.
+                  function Dot_Interval (Left, Right : Position_Scale) return Interval;
+                  --  Enclose the dot product of two exact vectors.
 
-                  function Dot_Interval (Left : Position_Scale; Right : Interval_Position_Scale) return Interval is
+                  function Dot_Interval (Left, Right : Position_Scale) return Interval is
                      Result : Interval := Interval_Exact (0.0);
                   begin
                      for Axis in Axis_Name loop
                         Result :=
-                          Interval_Add (Result, Interval_Multiply (Interval_Exact (Left (Axis)), Right (Axis)));
+                          Interval_Add
+                            (Result, Interval_Multiply (Interval_Exact (Left (Axis)), Interval_Exact (Right (Axis))));
                      end loop;
                      return Result;
                   end Dot_Interval;
 
-                  function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval;
-                  --  Enclose a ratio whose numerator is nonnegative and denominator is positive.
-
-                  function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval is
-                     Value : Dimensionless;
-                  begin
-                     if Numerator < 0.0 or else Denominator <= 0.0 then
-                        return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-                     end if;
-                     Value := Numerator / Denominator;
-                     return Checked_Interval (Down (Value), Up (Value));
-                  exception
-                     when Constraint_Error =>
-                        return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-                  end Positive_Ratio;
-
-                  procedure Build_Product
-                    (Left : Interval_Bernstein; Right : Interval_Bernstein; Result : out Interval_Bernstein);
-                  --  Build the interval Bernstein product of Left and Right.
-
-                  procedure Build_Product
-                    (Left : Interval_Bernstein; Right : Interval_Bernstein; Result : out Interval_Bernstein)
-                  is
-                     Left_Degree    : constant Natural := Left'Length - 1;
-                     Right_Degree   : constant Natural := Right'Length - 1;
-                     Product_Degree : constant Natural := Left_Degree + Right_Degree;
-                  begin
-                     Result := [others => Interval_Exact (0.0)];
-                     for I in Left'Range loop
-                        for J in Right'Range loop
-                           declare
-                              K      : constant Natural := I + J;
-                              Weight : constant Interval :=
-                                Positive_Ratio
-                                  (Binomial (Left_Degree, I) * Binomial (Right_Degree, J),
-                                   Binomial (Product_Degree, K));
-                           begin
-                              Result (K) :=
-                                Interval_Add
-                                  (Result (K), Interval_Multiply (Weight, Interval_Multiply (Left (I), Right (J))));
-                           end;
-                        end loop;
-                     end loop;
-                  end Build_Product;
                begin
                   --  Form the inverse-stereographic tangent numerator
                   --
@@ -6596,7 +6102,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                           [for I in Chart_Coefficient_Index => Interval_Exact (Curve.Coefficients (I, C))];
                         Squared : Interval_Bernstein (Tangent_Numerator_Index);
                      begin
-                        Build_Product (Y, Y, Squared);
+                        Squared := Multiply_Bernstein (Y, Y);
                         for K in Tangent_Numerator_Index loop
                            R2 (K) := Interval_Add (R2 (K), Squared (K));
                         end loop;
@@ -6617,7 +6123,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                           [for I in Chart_Coefficient_Index => Interval_Exact (Curve.Coefficients (I, C))];
                         Elevated         : Interval_Bernstein (Tangent_Numerator_Index);
                      begin
-                        Build_Product (Y, Ones, Elevated);
+                        Elevated := Multiply_Bernstein (Y, Ones);
                         for K in Tangent_Numerator_Index loop
                            Numerator (K) :=
                              Interval_Add
@@ -6630,15 +6136,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   return Strict_Bernstein_Nonnegative (Numerator, 8);
                end Certify_Nonnegative_Projection;
 
-               function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean is
-               begin
-                  return
-                    Certify_Nonnegative_Projection
-                      (Interval_Position_Scale'([for Axis in Axis_Name => Interval_Exact (Direction (Axis))]));
-               end Certify_Nonnegative_Projection;
-
                function Certify_No_Bulge return Boolean;
-               --  Certify that the curve remains inside the endpoint-tangent cone.
+               --  Certify that the tangent's projection onto the endpoint-tangent plane stays inside the endpoint
+               --  cone.
 
                function Certify_No_Bulge return Boolean is
                   Planar_Applicable : Boolean;
@@ -6655,66 +6155,16 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   if Planar_Applicable then
                      return Planar_Certified;
                   end if;
-
-                  declare
-                     Start_Tangent  : constant Position_Scale :=
-                       Frame_Vector (Frame, Stereographic (Start_Chart_Jets (0)));
-                     Finish_Tangent : constant Position_Scale :=
-                       Frame_Vector (Frame, Stereographic (Finish_Chart_Jets (0)));
-                     Start_Square   : constant Interval := Exact_Dot_Interval (Start_Tangent, Start_Tangent);
-                     Finish_Square  : constant Interval := Exact_Dot_Interval (Finish_Tangent, Finish_Tangent);
-                     Cross          : constant Interval := Exact_Dot_Interval (Start_Tangent, Finish_Tangent);
-                     Determinant    : constant Interval :=
-                       Interval_Subtract
-                         (Interval_Multiply (Start_Square, Finish_Square), Interval_Multiply (Cross, Cross));
-                  begin
-                     --  The Gram determinant
-                     --
-                     --     Δ = (s·s)·(f·f) - (s·f)²
-                     --
-                     --  must stay positive before the endpoint-tangent dual directions can be certified.
-                     if not Determinant.Valid or else Determinant.Lower <= 1.0E-10 then
-                        --  A single chord projection cannot certify a nearly collapsed endpoint cone. The scalar
-                        --  planar proof above handles the normal line-line path; reject a genuinely non-planar
-                        --  degenerate case rather than weaken no-bulge.
-                        return False;
-                     end if;
-                     declare
-                        Start_Dual_Numerator   : Interval_Position_Scale;
-                        Finish_Dual_Numerator  : Interval_Position_Scale;
-                        Out_Of_Plane_Tolerance : constant Dimensionless := 1.0E-10;
-                     begin
-                        for Axis in Axis_Name loop
-                           Start_Dual_Numerator (Axis) :=
-                             Interval_Subtract
-                               (Interval_Multiply (Finish_Square, Interval_Exact (Start_Tangent (Axis))),
-                                Interval_Multiply (Cross, Interval_Exact (Finish_Tangent (Axis))));
-                           Finish_Dual_Numerator (Axis) :=
-                             Interval_Subtract
-                               (Interval_Multiply (Start_Square, Interval_Exact (Finish_Tangent (Axis))),
-                                Interval_Multiply (Cross, Interval_Exact (Start_Tangent (Axis))));
-                        end loop;
-                        for C in 2 .. 3 loop
-                           for K in Chart_Coefficient_Index loop
-                              if abs Curve.Coefficients (K, C) > Out_Of_Plane_Tolerance then
-                                 return False;
-                              end if;
-                           end loop;
-                        end loop;
-                        return
-                          Certify_Nonnegative_Projection (Start_Dual_Numerator)
-                          and then Certify_Nonnegative_Projection (Finish_Dual_Numerator);
-                     end;
-                  end;
+                  return Certify_Spatial_No_Bulge;
                end Certify_No_Bulge;
             begin
-               --  Allow_Bulge is a relaxation of the default geometry, not a switch to a disjoint acceptance rule.
+               --  Allowing bulge is a relaxation of the default geometry, not a switch to a disjoint acceptance rule.
                --  Retain a certified no-bulge candidate first; only a candidate which leaves the endpoint tangent
                --  cone needs the chord-monotonicity proof. This matters for obtuse asymmetric line corners, whose
                --  fixed endpoint tangent can point backwards along the chord even though the complete curve stays
                --  inside its tangent cone.
                if not Certify_No_Bulge
-                 and then (not Request.Allow_Bulge or else not Certify_Nonnegative_Projection (Chord_Direction))
+                 and then (not Bulge_Allowed or else not Certify_Nonnegative_Projection (Chord_Direction))
                then
                   return (Status => Candidate_Closure_Failed);
                end if;
@@ -7216,6 +6666,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return (Kind => Blend_Invalid_Arc_Length_Limit);
       end if;
 
+      if Request.Bulge = Never and then not No_Bulge_Is_Possible (Request, Chord / Chord_Length) then
+         return (Kind => Blend_Closure_Failed);
+      end if;
+
       declare
          Chord_Direction            : constant Position_Scale := Chord / Chord_Length;
          Selection                  : constant Warp_Selection :=
@@ -7376,30 +6830,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end if;
    end Derivative_Bounds;
 
-   procedure Certified_Ideal_Point_At_Parameter
-     (Curve     : Stereographic_Curve;
-      Parameter : Curve_Parameter;
-      Point     : out Position;
-      Error     : out Length;
-      Success   : out Boolean) is
-   begin
-      if Curve.Evaluator_Data.Kind = Zero_Curve_Kind then
-         Point := Curve.Evaluator_Data.Start_Point;
-         Error := 0.0 * mm;
-      else
-         --  Ideal_Point_At_Parameter is a diagnostic quadrature of the authoritative chart. Its result is covered by
-         --  the same cumulative construction certificate exposed by the realtime evaluator.
-         Point := Point_At_Parameter (Curve, Parameter);
-         Error := Curve.Certified_Position_Error;
-      end if;
-      Success := Error >= 0.0 * mm and then Error < Length'Last;
-   exception
-      when Constraint_Error =>
-         Point := Curve.Evaluator_Data.Start_Point;
-         Error := Length'Last;
-         Success := False;
-   end Certified_Ideal_Point_At_Parameter;
-
    function Ideal_Point_At_Parameter (Curve : Stereographic_Curve; Parameter : Curve_Parameter) return Position is
       Panel_Count       : constant Positive := 16;
       Integral          : Position_Scale := [others => 0.0];
@@ -7479,8 +6909,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       return Point_At_Parameter (Curve.Evaluator_Data, Parameter);
    end Point_At_Parameter;
 
-   function Point_At_Parameter
-     (Evaluator : Stereographic_Curve_Evaluator; Parameter : Curve_Parameter) return Position is
+   function Point_At_Parameter (Evaluator : Stereographic_Curve_Evaluator; Parameter : Curve_Parameter) return Position
+   is
    begin
       if Evaluator.Kind = Zero_Curve_Kind then
          return Evaluator.Start_Point;
@@ -7573,9 +7003,19 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    end Retained_Tangent_Error_Bound;
 
    function Retained_Endpoint_Jet_Error_Bound
-     (Curve : Stereographic_Curve; Order : Endpoint_Tangent_Derivative_Order) return Dimensionless is
+     (Curve : Stereographic_Curve; Order : Endpoint_Tangent_Derivative_Order) return Dimensionless
+   is
+      Errors : Endpoint_Jet_Error_Bounds;
    begin
-      return (if Curve.Evaluator_Data.Kind = Zero_Curve_Kind then 0.0 else Curve.Certified_Endpoint_Jet_Error (Order));
+      if Curve.Evaluator_Data.Kind = Zero_Curve_Kind then
+         return 0.0;
+      elsif Measure_Evaluator_Endpoint_Jet_Error
+              (Curve.Evaluator_Data, Curve.Requested_Start_Jet, Curve.Requested_Finish_Jet, Errors)
+      then
+         return Errors (Order);
+      else
+         return Dimensionless'Last;
+      end if;
    end Retained_Endpoint_Jet_Error_Bound;
 
    function Position_Error_Bound (Curve : Stereographic_Curve) return Length is

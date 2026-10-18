@@ -17,7 +17,13 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    pragma Extensions_Allowed (On);
 
@@ -46,6 +52,8 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
         Workspace.Static_Corner_Limits (Block.Corner_Velocity_Limits'Range);
       Window_Evaluations   : Profile_Window_Evaluation_Cache renames
         Workspace.Window_Evaluations (Block.Limited_Segment_Feedrates'Range);
+      Reachable_Memos      : Reachable_Velocity_Memo_Cache renames
+        Workspace.Reachable_Velocity_Memos (Block.Limited_Segment_Feedrates'Range);
 
       procedure Apply_Corner_Transition_Limits (Corner : Corners_Index; Limit : in out Velocity) is
          Transition : constant Corner_Transition_Evaluator := Block.Corner_Transitions (Corner);
@@ -191,9 +199,15 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       function Reachable_Cached_Profile_Window_Velocity
         (Finishing_Corner : Finishing_Corners_Index; Fixed_Vel : Velocity; Forward : Boolean) return Velocity
       is
+         Memo  : Reachable_Velocity_Memo renames Reachable_Memos (Finishing_Corner) (Forward);
          Best  : Velocity := 0.0 * mm / s;
          Total : constant Length := Segment_Total_Distance (Block'Access, Finishing_Corner);
       begin
+         --  The cached evaluations are fixed for this run, so the result depends only on Fixed_Vel.
+         if Memo.Valid and then Identical (Memo.Fixed_Vel, Fixed_Vel) then
+            return Memo.Reachable;
+         end if;
+
          for W in Profile_Window_Candidate_Index loop
             declare
                Eval              : Profile_Window_Evaluation renames Window_Evaluations (Finishing_Corner) (W);
@@ -207,12 +221,13 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                  and then Eval.Max_Vel >= Fixed_Vel
                  and then (Constant_Distance <= 0.0 * mm or else Fixed_Vel > 0.0 * mm / s)
                then
-                  Reachable := Reachable_Velocity (Fixed_Vel, Eval.Max_Vel, Eval.Window.Distance, Eval.Limits);
+                  Reachable := Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel);
                   Best := Velocity'Max (Best, Reachable);
                end if;
             end;
          end loop;
 
+         Memo := (Fixed_Vel => Fixed_Vel, Reachable => Best, Valid => True);
          return Best;
       end Reachable_Cached_Profile_Window_Velocity;
 
@@ -273,6 +288,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
          end;
       end loop;
       Fill_Static_Caches;
+      Reachable_Memos := [others => [others => (others => <>)]];
 
       --  Forward pass: Iterate from the second corner to the second-to-last corner. This pass calculates the maximum
       --  corner velocity based on:

@@ -17,10 +17,16 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 pragma Extensions_Allowed (On);
 
 private generic
 package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    procedure Run
      (Block       : aliased in out Execution_Block;
@@ -34,19 +40,6 @@ package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    --
    --  Limit_Scale reserves additional derivative and velocity margin for the stopped recovery path.
 
-private
-
-   function Profile_Window_Time
-     (Start_Vel       : Velocity;
-      End_Vel         : Velocity;
-      Distance        : Length;
-      Max_Vel         : Velocity;
-      Limits          : Scalar_Derivative_Limits;
-      Prefix_Distance : Length;
-      Suffix_Distance : Length) return Time;
-   --  Compute the total traversal time for a profile-window candidate with the full profile solver. Returns a large
-   --  sentinel value when no feasible profile can be generated.
-
    procedure Select_Feedrate_Profile_Window
      (Block            : not null access Execution_Block;
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
@@ -54,6 +47,7 @@ private
       Finishing_Corner : Finishing_Corners_Index;
       Result           : out Profile_Planning_Result;
       Limit_Scale      : Dimensionless);
-   --  Select and store the first feasible fixed profile-window candidate in profile-time order.
+   --  Select and certify a single segment with fixed endpoint velocities and extrusion corrections.
+   --  Also used for local corner alternatives; other segments and junctions remain unchanged.
 
 end Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;

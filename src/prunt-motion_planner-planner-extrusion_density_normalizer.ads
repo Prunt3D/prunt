@@ -17,10 +17,16 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 pragma Extensions_Allowed (On);
 
 private generic
 package Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    procedure Run (Block : aliased in out Execution_Block; Workspace : not null access Planning_Workspace);
    --  Assign densities once, before corner blending. Each same-direction XYZ/E run uses its total E divided by total

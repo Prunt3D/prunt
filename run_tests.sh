@@ -7,6 +7,21 @@ set -e
 
 cd tests
 
+# Exercise the same checks and optimization as production when requested.
+PRUNT_TEST_PROFILE=${PRUNT_TEST_PROFILE:-development}
+case "$PRUNT_TEST_PROFILE" in
+   development|release) ;;
+   *) printf '%s\n' 'PRUNT_TEST_PROFILE must be development or release' >&2; exit 1 ;;
+esac
+
+build_tests() {
+   if [ -n "${PRUNT_TEST_RUNTIME:-}" ]; then
+      alr build --"$PRUNT_TEST_PROFILE" --profiles=prunt="$PRUNT_TEST_PROFILE" -- --RTS="$PRUNT_TEST_RUNTIME" "$@"
+   else
+      alr build --"$PRUNT_TEST_PROFILE" --profiles=prunt="$PRUNT_TEST_PROFILE" -- "$@"
+   fi
+}
+
 [ "$PRUNT_DO_GNATCOV" = true ] && alr exec -- gnatcov setup --prefix=./gnatcov_rts
 
 # The test suite needs a lot of cleaning up before validation works
@@ -16,8 +31,8 @@ cd tests
 [ "$PRUNT_DO_GNATCOV" = true ] && GPR_PROJECT_PATH="$GPR_PROJECT_PATH:./gnatcov_rts/share/gpr" alr exec -P2 -- gnatcov instrument --level=stmt+mcdc+gexpr --dump-trigger=manual --projects=prunt.gpr --projects=tests.gpr --no-subprojects --ada=2022
 
 # Build testsuite with instrumented code.
-[ "$PRUNT_DO_GNATCOV" = true ] && GPR_PROJECT_PATH="$GPR_PROJECT_PATH:./gnatcov_rts/share/gpr" alr build --development -- --src-subdirs=gnatcov-instr --implicit-with=gnatcov_rts.gpr
-[ "$PRUNT_DO_GNATCOV" = true ] || alr build --development
+[ "$PRUNT_DO_GNATCOV" = true ] && GPR_PROJECT_PATH="$GPR_PROJECT_PATH:./gnatcov_rts/share/gpr" build_tests --src-subdirs=gnatcov-instr --implicit-with=gnatcov_rts.gpr
+[ "$PRUNT_DO_GNATCOV" = true ] || build_tests
 
 rm -f gnatcov_out/*.xcov
 rm -f gnatcov_out/*.html

@@ -17,9 +17,15 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 with Ada.Numerics.Generic_Elementary_Functions;
 
 package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    pragma Extensions_Allowed (On);
 

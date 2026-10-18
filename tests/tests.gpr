@@ -1,26 +1,39 @@
 with "config/tests_config.gpr";
 project Tests is
 
+   type Benchmark_Mode_Type is ("disabled", "enabled");
+   Benchmark_Mode : Benchmark_Mode_Type := external ("PRUNT_BENCHMARK_MODE", "disabled");
+   --  Benchmark mode always uses release settings, including when Alire's generated profile is stale.
+   type Build_Profile_Kind is ("release", "validation", "development");
+   Build_Profile : Build_Profile_Kind := Tests_Config.Build_Profile;
+   case Benchmark_Mode is
+      when "disabled" =>
+         null;
+      when "enabled" =>
+         Build_Profile := "release";
+   end case;
+
    for Source_Dirs use ("src/", "config/");
-   for Object_Dir use "obj/" & Tests_Config.Build_Profile;
+   for Object_Dir use "obj/" & Build_Profile;
    for Create_Missing_Dirs use "True";
    for Exec_Dir use "bin";
    for Main use
      ("tests.adb",
       "integration_tests.adb",
       "integration_scenario_runner.adb",
-      "benchy_planner_time.adb");
-
-   type Benchmark_Mode_Type is ("disabled", "enabled");
-   Benchmark_Mode : Benchmark_Mode_Type := external ("PRUNT_BENCHMARK_MODE", "disabled");
+      "benchy_planner_time.adb",
+      "helix_planner_time.adb",
+      "corner_planner_time.adb",
+      "runtime_math_time.adb");
 
    Tests_Release_Ada_Compiler_Switches :=
-     (--  TODO: Benchmark with -gnatp (disable all runtime checks)
+     ("-gnatp",  --  Planner units explicitly restore the checks needed for numerical recovery
+      "-gnateF", --  Enable floating-point overflow checking where unsuppressed
       "-flto=auto",
       "-fuse-linker-plugin",
       "-ffat-lto-objects",
-      "-gnatn", --  Enable inlining
-      "-O2");   --  TODO: Benchmark with O2 vs O3
+      "-gnatn2", --  Enable cross-unit inlining
+      "-O3");   --  Keep bounded numerical kernels optimized with runtime checks enabled
 
    case Benchmark_Mode is
       when "disabled" =>
@@ -31,7 +44,7 @@ project Tests is
    end case;
 
    Tests_Extra_Ada_Compiler_Switches := ();
-   case Tests_Config.Build_Profile is
+   case Build_Profile is
       when "release" =>
          Tests_Extra_Ada_Compiler_Switches := Tests_Release_Ada_Compiler_Switches;
 
@@ -114,10 +127,11 @@ project Tests is
 
    package Binder is
       --  TODO: Do these propagate out or are they useless here?
-      case Tests_Config.Build_Profile is
+      case Build_Profile is
          when "release" =>
             for Switches ("Ada") use
-              ("-r",   --  List restrictions that could be applied
+              ("-static", --  Expose the Ada runtime to link time optimization
+               "-r",   --  List restrictions that could be applied
                "-Es"); --  Symbolic traceback
          when "validation" =>
             for Switches ("Ada") use
@@ -132,7 +146,7 @@ project Tests is
    end Binder;
 
    package Linker is
-      case Tests_Config.Build_Profile is
+      case Build_Profile is
          when "release" =>
             for Switches ("Ada") use
               ("-flto=auto", --  Link time optimization

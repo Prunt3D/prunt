@@ -42,7 +42,7 @@ package body Prunt.Motion_Planner.Planner_Primitive_Jet_Test is
         Home_Move_Minimum_Coast_Time      => 5.0 * ms,
         Home_Move_Maximum_Tail_Time       => 20.0 * ms,
         Interpolation_Time                => 1.0 * ms,
-        Max_Corners                       => 4,
+        Max_Corners                       => 16, --  Include the mixed-primitive allocation-repair fixture.
         Max_Corners_Extra_Data_Count      => 2,
         Max_Corners_Extra_Data_Storage    => 1_024,
         Max_Corners_Extra_Data_Per_Corner => 2,

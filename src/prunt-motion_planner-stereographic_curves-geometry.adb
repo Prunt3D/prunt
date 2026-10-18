@@ -17,6 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+pragma Unsuppress (Overflow_Check);
+pragma Unsuppress (Range_Check);
+pragma Unsuppress (Division_Check);
+
 pragma Extensions_Allowed (On);
 
 package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
@@ -25,10 +30,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
      Compile_Time_Error
        (not Dimensionless'Machine_Rounds, "Stereographic_Curves.Geometry requires rounded floating-point arithmetic");
 
-   ---------------------------------------------------------------------------
-   --  Enclosing elementary geometry
-   ---------------------------------------------------------------------------
-   --
    --  The public answers are only as trustworthy as their smallest distance calculation. These helpers therefore carry
    --  an interval through every add, multiply, divide, and square root. Invalid or overflowing arithmetic becomes an
    --  uninformative interval; it is never converted into a plausible-looking scalar distance.
@@ -55,18 +56,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       when Constraint_Error =>
          return Invalid_Geometry_Interval;
    end Square_Interval;
-
-   function Divide_Intervals (Left, Right : Interval) return Interval is
-   begin
-      if not Left.Valid or else not Right.Valid or else Right.Lower <= 0.0 then
-         return Invalid_Geometry_Interval;
-      else
-         return Interval_Multiply (Left, Checked_Interval (Down (1.0 / Right.Upper), Up (1.0 / Right.Lower)));
-      end if;
-   exception
-      when Constraint_Error =>
-         return Invalid_Geometry_Interval;
-   end Divide_Intervals;
 
    function Square_Root_Interval (Value : Interval) return Interval is
    begin
@@ -155,23 +144,69 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       return (Lower => 0.0 * mm, Upper => Length'Last);
    end Unbounded_Distance;
 
+   function Round_Scalar_Down (Value : Dimensionless) return Dimensionless is
+   begin
+      if not Is_Finite (Value) then
+         raise Constraint_Error with "non-finite outward-rounding input";
+      end if;
+      return Down (Value);
+   end Round_Scalar_Down;
+
+   function Round_Scalar_Up (Value : Dimensionless) return Dimensionless is
+   begin
+      if not Is_Finite (Value) then
+         raise Constraint_Error with "non-finite outward-rounding input";
+      end if;
+      return Up (Value);
+   end Round_Scalar_Up;
+
    function Round_Down_Nonnegative (Value : Length) return Length is
    begin
-      if Value <= 0.0 * mm then
+      if not (Value >= -Length'Last and then Value <= Length'Last) or else Value <= 0.0 * mm then
          return 0.0 * mm;
+      elsif Value >= Length'Last then
+         return Length'Last;
       else
          return Length'Max (0.0 * mm, Length'Adjacent (Value, Length'First));
       end if;
+   exception
+      when Constraint_Error =>
+         return 0.0 * mm;
    end Round_Down_Nonnegative;
 
    function Round_Up (Value : Length) return Length is
    begin
-      if Value >= Length'Last then
+      if not (Value >= -Length'Last and then Value <= Length'Last) or else Value < 0.0 * mm then
+         return Length'Last;
+      elsif Value = 0.0 * mm then
+         return 0.0 * mm;
+      elsif Value >= Length'Last then
          return Length'Last;
       else
          return Length'Adjacent (Value, Length'Last);
       end if;
+   exception
+      when Constraint_Error =>
+         return Length'Last;
    end Round_Up;
+
+   function Round_Curvature_Up (Value : Curvature) return Curvature is
+      Inflation : Curvature;
+      Candidate : Curvature;
+   begin
+      if not (Value >= 0.0 / mm and then Value < Curvature'Last) then
+         return Curvature'Last;
+      end if;
+      Inflation := Curvature'Max (Dimensionless'Model_Small / mm, 2.0 * Dimensionless'Model_Epsilon * Value);
+      if Inflation > Curvature'Last - Value then
+         return Curvature'Last;
+      end if;
+      Candidate := Value + Inflation;
+      return (if Candidate > Value then Candidate else Curvature'Adjacent (Value, Curvature'Last));
+   exception
+      when Constraint_Error =>
+         return Curvature'Last;
+   end Round_Curvature_Up;
 
    function To_Distance_Interval (Value : Interval) return Distance_Interval is
       Maximum_Raw : constant Dimensionless := Dimensionless (Length'Last / mm);
@@ -296,7 +331,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
          end if;
 
          declare
-            Along : constant Interval := Divide_Intervals (Projection, Offset_Square);
+            Along : constant Interval := Interval_Divide (Projection, Offset_Square);
          begin
             if not Along.Valid then
                return Endpoint_Only_Bound;
@@ -340,10 +375,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
 
    function Frame_Speed_Upper (Curve : Stereographic_Curve) return Dimensionless is
    begin
-      return
-        (if Curve.Evaluator_Data.Kind = Zero_Curve_Kind
-         then 0.0
-         else Curve.Certified_Frame_Speed_Upper);
+      return (if Curve.Evaluator_Data.Kind = Zero_Curve_Kind then 0.0 else Curve.Certified_Frame_Speed_Upper);
    end Frame_Speed_Upper;
 
    function Maximum_Half_Parameter_Gap (Segments : Positive) return Dimensionless is
@@ -411,9 +443,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
    end Curvature_Norm_Upper;
 
    function Curvature_Capsule_Radius
-     (Curve                          : Stereographic_Curve;
-      Start_Parameter, End_Parameter : Curve_Parameter;
-      Curvature_Upper                : Curvature) return Length
+     (Curve : Stereographic_Curve; Start_Parameter, End_Parameter : Curve_Parameter; Curvature_Upper : Curvature)
+      return Length
    is
       Parameter_Width  : constant Interval :=
         Interval_Subtract
@@ -430,7 +461,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       begin
          declare
             Radius : constant Interval :=
-              Divide_Intervals
+              Interval_Divide
                 (Interval_Multiply
                    (Interval_Exact (Dimensionless (Curvature_Upper / (1.0 / mm))), Square_Interval (Width)),
                  Interval_Exact (8.0));
@@ -615,8 +646,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       end if;
 
       Speed_Upper := Frame_Speed_Upper (Curve);
-      Fixed_Lipschitz_Half_Gap :=
-        Lipschitz_Half_Gap_Upper (Curve, Speed_Upper, Fixed_Lipschitz_Segments);
+      Fixed_Lipschitz_Half_Gap := Lipschitz_Half_Gap_Upper (Curve, Speed_Upper, Fixed_Lipschitz_Segments);
       Use_Fixed_Lipschitz := Maximum_Interval_Width >= Fixed_Lipschitz_Half_Gap;
 
       --  At ordinary planner tolerances the frame-certified Lipschitz bound needs only a handful of samples and is
@@ -637,7 +667,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
                   Available_Length : constant Length := Round_Down_Nonnegative (Maximum_Interval_Width - Twice_Error);
                   Available        : constant Dimensionless := Dimensionless (Available_Length / mm);
                   Needed_Interval  : constant Interval :=
-                    Divide_Intervals
+                    Interval_Divide
                       (Interval_Multiply (Interval_Exact (Dimensionless (Total / mm)), Interval_Exact (Speed_Upper)),
                        Interval_Exact (2.0 * Available));
                   Needed           : constant Dimensionless :=

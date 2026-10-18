@@ -17,6 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+pragma Unsuppress (Overflow_Check);
+pragma Unsuppress (Range_Check);
+pragma Unsuppress (Division_Check);
+
 with Ada.Numerics.Generic_Elementary_Functions;
 with Interfaces;
 
@@ -99,6 +104,24 @@ package Prunt.Motion_Planner.Stereographic_Curves is
    end record;
    --  All geometric conditions imposed at one end of a requested blend.
 
+   type Bulge_Policy is
+     (Never,
+      --  Keep the projection of the authoritative ideal tangent onto the plane of the two endpoint tangents inside
+      --  their cone. Travel normal to that plane is unrestricted. The mathematical retained evaluator is within
+      --  Retained_Tangent_Error_Bound of that tangent, so its signed projection on any unit in-plane cone normal is
+      --  at least -Retained_Tangent_Error_Bound.
+
+      When_Unavoidable,
+      --  Apply Never whenever the endpoint data admit a curve inside the cone, and Always otherwise. Leaving the cone
+      --  is forced when the chord is outside it, including a chord off the line of two parallel endpoint tangents, or
+      --  when an endpoint curvature turns the tangent out of it.
+
+      Always
+      --  Retain cone-compliant curves and additionally permit leaving the cone when non-negative progress along the
+      --  chord can be established.
+     );
+   --  How far a blend may turn beyond its endpoint tangents.
+
    type Blend_Request is record
       Start : Blend_Endpoint;
       --  Position and tangent conditions at distance zero.
@@ -113,11 +136,8 @@ package Prunt.Motion_Planner.Stereographic_Curves is
       Maximum_Arc_Length : Length := 0.0 * mm;
       --  Hard upper bound on the constructed curve length.
 
-      Allow_Bulge : Boolean := False;
-      --  False keeps the authoritative ideal tangent inside the endpoint cone. The mathematical retained evaluator is
-      --  within Retained_Tangent_Error_Bound of that tangent, so its signed projection on any unit cone normal is at
-      --  least -Retained_Tangent_Error_Bound. True retains cone-compliant curves and additionally permits leaving the
-      --  cone when non-negative progress along the chord can be established.
+      Bulge : Bulge_Policy := Never;
+      --  Whether the curve may turn outside the cone spanned by the two endpoint tangents.
    end record;
 
    type Blend_Result_Kind is
@@ -230,8 +250,8 @@ package Prunt.Motion_Planner.Stereographic_Curves is
 
    function Retained_Endpoint_Jet_Error_Bound
      (Curve : Stereographic_Curve; Order : Endpoint_Tangent_Derivative_Order) return Dimensionless;
-   --  Return a construction-certified Euclidean bound on the larger of the start and finish endpoint errors for the
-   --  requested tangent derivative order, expressed in normalized-distance coordinates. For Order > 0, dividing by
+   --  Compute an outward-rounded Euclidean bound on the larger endpoint error on demand. The requested tangent
+   --  derivative order is expressed in normalized-distance coordinates. For Order > 0, dividing by
    --  Arc_Length(Curve)**Order converts the bound to the corresponding physical-distance derivative units.
    --  Dimensionless'Last is a saturated "certificate unavailable" marker, not a finite physical error claim.
 
@@ -493,8 +513,7 @@ private
    --  Integer representation used while combining Bernstein coefficients. All binomial coefficients needed through
    --  degree eighty-four fit in 128 bits, so coefficient ratios can be formed without first rounding the integers.
 
-   subtype Packed_Binomial_Index is
-     Natural range 0 .. (Maximum_Derivative_Bernstein_Degree + 2) ** 2 / 4 - 1;
+   subtype Packed_Binomial_Index is Natural range 0 .. (Maximum_Derivative_Bernstein_Degree + 2) ** 2 / 4 - 1;
    --  Each row stores only K <= N/2, using the symmetry C(N,K) = C(N,N-K).
 
    type Exact_Binomial_Table_Type is array (Packed_Binomial_Index) of Exact_Binomial_Value;
@@ -513,8 +532,10 @@ private
    function Multiply_Bernstein (Left, Right : Interval_Polynomial) return Interval_Polynomial
    with
      Pre =>
-       Left'First = 0 and then Right'First = 0
-       and then Left'Length > 0 and then Right'Length > 0
+       Left'First = 0
+       and then Right'First = 0
+       and then Left'Length > 0
+       and then Right'Length > 0
        and then Left'Last + Right'Last <= Maximum_Derivative_Bernstein_Degree;
    --  Multiply by convolving binomial-scaled controls. Fall back to individual enclosing weights when scaling
    --  cannot produce finite intervals, so intermediate overflow does not reject an otherwise certifiable product.
@@ -760,9 +781,8 @@ private
       --  Uniform ideal-to-cache tangent error. This turns ideal unit-vector projection bounds into certificates for
       --  the retained cache; axial derivatives are bounded directly from the pole/residue representation.
 
-      Certified_Endpoint_Jet_Error : Endpoint_Jet_Error_Bounds := [others => 0.0];
-      --  Maximum retained start/finish mismatch for each requested normalized tangent derivative order, or the
-      --  saturated unavailable marker when the optional direct endpoint enclosure could not be formed.
+      Requested_Start_Jet, Requested_Finish_Jet : Endpoint_Tangent_Jet;
+      --  Retain the requests for on-demand endpoint diagnostics; construction does not measure this test-only report.
 
       Retained_Tangent_Certificate : Retained_Tangent_Bernstein_Certificate := (others => <>);
       --  Construction-only rational Bernstein data used by V7's direct retained-tangent derivative certificate. The
@@ -778,21 +798,13 @@ private
        and then Stereographic_Curve.Certified_Tangent_Error >= 0.0
        and then Is_Finite (Stereographic_Curve.Certified_Tangent_Error)
        and then
-         (for all Order in Endpoint_Tangent_Derivative_Order =>
-            Stereographic_Curve.Certified_Endpoint_Jet_Error (Order) >= 0.0
-            and then Is_Finite (Stereographic_Curve.Certified_Endpoint_Jet_Error (Order)))
-       and then
          (Stereographic_Curve.Evaluator_Data.Kind = Positive_Curve_Kind
           or else
             (Stereographic_Curve.Certified_Position_Error = 0.0 * mm
-             and then Stereographic_Curve.Certified_Tangent_Error = 0.0
-             and then
-               (for all Order in Endpoint_Tangent_Derivative_Order =>
-                  Stereographic_Curve.Certified_Endpoint_Jet_Error (Order) = 0.0))),
-     Predicate_Failure =>
-       "a stereographic curve must contain nonnegative numerical certificates or saturated endpoint reports";
-   --  Full construction result: the compact evaluator, ideal geometry, endpoint jet error enclosures, and both the
-   --  legacy and Bernstein certificates used by planner queries. The retained Bernstein form bounds compiled
+             and then Stereographic_Curve.Certified_Tangent_Error = 0.0)),
+     Predicate_Failure => "a stereographic curve must contain nonnegative numerical certificates";
+   --  Full construction result: the compact evaluator, ideal geometry, requested endpoint jets, and the
+   --  certificates used by construction and diagnostic range queries. The retained Bernstein form bounds compiled
    --  derivatives directly before falling
    --  back to the pole-based Taylor enclosure.
 
@@ -1140,18 +1152,8 @@ private
    function Frame_Vector (Frame : Frame_Vector_Array; Components : Raw_Vector_4) return Position_Scale;
    --  Transform local frame Components back into a vector resolved on the machine axes.
 
-   function Integrate_GL16
-     (Frame : Frame_Vector_Array; Coefficients : Bernstein_Chart; Warp_Factor : Dimensionless; A, B : Dimensionless)
-      return Position_Scale
-   with
-     Pre =>
-       A >= 0.0
-       and then A <= B
-       and then B <= 1.0
-       and then Warp_Factor >= Minimum_Distance_Warp_Factor
-       and then Warp_Factor <= Maximum_Distance_Warp_Factor;
-   --  Integrate the ideal unit tangent over normalized physical distance A through B using the symmetric 16-point
-   --  Gauss-Legendre rule, returning a dimensionless displacement direction in machine-axis coordinates.
+   function Interval_Divide (Numerator, Denominator : Interval) return Interval;
+   --  Enclose a quotient; an invalid interval or a denominator containing zero fails closed.
 
    function Interval_Abs_Max (Value : Interval) return Dimensionless;
    --  Return a conservative upper bound on the absolute value of every member of Value.
@@ -1258,33 +1260,6 @@ private
      Post => Warp_Parameter'Result >= 0.0 and then Warp_Parameter'Result <= 1.0;
    --  Apply the monotone endpoint-preserving map from normalized physical distance U to polynomial chart coordinate V.
 
-   function Unwarp_Parameter (V, Warp_Factor : Dimensionless) return Dimensionless
-   with
-     Pre  =>
-       V >= 0.0
-       and then V <= 1.0
-       and then Warp_Factor >= Minimum_Distance_Warp_Factor
-       and then Warp_Factor <= Maximum_Distance_Warp_Factor,
-     Post => Unwarp_Parameter'Result >= 0.0 and then Unwarp_Parameter'Result <= 1.0;
-   --  Invert Warp_Parameter, mapping chart coordinate V back to normalized physical distance U.
-
-   function Base_Tangent_Range_Majorants
-     (Curve         : Stereographic_Curve;
-      Start_V       : Dimensionless;
-      End_V         : Dimensionless;
-      Highest_Order : Majorant_Order := Maximum_Majorant_Order) return Axis_Majorants;
-   --  Bound the machine-axis tangent and its derivatives with respect to unwarped chart coordinate V on the supplied
-   --  interval. The calculation propagates Bernstein chart bounds through inverse stereographic projection.
-
-   function Tangent_Range_Majorants
-     (Curve          : Stereographic_Curve;
-      Start_U        : Dimensionless;
-      End_U          : Dimensionless;
-      Highest_Order  : Majorant_Order := Maximum_Majorant_Order;
-      Base_Majorants : access constant Axis_Majorants := null) return Axis_Majorants;
-   --  Convert base chart-coordinate majorants into derivatives with respect to normalized physical distance U by
-   --  composing them with the distance warp. A caller may supply reusable base majorants for the same interval.
-
    procedure Closure_Residual
      (Frame, Closure_Frame : Frame_Vector_Array;
       Start_Jets           : Chart_Jet_Array;
@@ -1335,8 +1310,7 @@ private
      (Curve        : Stereographic_Curve;
       Start_U      : Dimensionless;
       End_U        : Dimensionless;
-      Coefficients : Projection_Coefficients)
-      return Curvature;
+      Coefficients : Projection_Coefficients) return Curvature;
    --  Certify an upper bound on the absolute projected realtime tangent over a normalized-distance interval, including
    --  ideal-to-cache error and the continuous finish correction.
 
@@ -1354,15 +1328,6 @@ private
    function Ideal_Point_At_Parameter (Curve : Stereographic_Curve; Parameter : Curve_Parameter) return Position;
    --  Construction-only high-accuracy numerical evaluation of the ideal tangent integral. Realtime code uses
    --  Point_At_Parameter instead.
-
-   procedure Certified_Ideal_Point_At_Parameter
-     (Curve     : Stereographic_Curve;
-      Parameter : Curve_Parameter;
-      Point     : out Position;
-      Error     : out Length;
-      Success   : out Boolean);
-   --  Return the realtime point with a certified radius containing the ideal point. This is intentionally the same
-   --  centre used during execution; no second numerical integral needs to be trusted by a caller.
 
    function Bounds_On_Parameter_Range
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless) return Unit_Speed_Axial_Derivative_Bounds

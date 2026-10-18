@@ -17,6 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+pragma Unsuppress (Overflow_Check);
+pragma Unsuppress (Range_Check);
+pragma Unsuppress (Division_Check);
+
 with Ada.Numerics.Generic_Elementary_Functions;
 with Prunt.Motion_Planner.Stereographic_Curves;
 

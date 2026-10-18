@@ -12,16 +12,16 @@ tags = []
 executables = ["config_codegen", "package_subprogram_audit"]
 
 [[depends-on]]
-gnat_native = "~16.2.1002"
+gnat_native = "~16.2.1007"
 # From here: https://github.com/Prunt3D/prunt_alire_index
 
 [[depends-on]]
-libadalang_prebuilt = "^26.0.1003"
+libadalang_prebuilt = "^26.0.1005"
 
 [build-switches]
 "*".style_checks = "No"
 
 [[pins]]
-gnat_native = "16.2.1002"
-gnat = "16.2.1002"
-libadalang_prebuilt = "26.0.1003"
+gnat_native = "16.2.1007"
+gnat = "16.2.1007"
+libadalang_prebuilt = "26.0.1005"

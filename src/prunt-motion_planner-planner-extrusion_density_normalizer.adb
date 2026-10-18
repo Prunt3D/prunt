@@ -17,7 +17,13 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    pragma Extensions_Allowed (On);
 

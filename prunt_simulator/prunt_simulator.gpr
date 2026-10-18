@@ -12,12 +12,13 @@ project Prunt_Simulator is
    case Prunt_Simulator_Config.Build_Profile is
       when "release" =>
          Prunt_Simulator_Extra_Ada_Compiler_Switches :=
-           (--  TODO: Benchmark with -gnatp (disable all runtime checks)
+           ("-gnatp",  --  Planner units explicitly restore the checks needed for numerical recovery
+            "-gnateF", --  Enable floating-point overflow checking where unsuppressed
             "-flto=auto",
             "-fuse-linker-plugin",
             "-ffat-lto-objects",
-            "-gnatn", --  Enable inlining
-            "-O2");   --  TODO: Benchmark with O2 vs O3
+            "-gnatn2", --  Enable cross-unit inlining
+            "-O3");
 
       when "validation" =>
          Prunt_Simulator_Extra_Ada_Compiler_Switches :=
@@ -100,7 +101,8 @@ project Prunt_Simulator is
       case Prunt_Simulator_Config.Build_Profile is
          when "release" =>
             for Switches ("Ada") use
-              ("-Es"); --  Symbolic traceback
+              ("-static", --  Expose the Ada runtime to link time optimization
+               "-Es"); --  Symbolic traceback
          when "validation" =>
             for Switches ("Ada") use
               ("-we",  --  Treat warnings as errors
@@ -110,6 +112,17 @@ project Prunt_Simulator is
               ("-Es"); --  Symbolic traceback
       end case;
    end Binder;
+
+   package Linker is
+      case Prunt_Simulator_Config.Build_Profile is
+         when "release" =>
+            for Switches ("Ada") use
+              ("-flto=auto", --  Link time optimization, including the static Ada runtime
+               "-Wl,--gc-sections"); --  Delete unreferenced sections
+         when others =>
+            null;
+      end case;
+   end Linker;
 
    package Install is
       for Artifacts (".") use ("share");

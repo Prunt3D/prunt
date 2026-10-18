@@ -425,6 +425,76 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          Name & " point error is " & Error'Image & ", tolerance is " & Tolerance'Image);
    end Assert_Point_Close;
 
+   procedure Test_Biarc_Asymmetric_Ratio_Search (T : in out Trendy_Test.Operation'Class) is
+      --  Unequal legs make the equal-tangent member (D0 = D1) far from curvature-optimal. The ratio search can only
+      --  reach flatter members if every searched ratio solves the correct tangent-length equation; otherwise the
+      --  equal-tangent member is the only one with a tangent-continuous splice.
+      Finish_Point : constant Position := R4_Origin + R4_First * (18.0 * mm) + R4_Second * (7.0 * mm);
+      Ratios       : constant array (Positive range 1 .. 3) of Dimensionless := [1.0 / 5.0, 1.0, 5.0];
+      Equal_Peak   : Curvature;
+   begin
+      T.Register;
+      declare
+         Projection    : Dimensionless := 0.0;
+         Chord_Squared : Dimensionless := 0.0;
+         TT            : constant Dimensionless := 1.0 - Dot (R4_First, R4_Second);
+         D             : Length;
+         Q0, Q1, Join  : Position;
+         First, Second : Arc_Data;
+         Good_First    : Boolean;
+         Good_Second   : Boolean;
+      begin
+         for Axis in Axis_Name loop
+            declare
+               Offset : constant Dimensionless := Dimensionless ((Finish_Point (Axis) - R4_Origin (Axis)) / mm);
+            begin
+               Projection := Projection + Offset * (R4_First (Axis) + R4_Second (Axis));
+               Chord_Squared := Chord_Squared + Offset ** 2;
+            end;
+         end loop;
+         --  Equal tangent lengths D satisfy 2·(1 - T0·T1)·D² + 2·V·(T0 + T1)·D - V·V = 0.
+         D := (-Projection + Math.Sqrt (Projection ** 2 + 2.0 * TT * Chord_Squared)) / (2.0 * TT) * mm;
+         Q0 := R4_Origin + R4_First * D;
+         Q1 := Finish_Point - R4_Second * D;
+         for Axis in Axis_Name loop
+            Join (Axis) := 0.5 * (Q0 (Axis) + Q1 (Axis));
+         end loop;
+         Arc_From_Start (R4_Origin, Join, R4_First, First, Good_First);
+         Arc_From_Start (Finish_Point, Join, R4_Second * (-1.0), Second, Good_Second);
+         T.Assert (Good_First and then Good_Second, "Equal-tangent reference biarc is constructible");
+         Equal_Peak := Curvature'Max (1.0 / First.Radius, 1.0 / Second.Radius);
+      end;
+
+      for Ratio of Ratios loop
+         declare
+            Result : constant Construction_Result :=
+              Create_Biarc
+                (R4_Origin, Finish_Point, R4_First, R4_Second,
+                 Maximum_Length => 200.0 * mm, Preferred_Trim_Ratio => Ratio);
+         begin
+            Assert_Construction_Succeeded (Result, "Asymmetric biarc " & Ratio'Image, T);
+            if Result.Status = Construction_Success then
+               declare
+                  Arcs              : constant Biarc_Data := Result.Transition.Two_Arcs;
+                  Peak              : constant Curvature :=
+                    Curvature'Max (1.0 / Arcs.First.Radius, 1.0 / Arcs.Second.Radius);
+                  First_End_Tangent : constant Position_Scale :=
+                    Arcs.First.Radial_Start * (-Math.Sin (Arcs.First.Sweep))
+                    + Arcs.First.Tangent_Start * Math.Cos (Arcs.First.Sweep);
+               begin
+                  T.Assert
+                    (abs (First_End_Tangent - Arcs.Second.Tangent_Start) <= 1.0E-9,
+                     "Asymmetric biarc splice is tangent-continuous" & Ratio'Image);
+                  T.Assert
+                    (Peak <= 0.9 * Equal_Peak,
+                     "Asymmetric biarc peak curvature" & Peak'Image & " must beat the equal-tangent member"
+                     & Equal_Peak'Image);
+               end;
+            end if;
+         end;
+      end loop;
+   end Test_Biarc_Asymmetric_Ratio_Search;
+
    procedure Test_Biarc_Determinism_And_Reversal (T : in out Trendy_Test.Operation'Class) is
       Finish_Point : constant Position := R4_Origin + R4_First * (10.0 * mm) + R4_Second * (10.0 * mm);
       Forward : constant Construction_Result :=
@@ -875,6 +945,7 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          Test_Parabolic_R4_Geometry_And_Bounds'Access,
          Test_Biarc_Determinism_And_Reversal'Access,
          Test_Biarc_Trim_Ratio_Search'Access,
+         Test_Biarc_Asymmetric_Ratio_Search'Access,
          Test_Stereographic_Wrapper'Access,
          Test_Fixed_Size_Copying'Access];
    end All_Tests;

@@ -392,6 +392,40 @@ package body Prunt.Motion_Planner.Test is
          "Crackle quadratic should retain the positive root near 1e-16");
    end Test_Mixed_Derivative_Stable_Crackle_Quadratic;
 
+   procedure Test_Mixed_Derivative_Quadratic_Exponent_Range (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Result : Mixed_Derivative_Limit_Result;
+      Expected : constant Acceleration :=
+        0.999 * Dimensionless_Math.Sqrt (1.0E100 / (15.0E14 + 10.0E10)) * mm / s ** 2;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E100 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E100 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E100 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E100 * mm / s ** 5];
+      --  Conservative component bounds for a circle of radius 1e-10 mm. Both the speed and configured
+      --  derivative limits are within the user configuration ranges. The unscaled acceleration is 1e100,
+      --  so the snap quadratic has Q = 3e210 and R approximately 1e100: 4QR overflows Dimensionless.
+      Bounds :=
+        (Velocity     => [X_Axis | Y_Axis => 1.0, others => 0.0],
+         Acceleration => [X_Axis | Y_Axis => 1.0E10 / mm, others => 0.0 / mm],
+         Jerk         => [X_Axis | Y_Axis => 1.0E20 / mm ** 2, others => 0.0 / mm ** 2],
+         Snap         => [X_Axis | Y_Axis => 1.0E30 / mm ** 3, others => 0.0 / mm ** 3],
+         Crackle      => [X_Axis | Y_Axis => 1.0E40 / mm ** 4, others => 0.0 / mm ** 4]);
+
+      Result := Mixed_Derivative_Limits (Params, Bounds, 1.0E-6 * mm / s);
+
+      T.Assert (Result.Valid, "An unrepresentable quadratic discriminant must retain its finite positive root");
+      --  Crackle is the tightest budget. Its quadratic part is (15e14 + 10e10) times the squared returned
+      --  acceleration; at the root, its fixed and linear parts are negligible at Dimensionless precision.
+      T.Assert
+        (abs (Result.Limits.Acceleration_Max - Expected) <= 1.0E-12 * Expected,
+         "The finite acceleration limit must survive discriminants beyond Dimensionless'Last");
+   end Test_Mixed_Derivative_Quadratic_Exponent_Range;
+
    procedure Test_Mixed_Derivative_Scaled_Powers (T : in out Trendy_Test.Operation'Class) is
       Params : Kinematic_Parameters;
       Bounds : Unit_Speed_Axial_Derivative_Bounds;
@@ -678,6 +712,19 @@ package body Prunt.Motion_Planner.Test is
 
       Profile := Optimal_Full_Profile (0.0 * mm / s, 10.0 * mm / s, 0.0 * mm / s, 0.0 * mm, Am, Jm, Sm, Cm);
       T.Assert (Total_Time (Profile) = 0.0 * s, "Zero distance should result in zero time profile");
+
+      Profile := Optimal_Full_Profile (5.0 * mm / s, 10.0 * mm / s, 5.0 * mm / s, 0.0 * mm, Am, Jm, Sm, Cm);
+      T.Assert (Total_Time (Profile) = 0.0 * s, "An empty profile can preserve a nonzero velocity");
+      for Accelerating in Boolean loop
+         begin
+            Profile := Optimal_Full_Profile
+              ((if Accelerating then 0.0 else 5.0) * mm / s, 10.0 * mm / s,
+               (if Accelerating then 5.0 else 0.0) * mm / s, 0.0 * mm, Am, Jm, Sm, Cm);
+            T.Fail ("A zero-distance velocity change must be rejected");
+         exception
+            when Constraint_Error => null;
+         end;
+      end loop;
    end Test_Optimal_Full_Profile_Errors;
 
    procedure Test_Optimal_Full_Profile_Impossible (T : in out Trendy_Test.Operation'Class) is
@@ -1807,14 +1854,28 @@ package body Prunt.Motion_Planner.Test is
 
       Check_Profile_For_Distance
         (Start_Vel   => Vs,
-         Distance    => Dist4 * (Dimensionless (N_Boundary_Intervals) / Dimensionless (N_Boundary_Intervals)),
+         Distance    => Dist4,
+         Max_Accel   => Am,
+         Max_Jerk    => Jm,
+         Max_Snap    => Sm,
+         Max_Crackle => Cm,
+         Region      => Region_3,
+         Index       => 1,
+         Name        => "Case D3.1 Exact Boundary",
+         T           => T);
+
+      --  The case selection uses a strict > comparison. GNAT 16.2.1005 evaluates the dimensioned cube root in
+      --  Long_Float, so equality no longer crosses the boundary through the old extended-precision rounding.
+      Check_Profile_For_Distance
+        (Start_Vel   => Vs,
+         Distance    => Length'Adjacent (Dist4, Length'Last),
          Max_Accel   => Am,
          Max_Jerk    => Jm,
          Max_Snap    => Sm,
          Max_Crackle => Cm,
          Region      => Region_3,
          Index       => 4,
-         Name        => "Case D3.1 Boundary High (I=N)",
+         Name        => "Case D3.1 First Distance Above Boundary",
          T           => T);
    end Test_Optimal_Profile_For_Distance_Case_D3_1;
 
@@ -1831,19 +1892,19 @@ package body Prunt.Motion_Planner.Test is
       P4 : constant Feedrate_Profile_Times := [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
-      Min_Dist : constant Length := Dist4;
+      Min_Dist : constant Length := Length'Adjacent (Dist4, Length'Last);
       Max_Dist : constant Length := Dist4 + 1.0 * mm;
 
       Check_Profile_For_Distance
         (Start_Vel   => Vs,
-         Distance    => 0.0 * mm,
+         Distance    => Dist4,
          Max_Accel   => Am,
          Max_Jerk    => Jm,
          Max_Snap    => Sm,
          Max_Crackle => Cm,
          Region      => Region_3,
          Index       => 1,
-         Name        => "Case D3.4 Boundary Low (I=-1)",
+         Name        => "Case D3.4 Exact Boundary",
          T           => T);
 
       for I in 0 .. N_Boundary_Intervals loop
@@ -2140,16 +2201,331 @@ package body Prunt.Motion_Planner.Test is
          "full circle should be checked between its coincident endpoints");
    end Test_Workspace_Bounds;
 
+   procedure Test_Mixed_Derivative_Time_Scale (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters := (others => <>);
+      Bounds : Unit_Speed_Axial_Derivative_Bounds := (others => <>);
+      Peaks : Scalar_Derivative_Limits;
+      Scale : Dimensionless;
+   begin
+      T.Register;
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E-100 * mm / s ** 5];
+      Bounds.Velocity (X_Axis) := 1.0;
+      for Degree in 1 .. 4 loop
+         Peaks := (0.0 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+         case Degree is
+            when 1 => Peaks.Acceleration_Max := 1.0E100 * mm / s ** 2;
+            when 2 => Peaks.Jerk_Max := 1.0E200 * mm / s ** 3;
+            when 3 => Peaks.Snap_Max := 1.0E300 * mm / s ** 4;
+            when 4 => Peaks.Crackle_Max := 1.0E300 * mm / s ** 5;
+            when others => null;
+         end case;
+         Scale := Mixed_Derivative_Time_Scale (Params, Bounds, 1.0 * mm / s, Peaks);
+         T.Assert (Scale > 0.998 * 1.0E-100 and then Scale <= 1.0E-100,
+           "Fixed-delta-V scaling preserves tiny roots without overflowing coefficient ratios");
+      end loop;
+      Peaks := (0.0 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+      Bounds.Acceleration (X_Axis) := 1.0 / mm;
+      Scale := Mixed_Derivative_Time_Scale (Params, Bounds, 1.0 * mm / s, Peaks);
+      T.Assert (Scale > 0.0, "A zero-derivative coast can exhaust the fixed curvature budget");
+      Scale := Mixed_Derivative_Time_Scale (Params, Bounds, 2.0 * mm / s, Peaks);
+      T.Assert (Scale = 0.0, "Stretching time cannot repair an excessive fixed speed");
+      Peaks.Acceleration_Max := 1.0 * mm / s ** 2;
+      Scale := Mixed_Derivative_Time_Scale (Params, Bounds, 1.0 * mm / s, Peaks);
+      T.Assert (Scale = 0.0, "No positive ramp is certified when curvature exhausts the acceleration budget");
+   end Test_Mixed_Derivative_Time_Scale;
+
+   procedure Test_Mixed_Derivative_Time_Scale_Exponent_Range (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Peaks : Scalar_Derivative_Limits :=
+        (1.0E300 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+      Scale : Dimensionless;
+   begin
+      T.Register;
+
+      Params.Axial_Velocity_Maxes := [others => 1.0E100 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1.0E100 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0E100 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0E100 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0E100 * mm / s ** 5];
+      Bounds.Velocity (E_Axis) := 1.0E100;
+
+      --  The acceleration coefficient is 1e400, but its limiting scale 1e100 / 1e400 is representable.
+      Scale := Mixed_Derivative_Time_Scale (Params, Bounds, 1.0 * mm / s, Peaks);
+      T.Assert
+        (abs (Scale / 1.0E-300 - 0.999) <= 1.0E-12,
+         "An overflowing time-polynomial coefficient must retain its representable positive scale");
+
+      Bounds.Velocity (X_Axis) := 1.0;
+      Bounds.Velocity (E_Axis) := 1.0E-200;
+      Peaks.Acceleration_Max := 1.0E-200 * mm / s ** 2;
+      Params.Axial_Acceleration_Maxes (E_Axis) := 0.0 * mm / s ** 2;
+      --  The E acceleration coefficient is positive (1e-400), even though a Dimensionless product rounds
+      --  to zero. Losing that coefficient would incorrectly certify a positive ramp against a zero budget.
+      Scale := Mixed_Derivative_Time_Scale (Params, Bounds, 1.0 * mm / s, Peaks);
+      T.Assert (Scale = 0.0, "An underflowing positive coefficient must still consume derivative budget");
+   end Test_Mixed_Derivative_Time_Scale_Exponent_Range;
+
+   procedure Test_Mixed_Derivative_Dimensionless_Path (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      Bounds : Unit_Speed_Axial_Derivative_Bounds;
+      Peaks : Scalar_Derivative_Limits;
+      type Sample_State is mod 2 ** 32;
+      State : Sample_State := 13;
+      Positive_Results : Natural := 0;
+
+      function Sample (Wide : Boolean) return Dimensionless;
+      procedure Compare (Speed : Velocity);
+
+      function Sample (Wide : Boolean) return Dimensionless is
+         type Exponent_Array is array (Natural range 0 .. 6) of Integer;
+         Edges : constant Exponent_Array := [-65, -64, -63, 0, 63, 64, 65];
+         Exponent : Integer;
+      begin
+         State := State * 1_664_525 + 1_013_904_223;
+         if State mod 11 = 0 then
+            return 0.0;
+         end if;
+         Exponent := (if Wide then Edges (Natural (State mod 7)) else Integer (State mod 33) - 16);
+         return Dimensionless'Scaling (0.5 + Dimensionless ((State / 256) mod 1024) / 2048.0, Exponent);
+      end Sample;
+
+      procedure Compare (Speed : Velocity) is
+         Fast_Cache, Scaled_Cache : Mixed_Derivative_Cache;
+         Actual, Expected : Dimensionless;
+      begin
+         --  A zero-speed coast fills every axis without exhausting any positive derivative budget.
+         Actual := Mixed_Derivative_Time_Scale
+           (Params, Bounds, 0.0 * mm / s,
+            (0.0 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5), Fast_Cache);
+         T.Assert (Actual = 0.999, "A zero-speed coast fills the coefficient cache");
+         Scaled_Cache := Fast_Cache;
+         --  Exercise the retained implementation as an independent reference, including its scaled products.
+         Scaled_Cache.Dimensionless_Axes := [others => False];
+         for Iteration in 1 .. 3 loop
+            Actual :=
+              Mixed_Derivative_Time_Scale (Params, Bounds, Speed / Dimensionless (Iteration), Peaks, Fast_Cache);
+            Expected :=
+              Mixed_Derivative_Time_Scale (Params, Bounds, Speed / Dimensionless (Iteration), Peaks, Scaled_Cache);
+            T.Assert (Actual = Expected, "Native and scaled time certificates must agree exactly");
+            T.Assert (Actual in 0.0 .. 1.0, "The inverse time stretch remains bounded");
+            if Actual > 0.0 and then Actual < 0.999 then
+               Positive_Results := @ + 1;
+            end if;
+         end loop;
+      end Compare;
+   begin
+      T.Register;
+      Params.Axial_Velocity_Maxes := [others => 2.0 ** 64 * mm / s];
+      for Case_Index in 1 .. 1000 loop
+         declare
+            Wide : constant Boolean := Case_Index mod 2 = 0;
+            Speed : Velocity;
+         begin
+            Params.Axial_Acceleration_Maxes :=
+              [others => Dimensionless'Max (2.0 ** (-64), Sample (Wide)) * mm / s ** 2];
+            Params.Axial_Jerk_Maxes := [others => Dimensionless'Max (2.0 ** (-64), Sample (Wide)) * mm / s ** 3];
+            Params.Axial_Snap_Maxes := [others => Dimensionless'Max (2.0 ** (-64), Sample (Wide)) * mm / s ** 4];
+            Params.Axial_Crackle_Maxes := [others => Dimensionless'Max (2.0 ** (-64), Sample (Wide)) * mm / s ** 5];
+            Bounds.Velocity := [for Axis in Axis_Name => Sample (Wide)];
+            Bounds.Acceleration := [for Axis in Axis_Name => Sample (Wide) / mm];
+            Bounds.Jerk := [for Axis in Axis_Name => Sample (Wide) / mm ** 2];
+            Bounds.Snap := [for Axis in Axis_Name => Sample (Wide) / mm ** 3];
+            Bounds.Crackle := [for Axis in Axis_Name => Sample (Wide) / mm ** 4];
+            Peaks :=
+              (Sample (Wide) * mm / s ** 2, Sample (Wide) * mm / s ** 3,
+               Sample (Wide) * mm / s ** 4, Sample (Wide) * mm / s ** 5);
+            Speed := Constant_Speed_Axial_Ceiling (Params, Bounds, 1.0 * mm / s, Safety => 0.25);
+            Compare (Speed);
+         end;
+      end loop;
+      T.Assert (Positive_Results > 1000, "The comparison exercises limiting polynomials, not just rejected speeds");
+
+      --  Exact factor boundaries and roots on either side of the native search cutoff. Reusing the cache
+      --  at successively smaller speeds also exercises fallback after an earlier constraint reduced the scale.
+      Params.Axial_Acceleration_Maxes := [others => 0.5 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 1.0 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 1.0 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 1.0 * mm / s ** 5];
+      Bounds := (Velocity => [X_Axis => 2.0 ** 63, others => 0.0], others => <>);
+      Peaks := (2.0 ** 64 * mm / s ** 2, 1.0 * mm / s ** 3, 1.0 * mm / s ** 4, 1.0 * mm / s ** 5);
+      Compare (1.0 * mm / s);
+      Params.Axial_Acceleration_Maxes (X_Axis) := Acceleration'Adjacent (0.5 * mm / s ** 2, 0.0 * mm / s ** 2);
+      Compare (1.0 * mm / s);
+      Params.Axial_Acceleration_Maxes (X_Axis) := 2.0 ** (-64) * mm / s ** 2;
+      Compare (1.0 * mm / s);
+      Peaks.Acceleration_Max := Dimensionless'Adjacent (2.0 ** 64, Dimensionless'Last) * mm / s ** 2;
+      Compare (1.0 * mm / s);
+
+      --  Cancellation in the residual and fixed curvature that exactly exhausts or exceeds its budget.
+      Params.Axial_Acceleration_Maxes := [others => 1.0 * mm / s ** 2];
+      Bounds :=
+        (Velocity => [X_Axis => 1.0, others => 0.0],
+         Acceleration => [X_Axis => 1.0 / mm, others => 0.0 / mm], others => <>);
+      Peaks := (1.0 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+      Compare (Dimensionless'Adjacent (1.0, 0.0) * mm / s);
+      Compare (1.0 * mm / s);
+      Compare (Dimensionless'Adjacent (1.0, 2.0) * mm / s);
+      Bounds.Acceleration := [others => 0.0 / mm];
+      Params.Axial_Acceleration_Maxes := [others => 0.0 * mm / s ** 2];
+      Compare (1.0 * mm / s);
+      Params.Axial_Acceleration_Maxes := [others => 2.0 ** (-64) * mm / s ** 2];
+      Bounds.Velocity (X_Axis) := 2.0 ** (-64);
+      Peaks.Acceleration_Max := 2.0 ** (-64) * mm / s ** 2;
+      Compare (1.0 * mm / s);
+      Bounds.Velocity (X_Axis) := Dimensionless'Adjacent (2.0 ** (-64), 0.0);
+      Compare (1.0 * mm / s);
+      Bounds.Velocity (X_Axis) := Dimensionless'Adjacent (2.0 ** 64, 0.0);
+      Compare (1.0 * mm / s);
+      Bounds.Velocity (X_Axis) := 2.0 ** 64;
+      Compare (1.0 * mm / s);
+
+      --  Exercise the smallest nonzero products, then the largest fixed terms before budget rejection.
+      Params.Axial_Jerk_Maxes := [others => 2.0 ** (-64) * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 2.0 ** (-64) * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 2.0 ** (-64) * mm / s ** 5];
+      Bounds :=
+        (Velocity => [others => 2.0 ** (-64)], Acceleration => [others => 2.0 ** (-64) / mm],
+         Jerk => [others => 2.0 ** (-64) / mm ** 2], Snap => [others => 2.0 ** (-64) / mm ** 3],
+         Crackle => [others => 2.0 ** (-64) / mm ** 4]);
+      Peaks :=
+        (2.0 ** (-64) * mm / s ** 2, 2.0 ** (-64) * mm / s ** 3,
+         2.0 ** (-64) * mm / s ** 4, 2.0 ** (-64) * mm / s ** 5);
+      Compare (2.0 ** (-64) * mm / s);
+      Params.Axial_Acceleration_Maxes := [others => 2.0 ** 63 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 2.0 ** 63 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 2.0 ** 63 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 2.0 ** 63 * mm / s ** 5];
+      Bounds :=
+        (Velocity => [others => 0.0], Acceleration => [others => 2.0 ** 63 / mm],
+         Jerk => [others => 2.0 ** 63 / mm ** 2], Snap => [others => 2.0 ** 63 / mm ** 3],
+         Crackle => [others => 2.0 ** 63 / mm ** 4]);
+      Peaks :=
+        (2.0 ** 64 * mm / s ** 2, 2.0 ** 64 * mm / s ** 3,
+         2.0 ** 64 * mm / s ** 4, 2.0 ** 64 * mm / s ** 5);
+      Compare (2.0 ** 64 * mm / s);
+   end Test_Mixed_Derivative_Dimensionless_Path;
+
+   procedure Test_Mixed_Derivative_Normalization (T : in out Trendy_Test.Operation'Class) is
+      function Limit_For (Factor : Dimensionless) return Dimensionless;
+
+      function Limit_For (Factor : Dimensionless) return Dimensionless is
+         Params : Kinematic_Parameters := (others => <>);
+         Bounds : Unit_Speed_Axial_Derivative_Bounds := (others => <>);
+         Peaks : constant Scalar_Derivative_Limits :=
+           (1.0 * mm / s ** 2, 1.0 * mm / s ** 3, 1.0 * mm / s ** 4, 1.0 * mm / s ** 5);
+      begin
+         Params.Axial_Velocity_Maxes := [others => 2.0 * Factor * mm / s];
+         Params.Axial_Acceleration_Maxes := [others => 2.0 * Factor * mm / s ** 2];
+         Params.Axial_Jerk_Maxes := [others => 2.0 * Factor * mm / s ** 3];
+         Params.Axial_Snap_Maxes := [others => 2.0 * Factor * mm / s ** 4];
+         Params.Axial_Crackle_Maxes := [others => 2.0 * Factor * mm / s ** 5];
+         Bounds.Velocity (X_Axis) := Factor;
+         Bounds.Acceleration (X_Axis) := Factor / mm;
+         Bounds.Jerk (X_Axis) := Factor / mm ** 2;
+         Bounds.Snap (X_Axis) := Factor / mm ** 3;
+         Bounds.Crackle (X_Axis) := Factor / mm ** 4;
+         return Mixed_Derivative_Time_Scale (Params, Bounds, 1.0 * mm / s, Peaks);
+      end Limit_For;
+
+      Reference : constant Dimensionless := Limit_For (1.0);
+      type Exponents is array (Positive range <>) of Integer;
+      type Fractions is array (Positive range <>) of Dimensionless;
+   begin
+      T.Register;
+      T.Assert (Reference > 0.0 and then Reference < 1.0, "Normalization reference exercises a limiting polynomial");
+      --  Multiplying every coefficient and its budget by the same positive number cannot change the feasible
+      --  time scale. Exercise subnormals, large exponents, and both sides of mantissa normalization boundaries.
+      for Exponent of Exponents'[-1070, -1000, -100, -54, -53, -1, 0, 1, 52, 53, 100, 999, 1000] loop
+         for Fraction of Fractions'[0.5, Dimensionless'Adjacent (0.5, 1.0), 0.75, Dimensionless'Adjacent (1.0, 0.0)] loop
+            declare
+               Actual : constant Dimensionless := Limit_For (Dimensionless'Scaling (Fraction, Exponent));
+            begin
+               T.Assert (abs (Actual - Reference) <= 1.0E-12,
+                 "Derivative scale is independent of coefficient representation" & Exponent'Image);
+            end;
+         end loop;
+      end loop;
+   end Test_Mixed_Derivative_Normalization;
+
+   procedure Test_Profile_Degenerate_Limits (T : in out Trendy_Test.Operation'Class) is
+      Limits : Scalar_Derivative_Limits;
+      Profile : Feedrate_Profile;
+      Times : Feedrate_Profile_Times;
+   begin
+      T.Register;
+      for Zero_Limit in 1 .. 4 loop
+         Limits := (100.0 * mm / s ** 2, 1000.0 * mm / s ** 3, 10000.0 * mm / s ** 4, 100000.0 * mm / s ** 5);
+         case Zero_Limit is
+            when 1 => Limits.Acceleration_Max := 0.0 * mm / s ** 2;
+            when 2 => Limits.Jerk_Max := 0.0 * mm / s ** 3;
+            when 3 => Limits.Snap_Max := 0.0 * mm / s ** 4;
+            when 4 => Limits.Crackle_Max := 0.0 * mm / s ** 5;
+            when others => null;
+         end case;
+         begin
+            Profile := Optimal_Full_Profile
+              (0.0 * mm / s, 30.0 * mm / s, 0.0 * mm / s, 10.0 * mm,
+               Limits.Acceleration_Max, Limits.Jerk_Max, Limits.Snap_Max, Limits.Crackle_Max);
+            T.Fail ("Motion from rest requires every derivative limit to be positive");
+         exception
+            when Constraint_Error => null;
+         end;
+         begin
+            Times := Optimal_Profile_For_Delta_V
+              (1.0 * mm / s, Limits.Acceleration_Max, Limits.Jerk_Max, Limits.Snap_Max, Limits.Crackle_Max);
+            T.Fail ("A nonzero velocity change cannot use a zero derivative limit");
+         exception
+            when Constraint_Error => null;
+         end;
+         Times := Optimal_Profile_For_Delta_V
+           (0.0 * mm / s, Limits.Acceleration_Max, Limits.Jerk_Max, Limits.Snap_Max, Limits.Crackle_Max);
+         T.Assert (Total_Time (Times) = 0.0 * s, "No ramp is needed for zero velocity change");
+         Profile := Optimal_Full_Profile
+           (2.0 * mm / s, 30.0 * mm / s, 2.0 * mm / s, 10.0 * mm,
+            Limits.Acceleration_Max, Limits.Jerk_Max, Limits.Snap_Max, Limits.Crackle_Max);
+         T.Assert (Profile.Coast = 5.0 * s and then Total_Time (Profile) = 5.0 * s,
+           "Zero derivative limits preserve feasible constant-speed motion");
+      end loop;
+      Profile := (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
+      T.Assert (not Profile_Is_Valid (Profile, 1.0 * mm, 0.0 * mm / s, 0.0 * mm / s, 1.0 * mm / s ** 5),
+        "An empty profile cannot cover nonzero distance");
+      Profile.Coast := 1.0 * s;
+      T.Assert (not Profile_Is_Valid (Profile, 1.0 * mm, 1.0 * mm / s, 2.0 * mm / s, 1.0 * mm / s ** 5),
+        "A profile must reach the requested final velocity");
+      Profile.Accel := [others => Time'Last];
+      T.Assert (not Profile_Is_Valid (Profile, 1.0 * mm, 0.0 * mm / s, 0.0 * mm / s, 1.0 * mm / s ** 5),
+        "Overflow while validating a profile is rejected");
+      begin
+         Times := Optimal_Profile_For_Distance
+           (1.0E300 * mm / s, 1.0E-300 * mm, 0.0 * mm / s ** 2,
+            0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+         T.Fail ("A positive distance must not underflow to zero motion time");
+      exception
+         when Constraint_Error => null;
+      end;
+   end Test_Profile_Degenerate_Limits;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
         [Test_Distance_At_Time_Phases'Access,
+         Test_Profile_Degenerate_Limits'Access,
          Test_Mixed_Derivative_Straight_Line'Access,
+         Test_Mixed_Derivative_Time_Scale'Access,
+         Test_Mixed_Derivative_Time_Scale_Exponent_Range'Access,
+         Test_Mixed_Derivative_Dimensionless_Path'Access,
+         Test_Mixed_Derivative_Normalization'Access,
          Test_Constant_Speed_Axial_Ceiling'Access,
          Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios'Access,
          Test_Mixed_Derivative_Does_Not_Floor_Residual'Access,
          Test_Mixed_Derivative_Stable_Snap_Quadratic'Access,
          Test_Mixed_Derivative_Stable_Crackle_Quadratic'Access,
+         Test_Mixed_Derivative_Quadratic_Exponent_Range'Access,
          Test_Mixed_Derivative_Scaled_Powers'Access,
          Test_Mixed_Derivative_Curved_Window_Reduces_Limits'Access,
          Test_Fast_Vs_Slow'Access,

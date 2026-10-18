@@ -17,6 +17,11 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+pragma Unsuppress (Overflow_Check);
+pragma Unsuppress (Range_Check);
+pragma Unsuppress (Division_Check);
+
 package Prunt.Motion_Planner.Stereographic_Curves.Geometry is
    type Distance_Interval is record
       Lower : Length := 0.0 * mm;
@@ -69,6 +74,17 @@ package Prunt.Motion_Planner.Stereographic_Curves.Geometry is
 
    function Point_To_Point_Distance (Left, Right : Position) return Distance_Interval;
    --  Certify the Euclidean distance between two represented machine positions.
+
+   function Round_Scalar_Down (Value : Dimensionless) return Dimensionless;
+   function Round_Scalar_Up (Value : Dimensionless) return Dimensionless;
+   --  Shared directed rounding for finite dimensionless values.
+
+   function Round_Down_Nonnegative (Value : Length) return Length;
+   function Round_Up (Value : Length) return Length;
+   --  Round nonnegative lengths outward, saturating unsafe upper bounds and clamping lower bounds to zero.
+
+   function Round_Curvature_Up (Value : Curvature) return Curvature;
+   --  Inflate a nonnegative curvature bound, saturating before the addition can overflow.
 
 private
 
@@ -127,9 +143,6 @@ private
    function Square_Interval (Value : Interval) return Interval;
    --  Conservatively enclose the square of every value in Value, accounting for an interval that crosses zero.
 
-   function Divide_Intervals (Left, Right : Interval) return Interval;
-   --  Conservatively enclose Left divided by Right. The result is invalid when Right may contain zero.
-
    function Square_Root_Interval (Value : Interval) return Interval;
    --  Enclose the nonnegative square root of Value, rejecting an interval that is wholly negative or invalid.
 
@@ -152,13 +165,6 @@ private
    function Subtract_Lower_Nonnegative (Left, Right : Length) return Length
    with Pre => Left >= 0.0 * mm and then Right >= 0.0 * mm;
    --  Subtract an error allowance from a lower bound, rounding downward and clamping the result to zero.
-
-   function Round_Down_Nonnegative (Value : Length) return Length;
-   --  Round a physical length downward while preserving the nonnegative distance domain.
-
-   function Round_Up (Value : Length) return Length
-   with Pre => Value >= 0.0 * mm;
-   --  Round a nonnegative physical length upward, saturating if a finite successor cannot be represented.
 
    function Valid_Error (Value : Length) return Boolean;
    --  Return True when Value is a finite, nonnegative error radius suitable for widening a certificate.

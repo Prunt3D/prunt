@@ -17,10 +17,16 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 pragma Extensions_Allowed (On);
 
 private generic
 package Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    procedure Run
      (Block               : aliased in out Execution_Block;

@@ -23,6 +23,9 @@ with Ada.Command_Line;
 with Ada.Real_Time;
 with Ada.Strings.Fixed;
 with Ada.Text_IO;
+with Ada.Unchecked_Conversion;
+with GNAT.OS_Lib;
+with Interfaces;
 with Prunt;                        use Prunt;
 with Prunt.Input_Shapers;
 with Prunt.Motion_Planner;         use Prunt.Motion_Planner;
@@ -38,6 +41,9 @@ procedure Benchy_Planner_Time is
      (if Ada.Command_Line.Argument_Count >= 2 then Ada.Command_Line.Argument (2)
       else "../prunt_simulator/uploads/benchy.gcode");
    use type Ada.Real_Time.Time;
+   use type Interfaces.Unsigned_64;
+
+   function To_Bits is new Ada.Unchecked_Conversion (Long_Float, Interfaces.Unsigned_64);
 
    type Motor_Name is (X_Motor, Y_Motor, Z_Motor, E_Motor);
    type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
@@ -135,6 +141,7 @@ procedure Benchy_Planner_Time is
    Moving_Count  : Natural := 0;
    Block_Count   : Natural := 0;
    Segment_Count : Natural := 0;
+   Checksum      : Interfaces.Unsigned_64 := 0;
    Timeout_Count : Natural := 0;
    Final_Pos     : Position := [others => 0.0 * mm];
    Started       : Ada.Real_Time.Time;
@@ -267,6 +274,9 @@ begin
          if Block.N_Corners >= Planner.Finishing_Corners_Index'First then
             for Corner in Planner.Finishing_Corners_Index'First .. Block.N_Corners loop
                Total := Total + Planner.Segment_Time (Block'Access, Corner);
+               Checksum :=
+                 (Checksum xor To_Bits (Long_Float (Planner.Segment_Time (Block'Access, Corner) / s)))
+                 * 1_099_511_628_211;
                Segment_Count := Segment_Count + 1;
                if Selected_Case = Rounding_Stress then
                   declare
@@ -311,9 +321,11 @@ begin
    Ada.Text_IO.Put_Line ("planned_blocks=" & Block_Count'Image);
    Ada.Text_IO.Put_Line ("planned_segments=" & Segment_Count'Image);
    Ada.Text_IO.Put_Line ("total_planned_seconds=" & Long_Float'Image (Long_Float (Total / s)));
+   Ada.Text_IO.Put_Line ("segment_time_checksum=" & Checksum'Image);
    if Write_Segments then
       Ada.Text_IO.Close (Segment_Output);
    end if;
-   Planner.Reset;
-   abort Planner.Runner;
+   --  All validation and output are complete. The persistent planner task can defer abort while waiting for input.
+   Ada.Text_IO.Flush;
+   GNAT.OS_Lib.OS_Exit (0);
 end Benchy_Planner_Time;

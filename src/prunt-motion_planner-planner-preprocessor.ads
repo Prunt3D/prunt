@@ -17,6 +17,8 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+pragma Check_Float_Overflow;
+
 pragma Extensions_Allowed (On);
 
 with Ada.Containers; use Ada.Containers;
@@ -28,6 +30,10 @@ private with Prunt.Bounded_Indefinite_Queues;
 
 private generic
 package Prunt.Motion_Planner.Planner.Preprocessor is
+
+   pragma Unsuppress (Overflow_Check);
+   pragma Unsuppress (Range_Check);
+   pragma Unsuppress (Division_Check);
 
    procedure Setup (Initial_Parameters : Kinematic_Parameters);
    --  Initialise the preprocessor with the initial kinematic parameters. This must be called before any other

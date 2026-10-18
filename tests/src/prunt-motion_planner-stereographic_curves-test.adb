@@ -45,7 +45,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Start_Tangent, Finish_Tangent : Position_Scale;
       Maximum_Position_Error        : Length;
       Maximum_Arc_Length            : Length;
-      Allow_Bulge                   : Boolean := False) return Blend_Request;
+      Bulge                         : Bulge_Policy := Never) return Blend_Request;
 
    function Quarter_Turn_Request
      (Scale : Dimensionless := 1.0) return Blend_Request;
@@ -157,7 +157,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Start_Tangent, Finish_Tangent : Position_Scale;
       Maximum_Position_Error        : Length;
       Maximum_Arc_Length            : Length;
-      Allow_Bulge                   : Boolean := False) return Blend_Request
+      Bulge                         : Bulge_Policy := Never) return Blend_Request
    is
       Result : Blend_Request;
    begin
@@ -167,7 +167,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Result.Finish.Jet.Tangent := Finish_Tangent;
       Result.Maximum_Position_Error := Maximum_Position_Error;
       Result.Maximum_Arc_Length := Maximum_Arc_Length;
-      Result.Allow_Bulge := Allow_Bulge;
+      Result.Bulge := Bulge;
       return Result;
    end Make_Request;
 
@@ -2058,10 +2058,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       T.Assert
         (Result.Kind = Blend_Success,
          "Roundoff-planar flat request constructs: " & Result.Kind'Image);
+      --  No-bulge restricts only the in-plane turn, so the request constructs. Its normal chart mode must survive:
+      --  removing it would absorb a genuine E offset as stored-coordinate cancellation.
       T.Assert
-        (Excessive_Residual_Result.Kind /= Blend_Success,
-         "Resolvable nonplanarity is not absorbed as stored-coordinate cancellation: "
-         & Excessive_Residual_Result.Kind'Image);
+        (Excessive_Residual_Result.Kind = Blend_Success
+         and then not
+           (for all C in 2 .. 3 =>
+              (for all K in Chart_Coefficient_Index => Excessive_Residual_Result.Curve.Coefficients (K, C) = 0.0)),
+         "Resolvable nonplanarity is kept as a normal chart mode: " & Excessive_Residual_Result.Kind'Image);
       if Result.Kind /= Blend_Success then
          return;
       end if;
@@ -2130,7 +2134,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
            Finish_Tangent         => X_Unit,
            Maximum_Position_Error => 1.0E-3 * mm,
            Maximum_Arc_Length     => 20.0 * mm,
-           Allow_Bulge            => True);
+           Bulge                  => Always);
       Result : constant Blend_Result := Create_Blend (Request);
    begin
       T.Register;
@@ -2163,6 +2167,109 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
            (Result.Curve, Y_Axis),
          "Generic closure changes the transverse axis");
    end Test_Non_Chord_Flat_Tangents;
+
+   procedure Test_Bulge_Policies
+     (T : in out Trendy_Test.Operation'Class)
+   is
+      Radius    : constant Length := 10.0 * mm;
+      Turn_Rate : constant Curvature := 1.0 / Radius;
+      Away      : Blend_Request := Quarter_Turn_Request;
+      Spatial   : Blend_Request := Quarter_Turn_Request;
+      Line_Line : Blend_Request := Quarter_Turn_Request;
+
+      function Ideal_Tangent (Curve : Stereographic_Curve; U : Dimensionless) return Position_Scale
+      is (Tangent_At (Curve.Frame, Curve.Coefficients, Dimensionless (Curve.Warp_Factor), U));
+
+      function Stays_In_Quarter_Cone (Curve : Stereographic_Curve) return Boolean;
+      --  The endpoint tangents are X and Y, so the in-plane cone is X ≥ 0, Y ≥ 0. Normal travel is unrestricted.
+
+      function Stays_In_Quarter_Cone (Curve : Stereographic_Curve) return Boolean is
+      begin
+         for Sample in 0 .. 256 loop
+            declare
+               Tangent : constant Position_Scale := Ideal_Tangent (Curve, Dimensionless (Sample) / 256.0);
+            begin
+               if Tangent (X_Axis) < -1.0E-12 or else Tangent (Y_Axis) < -1.0E-12 then
+                  return False;
+               end if;
+            end;
+         end loop;
+         return True;
+      end Stays_In_Quarter_Cone;
+   begin
+      T.Register;
+
+      --  The quarter turn is to the left, but an incoming clockwise arc first turns the tangent to the right, out of
+      --  the endpoint cone. No curve can stay inside it.
+      Away.Start.Jet.Tangent_Derivative_1 := [Y_Axis => -Turn_Rate, others => 0.0 / mm];
+      Away.Start.Jet.Tangent_Derivative_2 := [X_Axis => -(Turn_Rate ** 2), others => 0.0 / mm ** 2];
+      Away.Start.Jet.Tangent_Derivative_3 := [Y_Axis => Turn_Rate ** 3, others => 0.0 / mm ** 3];
+      Assert_Result_Kind (Away, Blend_Closure_Failed, "Never rejects curvature leaving the endpoint cone", T);
+      Away.Bulge := When_Unavoidable;
+      declare
+         Result : constant Blend_Result := Create_Blend (Away);
+      begin
+         T.Assert
+           (Result.Kind = Blend_Success,
+            "When_Unavoidable blends curvature leaving the endpoint cone: " & Result.Kind'Image);
+         if Result.Kind = Blend_Success then
+            declare
+               Chord       : constant Position_Offset := Away.Finish.Point - Away.Start.Point;
+               Direction   : constant Position_Scale := Chord / abs Chord;
+               Progresses  : Boolean := True;
+               Leaves_Cone : Boolean := False;
+            begin
+               for Sample in 0 .. 256 loop
+                  declare
+                     Tangent : constant Position_Scale :=
+                       Ideal_Tangent (Result.Curve, Dimensionless (Sample) / 256.0);
+                  begin
+                     Progresses := Progresses and then Dot (Tangent, Direction) >= 0.0;
+                     Leaves_Cone := Leaves_Cone or else Tangent (Y_Axis) < 0.0;
+                  end;
+               end loop;
+               T.Assert (Leaves_Cone, "The incoming curvature turns the blend outside the endpoint cone");
+               T.Assert (Progresses, "The bulging blend keeps non-negative progress along the chord");
+            end;
+         end if;
+      end;
+
+      --  Zero endpoint curvature always admits the cone, so When_Unavoidable keeps the Never curve exactly.
+      Line_Line.Bulge := When_Unavoidable;
+      declare
+         Never_Result       : constant Blend_Result := Create_Blend (Quarter_Turn_Request);
+         Unavoidable_Result : constant Blend_Result := Create_Blend (Line_Line);
+      begin
+         T.Assert
+           (Never_Result.Kind = Blend_Success and then Unavoidable_Result.Kind = Blend_Success,
+            "Both policies blend a line-line quarter turn");
+         if Never_Result.Kind = Blend_Success and then Unavoidable_Result.Kind = Blend_Success then
+            T.Assert
+              (Never_Result.Curve.Coefficients = Unavoidable_Result.Curve.Coefficients
+               and then Arc_Length (Never_Result.Curve) = Arc_Length (Unavoidable_Result.Curve),
+               "When_Unavoidable keeps the no-bulge line-line curve");
+            T.Assert
+              (Stays_In_Quarter_Cone (Unavoidable_Result.Curve),
+               "The line-line curve stays inside the endpoint cone");
+         end if;
+      end;
+
+      --  Rising out of the endpoint-tangent plane is not a bulge: Never certifies only the in-plane turn.
+      Spatial.Finish.Point (Z_Axis) := 2.0 * mm;
+      declare
+         Result : constant Blend_Result := Create_Blend (Spatial);
+      begin
+         T.Assert
+           (Result.Kind = Blend_Success, "Never blends endpoints outside the tangent plane: " & Result.Kind'Image);
+         if Result.Kind = Blend_Success then
+            T.Assert
+              (Stays_In_Quarter_Cone (Result.Curve),
+               "The out-of-plane curve keeps its in-plane tangent inside the endpoint cone");
+            Assert_Point_Close
+              (Point_At_Parameter (Result.Curve, 1.0), Spatial.Finish.Point, 0.0 * mm, "Out-of-plane finish", T);
+         end if;
+      end;
+   end Test_Bulge_Policies;
 
    procedure Test_Nonzero_Jets_And_Bounds
      (T : in out Trendy_Test.Operation'Class)
@@ -3459,6 +3566,13 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
         (Saturated_Distance.Lower = 0.0 * mm
          and then Saturated_Distance.Upper = Length'Last,
          "Out-of-range distance arithmetic safely returns the unbounded interval");
+      T.Assert
+        (Geometry.Round_Curvature_Up (Curvature'Adjacent (Curvature'Last, 0.0 / mm)) = Curvature'Last,
+         "Curvature inflation saturates at the largest finite value");
+      T.Assert
+        (Geometry.Round_Curvature_Up (1.0 / mm) > 1.0 / mm
+         and then Geometry.Round_Curvature_Up (1.0 / mm) < Curvature'Last,
+         "Ordinary curvature bounds still round upward");
    end Test_Geometry_Scale_And_Range;
 
    procedure Test_Uniform_Scaling
@@ -3654,10 +3768,33 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          T);
    end Test_Construction_Failure_Kinds;
 
+   procedure Test_Numeric_Check_Recovery (T : in out Trendy_Test.Operation'Class) is
+      Huge : Dimensionless := Dimensionless'Last with Volatile;
+      Norm_OK : Boolean;
+      Norm : Dimensionless;
+      Length_Norm : Length;
+   begin
+      T.Register;
+      Norm := Safe_Norm (Position_Scale'[others => Huge], Norm_OK);
+      T.Assert (not Norm_OK and then Norm = 0.0, "An overflowing norm reaches floating-point recovery");
+      Length_Norm := Safe_Norm (Position_Offset'[others => Huge * mm], Norm_OK);
+      T.Assert
+        (not Norm_OK and then Length_Norm = 0.0 * mm, "An overflowing dimensioned norm reaches recovery");
+      Norm := Safe_Norm (Position_Scale'[X_Axis => 3.0, Y_Axis => 4.0, others => 0.0], Norm_OK);
+      T.Assert (Norm_OK and then Norm = 5.0, "A finite norm remains usable");
+      begin
+         Norm := Dot (Position_Scale'[others => Huge], Position_Scale'[others => 2.0]);
+         T.Fail ("Shared vector arithmetic must preserve the blender's overflow recovery");
+      exception
+         when Constraint_Error => null;
+      end;
+   end Test_Numeric_Check_Recovery;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Bernstein_Product_Enclosures'Access,
+        [Test_Numeric_Check_Recovery'Access,
+         Test_Bernstein_Product_Enclosures'Access,
          Test_Bernstein_Products'Access,
          Test_Interval_Multiplication_Sign_Cases'Access,
          Test_Complex_Pole_Primitive_Cancellation'Access,
@@ -3669,6 +3806,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          Test_Rounded_Quarter_Turn_Endpoint'Access,
          Test_Planar_Roundoff_Canonicalization'Access,
          Test_Non_Chord_Flat_Tangents'Access,
+         Test_Bulge_Policies'Access,
          Test_Nonzero_Jets_And_Bounds'Access,
          Test_Saturated_Physical_Bounds'Access,
          Test_Ranged_And_Projected_Bounds'Access,
