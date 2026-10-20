@@ -42,7 +42,7 @@ package Prunt.Motion_Planner is
    --  Smooth_Deviation mode. Zero E allowance disables blending at remaining density changes and requires a stop.  The
    --  E entry is unused in Instantaneous_Velocity_Change mode.
 
-   type Cornering_Kind is (Stereographic, Circular, Parabolic, Biarc, Sharp_SCV);
+   type Cornering_Kind is (Stereographic, Circular, Biarc, Sharp_SCV);
 
    type Workspace_Bounds_Kind is (Rectangular_Workspace, Circular_Workspace);
 
@@ -77,13 +77,6 @@ package Prunt.Motion_Planner is
       Radius_Max               : Length := 1.0E100 * mm;
    end record;
 
-   type Parabolic_Corner_Parameters is record
-      Axial_Deviation_Maxes    : Axial_Deviation_Limits := [others => 0.1 * mm];
-      Corner_Miss_Distance_Max : Length := 0.1 * mm;
-      Shape_Bias               : Dimensionless range -1.0 .. 1.0 := 0.0;
-      Trim_Max                 : Length := 1.0E100 * mm;
-   end record;
-
    type Biarc_Corner_Parameters is record
       Axial_Deviation_Maxes    : Axial_Deviation_Limits := [others => 0.1 * mm];
       Corner_Miss_Distance_Max : Length := 0.1 * mm;
@@ -103,9 +96,6 @@ package Prunt.Motion_Planner is
          when Circular =>
             Circular_Params : Circular_Corner_Parameters;
 
-         when Parabolic =>
-            Parabolic_Params : Parabolic_Corner_Parameters;
-
          when Biarc =>
             Biarc_Params : Biarc_Corner_Parameters;
 
@@ -115,8 +105,8 @@ package Prunt.Motion_Planner is
    end record;
    --  Selects one corner-transition construction and contains only the parameters meaningful to that construction.
    --  Stereographic supports the existing line/helix combinations and matches position through its fourth distance
-   --  derivative at each endpoint. Circular and Parabolic are C1 line-to-line transitions; their endpoint jerk, snap,
-   --  and crackle limits are waived. Biarc is C1 for certifiable line/helix corners and has the same waiver at both
+   --  derivative at each endpoint. Circular transitions are C1 and support line-to-line corners; their endpoint jerk,
+   --  snap, and crackle limits are waived. Biarc is C1 for certifiable line/helix corners and has the same waiver at both
    --  endpoints and its internal splice. Sharp_SCV is C0 for primitives with usable tangents, so acceleration and
    --  every higher derivative limit are waived at its junction. Unsupported or uncertifiable geometry becomes a hard
    --  stop. These derivative waivers apply to XYZ; Extrusion_Cornering selects E's junction behavior.

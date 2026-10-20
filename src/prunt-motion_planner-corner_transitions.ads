@@ -32,7 +32,6 @@ package Prunt.Motion_Planner.Corner_Transitions is
       Sharp_SCV_Transition,
       Stereographic_Transition,
       Circular_Transition,
-      Parabolic_Transition,
       Biarc_Transition);
 
    type Junction_Policy_Kind is (Hard_Stop, Passthrough, Derivative_Bounded, Square_Corner_Velocity);
@@ -80,11 +79,6 @@ package Prunt.Motion_Planner.Corner_Transitions is
      (Start_Point, Commanded_Corner, Finish_Point : Position; Maximum_Radius : Length := 1.0E100 * mm)
       return Construction_Result;
    --  Construct the unique equal-trim circular fillet.  Unequal or degenerate trims fail closed.
-
-   function Create_Parabolic
-     (Start_Point, Commanded_Corner, Finish_Point : Position; Maximum_Length : Length := 1.0E100 * mm)
-      return Construction_Result;
-   --  Construct the quadratic Bezier with the commanded corner as its control point.
 
    function Create_Biarc
      (Start_Point, Finish_Point     : Position;
@@ -170,7 +164,6 @@ private
    package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
    type Structural_Axes is array (Axis_Name) of Boolean;
-   type Distance_Table is array (Natural range 0 .. 32) of Length;
 
    type Arc_Data is record
       Centre        : Position := [others => 0.0 * mm];
@@ -179,16 +172,6 @@ private
       Radius        : Length := 0.0 * mm;
       Sweep         : Dimensionless := 0.0;
       Length_Value  : Length := 0.0 * mm;
-   end record;
-
-   type Parabolic_Data is record
-      Start_Point, Control_Point, Finish_Point : Position := [others => 0.0 * mm];
-      Table                                    : Distance_Table := [others => 0.0 * mm];
-      Length_Value                             : Length := 0.0 * mm;
-      Half_Distance                            : Length := 0.0 * mm;
-      Length_Error                             : Length := 0.0 * mm;
-      Maximum_Speed                            : Length := 0.0 * mm;
-      Minimum_Speed                            : Length := 0.0 * mm;
    end record;
 
    type Biarc_Data is record
@@ -208,9 +191,6 @@ private
 
          when Circular_Transition =>
             Circle : Arc_Data;
-
-         when Parabolic_Transition =>
-            Parabola : Parabolic_Data;
 
          when Biarc_Transition =>
             Two_Arcs : Biarc_Data;
@@ -232,9 +212,6 @@ private
 
          when Circular_Transition =>
             Circle : Arc_Data;
-
-         when Parabolic_Transition =>
-            Parabola : Parabolic_Data;
 
          when Biarc_Transition =>
             Two_Arcs : Biarc_Data;
@@ -265,9 +242,6 @@ private
 
    function Arc_Constant_Axes (Arc : Arc_Data) return Structural_Axes;
    --  Identify axes whose radial and tangent coefficients prove that Arc is structurally constant.
-
-   function Parabolic_Constant_Axes (P : Parabolic_Data) return Structural_Axes;
-   --  Identify axes on which all three quadratic Bezier control points are equal.
 
    function Biarc_Constant_Axes (Data : Biarc_Data) return Structural_Axes;
    --  Identify axes proven constant across both subarcs and their splice.
@@ -301,28 +275,6 @@ private
      (Start_Point, Finish_Point : Position; Start_Tangent : Position_Scale; Arc : out Arc_Data; Good : out Boolean);
    --  Construct the minor arc from Start_Point to Finish_Point with the requested initial tangent.  Good is False for
    --  degenerate, backward, greater-than-semicircular, or numerically unsafe geometry.
-
-   function Bezier_Point (P : Parabolic_Data; T : Dimensionless) return Position;
-   --  Evaluate the quadratic Bezier at its native parameter T.
-
-   function Bezier_Speed (P : Parabolic_Data; T : Dimensionless) return Length;
-   --  Return the norm of the derivative with respect to the native Bezier parameter.
-
-   function Bezier_Cell_Length (P : Parabolic_Data; T0, T1 : Dimensionless) return Length;
-   --  Approximate the arc length on a table cell interval using the positive Simpson rule used by table inversion.
-
-   function Parabolic_Parameter (P : Parabolic_Data; Distance : Length) return Dimensionless;
-   --  Invert P's monotone arc-length table with a certified bracket and one safeguarded Newton correction.
-
-   function Parabolic_Point (P : Parabolic_Data; Distance : Length) return Position;
-   --  Evaluate P at physical arc distance Distance from its start.
-
-   function Parabolic_Envelope (P : Parabolic_Data; Start_Distance, End_Distance : Length) return Position_Envelope;
-   --  Bound a closed arc-distance interval using the convex hull of its de Casteljau restricted control polygon.
-
-   function Parabolic_Bounds
-     (P : Parabolic_Data; Start_Distance, End_Distance : Length) return Unit_Speed_Axial_Derivative_Bounds;
-   --  Return interval-safe chain-rule derivative bounds for a closed arc-distance interval of P.
 
    function Reverse_Arc (Arc : Arc_Data) return Arc_Data;
    --  Return the same geometric arc with the opposite physical-distance orientation.

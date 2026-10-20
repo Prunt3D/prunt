@@ -76,16 +76,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       return R;
    end Arc_Constant_Axes;
 
-   function Parabolic_Constant_Axes (P : Parabolic_Data) return Structural_Axes is
-      R : Structural_Axes;
-   begin
-      for Axis in Axis_Name loop
-         R (Axis) :=
-           P.Start_Point (Axis) = P.Control_Point (Axis) and then P.Control_Point (Axis) = P.Finish_Point (Axis);
-      end loop;
-      return R;
-   end Parabolic_Constant_Axes;
-
    function Biarc_Constant_Axes (Data : Biarc_Data) return Structural_Axes is
       First  : constant Structural_Axes := Arc_Constant_Axes (Data.First);
       Second : constant Structural_Axes := Arc_Constant_Axes (Data.Second);
@@ -448,322 +438,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       when Constraint_Error =>
          return (Status => Numerically_Unsafe, Transition => <>);
    end Create_Circular;
-
-   function Bezier_Point (P : Parabolic_Data; T : Dimensionless) return Position is
-      R : Position;
-      A : constant Dimensionless := 1.0 - T;
-   begin
-      for Axis in Axis_Name loop
-         --  The Bernstein weights sum to one only in exact arithmetic. Preserve a constant coordinate directly
-         --  so rounding cannot introduce motion on an otherwise stationary axis.
-         R (Axis) :=
-           (if P.Start_Point (Axis) = P.Control_Point (Axis) and then P.Control_Point (Axis) = P.Finish_Point (Axis)
-            then P.Start_Point (Axis)
-            else
-              A ** 2 * P.Start_Point (Axis) + 2.0 * A * T * P.Control_Point (Axis) + T ** 2 * P.Finish_Point (Axis));
-      end loop;
-      return R;
-   end Bezier_Point;
-
-   function Bezier_Speed (P : Parabolic_Data; T : Dimensionless) return Length is
-      V : Position_Offset;
-   begin
-      for Axis in Axis_Name loop
-         V (Axis) :=
-           2.0
-           * ((1.0 - T) * (P.Control_Point (Axis) - P.Start_Point (Axis))
-              + T * (P.Finish_Point (Axis) - P.Control_Point (Axis)));
-      end loop;
-      return abs V;
-   end Bezier_Speed;
-
-   function Bezier_Cell_Length (P : Parabolic_Data; T0, T1 : Dimensionless) return Length is
-      TM : constant Dimensionless := 0.5 * (T0 + T1);
-   begin
-      --  This same positive quadrature is used to construct and invert the table.  Its geometric discrepancy from
-      --  true arc distance is independently covered by P.Length_Error, accumulated from convex control polygons.
-      return (T1 - T0) * (Bezier_Speed (P, T0) + 4.0 * Bezier_Speed (P, TM) + Bezier_Speed (P, T1)) / 6.0;
-   end Bezier_Cell_Length;
-
-   function Parabolic_Parameter (P : Parabolic_Data; Distance : Length) return Dimensionless is
-      Cell                                    : Natural range 0 .. 31 := 0;
-      Cell_Start, Low_T, High_T, Mid_T        : Dimensionless;
-      Low_S, High_S, Seed_T, Seed_S, Newton_T : Dimensionless;
-   begin
-      if Distance <= 0.0 * mm then
-         return 0.0;
-      elsif Distance >= P.Length_Value then
-         return 1.0;
-      end if;
-      for I in 0 .. 31 loop
-         if Distance >= P.Table (I) and then Distance <= P.Table (I + 1) then
-            Cell := I;
-            exit;
-         end if;
-      end loop;
-      Cell_Start := Dimensionless (Cell) / 32.0;
-      Low_T := Cell_Start;
-      High_T := Dimensionless (Cell + 1) / 32.0;
-      --  Fifteen bisections give a certified final bracket.  The sixteenth and final safeguarded step is a Newton
-      --  correction from a residual-interpolated seed.  Unlike returning a bracket midpoint, the result varies with
-      --  Distance inside the final bracket and therefore does not quantize the realtime evaluator into plateaus.
-      for Iteration in 1 .. 15 loop
-         Mid_T := 0.5 * (Low_T + High_T);
-         declare
-            Mid_S : constant Length := P.Table (Cell) + Bezier_Cell_Length (P, Cell_Start, Mid_T);
-         begin
-            if Distance <= Mid_S then
-               High_T := Mid_T;
-            else
-               Low_T := Mid_T;
-            end if;
-         end;
-      end loop;
-
-      Low_S := Dimensionless ((P.Table (Cell) + Bezier_Cell_Length (P, Cell_Start, Low_T) - Distance) / mm);
-      High_S := Dimensionless ((P.Table (Cell) + Bezier_Cell_Length (P, Cell_Start, High_T) - Distance) / mm);
-      if High_S > Low_S then
-         Seed_T := Low_T - Low_S * (High_T - Low_T) / (High_S - Low_S);
-      else
-         Seed_T := 0.5 * (Low_T + High_T);
-      end if;
-      Seed_T := Dimensionless'Max (Low_T, Dimensionless'Min (High_T, Seed_T));
-      Seed_S := Dimensionless ((P.Table (Cell) + Bezier_Cell_Length (P, Cell_Start, Seed_T) - Distance) / mm);
-      if Bezier_Speed (P, Seed_T) > 0.0 * mm then
-         Newton_T := Seed_T - Seed_S / Dimensionless (Bezier_Speed (P, Seed_T) / mm);
-      else
-         Newton_T := Seed_T;
-      end if;
-      return Dimensionless'Max (Low_T, Dimensionless'Min (High_T, Newton_T));
-   end Parabolic_Parameter;
-
-   function Parabolic_Point (P : Parabolic_Data; Distance : Length) return Position is
-   begin
-      return Bezier_Point (P, Parabolic_Parameter (P, Distance));
-   end Parabolic_Point;
-
-   function Parabolic_Envelope (P : Parabolic_Data; Start_Distance, End_Distance : Length) return Position_Envelope is
-      T0      : constant Dimensionless := Parabolic_Parameter (P, Start_Distance);
-      T1      : constant Dimensionless := Parabolic_Parameter (P, End_Distance);
-      First   : constant Position := Bezier_Point (P, T0);
-      Last    : constant Position := Bezier_Point (P, T1);
-      Control : Position;
-      R       : Position_Envelope;
-   begin
-      --  Restrict the quadratic with de Casteljau.  The subcurve control point follows from its start derivative;
-      --  the complete restricted curve is contained in the hull of these three points on every axis.
-      for Axis in Axis_Name loop
-         Control (Axis) :=
-           First (Axis)
-           + (T1 - T0)
-             * ((1.0 - T0) * (P.Control_Point (Axis) - P.Start_Point (Axis))
-                + T0 * (P.Finish_Point (Axis) - P.Control_Point (Axis)));
-         R (Axis) :=
-           (Lower => Length'Min (First (Axis), Length'Min (Control (Axis), Last (Axis))),
-            Upper => Length'Max (First (Axis), Length'Max (Control (Axis), Last (Axis))));
-      end loop;
-      return R;
-   end Parabolic_Envelope;
-
-   function Parabolic_Bounds
-     (P : Parabolic_Data; Start_Distance, End_Distance : Length) return Unit_Speed_Axial_Derivative_Bounds
-   is
-      subtype Order is Natural range 0 .. 4;
-      type Majorants is array (Order) of Dimensionless;
-      type Axis_Majorants is array (Axis_Name, Order) of Dimensionless;
-
-      function Binomial (N, K : Natural) return Dimensionless;
-      function Binomial (N, K : Natural) return Dimensionless is
-      begin
-         case N is
-            when 0 | 1  =>
-               return 1.0;
-
-            when 2      =>
-               return (if K = 1 then 2.0 else 1.0);
-
-            when 3      =>
-               return (if K in 1 .. 2 then 3.0 else 1.0);
-
-            when 4      =>
-               return (if K in 1 | 3 then 4.0 elsif K = 2 then 6.0 else 1.0);
-
-            when others =>
-               return 0.0;
-         end case;
-      end Binomial;
-
-      Fudge                : constant Dimensionless := 1.0 + 4_096.0 * Dimensionless'Model_Epsilon;
-      Parameter_Padding    : constant Dimensionless :=
-        Dimensionless (P.Length_Error / P.Minimum_Speed) + 1.0 / (32.0 * 2.0 ** 15) + Epsilon;
-      T0                   : constant Dimensionless :=
-        Dimensionless'Max (0.0, Parabolic_Parameter (P, Start_Distance) - Parameter_Padding);
-      T1                   : constant Dimensionless :=
-        Dimensionless'Min (1.0, Parabolic_Parameter (P, End_Distance) + Parameter_Padding);
-      A, B, V0, V1, V_Min  : Position_Scale;
-      V_Abs, B_Abs         : Position_Scale;
-      B_Norm, Q_Min, Q_Max : Dimensionless;
-      B2, AB               : Dimensionless := 0.0;
-      T_Min                : Dimensionless := T0;
-      Q, G                 : Majorants := [others => 0.0];
-      H                    : Majorants := [others => 0.0];
-      T_Derivative         : Axis_Majorants := [others => [others => 0.0]];
-      R                    : Unit_Speed_Axial_Derivative_Bounds := (others => <>);
-   begin
-      --  In raw millimetre coordinates the quadratic derivative is V(t) = A + B*t.  Its component hull is exact on
-      --  [T0,T1], while the minimum norm is obtained by projecting -A onto B and clamping to that interval.
-      for Axis in Axis_Name loop
-         A (Axis) := 2.0 * Dimensionless ((P.Control_Point (Axis) - P.Start_Point (Axis)) / mm);
-         B (Axis) :=
-           2.0 * Dimensionless ((P.Finish_Point (Axis) - 2.0 * P.Control_Point (Axis) + P.Start_Point (Axis)) / mm);
-         V0 (Axis) := A (Axis) + B (Axis) * T0;
-         V1 (Axis) := A (Axis) + B (Axis) * T1;
-         V_Abs (Axis) := Dimensionless'Max (abs V0 (Axis), abs V1 (Axis));
-         B_Abs (Axis) := abs B (Axis);
-         B2 := B2 + B (Axis) ** 2;
-         AB := AB + A (Axis) * B (Axis);
-      end loop;
-      if B2 > 0.0 then
-         T_Min := Dimensionless'Max (T0, Dimensionless'Min (T1, -AB / B2));
-      end if;
-      V_Min := A + B * T_Min;
-      Q_Min := Norm (V_Min);
-      Q_Max := Dimensionless'Max (Norm (V0), Norm (V1));
-      B_Norm := Norm (B);
-      if Q_Min <= 0.0 or else not Finite (Q_Min) or else not Finite (Q_Max) then
-         raise Constraint_Error;
-      end if;
-
-      --  Differentiate q*q = V*V to majorize q derivatives, then q*g = 1 to majorize derivatives of g = 1/q.
-      --  These recurrences are interval-safe because every discarded sign is replaced by an absolute value.
-      Q (0) := Q_Max;
-      H (1) := 2.0 * Q_Max * B_Norm;
-      H (2) := 2.0 * B_Norm ** 2;
-      for N in 1 .. 4 loop
-         Q (N) := H (N);
-         for K in 1 .. N - 1 loop
-            Q (N) := Q (N) + Binomial (N, K) * Q (K) * Q (N - K);
-         end loop;
-         Q (N) := Fudge * Q (N) / (2.0 * Q_Min);
-      end loop;
-      G (0) := Fudge / Q_Min;
-      for N in 1 .. 4 loop
-         for K in 1 .. N loop
-            G (N) := G (N) + Binomial (N, K) * Q (K) * G (N - K);
-         end loop;
-         G (N) := Fudge * G (N) / Q_Min;
-      end loop;
-
-      --  T = V*g and V is affine, so T^(n) = V*g^(n) + n*B*g^(n-1).  Repeatedly applying
-      --  d/ds = g*d/dt gives the explicit chain-rule combinations below through d^4 T/ds^4.
-      for Axis in Axis_Name loop
-         T_Derivative (Axis, 0) := Fudge * V_Abs (Axis) * G (0);
-         for N in 1 .. 4 loop
-            T_Derivative (Axis, N) := Fudge * (V_Abs (Axis) * G (N) + Dimensionless (N) * B_Abs (Axis) * G (N - 1));
-         end loop;
-         R.Velocity (Axis) := Dimensionless'Min (1.0, T_Derivative (Axis, 0));
-         R.Acceleration (Axis) := Fudge * G (0) * T_Derivative (Axis, 1) / mm;
-         R.Jerk (Axis) :=
-           Fudge * (G (0) * G (1) * T_Derivative (Axis, 1) + G (0) ** 2 * T_Derivative (Axis, 2)) / mm ** 2;
-         R.Snap (Axis) :=
-           Fudge
-           * (G (0) * (G (1) ** 2 + G (0) * G (2)) * T_Derivative (Axis, 1)
-              + 3.0 * G (0) ** 2 * G (1) * T_Derivative (Axis, 2)
-              + G (0) ** 3 * T_Derivative (Axis, 3))
-           / mm ** 3;
-         R.Crackle (Axis) :=
-           Fudge
-           * ((G (0) * G (1) ** 3 + 4.0 * G (0) ** 2 * G (1) * G (2) + G (0) ** 3 * G (3)) * T_Derivative (Axis, 1)
-              + (7.0 * G (0) ** 2 * G (1) ** 2 + 4.0 * G (0) ** 3 * G (2)) * T_Derivative (Axis, 2)
-              + 6.0 * G (0) ** 3 * G (1) * T_Derivative (Axis, 3)
-              + G (0) ** 4 * T_Derivative (Axis, 4))
-           / mm ** 4;
-      end loop;
-      return R;
-   exception
-      when Constraint_Error =>
-         return
-           (Velocity     => [others => 1.0],
-            Acceleration => [others => Curvature'Last],
-            Jerk         => [others => Curvature_To_2'Last],
-            Snap         => [others => Curvature_To_3'Last],
-            Crackle      => [others => Curvature_To_4'Last]);
-   end Parabolic_Bounds;
-
-   function Create_Parabolic
-     (Start_Point, Commanded_Corner, Finish_Point : Position; Maximum_Length : Length := 1.0E100 * mm)
-      return Construction_Result
-   is
-      P         : Parabolic_Data :=
-        (Start_Point => Start_Point, Control_Point => Commanded_Corner, Finish_Point => Finish_Point, others => <>);
-      Env       : Position_Envelope;
-      Min_Speed : Length := Length'Last;
-      Max_Speed : Length := 0.0 * mm;
-      A, B      : Position_Offset;
-      B2, AB    : Dimensionless := 0.0;
-      T_Min     : Dimensionless := 0.0;
-      Bounds    : Unit_Speed_Axial_Derivative_Bounds := (others => <>);
-   begin
-      if Maximum_Length <= 0.0 * mm then
-         return (Status => Invalid_Input, Transition => <>);
-      end if;
-      P.Table (0) := 0.0 * mm;
-      for I in 0 .. 31 loop
-         declare
-            T0            : constant Dimensionless := Dimensionless (I) / 32.0;
-            T1            : constant Dimensionless := Dimensionless (I + 1) / 32.0;
-            Cell_Length   : constant Length := Bezier_Cell_Length (P, T0, T1);
-            Chord_Lower   : constant Length := abs (Bezier_Point (P, T1) - Bezier_Point (P, T0));
-            Polygon_Upper : constant Length := (T1 - T0) * (Bezier_Speed (P, T0) + Bezier_Speed (P, T1)) / 2.0;
-            Cell_Error    : constant Length :=
-              Length'Max (abs (Cell_Length - Chord_Lower), abs (Polygon_Upper - Cell_Length));
-         begin
-            if Cell_Length <= 0.0 * mm or else not Finite (Dimensionless (Cell_Length / mm)) then
-               return (Status => Unsupported_Geometry, Transition => <>);
-            end if;
-            P.Table (I + 1) := P.Table (I) + Cell_Length;
-            P.Length_Error := P.Length_Error + Cell_Error + Epsilon * Polygon_Upper;
-         end;
-      end loop;
-      P.Length_Value := P.Table (32);
-      P.Half_Distance := P.Table (16);
-      if P.Length_Value > Maximum_Length then
-         return (Status => Length_Limit_Exceeded, Transition => <>);
-      end if;
-      for Axis in Axis_Name loop
-         Env (Axis) :=
-           (Lower => Length'Min (Start_Point (Axis), Length'Min (Commanded_Corner (Axis), Finish_Point (Axis))),
-            Upper => Length'Max (Start_Point (Axis), Length'Max (Commanded_Corner (Axis), Finish_Point (Axis))));
-         A (Axis) := 2.0 * (Commanded_Corner (Axis) - Start_Point (Axis));
-         B (Axis) := 2.0 * (Finish_Point (Axis) - 2.0 * Commanded_Corner (Axis) + Start_Point (Axis));
-         B2 := B2 + Dimensionless ((B (Axis) / mm) ** 2);
-         AB := AB + Dimensionless ((A (Axis) / mm) * (B (Axis) / mm));
-      end loop;
-      if B2 > 0.0 then
-         T_Min := Dimensionless'Max (0.0, Dimensionless'Min (1.0, -AB / B2));
-      end if;
-      Min_Speed := Length'Min (Bezier_Speed (P, 0.0), Length'Min (Bezier_Speed (P, 1.0), Bezier_Speed (P, T_Min)));
-      Max_Speed := Length'Max (Bezier_Speed (P, 0.0), Bezier_Speed (P, 1.0));
-      P.Maximum_Speed := Max_Speed;
-      P.Minimum_Speed := Min_Speed;
-      if Min_Speed <= 1.0E-10 * mm then
-         return (Status => Unsupported_Geometry, Transition => <>);
-      end if;
-      Bounds := Parabolic_Bounds (P, 0.0 * mm, P.Length_Value);
-      return
-        (Status     => Construction_Success,
-         Transition =>
-           (Kind_Value    => Parabolic_Transition,
-            Parabola      => P,
-            Bounds        => Bounds,
-            Envelope      => Env,
-            Error         => P.Length_Error + Max_Speed / (32.0 * 2.0 ** 15) + Epsilon * P.Length_Value,
-            Constant_Axes => Parabolic_Constant_Axes (P),
-            SCV_Limit     => Velocity'Last));
-   exception
-      when Constraint_Error =>
-         return (Status => Numerically_Unsafe, Transition => <>);
-   end Create_Parabolic;
 
    function Reverse_Arc (Arc : Arc_Data) return Arc_Data is
       C            : constant Dimensionless := Math.Cos (Arc.Sweep);
@@ -1143,7 +817,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          when Stereographic_Transition                                             =>
             return (4, False, 0);
 
-         when Circular_Transition | Parabolic_Transition                           =>
+         when Circular_Transition                                                 =>
             return (1, False, 0);
 
          when Biarc_Transition                                                     =>
@@ -1170,9 +844,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          when Circular_Transition      =>
             return Transition.Circle.Length_Value;
 
-         when Parabolic_Transition     =>
-            return Transition.Parabola.Length_Value;
-
          when Biarc_Transition         =>
             return Transition.Two_Arcs.Length_Value;
 
@@ -1190,9 +861,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          when Circular_Transition      =>
             return Evaluator.Circle.Length_Value;
 
-         when Parabolic_Transition     =>
-            return Evaluator.Parabola.Length_Value;
-
          when Biarc_Transition         =>
             return Evaluator.Two_Arcs.Length_Value;
 
@@ -1207,9 +875,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          when Stereographic_Transition | Circular_Transition =>
             return Arc_Length (Transition) / 2.0;
 
-         when Parabolic_Transition                           =>
-            return Transition.Parabola.Half_Distance;
-
          when Biarc_Transition                               =>
             return Transition.Two_Arcs.First.Length_Value;
 
@@ -1223,9 +888,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       case Evaluator.Kind_Value is
          when Stereographic_Transition | Circular_Transition =>
             return Arc_Length (Evaluator) / 2.0;
-
-         when Parabolic_Transition                           =>
-            return Evaluator.Parabola.Half_Distance;
 
          when Biarc_Transition                               =>
             return Evaluator.Two_Arcs.First.Length_Value;
@@ -1248,9 +910,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
 
          when Circular_Transition      =>
             return Arc_Point (Transition.Circle, Distance);
-
-         when Parabolic_Transition     =>
-            return Parabolic_Point (Transition.Parabola, Distance);
 
          when Biarc_Transition         =>
             if Distance <= Transition.Two_Arcs.First.Length_Value then
@@ -1284,9 +943,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          when Circular_Transition      =>
             return Arc_Point (Evaluator.Circle, Distance);
 
-         when Parabolic_Transition     =>
-            return Parabolic_Point (Evaluator.Parabola, Distance);
-
          when Biarc_Transition         =>
             if Distance <= Evaluator.Two_Arcs.First.Length_Value then
                return Arc_Point (Evaluator.Two_Arcs.First, Distance);
@@ -1313,9 +969,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          when Circular_Transition      =>
             return Arc_Bounds (Transition.Circle, Start_Distance, End_Distance);
 
-         when Parabolic_Transition     =>
-            return Parabolic_Bounds (Transition.Parabola, Start_Distance, End_Distance);
-
          when Biarc_Transition         =>
             return Biarc_Bounds (Transition.Two_Arcs, Start_Distance, End_Distance);
 
@@ -1334,9 +987,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       case Evaluator.Kind_Value is
          when Circular_Transition  =>
             return Arc_Bounds (Evaluator.Circle, Start_Distance, End_Distance);
-
-         when Parabolic_Transition =>
-            return Parabolic_Bounds (Evaluator.Parabola, Start_Distance, End_Distance);
 
          when Biarc_Transition     =>
             return Biarc_Bounds (Evaluator.Two_Arcs, Start_Distance, End_Distance);
@@ -1480,13 +1130,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
                  Transition.Error,
                  Transition.Constant_Axes);
 
-         when Parabolic_Transition     =>
-            return
-              Pad_Envelope
-                (Parabolic_Envelope (Transition.Parabola, Start_Distance, End_Distance),
-                 Transition.Error,
-                 Transition.Constant_Axes);
-
          when Biarc_Transition         =>
             return
               Pad_Envelope
@@ -1513,13 +1156,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
             return
               Pad_Envelope
                 (Arc_Envelope (Evaluator.Circle, Start_Distance, End_Distance),
-                 Evaluator.Error,
-                 Evaluator.Constant_Axes);
-
-         when Parabolic_Transition =>
-            return
-              Pad_Envelope
-                (Parabolic_Envelope (Evaluator.Parabola, Start_Distance, End_Distance),
                  Evaluator.Error,
                  Evaluator.Constant_Axes);
 
@@ -1562,16 +1198,6 @@ package body Prunt.Motion_Planner.Corner_Transitions is
             return
               (Kind_Value    => Circular_Transition,
                Circle        => Transition.Circle,
-               Bounds        => Transition.Bounds,
-               Envelope      => Transition.Envelope,
-               Error         => Transition.Error,
-               Constant_Axes => Transition.Constant_Axes,
-               SCV_Limit     => Transition.SCV_Limit);
-
-         when Parabolic_Transition     =>
-            return
-              (Kind_Value    => Parabolic_Transition,
-               Parabola      => Transition.Parabola,
                Bounds        => Transition.Bounds,
                Envelope      => Transition.Envelope,
                Error         => Transition.Error,

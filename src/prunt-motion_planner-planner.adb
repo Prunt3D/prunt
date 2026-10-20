@@ -379,7 +379,6 @@ package body Prunt.Motion_Planner.Planner is
          (case Block.Params.Cornering.Kind is
             when Stereographic => Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis),
             when Circular      => Block.Params.Cornering.Circular_Params.Axial_Deviation_Maxes (E_Axis),
-            when Parabolic     => Block.Params.Cornering.Parabolic_Params.Axial_Deviation_Maxes (E_Axis),
             when Biarc         => Block.Params.Cornering.Biarc_Params.Axial_Deviation_Maxes (E_Axis),
             when Sharp_SCV     => 0.0 * mm));
 

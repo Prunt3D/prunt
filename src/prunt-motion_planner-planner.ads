@@ -43,8 +43,8 @@ pragma Check_Float_Overflow;
 --
 --     The configured family is constructed without per-corner allocation. Stereographic transitions support the
 --     existing line/helix combinations and match position through its fourth distance derivative at their endpoints.
---     Circular and Parabolic transitions support line-to-line corners and are C1. Biarc transitions are C1 and support
---     lines and helices when their two arcs can be certified. Circular and Parabolic waive jerk, snap, and crackle at
+--     Circular transitions support line-to-line corners and are C1. Biarc transitions are C1 and support lines and
+--     helices when their two arcs can be certified. Circular transitions waive jerk, snap, and crackle at
 --     their endpoints; Biarc also waives them at its internal splice. Sharp_SCV retains the commanded corner exactly,
 --     is C0, and waives acceleration and every higher derivative limit at the junction. Unsupported or uncertifiable
 --     geometry becomes a hard stop; nearly straight geometry is represented explicitly as a passthrough.

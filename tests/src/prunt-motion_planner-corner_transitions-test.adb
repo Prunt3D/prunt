@@ -41,19 +41,8 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
    Y_Unit : constant Position_Scale := [Y_Axis => 1.0, others => 0.0];
    E_Unit : constant Position_Scale := [E_Axis => 1.0, others => 0.0];
 
-   subtype Series_Index is Natural range 0 .. 5;
-   type Series is array (Series_Index) of Long_Float;
-   Factorial : constant array (Series_Index) of Long_Float := [1.0, 1.0, 2.0, 6.0, 24.0, 120.0];
-
-   function Add (Left, Right : Series) return Series;
-   function Bezier_Position (Start_Point, Control_Point, Finish_Point : Position; T : Dimensionless) return Position;
    function Distance (Left, Right : Position) return Length;
    function Make_Stereographic_Request return Stereographic_Curves.Blend_Request;
-   function Multiply (Left, Right : Series) return Series;
-   function Parameter_Series (Data : Parabolic_Data; T : Dimensionless) return Series;
-   function Reciprocal (Value : Series) return Series;
-   function Scale (Value : Series; Factor : Long_Float) return Series;
-   function Square_Root (Value : Series) return Series;
 
    procedure Assert_Arc_Derivatives_Covered
      (Transition : Corner_Transition;
@@ -76,39 +65,11 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
       Name       : String;
       T          : in out Trendy_Test.Operation'Class);
 
-   procedure Assert_Parabolic_Derivatives_Covered
-     (Transition : Corner_Transition;
-      Name       : String;
-      T          : in out Trendy_Test.Operation'Class);
-
    procedure Assert_Point_Close
      (Actual, Expected : Position;
       Tolerance        : Length;
       Name             : String;
       T                : in out Trendy_Test.Operation'Class);
-
-   function Add (Left, Right : Series) return Series is
-      Result : Series;
-   begin
-      for I in Series_Index loop
-         Result (I) := Left (I) + Right (I);
-      end loop;
-      return Result;
-   end Add;
-
-   function Bezier_Position
-     (Start_Point, Control_Point, Finish_Point : Position;
-      T                                         : Dimensionless) return Position is
-      Result : Position;
-   begin
-      for Axis in Axis_Name loop
-         Result (Axis) :=
-           (1.0 - T) ** 2 * Start_Point (Axis)
-           + 2.0 * (1.0 - T) * T * Control_Point (Axis)
-           + T ** 2 * Finish_Point (Axis);
-      end loop;
-      return Result;
-   end Bezier_Position;
 
    function Distance (Left, Right : Position) return Length is
    begin
@@ -127,80 +88,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
       Result.Maximum_Arc_Length := 40.0 * mm;
       return Result;
    end Make_Stereographic_Request;
-
-   function Multiply (Left, Right : Series) return Series is
-      Result : Series := [others => 0.0];
-   begin
-      for I in Series_Index loop
-         for J in 0 .. Series_Index'Last - I loop
-            Result (I + J) := Result (I + J) + Left (I) * Right (J);
-         end loop;
-      end loop;
-      return Result;
-   end Multiply;
-
-   function Parameter_Series (Data : Parabolic_Data; T : Dimensionless) return Series is
-      Result : Series := [0 => Long_Float (T), others => 0.0];
-   begin
-      for Order in 0 .. Series_Index'Last - 1 loop
-         declare
-            Speed_Squared : Series := [others => 0.0];
-         begin
-            for Axis in Axis_Name loop
-               declare
-                  Linear : constant Long_Float :=
-                    2.0 * Long_Float ((Data.Control_Point (Axis) - Data.Start_Point (Axis)) / mm);
-                  Quadratic : constant Long_Float :=
-                    Long_Float
-                      ((Data.Finish_Point (Axis) - 2.0 * Data.Control_Point (Axis)
-                        + Data.Start_Point (Axis))
-                       / mm);
-                  Tangent : Series := Scale (Result, 2.0 * Quadratic);
-               begin
-                  Tangent (0) := Tangent (0) + Linear;
-                  Speed_Squared := Add (Speed_Squared, Multiply (Tangent, Tangent));
-               end;
-            end loop;
-            Result (Order + 1) := Reciprocal (Square_Root (Speed_Squared)) (Order) / Long_Float (Order + 1);
-         end;
-      end loop;
-      return Result;
-   end Parameter_Series;
-
-   function Reciprocal (Value : Series) return Series is
-      Result : Series := [others => 0.0];
-   begin
-      Result (0) := 1.0 / Value (0);
-      for I in 1 .. Series_Index'Last loop
-         for J in 1 .. I loop
-            Result (I) := Result (I) - Value (J) * Result (I - J) / Value (0);
-         end loop;
-      end loop;
-      return Result;
-   end Reciprocal;
-
-   function Scale (Value : Series; Factor : Long_Float) return Series is
-      Result : Series;
-   begin
-      for I in Series_Index loop
-         Result (I) := Value (I) * Factor;
-      end loop;
-      return Result;
-   end Scale;
-
-   function Square_Root (Value : Series) return Series is
-      Result : Series := [others => 0.0];
-   begin
-      Result (0) := Ada.Numerics.Long_Elementary_Functions.Sqrt (Value (0));
-      for I in 1 .. Series_Index'Last loop
-         Result (I) := Value (I);
-         for J in 1 .. I - 1 loop
-            Result (I) := Result (I) - Result (J) * Result (I - J);
-         end loop;
-         Result (I) := Result (I) / (2.0 * Result (0));
-      end loop;
-      return Result;
-   end Square_Root;
 
    procedure Assert_Arc_Derivatives_Covered
      (Transition : Corner_Transition;
@@ -358,60 +245,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
       end loop;
       T.Assert (Matches, Name & " evaluator preserves all transition metadata and evaluations");
    end Assert_Evaluator_Matches;
-
-   procedure Assert_Parabolic_Derivatives_Covered
-     (Transition : Corner_Transition;
-      Name       : String;
-      T          : in out Trendy_Test.Operation'Class) is
-      Data : constant Parabolic_Data := Transition.Parabola;
-      Bounds : constant Unit_Speed_Axial_Derivative_Bounds := Derivative_Bounds (Transition);
-      In_Bounds : Boolean := True;
-      Worst_Excess : Long_Float := 0.0;
-   begin
-      for Sample in 0 .. Derivative_Samples loop
-         declare
-            Parameter : constant Dimensionless := Dimensionless (Sample) / Dimensionless (Derivative_Samples);
-            Parameter_Jet : constant Series := Parameter_Series (Data, Parameter);
-            Parameter_Squared : constant Series := Multiply (Parameter_Jet, Parameter_Jet);
-         begin
-            for Axis in Axis_Name loop
-               declare
-                  Start_Value : constant Long_Float := Long_Float (Data.Start_Point (Axis) / mm);
-                  Linear : constant Long_Float :=
-                    2.0 * Long_Float ((Data.Control_Point (Axis) - Data.Start_Point (Axis)) / mm);
-                  Quadratic : constant Long_Float :=
-                    Long_Float
-                      ((Data.Finish_Point (Axis) - 2.0 * Data.Control_Point (Axis)
-                        + Data.Start_Point (Axis))
-                       / mm);
-                  Position_Jet : Series :=
-                    Add (Scale (Parameter_Jet, Linear), Scale (Parameter_Squared, Quadratic));
-                  Limits : constant array (Positive range 1 .. 5) of Long_Float :=
-                    [Long_Float (Bounds.Velocity (Axis)),
-                     Long_Float (Bounds.Acceleration (Axis) * mm),
-                     Long_Float (Bounds.Jerk (Axis) * mm ** 2),
-                     Long_Float (Bounds.Snap (Axis) * mm ** 3),
-                     Long_Float (Bounds.Crackle (Axis) * mm ** 4)];
-               begin
-                  Position_Jet (0) := Position_Jet (0) + Start_Value;
-                  for Order in Limits'Range loop
-                     declare
-                        Value : constant Long_Float := abs (Position_Jet (Order) * Factorial (Order));
-                     begin
-                        Worst_Excess := Long_Float'Max (Worst_Excess, Value - Limits (Order));
-                        In_Bounds :=
-                          In_Bounds
-                          and then Value <= Limits (Order) * (1.0 + Numeric_Tolerance) + 2.0E-10;
-                     end;
-                  end loop;
-               end;
-            end loop;
-         end;
-      end loop;
-      T.Assert
-        (In_Bounds,
-         Name & " exact series derivatives exceed the public bound by" & Worst_Excess'Image);
-   end Assert_Parabolic_Derivatives_Covered;
 
    procedure Assert_Point_Close
      (Actual, Expected : Position;
@@ -679,47 +512,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
       end loop;
    end Test_Fixed_Size_Copying;
 
-   procedure Test_Parabolic_R4_Geometry_And_Bounds (T : in out Trendy_Test.Operation'Class) is
-      Corner : constant Position := R4_Origin;
-      Start_Point : constant Position := Corner - R4_First * (12.0 * mm);
-      Finish_Point : constant Position := Corner + R4_Second * (5.0 * mm);
-      Expected_Midpoint : constant Position := Bezier_Position (Start_Point, Corner, Finish_Point, 0.5);
-      Result : constant Construction_Result :=
-        Create_Parabolic (Start_Point, Corner, Finish_Point, Maximum_Length => 30.0 * mm);
-   begin
-      T.Register;
-      Assert_Construction_Succeeded (Result, "R4 parabolic", T);
-      if Result.Status /= Construction_Success then
-         return;
-      end if;
-
-      T.Assert
-        (abs (Split_Distance (Result.Transition) - Arc_Length (Result.Transition) / 2.0) > 0.1 * mm,
-         "Unequal-trim parabolic split is not a hard-coded half length");
-      Assert_Point_Close
-        (Point_At_Distance (Result.Transition, 0.0 * mm), Start_Point, Geometry_Tolerance,
-         "Parabolic start endpoint", T);
-      Assert_Point_Close
-        (Point_At_Distance (Result.Transition, Arc_Length (Result.Transition)), Finish_Point,
-         Geometry_Tolerance, "Parabolic finish endpoint", T);
-      Assert_Point_Close
-        (Point_At_Distance (Result.Transition, Split_Distance (Result.Transition)), Expected_Midpoint,
-         Position_Error_Bound (Result.Transition) + Geometry_Tolerance,
-         "Parabolic split evaluates at Bezier parameter 0.5", T);
-      declare
-         First_Distance : constant Length := Arc_Length (Result.Transition) * 0.371_234;
-         Second_Distance : constant Length := First_Distance + Arc_Length (Result.Transition) * 1.0E-9;
-      begin
-         T.Assert
-           (Point_At_Distance (Result.Transition, First_Distance)
-              /= Point_At_Distance (Result.Transition, Second_Distance),
-            "Parabolic arc-length evaluation is not quantized into constant-distance plateaus");
-      end;
-      Assert_Envelope_Covers_Dense_Samples (Result.Transition, "R4 parabolic", T);
-      Assert_Parabolic_Derivatives_Covered (Result.Transition, "R4 parabolic", T);
-      Assert_Evaluator_Matches (Result.Transition, "R4 parabolic", T);
-   end Test_Parabolic_R4_Geometry_And_Bounds;
-
    procedure Test_SCV_Angles_And_Axis_Selection (T : in out Trendy_Test.Operation'Class) is
       SCV : constant Velocity := 5.0 * mm / s;
       Root_Half : constant Dimensionless := 0.707_106_781_186_547_524_4;
@@ -895,7 +687,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
                   Result :=
                     (case Kind is
                        when Circular_Transition => Create_Circular (Start, Corner, Finish),
-                       when Parabolic_Transition => Create_Parabolic (Start, Corner, Finish),
                        when Biarc_Transition =>
                          Create_Biarc (Start, Finish, Incoming, Outgoing, Preferred_Trim_Ratio => 0.1));
                   Assert_Construction_Succeeded (Result, Kind'Image, T);
@@ -914,25 +705,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
             end;
          end loop;
       end loop;
-      declare
-         Start : constant Position := [E_Axis => 100.0 * mm, others => 0.0 * mm];
-         Corner : Position := Start;
-         Finish : Position := Start;
-         Result : Construction_Result;
-      begin
-         Corner (X_Axis) := 10.0 * mm;
-         Finish (X_Axis) := 10.0 * mm;
-         Finish (Y_Axis) := 10.0 * mm;
-         for I in 1 .. 4 loop
-            Corner (E_Axis) := Length'Adjacent (Corner (E_Axis), Length'Last);
-         end loop;
-         Result := Create_Parabolic (Start, Corner, Finish);
-         Assert_Construction_Succeeded (Result, "four-ULP E excursion", T);
-         T.Assert
-           (not Axis_Is_Structurally_Constant (Result.Transition, E_Axis)
-            and then Point_At_Distance (Result.Transition, Split_Distance (Result.Transition)) (E_Axis) /= Start (E_Axis),
-            "equal endpoints must not suppress a genuine four-ULP control-point excursion");
-      end;
    end Test_Constant_Axes;
 
    function All_Tests return Trendy_Test.Test_Group is
@@ -942,7 +714,6 @@ package body Prunt.Motion_Planner.Corner_Transitions.Test is
          Test_Zero_Length_Policy_Separation'Access,
          Test_SCV_Angles_And_Axis_Selection'Access,
          Test_Circular_R4_Geometry_And_Bounds'Access,
-         Test_Parabolic_R4_Geometry_And_Bounds'Access,
          Test_Biarc_Determinism_And_Reversal'Access,
          Test_Biarc_Trim_Ratio_Search'Access,
          Test_Biarc_Asymmetric_Ratio_Search'Access,

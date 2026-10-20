@@ -552,7 +552,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          T.Assert
            (Transition_Kind (Block.Corner_Transitions (2)) = Expected,
             Name & " dispatch produced " & Transition_Kind (Block.Corner_Transitions (2))'Image);
-         if Expected in Stereographic_Transition | Circular_Transition | Parabolic_Transition | Biarc_Transition then
+         if Expected in Stereographic_Transition | Circular_Transition | Biarc_Transition then
             T.Assert
               (Arc_Length (Block.Corner_Transitions (2)) > 0.0 * mm,
                Name & " dispatch retained a positive transition");
@@ -611,15 +611,6 @@ package body Prunt.Motion_Planner.Planner.Test is
       Assert_Dispatched (Circular_Transition, "Circular", T);
 
       Block.Params.Cornering :=
-        (Kind             => Parabolic,
-         Parabolic_Params =>
-           (Axial_Deviation_Maxes    => Deviation,
-            Corner_Miss_Distance_Max => 100.0 * mm,
-            Shape_Bias               => 0.0,
-            Trim_Max                 => 5.0 * mm));
-      Assert_Dispatched (Parabolic_Transition, "Parabolic", T);
-
-      Block.Params.Cornering :=
         (Kind        => Biarc,
          Biarc_Params =>
            (Axial_Deviation_Maxes    => Deviation,
@@ -666,13 +657,13 @@ package body Prunt.Motion_Planner.Planner.Test is
 
       Block.Primitives (2) := Make_Line_Primitive;
       Block.Params.Cornering :=
-        (Kind             => Parabolic,
-         Parabolic_Params =>
+        (Kind        => Biarc,
+         Biarc_Params =>
            (Axial_Deviation_Maxes    => Deviation,
             Corner_Miss_Distance_Max => 100.0 * mm,
             Shape_Bias               => 0.0,
             Trim_Max                 => 5.0 * mm));
-      Assert_Dispatched (Parabolic_Transition, "Post-failure parabolic", T);
+      Assert_Dispatched (Biarc_Transition, "Post-failure biarc", T);
       T.Assert
         (not Bounds_Are_Zero (Workspace.Corner_Derivative_Bounds (2)),
          "A successful later family does not retain stale hard-stop workspace state");
@@ -1740,8 +1731,6 @@ package body Prunt.Motion_Planner.Planner.Test is
                  (Kind => Stereographic, Stereographic_Params => (Axial_Deviation_Maxes => Limits, others => <>));
                when Circular => Block.Params.Cornering :=
                  (Kind => Circular, Circular_Params => (Axial_Deviation_Maxes => Limits, others => <>));
-               when Parabolic => Block.Params.Cornering :=
-                 (Kind => Parabolic, Parabolic_Params => (Axial_Deviation_Maxes => Limits, others => <>));
                when Biarc => Block.Params.Cornering :=
                  (Kind => Biarc, Biarc_Params => (Axial_Deviation_Maxes => Limits, others => <>));
                when Sharp_SCV => Block.Params.Cornering := (Kind => Sharp_SCV, others => <>);
@@ -1985,11 +1974,6 @@ package body Prunt.Motion_Planner.Planner.Test is
                     (Kind => Circular, Circular_Params =>
                        (Axial_Deviation_Maxes => Limits, Corner_Miss_Distance_Max => 100.0 * mm,
                         Radius_Max => 5.0 * mm));
-               when Parabolic =>
-                  Block.Params.Cornering :=
-                    (Kind => Parabolic, Parabolic_Params =>
-                       (Axial_Deviation_Maxes => Limits, Corner_Miss_Distance_Max => 100.0 * mm,
-                        Trim_Max => 5.0 * mm, others => <>));
                when Biarc =>
                   Block.Params.Cornering :=
                     (Kind => Biarc, Biarc_Params =>
@@ -2037,7 +2021,6 @@ package body Prunt.Motion_Planner.Planner.Test is
             case Family is
                when Stereographic => Baseline.Params.Cornering := (Kind => Stereographic, others => <>);
                when Circular => Baseline.Params.Cornering := (Kind => Circular, others => <>);
-               when Parabolic => Baseline.Params.Cornering := (Kind => Parabolic, others => <>);
                when Biarc => Baseline.Params.Cornering := (Kind => Biarc, others => <>);
                when Sharp_SCV => Baseline.Params.Cornering := (Kind => Sharp_SCV, others => <>);
             end case;
@@ -2218,7 +2201,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       end Check_Segment;
    begin
       T.Register;
-      for Scenario in 1 .. 11 loop
+      for Scenario in 1 .. 10 loop
          Reset_Early_Limiter_Block (Block);
          Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
          Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
@@ -2247,13 +2230,13 @@ package body Prunt.Motion_Planner.Planner.Test is
                  (Block.Corners (3), Block.Corners (4),
                   [X_Axis => 10.05 * mm, others => 0.0 * mm], Clockwise => False);
             end if;
-         elsif Scenario = 10 then
+         elsif Scenario = 9 then
             Block.Corners :=
               [1 => [others => 0.0 * mm],
                2 => [X_Axis => 9.5 * mm, E_Axis => 0.95 * mm, others => 0.0 * mm],
                3 => [X_Axis => 10.0 * mm, E_Axis => 0.96 * mm, others => 0.0 * mm],
                4 => [X_Axis | Y_Axis => 10.0 * mm, E_Axis => 1.96 * mm, others => 0.0 * mm]];
-         elsif Scenario = 11 then
+         elsif Scenario = 10 then
             Block.Corners :=
               [1 => [others => 0.0 * mm],
                2 => [X_Axis => 10.0 * mm, E_Axis => 1.0 * mm, others => 0.0 * mm],
@@ -2266,8 +2249,7 @@ package body Prunt.Motion_Planner.Planner.Test is
             case Scenario is
                when 5 => Block.Params.Cornering := (Kind => Stereographic, others => <>);
                when 6 => Block.Params.Cornering := (Kind => Circular, others => <>);
-               when 7 => Block.Params.Cornering := (Kind => Parabolic, others => <>);
-               when 8 => Block.Params.Cornering := (Kind => Biarc, others => <>);
+               when 7 => Block.Params.Cornering := (Kind => Biarc, others => <>);
                when others => Block.Params.Cornering := (Kind => Sharp_SCV, others => <>);
             end case;
          end if;

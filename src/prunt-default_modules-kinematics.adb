@@ -78,15 +78,6 @@ package body Prunt.Default_Modules.Kinematics is
                   Corner_Miss_Distance_Max => Cornering.Circular_Params.Maximum_Corner_Miss_Distance,
                   Radius_Max               => Cornering.Circular_Params.Maximum_Radius));
 
-         when Parabolic     =>
-            return
-              (Kind             => Motion_Planner.Parabolic,
-               Parabolic_Params =>
-                 (Axial_Deviation_Maxes    => [for X of Cornering.Parabolic_Params.Axial_Deviation_Limits => X],
-                  Corner_Miss_Distance_Max => Cornering.Parabolic_Params.Maximum_Corner_Miss_Distance,
-                  Shape_Bias               => Cornering.Parabolic_Params.Shape_Bias,
-                  Trim_Max                 => Cornering.Parabolic_Params.Maximum_Trim));
-
          when Biarc         =>
             return
               (Kind         => Motion_Planner.Biarc,

@@ -289,27 +289,6 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Cornering_Parabolic is record
-      --  Use a quadratic parabolic curve for supported line-to-line corners. Position and tangent are continuous and
-      --  acceleration remains bounded, but acceleration may jump at the endpoints. Jerk, snap, and crackle limits do
-      --  not apply to those endpoint jumps.
-
-      Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
-      --  XYZ entries limit geometric deviation. E limits extrusion error after density normalization and shortening in
-      --  Smooth_Deviation mode; zero disables blending at density changes. E is unused in velocity-change mode.
-
-      Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
-      --  Maximum distance by which the curve may miss the commanded corner point.
-
-      Shape_Bias : Dimensionless range -1.0 .. 1.0 := 0.0;
-      --  Bias the curve toward the incoming side when negative and toward the outgoing side when positive.
-
-      Maximum_Trim : Length range 0.0 * mm .. 1.0E100 * mm := 1.0E100 * mm;
-      --  Maximum distance that the curve may trim from either adjoining path. The default of 1.0E100 leaves trimming
-      --  effectively uncapped so the deviation limits determine the curve size.
-   end record
-   with Annotate => (Prunt_Config, User_Config);
-
    type User_Config_Cornering_Biarc is record
       --  Use two tangent circular arcs for line/helix corners where a certified biarc exists. Position and tangent are
       --  continuous. Acceleration may jump at the endpoints and at the internal arc splice, so jerk, snap, and crackle
@@ -342,7 +321,7 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
-   type User_Config_Cornering_Kind is (Stereographic, Circular, Parabolic, Biarc, Sharp_SCV)
+   type User_Config_Cornering_Kind is (Stereographic, Circular, Biarc, Sharp_SCV)
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Cornering (Kind : User_Config_Cornering_Kind := Stereographic) is record
@@ -355,9 +334,6 @@ private
 
          when Circular =>
             Circular_Params : User_Config_Cornering_Circular;
-
-         when Parabolic =>
-            Parabolic_Params : User_Config_Cornering_Parabolic;
 
          when Biarc =>
             Biarc_Params : User_Config_Cornering_Biarc;

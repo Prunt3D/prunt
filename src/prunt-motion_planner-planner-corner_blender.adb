@@ -175,14 +175,6 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                      0.0,
                      0.0 * mm);
 
-               when Parabolic     =>
-                  return
-                    (Block.Params.Cornering.Parabolic_Params.Axial_Deviation_Maxes,
-                     Block.Params.Cornering.Parabolic_Params.Corner_Miss_Distance_Max,
-                     0.0,
-                     Block.Params.Cornering.Parabolic_Params.Shape_Bias,
-                     Block.Params.Cornering.Parabolic_Params.Trim_Max);
-
                when Biarc         =>
                   return
                     (Block.Params.Cornering.Biarc_Params.Axial_Deviation_Maxes,
@@ -423,7 +415,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                return True;
             elsif not Any_Deviation_Allowed then
                return True;
-            elsif Block.Params.Cornering.Kind in Circular | Parabolic
+            elsif Block.Params.Cornering.Kind = Circular
               and then
                 (Block.Primitives (I).Kind /= Line_Primitive_Kind
                  or else Block.Primitives (I + 1).Kind /= Line_Primitive_Kind)
@@ -1066,7 +1058,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                               Target_Outgoing_Trims (I) := Base_Width;
                            end;
 
-                        when Parabolic | Biarc =>
+                        when Biarc =>
                            declare
                               Trim_Max : constant Length := Settings.Trim_Max;
                            begin
@@ -1435,11 +1427,6 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                           Block.Corners (I),
                           End_Point,
                           Block.Params.Cornering.Circular_Params.Radius_Max);
-
-                  when Parabolic     =>
-                     Result :=
-                       Create_Parabolic
-                         (Start_Point, Block.Corners (I), End_Point, Maximum_Length => Trim_In + Trim_Out);
 
                   when Biarc         =>
                      Result :=
