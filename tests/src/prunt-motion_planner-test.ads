@@ -51,6 +51,9 @@ private
       Region      : Constraint_Region;
       Index       : Integer;
       Name        : String;
-      T           : in out Trendy_Test.Operation'Class);
+      T           : in out Trendy_Test.Operation'Class;
+      Tie_Index   : Integer := 0);
+   --  Tie_Index is also accepted at a case boundary, where both cases describe the same profile and the sign of the
+   --  computed phase time that selects between them is decided by roundoff.
 
 end Prunt.Motion_Planner.Test;

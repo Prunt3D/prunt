@@ -2422,6 +2422,55 @@ package body Prunt.Motion_Planner.Planner.Test is
       end loop;
    end Test_Extrusion_Transition_Locality;
 
+   procedure Test_Fixed_Geometry_Region_Boundary (T : in out Trendy_Test.Operation'Class) is
+      type Workspace_Access is access Planning_Workspace;
+      Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
+      Block : aliased Execution_Block (5);
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Job_Time : Time := 0.0 * s;
+   begin
+      T.Register;
+      Reset_Early_Limiter_Block (Block);
+      Block.Params.Tangential_Velocity_Max := 250.0 * mm / s;
+      Block.Params.Axial_Velocity_Maxes := [others => 200.0 * mm / s];
+      Block.Params.Axial_Acceleration_Maxes := [others => 3000.0 * mm / s ** 2];
+      Block.Params.Axial_Jerk_Maxes := [others => 1.0E5 * mm / s ** 3];
+      Block.Params.Axial_Snap_Maxes := [others => 5.0E6 * mm / s ** 4];
+      Block.Params.Axial_Crackle_Maxes := [others => 5.0E8 * mm / s ** 5];
+      Block.Params.Cornering := (Kind => Sharp_SCV, Sharp_SCV_Params => (Square_Corner_Velocity => 0.0 * mm / s));
+      Block.Original_Segment_Feedrates := [others => 250.0 * mm / s];
+      Block.Corners :=
+        [[others => 0.0 * mm],
+         [X_Axis => 40.0 * mm, others => 0.0 * mm],
+         [X_Axis | Y_Axis => 40.0 * mm, others => 0.0 * mm],
+         [Y_Axis => 40.0 * mm, others => 0.0 * mm],
+         [others => 0.0 * mm]];
+      Normalize_And_Blend (Block, Motor_Map, Workspace);
+      Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
+      T.Assert ((for all V of Block.Limited_Segment_Feedrates => abs (V - 199.8 * mm / s) < 1.0E-9 * mm / s),
+        "The square starts with the expected axial feedrate limit");
+      Plan_Fixed_Geometry (Block, Motor_Map, Workspace);
+      T.Assert ((for all V of Block.Limited_Segment_Feedrates => abs (V - 199.8 * mm / s) < 1.0E-9 * mm / s),
+        "Boundary roundoff must not halve the square's feedrates; first segment"
+        & Block.Limited_Segment_Feedrates (2)'Image);
+      for I in Block.Primitives'Range loop
+         T.Assert (Workspace.Planning_Attempts (I) = 0, "The boundary profile needs no recovery attempts");
+         Job_Time := Job_Time + Segment_Time (Block'Access, I);
+         declare
+            End_Time : constant Time := Segment_Time (Block'Access, I);
+            Before_End : constant Time := Time'Adjacent (End_Time, 0.0 * s);
+         begin
+            --  At End_Time the executor substitutes the requested endpoint. Inspect the previous representable
+            --  time too, otherwise that substitution could conceal an erroneous profile and a position jump.
+            T.Assert (abs (Segment_Pos_At_Time (Block'Access, I, Before_End) - Block.Corners (I)) < 1.0E-10 * mm,
+              "The executed square approaches each endpoint without a position jump");
+            T.Assert (abs (Segment_Pos_At_Time (Block'Access, I, End_Time) - Block.Corners (I)) < 1.0E-10 * mm,
+              "The executed square reaches each requested endpoint");
+         end;
+      end loop;
+      T.Assert (Job_Time < 1.4 * s, "The stopped 40 mm square retains its expected duration");
+   end Test_Fixed_Geometry_Region_Boundary;
+
    procedure Test_Extrusion_Position_Bounds (T : in out Trendy_Test.Operation'Class) is
       type Workspace_Access is access Planning_Workspace;
       Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
@@ -3750,6 +3799,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Extrusion_Instantaneous_Velocity_Change'Unrestricted_Access,
          Test_Profile_Local_Curve_Limits'Unrestricted_Access,
          Test_Profile_Recovery'Unrestricted_Access,
+         Test_Fixed_Geometry_Region_Boundary'Unrestricted_Access,
          Test_Profile_Numeric_Recovery'Unrestricted_Access,
          Test_Stationary_Extrusion_Certificate'Unrestricted_Access,
          Test_Extrusion_Workspace_Reuse'Unrestricted_Access,

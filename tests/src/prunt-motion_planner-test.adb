@@ -40,6 +40,7 @@ package body Prunt.Motion_Planner.Test is
    begin
       T.Assert (Result.Region = Region, Name & ": Incorrect region");
       T.Assert (Result.Index = Index, Name & ": Incorrect index");
+      T.Assert ((for all Phase_Time of Result.Profile => Phase_Time >= 0.0 * s), Name & ": Negative phase time");
 
       for I in 0 .. N_Kinematic_Check_Steps loop
          T_Val : constant Time :=
@@ -84,13 +85,15 @@ package body Prunt.Motion_Planner.Test is
       Region      : Constraint_Region;
       Index       : Integer;
       Name        : String;
-      T           : in out Trendy_Test.Operation'Class)
+      T           : in out Trendy_Test.Operation'Class;
+      Tie_Index   : Integer := 0)
    is
       Result : constant Internal_Profile_Result :=
         Optimal_Profile_For_Delta_V_Internal (Delta_V, Max_Accel, Max_Jerk, Max_Snap, Max_Crackle);
    begin
       T.Assert (Result.Region = Region, Name & ": Incorrect region");
-      T.Assert (Result.Index = Index, Name & ": Incorrect index");
+      T.Assert (Result.Index = Index or else Result.Index = Tie_Index, Name & ": Incorrect index");
+      T.Assert ((for all Phase_Time of Result.Profile => Phase_Time >= 0.0 * s), Name & ": Negative phase time");
 
       for I in 0 .. N_Kinematic_Check_Steps loop
          T_Val : constant Time :=
@@ -806,11 +809,20 @@ package body Prunt.Motion_Planner.Test is
 
       D := Distance_At_Time (Profile, Total_T, Cm, Start_Vel);
       T.Assert
-        (abs (D - Distance) < 0.001 * mm, Name & ": Incorrect end distance " & D'Image & " vs " & Distance'Image);
+        (abs (D - Distance) <= 1.0E-12 * Distance,
+         Name & ": Incorrect end distance " & D'Image & " vs " & Distance'Image);
+      declare
+         Before_End : constant Time := Time'Adjacent (Total_T, 0.0 * s);
+         Before_Distance : constant Length := Distance_At_Time (Profile, Before_End, Cm, Start_Vel);
+      begin
+         T.Assert (abs (Before_Distance - Distance) <= 1.0E-12 * Distance + Max_Vel * (Total_T - Before_End),
+           Name & ": Position must approach the endpoint without a jump");
+      end;
 
       V := Velocity_At_Time (Profile, Total_T, Cm, Start_Vel);
       T.Assert
-        (abs (V - End_Vel) < 0.001 * mm / s, Name & ": Incorrect end velocity " & V'Image & " vs " & End_Vel'Image);
+        (abs (V - End_Vel) <= 1.0E-12 * Max_Vel,
+         Name & ": Incorrect end velocity " & V'Image & " vs " & End_Vel'Image);
    end Check_Full_Profile;
 
    procedure Test_Optimal_Full_Profile_Reach_Max_Vel (T : in out Trendy_Test.Operation'Class) is
@@ -1233,7 +1245,8 @@ package body Prunt.Motion_Planner.Test is
             Region      => Region_3,
             Index       => 1,
             Name        => "Case V3.1 (" & I'Image & ")",
-            T           => T);
+            T           => T,
+            Tie_Index   => (if I = N_Boundary_Intervals then 4 else 0));
       end loop;
 
       Check_Profile_For_Delta_V
@@ -1270,7 +1283,8 @@ package body Prunt.Motion_Planner.Test is
          Region      => Region_3,
          Index       => 1,
          Name        => "Case V3.4 Boundary Low (I=0)",
-         T           => T);
+         T           => T,
+         Tie_Index   => 4);
 
       for I in 1 .. N_Boundary_Intervals loop
          Check_Profile_For_Delta_V
@@ -1358,7 +1372,8 @@ package body Prunt.Motion_Planner.Test is
             Region      => Region_4,
             Index       => 3,
             Name        => "Case V4.3 (" & I'Image & ")",
-            T           => T);
+            T           => T,
+            Tie_Index   => (if I = N_Boundary_Intervals then 4 else 0));
       end loop;
 
       Check_Profile_For_Delta_V
@@ -1398,7 +1413,8 @@ package body Prunt.Motion_Planner.Test is
          Region      => Region_4,
          Index       => 3,
          Name        => "Case V4.4 Boundary Low (I=0)",
-         T           => T);
+         T           => T,
+         Tie_Index   => 4);
 
       for I in 1 .. N_Boundary_Intervals loop
          Check_Profile_For_Delta_V
@@ -2452,6 +2468,87 @@ package body Prunt.Motion_Planner.Test is
       end loop;
    end Test_Mixed_Derivative_Normalization;
 
+   procedure Test_Delta_V_Profile_Region_Boundary (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      --  Am = Jm * (Jm / Sm + Sm / Cm), but the Region 1 jerk plateau Am / Jm - Jm / Sm - Sm / Cm rounds to
+      --  -2**(-59). Region 2 must be selected instead. Its profile coincides with Region 1's on this boundary.
+      Check_Profile_For_Delta_V
+        (200.0 * mm / s, 3000.0 * mm / s ** 2, 1.0E5 * mm / s ** 3, 5.0E6 * mm / s ** 4,
+         5.0E8 * mm / s ** 5, Region_2, 4, "Region 1 boundary velocity ramp", T);
+   end Test_Delta_V_Profile_Region_Boundary;
+
+   procedure Test_Distance_Profile_Region_Boundary (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Check_Profile_For_Distance
+        (0.0 * mm / s, 100.0 * mm, 3000.0 * mm / s ** 2, 1.0E5 * mm / s ** 3, 5.0E6 * mm / s ** 4,
+         5.0E8 * mm / s ** 5, Region_2, 4, "Region 1 boundary distance ramp", T);
+   end Test_Distance_Profile_Region_Boundary;
+
+   procedure Test_Full_Profile_Region_Boundary (T : in out Trendy_Test.Operation'Class) is
+      Am : constant Acceleration := 3000.0 * mm / s ** 2;
+      Jm : constant Jerk := 1.0E5 * mm / s ** 3;
+      Sm : constant Snap := 5.0E6 * mm / s ** 4;
+      Cm : constant Crackle := 5.0E8 * mm / s ** 5;
+      type Acceleration_Array is array (Positive range <>) of Acceleration;
+      type Velocity_Array is array (Positive range <>) of Velocity;
+      type Length_Array is array (Positive range <>) of Length;
+      Profile : Feedrate_Profile;
+   begin
+      T.Register;
+      Profile := Optimal_Full_Profile (0.0 * mm / s, 200.0 * mm / s, 0.0 * mm / s, 100.0 * mm, Am, Jm, Sm, Cm);
+      T.Assert (Profile.Accel (3) = 0.0 * s and then Profile.Decel (3) = 0.0 * s,
+        "The collapsed jerk plateau has exactly zero duration");
+      T.Assert (abs (Total_Time (Profile) - (0.5 + 200.0 / 3000.0 + 0.06) * s) < 1.0E-12 * s,
+        "The boundary profile retains its optimal duration");
+      declare
+         Bad_Profile : Feedrate_Profile := Profile;
+      begin
+         Bad_Profile.Coast := @ + 1.0E-4 * s;
+         T.Assert (not Profile_Is_Valid (Bad_Profile, 100.0 * mm, 0.0 * mm / s, 0.0 * mm / s, Cm),
+           "Nonnegative times must not bypass the final distance check");
+      end;
+      Profile.Accel (3) := -2.0 ** (-59) * s;
+      T.Assert (not Profile_Is_Valid (Profile, 100.0 * mm, 0.0 * mm / s, 0.0 * mm / s, Cm),
+        "Validation must still reject even a tiny negative phase time");
+      for Accel of Acceleration_Array'[Acceleration'Adjacent (Am, 0.0 * mm / s ** 2), Am,
+                                       Acceleration'Adjacent (Am, 6000.0 * mm / s ** 2)] loop
+         for Peak of Velocity_Array'[Velocity'Adjacent (180.0 * mm / s, 0.0 * mm / s), 180.0 * mm / s,
+                                     Velocity'Adjacent (180.0 * mm / s, 200.0 * mm / s), 200.0 * mm / s] loop
+            for Distance of Length_Array'[10.0 * mm, 40.0 * mm, 100.0 * mm] loop
+               Check_Full_Profile (0.0 * mm / s, Peak, 0.0 * mm / s, Distance, Accel, Jm, Sm, Cm,
+                 "Region 1 boundary full profile", T);
+            end loop;
+         end loop;
+      end loop;
+      Check_Full_Profile (30.0 * mm / s, 230.0 * mm / s, 10.0 * mm / s, 100.0 * mm, Am, Jm, Sm, Cm,
+        "Region 1 boundary with asymmetric nonzero endpoint velocities", T);
+   end Test_Full_Profile_Region_Boundary;
+
+   procedure Test_Fractional_Power_Profile_Boundary (T : in out Trendy_Test.Operation'Class) is
+      Am : constant Acceleration := 300.0 * mm / s ** 2;
+      Jm : constant Jerk := 1.0E5 * mm / s ** 3;
+      Cm : constant Crackle := 5.0E8 * mm / s ** 5;
+      Boundary : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3);
+      type Snaps is array (Positive range <>) of Snap;
+      type Velocities is array (Positive range <>) of Velocity;
+      type Lengths is array (Positive range <>) of Length;
+   begin
+      T.Register;
+      --  Regions 3 and 5 independently evaluate powers 1/3 and 4/3. Exercise their rounded case boundary using
+      --  the compiler's native precision, checking the executed endpoint as well as the nonnegative phase times.
+      for Sm of Snaps'[5.0E6 * mm / s ** 4, 1.0E7 * mm / s ** 4] loop
+         for Peak of Velocities'[Velocity'Adjacent (Boundary, 0.0 * mm / s), Boundary,
+                                 Velocity'Adjacent (Boundary, Velocity'Last)] loop
+            for Distance of Lengths'[0.01 * mm, 1.0 * mm, 100.0 * mm] loop
+               Check_Full_Profile (0.0 * mm / s, Peak, 0.0 * mm / s, Distance, Am, Jm, Sm, Cm,
+                 "Fractional-power boundary full profile", T);
+            end loop;
+         end loop;
+      end loop;
+   end Test_Fractional_Power_Profile_Boundary;
+
    procedure Test_Profile_Degenerate_Limits (T : in out Trendy_Test.Operation'Class) is
       Limits : Scalar_Derivative_Limits;
       Profile : Feedrate_Profile;
@@ -2541,6 +2638,10 @@ package body Prunt.Motion_Planner.Test is
          Test_Optimal_Full_Profile_Start_End_Constraints'Access,
          Test_Optimal_Full_Profile_Triangle'Access,
          Test_Optimal_Full_Profile_Short_Triangle_Distance_Closure'Access,
+         Test_Delta_V_Profile_Region_Boundary'Access,
+         Test_Distance_Profile_Region_Boundary'Access,
+         Test_Full_Profile_Region_Boundary'Access,
+         Test_Fractional_Power_Profile_Boundary'Access,
          Test_Workspace_Bounds'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_1'Access,
          Test_Optimal_Profile_For_Delta_V_Case_V1_2'Access,

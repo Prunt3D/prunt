@@ -2107,6 +2107,7 @@ package body Prunt.Motion_Planner is
       Cm     : constant Crackle := Crackle_Max;
       Cases  : array (Feedrate_Profile_Times_Index) of Feedrate_Profile_Times;
       Region : Constraint_Region;
+      T2, T3 : Time;
 
       function Solve_Distance_At_Time
         (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index) return Internal_Profile_Result;
@@ -2173,63 +2174,63 @@ package body Prunt.Motion_Planner is
             raise Constraint_Error with "Positive distance from rest requires positive derivative limits.";
          end if;
       end if;
-      if Sm ** 2 < Jm * Cm then
-         if Am >= Jm * (Jm / Sm + Sm / Cm) then
+      --  Each region test is algebraically equivalent to a phase time being nonnegative. Test the computed phase time
+      --  itself, since a rearranged test rounds differently and can select a region whose phase time is negative.
+      T2 := Jm / Sm - Sm / Cm;
+      if T2 > 0.0 * s then
+         --  Sm ** 2 < Jm * Cm
+         T3 := Am / Jm - Jm / Sm - Sm / Cm;
+         if T3 >= 0.0 * s then
+            --  Am >= Jm * (Jm / Sm + Sm / Cm)
             Region := Region_1;
             Cases :=
               [
                --  Reachable: Sm, Jm, Am (Test Case D1.4)
-               4 => [Sm / Cm, Jm / Sm - Sm / Cm, Am / Jm - Jm / Sm - Sm / Cm, 0.0 * s],
+               4 => [Sm / Cm, T2, T3, 0.0 * s],
                --  Reachable: Sm, Jm (Test Case D1.3)
-               3 => [Sm / Cm, Jm / Sm - Sm / Cm, 0.0 * s, 0.0 * s],
+               3 => [Sm / Cm, T2, 0.0 * s, 0.0 * s],
                --  Reachable: Sm (Test Case D1.2)
                2 => [Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D1.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
-         elsif Am >= 2.0 * Sm ** 3 / Cm ** 2 then
-            Region := Region_2;
-            Cases :=
-              [
-               --  Reachable: Sm, Am (Test Case D2.4)
-               4 =>
-                 [Sm / Cm,
-                  Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) - 1.5 * Sm / Cm,
-                  0.0 * s,
-                  0.0 * s],
-               --  Impossible case.
-               3 =>
-                 [Sm / Cm,
-                  Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) - 1.5 * Sm / Cm,
-                  0.0 * s,
-                  0.0 * s],
-               --  Reachable: Sm (Test Case D2.2)
-               2 => [Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s],
-               --  Reachable: None (Test Case D2.1)
-               1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
          else
-            Region := Region_3;
-            Cases :=
-              [
-               --  Reachable: Am (Test Case D3.4)
-               4 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
-               --  Impossible case.
-               3 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
-               --  Impossible case.
-               2 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
-               --  Reachable: None (Test Case D3.1)
-               1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
+            T2 := Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) - 1.5 * Sm / Cm;
+            if T2 >= 0.0 * s then
+               --  Am >= 2.0 * Sm ** 3 / Cm ** 2
+               Region := Region_2;
+               Cases :=
+                 [
+                  --  Reachable: Sm, Am (Test Case D2.4)
+                  4 => [Sm / Cm, T2, 0.0 * s, 0.0 * s],
+                  --  Impossible case.
+                  3 => [Sm / Cm, T2, 0.0 * s, 0.0 * s],
+                  --  Reachable: Sm (Test Case D2.2)
+                  2 => [Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s],
+                  --  Reachable: None (Test Case D2.1)
+                  1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
+            else
+               Region := Region_3;
+               Cases :=
+                 [
+                  --  Reachable: Am (Test Case D3.4)
+                  4 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  --  Impossible case.
+                  3 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  --  Impossible case.
+                  2 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  --  Reachable: None (Test Case D3.1)
+                  1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
+            end if;
          end if;
       else
-         if Am > 2.0 * Jm * Dimensionless_Math.Sqrt (Jm / Cm) then
+         T3 := Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm);
+         if T3 > 0.0 * s then
+            --  Am > 2.0 * Jm * Dimensionless_Math.Sqrt (Jm / Cm)
             Region := Region_4;
             Cases :=
               [
                --  Reachable: Jm, Am (Test Case D4.4)
-               4 =>
-                 [Dimensionless_Math.Sqrt (Jm / Cm),
-                  0.0 * s,
-                  Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm),
-                  0.0 * s],
+               4 => [Dimensionless_Math.Sqrt (Jm / Cm), 0.0 * s, T3, 0.0 * s],
                --  Reachable: Jm (Test Case D4.3)
                3 => [Dimensionless_Math.Sqrt (Jm / Cm), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
@@ -2288,6 +2289,8 @@ package body Prunt.Motion_Planner is
       Sm     : constant Snap := Snap_Max;
       Cm     : constant Crackle := Crackle_Max;
       Region : Constraint_Region;
+      T2, T3 : Time;
+      T4     : Time;
 
       function Solve_Velocity_At_Time
         (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index; Target : Velocity)
@@ -2359,25 +2362,27 @@ package body Prunt.Motion_Planner is
       --      NonNegativeReals
       --    ]
       --  ]
-      if Sm ** 2 < Jm * Cm then
-         if Am >= Jm * (Jm / Sm + Sm / Cm) then
+      --
+      --  As in Optimal_Profile_For_Distance_Internal, each case is selected by testing the sign of the computed phase
+      --  time it would use, with the equivalent algebraic condition noted beside each test.
+      T2 := Jm / Sm - Sm / Cm;
+      if T2 > 0.0 * s then
+         --  Sm ** 2 < Jm * Cm
+         T3 := Am / Jm - Jm / Sm - Sm / Cm;
+         if T3 >= 0.0 * s then
+            --  Am >= Jm * (Jm / Sm + Sm / Cm)
             Region := Region_1;
-            if Vd > Am * (Am / Jm + Jm / Sm + Sm / Cm) then
+            T4 := Vd / Am - Am / Jm - Jm / Sm - Sm / Cm;
+            if T4 > 0.0 * s then
+               --  Vd > Am * (Am / Jm + Jm / Sm + Sm / Cm)
                --  Reachable: Sm, Jm, Am (Test Case V1.4)
-               return
-                 ([Sm / Cm, Jm / Sm - Sm / Cm, Am / Jm - Jm / Sm - Sm / Cm, Vd / Am - Am / Jm - Jm / Sm - Sm / Cm],
-                  Region,
-                  4);
-            elsif Vd > 2.0 * Jm * (Jm / Sm + Sm / Cm) ** 2 then
+               return ([Sm / Cm, T2, T3, T4], Region, 4);
+            end if;
+            T3 := 0.5 * Dimensionless_Math.Sqrt ((Jm / Sm + Sm / Cm) ** 2 + 4.0 * Vd / Jm) - 1.5 * (Jm / Sm + Sm / Cm);
+            if T3 > 0.0 * s then
+               --  Vd > 2.0 * Jm * (Jm / Sm + Sm / Cm) ** 2
                --  Reachable: Sm, Jm (Test Case V1.3)
-               return
-                 ([Sm / Cm,
-                   Jm / Sm - Sm / Cm,
-                   0.5 * Dimensionless_Math.Sqrt ((Jm / Sm + Sm / Cm) ** 2 + 4.0 * Vd / Jm)
-                   - 1.5 * (Jm / Sm + Sm / Cm),
-                   0.0 * s],
-                  Region,
-                  3);
+               return ([Sm / Cm, T2, T3, 0.0 * s], Region, 3);
             elsif Vd > 8.0 * Sm ** 4 / Cm ** 3 then
                --  Reachable: Sm (Test Case V1.2)
                return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
@@ -2388,17 +2393,16 @@ package body Prunt.Motion_Planner is
                   Region,
                   1);
             end if;
-         elsif Am >= 2.0 * Sm ** 3 / Cm ** 2 then
+         end if;
+         T2 := Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) - 1.5 * Sm / Cm;
+         if T2 >= 0.0 * s then
+            --  Am >= 2.0 * Sm ** 3 / Cm ** 2
             Region := Region_2;
-            if Vd > Am * (2.0 * Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) + Sm / Cm) then
+            T4 := Vd / Am - Sm / Cm - 2.0 * Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm);
+            if T4 > 0.0 * s then
+               --  Vd > Am * (2.0 * Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) + Sm / Cm)
                --  Reachable: Sm, Am (Test Case V2.4)
-               return
-                 ([Sm / Cm,
-                   Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) - 1.5 * Sm / Cm,
-                   0.0 * s,
-                   Vd / Am - Sm / Cm - 2.0 * Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm)],
-                  Region,
-                  4);
+               return ([Sm / Cm, T2, 0.0 * s, T4], Region, 4);
             elsif Vd > 8.0 * Sm ** 4 / Cm ** 3 then
                --  Reachable: Sm (Test Case V2.2)
                return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
@@ -2411,12 +2415,11 @@ package body Prunt.Motion_Planner is
             end if;
          else
             Region := Region_3;
-            if Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3) then
+            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm) ** (1 / 3);
+            if T4 > 0.0 * s then
+               --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3)
                --  Reachable: Am (Test Case V3.4)
-               return
-                 ([(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, Vd / Am - 4.0 * (0.5 * Am / Cm) ** (1 / 3)],
-                  Region,
-                  4);
+               return ([(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
             else
                --  Reachable: None (Test Case V3.1)
                return
@@ -2426,26 +2429,21 @@ package body Prunt.Motion_Planner is
             end if;
          end if;
       else
-         if Am > 2.0 * Jm * Dimensionless_Math.Sqrt (Jm / Cm) then
+         T3 := Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm);
+         if T3 > 0.0 * s then
+            --  Am > 2.0 * Jm * Dimensionless_Math.Sqrt (Jm / Cm)
             Region := Region_4;
-            if Vd > Am * (Am / Jm + 2.0 * Dimensionless_Math.Sqrt (Jm / Cm)) then
+            T4 := Vd / Am - Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm);
+            if T4 > 0.0 * s then
+               --  Vd > Am * (Am / Jm + 2.0 * Dimensionless_Math.Sqrt (Jm / Cm))
                --  Reachable: Jm, Am (Test Case V4.4)
-               return
-                 ([Dimensionless_Math.Sqrt (Jm / Cm),
-                   0.0 * s,
-                   Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm),
-                   Vd / Am - Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm)],
-                  Region,
-                  4);
-            elsif Vd > 8.0 * Jm ** 2 / Cm then
+               return ([Dimensionless_Math.Sqrt (Jm / Cm), 0.0 * s, T3, T4], Region, 4);
+            end if;
+            T3 := Dimensionless_Math.Sqrt (Jm / Cm + Vd / Jm) - 3.0 * Dimensionless_Math.Sqrt (Jm / Cm);
+            if T3 > 0.0 * s then
+               --  Vd > 8.0 * Jm ** 2 / Cm
                --  Reachable: Jm (Test Case V4.3)
-               return
-                 ([Dimensionless_Math.Sqrt (Jm / Cm),
-                   0.0 * s,
-                   Dimensionless_Math.Sqrt (Jm / Cm + Vd / Jm) - 3.0 * Dimensionless_Math.Sqrt (Jm / Cm),
-                   0.0 * s],
-                  Region,
-                  3);
+               return ([Dimensionless_Math.Sqrt (Jm / Cm), 0.0 * s, T3, 0.0 * s], Region, 3);
             else
                --  Reachable: None (Test Case V4.1)
                return
@@ -2455,12 +2453,11 @@ package body Prunt.Motion_Planner is
             end if;
          else
             Region := Region_5;
-            if Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3) then
+            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm) ** (1 / 3);
+            if T4 > 0.0 * s then
+               --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3)
                --  Reachable: Am (Test Case V5.4)
-               return
-                 ([(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, Vd / Am - 4.0 * (0.5 * Am / Cm) ** (1 / 3)],
-                  Region,
-                  4);
+               return ([(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
             else
                --  Reachable: None (Test Case V5.1)
                return
