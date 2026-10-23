@@ -58,6 +58,11 @@ package body Prunt.Bounded_Indefinite_Vectors is
       end loop;
 
       This.Last_Used_Index := Extended_Index'First;
+
+      if This.Subpool /= null then
+         This.Subpool.Current_Free := This.Storage'Address;
+      end if;
+
       Error.Reraise;
    end Clear;
 
