@@ -17,6 +17,7 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Prunt.Cleanup_Exceptions;
 with Ada.Unchecked_Deallocate_Subpool;
 
 package body Prunt.Bounded_Indefinite_Vectors is
@@ -40,16 +41,24 @@ package body Prunt.Bounded_Indefinite_Vectors is
    end Append;
 
    procedure Clear (This : in out Vector) is
+      Error : Cleanup_Exceptions.Holder;
    begin
       --  No init required. Guarded by Last_Used_Index check.
 
       for E of This.Elements (Index_Type'First .. This.Last_Used_Index) loop
-         Free (E);
-         pragma Unreferenced (E);
-         E := null;
+         declare
+            Item : Element_Access := E;
+         begin
+            E := null;
+            Free (Item);
+         exception
+            when Failure : others =>
+               Error.Save (Failure);
+         end;
       end loop;
 
       This.Last_Used_Index := Extended_Index'First;
+      Error.Reraise;
    end Clear;
 
    function Element (This : Vector; Index : Index_Type) return Element_Type is
@@ -91,12 +100,18 @@ package body Prunt.Bounded_Indefinite_Vectors is
 
    overriding
    procedure Finalize (This : in out Vector) is
+      Error : Cleanup_Exceptions.Holder;
    begin
       if This.Subpool /= null then
          declare
             Handle : Subpool_Handle := This.Subpool.all'Unchecked_Access;
          begin
-            Clear (This);
+            begin
+               Clear (This);
+            exception
+               when E : others =>
+                  Error.Save (E);
+            end;
 
             Ada.Unchecked_Deallocate_Subpool (Handle);
             --  Free should be all we need here, but GCC does not currently finalize subpools correctly, leading to
@@ -106,6 +121,7 @@ package body Prunt.Bounded_Indefinite_Vectors is
             Free (This.Subpool);
          end;
       end if;
+      Error.Reraise;
    end Finalize;
 
    function Is_Empty (This : Vector) return Boolean is
