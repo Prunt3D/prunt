@@ -17,8 +17,8 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Finalization;
 with Prunt.Step_Generator.Block_Executor;
-with System.Pool_Local;
 
 package body Prunt.Step_Generator is
 
@@ -179,9 +179,6 @@ package body Prunt.Step_Generator is
       end loop;
 
       Reset;
-      if Runner'Terminated then
-         Idle_Confirmed := False;
-      end if;
    end Soft_Halt;
 
    procedure Pause is
@@ -353,23 +350,23 @@ package body Prunt.Step_Generator is
       Commands         : Command_State;
       Active_Transform : Kinematic_Transform;
 
-      type Block_Wrapper is record
-         Block : aliased Execution_Block;
-      end record;
+      type Runner_Finalizer is new Ada.Finalization.Limited_Controlled with null record;
 
-      type Pause_Block_Wrapper is record
-         Block : aliased Pause_Planner.Execution_Block;
-      end record;
+      overriding
+      procedure Finalize (This : in out Runner_Finalizer);
 
-      Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+      overriding
+      procedure Finalize (This : in out Runner_Finalizer) is
+         pragma Unreferenced (This);
+      begin
+         Paused := False;
+      end Finalize;
 
-      type Block_Wrapper_Access is access Block_Wrapper with Storage_Pool => Pool;
-      type Pause_Block_Wrapper_Access is access Pause_Block_Wrapper with Storage_Pool => Pool;
-
-      Working_Block_Wrapper       : constant Block_Wrapper_Access := new Block_Wrapper;
-      Block renames Working_Block_Wrapper.Block;
-      Working_Pause_Block_Wrapper : constant Pause_Block_Wrapper_Access := new Pause_Block_Wrapper;
-      Pause_Block renames Working_Pause_Block_Wrapper.Block;
+      Lifetime    : Runner_Finalizer;
+      pragma Unreferenced (Lifetime);
+      Block       : Planner.Block_Handle;
+      Pause_Block : Pause_Planner.Block_Handle;
+      --  Each handle releases its slot on task exit, including abort or a failure finalizing the other handle.
 
       Zero_Length : constant Length := 0.0 * mm;
 
@@ -475,6 +472,7 @@ package body Prunt.Step_Generator is
          end Enter_Halted_State;
 
          procedure Execute_Pause_Plan (Resume_Plan : Boolean) is
+            Plan_Done : Boolean;
          begin
             if Resume_Plan then
                Handle_Resume (Stable_Pause_Position, Commands.Current_Command_Index);
@@ -487,11 +485,13 @@ package body Prunt.Step_Generator is
                if Reset_Requested then
                   return;
                end if;
-               Pause_Block_Executor.Execute_Block (Pause_Block'Access, Active_Transform, Commands, Reset_Requested);
+               Pause_Block_Executor.Execute_Block (Pause_Block, Active_Transform, Commands, Reset_Requested);
                if Reset_Requested then
                   return;
                end if;
-               exit when Is_Pause_Plan_Done (Pause_Planner.Flush_Resetting_Data (Pause_Block'Access));
+               Plan_Done := Is_Pause_Plan_Done (Pause_Planner.Flush_Resetting_Data (Pause_Block));
+               Pause_Planner.Release (Pause_Block);
+               exit when Plan_Done;
             end loop;
          end Execute_Pause_Plan;
 
@@ -557,8 +557,8 @@ package body Prunt.Step_Generator is
          Paused := False;
          Do_Pause := False;
          Do_Halt := False;
-         Planner.Clear_Block_Extra_Data (Block'Access);
-         Pause_Planner.Clear_Block_Extra_Data (Pause_Block'Access);
+         Planner.Release (Block);
+         Pause_Planner.Release (Pause_Block);
          Reset_Control.Acknowledge;
          Commands.Last_Queued_Position := [others => Zero_Length];
          Commands.Extrusion_Check_Cycles_Remaining := 0;
@@ -578,7 +578,8 @@ package body Prunt.Step_Generator is
                Primary_Block_Executor.Dequeue_Block (Block, Commands, Reset_Requested);
                exit Main when Reset_Requested;
 
-               Primary_Block_Executor.Execute_Block (Block'Access, Active_Transform, Commands, Reset_Requested);
+               Primary_Block_Executor.Execute_Block (Block, Active_Transform, Commands, Reset_Requested);
+               Planner.Release (Block);
                exit Main when Reset_Requested;
             exception
                when Hardware_Communication_Error =>

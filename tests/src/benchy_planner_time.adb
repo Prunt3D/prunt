@@ -129,12 +129,7 @@ procedure Benchy_Planner_Time is
    Current_Pos   : Position := [others => 0.0 * mm];
    Feedrate      : Velocity := 0.1 * mm / s;
    Relative_E    : Boolean := False;
-   type Block_Wrapper is record
-      Block : aliased Planner.Execution_Block;
-   end record;
-   type Block_Wrapper_Access is access Block_Wrapper;
-   Working_Block : constant Block_Wrapper_Access := new Block_Wrapper;
-   Block         : Planner.Execution_Block renames Working_Block.Block;
+   Block         : Planner.Block_Handle;
    Timed_Out     : Boolean;
    Total         : Time := 0.0 * s;
    G1_Count      : Natural := 0;
@@ -270,24 +265,24 @@ begin
          end if;
       else
          Block_Count := Block_Count + 1;
-         Final_Pos := Planner.Next_Block_Pos (Block'Access);
-         if Block.N_Corners >= Planner.Finishing_Corners_Index'First then
-            for Corner in Planner.Finishing_Corners_Index'First .. Block.N_Corners loop
-               Total := Total + Planner.Segment_Time (Block'Access, Corner);
+         Final_Pos := Planner.Next_Block_Pos (Block);
+         if Planner.Corner_Count (Block) >= Planner.Finishing_Corners_Index'First then
+            for Corner in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
+               Total := Total + Planner.Segment_Time (Block, Corner);
                Checksum :=
-                 (Checksum xor To_Bits (Long_Float (Planner.Segment_Time (Block'Access, Corner) / s)))
+                 (Checksum xor To_Bits (Long_Float (Planner.Segment_Time (Block, Corner) / s)))
                  * 1_099_511_628_211;
                Segment_Count := Segment_Count + 1;
                if Selected_Case = Rounding_Stress then
                   declare
-                     At_End : constant Time := Planner.Segment_Time (Block'Access, Corner);
-                     P : constant Position := Planner.Segment_Pos_At_Time (Block'Access, Corner, At_End);
+                     At_End : constant Time := Planner.Segment_Time (Block, Corner);
+                     P : constant Position := Planner.Segment_Pos_At_Time (Block, Corner, At_End);
                   begin
                      if abs (P (E_Axis) - 0.05 * P (X_Axis)) > 1.0E-8 * mm then
                         raise Program_Error with "normalized E execution drifted in the 50000-segment run";
                      end if;
-                     if Corner < Block.N_Corners
-                       and then Planner.Segment_Vel_Ratio_At_Time (Block'Access, Corner, At_End) <= 0.0
+                     if Corner < Planner.Corner_Count (Block)
+                       and then Planner.Segment_Vel_Ratio_At_Time (Block, Corner, At_End) <= 0.0
                      then
                         raise Program_Error with "a density mismatch introduced a stop in the normalized run";
                      end if;
@@ -296,14 +291,15 @@ begin
                if Write_Segments then
                   Ada.Text_IO.Put_Line
                     (Segment_Output,
-                     Segment_Count'Image & "," & Dimensionless'Image (Planner.Segment_Time (Block'Access, Corner) / s)
+                     Segment_Count'Image & "," & Dimensionless'Image (Planner.Segment_Time (Block, Corner) / s)
                      & "," & Dimensionless'Image (Planner.Segment_Corner_Distance (Block, Corner) / mm)
                      & "," & Dimensionless'Image (Planner.Segment_Vel_Ratio_At_Time
-                       (Block'Access, Corner, Planner.Segment_Time (Block'Access, Corner) / 2.0)));
+                       (Block, Corner, Planner.Segment_Time (Block, Corner) / 2.0)));
                end if;
             end loop;
          end if;
-         exit when Planner.Flush_Resetting_Data (Block'Access);
+         exit when Planner.Flush_Resetting_Data (Block);
+         Planner.Release (Block);
       end if;
    end loop;
 
@@ -326,6 +322,7 @@ begin
       Ada.Text_IO.Close (Segment_Output);
    end if;
    --  All validation and output are complete. The persistent planner task can defer abort while waiting for input.
+   Planner.Release (Block);
    Ada.Text_IO.Flush;
    GNAT.OS_Lib.OS_Exit (0);
 end Benchy_Planner_Time;

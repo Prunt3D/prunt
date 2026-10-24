@@ -25,8 +25,8 @@ pragma Check_Float_Overflow;
 --
 --  The package works by collecting a series of corners before processing them as a single batch, called an
 --  Execution_Block which starts and ends at zero velocity. Corners are collected until a flush command is received
---  or the block is full. Once a block is filled, it passes through a multi-stage planning pipeline, each of which is
---  implemented in a child package of this one:
+--  or the block is full. A full block waits for the next command to establish whether its final corner has overflow
+--  data before being published. Each stage of the planning pipeline is implemented in a child package of this one:
 --
 --  1. Preprocessor:
 --
@@ -78,7 +78,8 @@ pragma Check_Float_Overflow;
 --     Home_Move_Maximum_Tail_Time. If either check fails, the segment's maximum velocity is reduced before going back
 --     to stage 5 (Kinematic_Limiter).
 --
---  The fully processed Execution_Block is then made available via the Dequeue procedure.
+--  The fully processed Execution_Block is then made available via the Dequeue procedure. Fixed blocks are reused
+--  in a ring; execution borrows a block until Release, while planning continues in the other slots.
 
 pragma Extensions_Allowed (On);
 
@@ -86,9 +87,11 @@ with Ada.Containers;
 with System.Multiprocessors;
 with System.Storage_Elements;
 
+private with Ada.Finalization;
 private with Prunt.Bounded_Indefinite_Vectors;
 private with Prunt.Motion_Planner.Corner_Transitions;
 private with Prunt.Motion_Planner.Stereographic_Curves;
+private with System.Pool_Local;
 
 pragma Warnings (Off, "formal object * is not referenced");
 --  Silence bogus warnings related to generic parameters used in child packages.
@@ -129,9 +132,9 @@ generic
    --  CPU to run all motion planning on.
 
    Max_Corners : Max_Corners_Type := 50_000;
-   --  The maximum number of corners that can be processed in a single execution block. This impacts the memory usage
-   --  of the planner. Memory is allocated for the maximum block size during initialisation, memory is not allocated
-   --  per-block.
+   --  The maximum number of corners in one execution block. Each planner allocates Block_Capacity blocks of this
+   --  size, plus its planning workspace, during initialisation. Increasing this limit increases every slot's storage;
+   --  execution blocks are reused without per-block allocation.
 
    Max_Corners_Extra_Data_Count : Max_Corners_Extra_Data_Type := 1_000;
 
@@ -172,87 +175,99 @@ package Prunt.Motion_Planner.Planner is
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
    subtype Finishing_Corners_Index is Corners_Index range 2 .. Corners_Index'Last;
 
+   Block_Capacity : constant Positive;
+   --  Number of slots in each planner's ring. Configure this by changing the private Block_Index modulus;
+   --  storage, queue limits and wraparound all derive from that type.
+
    type Execution_Block_Kind is (Motion_Block_Kind, Extra_Data_Overflow_Block_Kind);
 
-   type Execution_Block (N_Corners : Corners_Index := 1) is private;
-   --  N_Corners may be 1, in which case there are no segments.
+   type Block_Handle is tagged limited private;
+   --  Exclusive ownership of a read-only slot in the planner's block ring. A handle starts empty and cannot
+   --  be copied. Release returns its slot promptly; finalization also releases it on scope exit, exceptions or abort.
+   --  A populated handle remains valid across Reset. Do not access the same handle concurrently from multiple tasks.
 
-   procedure Clear_Block_Extra_Data (Block : not null access Execution_Block);
-   --  Release callback/configuration references when discarding a block. The block must not be executed afterwards.
-   --  Accept an access value because discarded blocks may be only partly initialized; only their initialized
-   --  reference-holding fields are needed for cleanup.
+   function Is_Empty (Block : Block_Handle) return Boolean;
 
-   --  First Finishing_Corner = 2. If N_Corners < 2 then these functions must not be called.
+   function Corner_Count (Block : Block_Handle) return Corners_Index
+   with Pre => not Is_Empty (Block);
+   --  May be 1, in which case there are no segments.
 
-   function Segment_Time
-     (Block : not null access constant Execution_Block; Finishing_Corner : Corners_Index) return Time;
+   --  First Finishing_Corner = 2. If Corner_Count is 1 then there are no segments to evaluate.
+
+   function Segment_Time (Block : Block_Handle; Finishing_Corner : Corners_Index) return Time
+   with Pre => not Is_Empty (Block);
    --  Returns the total time for a given segment.
 
-   function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
+   function Segment_Corner_Distance (Block : Block_Handle; Finishing_Corner : Corners_Index) return Length
+   with Pre => not Is_Empty (Block);
    --  Returns the distance between the two original corners for a given segment.
 
    function Segment_Pos_At_Time
-     (Block             : not null access constant Execution_Block;
-      Finishing_Corner  : Finishing_Corners_Index;
-      Time_Into_Segment : Time) return Position
+     (Block : Block_Handle; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time) return Position
    with
      Pre =>
-       Finishing_Corner <= Block.N_Corners
+       not Is_Empty (Block)
+       and then Finishing_Corner <= Corner_Count (Block)
        and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
        and then Time_Into_Segment >= 0.0 * s;
    --  Return the position at a given time into a segment.
 
    function Segment_Vel_Ratio_At_Time
-     (Block             : not null access constant Execution_Block;
-      Finishing_Corner  : Finishing_Corners_Index;
-      Time_Into_Segment : Time) return Dimensionless
+     (Block : Block_Handle; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time) return Dimensionless
    with
      Pre =>
-       Finishing_Corner <= Block.N_Corners
+       not Is_Empty (Block)
+       and then Finishing_Corner <= Corner_Count (Block)
        and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
        and then Time_Into_Segment >= 0.0 * s;
    --  Returns the velocity at the given time in to a segment divided by the target velocity for the given segment.
    --  Always returns 1.0 inside dwell parts.
 
-   function Next_Block_Pos (Block : not null access constant Execution_Block) return Position;
+   function Next_Block_Pos (Block : Block_Handle) return Position
+   with Pre => not Is_Empty (Block);
    --  Returns the start position of the next block. At the end of a block, the motion executor should assume it is at
    --  this position, even if it is not. This also rebases E after path-length extrusion correction so subsequent
    --  blocks continue to accept the commanded absolute E coordinates.
 
-   function Block_Start_Pos (Block : not null access constant Execution_Block) return Position;
+   function Block_Start_Pos (Block : Block_Handle) return Position
+   with Pre => not Is_Empty (Block);
    --  Returns the start position of this block.
 
-   function Flush_Resetting_Data (Block : not null access constant Execution_Block) return Flush_Resetting_Data_Type;
+   function Flush_Resetting_Data (Block : Block_Handle) return Flush_Resetting_Data_Type
+   with Pre => not Is_Empty (Block);
    --  Return the data passed to the Enqueue procedure. This data resets for each block.
 
-   function Loop_Move_Minimum_Time (Block : not null access constant Execution_Block) return Time
-   with Pre => Block.Is_Homing_Move;
+   function Is_Homing_Move (Block : Block_Handle) return Boolean
+   with Pre => not Is_Empty (Block);
+   --  Returns True if the block contains a homing move as specified by the relevant flush command.
+
+   function Loop_Move_Minimum_Time (Block : Block_Handle) return Time
+   with Pre => not Is_Empty (Block) and then Is_Homing_Move (Block);
    --  Return the earliest interpolation time at which the homing loop command may be emitted.
 
-   function Block_Kind (Block : Execution_Block) return Execution_Block_Kind;
+   function Block_Kind (Block : Block_Handle) return Execution_Block_Kind
+   with Pre => not Is_Empty (Block);
    --  Return whether Block contains planned motion or only overflow corner data.
 
-   function Corner_ID
-     (Block : not null access constant Execution_Block; Corner : Corners_Index) return Planner_Corner_ID
-   with Pre => Corner <= Block.N_Corners;
+   function Corner_ID (Block : Block_Handle; Corner : Corners_Index) return Planner_Corner_ID
+   with Pre => not Is_Empty (Block) and then Corner <= Corner_Count (Block);
    --  Return the monotonic planner identifier assigned to Corner in Block.
 
    procedure Corner_Extra_Data
-     (Block   : not null access constant Execution_Block;
+     (Block   : Block_Handle;
       Corner  : Corners_Index;
       Process : not null access procedure (Data : in out Corner_Extra_Data_Type))
-   with Pre => Corner <= Block.N_Corners;
+   with Pre => not Is_Empty (Block) and then Corner <= Corner_Count (Block);
    --  Allows the caller to process the extra data for a corner.
 
-   function Has_Associated_Overflow_Block (Block : not null access constant Execution_Block) return Boolean;
+   function Has_Associated_Overflow_Block (Block : Block_Handle) return Boolean
+   with Pre => not Is_Empty (Block);
    --  Returns True if this block's final corner has more extra data in a following overflow block, so its corner ID
    --  publication must be delayed.
 
-   function Block_Kinematic_Parameters (Block : not null access constant Execution_Block) return Kinematic_Parameters;
+   function Block_Kinematic_Parameters (Block : Block_Handle) return Kinematic_Parameters
+   with Pre => not Is_Empty (Block);
    --  Returns the kinematic parameters used for the given block.
-
-   function Is_Homing_Move (Block : not null access constant Execution_Block) return Boolean;
-   --  Returns True if the block contains a homing move a specified by the relevant flush command.
 
    procedure Enqueue_Move
      (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False);
@@ -294,11 +309,18 @@ package Prunt.Motion_Planner.Planner is
    --  End the current input block and make New_Params apply to subsequently queued motion.
 
    procedure Reset;
-   --  Reset preprocessing and asynchronously discard planner work that has not been dequeued for execution.
+   --  Reset preprocessing and discard planner work that has not been dequeued. Borrowed blocks remain valid until
+   --  released and continue to occupy their slots across the next Setup.
 
-   procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean);
-   --  Pop a block from the queue of processed blocks. If a block is not ready then Timed_Out will be set to True,
-   --  otherwise it will be set to False and Block will be set.
+   procedure Dequeue (Block : in out Block_Handle; Timed_Out : out Boolean)
+   with Pre => Is_Empty (Block);
+   --  Borrow the next processed block without copying it. If no block becomes ready within one second, Timed_Out
+   --  is True and Block remains empty. Ownership is recorded directly in the caller's handle, even during abort.
+
+   procedure Release (Block : in out Block_Handle);
+   --  Release the block's extra data and return its slot to the planner, leaving the handle empty. Empty is a no-op.
+   --  Data finalizers run outside the ring lock; the slot remains reserved until cleanup finishes. If cleanup raises,
+   --  finish cleanup and empty the handle before propagating the first exception.
 
    Out_Of_Bounds_Error : exception;
 
@@ -307,13 +329,32 @@ package Prunt.Motion_Planner.Planner is
       --  TODO: We can probably lower Storage_Size now that the step rate limiter is gone.
       entry Setup (In_Params : Kinematic_Parameters; In_Motor_Map : Motor_Position_Map);
       entry Reset_Do_Not_Call_From_Other_Packages;
-      --  Call the Reset procedure rather than this entry to avoid blocking and reset the preprocessor.
+      --  Call the Reset procedure rather than this entry to stop dequeueing and reset the preprocessor.
       --  TODO: There must be some way to hide this while still exposing the task.
-      entry Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block);
-      --  Call the Dequeue procedure rather than this entry as it may be replaced with a queue in the future.
    end Runner;
 
 private
+
+   type Execution_Block (N_Corners : Corners_Index := 1);
+   type Execution_Block_Access is access constant Execution_Block with Storage_Size => 0;
+
+   type Block_Index is mod 5;
+   Block_Capacity : constant Positive := Block_Index'Modulus;
+   subtype Block_Count is Natural range 0 .. Block_Capacity;
+
+   type Block_Handle is new Ada.Finalization.Limited_Controlled with record
+      Data  : Execution_Block_Access := null;
+      Index : Block_Index := Block_Index'First;
+      --  Slot designated by Data. Only meaningful while Data is not null.
+   end record;
+
+   overriding
+   procedure Finalize (Block : in out Block_Handle);
+
+   procedure Clear_Block_Extra_Data (Block : not null access Execution_Block);
+   --  Release callback/configuration references when discarding a block. The block must not be executed afterwards.
+   --  Accept an access value because discarded blocks may be only partly initialized; only their initialized
+   --  reference-holding fields are needed for cleanup.
 
    type Command_Kind is
      (Move_Kind,
@@ -493,9 +534,8 @@ private
    --  change can be certified at its own speed and derivative peaks, rather than at an unreachable ceiling.
 
    type Window_Profile_Result is record
-      Valid : Boolean := False;
-      Profile : Feedrate_Profile :=
-        (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
+      Valid       : Boolean := False;
+      Profile     : Feedrate_Profile := (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
       Max_Crackle : Crackle := 0.0 * mm / s ** 5;
    end record;
 
@@ -516,7 +556,7 @@ private
       Check_Extrusion_Position : Boolean := True;
       --  Whether all commanded E coordinates are in bounds. Compute once per pass; homing can bypass bounds.
       Local_Comparison_Corners : Natural := 0;
-      Local_Stops_Selected : Natural := 0;
+      Local_Stops_Selected     : Natural := 0;
 
       --  Extrusion_Density_Normalizer
       Unblended_Segment_Lengths     : Block_Segment_Lengths (2 .. Last_Corner);
@@ -542,13 +582,13 @@ private
       Corner_Derivative_Bounds     : Block_Primitive_Derivative_Bounds (1 .. Last_Corner);
 
       --  Planner
-      Planning_Attempts : Block_Planning_Attempts (2 .. Last_Corner);
+      Planning_Attempts          : Block_Planning_Attempts (2 .. Last_Corner);
       --  Count certification retries per segment. Reset for each block and when falling back to a stopped path.
       Suffix_E_Min, Suffix_E_Max : Block_Segment_Lengths (2 .. Last_Corner);
       --  Bounds on the original remaining E trajectory, used to certify cumulative shifts after local untrimming.
    end record;
    --  Data needed while planning a block but not while executing it. One workspace is allocated per planner instance
-   --  and reused after the corresponding Execution_Block has been dequeued.
+   --  and reused after the corresponding Execution_Block has finished planning.
 
    type Profile_Planning_Result (Valid : Boolean := True) is record
       case Valid is
@@ -725,18 +765,20 @@ private
    --  Cache geometry, tangent-only limits and the constant-speed/motor ceiling for a candidate window.
 
    function Profile_At_Peak
-     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation;
-      Start_Vel, End_Vel, Peak : Velocity) return Window_Profile_Result;
+     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel, End_Vel, Peak : Velocity)
+      return Window_Profile_Result;
    --  Construct and certify a fixed-peak profile using a common time stretch of its velocity transitions.
 
    function Profile_At_Peak
-     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation;
-      Start_Vel, End_Vel, Peak : Velocity; Cache : in out Mixed_Derivative_Cache) return Window_Profile_Result;
+     (Params                   : Kinematic_Parameters;
+      Eval                     : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity;
+      Cache                    : in out Mixed_Derivative_Cache) return Window_Profile_Result;
    --  Identical to the uncached form. Cache must only be shared between calls with the same Params and Eval.
 
    function Generate_Window_Profile
-     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation;
-      Start_Vel, End_Vel : Velocity) return Window_Profile_Result;
+     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel, End_Vel : Velocity)
+      return Window_Profile_Result;
    --  Search feasible peak speeds for a fast certified profile, retaining the maximum-speed coast candidate.
 
    function Reachable_Window_Velocity
@@ -836,7 +878,7 @@ private
 
       --  Preprocessor
       Kind                      : Execution_Block_Kind := Motion_Block_Kind;
-      Flush_Resetting_Data      : Flush_Resetting_Data_Type;
+      Flush_Resetting_Data      : Flush_Resetting_Data_Type := Flush_Resetting_Data_Type_Default;
       Next_Block_Pos            : Position;
       Params                    : Kinematic_Parameters;
       First_Corner_ID           : Planner_Corner_ID := 0;
@@ -886,6 +928,102 @@ private
       --  Enabled entries replace the coasts outside Profile_Windows with generated acceleration profiles. This lets
       --  the retained primitive accelerate independently of tight bounds on the curved ends.
    end record;
+
+   type Block_Wrapper is record
+      Block : aliased Execution_Block;
+   end record;
+
+   type Block_Array is array (Block_Index) of Block_Wrapper;
+
+   Block_Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
+   type Block_Array_Access is access Block_Array with Storage_Pool => Block_Pool;
+
+   Blocks : constant Block_Array_Access := new Block_Array;
+   --  Allocate all slots once. Their lifetime includes any blocks still borrowed when Runner terminates.
+
+   type Block_State is (Free, Planning, Ready, Borrowed, Cleaning);
+   type Block_States is array (Block_Index) of Block_State;
+   type Block_Indices is array (Block_Index) of Block_Index;
+   type Block_Set is array (Block_Index) of Boolean;
+
+   protected Block_Ring is
+      procedure Setup;
+      procedure Request_Reset;
+      procedure Report_Termination;
+      procedure Begin_Discard (Pending : out Block_Set);
+      --  Called by Runner only, after it has stopped accessing its planning slot. Borrowed blocks are preserved.
+      entry Acquire (Index : out Block_Index; Reset_Called : out Boolean);
+      procedure Publish (Index : Block_Index);
+      entry Dequeue (Block : in out Block_Handle);
+      procedure Begin_Release (Index : Block_Index);
+      procedure Finish_Cleanup (Index : Block_Index);
+   private
+      Running               : Boolean := False;
+      Runner_Terminated     : Boolean := False;
+      States                : Block_States := [others => Free];
+      Free_Count            : Block_Count := Block_Count'Last;
+      Next_Slot             : Block_Index := Block_Index'First;
+      Ready_Slots           : Block_Indices := [others => Block_Index'First];
+      Next_Read, Next_Write : Block_Index := Block_Index'First;
+      Ready_Count           : Block_Count := 0;
+   end Block_Ring;
+
+   type Runner_Finalizer is new Ada.Finalization.Limited_Controlled with null record;
+
+   overriding
+   procedure Finalize (This : in out Runner_Finalizer);
+
+   function Segment_Time
+     (Block : not null access constant Execution_Block; Finishing_Corner : Corners_Index) return Time;
+
+   function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length;
+
+   function Segment_Pos_At_Time
+     (Block             : not null access constant Execution_Block;
+      Finishing_Corner  : Finishing_Corners_Index;
+      Time_Into_Segment : Time) return Position
+   with
+     Pre =>
+       Finishing_Corner <= Block.N_Corners
+       and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
+       and then Time_Into_Segment >= 0.0 * s;
+
+   function Segment_Vel_Ratio_At_Time
+     (Block             : not null access constant Execution_Block;
+      Finishing_Corner  : Finishing_Corners_Index;
+      Time_Into_Segment : Time) return Dimensionless
+   with
+     Pre =>
+       Finishing_Corner <= Block.N_Corners
+       and then Time_Into_Segment <= Segment_Time (Block, Finishing_Corner)
+       and then Time_Into_Segment >= 0.0 * s;
+
+   function Next_Block_Pos (Block : not null access constant Execution_Block) return Position;
+
+   function Block_Start_Pos (Block : not null access constant Execution_Block) return Position;
+
+   function Flush_Resetting_Data (Block : not null access constant Execution_Block) return Flush_Resetting_Data_Type;
+
+   function Loop_Move_Minimum_Time (Block : not null access constant Execution_Block) return Time
+   with Pre => Block.Is_Homing_Move;
+
+   function Block_Kind (Block : Execution_Block) return Execution_Block_Kind;
+
+   function Corner_ID
+     (Block : not null access constant Execution_Block; Corner : Corners_Index) return Planner_Corner_ID
+   with Pre => Corner <= Block.N_Corners;
+
+   procedure Corner_Extra_Data
+     (Block   : not null access constant Execution_Block;
+      Corner  : Corners_Index;
+      Process : not null access procedure (Data : in out Corner_Extra_Data_Type))
+   with Pre => Corner <= Block.N_Corners;
+
+   function Has_Associated_Overflow_Block (Block : not null access constant Execution_Block) return Boolean;
+
+   function Block_Kinematic_Parameters (Block : not null access constant Execution_Block) return Kinematic_Parameters;
+
+   function Is_Homing_Move (Block : not null access constant Execution_Block) return Boolean;
 
 end Prunt.Motion_Planner.Planner;
 

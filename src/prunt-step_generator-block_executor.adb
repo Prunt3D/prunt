@@ -45,7 +45,7 @@ package body Prunt.Step_Generator.Block_Executor is
 
    type Pausing_State_Kind is (Running_Kind, Pausing_Kind, Paused_Kind, Resuming_Kind);
    procedure Dequeue_Block
-     (Block : out Active_Planner.Execution_Block; Commands : in out Command_State; Reset_Requested : out Boolean)
+     (Block : in out Active_Planner.Block_Handle; Commands : in out Command_State; Reset_Requested : out Boolean)
    is
       Timed_Out : Boolean;
    begin
@@ -71,11 +71,12 @@ package body Prunt.Step_Generator.Block_Executor is
    end Dequeue_Block;
 
    procedure Execute_Block
-     (Block           : access constant Active_Planner.Execution_Block;
+     (Block           : Active_Planner.Block_Handle;
       Transform       : Kinematic_Transform;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean)
    is
+      N_Corners          : constant Active_Planner.Corners_Index := Active_Planner.Corner_Count (Block);
       Pausing_State      : Pausing_State_Kind := Running_Kind;
       Pause_Slew_Cursor  : Pause_Slew_Index := Pause_Slew_Index'First;
       Current_Time       : Time := 0.0 * s;
@@ -107,7 +108,7 @@ package body Prunt.Step_Generator.Block_Executor is
       procedure Publish_Block_Corner_ID (Corner : Active_Planner.Corners_Index) is
          Corner_ID : constant Planner_Corner_ID := Active_Planner.Corner_ID (Block, Corner);
       begin
-         if Corner = Block.N_Corners and then Active_Planner.Has_Associated_Overflow_Block (Block) then
+         if Corner = N_Corners and then Active_Planner.Has_Associated_Overflow_Block (Block) then
             return;
          end if;
 
@@ -172,7 +173,7 @@ package body Prunt.Step_Generator.Block_Executor is
             raise Constraint_Error with "Homing moves are not allowed in pause plans.";
          end if;
 
-         if Block.N_Corners /= 2 then
+         if N_Corners /= 2 then
             raise Constraint_Error with "Homing move must have exactly 2 corners.";
          end if;
       end if;
@@ -204,7 +205,7 @@ package body Prunt.Step_Generator.Block_Executor is
       Active_Planner.Corner_Extra_Data (Block, Active_Planner.Corners_Index'First, Process_Corner_Extra_Data'Access);
       Publish_Block_Corner_ID (Active_Planner.Corners_Index'First);
 
-      for I in 2 .. Block.N_Corners loop
+      for I in 2 .. N_Corners loop
          declare
             Finishing_Corner : constant Active_Planner.Finishing_Corners_Index := I;
          begin
@@ -252,8 +253,7 @@ package body Prunt.Step_Generator.Block_Executor is
                         Vel_Ratio    : constant Dimensionless :=
                           Active_Planner.Segment_Vel_Ratio_At_Time (Block, Finishing_Corner, Current_Time);
                         At_Stop      : constant Boolean :=
-                          Pause_Stopped
-                          or else (Finishing_Corner = Block.N_Corners and then Current_Time >= Segment_Time);
+                          Pause_Stopped or else (Finishing_Corner = N_Corners and then Current_Time >= Segment_Time);
                      begin
                         if Use_Input_Shapers then
                            Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
@@ -317,7 +317,7 @@ package body Prunt.Step_Generator.Block_Executor is
                      Current_Time := Current_Time + Current_Interpolation_Time;
                   end if;
 
-                  if Finishing_Corner = Block.N_Corners and then Current_Time > Segment_Time then
+                  if Finishing_Corner = N_Corners and then Current_Time > Segment_Time then
                      --  Ensure that the last corner is always enqueued at least once and we always finish on the exact
                      --  final position. Having the wrong interpolation time here is fine because the final bit of an
                      --  execution block has very low velocity.

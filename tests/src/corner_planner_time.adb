@@ -34,12 +34,7 @@ procedure Corner_Planner_Time is
       0.00025 * s, 1.0E100 * s, 0.00005 * s, Max_Corners => 5002);
    use type Planner.Corners_Index;
    Params : Kinematic_Parameters := (others => <>);
-   type Block_Wrapper is record
-      Block : aliased Planner.Execution_Block;
-   end record;
-   type Block_Access is access Block_Wrapper;
-   Working_Block : constant Block_Access := new Block_Wrapper;
-   Block : Planner.Execution_Block renames Working_Block.Block;
+   Block : Planner.Block_Handle;
    Position_Now : Position := [others => 0.0 * mm];
    Started : Ada.Real_Time.Time;
    Motion_Time : Time := 0.0 * s;
@@ -90,15 +85,16 @@ begin
          end if;
       else
          Block_Count := @ + 1;
-         for I in Planner.Finishing_Corners_Index'First .. Block.N_Corners loop
-            Motion_Time := @ + Planner.Segment_Time (Block'Access, I);
+         for I in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
+            Motion_Time := @ + Planner.Segment_Time (Block, I);
             Segment_Count := @ + 1;
          end loop;
-         exit when Planner.Flush_Resetting_Data (Block'Access);
+         exit when Planner.Flush_Resetting_Data (Block);
+         Planner.Release (Block);
       end if;
    end loop;
    if Segment_Count /= Moves or else Block_Count /= 1
-     or else Planner.Next_Block_Pos (Block'Access) /= Position_Now
+     or else Planner.Next_Block_Pos (Block) /= Position_Now
    then
       raise Program_Error with "incomplete corner benchmark plan";
    end if;
@@ -109,6 +105,7 @@ begin
    Ada.Text_IO.Put_Line ("planned_blocks=" & Block_Count'Image);
    --  All validation and timing are complete. Match the other benchmark drivers: shutdown of the persistent
    --  planner task is outside the measurement and must not introduce a Reset rendezvous race.
+   Planner.Release (Block);
    Ada.Text_IO.Flush;
    GNAT.OS_Lib.OS_Exit (0);
 end Corner_Planner_Time;

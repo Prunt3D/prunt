@@ -19,16 +19,16 @@
 
 pragma Check_Float_Overflow;
 
+with Ada.Numerics;
+with Ada.Numerics.Generic_Elementary_Functions;
+with Ada.Unchecked_Conversion;
+with Prunt.Cleanup_Exceptions;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
 with Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer;
 with Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
 with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Preprocessor;
-with Ada.Numerics;
-with Ada.Numerics.Generic_Elementary_Functions;
-with Ada.Unchecked_Conversion;
-with System.Pool_Local;
 
 package body Prunt.Motion_Planner.Planner is
 
@@ -48,6 +48,128 @@ package body Prunt.Motion_Planner.Planner is
    package My_Early_Kinematic_Limiter is new Early_Kinematic_Limiter;
    package My_Feedrate_Profile_Generator is new Feedrate_Profile_Generator;
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+
+   protected body Block_Ring is
+      procedure Setup is
+      begin
+         Running := True;
+      end Setup;
+
+      procedure Request_Reset is
+      begin
+         Running := False;
+      end Request_Reset;
+
+      procedure Report_Termination is
+      begin
+         Running := False;
+         Runner_Terminated := True;
+      end Report_Termination;
+
+      procedure Begin_Discard (Pending : out Block_Set) is
+      begin
+         for Index in Block_Index loop
+            Pending (Index) := States (Index) in Planning | Ready;
+            if Pending (Index) then
+               States (Index) := Cleaning;
+            end if;
+         end loop;
+         Ready_Count := 0;
+         Next_Read := Block_Index'First;
+         Next_Write := Block_Index'First;
+      end Begin_Discard;
+
+      entry Acquire (Index : out Block_Index; Reset_Called : out Boolean) when not Running or else Free_Count > 0 is
+      begin
+         Reset_Called := not Running;
+         Index := Next_Slot;
+         if Reset_Called then
+            return;
+         end if;
+         --  A borrower may retain a slot across reset, or release several borrowed slots out of order.
+         while States (Index) /= Free loop
+            Index := @ + 1;
+         end loop;
+         States (Index) := Planning;
+         Free_Count := @ - 1;
+         Next_Slot := Index + 1;
+      end Acquire;
+
+      procedure Publish (Index : Block_Index) is
+      begin
+         pragma Assert (States (Index) = Planning);
+         States (Index) := Ready;
+         Ready_Slots (Next_Write) := Index;
+         Next_Write := @ + 1;
+         Ready_Count := @ + 1;
+      end Publish;
+
+      entry Dequeue (Block : in out Block_Handle) when Runner_Terminated or else (Running and then Ready_Count > 0) is
+         Index : constant Block_Index := Ready_Slots (Next_Read);
+      begin
+         if Runner_Terminated then
+            raise Tasking_Error with "Motion planner runner has terminated.";
+         end if;
+         pragma Assert (States (Index) = Ready);
+         States (Index) := Borrowed;
+         Block.Data := Blocks (Index).Block'Access;
+         Block.Index := Index;
+         Next_Read := @ + 1;
+         Ready_Count := @ - 1;
+      end Dequeue;
+
+      procedure Begin_Release (Index : Block_Index) is
+      begin
+         pragma Assert (States (Index) = Borrowed);
+         States (Index) := Cleaning;
+      end Begin_Release;
+
+      procedure Finish_Cleanup (Index : Block_Index) is
+      begin
+         pragma Assert (States (Index) = Cleaning);
+         States (Index) := Free;
+         Free_Count := @ + 1;
+      end Finish_Cleanup;
+   end Block_Ring;
+
+   procedure Cleanup_Block (Index : Block_Index; Error : in out Cleanup_Exceptions.Holder);
+   --  Finish returning a reserved slot even if a finalizer fails, preserving the first cleanup exception.
+
+   procedure Cleanup_Block (Index : Block_Index; Error : in out Cleanup_Exceptions.Holder) is
+   begin
+      begin
+         Clear_Block_Extra_Data (Blocks (Index).Block'Access);
+      exception
+         when E : others =>
+            Error.Save (E);
+      end;
+      Block_Ring.Finish_Cleanup (Index);
+   end Cleanup_Block;
+
+   procedure Discard_Blocks;
+
+   procedure Discard_Blocks is
+      Pending : Block_Set;
+      Error   : Cleanup_Exceptions.Holder;
+   begin
+      pragma Abort_Defer;
+      Block_Ring.Begin_Discard (Pending);
+      for Index in Block_Index loop
+         if Pending (Index) then
+            Cleanup_Block (Index, Error);
+         end if;
+      end loop;
+      Error.Reraise;
+   end Discard_Blocks;
+
+   overriding
+   procedure Finalize (This : in out Runner_Finalizer) is
+      pragma Unreferenced (This);
+   begin
+      --  Wake pending dequeues on exceptions or abort without replacing the controller's termination handler.
+      Block_Ring.Report_Termination;
+      Discard_Blocks;
+   end Finalize;
 
    function Scaled_Curvature_Norm (Coefficients : Projection_Coefficients) return Curvature is
       Scale      : Curvature := 0.0 / mm;
@@ -78,13 +200,26 @@ package body Prunt.Motion_Planner.Planner is
    end Scaled_Curvature_Hypot;
 
    procedure Clear_Block_Extra_Data (Block : not null access Execution_Block) is
+      Error : Cleanup_Exceptions.Holder;
    begin
-      Block.Corners_Extra_Data.Clear;
-      Block.Flush_Resetting_Data := Flush_Resetting_Data_Type_Default;
+      begin
+         Block.Corners_Extra_Data.Clear;
+      exception
+         when E : others =>
+            Error.Save (E);
+      end;
+      begin
+         Block.Flush_Resetting_Data := Flush_Resetting_Data_Type_Default;
+      exception
+         when E : others =>
+            Error.Save (E);
+      end;
+      Error.Reraise;
    end Clear_Block_Extra_Data;
 
    procedure Reset is
    begin
+      Block_Ring.Request_Reset;
       My_Preprocessor.Reset;
       Runner.Reset_Do_Not_Call_From_Other_Packages;
    end Reset;
@@ -162,17 +297,97 @@ package body Prunt.Motion_Planner.Planner is
         ((Kind => Flush_And_Change_Parameters_Kind, Flush_Resetting_Data => Data, New_Params => New_Params));
    end Enqueue_Flush_And_Change_Kinematic_Parameters;
 
-   procedure Dequeue (Block : out Execution_Block; Timed_Out : out Boolean) is
+   procedure Dequeue (Block : in out Block_Handle; Timed_Out : out Boolean) is
    begin
+      if not Is_Empty (Block) then
+         --  Keep this check when assertions are disabled: overwriting the handle would leak its borrowed slot.
+         raise Program_Error with "Cannot dequeue into a populated block handle.";
+      end if;
+
       select
-         Runner.Dequeue_Do_Not_Call_From_Other_Packages (Block);
+         Block_Ring.Dequeue (Block);
          Timed_Out := False;
-         return;
       or
          delay 1.0;
+         Timed_Out := True;
       end select;
-      Timed_Out := True;
    end Dequeue;
+
+   procedure Release (Block : in out Block_Handle) is
+      Error : Cleanup_Exceptions.Holder;
+   begin
+      pragma Abort_Defer;
+      if Is_Empty (Block) then
+         return;
+      end if;
+      Block_Ring.Begin_Release (Block.Index);
+      --  Finalizers may block or call back into the planner. Keep the slot reserved until they finish, but do not hold
+      --  the ring lock. Deferring abort prevents a release from abandoning a slot in Cleaning state.
+      Cleanup_Block (Block.Index, Error);
+      Block.Data := null;
+      Error.Reraise;
+   end Release;
+
+   overriding
+   procedure Finalize (Block : in out Block_Handle) is
+   begin
+      Release (Block);
+   end Finalize;
+
+   function Is_Empty (Block : Block_Handle) return Boolean
+   is (Block.Data = null);
+
+   function Corner_Count (Block : Block_Handle) return Corners_Index
+   is (Block.Data.N_Corners);
+
+   function Segment_Time (Block : Block_Handle; Finishing_Corner : Corners_Index) return Time
+   is (Segment_Time (Block.Data, Finishing_Corner));
+
+   function Segment_Corner_Distance (Block : Block_Handle; Finishing_Corner : Corners_Index) return Length
+   is (Segment_Corner_Distance (Block.Data.all, Finishing_Corner));
+
+   function Segment_Pos_At_Time
+     (Block : Block_Handle; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time) return Position
+   is (Segment_Pos_At_Time (Block.Data, Finishing_Corner, Time_Into_Segment));
+
+   function Segment_Vel_Ratio_At_Time
+     (Block : Block_Handle; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time) return Dimensionless
+   is (Segment_Vel_Ratio_At_Time (Block.Data, Finishing_Corner, Time_Into_Segment));
+
+   function Next_Block_Pos (Block : Block_Handle) return Position
+   is (Next_Block_Pos (Block.Data));
+
+   function Block_Start_Pos (Block : Block_Handle) return Position
+   is (Block_Start_Pos (Block.Data));
+
+   function Flush_Resetting_Data (Block : Block_Handle) return Flush_Resetting_Data_Type
+   is (Flush_Resetting_Data (Block.Data));
+
+   function Is_Homing_Move (Block : Block_Handle) return Boolean
+   is (Is_Homing_Move (Block.Data));
+
+   function Loop_Move_Minimum_Time (Block : Block_Handle) return Time
+   is (Loop_Move_Minimum_Time (Block.Data));
+
+   function Block_Kind (Block : Block_Handle) return Execution_Block_Kind
+   is (Block_Kind (Block.Data.all));
+
+   function Corner_ID (Block : Block_Handle; Corner : Corners_Index) return Planner_Corner_ID
+   is (Corner_ID (Block.Data, Corner));
+
+   function Has_Associated_Overflow_Block (Block : Block_Handle) return Boolean
+   is (Has_Associated_Overflow_Block (Block.Data));
+
+   function Block_Kinematic_Parameters (Block : Block_Handle) return Kinematic_Parameters
+   is (Block_Kinematic_Parameters (Block.Data));
+
+   procedure Corner_Extra_Data
+     (Block   : Block_Handle;
+      Corner  : Corners_Index;
+      Process : not null access procedure (Data : in out Corner_Extra_Data_Type)) is
+   begin
+      Corner_Extra_Data (Block.Data, Corner, Process);
+   end Corner_Extra_Data;
 
    function Interval_Contains_Phase (Low, High, Base, Period : Dimensionless) return Boolean is
    begin
@@ -2376,18 +2591,13 @@ package body Prunt.Motion_Planner.Planner is
    end Homing_Profile_Violation;
 
    task body Runner is
-      type Block_Wrapper is record
-         Block : aliased Execution_Block;
-      end record;
-
-      Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
-
-      type Block_Wrapper_Access is access Block_Wrapper with Storage_Pool => Pool;
+      Lifetime  : Runner_Finalizer;
+      pragma Unreferenced (Lifetime);
+      --  Declare first so allocation failures also notify consumers, and cleanup runs after the workspace is freed.
+      Pool      : System.Pool_Local.Unbounded_Reclaim_Pool;
       type Planning_Workspace_Access is access Planning_Workspace with Storage_Pool => Pool;
-
-      Working_Block_Wrapper : constant Block_Wrapper_Access := new Block_Wrapper;
-      Block                 : Execution_Block renames Working_Block_Wrapper.Block;
-      Workspace             : constant Planning_Workspace_Access := new Planning_Workspace (Corners_Index'Last);
+      Workspace : constant Planning_Workspace_Access := new Planning_Workspace (Corners_Index'Last);
+      Index     : Block_Index;
 
       Reset_Called      : Boolean := False;
       Current_Motor_Map : Motor_Position_Map := [others => [others => 0.0 / mm]];
@@ -2398,122 +2608,122 @@ package body Prunt.Motion_Planner.Planner is
             My_Preprocessor.Setup (In_Params);
             Current_Motor_Map := In_Motor_Map;
             Next_Block_Start := Initial_Position;
+            Block_Ring.Setup;
          end Setup;
 
          Planning_Loop : loop
-            My_Preprocessor.Run (Block, Next_Block_Start, Reset_Called);
+            Block_Ring.Acquire (Index, Reset_Called);
+            exit Planning_Loop when Reset_Called;
 
-            if Reset_Called then
-               accept Reset_Do_Not_Call_From_Other_Packages do
-                  Clear_Block_Extra_Data (Block'Access);
-               end Reset_Do_Not_Call_From_Other_Packages;
-               exit Planning_Loop;
-            end if;
+            declare
+               Block : Execution_Block renames Blocks (Index).Block;
+            begin
+               My_Preprocessor.Run (Block'Access, Next_Block_Start, Reset_Called);
 
-            if Block.Kind /= Extra_Data_Overflow_Block_Kind then
-               if Block.Is_Homing_Move and then Block.N_Corners /= 2 then
-                  raise Constraint_Error with "Homing move must have exactly 2 corners.";
-               end if;
+               exit Planning_Loop when Reset_Called;
 
-               My_Extrusion_Density_Normalizer.Run (Block, Workspace);
-               My_Corner_Blender.Run (Block, Current_Motor_Map, Workspace);
-               My_Early_Kinematic_Limiter.Run (Block, Current_Motor_Map);
+               if Block.Kind /= Extra_Data_Overflow_Block_Kind then
+                  if Block.Is_Homing_Move and then Block.N_Corners /= 2 then
+                     raise Constraint_Error with "Homing move must have exactly 2 corners.";
+                  end if;
 
-               declare
-                  Have_Previous_Violation : Boolean := False;
-                  Previous_Violation      : Time := 0.0 * s;
-                  Adjustment_Count        : Natural := 0;
-               begin
-                  loop
-                     Plan_Kinematics (Block, Current_Motor_Map, Workspace);
+                  My_Extrusion_Density_Normalizer.Run (Block, Workspace);
+                  My_Corner_Blender.Run (Block, Current_Motor_Map, Workspace);
+                  My_Early_Kinematic_Limiter.Run (Block, Current_Motor_Map);
 
-                     exit when
-                       (not Block.Is_Homing_Move)
-                       or else
-                         (Block.Feedrate_Profiles (2).Coast >= Home_Move_Required_Coast_Time
-                          and then Homing_Unavoidable_Tail_Time (Block'Access) <= Home_Move_Maximum_Tail_Time);
-
-                     declare
-                        Violation         : constant Time := Homing_Profile_Violation (Block'Access);
-                        Previous_Feedrate : constant Velocity := Block.Limited_Segment_Feedrates (2);
-                        New_Feedrate      : constant Velocity := Previous_Feedrate * 0.9;
-                     begin
-                        if Have_Previous_Violation and then Violation > Previous_Violation then
-                           raise Constraint_Error
-                             with "Reducing the homing feedrate made the coast or retained-tail violation worse.";
-                        end if;
-
-                        if Adjustment_Count = Maximum_Homing_Feedrate_Adjustments then
-                           raise Constraint_Error with "Homing feedrate adjustment exceeded its iteration limit.";
-                        end if;
-
-                        if New_Feedrate <= 0.0 * mm / s or else New_Feedrate >= Previous_Feedrate then
-                           raise Constraint_Error with "Homing feedrate adjustment made no representable progress.";
-                        end if;
-
-                        Have_Previous_Violation := True;
-                        Previous_Violation := Violation;
-                        Adjustment_Count := @ + 1;
-                        Block.Limited_Segment_Feedrates (2) := New_Feedrate;
-                     end;
-                  end loop;
-               end;
-
-               if Block.Is_Homing_Move then
                   declare
-                     Finishing_Corner  : constant Finishing_Corners_Index := Finishing_Corners_Index'First;
-                     Window            : constant Profile_Window :=
-                       Selected_Profile_Window (Block'Access, Finishing_Corner);
-                     Prefix_Time       : constant Time :=
-                       Constant_Speed_Time
-                         (Window.Start_Distance, Block.Corner_Velocity_Limits (Finishing_Corner - 1));
-                     --  Time spent in the constant-speed prefix before the generated acceleration profile.
-                     Coast_Start_Time  : constant Time :=
-                       Prefix_Time + Total_Time (Block.Feedrate_Profiles (Finishing_Corner).Accel);
-                     --  First time at which the generated profile has reached its constant-velocity coast.
-                     End_Time          : constant Time := Segment_Time (Block'Access, Finishing_Corner);
-                     --  Time at the end of the complete homing segment, including any suffix and dwell.
-                     Minimum_Time      : constant Time :=
-                       Time'Max
-                         (Coast_Start_Time + Home_Move_Minimum_Coast_Time, End_Time - Home_Move_Maximum_Tail_Time);
-                     --  The loop command must leave the configured coast margin after acceleration, while also being
-                     --  late enough that every retained command after it fits within the hardware tail-time limit.
-                     Loop_Pos          : constant Position :=
-                       Segment_Pos_At_Time (Block'Access, Finishing_Corner, Minimum_Time);
-                     --  Planned tool position at the earliest permitted loop-command time. The step generator uses
-                     --  the first regular interpolation sample at or after this point, so the published tail is
-                     --  conservatively longer than the emitted tail by less than one interpolation period of motion.
-                     Tail_Offset       : constant Position_Offset := Block.Corners (Block.N_Corners) - Loop_Pos;
-                     --  Conservative planned displacement from a detector hit through the complete retained tail.
-                     Resolved_Position : Position;
+                     Have_Previous_Violation : Boolean := False;
+                     Previous_Violation      : Time := 0.0 * s;
+                     Adjustment_Count        : Natural := 0;
                   begin
-                     Block.Loop_Move_Minimum_Time := Minimum_Time;
-                     My_Preprocessor.Publish_Homing_Tail_Offset (Tail_Offset);
-                     My_Preprocessor.Wait_For_Resolved_Homing_Position (Resolved_Position, Reset_Called);
-                     if Reset_Called then
-                        accept Reset_Do_Not_Call_From_Other_Packages do
-                           Clear_Block_Extra_Data (Block'Access);
-                        end Reset_Do_Not_Call_From_Other_Packages;
-                        exit Planning_Loop;
-                     end if;
-                     Block.Next_Block_Pos := Resolved_Position;
+                     loop
+                        Plan_Kinematics (Block, Current_Motor_Map, Workspace);
+
+                        exit when
+                          (not Block.Is_Homing_Move)
+                          or else
+                            (Block.Feedrate_Profiles (2).Coast >= Home_Move_Required_Coast_Time
+                             and then Homing_Unavoidable_Tail_Time (Block'Access) <= Home_Move_Maximum_Tail_Time);
+
+                        declare
+                           Violation         : constant Time := Homing_Profile_Violation (Block'Access);
+                           Previous_Feedrate : constant Velocity := Block.Limited_Segment_Feedrates (2);
+                           New_Feedrate      : constant Velocity := Previous_Feedrate * 0.9;
+                        begin
+                           if Have_Previous_Violation and then Violation > Previous_Violation then
+                              raise Constraint_Error
+                                with "Reducing the homing feedrate made the coast or retained-tail violation worse.";
+                           end if;
+
+                           if Adjustment_Count = Maximum_Homing_Feedrate_Adjustments then
+                              raise Constraint_Error with "Homing feedrate adjustment exceeded its iteration limit.";
+                           end if;
+
+                           if New_Feedrate <= 0.0 * mm / s or else New_Feedrate >= Previous_Feedrate then
+                              raise Constraint_Error with "Homing feedrate adjustment made no representable progress.";
+                           end if;
+
+                           Have_Previous_Violation := True;
+                           Previous_Violation := Violation;
+                           Adjustment_Count := @ + 1;
+                           Block.Limited_Segment_Feedrates (2) := New_Feedrate;
+                        end;
+                     end loop;
                   end;
+
+                  if Block.Is_Homing_Move then
+                     declare
+                        Finishing_Corner  : constant Finishing_Corners_Index := Finishing_Corners_Index'First;
+                        Window            : constant Profile_Window :=
+                          Selected_Profile_Window (Block'Access, Finishing_Corner);
+                        Prefix_Time       : constant Time :=
+                          Constant_Speed_Time
+                            (Window.Start_Distance, Block.Corner_Velocity_Limits (Finishing_Corner - 1));
+                        --  Time spent in the constant-speed prefix before the generated acceleration profile.
+                        Coast_Start_Time  : constant Time :=
+                          Prefix_Time + Total_Time (Block.Feedrate_Profiles (Finishing_Corner).Accel);
+                        --  First time at which the generated profile has reached its constant-velocity coast.
+                        End_Time          : constant Time := Segment_Time (Block'Access, Finishing_Corner);
+                        --  Time at the end of the complete homing segment, including any suffix and dwell.
+                        Minimum_Time      : constant Time :=
+                          Time'Max
+                            (Coast_Start_Time + Home_Move_Minimum_Coast_Time, End_Time - Home_Move_Maximum_Tail_Time);
+                        --  Leave the configured coast margin after acceleration, while placing the loop command late
+                        --  enough that every retained command fits within the hardware tail-time limit.
+                        Loop_Pos          : constant Position :=
+                          Segment_Pos_At_Time (Block'Access, Finishing_Corner, Minimum_Time);
+                        --  Planned tool position at the earliest permitted loop-command time. The step generator uses
+                        --  the first regular interpolation sample at or after this point, so the published tail is
+                        --  conservatively longer than the emitted tail by less than one interpolation period.
+                        Tail_Offset       : constant Position_Offset := Block.Corners (Block.N_Corners) - Loop_Pos;
+                        --  Conservative planned displacement from a detector hit through the complete retained tail.
+                        Resolved_Position : Position;
+                     begin
+                        Block.Loop_Move_Minimum_Time := Minimum_Time;
+                        My_Preprocessor.Publish_Homing_Tail_Offset (Tail_Offset);
+                        My_Preprocessor.Wait_For_Resolved_Homing_Position (Resolved_Position, Reset_Called);
+                        exit Planning_Loop when Reset_Called;
+                        Block.Next_Block_Pos := Resolved_Position;
+                     end;
+                  end if;
                end if;
-            end if;
 
-            Next_Block_Start := Block.Next_Block_Pos;
+               Next_Block_Start := Block.Next_Block_Pos;
 
-            select
-               accept Dequeue_Do_Not_Call_From_Other_Packages (Out_Block : out Execution_Block) do
-                  Out_Block := Block;
-               end Dequeue_Do_Not_Call_From_Other_Packages;
-            or
-               accept Reset_Do_Not_Call_From_Other_Packages do
-                  Clear_Block_Extra_Data (Block'Access);
-               end Reset_Do_Not_Call_From_Other_Packages;
-               exit Planning_Loop;
-            end select;
+               Block_Ring.Publish (Index);
+            end;
          end loop Planning_Loop;
+
+         begin
+            accept Reset_Do_Not_Call_From_Other_Packages do
+               Discard_Blocks;
+            end Reset_Do_Not_Call_From_Other_Packages;
+         exception
+            when others =>
+               --  The rendezvous also propagates cleanup errors to the reset caller. All slots have been
+               --  returned, so keep Runner alive for the next Setup after any of the reset exit paths.
+               null;
+         end;
       end loop;
    end Runner;
 

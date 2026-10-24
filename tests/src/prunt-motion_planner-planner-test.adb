@@ -51,6 +51,7 @@ package body Prunt.Motion_Planner.Planner.Test is
    package Tested_Profile_Generator is new Feedrate_Profile_Generator;
    package Tested_Preprocessor is new Preprocessor;
    package Boundary_Preprocessor is new Preprocessor;
+   package Reset_Preprocessor is new Preprocessor;
 
    Identity_Tolerance_Factor : constant Long_Float := 32_768.0;
 
@@ -1127,7 +1128,7 @@ package body Prunt.Motion_Planner.Planner.Test is
           Feedrate         => 1.0 * mm / s));
       Tested_Preprocessor.Enqueue
         ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
-      Tested_Preprocessor.Run (Block, Initial_Position, Reset_Called);
+      Tested_Preprocessor.Run (Block'Access, Initial_Position, Reset_Called);
 
       T.Assert (not Reset_Called, "Accepted helix produces a normal motion block");
       T.Assert
@@ -1466,7 +1467,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Ignore_Bounds => True);
       Boundary_Preprocessor.Enqueue
         ((Kind => Homing_Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
-      Boundary_Preprocessor.Run (Homing_Block, Initial_Position, Reset_Called);
+      Boundary_Preprocessor.Run (Homing_Block'Access, Initial_Position, Reset_Called);
 
       T.Assert (not Reset_Called and then Homing_Block.Is_Homing_Move, "The boundary produces a homing block");
       Boundary_Preprocessor.Publish_Homing_Tail_Offset (Tail_Offset);
@@ -1490,7 +1491,7 @@ package body Prunt.Motion_Planner.Planner.Test is
           Feedrate    => 1.0 * mm / s));
       Boundary_Preprocessor.Enqueue
         ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
-      Boundary_Preprocessor.Run (Following_Block, Stopped_Position, Reset_Called);
+      Boundary_Preprocessor.Run (Following_Block'Access, Stopped_Position, Reset_Called);
       T.Assert
         (not Reset_Called
          and then Following_Block.Corners (1) = Stopped_Position
@@ -3696,6 +3697,29 @@ package body Prunt.Motion_Planner.Planner.Test is
       end loop;
    end Test_Local_Pair_Stop_Selection;
 
+   procedure Test_Preprocessor_Run_After_Reset (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      declare
+         Block : aliased Execution_Block;
+         Reset_Called : Boolean;
+      begin
+         Reset_Preprocessor.Setup ((others => <>));
+         Reset_Preprocessor.Reset;
+         --  Reproduce reset winning the protected lock after the planner has already acquired its slot.
+         Reset_Preprocessor.Run (Block'Access, Initial_Position, Reset_Called);
+         T.Assert (Reset_Called, "A late Run observes reset rather than killing the planner");
+
+         Reset_Preprocessor.Setup ((others => <>));
+         Reset_Preprocessor.Enqueue
+           ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
+         Reset_Preprocessor.Run (Block'Access, Initial_Position, Reset_Called);
+         T.Assert (not Reset_Called and then Block.N_Corners = 1, "Preprocessing works after the next setup");
+         Reset_Preprocessor.Reset;
+      end;
+   end Test_Preprocessor_Run_After_Reset;
+
    procedure Test_Profile_Conservative_Fallback (T : in out Trendy_Test.Operation'Class) is
       type Workspace_Access is access Planning_Workspace;
       Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
@@ -3779,7 +3803,8 @@ package body Prunt.Motion_Planner.Planner.Test is
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Profile_Conservative_Fallback'Unrestricted_Access,
+        [Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
+         Test_Profile_Conservative_Fallback'Unrestricted_Access,
          Test_Local_Pair_Stop_Selection'Unrestricted_Access,
          Test_Local_Corner_Selection'Unrestricted_Access,
          Test_Stopped_Duration_Selection'Unrestricted_Access,

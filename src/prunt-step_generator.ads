@@ -129,8 +129,9 @@ package Prunt.Step_Generator is
    --  the halt is complete. Raise Hardware_Communication_Error if physical idle could not be confirmed.
 
    procedure Soft_Halt (Idle_Confirmed : out Boolean; Last_Command_Index : out Command_Index);
-   --  Stop the worker even after a hardware failure. Idle_Confirmed distinguishes an acknowledged physical stop from a
-   --  failed or terminated worker; Last_Command_Index is the final command submitted before stopping.
+   --  Stop the worker even after a hardware failure. Idle_Confirmed reports whether physical idle was acknowledged,
+   --  and stays True if subsequent cleanup fails. Without that acknowledgement a failed or terminated worker returns
+   --  False. Last_Command_Index is the final command submitted before stopping.
 
    procedure Pause;
    --  Request the step generator to pause execution. This call is non-blocking. Use Is_Paused to check if the pause

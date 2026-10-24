@@ -181,6 +181,38 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
       T.Assert (V.Element (1) = "Three");
    end Test_Clear;
 
+   procedure Test_Clear_Reuses_Storage (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      declare
+         type Byte_Boolean is new Boolean with Size => 8, Alignment => 1;
+         type Storage_Index is range 1 .. 65;
+         package Small_Vectors is new
+           Prunt.Bounded_Indefinite_Vectors
+             (Element_Type => Byte_Boolean, Index_Type => Storage_Index, Storage_Size => 64);
+         V : Small_Vectors.Vector;
+      begin
+         V.Clear;
+         for Round in 1 .. 32 loop
+            for I in 1 .. 64 loop
+               V.Append (Byte_Boolean (Round mod 2 = 0));
+            end loop;
+            T.Assert (V.Element (1) = Byte_Boolean (Round mod 2 = 0));
+            T.Assert (V.Element (64) = Byte_Boolean (Round mod 2 = 0));
+            begin
+               V.Append (True);
+               T.Fail ("The backing storage should be full");
+            exception
+               when Small_Vectors.Out_Of_Space_Error => null;
+            end;
+            V.Clear;
+            V.Clear;
+            T.Assert (V.Is_Empty, "Clear permits reuse of the entire backing store after exhaustion");
+         end loop;
+      end;
+   end Test_Clear_Reuses_Storage;
+
    procedure Test_Element_Index_Error (T : in out Trendy_Test.Operation'Class) is
       V : Vector;
       S : String (1 .. 5);
@@ -222,6 +254,71 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
       end;
    end Test_Element_Too_Large;
 
+   procedure Test_Finalization_Errors (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      declare
+         Armed : Boolean := False;
+         Finalizations : Natural := 0;
+         type Item is new Ada.Finalization.Controlled with null record;
+         overriding procedure Finalize (Object : in out Item);
+
+         overriding procedure Finalize (Object : in out Item) is
+            pragma Unreferenced (Object);
+         begin
+            Finalizations := @ + 1;
+            if Armed then
+               raise Constraint_Error with "Injected vector element finalizer failure";
+            end if;
+         end Finalize;
+
+         package Vectors is new Bounded_Indefinite_Vectors (Item, Test_Index, 512);
+         V : Vectors.Vector;
+         Element : Item;
+      begin
+         for Round in 1 .. 32 loop
+            for I in Test_Index loop
+               V.Append (Element);
+            end loop;
+            Finalizations := 0;
+            Armed := True;
+            begin
+               V.Clear;
+               T.Fail ("Clear must report a finalizer failure");
+            exception
+               when Program_Error => null;
+            end;
+            Armed := False;
+            T.Assert (V.Is_Empty, "Clear empties the vector even when finalizers raise");
+            T.Assert (Finalizations = 5, "Clear attempts every element's finalizer");
+            V.Clear;
+            T.Assert (Finalizations = 5, "Repeated Clear does not finalize failed elements again");
+         end loop;
+
+         begin
+            declare
+               Scoped : Vectors.Vector;
+            begin
+               for I in Test_Index loop
+                  Scoped.Append (Element);
+               end loop;
+               Finalizations := 0;
+               Armed := True;
+            end;
+            T.Fail ("Scope finalization must report an element finalizer failure");
+         exception
+            when Program_Error => null;
+         end;
+         Armed := False;
+         T.Assert (Finalizations = 5, "Scope finalization still attempts every element's finalizer");
+      exception
+         when others =>
+            Armed := False;
+            raise;
+      end;
+   end Test_Finalization_Errors;
+
    procedure Test_Finalization_On_Clear (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -232,16 +329,19 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
          V       : Finalization_Vectors.Vector;
          Counter : Counter_Access := new Integer'(0);
       begin
-         declare
-            Item : Test_Item := (Ada.Finalization.Controlled with Finalized_Counter => Counter);
-         begin
-            V.Append (Item);
-            V.Append (Item);
-         end;
-         T.Assert (Counter.all = 1, "Temporary item should be finalized");
+         for Round in 1 .. 32 loop
+            declare
+               Item : Test_Item := (Ada.Finalization.Controlled with Finalized_Counter => Counter);
+            begin
+               V.Append (Item);
+               V.Append (Item);
+            end;
+            T.Assert (Counter.all = 3 * Round - 2, "Temporary item should be finalized");
 
-         V.Clear;
-         T.Assert (Counter.all = 3, "Stored items should be finalized on Clear");
+            V.Clear;
+            V.Clear;
+            T.Assert (Counter.all = 3 * Round, "Reused stored items should be finalized exactly once on Clear");
+         end loop;
       end;
    end Test_Finalization_On_Clear;
 
@@ -410,8 +510,10 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
          Test_Append_And_Read'Access,
          Test_Capacity_Exceeded'Access,
          Test_Clear'Access,
+         Test_Clear_Reuses_Storage'Access,
          Test_Element_Index_Error'Access,
          Test_Element_Too_Large'Access,
+         Test_Finalization_Errors'Access,
          Test_Finalization_On_Clear'Access,
          Test_Finalization_On_Scope_Exit'Access,
          Test_Process_Range'Access,

@@ -115,12 +115,7 @@ procedure Helix_Planner_Time is
 
    function To_Bits is new Ada.Unchecked_Conversion (Long_Float, Interfaces.Unsigned_64);
 
-   type Block_Wrapper is record
-      Block : aliased Planner.Execution_Block;
-   end record;
-   type Block_Wrapper_Access is access Block_Wrapper;
-   Working_Block : constant Block_Wrapper_Access := new Block_Wrapper;
-   Block         : Planner.Execution_Block renames Working_Block.Block;
+   Block : Planner.Block_Handle;
 
    Pi            : constant Long_Float := Ada.Numerics.Pi;
    Center_XY     : constant Long_Float := 150.0;
@@ -263,10 +258,10 @@ begin
          end if;
       else
          Block_Count := Block_Count + 1;
-         if Block.N_Corners >= Planner.Finishing_Corners_Index'First then
-            for Corner in Planner.Finishing_Corners_Index'First .. Block.N_Corners loop
+         if Planner.Corner_Count (Block) >= Planner.Finishing_Corners_Index'First then
+            for Corner in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
                declare
-                  T : constant Time := Planner.Segment_Time (Block'Access, Corner);
+                  T : constant Time := Planner.Segment_Time (Block, Corner);
                begin
                   Total := Total + T;
                   Segment_Count := Segment_Count + 1;
@@ -278,11 +273,12 @@ begin
                end;
             end loop;
          end if;
-         exit when Planner.Flush_Resetting_Data (Block'Access);
+         exit when Planner.Flush_Resetting_Data (Block);
+         Planner.Release (Block);
       end if;
    end loop;
 
-   if Planner.Next_Block_Pos (Block'Access) /= Current_Pos then
+   if Planner.Next_Block_Pos (Block) /= Current_Pos then
       raise Program_Error with "terminal planner position differs from the generated position";
    end if;
 
@@ -297,6 +293,7 @@ begin
       Ada.Text_IO.Close (Segment_Output);
    end if;
    --  All validation and output are complete. The persistent planner task can defer abort while waiting for input.
+   Planner.Release (Block);
    Ada.Text_IO.Flush;
    GNAT.OS_Lib.OS_Exit (0);
 end Helix_Planner_Time;

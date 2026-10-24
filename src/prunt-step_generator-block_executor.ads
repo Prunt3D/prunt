@@ -70,11 +70,11 @@ package Prunt.Step_Generator.Block_Executor
 is
 
    procedure Dequeue_Block
-     (Block : out Active_Planner.Execution_Block; Commands : in out Command_State; Reset_Requested : out Boolean);
+     (Block : in out Active_Planner.Block_Handle; Commands : in out Command_State; Reset_Requested : out Boolean);
    --  Wait for a planner block to become available while polling reset and between-block policy hooks.
 
    procedure Execute_Block
-     (Block           : access constant Active_Planner.Execution_Block;
+     (Block           : Active_Planner.Block_Handle;
       Transform       : Kinematic_Transform;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean);

@@ -53,10 +53,11 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
    --  state. This clears the command queue and resets position tracking to the initial values. Corner IDs are not
    --  reset.
 
-   procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
+   procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
    --  Process queued commands and assemble them into an execution block. This procedure blocks until either a complete
    --  block is assembled or a reset is requested. Reset_Called indicates whether the operation was terminated by a
-   --  reset request.
+   --  reset request. A reset may leave Block partly initialized, so it is passed by access rather than as an out
+   --  record that must be valid on return.
 
    procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset);
    --  Publish the retained-tail displacement calculated for the pending homing block.
@@ -97,15 +98,19 @@ private
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
       with Pre => (if Comm.Kind = Corner_Extra_Data_Kind then Extra /= null else Extra = null);
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean);
-      function Dequeue_Extra_Data return Corner_Extra_Data_Type;
+      procedure Append_Extra_Data (Target : in out Corner_Extra_Data_Vectors.Vector; Reset_Called : out Boolean);
+      --  Append the dequeued extra data to Target. Raises the vector's error, leaving the transaction open, if it
+      --  does not fit.
       function Get_Last_Assigned_Corner_ID return Planner_Corner_ID;
-      function Next_Is_Corner_Extra_Data return Boolean;
+      entry Wait_For_Corner_Continuation (Has_Extra_Data : out Boolean; Reset_Called : out Boolean);
       procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset);
       entry Wait_For_Homing_Tail_Offset (Tail_Offset : out Position_Offset; Reset_Called : out Boolean);
       procedure Resolve_Homing_Position (Pos : Position);
       entry Wait_For_Resolved_Homing_Position (Pos : out Position; Reset_Called : out Boolean);
-      procedure Finish_Dequeue;
-      procedure Cancel_Dequeue;
+      procedure Finish_Dequeue (Reset_Called : out Boolean);
+      procedure Cancel_Dequeue (Reset_Called : out Boolean);
+      --  Reset may run while the planner holds a dequeue transaction open, discarding that transaction with the rest
+      --  of the queue. The transaction operations then do nothing and set Reset_Called.
       procedure Reset;
    private
       procedure Assign_Corner_ID (Kind : Command_Kind);
@@ -132,13 +137,12 @@ private
    type Block_Corner_Dwell_Times_Access is access Block_Corner_Dwell_Times with Storage_Pool => Pool;
    type Block_Segment_Feedrates_Access is access Block_Segment_Feedrates with Storage_Pool => Pool;
    type Block_Path_Primitives_Access is access Block_Path_Primitives with Storage_Pool => Pool;
-   type Block_Corners_Extra_Data_Access is access Corner_Extra_Data_Vectors.Vector with Storage_Pool => Pool;
    type Block_Corners_Extra_Data_End_Indices_Access is access Block_Corners_Extra_Data_End_Indices
    with Storage_Pool => Pool;
 
    protected Runner is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
-      procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
+      procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
       procedure Reset (Last_Assigned_ID : Planner_Corner_ID);
    private
       Setup_Done                     : Boolean := False;
@@ -152,7 +156,6 @@ private
         new Block_Segment_Feedrates (2 .. Corners_Index'Last);
       Primitives                     : Block_Path_Primitives_Access :=
         new Block_Path_Primitives (2 .. Corners_Index'Last);
-      Corners_Extra_Data             : Block_Corners_Extra_Data_Access := new Corner_Extra_Data_Vectors.Vector;
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices_Access :=
         new Block_Corners_Extra_Data_End_Indices (1 .. Corners_Index'Last);
    end Runner;

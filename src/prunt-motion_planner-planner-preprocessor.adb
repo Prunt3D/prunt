@@ -216,24 +216,27 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          In_Dequeue := True;
       end Dequeue;
 
-      function Dequeue_Extra_Data return Corner_Extra_Data_Type is
+      procedure Append_Extra_Data (Target : in out Corner_Extra_Data_Vectors.Vector; Reset_Called : out Boolean) is
       begin
-         return Extra_Data_Storage.all.Peek;
-      end Dequeue_Extra_Data;
+         Reset_Called := not Setup_Done;
+         if not Reset_Called then
+            Target.Append (Extra_Data_Storage.all.Peek);
+         end if;
+      end Append_Extra_Data;
 
       function Get_Last_Assigned_Corner_ID return Planner_Corner_ID is
       begin
          return Last_Assigned_Corner_ID;
       end Get_Last_Assigned_Corner_ID;
 
-      function Next_Is_Corner_Extra_Data return Boolean is
+      entry Wait_For_Corner_Continuation (Has_Extra_Data : out Boolean; Reset_Called : out Boolean)
+        when Is_Full or else Next_Read /= Next_Write or else not Setup_Done
+      is
       begin
-         return
-           Setup_Done
-           and then not In_Dequeue
-           and then (Is_Full or else Next_Read /= Next_Write)
-           and then Elements (Next_Read).Kind = Corner_Extra_Data_Kind;
-      end Next_Is_Corner_Extra_Data;
+         pragma Assert (not In_Dequeue);
+         Reset_Called := not Setup_Done;
+         Has_Extra_Data := Setup_Done and then Elements (Next_Read).Kind = Corner_Extra_Data_Kind;
+      end Wait_For_Corner_Continuation;
 
       procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset) is
       begin
@@ -279,14 +282,18 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
       end Wait_For_Resolved_Homing_Position;
 
-      procedure Finish_Dequeue is
-         Current_Comm : constant Command := Elements (Next_Read);
+      procedure Finish_Dequeue (Reset_Called : out Boolean) is
       begin
+         Reset_Called := not Setup_Done;
+         if Reset_Called then
+            return;
+         end if;
+
          if not In_Dequeue then
             raise Constraint_Error with "Not in dequeue transaction.";
          end if;
 
-         if Current_Comm.Kind = Corner_Extra_Data_Kind then
+         if Elements (Next_Read).Kind = Corner_Extra_Data_Kind then
             Extra_Data_Storage.all.Dequeue;
          end if;
 
@@ -300,8 +307,13 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Retry_High_Priority := True;
       end Finish_Dequeue;
 
-      procedure Cancel_Dequeue is
+      procedure Cancel_Dequeue (Reset_Called : out Boolean) is
       begin
+         Reset_Called := not Setup_Done;
+         if Reset_Called then
+            return;
+         end if;
+
          if not In_Dequeue then
             raise Constraint_Error with "Not in dequeue transaction.";
          end if;
@@ -342,7 +354,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Runner.Reset (Command_Queue.Get_Last_Assigned_Corner_ID);
    end Reset;
 
-   procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
+   procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
    begin
       Runner.Run (Block, Start_Pos, Reset_Called);
    end Run;
@@ -385,7 +397,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Setup_Done := True;
       end Setup;
 
-      procedure Run (Block : aliased out Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
+      procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
+         use type System.Address;
+         Corners_Extra_Data           : Corner_Extra_Data_Vectors.Vector renames Block.Corners_Extra_Data;
+         Extra_Data_Address           : constant System.Address := Corners_Extra_Data'Address;
+         --  This field precedes the discriminant-dependent arrays, so it stays in place when N_Corners changes. Build
+         --  reference-holding data directly in the ring slot instead of copying it from staging storage.
          Flush_Resetting_Data         : Flush_Resetting_Data_Type := Flush_Resetting_Data_Type_Default;
          N_Corners                    : Corners_Index := 1;
          Block_N_Corners              : Corners_Index
@@ -404,16 +421,21 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          procedure Finish_Dequeue_And_Update_Corner_ID (Kind : Command_Kind; Corner_ID : out Planner_Corner_ID);
          --  Commit the current dequeue transaction and update the runner's mirror of command-queue corner ID state.
          --  Moves always open a new corner, extra data attaches to the current open corner or creates one, and flushes
-         --  close the current open corner. Corner_ID is the ID assigned to the consumed command.
+         --  close the current open corner. Corner_ID is the ID assigned to the consumed command. If a reset discarded
+         --  the transaction, set Reset_Called instead and leave the mirror for the runner's own reset.
 
          function Try_Append_Extra_Data return Boolean;
          --  Append the dequeued extra data and commit its dequeue transaction. Returns False, with the transaction
          --  cancelled, when the current block has no more extra-data storage and the data should be retried in a later
-         --  overflow block.
+         --  overflow block. Also returns False, with Reset_Called set, if a reset discarded the transaction.
 
          procedure Finish_Dequeue_And_Update_Corner_ID (Kind : Command_Kind; Corner_ID : out Planner_Corner_ID) is
          begin
-            Command_Queue.Finish_Dequeue;
+            Command_Queue.Finish_Dequeue (Reset_Called);
+            if Reset_Called then
+               Corner_ID := 0;
+               return;
+            end if;
 
             --  TODO: We should probably try to combine this with the enqueue logic to lower the risk of a mismatch.
             case Kind is
@@ -446,8 +468,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          function Try_Append_Extra_Data return Boolean is
             Corner_ID : Planner_Corner_ID;
          begin
-            Corners_Extra_Data.Append (Command_Queue.Dequeue_Extra_Data);
+            Command_Queue.Append_Extra_Data (Corners_Extra_Data, Reset_Called);
+            if Reset_Called then
+               return False;
+            end if;
+
             Finish_Dequeue_And_Update_Corner_ID (Corner_Extra_Data_Kind, Corner_ID);
+            if Reset_Called then
+               return False;
+            end if;
+
             Current_Corner_ID := Corner_ID;
             return True;
          exception
@@ -456,15 +486,15 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   raise Constraint_Error with "Extra corner data too big.";
                end if;
 
-               Command_Queue.Cancel_Dequeue;
+               Command_Queue.Cancel_Dequeue (Reset_Called);
                return False;
          end Try_Append_Extra_Data;
 
       begin
-         Reset_Called := False;
-
-         if not Setup_Done then
-            raise Constraint_Error with "Setup not done.";
+         Reset_Called := not Setup_Done;
+         if Reset_Called then
+            --  Reset may finish after the planner acquires a ring slot but before it enters this operation.
+            return;
          end if;
 
          Corners_Extra_Data.Clear;
@@ -500,7 +530,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   if Next_Command.Kind /= Corner_Extra_Data_Kind
                     or else Current_Input_Corner_ID /= Previous_Output_Corner_ID
                   then
-                     Command_Queue.Cancel_Dequeue;
+                     Command_Queue.Cancel_Dequeue (Reset_Called);
                      exit Read_In_Commands;
                   end if;
 
@@ -513,6 +543,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   case Next_Command.Kind is
                      when Flush_Kind | Homing_Flush_Kind   =>
                         Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
+                        exit Read_In_Commands when Reset_Called;
 
                         if Current_Corner_ID = 0 then
                            First_Corner_ID := Accepted_Corner_ID;
@@ -524,6 +555,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                      when Flush_And_Reset_Position_Kind    =>
                         Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
+                        exit Read_In_Commands when Reset_Called;
 
                         if Current_Corner_ID = 0 then
                            First_Corner_ID := Accepted_Corner_ID;
@@ -536,6 +568,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                      when Flush_And_Change_Parameters_Kind =>
                         Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
+                        exit Read_In_Commands when Reset_Called;
 
                         if Current_Corner_ID = 0 then
                            First_Corner_ID := Accepted_Corner_ID;
@@ -569,6 +602,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                      when Move_Kind                        =>
                         Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
+                        exit Read_In_Commands when Reset_Called;
                         N_Corners := N_Corners + 1;
                         Extra_Data_This_Corner := 0;
                         Current_Corner_ID := Accepted_Corner_ID;
@@ -584,6 +618,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                      when Helix_Move_Kind                  =>
                         Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
+                        exit Read_In_Commands when Reset_Called;
                         N_Corners := N_Corners + 1;
                         Extra_Data_This_Corner := 0;
                         Current_Corner_ID := Accepted_Corner_ID;
@@ -606,24 +641,40 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
             end;
          end loop Read_In_Commands;
 
+         if Reset_Called then
+            --  A reset discarded the queue while this block held a dequeue transaction open.
+            return;
+         end if;
+
          if Is_Extra_Data_Overflow_Block then
             Corners_Extra_Data_End_Indices (Corners_Index'First) := Corners_Extra_Data.Last_Index;
             pragma
               Assert
                 (Current_Input_Corner_ID = Previous_Output_Corner_ID,
                  "Extra data overflow block corner ID changed while assembling a block.");
-            Associated_Overflow_Block := Command_Queue.Next_Is_Corner_Extra_Data;
-         elsif Current_Corner_ID /= 0 then
-            Associated_Overflow_Block :=
-              Current_Input_Corner_ID = Current_Corner_ID and then Command_Queue.Next_Is_Corner_Extra_Data;
+         end if;
+
+         if Current_Corner_ID /= 0 and then Current_Input_Corner_ID = Current_Corner_ID then
+            --  A capacity boundary leaves the last corner open. An empty queue does not close that corner: wait for a
+            --  command to determine whether its extra data continues in an overflow block.
+            pragma Warnings (Off, "potentially blocking operation in protected operation");
+            Command_Queue.Wait_For_Corner_Continuation (Associated_Overflow_Block, Reset_Called);
+            pragma Warnings (On, "potentially blocking operation in protected operation");
+            if Reset_Called then
+               return;
+            end if;
          end if;
 
          Block_N_Corners := N_Corners;
          --  This is hacky and not portable, but if we try to assign to the entire record as you normally would then
          --  GCC insists on creating a whole Execution_Block on the stack.
 
+         pragma
+           Assert
+             (Block.Corners_Extra_Data'Address = Extra_Data_Address,
+              "Changing the corner count must not move the extra-data vector.");
+
          Block.Kind := (if Is_Extra_Data_Overflow_Block then Extra_Data_Overflow_Block_Kind else Motion_Block_Kind);
-         Block.Corners_Extra_Data := Corners_Extra_Data.all;
          Block.Corners := Corners (1 .. N_Corners);
          for I in Block.Corner_Transitions'Range loop
             Block.Corner_Transitions (I) := To_Evaluator (Stop_At (Block.Corners (I)));
@@ -668,7 +719,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       procedure Reset (Last_Assigned_ID : Planner_Corner_ID) is
       begin
          Setup_Done := False;
-         Corners_Extra_Data.Clear;
          Last_Assigned_Corner_ID := Last_Assigned_ID;
          Current_Input_Corner_ID := 0;
       end Reset;
