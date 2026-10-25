@@ -56,7 +56,7 @@ private generic
        (Resetting_Data     : Active_Planner.Flush_Resetting_Data_Type;
         Next_Block_Pos     : Motor_Position;
         Last_Command_Index : Command_Index);
-   --  Runs after all commands for the block have been queued.
+   --  Runs after all commands through the next stopped boundary have been queued and its shapers have drained.
 
    with procedure Publish_Corner_ID (Corner_ID : Planner_Corner_ID);
    --  Publishes a corner after any motion and extra data associated with it has been queued or processed.
@@ -65,7 +65,7 @@ private generic
    --  True when execution should slew to a stopped pause point.
 
    with procedure Handle_Pause (Pause_Position : Position; Reset_Requested : out Boolean) is No_Pause_Handler;
-   --  Runs once the executor has reached a stopped position and drained the input shapers.
+   --  Runs once the executor has reached a stopped position and drained the input shapers, unless a reset is pending.
 
 package Prunt.Step_Generator.Block_Executor
 is
@@ -75,11 +75,12 @@ is
    --  Wait for a planner block to become available while polling reset and between-block policy hooks.
 
    procedure Execute_Block
-     (Block           : Active_Planner.Block_Handle;
+     (Block           : in out Active_Planner.Block_Handle;
       Transform       : Kinematic_Transform;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean);
-   --  Queue all step-generator commands for Block unless reset is requested.
+   --  Stream through accepted successors until a stopped boundary, leaving Block at the last visited block. A reset
+   --  slews to a standstill like a pause, then returns with Reset_Requested True and without Finish_Block_Callback.
 
 private
 

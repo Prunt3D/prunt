@@ -17,6 +17,7 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Synchronous_Task_Control;
 with System.Multiprocessors;
 with Prunt.Input_Shapers;
 with Prunt.Motion_Planner.Planner;
@@ -26,10 +27,20 @@ package body Prunt.Step_Generator_Shaping_Test is
 
    pragma Extensions_Allowed (On);
 
+   function Block_Allows_Blended_Entry (Data : Boolean) return Boolean is
+      pragma Unreferenced (Data);
+   begin
+      return True;
+   end Block_Allows_Blended_Entry;
+
    type Pause_Timing is (During_Motion, Near_Block_End, During_Drain);
 
    procedure Check_Shaped_Pause
-     (T : in out Trendy_Test.Operation'Class; Smooth_Added_Part_Only : Boolean; Timing : Pause_Timing)
+     (T                      : in out Trendy_Test.Operation'Class;
+      Smooth_Added_Part_Only : Boolean;
+      Timing                 : Pause_Timing;
+      Across_Blocks          : Boolean := False;
+      Reset_Instead          : Boolean := False)
    is
    begin
       declare
@@ -37,6 +48,17 @@ package body Prunt.Step_Generator_Shaping_Test is
          type Motor_Position is array (Motor_Name) of Dimensionless;
          type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
          type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
+
+         Stream_Blocks : constant Positive := 20;
+         Policy_Calls : Natural := 0 with Atomic;
+         Publication_Complete, Producer_Failed : Boolean := False with Atomic;
+         Stream_Gate : Positive := 1;
+         function Allow_Stream_Entry (Data : Boolean) return Boolean is
+            pragma Unreferenced (Data);
+         begin
+            Policy_Calls := @ + 1;
+            return True;
+         end Allow_Stream_Entry;
 
          package Planner is new Motion_Planner.Planner
            (Motor_Name                        => Motor_Name,
@@ -52,7 +74,8 @@ package body Prunt.Step_Generator_Shaping_Test is
             Max_Corners                       => 10,
             Max_Corners_Extra_Data_Count       => 10,
             Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10);
+            Input_Queue_Length                => 10,
+            Allow_Blended_Entry               => Allow_Stream_Entry);
 
          package Pause_Planner is new Motion_Planner.Planner
            (Motor_Name                        => Motor_Name,
@@ -68,7 +91,8 @@ package body Prunt.Step_Generator_Shaping_Test is
             Max_Corners                       => 10,
             Max_Corners_Extra_Data_Count       => 10,
             Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10);
+            Input_Queue_Length                => 10,
+            Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
          End_Pos           : constant Position := [others => 100.123 * mm];
          Request_Pause     : access procedure;
@@ -82,6 +106,9 @@ package body Prunt.Step_Generator_Shaping_Test is
          Last_Safe         : Boolean := False;
          Last_Index        : Command_Index := 0;
          Safe_Stops        : Natural := 0;
+         Block_Starts      : Natural := 0;
+         Block_Finishes    : Natural := 0;
+         Reset_Gate        : Ada.Synchronous_Task_Control.Suspension_Object;
          Valid_Pause       : Boolean := True;
          Valid_Deltas      : Boolean := True;
          Valid_Indices     : Boolean := True;
@@ -115,6 +142,28 @@ package body Prunt.Step_Generator_Shaping_Test is
             return Motor_Name'Pos (Motor) = Axis_Name'Pos (Axis);
          end Affects_Axis;
 
+         task Stream_Producer is
+            entry Start;
+         end Stream_Producer;
+         task body Stream_Producer is
+            Tail : Position_Offset;
+         begin
+            accept Start;
+            for I in 1 .. Stream_Blocks loop
+               Planner.Enqueue_Move
+                 ((if I = Stream_Blocks then End_Pos else
+                    Position'[others => End_Pos (X_Axis) * Dimensionless (I) / Dimensionless (Stream_Blocks)]),
+                  10.0 * mm / s, Ignore_Bounds => True);
+               Planner.Enqueue_Flush (False);
+            end loop;
+            Planner.Enqueue_Move (End_Pos + Position_Offset'[others => 10.0 * mm], 10.0 * mm / s,
+                                  Ignore_Bounds => True);
+            Tail := Planner.Enqueue_Homing_Flush (False);
+            Publication_Complete := abs Tail > 0.0 * mm;
+         exception
+            when others => Producer_Failed := True;
+         end Stream_Producer;
+
          procedure Enqueue_Command
            (Pos             : Position;
             Motor_Pos       : Motor_Position;
@@ -124,6 +173,25 @@ package body Prunt.Step_Generator_Shaping_Test is
          is
             pragma Unreferenced (Motor_Pos, Vel_Ratio);
          begin
+            if Across_Blocks and then Stream_Gate < Stream_Blocks
+              and then Pos (X_Axis) >= End_Pos (X_Axis) * (Dimensionless (Stream_Gate) - 0.5)
+                / Dimensionless (Stream_Blocks)
+            then
+               --  Simulate hardware backpressure using only atomic publication witnesses. Keep planning one
+               --  boundary ahead of the next block's decision point while exercising real moving handoffs.
+               select
+                  delay 5.0;
+                  raise Program_Error with "Streaming planner failed to stay ahead of the simulated hardware";
+               then abort
+                  loop
+                     exit when Producer_Failed or else
+                       (if Stream_Gate < Stream_Blocks - 2 then Policy_Calls > Stream_Gate + 1
+                        else Publication_Complete);
+                     delay 0.001;
+                  end loop;
+               end select;
+               Stream_Gate := @ + 1;
+            end if;
             Previous_Pos := Last_Pos;
             Last_Pos := Pos;
             Last_Safe := Safe_Stop_After;
@@ -145,7 +213,11 @@ package body Prunt.Step_Generator_Shaping_Test is
                       when During_Drain => Pos (X_Axis) = End_Pos (X_Axis) and then not Safe_Stop_After)
                then
                   Pause_Sent := True;
-                  Request_Pause.all;
+                  if Reset_Instead then
+                     Ada.Synchronous_Task_Control.Set_True (Reset_Gate);
+                  else
+                     Request_Pause.all;
+                  end if;
                end if;
             end if;
          end Enqueue_Command;
@@ -155,8 +227,9 @@ package body Prunt.Step_Generator_Shaping_Test is
          procedure Finish_Block (Data : Boolean; Pos : Motor_Position; Index : Command_Index) is
             pragma Unreferenced (Data, Pos, Index);
          begin
+            Block_Finishes := @ + 1;
             --  A pause requested during the final drain is serviced by the next dequeue.
-            if Timing = During_Motion then
+            if Timing = During_Motion and then not Reset_Instead then
                Completion.Finish;
             end if;
          end Finish_Block;
@@ -205,7 +278,11 @@ package body Prunt.Step_Generator_Shaping_Test is
          end Pin_Motor;
 
          procedure Setup_Loop_Move (Data : Boolean) is null;
-         procedure Start_Block (Data : Boolean; Index : Command_Index) is null;
+         procedure Start_Block (Data : Boolean; Index : Command_Index) is
+            pragma Unreferenced (Data, Index);
+         begin
+            Block_Starts := @ + 1;
+         end Start_Block;
          procedure Start_Corner (Index : Command_Index; Data : Boolean) is null;
 
          procedure Start_Pause_Block (Data : Boolean; Index : Command_Index) is
@@ -257,12 +334,22 @@ package body Prunt.Step_Generator_Shaping_Test is
               [for Motor in Motor_Name =>
                  (if Axis_Name'Pos (Axis) = Motor_Name'Pos (Motor) then 1.0 / mm else 0.0 / mm)]];
 
+         task Resetter;
+         task body Resetter is
+         begin
+            Ada.Synchronous_Task_Control.Suspend_Until_True (Reset_Gate);
+            --  Reset waits for Runner to acknowledge, so it can not be called from Runner's own callbacks.
+            Stepgen.Reset;
+            Completion.Finish;
+         end Resetter;
+
          procedure Stop_Runners is
          begin
             if Runners_Stopped then
                return;
             end if;
             Runners_Stopped := True;
+            abort Stream_Producer, Resetter;
             Stepgen.Reset;
             Planner.Reset;
             Pause_Planner.Reset;
@@ -298,13 +385,31 @@ package body Prunt.Step_Generator_Shaping_Test is
             Pressure_Advance_Smooth_Time            => 0.123 * s,
             Pressure_Advance_Smooth_Added_Part_Only => Smooth_Added_Part_Only,
             Pressure_Advance_Smooth_Levels          => 3);
+         if Across_Blocks then
+            Params.Bounds :=
+              (Kind => Motion_Planner.Rectangular_Workspace,
+               Lower_X | Lower_Y | Lower_Z | Lower_E => -1000.0 * mm,
+               Upper_X | Upper_Y | Upper_Z | Upper_E => 1000.0 * mm);
+         end if;
          Request_Pause := Stepgen.Pause'Access;
          Request_Resume := Stepgen.Resume'Access;
          Planner.Runner.Setup (Params, Motor_Map);
          Pause_Planner.Runner.Setup (Params, Motor_Map);
+         if Across_Blocks then
+            Stream_Producer.Start;
+            select
+               delay 5.0;
+               T.Fail ("The initial streaming lookahead was not published");
+            then abort
+               while Policy_Calls < 2 and then not Producer_Failed loop
+                  delay 0.001;
+               end loop;
+            end select;
+         else
+            Planner.Enqueue_Move (End_Pos, 10.0 * mm / s, Ignore_Bounds => True);
+            Planner.Enqueue_Flush (False);
+         end if;
          Stepgen.Runner.Setup (False, True);
-         Planner.Enqueue_Move (End_Pos, 10.0 * mm / s, Ignore_Bounds => True);
-         Planner.Enqueue_Flush (False);
          select
             Completion.Wait;
          or
@@ -318,14 +423,34 @@ package body Prunt.Step_Generator_Shaping_Test is
             "Timed out completing shaped pause/park/resume motion; terminated=" & Runner_Terminated'Image
             & ", commands=" & Last_Index'Image & ", pauses=" & Pause_Count'Image
             & ", stops=" & Safe_Stops'Image & ", last=" & Last_Pos'Image);
-         T.Assert (Pause_Sent and then Pause_Count = 1, "The requested pause must be handled once");
-         T.Assert (Valid_Pause, "Pause must begin at the exact stationary position after all shapers drain");
+         if Across_Blocks then
+            --  A reset stops consuming the stream, so its producer may still be waiting for a free slot.
+            T.Assert
+              (not Producer_Failed and then (Reset_Instead or else Publication_Complete),
+               "The complete shaped stream was published");
+            T.Assert (Block_Starts = 1, "Twenty streamed blocks start once and do not run callbacks at moving seams");
+         end if;
          T.Assert (Valid_Deltas, "All shaped commands must respect the motor delta limits");
          T.Assert (Valid_Indices, "Pause and primary motion must share consecutive command indices");
-         T.Assert (Last_Pos = End_Pos, "Resumed motion must finish at the exact planned position");
-         T.Assert
-           (Safe_Stops = (if Timing = During_Motion then 4 else 3),
-            "Only drained stops in the primary, park and return plans may be marked safe");
+         if Reset_Instead then
+            T.Assert (Pause_Sent and then Pause_Count = 0, "A reset must stop without running the pause handler");
+            T.Assert (Block_Finishes = 0, "A reset stop must not run the block's end callback");
+            T.Assert (Last_Safe and then Safe_Stops = 1, "A reset must end at its only safe stop");
+            T.Assert (Last_Pos (X_Axis) < End_Pos (X_Axis), "A reset must stop mid-stream, not at the stream's end");
+            for Axis in Axis_Name loop
+               T.Assert
+                 (Last_Pos (Axis) = Last_Pos (X_Axis)
+                  and then abs (Last_Pos (Axis) - Previous_Pos (Axis)) < 1.0E-8 * mm,
+                  "A reset must slew to a standstill and drain all shapers before stopping");
+            end loop;
+         else
+            T.Assert (Pause_Sent and then Pause_Count = 1, "The requested pause must be handled once");
+            T.Assert (Valid_Pause, "Pause must begin at the exact stationary position after all shapers drain");
+            T.Assert (Last_Pos = End_Pos, "Resumed motion must finish at the exact planned position");
+            T.Assert
+              (Safe_Stops = (if Timing = During_Motion then 4 else 3),
+               "Only drained stops in the primary, park and return plans may be marked safe");
+         end if;
       exception
          when others =>
             Stop_Runners;
@@ -357,8 +482,23 @@ package body Prunt.Step_Generator_Shaping_Test is
       Check_Shaped_Pause (T, Smooth_Added_Part_Only => False, Timing => During_Motion);
    end Test_Shaped_Pause_Smooth_All;
 
+   procedure Test_Inter_Block_Shaped_Pause (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Check_Shaped_Pause (T, Smooth_Added_Part_Only => False, Timing => During_Motion, Across_Blocks => True);
+   end Test_Inter_Block_Shaped_Pause;
+
+   procedure Test_Inter_Block_Reset_Pauses (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      Check_Shaped_Pause
+        (T, Smooth_Added_Part_Only => False, Timing => During_Motion, Across_Blocks => True, Reset_Instead => True);
+   end Test_Inter_Block_Reset_Pauses;
+
    function All_Tests return Trendy_Test.Test_Group is
-     ([Test_Shaped_Pause_Smooth_All'Access,
+     ([Test_Inter_Block_Shaped_Pause'Access,
+       Test_Inter_Block_Reset_Pauses'Access,
+       Test_Shaped_Pause_Smooth_All'Access,
        Test_Shaped_Pause_Smooth_Added'Access,
        Test_Shaped_Pause_During_Drain'Access,
        Test_Shaped_Pause_Near_Block_End'Access]);

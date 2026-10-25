@@ -32,6 +32,9 @@ package Prunt.Cleanup_Exceptions is
    procedure Reraise (This : Holder);
    --  Propagate the saved exception, or do nothing if cleanup succeeded.
 
+   procedure Transfer (From : in out Holder; To : in out Holder);
+   --  Save From's exception into To as Save would, then leave From empty.
+
 private
 
    function Empty_Occurrence return Ada.Exceptions.Exception_Occurrence;

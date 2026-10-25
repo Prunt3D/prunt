@@ -598,6 +598,16 @@ private
      [for M in Motor_Name => Hardware.Motor_Hardware (M).Maximum_Delta_Per_Command];
    Global_Delta_Velocity_Safety_Factor : constant Dimensionless := 0.999;
 
+   function Block_Allows_Blended_Entry (Data : Extra_Block_Resetting_Data_Holders.Holder) return Boolean;
+   --  Motor-selective moves change execution throughout the block, so they require a stopped entry as well as exit.
+
+   function Block_Allows_Blended_Entry (Data : Extra_Block_Resetting_Data_Holders.Holder) return Boolean
+   is (if Data.Is_Empty
+       then True
+       elsif Data.Element in Gcode_Block_End_Data
+       then Block_Allows_Blended_Entry (Gcode_Block_End_Data (Data.Element).Nested_Data)
+       else Data.Element not in Motor_Move_Block_End_Data | Motor_Loop_Move_Block_End_Data);
+
    package My_Motion_Planner is new
      Motion_Planner.Planner
        (Motor_Name                        => Motor_Name,
@@ -605,14 +615,14 @@ private
         Motor_Delta_Limits                => Motor_Position,
         Maximum_Deltas_Per_Command        => Hardware_Maximum_Deltas_Per_Command,
         Flush_Resetting_Data_Type         => Extra_Block_Resetting_Data_Holders.Holder,
-        Flush_Resetting_Data_Type_Default =>
-          Extra_Block_Resetting_Data_Holders.To_Holder (Module_Types.Extra_Block_Resetting_Data'(null record)),
+        Flush_Resetting_Data_Type_Default => Extra_Block_Resetting_Data_Holders.Empty_Holder,
         Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
         Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
         Home_Move_Maximum_Tail_Time       => Dimensionless (Maximum_Loop_Move_Tail_Length) * 0.99 * Interpolation_Time,
         Interpolation_Time                => Interpolation_Time,
         Runner_CPU                        => Motion_Planner_CPU,
-        Max_Corners                       => Max_Planner_Block_Corners);
+        Max_Corners                       => Max_Planner_Block_Corners,
+        Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
    package My_Pause_Motion_Planner is new
      Motion_Planner.Planner
@@ -621,13 +631,13 @@ private
         Motor_Delta_Limits                => Motor_Position,
         Maximum_Deltas_Per_Command        => Hardware_Maximum_Deltas_Per_Command,
         Flush_Resetting_Data_Type         => Extra_Block_Resetting_Data_Holders.Holder,
-        Flush_Resetting_Data_Type_Default =>
-          Extra_Block_Resetting_Data_Holders.To_Holder (Module_Types.Extra_Block_Resetting_Data'(null record)),
+        Flush_Resetting_Data_Type_Default => Extra_Block_Resetting_Data_Holders.Empty_Holder,
         Corner_Extra_Data_Type            => Module_Types.Extra_Corner_Data'Class,
         Home_Move_Minimum_Coast_Time      => 5.0 * Interpolation_Time,
         Home_Move_Maximum_Tail_Time       => Dimensionless (Maximum_Loop_Move_Tail_Length) * 0.99 * Interpolation_Time,
         Interpolation_Time                => Interpolation_Time,
-        Max_Corners                       => 100);
+        Max_Corners                       => 100,
+        Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
    procedure Start_Planner_Block
      (Resetting_Data : Extra_Block_Resetting_Data_Holders.Holder; Last_Command_Index : Command_Index);

@@ -30,6 +30,12 @@ package body Prunt.Motion_Planner.Planner_Primitive_Jet_Test is
    type Test_Flush_Resetting_Data is null record;
    type Test_Corner_Extra_Data is null record;
 
+   function Block_Allows_Blended_Entry (Data : Test_Flush_Resetting_Data) return Boolean is
+      pragma Unreferenced (Data);
+   begin
+      return True;
+   end Block_Allows_Blended_Entry;
+
    package Test_Planner is new
      Prunt.Motion_Planner.Planner
        (Motor_Name                        => Test_Motor_Name,
@@ -46,7 +52,8 @@ package body Prunt.Motion_Planner.Planner_Primitive_Jet_Test is
         Max_Corners_Extra_Data_Count      => 2,
         Max_Corners_Extra_Data_Storage    => 1_024,
         Max_Corners_Extra_Data_Per_Corner => 2,
-        Input_Queue_Length                => 2);
+        Input_Queue_Length                => 2,
+        Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
    package Test_Planner_Test is new Test_Planner.Test;
 

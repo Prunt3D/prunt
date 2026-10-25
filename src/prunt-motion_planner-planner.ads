@@ -24,7 +24,8 @@ pragma Check_Float_Overflow;
 --  family determines which derivative limits remain meaningful at its joins.
 --
 --  The package works by collecting a series of corners before processing them as a single batch, called an
---  Execution_Block which starts and ends at zero velocity. Corners are collected until a flush command is received
+--  Execution_Block with a stopped fallback plan. Adjacent queued blocks without end data can be linked by a
+--  certified local blend before execution borrows them. Corners are collected until a flush command is received
 --  or the block is full. A full block waits for the next command to establish whether its final corner has overflow
 --  data before being published. Each stage of the planning pipeline is implemented in a child package of this one:
 --
@@ -87,11 +88,14 @@ with Ada.Containers;
 with System.Multiprocessors;
 with System.Storage_Elements;
 
+private with Ada.Exceptions;
 private with Ada.Finalization;
 private with Prunt.Bounded_Indefinite_Vectors;
+private with Prunt.Cleanup_Exceptions;
 private with Prunt.Motion_Planner.Corner_Transitions;
 private with Prunt.Motion_Planner.Stereographic_Curves;
 private with System.Pool_Local;
+private with System.Atomic_Operations.Exchange;
 
 pragma Warnings (Off, "formal object * is not referenced");
 --  Silence bogus warnings related to generic parameters used in child packages.
@@ -110,6 +114,9 @@ generic
    --  be used to indicate if a move is a homing move or if the machine should pause after completion.
 
    Flush_Resetting_Data_Type_Default : Flush_Resetting_Data_Type;
+   --  Data for blocks that end only because they reached a capacity limit. Such boundaries may be blended with the
+   --  next block, so a flush whose Data equals this value does not guarantee a stop. Use a distinct default if every
+   --  explicit flush must stop.
 
    type Corner_Extra_Data_Type (<>) is private;
    --  Data to be included with each corner such as heater targets or the current file line number.
@@ -164,6 +171,10 @@ generic
    --  not allocated per-item.
 
    Initial_Position : Position := [others => 0.0 * mm];
+
+   with function Allow_Blended_Entry (Data : Flush_Resetting_Data_Type) return Boolean;
+   --  Planner-side policy for data which also changes execution of the block itself (for example pinning individual
+   --  motors). False preserves its stopped entry. Ordinary end-only callbacks need no restriction.
 package Prunt.Motion_Planner.Planner is
 
    pragma Unsuppress (Overflow_Check);
@@ -184,9 +195,10 @@ package Prunt.Motion_Planner.Planner is
    type Execution_Block_Kind is (Motion_Block_Kind, Extra_Data_Overflow_Block_Kind);
 
    type Block_Handle is tagged limited private;
-   --  Exclusive ownership of a read-only slot in the planner's block ring. A handle starts empty and cannot
-   --  be copied. Release returns its slot promptly; finalization also releases it on scope exit, exceptions or abort.
-   --  A populated handle remains valid across Reset. Do not access the same handle concurrently from multiple tasks.
+   --  Exclusive ownership of one immutable block and its accepted outgoing blend in the planner's ring. A handle
+   --  starts empty and cannot be copied. Release returns its remaining slots; finalization also releases them on
+   --  scope exit, exceptions or abort. A populated handle remains valid across Reset. Do not access the same handle
+   --  concurrently from multiple tasks.
 
    function Is_Empty (Block : Block_Handle) return Boolean;
 
@@ -227,9 +239,9 @@ package Prunt.Motion_Planner.Planner is
 
    function Next_Block_Pos (Block : Block_Handle) return Position
    with Pre => not Is_Empty (Block);
-   --  Returns the start position of the next block. At the end of a block, the motion executor should assume it is at
-   --  this position, even if it is not. This also rebases E after path-length extrusion correction so subsequent
-   --  blocks continue to accept the commanded absolute E coordinates.
+   --  Returns the commanded start position of the next block. After a block with no accepted successor stops, the
+   --  motion executor should assume it is at this position, even if it is not. This also rebases E after path-length
+   --  extrusion correction so subsequent blocks continue to accept the commanded absolute E coordinates.
 
    function Block_Start_Pos (Block : Block_Handle) return Position
    with Pre => not Is_Empty (Block);
@@ -293,7 +305,9 @@ package Prunt.Motion_Planner.Planner is
    --  data.
 
    procedure Enqueue_Flush (Data : Flush_Resetting_Data_Type);
-   --  End the current input block and attach Data for processing after its motion stops.
+   --  End the current input block and attach Data for processing after its motion stops. Data equal to
+   --  Flush_Resetting_Data_Type_Default only marks a boundary, which may be blended with the next block without
+   --  stopping.
 
    function Enqueue_Homing_Flush (Data : Flush_Resetting_Data_Type) return Position_Offset;
    --  End the current input block as a homing loop move, prevent further motion enqueueing, and return the planned
@@ -316,13 +330,32 @@ package Prunt.Motion_Planner.Planner is
 
    procedure Dequeue (Block : in out Block_Handle; Timed_Out : out Boolean)
    with Pre => Is_Empty (Block);
-   --  Borrow the next processed block without copying it. If no block becomes ready within one second, Timed_Out
-   --  is True and Block remains empty. Ownership is recorded directly in the caller's handle, even during abort.
+   --  Borrow the next independently stopped block. Prepared successors are claimed one at a time by Advance_Block.
+   --  Call Prepare_Segment before evaluating each segment; it chooses a prepared tail at its first affected segment.
+   --  If no block becomes ready within one second, Timed_Out is True and Block remains empty. After Release discards
+   --  an unconsumed successor planned since the last Reset, no block is returned until the next Reset, because queued
+   --  blocks would continue from motion that never ran.
+
+   procedure Prepare_Segment (Block : in out Block_Handle; Finishing_Corner : Finishing_Corners_Index)
+   with Pre => not Is_Empty (Block);
+   --  Atomically commit to a prepared blend or the original stopping tail before evaluating the affected region.
+   --  Never waits or calls a protected object. Once chosen, the trajectory cannot change underneath the consumer.
+
+   function Has_Next_Block (Block : Block_Handle) return Boolean
+   with Pre => not Is_Empty (Block);
+   --  True only after Prepare_Segment has accepted this block's outgoing blend.
+
+   procedure Advance_Block (Block : in out Block_Handle)
+   with Pre => not Is_Empty (Block) and then Has_Next_Block (Block);
+   --  Claim the prepared successor and atomically retire the completed slot. A background cleaner finalizes it, so
+   --  extra-data finalizers never run on Runner while it plans. No allocation, finalization, protected call or waiting
+   --  occurs on this moving handoff.
 
    procedure Release (Block : in out Block_Handle);
-   --  Release the block's extra data and return its slot to the planner, leaving the handle empty. Empty is a no-op.
-   --  Data finalizers run outside the ring lock; the slot remains reserved until cleanup finishes. If cleanup raises,
-   --  finish cleanup and empty the handle before propagating the first exception.
+   --  At a safe stop, release this block and any unconsumed linked successors, leaving the handle empty. Discarding
+   --  a successor planned since the last Reset makes Dequeue wait for Reset. Finalizers run outside the ring lock.
+   --  Finish cleanup, including background cleanup of slots retired by Advance_Block, before propagating the first
+   --  cleanup exception.
 
    Out_Of_Bounds_Error : exception;
 
@@ -345,18 +378,15 @@ private
    subtype Block_Count is Natural range 0 .. Block_Capacity;
 
    type Block_Handle is new Ada.Finalization.Limited_Controlled with record
-      Data  : Execution_Block_Access := null;
-      Index : Block_Index := Block_Index'First;
+      Data         : Execution_Block_Access := null;
+      Index        : Block_Index := Block_Index'First;
+      Use_Tail     : Boolean := False;
+      Tail_Decided : Boolean := False;
       --  Slot designated by Data. Only meaningful while Data is not null.
    end record;
 
    overriding
    procedure Finalize (Block : in out Block_Handle);
-
-   procedure Clear_Block_Extra_Data (Index : Block_Index);
-   --  Release callback/configuration references when discarding a block. The block must not be executed afterwards.
-   --  Take the slot index because discarded blocks may be only partly initialized; only their reference-holding
-   --  fields are cleared.
 
    type Command_Kind is
      (Move_Kind,
@@ -876,39 +906,83 @@ private
 
    Blend_Radius : constant Corners_Index := Corners_Index'Min (32, (Corners_Index'Last - 1) / 2);
 
+   type Tail_State is (Open, Preparing, Offered, Closed, Accepted) with Atomic, Size => 32;
+   package Tail_Atomics is new System.Atomic_Operations.Exchange (Tail_State);
+   --  Producer: Open -> Preparing -> Offered. Consumer closes the choice before the affected segment and accepts
+   --  only an already Offered tail. A producer losing that exchange discards its patch and keeps the stopped plan.
+
+   type Block_State is (Free, Planning, Ready, Linked, Borrowed, Retired, Cleaning) with Atomic, Size => 32;
    type Block_Wrapper is record
-      Extra_Data : aliased Corner_Extra_Data_Vectors.Vector;
-      Block      : aliased Execution_Block;
+      State           : Block_State := Free;
+      Choice          : aliased Tail_State := Closed;
+      Planner_Reading : Boolean := False with Atomic;
+      Next            : Block_Index := Block_Index'First;
+      Extra_Data      : aliased Corner_Extra_Data_Vectors.Vector;
+      Block           : aliased Execution_Block;
+      Tail            : aliased Execution_Block (Blend_Radius + 1);
+      --  Block is immutable after publication. Tail and Next are visible only after the atomic Offered publication.
+      --  Tail stores at most 32 replacement segments, aligned to the end of this fixed-size scratch block.
+      --  Planner_Reading pins the original while a consumer may close its choice and retire it during planning.
+      --  Extra_Data holds Block's reference-holding corner data, built in place by the preprocessor.
    end record;
 
    type Block_Array is array (Block_Index) of Block_Wrapper;
-
    Block_Pool : System.Pool_Local.Unbounded_Reclaim_Pool;
    type Block_Array_Access is access Block_Array with Storage_Pool => Block_Pool;
+   Blocks     : constant Block_Array_Access := new Block_Array;
+   --  Five reusable slots, each with a bounded tail patch; streaming length is independent of this capacity.
 
-   Blocks : constant Block_Array_Access := new Block_Array;
-   --  Allocate all slots once. Their lifetime includes any blocks still borrowed when Runner terminates.
+   procedure Clear_Block_Extra_Data (Index : Block_Index);
+   --  Release callback/configuration references when discarding a slot's block. The block must not be executed
+   --  afterwards. Take the slot index rather than the record because discarded blocks may be only partly initialized;
+   --  only their reference-holding fields are cleared.
 
-   type Block_State is (Free, Planning, Ready, Borrowed, Cleaning);
-   type Block_States is array (Block_Index) of Block_State;
    type Block_Indices is array (Block_Index) of Block_Index;
    type Block_Set is array (Block_Index) of Boolean;
+
+   type Reset_Epoch is mod 2 ** 32;
+   type Block_Epochs is array (Block_Index) of Reset_Epoch;
 
    protected Block_Ring is
       procedure Setup;
       procedure Request_Reset;
       procedure Report_Termination;
       procedure Begin_Discard (Pending : out Block_Set);
-      --  Called by Runner only, after it has stopped accessing its planning slot. Borrowed blocks are preserved.
       entry Acquire (Index : out Block_Index; Reset_Called : out Boolean);
+      procedure Begin_Blend (Previous : out Block_Index; Available : out Boolean);
+      procedure Finish_Blend (Previous, Following : Block_Index; Blended : Boolean; Published : out Boolean);
       procedure Publish (Index : Block_Index);
       entry Dequeue (Block : in out Block_Handle);
-      procedure Begin_Release (Index : Block_Index);
+      entry Begin_Release (Block_Index);
+      --  Waits for a producer which lost the choice to finish reading this slot. Releasing a Linked slot discards a
+      --  successor that was never claimed; if it was planned since the last Reset, Dequeue then waits for Reset.
+      procedure Collect_Retired (Pending : out Block_Set);
+      procedure Request_Collection;
+      --  Runner asks Retired_Cleaner to reclaim retired slots now rather than at its next poll.
+      entry Wait_For_Retirement (Pending : out Block_Set; Stop : out Boolean);
+      --  Opens while a consumer can retire a slot without a protected call, on a collection request, or once Runner
+      --  has terminated. Only Runner links new successors, which re-evaluates this barrier. Pending returns the
+      --  retired slots now owned by Retired_Cleaner, which has no caller to report to. Stop is True once Runner has
+      --  terminated and none remain.
+      entry Wait_For_Collection_Request;
+      --  Lets an idle Retired_Cleaner poll without delaying a collection that Runner requests.
       procedure Finish_Cleanup (Index : Block_Index);
+      procedure Defer_Cleanup_Error (Occurrence : Ada.Exceptions.Exception_Occurrence);
+      entry Take_Cleanup_Error (Error : in out Cleanup_Exceptions.Holder);
+      --  Waits for Retired_Cleaner's slots in progress, then hands their first failure to the next Release.
    private
+      Deferred_Error        : Cleanup_Exceptions.Holder;
+      Deferred_Cleanup      : Block_Set := [others => False];
+      Collection_Requested  : Boolean := False;
+      Epoch                 : Reset_Epoch := 0;
+      Slot_Epochs           : Block_Epochs := [others => 0];
+      --  Begin_Discard advances Epoch. Slots keep the epoch in which Runner acquired them.
+      Discontinuous         : Boolean := False;
+      --  An unconsumed successor from the current epoch was released. Queued blocks would start where it ended.
       Running               : Boolean := False;
       Runner_Terminated     : Boolean := False;
-      States                : Block_States := [others => Free];
+      Tail_Valid            : Boolean := False;
+      Tail_Index            : Block_Index := Block_Index'First;
       Free_Count            : Block_Count := Block_Count'Last;
       Next_Slot             : Block_Index := Block_Index'First;
       Ready_Slots           : Block_Indices := [others => Block_Index'First];
