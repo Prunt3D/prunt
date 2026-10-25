@@ -53,11 +53,16 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
    --  state. This clears the command queue and resets position tracking to the initial values. Corner IDs are not
    --  reset.
 
-   procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
+   procedure Run
+     (Block        : not null access Execution_Block;
+      Extra_Data   : in out Corner_Extra_Data_Vectors.Vector;
+      Start_Pos    : Position;
+      Reset_Called : out Boolean);
    --  Process queued commands and assemble them into an execution block. This procedure blocks until either a complete
    --  block is assembled or a reset is requested. Reset_Called indicates whether the operation was terminated by a
    --  reset request. A reset may leave Block partly initialized, so it is passed by access rather than as an out
-   --  record that must be valid on return.
+   --  record that must be valid on return. Extra_Data receives the block's corner data in place; pass the ring slot's
+   --  vector so reference-holding data is never copied.
 
    procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset);
    --  Publish the retained-tail displacement calculated for the pending homing block.
@@ -142,7 +147,11 @@ private
 
    protected Runner is
       procedure Setup (Initial_Parameters : Kinematic_Parameters);
-      procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean);
+      procedure Run
+        (Block        : not null access Execution_Block;
+         Extra_Data   : in out Corner_Extra_Data_Vectors.Vector;
+         Start_Pos    : Position;
+         Reset_Called : out Boolean);
       procedure Reset (Last_Assigned_ID : Planner_Corner_ID);
    private
       Setup_Done                     : Boolean := False;

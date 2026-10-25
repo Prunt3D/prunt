@@ -351,10 +351,10 @@ private
    overriding
    procedure Finalize (Block : in out Block_Handle);
 
-   procedure Clear_Block_Extra_Data (Block : not null access Execution_Block);
+   procedure Clear_Block_Extra_Data (Index : Block_Index);
    --  Release callback/configuration references when discarding a block. The block must not be executed afterwards.
-   --  Accept an access value because discarded blocks may be only partly initialized; only their initialized
-   --  reference-holding fields are needed for cleanup.
+   --  Take the slot index because discarded blocks may be only partly initialized; only their reference-holding
+   --  fields are cleared.
 
    type Command_Kind is
      (Move_Kind,
@@ -887,8 +887,10 @@ private
       Loop_Move_Minimum_Time    : Time := 0.0 * s;
       --  Earliest interpolation time at which the loop command of a homing block may be emitted.
 
-      Corners_Extra_Data             : Corner_Extra_Data_Vectors.Vector;
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices (1 .. N_Corners);
+      --  Indices into the owning ring slot's Extra_Data. Keeping that vector outside this record means scratch blocks
+      --  and tail patches never hold corner extra data. They still carry Flush_Resetting_Data (a controlled holder in
+      --  the controller), which Copy_Window and Copy_Motion_Window never copy.
       Corners                        : Block_Plain_Corners (1 .. N_Corners);
       Primitives                     : Block_Path_Primitives (2 .. N_Corners);
       Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
@@ -930,7 +932,8 @@ private
    end record;
 
    type Block_Wrapper is record
-      Block : aliased Execution_Block;
+      Extra_Data : aliased Corner_Extra_Data_Vectors.Vector;
+      Block      : aliased Execution_Block;
    end record;
 
    type Block_Array is array (Block_Index) of Block_Wrapper;
@@ -1014,9 +1017,10 @@ private
    with Pre => Corner <= Block.N_Corners;
 
    procedure Corner_Extra_Data
-     (Block   : not null access constant Execution_Block;
-      Corner  : Corners_Index;
-      Process : not null access procedure (Data : in out Corner_Extra_Data_Type))
+     (Block      : not null access constant Execution_Block;
+      Extra_Data : Corner_Extra_Data_Vectors.Vector;
+      Corner     : Corners_Index;
+      Process    : not null access procedure (Data : in out Corner_Extra_Data_Type))
    with Pre => Corner <= Block.N_Corners;
 
    function Has_Associated_Overflow_Block (Block : not null access constant Execution_Block) return Boolean;

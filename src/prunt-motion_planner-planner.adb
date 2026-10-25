@@ -138,7 +138,7 @@ package body Prunt.Motion_Planner.Planner is
    procedure Cleanup_Block (Index : Block_Index; Error : in out Cleanup_Exceptions.Holder) is
    begin
       begin
-         Clear_Block_Extra_Data (Blocks (Index).Block'Access);
+         Clear_Block_Extra_Data (Index);
       exception
          when E : others =>
             Error.Save (E);
@@ -199,17 +199,17 @@ package body Prunt.Motion_Planner.Planner is
       return Scaled_Curvature_Norm ([X_Axis => Left, Y_Axis => Right, others => 0.0 / mm]);
    end Scaled_Curvature_Hypot;
 
-   procedure Clear_Block_Extra_Data (Block : not null access Execution_Block) is
+   procedure Clear_Block_Extra_Data (Index : Block_Index) is
       Error : Cleanup_Exceptions.Holder;
    begin
       begin
-         Block.Corners_Extra_Data.Clear;
+         Blocks (Index).Extra_Data.Clear;
       exception
          when E : others =>
             Error.Save (E);
       end;
       begin
-         Block.Flush_Resetting_Data := Flush_Resetting_Data_Type_Default;
+         Blocks (Index).Block.Flush_Resetting_Data := Flush_Resetting_Data_Type_Default;
       exception
          when E : others =>
             Error.Save (E);
@@ -386,7 +386,7 @@ package body Prunt.Motion_Planner.Planner is
       Corner  : Corners_Index;
       Process : not null access procedure (Data : in out Corner_Extra_Data_Type)) is
    begin
-      Corner_Extra_Data (Block.Data, Corner, Process);
+      Corner_Extra_Data (Block.Data, Blocks (Block.Index).Extra_Data, Corner, Process);
    end Corner_Extra_Data;
 
    function Interval_Contains_Phase (Low, High, Base, Period : Dimensionless) return Boolean is
@@ -2618,7 +2618,7 @@ package body Prunt.Motion_Planner.Planner is
             declare
                Block : Execution_Block renames Blocks (Index).Block;
             begin
-               My_Preprocessor.Run (Block'Access, Next_Block_Start, Reset_Called);
+               My_Preprocessor.Run (Block'Access, Blocks (Index).Extra_Data, Next_Block_Start, Reset_Called);
 
                exit Planning_Loop when Reset_Called;
 
@@ -2986,11 +2986,12 @@ package body Prunt.Motion_Planner.Planner is
    end Corner_ID;
 
    procedure Corner_Extra_Data
-     (Block   : not null access constant Execution_Block;
-      Corner  : Corners_Index;
-      Process : not null access procedure (Data : in out Corner_Extra_Data_Type)) is
+     (Block      : not null access constant Execution_Block;
+      Extra_Data : Corner_Extra_Data_Vectors.Vector;
+      Corner     : Corners_Index;
+      Process    : not null access procedure (Data : in out Corner_Extra_Data_Type)) is
    begin
-      Block.Corners_Extra_Data.Process_Range
+      Extra_Data.Process_Range
         ((if Corner = Corners_Index'First
           then Corners_Extra_Data_Index'First
           else Corners_Extra_Data_Index (Block.Corners_Extra_Data_End_Indices (Corner - 1) + 1)),
