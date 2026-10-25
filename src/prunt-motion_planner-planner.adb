@@ -22,7 +22,6 @@ pragma Check_Float_Overflow;
 with Ada.Numerics;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Unchecked_Conversion;
-with Prunt.Cleanup_Exceptions;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
 with Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer;
@@ -67,16 +66,37 @@ package body Prunt.Motion_Planner.Planner is
       end Report_Termination;
 
       procedure Begin_Discard (Pending : out Block_Set) is
+         Cursor : Block_Index;
       begin
+         Pending := [others => False];
+         --  Ready roots have never been borrowed. Their linked descendants are also unreachable by execution.
+         --  Preserve every other Linked slot: its predecessor may be borrowed, including across Reset/Setup.
          for Index in Block_Index loop
-            Pending (Index) := States (Index) in Planning | Ready;
-            if Pending (Index) then
-               States (Index) := Cleaning;
+            if Blocks (Index).State = Ready then
+               Cursor := Index;
+               loop
+                  Pending (Cursor) := True;
+                  exit when Blocks (Cursor).Choice /= Offered;
+                  Cursor := Blocks (Cursor).Next;
+                  pragma Assert (Blocks (Cursor).State = Linked);
+               end loop;
+            elsif Blocks (Index).State in Planning | Retired then
+               Pending (Index) := True;
             end if;
          end loop;
+         for Index in Block_Index loop
+            Blocks (Index).Planner_Reading := False;
+            if Pending (Index) then
+               Blocks (Index).State := Cleaning;
+            end if;
+         end loop;
+         Tail_Valid := False;
          Ready_Count := 0;
          Next_Read := Block_Index'First;
          Next_Write := Block_Index'First;
+         --  Successors preserved above belong to the old epoch. Releasing them later cannot strand new blocks.
+         Epoch := @ + 1;
+         Discontinuous := False;
       end Begin_Discard;
 
       entry Acquire (Index : out Block_Index; Reset_Called : out Boolean) when not Running or else Free_Count > 0 is
@@ -86,50 +106,154 @@ package body Prunt.Motion_Planner.Planner is
          if Reset_Called then
             return;
          end if;
-         --  A borrower may retain a slot across reset, or release several borrowed slots out of order.
-         while States (Index) /= Free loop
+         while Blocks (Index).State /= Free loop
             Index := @ + 1;
          end loop;
-         States (Index) := Planning;
+         Blocks (Index).State := Planning;
+         Blocks (Index).Choice := Open;
+         Slot_Epochs (Index) := Epoch;
          Free_Count := @ - 1;
          Next_Slot := Index + 1;
       end Acquire;
 
+      procedure Begin_Blend (Previous : out Block_Index; Available : out Boolean) is
+         Expected : aliased Tail_State := Open;
+      begin
+         Previous := Tail_Index;
+         Available := False;
+         if Running and then Tail_Valid and then Blocks (Previous).State in Ready | Linked | Borrowed then
+            --  Pin before the exchange. Even if execution closes and retires this slot, cleanup cannot reuse it
+            --  while the producer reads its immutable base trajectory.
+            Blocks (Previous).Planner_Reading := True;
+            Available := Tail_Atomics.Atomic_Compare_And_Exchange (Blocks (Previous).Choice, Expected, Preparing);
+            if not Available then
+               Blocks (Previous).Planner_Reading := False;
+            end if;
+         end if;
+      end Begin_Blend;
+
+      procedure Finish_Blend (Previous, Following : Block_Index; Blended : Boolean; Published : out Boolean) is
+         Expected : aliased Tail_State := Preparing;
+         Unused   : Boolean;
+      begin
+         Published := False;
+         if Blended and then Running then
+            Blocks (Following).State := Linked;
+            Blocks (Previous).Next := Following;
+            --  All replacement motion and the successor's incoming profiles precede this release publication.
+            Published := Tail_Atomics.Atomic_Compare_And_Exchange (Blocks (Previous).Choice, Expected, Offered);
+            if Published then
+               Tail_Index := Following;
+               Tail_Valid := True;
+            else
+               Blocks (Following).State := Planning;
+            end if;
+         else
+            Unused := Tail_Atomics.Atomic_Compare_And_Exchange (Blocks (Previous).Choice, Expected, Closed);
+         end if;
+         Blocks (Previous).Planner_Reading := False;
+      end Finish_Blend;
+
       procedure Publish (Index : Block_Index) is
       begin
-         pragma Assert (States (Index) = Planning);
-         States (Index) := Ready;
+         pragma Assert (Blocks (Index).State = Planning);
+         Blocks (Index).State := Ready;
          Ready_Slots (Next_Write) := Index;
          Next_Write := @ + 1;
          Ready_Count := @ + 1;
+         Tail_Index := Index;
+         Tail_Valid := True;
       end Publish;
 
-      entry Dequeue (Block : in out Block_Handle) when Runner_Terminated or else (Running and then Ready_Count > 0) is
+      entry Dequeue (Block : in out Block_Handle)
+        when Runner_Terminated or else (Running and then Ready_Count > 0 and then not Discontinuous)
+      is
          Index : constant Block_Index := Ready_Slots (Next_Read);
       begin
          if Runner_Terminated then
             raise Tasking_Error with "Motion planner runner has terminated.";
          end if;
-         pragma Assert (States (Index) = Ready);
-         States (Index) := Borrowed;
+         pragma Assert (Blocks (Index).State = Ready);
          Block.Data := Blocks (Index).Block'Access;
          Block.Index := Index;
+         Block.Use_Tail := False;
+         Block.Tail_Decided := False;
+         Blocks (Index).State := Borrowed;
          Next_Read := @ + 1;
          Ready_Count := @ - 1;
       end Dequeue;
 
-      procedure Begin_Release (Index : Block_Index) is
+      entry Begin_Release(for Index in Block_Index) when not Blocks (Index).Planner_Reading is
       begin
-         pragma Assert (States (Index) = Borrowed);
-         States (Index) := Cleaning;
+         --  Planner_Reading changes only inside this object's procedures, whose completion re-evaluates the barrier.
+         pragma Assert (Blocks (Index).State in Borrowed | Linked);
+         if Blocks (Index).State = Linked and then Slot_Epochs (Index) = Epoch then
+            --  Any block queued after this successor starts at its end, which execution never reached.
+            Discontinuous := True;
+         end if;
+         Blocks (Index).State := Cleaning;
       end Begin_Release;
+
+      procedure Collect_Retired (Pending : out Block_Set) is
+      begin
+         for Index in Block_Index loop
+            Pending (Index) := Blocks (Index).State = Retired and then not Blocks (Index).Planner_Reading;
+            if Pending (Index) then
+               Blocks (Index).State := Cleaning;
+            end if;
+         end loop;
+      end Collect_Retired;
+
+      procedure Request_Collection is
+      begin
+         if (for some Slot of Blocks.all => Slot.State = Retired) then
+            Collection_Requested := True;
+         end if;
+      end Request_Collection;
+
+      entry Wait_For_Retirement (Pending : out Block_Set; Stop : out Boolean)
+        when Runner_Terminated
+        or else Collection_Requested
+        or else (for some Slot of Blocks.all => Slot.State in Linked | Retired)
+      is
+      begin
+         Collection_Requested := False;
+         Collect_Retired (Pending);
+         for Index in Block_Index loop
+            if Pending (Index) then
+               Deferred_Cleanup (Index) := True;
+            end if;
+         end loop;
+         Stop := Runner_Terminated and then (for all Taken of Pending => not Taken);
+      end Wait_For_Retirement;
+
+      entry Wait_For_Collection_Request when Runner_Terminated or else Collection_Requested is
+      begin
+         null;
+      end Wait_For_Collection_Request;
 
       procedure Finish_Cleanup (Index : Block_Index) is
       begin
-         pragma Assert (States (Index) = Cleaning);
-         States (Index) := Free;
+         pragma Assert (Blocks (Index).State = Cleaning);
+         if Tail_Valid and then Tail_Index = Index then
+            Tail_Valid := False;
+         end if;
+         Deferred_Cleanup (Index) := False;
+         Blocks (Index).State := Free;
          Free_Count := @ + 1;
       end Finish_Cleanup;
+
+      procedure Defer_Cleanup_Error (Occurrence : Ada.Exceptions.Exception_Occurrence) is
+      begin
+         Deferred_Error.Save (Occurrence);
+      end Defer_Cleanup_Error;
+
+      entry Take_Cleanup_Error (Error : in out Cleanup_Exceptions.Holder)
+        when(for all Pending of Deferred_Cleanup => not Pending)
+      is
+      begin
+         Cleanup_Exceptions.Transfer (From => Deferred_Error, To => Error);
+      end Take_Cleanup_Error;
    end Block_Ring;
 
    procedure Cleanup_Block (Index : Block_Index; Error : in out Cleanup_Exceptions.Holder);
@@ -147,6 +271,7 @@ package body Prunt.Motion_Planner.Planner is
    end Cleanup_Block;
 
    procedure Discard_Blocks;
+   procedure Reclaim_Retired;
 
    procedure Discard_Blocks is
       Pending : Block_Set;
@@ -315,18 +440,73 @@ package body Prunt.Motion_Planner.Planner is
 
    procedure Release (Block : in out Block_Handle) is
       Error : Cleanup_Exceptions.Holder;
+      Index : Block_Index := Block.Index;
    begin
       pragma Abort_Defer;
       if Is_Empty (Block) then
          return;
       end if;
-      Block_Ring.Begin_Release (Block.Index);
-      --  Finalizers may block or call back into the planner. Keep the slot reserved until they finish, but do not hold
-      --  the ring lock. Deferring abort prevents a release from abandoning a slot in Cleaning state.
-      Cleanup_Block (Block.Index, Error);
+      loop
+         declare
+            Choice   : constant Tail_State := Tail_Atomics.Atomic_Exchange (Blocks (Index).Choice, Closed);
+            Has_Next : constant Boolean := Choice in Offered | Accepted;
+            Next     : constant Block_Index := (if Has_Next then Blocks (Index).Next else Index);
+         begin
+            --  Safe-stop release may wait for a producer which lost the choice to finish reading this slot.
+            Block_Ring.Begin_Release (Index);
+            Cleanup_Block (Index, Error);
+            exit when not Has_Next;
+            Index := Next;
+         end;
+      end loop;
       Block.Data := null;
+      begin
+         Reclaim_Retired;
+      exception
+         when E : others =>
+            Error.Save (E);
+      end;
+      --  Waits for Retired_Cleaner's slots in progress so their failures are reported here rather than lost.
+      Block_Ring.Take_Cleanup_Error (Error);
       Error.Reraise;
    end Release;
+
+   procedure Prepare_Segment (Block : in out Block_Handle; Finishing_Corner : Finishing_Corners_Index) is
+      Choice : Tail_State;
+   begin
+      pragma Abort_Defer;
+      if not Block.Tail_Decided
+        and then Finishing_Corner > Block.Data.N_Corners - Corners_Index'Min (Blend_Radius, Block.Data.N_Corners - 1)
+      then
+         Choice := Tail_Atomics.Atomic_Exchange (Blocks (Block.Index).Choice, Closed);
+         Block.Use_Tail := Choice = Offered;
+         Block.Tail_Decided := True;
+         if Block.Use_Tail then
+            Blocks (Block.Index).Choice := Accepted;
+         end if;
+      end if;
+   end Prepare_Segment;
+
+   function Has_Next_Block (Block : Block_Handle) return Boolean
+   is (Block.Use_Tail);
+
+   procedure Advance_Block (Block : in out Block_Handle) is
+      Previous  : constant Block_Index := Block.Index;
+      Following : constant Block_Index := Blocks (Previous).Next;
+   begin
+      pragma Abort_Defer;
+      pragma Assert (Blocks (Following).State = Linked);
+      Block.Index := Following;
+      Block.Data := Blocks (Following).Block'Access;
+      Block.Use_Tail := False;
+      Block.Tail_Decided := False;
+      Blocks (Previous).Choice := Closed;
+      --  The last access to Previous precedes this release store. Cleanup may reclaim the slot only afterwards.
+      --  Retire before claiming so Wait_For_Retirement always sees a Linked or Retired slot during the handoff.
+      --  Until claimed, Following is a Linked slot with no Ready root, which reset and cleanup both preserve.
+      Blocks (Previous).State := Retired;
+      Blocks (Following).State := Borrowed;
+   end Advance_Block;
 
    overriding
    procedure Finalize (Block : in out Block_Handle) is
@@ -340,19 +520,38 @@ package body Prunt.Motion_Planner.Planner is
    function Corner_Count (Block : Block_Handle) return Corners_Index
    is (Block.Data.N_Corners);
 
+   function Uses_Tail (Block : Block_Handle; Corner : Corners_Index) return Boolean
+   is (Block.Use_Tail
+       and then Corner > Block.Data.N_Corners - Corners_Index'Min (Blend_Radius, Block.Data.N_Corners - 1));
+
+   function Tail_Corner (Block : Block_Handle; Corner : Corners_Index) return Corners_Index
+   is (Blend_Radius + 1 - (Block.Data.N_Corners - Corner));
+
    function Segment_Time (Block : Block_Handle; Finishing_Corner : Corners_Index) return Time
-   is (Segment_Time (Block.Data, Finishing_Corner));
+   is (if Uses_Tail (Block, Finishing_Corner)
+       then Segment_Time (Blocks (Block.Index).Tail'Access, Tail_Corner (Block, Finishing_Corner))
+       else Segment_Time (Block.Data, Finishing_Corner));
 
    function Segment_Corner_Distance (Block : Block_Handle; Finishing_Corner : Corners_Index) return Length
-   is (Segment_Corner_Distance (Block.Data.all, Finishing_Corner));
+   is (if Uses_Tail (Block, Finishing_Corner)
+       then Segment_Corner_Distance (Blocks (Block.Index).Tail, Tail_Corner (Block, Finishing_Corner))
+       else Segment_Corner_Distance (Block.Data.all, Finishing_Corner));
 
    function Segment_Pos_At_Time
      (Block : Block_Handle; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time) return Position
-   is (Segment_Pos_At_Time (Block.Data, Finishing_Corner, Time_Into_Segment));
+   is (if Uses_Tail (Block, Finishing_Corner)
+       then
+         Segment_Pos_At_Time
+           (Blocks (Block.Index).Tail'Access, Tail_Corner (Block, Finishing_Corner), Time_Into_Segment)
+       else Segment_Pos_At_Time (Block.Data, Finishing_Corner, Time_Into_Segment));
 
    function Segment_Vel_Ratio_At_Time
      (Block : Block_Handle; Finishing_Corner : Finishing_Corners_Index; Time_Into_Segment : Time) return Dimensionless
-   is (Segment_Vel_Ratio_At_Time (Block.Data, Finishing_Corner, Time_Into_Segment));
+   is (if Uses_Tail (Block, Finishing_Corner)
+       then
+         Segment_Vel_Ratio_At_Time
+           (Blocks (Block.Index).Tail'Access, Tail_Corner (Block, Finishing_Corner), Time_Into_Segment)
+       else Segment_Vel_Ratio_At_Time (Block.Data, Finishing_Corner, Time_Into_Segment));
 
    function Next_Block_Pos (Block : Block_Handle) return Position
    is (Next_Block_Pos (Block.Data));
@@ -2194,6 +2393,123 @@ package body Prunt.Motion_Planner.Planner is
        and then Left.Corners (Left.N_Corners) = Right.Corners (1)
        and then Left.Corner_Dwell_Times (Left.N_Corners) = 0.0 * s);
 
+   procedure Reclaim_Retired is
+      Pending : Block_Set;
+      Error   : Cleanup_Exceptions.Holder;
+   begin
+      pragma Abort_Defer;
+      Block_Ring.Collect_Retired (Pending);
+      for Index in Block_Index loop
+         if Pending (Index) then
+            Cleanup_Block (Index, Error);
+         end if;
+      end loop;
+      Error.Reraise;
+   end Reclaim_Retired;
+
+   procedure Finalize_In_Background (Pending : Block_Set);
+   --  Finalize slots that Retired_Cleaner took from moving consumers. No caller waits on them, so failures are
+   --  deferred to the next Release, which waits for this cleanup before taking them.
+
+   procedure Finalize_In_Background (Pending : Block_Set) is
+   begin
+      pragma Abort_Defer;
+      for Index in Block_Index loop
+         if Pending (Index) then
+            begin
+               Clear_Block_Extra_Data (Index);
+            exception
+               when E : others =>
+                  --  Defer before Finish_Cleanup so a Release waiting on this slot always sees the failure.
+                  Block_Ring.Defer_Cleanup_Error (E);
+            end;
+            Block_Ring.Finish_Cleanup (Index);
+         end if;
+      end loop;
+   end Finalize_In_Background;
+
+   Retirement_Poll_Interval : constant Duration := 0.2;
+   --  Moving consumers retire slots with atomic stores, so no protected entry can wake on them. Polling only runs
+   --  while a linked or retired slot exists, and Runner's collection requests interrupt it.
+
+   task Retired_Cleaner
+     with CPU => Runner_CPU;
+   --  Finalizes slots retired while streaming. Keeping these finalizers off Runner means one that waits on the
+   --  planner, for example for input queue space, cannot block the only task able to unblock it.
+
+   task body Retired_Cleaner is
+      Pending : Block_Set;
+      Stop    : Boolean;
+   begin
+      loop
+         Block_Ring.Wait_For_Retirement (Pending, Stop);
+         exit when Stop;
+         begin
+            if (for some Taken of Pending => Taken) then
+               Finalize_In_Background (Pending);
+            else
+               select
+                  Block_Ring.Wait_For_Collection_Request;
+               or
+                  delay Retirement_Poll_Interval;
+               end select;
+            end if;
+         exception
+            when E : others =>
+               --  Stay alive: later retired slots still need reclaiming for Runner to keep planning.
+               Block_Ring.Defer_Cleanup_Error (E);
+         end;
+      end loop;
+   end Retired_Cleaner;
+
+   procedure Prepare_Blend
+     (Previous, Following : Block_Index;
+      Motor_Map           : Motor_Position_Map;
+      Workspace           : not null access Planning_Workspace);
+   --  Try to link Following to the published tail block Previous, which Begin_Blend has pinned. Publish Following as
+   --  an independently stopped block if the boundary is not blendable or the consumer has already decided.
+
+   procedure Prepare_Blend
+     (Previous, Following : Block_Index;
+      Motor_Map           : Motor_Position_Map;
+      Workspace           : not null access Planning_Workspace)
+   is
+      Left               : Execution_Block renames Blocks (Previous).Block;
+      Right              : Execution_Block renames Blocks (Following).Block;
+      Blended, Published : Boolean := False;
+   begin
+      if Blendable_Boundary (Left, Right) and then Allow_Blended_Entry (Right.Flush_Resetting_Data) then
+         declare
+            LC         : constant Corners_Index := Corners_Index'Min (Blend_Radius, Left.N_Corners - 1) + 1;
+            RC         : constant Corners_Index := Corners_Index'Min (Blend_Radius, Right.N_Corners - 1) + 1;
+            Left_Copy  : aliased Execution_Block (LC);
+            Right_Head : aliased Execution_Block (RC);
+            Suffix     : Block_Segment_Lengths renames
+              Workspace.Unblended_Extrusion_Positions (RC + 1 .. Right.N_Corners);
+         begin
+            Copy_Motion_Window (Left, Left.N_Corners - LC + 1, Left.N_Corners, Left_Copy);
+            Copy_Motion_Window (Right, 1, RC, Right_Head);
+            Suffix := Right.Extrusion_Reference_Positions (Suffix'Range);
+            Blend_Blocks (Left_Copy, Right, Motor_Map, Blended);
+            if Blended then
+               Copy_Motion_Window (Left_Copy, 1, LC, Blocks (Previous).Tail);
+            end if;
+            Block_Ring.Finish_Blend (Previous, Following, Blended, Published);
+            if Blended and then not Published then
+               --  The consumer crossed the decision point during planning. Restore the unpublished successor exactly,
+               --  including suffix E references (subtracting their translation would introduce rounding drift).
+               Copy_Window (Right_Head, 1, RC, Right, 1);
+               Right.Extrusion_Reference_Positions (Suffix'Range) := Suffix;
+            end if;
+         end;
+      else
+         Block_Ring.Finish_Blend (Previous, Following, False, Published);
+      end if;
+      if not Published then
+         Block_Ring.Publish (Following);
+      end if;
+   end Prepare_Blend;
+
    task body Runner is
       Lifetime  : Runner_Finalizer;
       pragma Unreferenced (Lifetime);
@@ -2209,6 +2525,9 @@ package body Prunt.Motion_Planner.Planner is
    begin
       loop
          accept Setup (In_Params : Kinematic_Parameters; In_Motor_Map : Motor_Position_Map) do
+            if not Tail_Atomics.Is_Lock_Free (Blocks (Block_Index'First).Choice) then
+               raise Program_Error with "Inter-block publication requires lock-free atomic exchange.";
+            end if;
             My_Preprocessor.Setup (In_Params);
             Current_Motor_Map := In_Motor_Map;
             Next_Block_Start := Initial_Position;
@@ -2216,6 +2535,9 @@ package body Prunt.Motion_Planner.Planner is
          end Setup;
 
          Planning_Loop : loop
+            --  Retired_Cleaner, Release and reset all return slots through Block_Ring, which opens this barrier. Hand
+            --  slots retired since the last block to the cleaner now, so a full ring need not wait for its next poll.
+            Block_Ring.Request_Collection;
             Block_Ring.Acquire (Index, Reset_Called);
             exit Planning_Loop when Reset_Called;
 
@@ -2314,7 +2636,17 @@ package body Prunt.Motion_Planner.Planner is
 
                Next_Block_Start := Block.Next_Block_Pos;
 
-               Block_Ring.Publish (Index);
+               declare
+                  Previous  : Block_Index;
+                  Available : Boolean;
+               begin
+                  Block_Ring.Begin_Blend (Previous, Available);
+                  if Available then
+                     Prepare_Blend (Previous, Index, Current_Motor_Map, Workspace);
+                  else
+                     Block_Ring.Publish (Index);
+                  end if;
+               end;
             end;
          end loop Planning_Loop;
 
@@ -2551,6 +2883,9 @@ package body Prunt.Motion_Planner.Planner is
 
    function Block_Start_Pos (Block : not null access constant Execution_Block) return Position is
    begin
+      if Block.N_Corners >= 2 and then Block.Corner_Velocity_Limits (1) > 0.0 * mm / s then
+         return Segment_Pos_At_Time (Block, 2, 0.0 * s);
+      end if;
       return Block.Corners (Corners_Index'First);
    end Block_Start_Pos;
 

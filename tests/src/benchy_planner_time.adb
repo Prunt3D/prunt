@@ -49,6 +49,14 @@ procedure Benchy_Planner_Time is
    type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
    type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
 
+   function Block_Allows_Blended_Entry (Data : Boolean) return Boolean is
+      pragma Unreferenced (Data);
+   begin
+      --  This consumer reaches each tail decision as fast as it can iterate, so whether a blend is accepted would
+      --  depend on thread timing. Keep planned totals and checksums reproducible by planning stopped boundaries only.
+      return False;
+   end Block_Allows_Blended_Entry;
+
    package Planner is new
      Prunt.Motion_Planner.Planner
        (Motor_Name                         => Motor_Name,
@@ -63,7 +71,8 @@ procedure Benchy_Planner_Time is
         Interpolation_Time                 => 0.000_05 * s,
         --  Keep one spare corner so the stress fixture's terminal flush joins the motion block instead of
         --  following an automatic capacity flush with an empty block.
-        Max_Corners                        => 50_002);
+        Max_Corners                        => 50_002,
+        Allow_Blended_Entry                => Block_Allows_Blended_Entry);
 
    use type Planner.Corners_Index;
 
@@ -250,7 +259,7 @@ begin
    --  False default, so draining through the marker proves that the complete input—not merely the first available
    --  block—was planned.
    Planner.Enqueue_Flush (True);
-   loop
+   Blocks_Loop : loop
       Planner.Dequeue (Block, Timed_Out);
       if Timed_Out then
          Timeout_Count := Timeout_Count + 1;
@@ -258,44 +267,49 @@ begin
             raise Program_Error with "planner did not reach the terminal Benchy flush within one hour";
          end if;
       else
-         Block_Count := Block_Count + 1;
-         Final_Pos := Planner.Next_Block_Pos (Block);
-         if Planner.Corner_Count (Block) >= Planner.Finishing_Corners_Index'First then
-            for Corner in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
-               Total := Total + Planner.Segment_Time (Block, Corner);
-               Checksum :=
-                 (Checksum xor To_Bits (Long_Float (Planner.Segment_Time (Block, Corner) / s)))
-                 * 1_099_511_628_211;
-               Segment_Count := Segment_Count + 1;
-               if Selected_Case = Rounding_Stress then
-                  declare
-                     At_End : constant Time := Planner.Segment_Time (Block, Corner);
-                     P : constant Position := Planner.Segment_Pos_At_Time (Block, Corner, At_End);
-                  begin
-                     if abs (P (E_Axis) - 0.05 * P (X_Axis)) > 1.0E-8 * mm then
-                        raise Program_Error with "normalized E execution drifted in the 50000-segment run";
-                     end if;
-                     if Corner < Planner.Corner_Count (Block)
-                       and then Planner.Segment_Vel_Ratio_At_Time (Block, Corner, At_End) <= 0.0
-                     then
-                        raise Program_Error with "a density mismatch introduced a stop in the normalized run";
-                     end if;
-                  end;
-               end if;
-               if Write_Segments then
-                  Ada.Text_IO.Put_Line
-                    (Segment_Output,
-                     Segment_Count'Image & "," & Dimensionless'Image (Planner.Segment_Time (Block, Corner) / s)
-                     & "," & Dimensionless'Image (Planner.Segment_Corner_Distance (Block, Corner) / mm)
-                     & "," & Dimensionless'Image (Planner.Segment_Vel_Ratio_At_Time
-                       (Block, Corner, Planner.Segment_Time (Block, Corner) / 2.0)));
-               end if;
-            end loop;
-         end if;
-         exit when Planner.Flush_Resetting_Data (Block);
+         loop
+            Block_Count := Block_Count + 1;
+            Final_Pos := Planner.Next_Block_Pos (Block);
+            if Planner.Corner_Count (Block) >= Planner.Finishing_Corners_Index'First then
+               for Corner in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
+                  Planner.Prepare_Segment (Block, Corner);
+                  Total := Total + Planner.Segment_Time (Block, Corner);
+                  Checksum :=
+                    (Checksum xor To_Bits (Long_Float (Planner.Segment_Time (Block, Corner) / s)))
+                    * 1_099_511_628_211;
+                  Segment_Count := Segment_Count + 1;
+                  if Selected_Case = Rounding_Stress then
+                     declare
+                        At_End : constant Time := Planner.Segment_Time (Block, Corner);
+                        P : constant Position := Planner.Segment_Pos_At_Time (Block, Corner, At_End);
+                     begin
+                        if abs (P (E_Axis) - 0.05 * P (X_Axis)) > 1.0E-8 * mm then
+                           raise Program_Error with "normalized E execution drifted in the 50000-segment run";
+                        end if;
+                        if Corner < Planner.Corner_Count (Block)
+                          and then Planner.Segment_Vel_Ratio_At_Time (Block, Corner, At_End) <= 0.0
+                        then
+                           raise Program_Error with "a density mismatch introduced a stop in the normalized run";
+                        end if;
+                     end;
+                  end if;
+                  if Write_Segments then
+                     Ada.Text_IO.Put_Line
+                       (Segment_Output,
+                        Segment_Count'Image & "," & Dimensionless'Image (Planner.Segment_Time (Block, Corner) / s)
+                        & "," & Dimensionless'Image (Planner.Segment_Corner_Distance (Block, Corner) / mm)
+                        & "," & Dimensionless'Image (Planner.Segment_Vel_Ratio_At_Time
+                          (Block, Corner, Planner.Segment_Time (Block, Corner) / 2.0)));
+                  end if;
+               end loop;
+            end if;
+            exit Blocks_Loop when Planner.Flush_Resetting_Data (Block);
+            exit when not Planner.Has_Next_Block (Block);
+            Planner.Advance_Block (Block);
+         end loop;
          Planner.Release (Block);
       end if;
-   end loop;
+   end loop Blocks_Loop;
 
    if Final_Pos /= Current_Pos then
       raise Program_Error with "terminal planner position differs from the parsed Benchy position";

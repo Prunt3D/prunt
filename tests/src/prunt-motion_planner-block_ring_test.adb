@@ -19,11 +19,18 @@
 
 with Ada.Assertions;
 with Ada.Finalization;
+with Ada.Task_Identification;
 with Prunt.Motion_Planner.Planner;
 
 package body Prunt.Motion_Planner.Block_Ring_Test is
 
    pragma Extensions_Allowed (On);
+
+   function Block_Allows_Blended_Entry (Data : Integer) return Boolean is
+      pragma Unreferenced (Data);
+   begin
+      return True;
+   end Block_Allows_Blended_Entry;
 
    procedure Test_Block_Ring_Cleanup (T : in out Trendy_Test.Operation'Class) is
    begin
@@ -107,6 +114,13 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
          type Motor_Name is (Motor);
          type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
          type Motor_Limits is array (Motor_Name) of Dimensionless;
+
+         function Block_Allows_Blended_Entry (Value : Data) return Boolean is
+            pragma Unreferenced (Value);
+         begin
+            return True;
+         end Block_Allows_Blended_Entry;
+
          Empty_Data : constant Data := (Ada.Finalization.Controlled with Value => 0);
          package Planner is new Motion_Planner.Planner
            (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Data, Empty_Data, Data,
@@ -114,7 +128,8 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
             Max_Corners => 4,
             Max_Corners_Extra_Data_Count => 4,
             Max_Corners_Extra_Data_Storage => 512,
-            Input_Queue_Length => 16);
+            Input_Queue_Length => 16,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
 
          Blocks : array (1 .. Planner.Block_Capacity) of Planner.Block_Handle;
          Spare : Planner.Block_Handle;
@@ -328,12 +343,20 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
          type Motor_Name is (Motor);
          type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
          type Motor_Limits is array (Motor_Name) of Dimensionless;
+
+         function Block_Allows_Blended_Entry (Value : Data) return Boolean is
+            pragma Unreferenced (Value);
+         begin
+            return True;
+         end Block_Allows_Blended_Entry;
+
          Empty_Data : constant Data := (Ada.Finalization.Controlled with Value => 0);
          package Planner is new Motion_Planner.Planner
            (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Data, Empty_Data, Data,
             0.005 * s, 1.0 * s, 0.001 * s,
             Max_Corners => 4, Max_Corners_Extra_Data_Count => 4,
-            Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 16);
+            Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 16,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
 
          Block : Planner.Block_Handle;
          Blocks : array (1 .. Planner.Block_Capacity) of Planner.Block_Handle;
@@ -503,7 +526,8 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
             Max_Corners_Extra_Data_Count => 2,
             Max_Corners_Extra_Data_Storage => 128,
             Max_Corners_Extra_Data_Per_Corner => 2,
-            Input_Queue_Length => 64);
+            Input_Queue_Length => 64,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
 
          use type Planner.Execution_Block_Kind;
          use type Planner.Corners_Index;
@@ -820,7 +844,8 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
             Max_Corners => 4,
             Max_Corners_Extra_Data_Count => 2,
             Max_Corners_Extra_Data_Storage => 128,
-            Input_Queue_Length => 4);
+            Input_Queue_Length => 4,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
          Block : Planner.Block_Handle;
          Params : Kinematic_Parameters := (others => <>);
          Timed_Out : Boolean;
@@ -914,7 +939,8 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
             Max_Corners => 4,
             Max_Corners_Extra_Data_Count => 2,
             Max_Corners_Extra_Data_Storage => 128,
-            Input_Queue_Length => 4);
+            Input_Queue_Length => 4,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
          Block : Planner.Block_Handle;
          Timed_Out : Boolean;
          Failure_Reported : Boolean := False;
@@ -943,8 +969,490 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
       end;
    end Test_Block_Ring_Termination;
 
+   procedure Test_Inter_Block_Chain_Lifetime (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      declare
+         type Motor_Name is (Motor);
+         type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
+         type Motor_Limits is array (Motor_Name) of Dimensionless;
+         package Planner is new Motion_Planner.Planner
+           (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Integer, 0, Integer,
+            0.005 * s, 1.0 * s, 0.001 * s, Max_Corners => 4,
+            Max_Corners_Extra_Data_Count => 2, Max_Corners_Extra_Data_Storage => 128, Input_Queue_Length => 16,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
+         Params : constant Kinematic_Parameters :=
+           (Bounds =>
+              (Kind => Rectangular_Workspace,
+               Lower_X | Lower_Y | Lower_Z | Lower_E => -100.0 * mm,
+               Upper_X | Upper_Y | Upper_Z | Upper_E => 100.0 * mm),
+            Tangential_Velocity_Max => 100.0 * mm / s,
+            Axial_Velocity_Maxes => [others => 100.0 * mm / s],
+            Axial_Acceleration_Maxes => [others => 1_000.0 * mm / s ** 2],
+            Axial_Jerk_Maxes => [others => 10_000.0 * mm / s ** 3],
+            Axial_Snap_Maxes => [others => 100_000.0 * mm / s ** 4],
+            Axial_Crackle_Maxes => [others => 1_000_000.0 * mm / s ** 5], others => <>);
+         Block, Spare : Planner.Block_Handle;
+         Timed_Out : Boolean;
+         Tail : Position_Offset;
+         Seam : Position;
+      begin
+         Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         for I in 1 .. 2 loop
+            Planner.Enqueue_Move ([X_Axis => Dimensionless (I) * 10.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+            Planner.Enqueue_Flush (0);
+         end loop;
+         Planner.Enqueue_Move ([X_Axis => 30.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         --  This handshake occurs after the preceding two blocks were published. It gives a deterministic
+         --  publication barrier without relying on the scheduler or a timed delay.
+         Tail := Planner.Enqueue_Homing_Flush (1);
+         T.Assert (Tail (X_Axis) > 0.0 * mm, "The following homing block reached its planning handshake");
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert (not Timed_Out, "The first prepared block can be borrowed");
+         Planner.Prepare_Segment (Block, 2);
+         T.Assert (Planner.Has_Next_Block (Block), "The prepared successor is accepted at the tail decision");
+         Seam := Planner.Segment_Pos_At_Time (Block, 2, Planner.Segment_Time (Block, 2));
+         Planner.Reset;
+         Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         Planner.Enqueue_Flush (1);
+         Planner.Dequeue (Spare, Timed_Out);
+         T.Assert (not Timed_Out, "Setup can use free slots while the old chain remains borrowed");
+         Planner.Advance_Block (Block);
+         T.Assert (not Planner.Has_Next_Block (Block), "The chain stops before the homing boundary");
+         T.Assert (abs (Seam - Planner.Block_Start_Pos (Block)) < 1.0E-8 * mm,
+           "The chain remains continuous after reset and another setup");
+         Planner.Release (Block);
+         Planner.Release (Spare);
+         Planner.Reset;
+         abort Planner.Runner;
+      exception
+         when others =>
+            select
+               delay 2.0;
+            then abort
+               Planner.Reset;
+            end select;
+            abort Planner.Runner;
+            raise;
+      end;
+   end Test_Inter_Block_Chain_Lifetime;
+
+   procedure Test_Inter_Block_Streaming (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      declare
+         Total_Blocks : constant Positive := 1_000;
+         Policy_Calls : Natural := 0 with Atomic;
+         First_Started : Boolean := False with Atomic;
+         Publication_Complete : Boolean := False with Atomic;
+         Producer_Failed : Boolean := False with Atomic;
+         function Allow_Entry (Data : Integer) return Boolean is
+            pragma Unreferenced (Data);
+         begin
+            Policy_Calls := @ + 1;
+            return True;
+         end Allow_Entry;
+         type Motor_Name is (Motor);
+         type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
+         type Motor_Limits is array (Motor_Name) of Dimensionless;
+         package Planner is new Motion_Planner.Planner
+           (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Integer, 0, Integer,
+            0.005 * s, 1.0 * s, 0.001 * s, Max_Corners => 80,
+            Max_Corners_Extra_Data_Count => 2, Max_Corners_Extra_Data_Storage => 128,
+            Input_Queue_Length => 16, Allow_Blended_Entry => Allow_Entry);
+         Params : Kinematic_Parameters := (others => <>);
+         Block : Planner.Block_Handle;
+         Timed_Out : Boolean;
+         Seam : Position;
+         Completed : Natural := 0;
+         Prefix_Time : Time;
+         task Producer is
+            entry Start;
+         end Producer;
+         task body Producer is
+            Tail : Position_Offset;
+         begin
+            accept Start;
+            for I in 1 .. Total_Blocks loop
+               if I = 1 then
+                  for J in 1 .. 40 loop
+                     Planner.Enqueue_Move ([X_Axis => Dimensionless (J) * 0.25 * mm, others => 0.0 * mm], 10.0 * mm / s);
+                  end loop;
+               else
+                  Planner.Enqueue_Move ([X_Axis => Dimensionless (I) * 10.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+               end if;
+               Planner.Enqueue_Flush (if I = Total_Blocks then 1 else 0);
+               if I = 1 then
+                  while not First_Started loop
+                     delay 0.001;
+                  end loop;
+               end if;
+            end loop;
+            Planner.Enqueue_Move ([X_Axis => Dimensionless (Total_Blocks + 1) * 10.0 * mm, others => 0.0 * mm],
+                                  10.0 * mm / s);
+            Tail := Planner.Enqueue_Homing_Flush (1);
+            Publication_Complete := Tail (X_Axis) > 0.0 * mm;
+         exception
+            when others => Producer_Failed := True;
+         end Producer;
+      begin
+         Params.Bounds :=
+           (Kind => Rectangular_Workspace,
+            Lower_X | Lower_Y | Lower_Z | Lower_E => -100_000.0 * mm,
+            Upper_X | Upper_Y | Upper_Z | Upper_E => 100_000.0 * mm);
+         Params.Tangential_Velocity_Max := 100.0 * mm / s;
+         Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+         Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s ** 2];
+         Params.Axial_Jerk_Maxes := [others => 10_000.0 * mm / s ** 3];
+         Params.Axial_Snap_Maxes := [others => 100_000.0 * mm / s ** 4];
+         Params.Axial_Crackle_Maxes := [others => 1_000_000.0 * mm / s ** 5];
+         Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         Producer.Start;
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert (not Timed_Out, "The streaming root is available");
+         Prefix_Time := Planner.Segment_Time (Block, 2);
+         Planner.Prepare_Segment (Block, 2);
+         T.Assert (not Planner.Has_Next_Block (Block), "The long first block begins before a successor exists");
+         First_Started := True;
+         for I in 1 .. Total_Blocks loop
+            --  Entering the next boundary's policy proves this boundary was published. This keeps the producer
+            --  deliberately ahead without relying on a fixed sleep or requiring the entire stream to fit in memory.
+            if I < Total_Blocks then
+               select
+                  delay 5.0;
+                  T.Fail ("Producer failed to prepare streaming boundary" & I'Image);
+               then abort
+                  loop
+                     exit when Producer_Failed or else
+                       (if I < Total_Blocks - 1 then Policy_Calls > I else Publication_Complete);
+                     delay 0.001;
+                  end loop;
+               end select;
+               T.Assert (not Producer_Failed, "The streaming producer stays alive");
+            end if;
+            for Corner in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
+               Planner.Prepare_Segment (Block, Corner);
+            end loop;
+            if I = 1 then
+               T.Assert (Planner.Segment_Time (Block, 2) = Prefix_Time,
+                         "A blend prepared after execution starts preserves the already consumed prefix");
+            end if;
+            T.Assert (Planner.Has_Next_Block (Block) = (I < Total_Blocks),
+                      "Only the stream's terminal block has a stopped exit");
+            Seam := Planner.Segment_Pos_At_Time
+              (Block, Planner.Corner_Count (Block), Planner.Segment_Time (Block, Planner.Corner_Count (Block)));
+            if I < Total_Blocks then
+               T.Assert (Planner.Segment_Vel_Ratio_At_Time
+                           (Block, Planner.Corner_Count (Block), Planner.Segment_Time (Block, Planner.Corner_Count (Block))) > 0.0,
+                         "Every moving boundary retains nonzero speed");
+               Planner.Advance_Block (Block);
+               T.Assert (abs (Seam - Planner.Block_Start_Pos (Block)) < 1.0E-8 * mm,
+                         "Position remains continuous through slot reuse");
+            end if;
+            Completed := @ + 1;
+         end loop;
+         T.Assert (Planner.Block_Capacity = 5 and then Completed = Total_Blocks,
+                   "A thousand-block stream executes through five reusable slots with one dequeue");
+         T.Assert (Seam (X_Axis) = Dimensionless (Total_Blocks) * 10.0 * mm, "The final endpoint is exact");
+         Planner.Release (Block);
+         Planner.Reset;
+         abort Planner.Runner;
+      exception
+         when others =>
+            abort Producer;
+            select
+               delay 2.0;
+            then abort
+               Planner.Reset;
+            end select;
+            abort Planner.Runner;
+            raise;
+      end;
+   end Test_Inter_Block_Streaming;
+
+   procedure Test_Inter_Block_Missed_Deadline (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      declare
+         Entered, Continue_Planning : Boolean := False with Atomic;
+         function Allow_Entry (Data : Integer) return Boolean is
+            pragma Unreferenced (Data);
+         begin
+            Entered := True;
+            while not Continue_Planning loop
+               delay 0.001;
+            end loop;
+            return True;
+         end Allow_Entry;
+         type Motor_Name is (Motor);
+         type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
+         type Motor_Limits is array (Motor_Name) of Dimensionless;
+         package Planner is new Motion_Planner.Planner
+           (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Integer, 0, Integer,
+            0.005 * s, 1.0 * s, 0.001 * s, Max_Corners => 4,
+            Max_Corners_Extra_Data_Count => 2, Max_Corners_Extra_Data_Storage => 128,
+            Input_Queue_Length => 16, Allow_Blended_Entry => Allow_Entry);
+         Params : Kinematic_Parameters := (others => <>);
+         Block : Planner.Block_Handle;
+         Timed_Out : Boolean;
+         Original_Time : Time;
+         Tail : Position_Offset;
+      begin
+         Params.Bounds :=
+           (Kind => Rectangular_Workspace,
+            Lower_X | Lower_Y | Lower_Z | Lower_E => -100.0 * mm,
+            Upper_X | Upper_Y | Upper_Z | Upper_E => 100.0 * mm);
+         Params.Tangential_Velocity_Max := 100.0 * mm / s;
+         Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+         Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s ** 2];
+         Params.Axial_Jerk_Maxes := [others => 10_000.0 * mm / s ** 3];
+         Params.Axial_Snap_Maxes := [others => 100_000.0 * mm / s ** 4];
+         Params.Axial_Crackle_Maxes := [others => 1_000_000.0 * mm / s ** 5];
+         Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         Planner.Enqueue_Move ([X_Axis => 10.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         Planner.Enqueue_Flush (0);
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert (not Timed_Out, "Borrow the first block before its successor is planned");
+         Original_Time := Planner.Segment_Time (Block, 2);
+         Planner.Enqueue_Move ([X_Axis => 20.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         Planner.Enqueue_Flush (0);
+         select
+            delay 5.0;
+            T.Fail ("Planner did not enter the controlled blend preparation");
+         then abort
+            while not Entered loop
+               delay 0.001;
+            end loop;
+         end select;
+         --  Must return while the planner remains blocked inside the policy, using the immutable stopping plan.
+         Planner.Prepare_Segment (Block, 2);
+         T.Assert (not Planner.Has_Next_Block (Block), "An unfinished blend cannot be selected");
+         T.Assert (Planner.Segment_Time (Block, 2) = Original_Time, "The original stopping profile is untouched");
+         Continue_Planning := True;
+         Planner.Enqueue_Move ([X_Axis => 30.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         Tail := Planner.Enqueue_Homing_Flush (1);
+         T.Assert (Tail (X_Axis) > 0.0 * mm, "The losing producer completes and publishes its stopped successor");
+         T.Assert (not Planner.Has_Next_Block (Block), "A late publication cannot change the chosen trajectory");
+         Planner.Release (Block);
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert (not Timed_Out, "The rejected blend's successor remains queued");
+         T.Assert (Planner.Segment_Vel_Ratio_At_Time (Block, 2, 0.0 * s) = 0.0,
+                   "The successor's stopped entry is restored when publication loses the deadline");
+         T.Assert (Planner.Block_Start_Pos (Block) = Position'[X_Axis => 10.0 * mm, others => 0.0 * mm],
+                   "The successor starts at the original stopped endpoint");
+         Planner.Release (Block);
+         Planner.Reset;
+         abort Planner.Runner;
+      exception
+         when others =>
+            Continue_Planning := True;
+            select
+               delay 2.0;
+            then abort
+               Planner.Reset;
+            end select;
+            abort Planner.Runner;
+            raise;
+      end;
+   end Test_Inter_Block_Missed_Deadline;
+
+   procedure Test_Inter_Block_Declined_Successor (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      declare
+         type Motor_Name is (Motor);
+         type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
+         type Motor_Limits is array (Motor_Name) of Dimensionless;
+         package Planner is new Motion_Planner.Planner
+           (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Integer, 0, Integer,
+            0.005 * s, 1.0 * s, 0.001 * s, Max_Corners => 4,
+            Max_Corners_Extra_Data_Count => 2, Max_Corners_Extra_Data_Storage => 128, Input_Queue_Length => 16,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
+         Params : constant Kinematic_Parameters :=
+           (Bounds =>
+              (Kind => Rectangular_Workspace,
+               Lower_X | Lower_Y | Lower_Z | Lower_E => -100.0 * mm,
+               Upper_X | Upper_Y | Upper_Z | Upper_E => 100.0 * mm),
+            Tangential_Velocity_Max => 100.0 * mm / s,
+            Axial_Velocity_Maxes => [others => 100.0 * mm / s],
+            Axial_Acceleration_Maxes => [others => 1_000.0 * mm / s ** 2],
+            Axial_Jerk_Maxes => [others => 10_000.0 * mm / s ** 3],
+            Axial_Snap_Maxes => [others => 100_000.0 * mm / s ** 4],
+            Axial_Crackle_Maxes => [others => 1_000_000.0 * mm / s ** 5], others => <>);
+         Block : Planner.Block_Handle;
+         Blocks : array (1 .. Planner.Block_Capacity) of Planner.Block_Handle;
+         Timed_Out : Boolean;
+         Tail : Position_Offset;
+      begin
+         Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         for I in 1 .. 2 loop
+            Planner.Enqueue_Move ([X_Axis => Dimensionless (I) * 10.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+            Planner.Enqueue_Flush (0);
+         end loop;
+         Planner.Enqueue_Move ([X_Axis => 30.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         --  The homing handshake occurs after the first two blocks were published, so the first offers the second.
+         Tail := Planner.Enqueue_Homing_Flush (1);
+         T.Assert (Tail (X_Axis) > 0.0 * mm, "The following homing block reached its planning handshake");
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert (not Timed_Out, "The first block can be borrowed");
+         --  A reset pause can stop before the tail is chosen, releasing the block with its successor still offered.
+         Planner.Release (Block);
+         Planner.Resolve_Homing_Position ([X_Axis => 30.0 * mm, others => 0.0 * mm]);
+         --  The homing block starts where the discarded successor ended, which execution never reached.
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert (Timed_Out, "Blocks queued after a discarded successor are withheld until reset");
+         Planner.Reset;
+         Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         for I in Blocks'Range loop
+            Planner.Enqueue_Flush (1);
+         end loop;
+         for B of Blocks loop
+            Planner.Dequeue (B, Timed_Out);
+            T.Assert (not Timed_Out, "Declining a successor does not leak its slot");
+         end loop;
+         for B of Blocks loop
+            Planner.Release (B);
+         end loop;
+         Planner.Reset;
+         abort Planner.Runner;
+      exception
+         when others =>
+            select
+               delay 2.0;
+            then abort
+               Planner.Reset;
+            end select;
+            abort Planner.Runner;
+            raise;
+      end;
+   end Test_Inter_Block_Declined_Successor;
+
+   procedure Test_Inter_Block_Retired_Cleanup_Error (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+      declare
+         Armed, Failed : Boolean := False with Atomic;
+         Finalizer_Task : Ada.Task_Identification.Task_Id;
+         --  Written before Failed is set, so reading it after observing Failed is ordered by that atomic store.
+
+         type Data is new Ada.Finalization.Controlled with record
+            Value : Natural := 0;
+         end record;
+         overriding procedure Finalize (Object : in out Data);
+
+         overriding procedure Finalize (Object : in out Data) is
+            Value : constant Natural := Object.Value;
+         begin
+            Object.Value := 0;
+            if Value /= 0 and then Armed then
+               Finalizer_Task := Ada.Task_Identification.Current_Task;
+               Failed := True;
+               raise Constraint_Error with "Injected retired block data finalizer failure";
+            end if;
+         end Finalize;
+
+         type Motor_Name is (Motor);
+         type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
+         type Motor_Limits is array (Motor_Name) of Dimensionless;
+         package Planner is new Motion_Planner.Planner
+           (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Integer, 0, Data,
+            0.005 * s, 1.0 * s, 0.001 * s, Max_Corners => 4,
+            Max_Corners_Extra_Data_Count => 2, Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 16,
+            Allow_Blended_Entry => Block_Allows_Blended_Entry);
+         Params : constant Kinematic_Parameters :=
+           (Bounds =>
+              (Kind => Rectangular_Workspace,
+               Lower_X | Lower_Y | Lower_Z | Lower_E => -100.0 * mm,
+               Upper_X | Upper_Y | Upper_Z | Upper_E => 100.0 * mm),
+            Tangential_Velocity_Max => 100.0 * mm / s,
+            Axial_Velocity_Maxes => [others => 100.0 * mm / s],
+            Axial_Acceleration_Maxes => [others => 1_000.0 * mm / s ** 2],
+            Axial_Jerk_Maxes => [others => 10_000.0 * mm / s ** 3],
+            Axial_Snap_Maxes => [others => 100_000.0 * mm / s ** 4],
+            Axial_Crackle_Maxes => [others => 1_000_000.0 * mm / s ** 5], others => <>);
+         Block, Homing, Last : Planner.Block_Handle;
+         Timed_Out : Boolean;
+         Tail : Position_Offset;
+
+         procedure Release_Quietly (Handle : in out Planner.Block_Handle) is
+         begin
+            Planner.Release (Handle);
+         exception
+            when others => null;
+         end Release_Quietly;
+      begin
+         Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         Planner.Enqueue_Corner_Extra_Data ((Ada.Finalization.Controlled with Value => 1));
+         for I in 1 .. 2 loop
+            Planner.Enqueue_Move ([X_Axis => Dimensionless (I) * 10.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+            Planner.Enqueue_Flush (0);
+         end loop;
+         Planner.Enqueue_Move ([X_Axis => 30.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         Tail := Planner.Enqueue_Homing_Flush (1);
+         T.Assert (Tail (X_Axis) > 0.0 * mm, "The following homing block reached its planning handshake");
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert (not Timed_Out, "The first block can be borrowed");
+         Planner.Prepare_Segment (Block, 2);
+         T.Assert (Planner.Has_Next_Block (Block), "The prepared successor is accepted");
+         Armed := True;
+         Planner.Advance_Block (Block);
+         Planner.Resolve_Homing_Position ([X_Axis => 30.0 * mm, others => 0.0 * mm]);
+         Planner.Enqueue_Move ([X_Axis => 40.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         Planner.Enqueue_Flush (1);
+         Planner.Dequeue (Homing, Timed_Out);
+         T.Assert (not Timed_Out and then Planner.Is_Homing_Move (Homing), "The homing block is published");
+         Planner.Dequeue (Last, Timed_Out);
+         T.Assert (not Timed_Out, "Runner keeps planning while the retired slot is cleaned in the background");
+         --  The background cleaner polls for retired slots. Keep the failure armed until it has finalized this one.
+         select
+            delay 5.0;
+            T.Fail ("The background cleaner did not finalize the retired slot");
+         then abort
+            while not Failed loop
+               delay 0.001;
+            end loop;
+         end select;
+         declare
+            use type Ada.Task_Identification.Task_Id;
+         begin
+            T.Assert (Finalizer_Task /= Planner.Runner'Identity,
+                      "Retired extra data is not finalized on Runner, which a waiting finalizer could block");
+         end;
+         Armed := False;
+         begin
+            Planner.Release (Block);
+            T.Fail ("Release must report the deferred retired-slot cleanup failure");
+         exception
+            when Program_Error => null;
+         end;
+         T.Assert (Planner.Is_Empty (Block), "Reporting a deferred failure still empties the handle");
+         Planner.Release (Homing);
+         Planner.Release (Last);
+         Planner.Reset;
+         abort Planner.Runner;
+      exception
+         when others =>
+            Armed := False;
+            Release_Quietly (Block);
+            Release_Quietly (Homing);
+            Release_Quietly (Last);
+            select
+               delay 2.0;
+            then abort
+               Planner.Reset;
+            end select;
+            abort Planner.Runner;
+            raise;
+      end;
+   end Test_Inter_Block_Retired_Cleanup_Error;
+
    function All_Tests return Trendy_Test.Test_Group is
-     ([Test_Block_Ring_Cleanup'Access,
+     ([Test_Inter_Block_Streaming'Access,
+       Test_Inter_Block_Missed_Deadline'Access,
+       Test_Inter_Block_Chain_Lifetime'Access,
+       Test_Inter_Block_Declined_Successor'Access,
+       Test_Inter_Block_Retired_Cleanup_Error'Access,
+       Test_Block_Ring_Cleanup'Access,
        Test_Block_Ring_Cleanup_Exceptions'Access,
        Test_Block_Ring_Lifetime'Access,
        Test_Block_Ring_Reset_During_Dequeue'Access,

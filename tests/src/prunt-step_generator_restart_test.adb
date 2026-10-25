@@ -26,6 +26,12 @@ package body Prunt.Step_Generator_Restart_Test is
 
    pragma Extensions_Allowed (On);
 
+   function Block_Allows_Blended_Entry (Data : Boolean) return Boolean is
+      pragma Unreferenced (Data);
+   begin
+      return True;
+   end Block_Allows_Blended_Entry;
+
    procedure Test_Command_Indices_After_Restart (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -50,7 +56,8 @@ package body Prunt.Step_Generator_Restart_Test is
             Max_Corners                       => 10,
             Max_Corners_Extra_Data_Count       => 10,
             Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10);
+            Input_Queue_Length                => 10,
+            Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
          package Pause_Planner is new Motion_Planner.Planner
            (Motor_Name                        => Motor_Name,
@@ -66,7 +73,8 @@ package body Prunt.Step_Generator_Restart_Test is
             Max_Corners                       => 10,
             Max_Corners_Extra_Data_Count       => 10,
             Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10);
+            Input_Queue_Length                => 10,
+            Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
          protected Hardware is
             procedure Check_Idle (Index : Command_Index);
@@ -588,12 +596,14 @@ package body Prunt.Step_Generator_Restart_Test is
               (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Boolean, False, Data,
                0.005 * s, 1.0 * s, 0.001 * s,
                Max_Corners => 4, Max_Corners_Extra_Data_Count => 4,
-               Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 8);
+               Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 8,
+               Allow_Blended_Entry            => Block_Allows_Blended_Entry);
             package Pause_Planner is new Motion_Planner.Planner
               (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Boolean, False, Data,
                0.005 * s, 1.0 * s, 0.001 * s,
                Max_Corners => 4, Max_Corners_Extra_Data_Count => 4,
-               Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 8);
+               Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 8,
+               Allow_Blended_Entry            => Block_Allows_Blended_Entry);
 
             function Affects_Axis (Transform : Boolean; Motor : Motor_Name; Axis : Axis_Name) return Boolean is
                pragma Unreferenced (Transform, Motor);

@@ -39,4 +39,10 @@ package body Prunt.Cleanup_Exceptions is
       end if;
    end Save;
 
+   procedure Transfer (From : in out Holder; To : in out Holder) is
+   begin
+      To.Save (From.Error);
+      Ada.Exceptions.Save_Occurrence (From.Error, Ada.Exceptions.Null_Occurrence);
+   end Transfer;
+
 end Prunt.Cleanup_Exceptions;

@@ -29,9 +29,17 @@ procedure Corner_Planner_Time is
    type Motor_Name is (Motor);
    type Motor_Map_Type is array (Axis_Name, Motor_Name) of Curvature;
    type Motor_Limits is array (Motor_Name) of Dimensionless;
+
+   function Block_Allows_Blended_Entry (Data : Boolean) return Boolean is
+      pragma Unreferenced (Data);
+   begin
+      return True;
+   end Block_Allows_Blended_Entry;
+
    package Planner is new Prunt.Motion_Planner.Planner
      (Motor_Name, Motor_Map_Type, Motor_Limits, [others => 1.0], Boolean, False, Boolean,
-      0.00025 * s, 1.0E100 * s, 0.00005 * s, Max_Corners => 5002);
+      0.00025 * s, 1.0E100 * s, 0.00005 * s, Max_Corners => 5002,
+      Allow_Blended_Entry => Block_Allows_Blended_Entry);
    use type Planner.Corners_Index;
    Params : Kinematic_Parameters := (others => <>);
    Block : Planner.Block_Handle;
@@ -73,7 +81,7 @@ begin
       Planner.Enqueue_Move (Position_Now, 250.0 * mm / s);
    end loop;
    Planner.Enqueue_Flush (True);
-   loop
+   Blocks_Loop : loop
       Planner.Dequeue (Block, Timed_Out);
       if Timed_Out then
          --  Dequeue gives up after one second, but a large block can take longer to plan. Only a planner that
@@ -84,15 +92,20 @@ begin
             raise Program_Error with "corner benchmark planner timed out";
          end if;
       else
-         Block_Count := @ + 1;
-         for I in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
-            Motion_Time := @ + Planner.Segment_Time (Block, I);
-            Segment_Count := @ + 1;
+         loop
+            Block_Count := @ + 1;
+            for I in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
+               Planner.Prepare_Segment (Block, I);
+               Motion_Time := @ + Planner.Segment_Time (Block, I);
+               Segment_Count := @ + 1;
+            end loop;
+            exit Blocks_Loop when Planner.Flush_Resetting_Data (Block);
+            exit when not Planner.Has_Next_Block (Block);
+            Planner.Advance_Block (Block);
          end loop;
-         exit when Planner.Flush_Resetting_Data (Block);
          Planner.Release (Block);
       end if;
-   end loop;
+   end loop Blocks_Loop;
    if Segment_Count /= Moves or else Block_Count /= 1
      or else Planner.Next_Block_Pos (Block) /= Position_Now
    then

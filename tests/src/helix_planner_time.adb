@@ -48,6 +48,14 @@ procedure Helix_Planner_Time is
    type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
    type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
 
+   function Block_Allows_Blended_Entry (Data : Boolean) return Boolean is
+      pragma Unreferenced (Data);
+   begin
+      --  This consumer reaches each tail decision as fast as it can iterate, so whether a blend is accepted would
+      --  depend on thread timing. Keep planned totals and checksums reproducible by planning stopped boundaries only.
+      return False;
+   end Block_Allows_Blended_Entry;
+
    package Planner is new
      Prunt.Motion_Planner.Planner
        (Motor_Name                         => Motor_Name,
@@ -60,14 +68,15 @@ procedure Helix_Planner_Time is
         Home_Move_Minimum_Coast_Time       => 0.000_25 * s,
         Home_Move_Maximum_Tail_Time        => 1.0E100 * s,
         Interpolation_Time                 => 0.000_05 * s,
-        Max_Corners                        => 50_002);
+        Max_Corners                        => 50_002,
+        Allow_Blended_Entry                => Block_Allows_Blended_Entry);
 
    use type Planner.Corners_Index;
 
    Deviation : constant Length := 0.02 * mm;
 
    Params : Kinematic_Parameters :=
-     (Bounds                       =>
+     (Bounds                        =>
         (Kind    => Rectangular_Workspace,
          Lower_Z => 0.0 * mm,
          Upper_Z => 300.0 * mm,
@@ -249,7 +258,7 @@ begin
    end loop;
 
    Planner.Enqueue_Flush (True);
-   loop
+   Blocks_Loop : loop
       Planner.Dequeue (Block, Timed_Out);
       if Timed_Out then
          Timeout_Count := Timeout_Count + 1;
@@ -257,26 +266,31 @@ begin
             raise Program_Error with "planner did not reach the terminal flush within one hour";
          end if;
       else
-         Block_Count := Block_Count + 1;
-         if Planner.Corner_Count (Block) >= Planner.Finishing_Corners_Index'First then
-            for Corner in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
-               declare
-                  T : constant Time := Planner.Segment_Time (Block, Corner);
-               begin
-                  Total := Total + T;
-                  Segment_Count := Segment_Count + 1;
-                  Checksum := (Checksum xor To_Bits (Long_Float (T / s))) * 1_099_511_628_211;
-                  if Write_Segments then
-                     Ada.Text_IO.Put_Line
-                       (Segment_Output, Segment_Count'Image & "," & To_Bits (Long_Float (T / s))'Image);
-                  end if;
-               end;
-            end loop;
-         end if;
-         exit when Planner.Flush_Resetting_Data (Block);
+         loop
+            Block_Count := Block_Count + 1;
+            if Planner.Corner_Count (Block) >= Planner.Finishing_Corners_Index'First then
+               for Corner in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
+                  Planner.Prepare_Segment (Block, Corner);
+                  declare
+                     T : constant Time := Planner.Segment_Time (Block, Corner);
+                  begin
+                     Total := Total + T;
+                     Segment_Count := Segment_Count + 1;
+                     Checksum := (Checksum xor To_Bits (Long_Float (T / s))) * 1_099_511_628_211;
+                     if Write_Segments then
+                        Ada.Text_IO.Put_Line
+                          (Segment_Output, Segment_Count'Image & "," & To_Bits (Long_Float (T / s))'Image);
+                     end if;
+                  end;
+               end loop;
+            end if;
+            exit Blocks_Loop when Planner.Flush_Resetting_Data (Block);
+            exit when not Planner.Has_Next_Block (Block);
+            Planner.Advance_Block (Block);
+         end loop;
          Planner.Release (Block);
       end if;
-   end loop;
+   end loop Blocks_Loop;
 
    if Planner.Next_Block_Pos (Block) /= Current_Pos then
       raise Program_Error with "terminal planner position differs from the generated position";
