@@ -256,9 +256,7 @@ private
       --  four distance derivatives match the adjoining path at each endpoint.
 
       Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
-      --  XYZ entries limit geometric deviation from the commanded path. The E entry limits extrusion error after
-      --  density normalization and path shortening in Smooth_Deviation mode. Zero E deviation disables blending at
-      --  density changes. The E entry is unused in Instantaneous_Velocity_Change mode.
+      --  XYZ entries limit geometric deviation from the commanded path. The E entry is unused.
 
       Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
       --  Maximum distance by which the curve may miss the commanded corner point.
@@ -277,8 +275,7 @@ private
       --  not apply to those endpoint jumps.
 
       Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
-      --  XYZ entries limit geometric deviation. E limits extrusion error after density normalization and shortening in
-      --  Smooth_Deviation mode; zero disables blending at density changes. E is unused in velocity-change mode.
+      --  XYZ entries limit geometric deviation. The E entry is unused.
 
       Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
       --  Maximum distance by which the arc may miss the commanded corner point.
@@ -295,8 +292,7 @@ private
       --  limits do not apply at those locations.
 
       Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
-      --  XYZ entries limit geometric deviation. E limits extrusion error after density normalization and shortening in
-      --  Smooth_Deviation mode; zero disables blending at density changes. E is unused in velocity-change mode.
+      --  XYZ entries limit geometric deviation. The E entry is unused.
 
       Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
       --  Maximum distance by which the biarc may miss the commanded corner point.
@@ -340,30 +336,6 @@ private
 
          when Sharp_SCV =>
             Sharp_SCV_Params : User_Config_Cornering_Sharp_SCV;
-      end case;
-   end record
-   with Annotate => (Prunt_Config, User_Config);
-
-   type User_Config_Extrusion_Cornering_Kind is (Smooth_Deviation, Instantaneous_Velocity_Change)
-   with Annotate => (Prunt_Config, User_Config);
-
-   type User_Config_Extrusion_Cornering (Kind : User_Config_Extrusion_Cornering_Kind := Smooth_Deviation) is record
-      --  Choose how E changes speed when the commanded extrusion per unit path length changes. E position always
-      --  accounts for the path shortening caused by XYZ corner blending. Smooth_Deviation uses the E deviation limit
-      --  of the selected cornering model. Zero deviation, including XYZ Sharp_SCV, disables blending at density
-      --  changes and requires a stop.
-
-      case Kind is
-         when Smooth_Deviation =>
-            null;
-
-         when Instantaneous_Velocity_Change =>
-            Maximum_Velocity_Change : Velocity range 0.0 * mm / s .. 1.0E100 * mm / s := 0.0 * mm / s;
-            --  Maximum instantaneous change in E velocity at a segment junction. Zero disables blending at density
-            --  changes and requires a stop. Positive values allow XYZ to keep moving while E changes speed instantly.
-            --  E follows the path-length-corrected reference exactly. E acceleration, jerk, snap and crackle limits
-            --  are waived only at the instantaneous jump; all E limits still apply between junctions. The cornering
-            --  model's E deviation entry is unused.
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -424,16 +396,20 @@ private
       Cornering : User_Config_Cornering := (others => <>);
       --  Select the corner-transition model and configure the parameters relevant to that model.
 
-      Extrusion_Cornering : User_Config_Extrusion_Cornering := (others => <>);
-      --  Select E junction handling independently of the XYZ corner-transition model.
+      Maximum_Extrusion_Velocity_Change : Velocity range 0.0 * mm / s .. 1.0E100 * mm / s := 1.0 * mm / s;
+      --  Maximum instantaneous change in E velocity at a segment junction where the commanded extrusion per unit path
+      --  length changes. E position always follows the path, including the path shortening caused by XYZ corner
+      --  blending, so the change is the extrusion ratio change times the junction speed and the junction is slowed
+      --  until it fits. E acceleration, jerk, snap and crackle limits are waived only at the instantaneous change; all
+      --  E limits still apply between junctions. Zero requires a stop at every change in extrusion ratio.
 
       Extrusion_Rounding_Tolerance : Length range 0.0 * mm .. 1.0E100 * mm := 0.01 * mm;
       --  Maximum adjustment to the extrusion amount of each segment, in mm of E, when removing density differences
       --  caused by rounded G-code. Account for both E and XYZ rounding when choosing this value. Each accepted run
       --  uses one common density and retains its total extrusion before corner shortening.  Travel, reversals, E-only
       --  moves and dwells remain boundaries. Zero disables this normalization. This bounds each segment's adjustment,
-      --  not cumulative E position error inside a run. The separate E deviation or instantaneous velocity-change
-      --  allowance applies after density normalization and blending.
+      --  not cumulative E position error inside a run. The separate instantaneous velocity-change allowance applies
+      --  after density normalization and blending.
 
       Kinematics_Kind : User_Config_Kinematics_Variant := (others => <>);
       --  This selects the kinematic layout and allows motors to be assigned to the axes they control.
@@ -472,8 +448,6 @@ private
 
    function Build_Cornering_Parameters (Cornering : User_Config_Cornering) return Motion_Planner.Cornering_Parameters;
 
-   function Build_Extrusion_Cornering_Parameters
-     (Cornering : User_Config_Extrusion_Cornering) return Motion_Planner.Extrusion_Cornering_Parameters;
    --  Convert the selected user-config cornering branch to the corresponding planner parameters.
 
    type Axial_Update_Set is array (Axis_Name) of Boolean;

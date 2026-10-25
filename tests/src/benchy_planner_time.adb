@@ -33,8 +33,8 @@ with Prunt.Motion_Planner.Planner;
 
 procedure Benchy_Planner_Time is
    type Benchmark_Case is
-     (Baseline, Tight_E_Deviation, Zero_E_Deviation, E_Acceleration, X_Crackle, Mixed_Limits, Circular_Corners,
-      XYZ_Only, Relaxed_E_Limits, Stopped_Path, E_Jump_Zero, E_Jump_One, E_Jump_Five, Rounding_Stress);
+     (Baseline, E_Acceleration, X_Crackle, Mixed_Limits, Circular_Corners, XYZ_Only, Relaxed_E_Limits, Stopped_Path,
+      E_Jump_Zero, E_Jump_One, E_Jump_Five, Rounding_Stress);
    Selected_Case : constant Benchmark_Case :=
      (if Ada.Command_Line.Argument_Count >= 1 then Benchmark_Case'Value (Ada.Command_Line.Argument (1)) else Baseline);
    Gcode_Path : constant String :=
@@ -93,7 +93,7 @@ procedure Benchy_Planner_Time is
             Corner_Miss_Distance_Max => 0.02 * mm,
             Shape_Bias               => 0.0,
             Circularity              => 0.0)),
-      Extrusion_Cornering      => <>,
+      Extrusion_Velocity_Change_Max => <>,
       Extrusion_Rounding_Tolerance => <>,
       Axial_Shapers            => [others => (Kind => Prunt.Input_Shapers.No_Shaper)]);
 
@@ -145,15 +145,13 @@ begin
       when Baseline | XYZ_Only => null;
       when Rounding_Stress =>
          Params.Bounds.Upper_X := 6000.0 * mm;
-         Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0 * mm;
+         Params.Extrusion_Velocity_Change_Max := 0.0 * mm / s;
       when E_Jump_Zero | E_Jump_One | E_Jump_Five =>
-         Params.Extrusion_Cornering :=
-           (Kind => Instantaneous_Velocity_Change,
-            Velocity_Change_Max =>
-              (case Selected_Case is
-                 when E_Jump_One => 1.0 * mm / s,
-                 when E_Jump_Five => 5.0 * mm / s,
-                 when others => 0.0 * mm / s));
+         Params.Extrusion_Velocity_Change_Max :=
+           (case Selected_Case is
+              when E_Jump_One => 1.0 * mm / s,
+              when E_Jump_Five => 5.0 * mm / s,
+              when others => 0.0 * mm / s);
       when Relaxed_E_Limits =>
          Params.Axial_Velocity_Maxes (E_Axis) := 1.0E6 * mm / s;
          Params.Axial_Acceleration_Maxes (E_Axis) := 1.0E12 * mm / s ** 2;
@@ -161,13 +159,9 @@ begin
          Params.Axial_Snap_Maxes (E_Axis) := 1.0E24 * mm / s ** 4;
          Params.Axial_Crackle_Maxes (E_Axis) := 1.0E30 * mm / s ** 5;
       when Stopped_Path =>
-         --  Match the geometry used when the old planner's zero E allowance prevents corner construction.
+         --  Match the geometry used when a zero E allowance prevents corner construction.
          Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.0 * mm];
          Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.0 * mm;
-      when Tight_E_Deviation =>
-         Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0002 * mm;
-      when Zero_E_Deviation =>
-         Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0 * mm;
       when E_Acceleration =>
          Params.Axial_Acceleration_Maxes (E_Axis) := 50.0 * mm / s ** 2;
       when X_Crackle =>

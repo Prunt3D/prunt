@@ -30,7 +30,6 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    procedure Select_Feedrate_Profile_Window
      (Block            : not null access Execution_Block;
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace        : not null access constant Planning_Workspace;
       Finishing_Corner : Finishing_Corners_Index;
       Result           : out Profile_Planning_Result;
       Limit_Scale      : Dimensionless)
@@ -44,21 +43,17 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Best_Profile : Feedrate_Profile :=
         (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
       Best_Eval    : Profile_Window_Evaluation;
-      Candidate    : Feedrate_Profile;
 
       type Candidate_Info is record
-         Valid        : Boolean := False;
-         Tried        : Boolean := False;
-         Eval         : Profile_Window_Evaluation;
-         Duration     : Time := 1.0E100 * s;
-         Solution     : Window_Profile_Result;
-         Conservative : Boolean := False;
+         Valid    : Boolean := False;
+         Eval     : Profile_Window_Evaluation;
+         Duration : Time := 1.0E100 * s;
+         Solution : Window_Profile_Result;
       end record;
 
       type Candidate_Info_Array is array (Profile_Window_Candidate_Index) of Candidate_Info;
 
-      Windows    : constant Profile_Window_Candidates :=
-        Segment_Profile_Window_Candidates (Block, Workspace, Finishing_Corner);
+      Windows    : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block, Finishing_Corner);
       Candidates : Candidate_Info_Array;
 
       function Conservative_Evaluation (Eval : Profile_Window_Evaluation) return Profile_Window_Evaluation;
@@ -120,40 +115,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          Evals         : array (Split_Windows'Range) of Profile_Window_Evaluation;
          Profiles      : array (Split_Windows'Range) of Feedrate_Profile;
          Speeds        : array (Natural range 0 .. 3) of Velocity;
-         Ends          : Profile_End_Pair := (Enabled => True, others => <>);
          Split_Time    : Time := 0.0 * s;
-         Maximum_Speed : Velocity := 0.0 * mm / s;
-
-         procedure Consider_Current;
-
-         procedure Consider_Current is
-         begin
-            if Split_Time >= Best_Time then
-               Accepted := True;
-               return;
-            end if;
-            Ends.Prefix := (Profiles (1), Evals (1).Limits.Crackle_Max, Speeds (1));
-            Ends.Suffix := (Profiles (3), Evals (3).Limits.Crackle_Max, Speeds (2));
-            if Extrusion_Segment_Valid
-                 (Block,
-                  Workspace,
-                  Finishing_Corner,
-                  Profiles (2),
-                  Split_Windows (2),
-                  Evals (2).Limits.Crackle_Max,
-                  Maximum_Speed,
-                  Motor_Map,
-                  Ends)
-            then
-               Accepted := True;
-               Best_Found := True;
-               Best_Time := Split_Time;
-               Best_Profile := Profiles (2);
-               Best_Eval := Evals (2);
-               Block.Profile_Ends (Finishing_Corner) := Ends;
-            end if;
-         end Consider_Current;
-
       begin
          Accepted := False;
          if Start_Curve = 0.0 * mm and then Split_Windows (3).Distance = 0.0 * mm then
@@ -167,12 +129,10 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
             Evals (I) :=
               Evaluate_Profile_Window
                 (Block,
-                 Workspace,
                  Motor_Map,
                  Finishing_Corner,
                  Split_Windows (I),
-                 Block.Limited_Segment_Feedrates (Finishing_Corner),
-                 Allow_Extrusion_Overlap => True);
+                 Block.Limited_Segment_Feedrates (Finishing_Corner));
             if not Evals (I).Valid then
                return;
             end if;
@@ -187,7 +147,6 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                   return;
                end if;
             end if;
-            Maximum_Speed := Velocity'Max (Maximum_Speed, Evals (I).Max_Vel);
          end loop;
          if Start_Vel > Evals (1).Max_Vel or else End_Vel > Evals (3).Max_Vel then
             return;
@@ -246,7 +205,17 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                end if;
             end;
          end loop;
-         Consider_Current;
+         Accepted := True;
+         if Split_Time < Best_Time then
+            Best_Found := True;
+            Best_Time := Split_Time;
+            Best_Profile := Profiles (2);
+            Best_Eval := Evals (2);
+            Block.Profile_Ends (Finishing_Corner) :=
+              (Enabled => True,
+               Prefix  => (Profiles (1), Evals (1).Limits.Crackle_Max, Speeds (1)),
+               Suffix  => (Profiles (3), Evals (3).Limits.Crackle_Max, Speeds (2)));
+         end if;
       exception
          when Constraint_Error =>
             null;
@@ -255,16 +224,14 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       procedure Try_Conservative_Candidate (I : Profile_Window_Candidate_Index) is
          C : Candidate_Info renames Candidates (I);
       begin
-         if C.Conservative or else not C.Eval.Curved then
+         if not C.Eval.Curved then
             return;
          end if;
-         C.Conservative := True;
          C.Valid := False;
          C.Eval := Conservative_Evaluation (C.Eval);
          C.Solution := Conservative_Profile (C.Eval, Start_Vel, End_Vel);
          if C.Solution.Valid then
             C.Valid := True;
-            C.Tried := False;
             C.Duration :=
               Constant_Speed_Time (C.Eval.Window.Start_Distance, Start_Vel)
               + Total_Time (C.Solution.Profile)
@@ -280,12 +247,10 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                Eval        : Profile_Window_Evaluation :=
                  Evaluate_Profile_Window
                    (Block,
-                    Workspace,
                     Motor_Map,
                     Finishing_Corner,
                     Windows (I),
-                    Block.Limited_Segment_Feedrates (Finishing_Corner),
-                    Allow_Extrusion_Overlap => True);
+                    Block.Limited_Segment_Feedrates (Finishing_Corner));
                Prefix_Dist : constant Length := Windows (I).Start_Distance;
                Suffix_Dist : constant Length := Total - Windows (I).Start_Distance - Windows (I).Distance;
             begin
@@ -307,12 +272,10 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                        Generate_Window_Profile (Block.Params, Eval, Start_Vel, End_Vel);
                   begin
                      Candidates (I) :=
-                       (Valid        => Solution.Valid,
-                        Tried        => False,
-                        Eval         => Eval,
-                        Solution     => Solution,
-                        Conservative => False,
-                        Duration     =>
+                       (Valid    => Solution.Valid,
+                        Eval     => Eval,
+                        Solution => Solution,
+                        Duration =>
                           Constant_Speed_Time (Prefix_Dist, Start_Vel)
                           + Total_Time (Solution.Profile)
                           + Constant_Speed_Time (Suffix_Dist, End_Vel));
@@ -325,53 +288,14 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          end if;
       end loop;
 
-      loop
-         declare
-            Candidate_Found : Boolean := False;
-            Best_Index      : Profile_Window_Candidate_Index := Profile_Window_Candidate_Index'First;
-         begin
-            for I in Profile_Window_Candidate_Index loop
-               if Candidates (I).Valid
-                 and then not Candidates (I).Tried
-                 and then (not Candidate_Found or else Candidates (I).Duration < Candidates (Best_Index).Duration)
-               then
-                  Candidate_Found := True;
-                  Best_Index := I;
-               end if;
-            end loop;
-
-            exit when not Candidate_Found;
-
-            Candidates (Best_Index).Tried := True;
-
-            begin
-               Candidate := Candidates (Best_Index).Solution.Profile;
-               Candidates (Best_Index).Eval.Limits.Crackle_Max := Candidates (Best_Index).Solution.Max_Crackle;
-
-               if Extrusion_Segment_Valid
-                    (Block,
-                     Workspace,
-                     Finishing_Corner,
-                     Candidate,
-                     Candidates (Best_Index).Eval.Window,
-                     Candidates (Best_Index).Eval.Limits.Crackle_Max,
-                     Candidates (Best_Index).Eval.Max_Vel,
-                     Motor_Map)
-               then
-                  Best_Found := True;
-                  Best_Time := Candidates (Best_Index).Duration;
-                  Best_Profile := Candidate;
-                  Best_Eval := Candidates (Best_Index).Eval;
-                  exit;
-               end if;
-            exception
-               when Constraint_Error =>
-                  null;
-            end;
-            --  Reinsert a rejected window with conservative limits and its own duration. It must still
-            --  compete with the other windows and pass the combined E certificate before selection.
-            Try_Conservative_Candidate (Best_Index);
-         end;
+      for C of Candidates loop
+         if C.Valid and then C.Duration < Best_Time then
+            Best_Found := True;
+            Best_Time := C.Duration;
+            Best_Profile := C.Solution.Profile;
+            Best_Eval := C.Eval;
+            Best_Eval.Limits.Crackle_Max := C.Solution.Max_Crackle;
+         end if;
       end loop;
 
       declare
@@ -398,13 +322,12 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    procedure Run
      (Block       : aliased in out Execution_Block;
       Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace   : not null access constant Planning_Workspace;
       Result      : out Profile_Planning_Result;
       Limit_Scale : Dimensionless := 1.0) is
    begin
       Result := (Valid => True);
       for I in Block.Feedrate_Profiles'Range loop
-         Select_Feedrate_Profile_Window (Block'Access, Motor_Map, Workspace, I, Result, Limit_Scale);
+         Select_Feedrate_Profile_Window (Block'Access, Motor_Map, I, Result, Limit_Scale);
          exit when not Result.Valid;
       end loop;
    end Run;

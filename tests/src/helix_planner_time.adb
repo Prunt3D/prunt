@@ -77,24 +77,24 @@ procedure Helix_Planner_Time is
          Upper_X => 300.0 * mm,
          Lower_Y => 0.0 * mm,
          Upper_Y => 300.0 * mm),
-      Ignore_E_In_XYZE             => True,
-      Tangential_Velocity_Max      => 250.0 * mm / s,
-      Axial_Velocity_Maxes         =>
+      Ignore_E_In_XYZE              => True,
+      Tangential_Velocity_Max       => 250.0 * mm / s,
+      Axial_Velocity_Maxes          =>
         [X_Axis | Y_Axis => 250.0 * mm / s, Z_Axis => 25.0 * mm / s, E_Axis => 80.0 * mm / s],
-      Axial_Acceleration_Maxes     => [others => 5_000.0 * mm / s ** 2],
-      Axial_Jerk_Maxes             => [others => 500_000.0 * mm / s ** 3],
-      Axial_Snap_Maxes             => [others => 500_000_000.0 * mm / s ** 4],
-      Axial_Crackle_Maxes          => [others => 500_000_000_000.0 * mm / s ** 5],
-      Cornering                    =>
+      Axial_Acceleration_Maxes      => [others => 5_000.0 * mm / s ** 2],
+      Axial_Jerk_Maxes              => [others => 500_000.0 * mm / s ** 3],
+      Axial_Snap_Maxes              => [others => 500_000_000.0 * mm / s ** 4],
+      Axial_Crackle_Maxes           => [others => 500_000_000_000.0 * mm / s ** 5],
+      Cornering                     =>
         (Kind                 => Stereographic,
          Stereographic_Params =>
            (Axial_Deviation_Maxes    => [others => Deviation],
             Corner_Miss_Distance_Max => Deviation,
             Shape_Bias               => 0.0,
             Circularity              => 0.0)),
-      Extrusion_Cornering          => <>,
-      Extrusion_Rounding_Tolerance => <>,
-      Axial_Shapers                => [others => (Kind => Prunt.Input_Shapers.No_Shaper)]);
+      Extrusion_Velocity_Change_Max => <>,
+      Extrusion_Rounding_Tolerance  => <>,
+      Axial_Shapers                 => [others => (Kind => Prunt.Input_Shapers.No_Shaper)]);
 
    Motor_Map : constant Motor_Position_Map :=
      [X_Axis => [X_Motor => 1.0 / mm, others => 0.0 / mm],

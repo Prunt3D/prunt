@@ -697,7 +697,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Loop_Move_Minimum_Time := 0.0 * s;
          Block.Extrusion_Reference_Positions := [others => 0.0 * mm];
          Block.Extrusion_Densities := [others => 0.0];
-         Block.Extrusion_Junction_Corrections := [others => <>];
          Block.Primitive_Distances := [others => 0.0 * mm];
          Block.Primitive_Start_Distances := [others => 0.0 * mm];
          Block.Corner_Velocity_Limits := [others => 0.0 * mm / s];

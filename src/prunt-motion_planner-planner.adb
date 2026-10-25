@@ -587,599 +587,16 @@ package body Prunt.Motion_Planner.Planner is
       return Result;
    end Spatial_Primitive;
 
-   function Extrusion_Deviation (Block : not null access constant Execution_Block) return Length
-   is (if Block.Params.Extrusion_Cornering.Kind = Instantaneous_Velocity_Change
-       then 0.0 * mm
-       else
-         (case Block.Params.Cornering.Kind is
-            when Stereographic => Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis),
-            when Circular      => Block.Params.Cornering.Circular_Params.Axial_Deviation_Maxes (E_Axis),
-            when Biarc         => Block.Params.Cornering.Biarc_Params.Axial_Deviation_Maxes (E_Axis),
-            when Sharp_SCV     => 0.0 * mm));
-
-   function Extrusion_Transition
-     (Block     : not null access constant Execution_Block;
-      Workspace : not null access constant Planning_Workspace;
-      Corner    : Corners_Index;
-      Speed     : Velocity) return Extrusion_Transition_Result
+   function Extrusion_Junction_Ceiling
+     (Block : not null access constant Execution_Block; Corner : Corners_Index; Limit : Velocity) return Velocity
    is
-      Result  : Extrusion_Transition_Result;
-      Delta_V : Velocity;
-      Safety  : constant Dimensionless := 0.999;
+      Change  : constant Dimensionless :=
+        abs (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner));
+      Maximum : constant Velocity := Block.Params.Extrusion_Velocity_Change_Max;
    begin
-      Delta_V := (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner)) * Speed;
-      if Speed <= 0.0 * mm / s or else Delta_V = 0.0 * mm / s then
-         return Result;
-      end if;
-      if Block.Params.Extrusion_Cornering.Kind = Instantaneous_Velocity_Change then
-         Result.Valid :=
-           abs Delta_V <= Block.Params.Extrusion_Cornering.Velocity_Change_Max
-           and then
-             Dimensionless'Max (abs Block.Extrusion_Densities (Corner), abs Block.Extrusion_Densities (Corner + 1))
-             * Speed
-             <= Block.Params.Axial_Velocity_Maxes (E_Axis);
-         --  The two density-scaled profiles meet directly; no displacement correction or ramp is stored.
-         return Result;
-      end if;
-      if Workspace.Extrusion_Stops (Corner)
-        or else Block.Params.Axial_Acceleration_Maxes (E_Axis) <= 0.0 * mm / s ** 2
-        or else Block.Params.Axial_Jerk_Maxes (E_Axis) <= 0.0 * mm / s ** 3
-        or else Block.Params.Axial_Snap_Maxes (E_Axis) <= 0.0 * mm / s ** 4
-        or else Block.Params.Axial_Crackle_Maxes (E_Axis) <= 0.0 * mm / s ** 5
-        or else
-          Dimensionless'Max (abs Block.Extrusion_Densities (Corner), abs Block.Extrusion_Densities (Corner + 1))
-          * Speed
-          > Block.Params.Axial_Velocity_Maxes (E_Axis)
-      then
-         Result.Valid := False;
-         return Result;
-      end if;
-      Result.Profile.Max_Crackle := Safety * Block.Params.Axial_Crackle_Maxes (E_Axis);
-      Result.Profile.Times :=
-        Optimal_Profile_For_Delta_V
-          (Delta_V,
-           Safety * Block.Params.Axial_Acceleration_Maxes (E_Axis),
-           Safety * Block.Params.Axial_Jerk_Maxes (E_Axis),
-           Safety * Block.Params.Axial_Snap_Maxes (E_Axis),
-           Result.Profile.Max_Crackle);
-      if Delta_V < 0.0 * mm / s then
-         Result.Profile.Max_Crackle := -Result.Profile.Max_Crackle;
-      end if;
-      Result.Half_Distance := Speed * (Total_Time (Result.Profile.Times) / 2.0);
-      --  Relative to the incoming reference line, error starts at zero and has derivative v(t)-v_in. Relative to the
-      --  outgoing line its derivative is v(t)-v_out. Monotonicity of v makes the midpoint the unique maximum absolute
-      --  error. Symmetry gives equal errors on the two halves and zero error at both ends.
-      Result.Deviation :=
-        abs Distance_At_Time
-              (Result.Profile.Times,
-               Total_Time (Result.Profile.Times) / 2.0,
-               Result.Profile.Max_Crackle,
-               0.0 * mm / s);
-      Result.Valid :=
-        Result.Half_Distance >= 0.0 * mm
-        and then Result.Half_Distance < Length'Last
-        and then Result.Deviation >= 0.0 * mm
-        and then Result.Deviation < Length'Last;
-      return Result;
-   exception
-      when Constraint_Error =>
-         return (Valid => False, others => <>);
-   end Extrusion_Transition;
-
-   procedure Plan_Extrusion_Junction
-     (Block     : aliased in out Execution_Block;
-      Workspace : not null access Planning_Workspace;
-      Corner    : Corners_Index;
-      Ceiling   : Velocity)
-   is
-      Available     : constant Length := Workspace.Extrusion_Widths (Corner);
-      Allowed_Error : constant Length := Extrusion_Deviation (Block'Access);
-      Lower         : Velocity := 0.0 * mm / s;
-      Upper         : Velocity := Ceiling;
-      Profile       : Extrusion_Transition_Result;
-      function Fits (Candidate : Extrusion_Transition_Result) return Boolean
-      is (Candidate.Valid
-          and then Candidate.Half_Distance <= Available * (1.0 - 1.0E-10)
-          and then Candidate.Deviation <= Allowed_Error * (1.0 - 1.0E-10));
-   begin
-      if Block.Extrusion_Densities (Corner) = Block.Extrusion_Densities (Corner + 1) then
-         Workspace.Extrusion_Ceilings (Corner) := Ceiling;
-         Workspace.Extrusion_Widths (Corner) := 0.0 * mm;
-         return;
-      elsif Block.Params.Extrusion_Cornering.Kind = Instantaneous_Velocity_Change then
-         declare
-            Change  : constant Dimensionless :=
-              abs (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner));
-            Maximum : constant Velocity := Block.Params.Extrusion_Cornering.Velocity_Change_Max;
-         begin
-            Workspace.Extrusion_Ceilings (Corner) :=
-              (if Change * Ceiling > Maximum then 0.999 * Maximum / Change else Ceiling);
-            Workspace.Extrusion_Widths (Corner) := 0.0 * mm;
-            Workspace.Extrusion_Deviations (Corner) := 0.0 * mm;
-            return;
-         end;
-      elsif Available <= 0.0 * mm or else Ceiling <= 0.0 * mm / s then
-         Workspace.Extrusion_Ceilings (Corner) := 0.0 * mm / s;
-         Workspace.Extrusion_Widths (Corner) := 0.0 * mm;
-         return;
-      end if;
-      Profile := Extrusion_Transition (Block'Access, Workspace, Corner, Upper);
-      if Fits (Profile) then
-         Lower := Upper;
-      else
-         --  Both the optimal ramp's spatial extent and its maximum deviation increase with junction speed.
-         --  Solve this common XYZ/E constraint before lookahead; no post-hoc time scaling of either profile.
-         for Iteration in 1 .. 56 loop
-            declare
-               Mid : constant Velocity := (Lower + Upper) / 2.0;
-            begin
-               if Fits (Extrusion_Transition (Block'Access, Workspace, Corner, Mid)) then
-                  Lower := Mid;
-               else
-                  Upper := Mid;
-               end if;
-            end;
-         end loop;
-         Profile := Extrusion_Transition (Block'Access, Workspace, Corner, Lower);
-      end if;
-      Workspace.Extrusion_Ceilings (Corner) := Lower;
-      Workspace.Extrusion_Widths (Corner) := Length'Min (Available, Profile.Half_Distance * (1.0 + 1.0E-12));
-      Workspace.Extrusion_Deviations (Corner) := Profile.Deviation;
-   end Plan_Extrusion_Junction;
-
-   function Extrusion_Polynomial_In_Range
-     (Coefficients : Extrusion_Polynomial; Lower, Upper : Dimensionless) return Boolean
-   is
-      Degree   : constant Natural := Coefficients'Last;
-      Controls : Extrusion_Polynomial (0 .. Degree) := [others => 0.0];
-      function Enclosed (B : Extrusion_Polynomial; Depth : Natural) return Boolean;
-
-      function Enclosed (B : Extrusion_Polynomial; Depth : Natural) return Boolean is
-         Low  : Dimensionless := Dimensionless'Last;
-         High : Dimensionless := -Dimensionless'Last;
-      begin
-         for V of B loop
-            if not (V >= -Dimensionless'Last and then V <= Dimensionless'Last) then
-               return False;
-            end if;
-            Low := Dimensionless'Min (Low, V);
-            High := Dimensionless'Max (High, V);
-         end loop;
-         if Low >= Lower and then High <= Upper then
-            return True;
-         elsif B (B'First) < Lower
-           or else B (B'First) > Upper
-           or else B (B'Last) < Lower
-           or else B (B'Last) > Upper
-           or else Depth = 0
-         then
-            return False;
-         end if;
-         declare
-            Work        : Extrusion_Polynomial := B;
-            Left, Right : Extrusion_Polynomial (B'Range);
-         begin
-            Left (0) := Work (0);
-            Right (Degree) := Work (Degree);
-            for Level in 1 .. Degree loop
-               for I in 0 .. Degree - Level loop
-                  Work (I) := (Work (I) + Work (I + 1)) / 2.0;
-               end loop;
-               Left (Level) := Work (0);
-               Right (Degree - Level) := Work (Degree - Level);
-            end loop;
-            return Enclosed (Left, Depth - 1) and then Enclosed (Right, Depth - 1);
-         end;
-      end Enclosed;
-   begin
-      for I in 0 .. Degree loop
-         declare
-            Ratio : Dimensionless := 1.0;
-         begin
-            for K in 0 .. I loop
-               Controls (I) := Controls (I) + Coefficients (K) * Ratio;
-               if K < I then
-                  Ratio := Ratio * Dimensionless (I - K) / Dimensionless (Degree - K);
-               end if;
-            end loop;
-         end;
-      end loop;
-      return Enclosed (Controls, 12);
-   end Extrusion_Polynomial_In_Range;
-
-   function Extrusion_Segment_Valid
-     (Block       : not null access constant Execution_Block;
-      Workspace   : not null access constant Planning_Workspace;
-      Corner      : Finishing_Corners_Index;
-      Profile     : Feedrate_Profile;
-      Window      : Profile_Window;
-      Max_Crackle : Crackle;
-      Max_Vel     : Velocity;
-      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Ends        : Profile_End_Pair := (others => <>)) return Boolean
-   is
-      Start_Vel      : constant Velocity := Block.Corner_Velocity_Limits (Corner - 1);
-      End_Vel        : constant Velocity := Block.Corner_Velocity_Limits (Corner);
-      Central_Start  : constant Velocity := (if Ends.Enabled then Ends.Prefix.Boundary_Velocity else Start_Vel);
-      Prefix         : Time;
-      Motion_Time    : Time;
-      Start_Ramp     : constant Extrusion_Junction_Correction := Block.Extrusion_Junction_Corrections (Corner - 1);
-      End_Ramp       : constant Extrusion_Junction_Correction := Block.Extrusion_Junction_Corrections (Corner);
-      Half_Start     : Time;
-      Half_End       : Time;
-      Density        : constant Dimensionless := Block.Extrusion_Densities (Corner);
-      Stationary_XYZ : Boolean;
-      --  Six path ramps and two E ramps contribute at most 16 boundaries each, plus four explicit boundaries.
-      Cuts           : array (1 .. 8 * 16 + 4) of Time;
-      Count          : Natural := 0;
-      type Jet is array (Natural range 0 .. 5) of Dimensionless;
-      Factorial      : constant Jet := [1.0, 1.0, 2.0, 6.0, 24.0, 120.0];
-      Limits         : constant Jet :=
-        [0.0,
-         Block.Params.Axial_Velocity_Maxes (E_Axis) / (mm / s),
-         Block.Params.Axial_Acceleration_Maxes (E_Axis) / (mm / s ** 2),
-         Block.Params.Axial_Jerk_Maxes (E_Axis) / (mm / s ** 3),
-         Block.Params.Axial_Snap_Maxes (E_Axis) / (mm / s ** 4),
-         Block.Params.Axial_Crackle_Maxes (E_Axis) / (mm / s ** 5)];
-
-      procedure Add (T : Time);
-      procedure Add_Phases (Times : Feedrate_Profile_Times; Origin : Time; Direction : Dimensionless := 1.0);
-      function Correction (Ramp : Extrusion_Junction_Correction; U : Time) return Jet;
-      function Polynomial (Values : Jet; Order : Natural; Interval_Time : Time) return Extrusion_Polynomial;
-
-      procedure Add (T : Time) is
-      begin
-         if T >= 0.0 * s and then T <= Motion_Time then
-            Count := Count + 1;
-            Cuts (Count) := T;
-         end if;
-      end Add;
-
-      procedure Add_Phases (Times : Feedrate_Profile_Times; Origin : Time; Direction : Dimensionless := 1.0) is
-         Durations : constant array (1 .. 15) of Time :=
-           [Times (1),
-            Times (2),
-            Times (1),
-            Times (3),
-            Times (1),
-            Times (2),
-            Times (1),
-            Times (4),
-            Times (1),
-            Times (2),
-            Times (1),
-            Times (3),
-            Times (1),
-            Times (2),
-            Times (1)];
-         T         : Time := Origin;
-      begin
-         Add (T);
-         for D of Durations loop
-            T := T + Direction * D;
-            Add (T);
-         end loop;
-      end Add_Phases;
-
-      function Correction (Ramp : Extrusion_Junction_Correction; U : Time) return Jet
-      is ([Distance_At_Time (Ramp.Times, U, Ramp.Max_Crackle, 0.0 * mm / s) / mm,
-           Velocity_At_Time (Ramp.Times, U, Ramp.Max_Crackle, 0.0 * mm / s) / (mm / s),
-           Acceleration_At_Time (Ramp.Times, U, Ramp.Max_Crackle) / (mm / s ** 2),
-           Jerk_At_Time (Ramp.Times, U, Ramp.Max_Crackle) / (mm / s ** 3),
-           Snap_At_Time (Ramp.Times, U, Ramp.Max_Crackle) / (mm / s ** 4),
-           Crackle_At_Time (Ramp.Times, U, Ramp.Max_Crackle) / (mm / s ** 5)]);
-
-      function Polynomial (Values : Jet; Order : Natural; Interval_Time : Time) return Extrusion_Polynomial is
-         Result : Extrusion_Polynomial (0 .. 5 - Order) := [others => 0.0];
-         D      : constant Dimensionless := Interval_Time / s;
-      begin
-         --  Derivatives are evaluated analytically at the interval midpoint, away from crackle jumps.
-         --  Translate that Taylor polynomial to normalized time u in [0, 1]. No interpolation or fitting.
-         for K in Result'Range loop
-            for J in K + Order .. 5 loop
-               Result (K) :=
-                 Result (K)
-                 + Values (J) * (-D / 2.0) ** (J - K - Order) / Factorial (J - K - Order) * D ** K / Factorial (K);
-            end loop;
-         end loop;
-         return Result;
-      end Polynomial;
-   begin
-      Prefix :=
-        (if Ends.Enabled
-         then Total_Time (Ends.Prefix.Profile)
-         else Constant_Speed_Time (Window.Start_Distance, Start_Vel));
-      Motion_Time :=
-        Prefix
-        + Total_Time (Profile)
-        + (if Ends.Enabled
-           then Total_Time (Ends.Suffix.Profile)
-           else
-             Constant_Speed_Time
-               (Segment_Total_Distance (Block, Corner) - Window.Start_Distance - Window.Distance, End_Vel));
-      Half_Start := Total_Time (Start_Ramp.Times) / 2.0;
-      Half_End := Total_Time (End_Ramp.Times) / 2.0;
-      Stationary_XYZ :=
-        Derive_Path_Primitive
-          (Block.Primitives (Corner),
-           [Block.Corners (Corner - 1) with delta E_Axis => 0.0 * mm],
-           [Block.Corners (Corner) with delta E_Axis => 0.0 * mm])
-          .Length
-        = 0.0 * mm
-        and then Segment_Start_Transition_Distance (Block, Corner) = 0.0 * mm
-        and then Segment_End_Transition_Distance (Block, Corner) = 0.0 * mm
-        and then
-          (for all Axis in Axis_Name =>
-             Axis = E_Axis or else Block.Params.Axial_Shapers (Axis).Kind = Prunt.Input_Shapers.No_Shaper);
-      if not (Motion_Time >= 0.0 * s and then Motion_Time < 1.0E100 * s)
-        or else (Motion_Time = 0.0 * s and then Segment_Total_Distance (Block, Corner) > 0.0 * mm)
-        or else Half_Start + Half_End > Motion_Time
-        or else Workspace.Extrusion_Deviations (Corner - 1) > Extrusion_Deviation (Block)
-        or else Workspace.Extrusion_Deviations (Corner) > Extrusion_Deviation (Block)
-      then
-         return False;
-      end if;
-      if Block.Params.Extrusion_Cornering.Kind = Instantaneous_Velocity_Change then
-         for Junction in Corner - 1 .. Corner loop
-            if Junction > Block.Corners'First
-              and then Junction < Block.Corners'Last
-              and then
-                abs (Block.Extrusion_Densities (Junction + 1) - Block.Extrusion_Densities (Junction))
-                * Block.Corner_Velocity_Limits (Junction)
-                > Block.Params.Extrusion_Cornering.Velocity_Change_Max
-            then
-               return False;
-            end if;
-         end loop;
-      end if;
-      if Density = 0.0
-        and then Half_Start = 0.0 * s
-        and then Half_End = 0.0 * s
-        and then not Ends.Enabled
-        and then (for all Order in 1 .. 5 => Limits (Order) >= 0.0 and then Limits (Order) <= Dimensionless'Last)
-        and then Block.Extrusion_Reference_Positions (Corner - 1) >= -Length'Last
-        and then Block.Extrusion_Reference_Positions (Corner - 1) <= Length'Last
-        and then
-          (for all M in Motor_Name =>
-             Motor_Map (E_Axis, M) = 0.0 / mm
-             or else
-               ((for all Axis in Axis_Name => Axis = E_Axis or else Motor_Map (Axis, M) = 0.0 / mm)
-                and then abs Motor_Map (E_Axis, M) <= Curvature'Last
-                and then Maximum_Deltas_Per_Command (M) / (Interpolation_Time / s) >= 0.0))
-      then
-         --  E is constant and its motors have no spatial contribution: all five derivative polynomials are zero.
-         --  Keep the motion-profile check, including empty or malformed profiles. Coupled motors, split profiles,
-         --  and active E corrections retain the complete continuous certificate below.
-         return Profile_Is_Valid (Profile, Window.Distance, Central_Start, End_Vel, Max_Crackle);
-      end if;
-      Add (0.0 * s);
-      Add (Motion_Time);
-      if Ends.Enabled then
-         Add_Phases (Ends.Prefix.Profile.Accel, 0.0 * s);
-         Add_Phases (Ends.Prefix.Profile.Decel, Total_Time (Ends.Prefix.Profile.Accel) + Ends.Prefix.Profile.Coast);
-         Add_Phases (Ends.Suffix.Profile.Accel, Prefix + Total_Time (Profile));
-         Add_Phases
-           (Ends.Suffix.Profile.Decel,
-            Prefix + Total_Time (Profile) + Total_Time (Ends.Suffix.Profile.Accel) + Ends.Suffix.Profile.Coast);
-      end if;
-      Add_Phases (Profile.Accel, Prefix);
-      Add_Phases (Profile.Decel, Prefix + Total_Time (Profile.Accel) + Profile.Coast);
-      Add_Phases (Start_Ramp.Times, Half_Start, -1.0);
-      Add_Phases (End_Ramp.Times, Motion_Time - Half_End);
-      Add (Half_Start);
-      Add (Motion_Time - Half_End);
-      for I in 2 .. Count loop
-         declare
-            T : constant Time := Cuts (I);
-            J : Natural := I;
-         begin
-            while J > 1 and then Cuts (J - 1) > T loop
-               Cuts (J) := Cuts (J - 1);
-               J := J - 1;
-            end loop;
-            Cuts (J) := T;
-         end;
-      end loop;
-      for I in 2 .. Count loop
-         if Cuts (I) > Cuts (I - 1) then
-            declare
-               Interval_Time        : constant Time := Cuts (I) - Cuts (I - 1);
-               T                    : constant Time := Cuts (I - 1) + Interval_Time / 2.0;
-               XYZ, E               : Jet := [others => 0.0];
-               Correction_Direction : Dimensionless := 0.0;
-            begin
-               if Ends.Enabled and then (T < Prefix or else T > Prefix + Total_Time (Profile)) then
-                  declare
-                     At_Start : constant Boolean := T < Prefix;
-                     Part     : constant Profile_End := (if At_Start then Ends.Prefix else Ends.Suffix);
-                     U        : constant Time :=
-                       Time'Min
-                         ((if At_Start then T else T - Prefix - Total_Time (Profile)), Total_Time (Part.Profile));
-                     V        : constant Velocity := (if At_Start then Start_Vel else Part.Boundary_Velocity);
-                     D        : constant Length :=
-                       (if At_Start then 0.0 * mm else Window.Start_Distance + Window.Distance);
-                  begin
-                     XYZ :=
-                       [(D + Distance_At_Time (Part.Profile, U, Part.Max_Crackle, V)) / mm,
-                        Velocity_At_Time (Part.Profile, U, Part.Max_Crackle, V) / (mm / s),
-                        Acceleration_At_Time (Part.Profile, U, Part.Max_Crackle) / (mm / s ** 2),
-                        Jerk_At_Time (Part.Profile, U, Part.Max_Crackle) / (mm / s ** 3),
-                        Snap_At_Time (Part.Profile, U, Part.Max_Crackle) / (mm / s ** 4),
-                        Crackle_At_Time (Part.Profile, U, Part.Max_Crackle) / (mm / s ** 5)];
-                  end;
-               elsif T < Prefix then
-                  XYZ (0) := Start_Vel * T / mm;
-                  XYZ (1) := Start_Vel / (mm / s);
-               elsif T > Prefix + Total_Time (Profile) then
-                  XYZ (0) :=
-                    (Window.Start_Distance + Window.Distance + (T - Prefix - Total_Time (Profile)) * End_Vel) / mm;
-                  XYZ (1) := End_Vel / (mm / s);
-               else
-                  declare
-                     --  A midpoint of a one-ulp interval at a join can round so that T - Prefix exceeds the profile
-                     --  time by an ulp. Clamp as Reference_Segment_Pos_At_Time does.
-                     U : constant Time := Time'Min (T - Prefix, Total_Time (Profile));
-                  begin
-                     XYZ :=
-                       [(Window.Start_Distance + Distance_At_Time (Profile, U, Max_Crackle, Central_Start)) / mm,
-                        Velocity_At_Time (Profile, U, Max_Crackle, Central_Start) / (mm / s),
-                        Acceleration_At_Time (Profile, U, Max_Crackle) / (mm / s ** 2),
-                        Jerk_At_Time (Profile, U, Max_Crackle) / (mm / s ** 3),
-                        Snap_At_Time (Profile, U, Max_Crackle) / (mm / s ** 4),
-                        Crackle_At_Time (Profile, U, Max_Crackle) / (mm / s ** 5)];
-                  end;
-               end if;
-               if T < Half_Start then
-                  E := Correction (Start_Ramp, Half_Start - T);
-                  Correction_Direction := (if Start_Ramp.Max_Crackle > 0.0 * mm / s ** 5 then 1.0 else -1.0);
-                  for Order in 1 .. 5 loop
-                     if Order mod 2 = 1 then
-                        E (Order) := -E (Order);
-                     end if;
-                  end loop;
-               elsif T > Motion_Time - Half_End then
-                  E := Correction (End_Ramp, T - Motion_Time + Half_End);
-                  Correction_Direction := (if End_Ramp.Max_Crackle > 0.0 * mm / s ** 5 then 1.0 else -1.0);
-               end if;
-               for Order in E'Range loop
-                  E (Order) := E (Order) + Density * XYZ (Order);
-               end loop;
-               E (0) := E (0) + Block.Extrusion_Reference_Positions (Corner - 1) / mm;
-               for Order in 1 .. 5 loop
-                  if not Extrusion_Polynomial_In_Range
-                           (Polynomial (E, Order, Interval_Time), -Limits (Order), Limits (Order))
-                  then
-                     return False;
-                  end if;
-               end loop;
-               if not Block.Params.Ignore_E_In_XYZE and then Correction_Direction /= 0.0 then
-                  --  The early limiter converts the XYZE cap using each segment's nominal density. During an E
-                  --  correction that ratio no longer describes the executed velocity. Certify the sum of the squared
-                  --  spatial and E velocities over the whole phase, normalized to avoid squaring the cap.
-                  declare
-                     Cap           : constant Dimensionless := Block.Params.Tangential_Velocity_Max / (mm / s);
-                     Spatial_Speed : constant Extrusion_Polynomial := Polynomial (XYZ, 1, Interval_Time);
-                     E_Speed       : constant Extrusion_Polynomial := Polynomial (E, 1, Interval_Time);
-                     Speed_Squared : Extrusion_Polynomial (0 .. 2 * Spatial_Speed'Last) := [others => 0.0];
-                  begin
-                     if Cap <= 0.0 then
-                        return False;
-                     end if;
-                     for J in Spatial_Speed'Range loop
-                        for K in Spatial_Speed'Range loop
-                           Speed_Squared (J + K) :=
-                             @ + (Spatial_Speed (J) / Cap) * (Spatial_Speed (K) / Cap)
-                             + (E_Speed (J) / Cap) * (E_Speed (K) / Cap);
-                        end loop;
-                     end loop;
-                     if not Extrusion_Polynomial_In_Range (Speed_Squared, -Dimensionless'Last, 1.0) then
-                        return False;
-                     end if;
-                  end;
-               end if;
-               --  The monotone segment reference is already inside the position bounds. A positive correction
-               --  cannot violate the lower bound, nor a negative correction the upper bound. Retain that exact
-               --  sign proof at endpoints instead of reconstructing a zero position by polynomial cancellation.
-               if Workspace.Check_Extrusion_Position
-                 and then Correction_Direction /= 0.0
-                 and then
-                   not Extrusion_Polynomial_In_Range
-                         (Polynomial (E, 0, Interval_Time),
-                          (if Correction_Direction > 0.0
-                           then -Dimensionless'Last
-                           else Block.Params.Bounds.Lower_E / mm),
-                          (if Correction_Direction < 0.0
-                           then Dimensionless'Last
-                           else Block.Params.Bounds.Upper_E / mm))
-               then
-                  return False;
-               end if;
-               for M in Motor_Name loop
-                  if Motor_Map (E_Axis, M) /= 0.0 / mm then
-                     declare
-                        Coefficients  : constant Projection_Coefficients :=
-                          [Motor_Projection_Coefficients (Motor_Map, M) with delta E_Axis => 0.0 / mm];
-                        Spatial       : constant Dimensionless :=
-                          (if Stationary_XYZ
-                           then 0.0
-                           else
-                             Shaper_Aware_Projection_Bound
-                               (Block.Params, Coefficients, Scaled_Curvature_Norm (Coefficients))
-                             * mm);
-                        Bound         : constant Dimensionless :=
-                          Maximum_Deltas_Per_Command (M) / (Interpolation_Time / s);
-                        Instantaneous : constant Boolean :=
-                          (for all Axis in Axis_Name =>
-                             Motor_Map (Axis, M) = 0.0 / mm
-                             or else Block.Params.Axial_Shapers (Axis).Kind = Prunt.Input_Shapers.No_Shaper);
-                        E_Coefficient : constant Dimensionless := abs (Motor_Map (E_Axis, M) * mm);
-                     begin
-                        for Sign in -1 .. 1 loop
-                           if Sign /= 0 then
-                              declare
-                                 Motor : Jet;
-                              begin
-                                 for Order in Motor'Range loop
-                                    Motor (Order) :=
-                                      Dimensionless (Sign)
-                                      * E_Coefficient
-                                      * E (Order)
-                                      + (if Instantaneous
-                                         then Spatial * XYZ (Order)
-                                         elsif Order = 1
-                                         then Spatial * Max_Vel / (mm / s)
-                                         else 0.0);
-                                 end loop;
-                                 --  Certify both signs of E against the spatial projection bound at the same
-                                 --  instant. Independently delayed shapers retain the global spatial-speed bound.
-                                 if not Extrusion_Polynomial_In_Range
-                                          (Polynomial (Motor, 1, Interval_Time), -Dimensionless'Last, Bound)
-                                 then
-                                    return False;
-                                 end if;
-                              end;
-                           end if;
-                        end loop;
-                     end;
-                  end if;
-               end loop;
-            end;
-         end if;
-      end loop;
-      return True;
-   exception
-      when Constraint_Error =>
-         return False;
-   end Extrusion_Segment_Valid;
-
-   function Apply_Extrusion_Junction_Correction
-     (Block     : not null access constant Execution_Block;
-      Corner    : Finishing_Corners_Index;
-      Elapsed   : Time;
-      Reference : Length) return Length
-   is
-      Motion_Time : constant Time := Segment_Time (Block, Corner) - Block.Corner_Dwell_Times (Corner);
-   begin
-      for Junction in Corner - 1 .. Corner loop
-         if Junction > 1 and then Junction < Block.N_Corners then
-            declare
-               Profile   : constant Extrusion_Junction_Correction := Block.Extrusion_Junction_Corrections (Junction);
-               Half_Time : constant Time := Total_Time (Profile.Times) / 2.0;
-               Offset    : constant Time := (if Junction = Corner - 1 then Elapsed else Elapsed - Motion_Time);
-            begin
-               if Half_Time > 0.0 * s and then abs Offset <= Half_Time then
-                  --  Add the generated correction to the moving reference. XYZ may accelerate during this
-                  --  interval. Its zero acceleration/jerk/snap at the reference corner makes the two density
-                  --  branches join through snap; the combined E derivatives are certified during profile selection.
-                  return
-                    Reference
-                    + Distance_At_Time (Profile.Times, Half_Time - abs Offset, Profile.Max_Crackle, 0.0 * mm / s);
-               end if;
-            end;
-         end if;
-      end loop;
-      return Reference;
-   end Apply_Extrusion_Junction_Correction;
+      --  The two density-scaled profiles meet directly, so E's velocity jumps by Change * Limit.
+      return (if Change * Limit > Maximum then 0.999 * Maximum / Change else Limit);
+   end Extrusion_Junction_Ceiling;
 
    function Extrusion_Reference_At_Distance
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Distance : Length)
@@ -1188,49 +605,14 @@ package body Prunt.Motion_Planner.Planner is
       Total : constant Length := Segment_Total_Distance (Block, Corner);
       D     : constant Length := Length'Max (0.0 * mm, Length'Min (Distance, Total));
    begin
-      --  E follows the shortened path at the commanded density. Segment_Pos_At_Time adds the time-domain
-      --  junction correction to this reference when the density changes.
+      --  E follows the shortened path at the commanded density.
       return Block.Extrusion_Reference_Positions (Corner - 1) + Block.Extrusion_Densities (Corner) * D;
    end Extrusion_Reference_At_Distance;
 
    function Extrusion_Bounds
-     (Block          : not null access constant Execution_Block;
-      Workspace      : not null access constant Planning_Workspace;
-      Corner         : Finishing_Corners_Index;
-      Start_Distance : Length := 0.0 * mm;
-      Distance       : Length := Length'Last) return Unit_Speed_Axial_Derivative_Bounds
-   is
-      Result : Unit_Speed_Axial_Derivative_Bounds := (others => <>);
-      Total  : constant Length := Segment_Total_Distance (Block, Corner);
-      First  : constant Length := Length'Max (0.0 * mm, Length'Min (Start_Distance, Total));
-      Last   : constant Length := First + Length'Min (Length'Max (0.0 * mm, Distance), Total - First);
-
-      procedure Include_Junction (Junction : Corners_Index);
-
-      procedure Include_Junction (Junction : Corners_Index) is
-         Width : constant Length := Workspace.Extrusion_Widths (Junction);
-      begin
-         if Width <= 0.0 * mm then
-            return;
-         end if;
-         Result.Velocity (E_Axis) :=
-           Dimensionless'Max
-             (Result.Velocity (E_Axis),
-              Dimensionless'Max
-                (abs Block.Extrusion_Densities (Junction), abs Block.Extrusion_Densities (Junction + 1)));
-         --  This is a velocity projection bound, for motor limits and constant-density scalar profiles.
-         --  Higher E time derivatives in a junction are bounded by its independent velocity-transition generator.
-      end Include_Junction;
-   begin
-      Result.Velocity (E_Axis) := abs Block.Extrusion_Densities (Corner);
-      if Corner > 2 and then First < Workspace.Extrusion_Widths (Corner - 1) then
-         Include_Junction (Corner - 1);
-      end if;
-      if Corner < Block.N_Corners and then Last > Total - Workspace.Extrusion_Widths (Corner) then
-         Include_Junction (Corner);
-      end if;
-      return Result;
-   end Extrusion_Bounds;
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index)
+      return Unit_Speed_Axial_Derivative_Bounds
+   is (Velocity => [E_Axis => abs Block.Extrusion_Densities (Corner), others => 0.0], others => <>);
 
    function Primitive_Length
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
@@ -1514,19 +896,12 @@ package body Prunt.Motion_Planner.Planner is
    end Segment_Total_Distance;
 
    function Segment_Profile_Window_Candidates
-     (Block            : not null access constant Execution_Block;
-      Workspace        : not null access constant Planning_Workspace;
-      Finishing_Corner : Finishing_Corners_Index) return Profile_Window_Candidates
+     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
+      return Profile_Window_Candidates
    is
       Start_Transition : constant Length := Segment_Start_Transition_Distance (Block, Finishing_Corner);
       End_Transition   : constant Length := Segment_End_Transition_Distance (Block, Finishing_Corner);
       Total            : constant Length := Segment_Total_Distance (Block, Finishing_Corner);
-      Start_E          : constant Length := Workspace.Extrusion_Widths (Finishing_Corner - 1);
-      End_E            : constant Length := Workspace.Extrusion_Widths (Finishing_Corner);
-      type Cuts is array (1 .. 4) of Length;
-      Starts           : constant Cuts :=
-        [0.0 * mm, Start_Transition, Start_E, Length'Max (Start_Transition, Start_E)];
-      Ends             : constant Cuts := [0.0 * mm, End_Transition, End_E, Length'Max (End_Transition, End_E)];
       Result           : Profile_Window_Candidates;
       Index            : Profile_Window_Candidate_Index := 1;
       procedure Add (First, Tail : Length);
@@ -1535,7 +910,7 @@ package body Prunt.Motion_Planner.Planner is
          Last : constant Length := Total - Tail;
          Dist : Length := Last - First;
       begin
-         --  Rounding must not make a profile overlap the E transition that the selected cut excludes.
+         --  Rounding must not make a profile overlap the transition that the selected cut excludes.
          if Dist > 0.0 * mm and then First + Dist > Last then
             Dist := Length'Adjacent (Dist, 0.0 * mm);
          end if;
@@ -1545,40 +920,26 @@ package body Prunt.Motion_Planner.Planner is
          end if;
       end Add;
    begin
-      Add (Starts (1), Ends (1));
-      Add (Starts (2), Ends (1));
-      Add (Starts (1), Ends (2));
-      Add (Starts (2), Ends (2));
-      for I in Starts'Range loop
-         for J in Ends'Range loop
-            if I > 2 or else J > 2 then
-               Add (Starts (I), Ends (J));
-            end if;
-         end loop;
-      end loop;
+      Add (0.0 * mm, 0.0 * mm);
+      Add (Start_Transition, 0.0 * mm);
+      Add (0.0 * mm, End_Transition);
+      Add (Start_Transition, End_Transition);
       return Result;
    end Segment_Profile_Window_Candidates;
 
    function Evaluate_Profile_Window
-     (Block                   : not null access constant Execution_Block;
-      Workspace               : not null access constant Planning_Workspace;
-      Motor_Map               : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Finishing_Corner        : Finishing_Corners_Index;
-      Window                  : Profile_Window;
-      Max_Vel                 : Velocity;
-      Allow_Extrusion_Overlap : Boolean := False) return Profile_Window_Evaluation
+     (Block            : not null access constant Execution_Block;
+      Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Finishing_Corner : Finishing_Corners_Index;
+      Window           : Profile_Window;
+      Max_Vel          : Velocity) return Profile_Window_Evaluation
    is
-      Bounds : Unit_Speed_Axial_Derivative_Bounds :=
-        Window_Axial_Derivative_Bounds (Block, Workspace, Finishing_Corner, Window);
-      Mixed  : Mixed_Derivative_Limit_Result;
+      Bounds : constant Unit_Speed_Axial_Derivative_Bounds :=
+        Window_Axial_Derivative_Bounds (Block, Finishing_Corner, Window);
+      Mixed  : constant Mixed_Derivative_Limit_Result :=
+        Mixed_Derivative_Limits (Block.Params, (Velocity => Bounds.Velocity, others => <>), Max_Vel);
       Result : Profile_Window_Evaluation;
    begin
-      if Allow_Extrusion_Overlap then
-         --  Only the local reference density follows XYZ acceleration. Neighbouring densities belong to
-         --  the independent time correction, whose combined derivatives are certified after generation.
-         Bounds.Velocity (E_Axis) := abs Block.Extrusion_Densities (Finishing_Corner);
-      end if;
-      Mixed := Mixed_Derivative_Limits (Block.Params, (Velocity => Bounds.Velocity, others => <>), Max_Vel);
       Result :=
         (Valid   => Mixed.Valid,
          Window  => Window,
@@ -1586,7 +947,6 @@ package body Prunt.Motion_Planner.Planner is
          Max_Vel =>
            Motor_Delta_Ceiling_For_Window
              (Block,
-              Workspace,
               Motor_Map,
               Finishing_Corner,
               Window,
@@ -1604,23 +964,11 @@ package body Prunt.Motion_Planner.Planner is
       then
          Result.Valid := False;
       end if;
-      if not Allow_Extrusion_Overlap
-        and then
-          (Window.Start_Distance < Workspace.Extrusion_Widths (Finishing_Corner - 1)
-           or else
-             Window.Start_Distance + Window.Distance
-             > Segment_Total_Distance (Block, Finishing_Corner) - Workspace.Extrusion_Widths (Finishing_Corner))
-      then
-         --  Lookahead retains a feasible coast-based seed. Final profile selection can accelerate through
-         --  these intervals once the combined XYZ/E phase polynomials have been certified.
-         Result.Valid := False;
-      end if;
       return Result;
    end Evaluate_Profile_Window;
 
    function Window_Axial_Derivative_Bounds
      (Block            : not null access constant Execution_Block;
-      Workspace        : not null access constant Planning_Workspace;
       Finishing_Corner : Finishing_Corners_Index;
       Window           : Profile_Window) return Unit_Speed_Axial_Derivative_Bounds
    is
@@ -1680,7 +1028,7 @@ package body Prunt.Motion_Planner.Planner is
       end Merge_End_Transition;
    begin
       if Window.Distance <= 0.0 * mm then
-         return Extrusion_Bounds (Block, Workspace, Finishing_Corner, Window.Start_Distance, Window.Distance);
+         return Extrusion_Bounds (Block, Finishing_Corner);
       end if;
 
       if Window_Start < Start_Transition and then Window_End > 0.0 * mm then
@@ -1696,8 +1044,7 @@ package body Prunt.Motion_Planner.Planner is
       end if;
 
       declare
-         E_Bounds : constant Unit_Speed_Axial_Derivative_Bounds :=
-           Extrusion_Bounds (Block, Workspace, Finishing_Corner, Window.Start_Distance, Window.Distance);
+         E_Bounds : constant Unit_Speed_Axial_Derivative_Bounds := Extrusion_Bounds (Block, Finishing_Corner);
       begin
          Result.Velocity (E_Axis) := E_Bounds.Velocity (E_Axis);
          Result.Acceleration (E_Axis) := E_Bounds.Acceleration (E_Axis);
@@ -1806,7 +1153,6 @@ package body Prunt.Motion_Planner.Planner is
 
    function Motor_Delta_Ceiling_For_Window
      (Block            : not null access constant Execution_Block;
-      Workspace        : not null access constant Planning_Workspace;
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Finishing_Corner : Finishing_Corners_Index;
       Window           : Profile_Window;
@@ -1821,9 +1167,7 @@ package body Prunt.Motion_Planner.Planner is
       Window_End       : constant Length := Window.Start_Distance + Window.Distance;
    begin
       declare
-         E_Bound : constant Dimensionless :=
-           Extrusion_Bounds (Block, Workspace, Finishing_Corner, Window.Start_Distance, Window.Distance).Velocity
-             (E_Axis);
+         E_Bound : constant Dimensionless := abs Block.Extrusion_Densities (Finishing_Corner);
       begin
          for M in Motor_Name loop
             declare
@@ -2200,11 +1544,8 @@ package body Prunt.Motion_Planner.Planner is
    begin
       Attempts := [others => 0];
       loop
-         My_Kinematic_Limiter.Run (Block, Motor_Map, Workspace, Result);
-         if Result.Valid then
-            My_Feedrate_Profile_Generator.Run
-              (Block, Motor_Map, Workspace, Result, Limit_Scale => (if Stopped then 0.5 else 1.0));
-         end if;
+         My_Kinematic_Limiter.Run (Block, Motor_Map, Workspace);
+         My_Feedrate_Profile_Generator.Run (Block, Motor_Map, Result, Limit_Scale => (if Stopped then 0.5 else 1.0));
          exit when Result.Valid;
 
          if not Stopped and then Attempts (Result.Failed_Segment) = Blended_Retries then
@@ -2224,14 +1565,10 @@ package body Prunt.Motion_Planner.Planner is
                 & Result.Failed_Segment'Image
                 & ". Check for zero limits or unrepresentable motion.";
          else
-            --  Recompute both adjoining junctions, their E corrections and all dependent profiles. A failed
-            --  segment may be constrained by the next junction's outgoing correction as well as its own.
-            for I in
-              Finishing_Corners_Index'Max (2, Result.Failed_Segment - 1)
-              .. Corners_Index'Min (Block.N_Corners, Result.Failed_Segment + 1)
-            loop
-               Block.Limited_Segment_Feedrates (I) := Block.Limited_Segment_Feedrates (I) * 0.5;
-            end loop;
+            --  Both adjoining junction ceilings take the minimum of their segments' feedrates, so halving the failed
+            --  segment's feedrate also slows its endpoints.
+            Block.Limited_Segment_Feedrates (Result.Failed_Segment) :=
+              Block.Limited_Segment_Feedrates (Result.Failed_Segment) * 0.5;
             Attempts (Result.Failed_Segment) := Attempts (Result.Failed_Segment) + 1;
          end if;
       end loop;
@@ -2265,13 +1602,11 @@ package body Prunt.Motion_Planner.Planner is
          Eval : constant Profile_Window_Evaluation :=
            Evaluate_Profile_Window
              (Block'Access,
-              Workspace,
               Motor_Map,
               Segment,
               (Start_Distance => Segment_Start_Transition_Distance (Block'Access, Segment),
                Distance       => Block.Primitive_Distances (Segment)),
-              Block.Limited_Segment_Feedrates (Segment),
-              Allow_Extrusion_Overlap => True);
+              Block.Limited_Segment_Feedrates (Segment));
       begin
          if not Eval.Valid
            or else Block.Primitive_Distances (Segment) <= 0.0 * mm
@@ -2320,11 +1655,9 @@ package body Prunt.Motion_Planner.Planner is
             Ends                                  : Profile_End_Pair;
          end record;
          type Saved_Corner is record
-            Transition       : Corner_Transition_Evaluator;
-            Bounds           : Unit_Speed_Axial_Derivative_Bounds;
-            Speed            : Velocity;
-            Correction       : Extrusion_Junction_Correction;
-            Width, Deviation : Length;
+            Transition : Corner_Transition_Evaluator;
+            Bounds     : Unit_Speed_Axial_Derivative_Bounds;
+            Speed      : Velocity;
          end record;
          subtype Window_Segments is Finishing_Corners_Index range First .. Last + 1;
          Saved         : constant array (Window_Segments) of Saved_Segment :=
@@ -2341,10 +1674,7 @@ package body Prunt.Motion_Planner.Planner is
            [for J in First .. Last =>
               (Block.Corner_Transitions (J),
                Workspace.Corner_Derivative_Bounds (J),
-               Block.Corner_Velocity_Limits (J),
-               Block.Extrusion_Junction_Corrections (J),
-               Workspace.Extrusion_Widths (J),
-               Workspace.Extrusion_Deviations (J))];
+               Block.Corner_Velocity_Limits (J))];
          Old_Times     : constant array (Window_Segments) of Time :=
            [for I in Window_Segments => Segment_Time (Block'Access, I)];
          Old_Distances : constant Block_Segment_Lengths (Window_Segments) :=
@@ -2362,9 +1692,6 @@ package body Prunt.Motion_Planner.Planner is
                Block.Corner_Transitions (J) := Saved_Corners (J).Transition;
                Workspace.Corner_Derivative_Bounds (J) := Saved_Corners (J).Bounds;
                Block.Corner_Velocity_Limits (J) := Saved_Corners (J).Speed;
-               Block.Extrusion_Junction_Corrections (J) := Saved_Corners (J).Correction;
-               Workspace.Extrusion_Widths (J) := Saved_Corners (J).Width;
-               Workspace.Extrusion_Deviations (J) := Saved_Corners (J).Deviation;
             end loop;
             for I in Saved'Range loop
                Block.Primitive_Distances (I) := Saved (I).Distance;
@@ -2385,16 +1712,13 @@ package body Prunt.Motion_Planner.Planner is
             Old_Time := @ + Old_Times (I);
          end loop;
          Workspace.Local_Comparison_Corners := @ + 1;
-         --  Change only these junctions. The retained outer transitions, their velocities and their E ramps
-         --  remain identical, so certified replacement profiles splice into the existing trajectory.
+         --  Change only these junctions. The retained outer transitions and their velocities remain identical, so
+         --  certified replacement profiles splice into the existing trajectory.
          for Corner in First .. Last loop
             Block.Corner_Transitions (Corner) :=
               To_Evaluator (Stop_At ([Block.Corners (Corner) with delta E_Axis => 0.0 * mm]));
             Workspace.Corner_Derivative_Bounds (Corner) := Derivative_Bounds (Block.Corner_Transitions (Corner));
             Block.Corner_Velocity_Limits (Corner) := 0.0 * mm / s;
-            Block.Extrusion_Junction_Corrections (Corner) := (others => <>);
-            Workspace.Extrusion_Widths (Corner) := 0.0 * mm;
-            Workspace.Extrusion_Deviations (Corner) := 0.0 * mm;
             Block.Primitive_Distances (Corner) :=
               Primitive_Length (Block'Access, Corner) - Block.Primitive_Start_Distances (Corner);
             Block.Primitive_Distances (Corner + 1) := @ + Block.Primitive_Start_Distances (Corner + 1);
@@ -2413,7 +1737,7 @@ package body Prunt.Motion_Planner.Planner is
                return;
             end if;
             --  Retain the already normalized speed cap. The profile generator certifies the newly restored
-            --  primitives and both retained boundary ramps, including helix, motor and E derivative limits.
+            --  primitives, including helix, motor and E derivative limits.
             Block.Limited_Segment_Feedrates (I) :=
               Velocity'Min (Saved (I).Feedrate, Segment_Total_Distance (Block'Access, I) / Interpolation_Time);
          end loop;
@@ -2433,7 +1757,7 @@ package body Prunt.Motion_Planner.Planner is
          end if;
          for I in Window_Segments loop
             My_Feedrate_Profile_Generator.Select_Feedrate_Profile_Window
-              (Block'Access, Motor_Map, Workspace, I, Result, Limit_Scale => 1.0);
+              (Block'Access, Motor_Map, I, Result, Limit_Scale => 1.0);
             if not Result.Valid then
                Restore;
                return;
@@ -2460,8 +1784,6 @@ package body Prunt.Motion_Planner.Planner is
          Workspace.Local_Stops_Selected := @ + Natural (Last - First + 1);
          for Corner in First .. Last loop
             Workspace.Static_Corner_Limits (Corner) := 0.0 * mm / s;
-            Workspace.Extrusion_Stops (Corner) := True;
-            Workspace.Extrusion_Ceilings (Corner) := 0.0 * mm / s;
          end loop;
          for I in Saved'Range loop
             Workspace.Planning_Attempts (I) := 0;
@@ -2486,32 +1808,14 @@ package body Prunt.Motion_Planner.Planner is
       then
          return;
       end if;
-      --  Each reference is monotone within its segment. At most one of its two E corrections is active;
-      --  bound their signed displacement using the certified midpoint deviations, with outward padding.
+      --  Each reference is monotone within its segment, so its endpoints bound it.
       for I in reverse Block.Primitives'Range loop
          declare
-            Low_Correction, High_Correction : Length := 0.0 * mm;
-            Low, High                       : Length;
+            Low  : constant Length :=
+              Length'Min (Block.Extrusion_Reference_Positions (I - 1), Block.Extrusion_Reference_Positions (I));
+            High : constant Length :=
+              Length'Max (Block.Extrusion_Reference_Positions (I - 1), Block.Extrusion_Reference_Positions (I));
          begin
-            for J in I - 1 .. I loop
-               if Block.Extrusion_Junction_Corrections (J).Max_Crackle < 0.0 * mm / s ** 5 then
-                  Low_Correction := Length'Min (Low_Correction, -Workspace.Extrusion_Deviations (J));
-               elsif Block.Extrusion_Junction_Corrections (J).Max_Crackle > 0.0 * mm / s ** 5 then
-                  High_Correction := Length'Max (High_Correction, Workspace.Extrusion_Deviations (J));
-               end if;
-            end loop;
-            Low := Length'Min (Block.Extrusion_Reference_Positions (I - 1), Block.Extrusion_Reference_Positions (I));
-            High := Length'Max (Block.Extrusion_Reference_Positions (I - 1), Block.Extrusion_Reference_Positions (I));
-            if Low_Correction /= 0.0 * mm then
-               Low :=
-                 @ + Low_Correction - 64.0 * Dimensionless'Model_Epsilon * (abs Low + abs Low_Correction)
-                 - 1.0E-12 * mm;
-            end if;
-            if High_Correction /= 0.0 * mm then
-               High :=
-                 @ + High_Correction + 64.0 * Dimensionless'Model_Epsilon * (abs High + abs High_Correction)
-                 + 1.0E-12 * mm;
-            end if;
             Workspace.Suffix_E_Min (I) :=
               (if I = Block.N_Corners then Low else Length'Min (Low, Workspace.Suffix_E_Min (I + 1)));
             Workspace.Suffix_E_Max (I) :=
@@ -2834,12 +2138,7 @@ package body Prunt.Motion_Planner.Planner is
       end if;
    end Segment_Corner_Distance;
 
-   function Reference_Segment_Pos_At_Time
-     (Block             : not null access constant Execution_Block;
-      Finishing_Corner  : Finishing_Corners_Index;
-      Time_Into_Segment : Time) return Position;
-
-   function Reference_Segment_Pos_At_Time
+   function Segment_Pos_At_Time
      (Block             : not null access constant Execution_Block;
       Finishing_Corner  : Finishing_Corners_Index;
       Time_Into_Segment : Time) return Position
@@ -2894,18 +2193,6 @@ package body Prunt.Motion_Planner.Planner is
                 * Time'Min (Time_Into_Segment - (Prefix_Time + Profile_Time), Suffix_Time));
       end if;
       return Point_At_Segment_Distance (Block, Finishing_Corner, Distance);
-   end Reference_Segment_Pos_At_Time;
-
-   function Segment_Pos_At_Time
-     (Block             : not null access constant Execution_Block;
-      Finishing_Corner  : Finishing_Corners_Index;
-      Time_Into_Segment : Time) return Position
-   is
-      Result : Position := Reference_Segment_Pos_At_Time (Block, Finishing_Corner, Time_Into_Segment);
-   begin
-      Result (E_Axis) :=
-        Apply_Extrusion_Junction_Correction (Block, Finishing_Corner, Time_Into_Segment, Result (E_Axis));
-      return Result;
    end Segment_Pos_At_Time;
 
    function Segment_Vel_Ratio_At_Time

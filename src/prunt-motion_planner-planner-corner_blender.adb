@@ -43,10 +43,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       Spatial_Map             : Prunt.Motion_Planner.Planner.Motor_Position_Map := Motor_Map;
       Extrusion_Reduction     : Length := 0.0 * mm;
       Reduction_Roundoff      : Length := 0.0 * mm;
-      Stop_At_Density_Changes : constant Boolean :=
-        (case Block.Params.Extrusion_Cornering.Kind is
-           when Smooth_Deviation              => Extrusion_Deviation (Block'Access) = 0.0 * mm,
-           when Instantaneous_Velocity_Change => Block.Params.Extrusion_Cornering.Velocity_Change_Max = 0.0 * mm / s);
+      Stop_At_Density_Changes : constant Boolean := Block.Params.Extrusion_Velocity_Change_Max = 0.0 * mm / s;
    begin
       for I in Block.Corners'Range loop
          Original_E (I) := Block.Corners (I) (E_Axis);
