@@ -172,7 +172,9 @@ package Prunt.Motion_Planner.Planner is
    --  These local pragmas survive instantiation; configuration pragmas above the generic do not.
    --  The instantiating compilation unit must also enable floating-point checking with -gnateF.
 
-   type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners;
+   type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners_Type'Max (Max_Corners, 3);
+   --  Three indices are needed for the seam workspace even when input blocks are limited to two corners.
+
    subtype Finishing_Corners_Index is Corners_Index range 2 .. Corners_Index'Last;
 
    Block_Capacity : constant Positive;
@@ -577,6 +579,15 @@ private
       end case;
    end record;
 
+   procedure Blend_Blocks
+     (Left, Right : aliased in out Execution_Block;
+      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Blended     : out Boolean);
+   --  Replace the stop where Left ends and Right begins with a blended corner, replanning at most Blend_Radius
+   --  segments on each side with the outer speeds fixed. Blended is True only if the replacement is certified and
+   --  faster, in which case Right's later E references are also translated; otherwise neither block is modified.
+   --  The caller first checks Blendable_Boundary and Allow_Blended_Entry, before copying any window.
+
    procedure Plan_Fixed_Geometry
      (Block     : aliased in out Execution_Block;
       Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
@@ -812,6 +823,7 @@ private
       --  faster than the same code without discriminated types (refer to the no-discriminated-records branch).
 
       --  Preprocessor
+      Blendable_End             : Boolean := False;
       Kind                      : Execution_Block_Kind := Motion_Block_Kind;
       Flush_Resetting_Data      : Flush_Resetting_Data_Type := Flush_Resetting_Data_Type_Default;
       Next_Block_Pos            : Position;
@@ -862,6 +874,8 @@ private
       --  the retained primitive accelerate independently of tight bounds on the curved ends.
    end record;
 
+   Blend_Radius : constant Corners_Index := Corners_Index'Min (32, (Corners_Index'Last - 1) / 2);
+
    type Block_Wrapper is record
       Extra_Data : aliased Corner_Extra_Data_Vectors.Vector;
       Block      : aliased Execution_Block;
@@ -901,6 +915,27 @@ private
       Next_Read, Next_Write : Block_Index := Block_Index'First;
       Ready_Count           : Block_Count := 0;
    end Block_Ring;
+
+   procedure Copy_Window
+     (Source : Execution_Block; First, Last : Corners_Index; Target : in out Execution_Block; Into : Corners_Index);
+   --  Copy every per-corner motion field of Source (First .. Last), and every per-segment field between those corners,
+   --  into Target starting at corner Into. This is the single list of fields that inter-block windows exchange.
+
+   procedure Copy_Motion_Window
+     (Source : Execution_Block; First, Last : Corners_Index; Target : aliased out Execution_Block);
+   --  Copy numeric motion fields only, aligning Source (First .. Last) with the end of Target. No user data copying.
+
+   procedure Clear_Planned_Fields (Block : not null access Execution_Block);
+   --  Initialize every field written by the stages after the preprocessor, in the block's current layout. This is the
+   --  single list of planned fields; Copy_Window lists the same fields where windows exchange them. Those fields are
+   --  not yet valid, so Block is passed by access rather than as an in out record checked for validity on entry.
+
+   procedure Initialize_Scratch_Block (Block : aliased out Execution_Block);
+   --  Give a numeric scratch block zeroed preprocessor fields and no plan. Callers fill the fields they use.
+
+   function Blendable_Boundary (Left, Right : Execution_Block) return Boolean;
+   --  Structural conditions for Blend_Blocks, excluding the Allow_Blended_Entry policy. Prepare_Blend checks both
+   --  before copying any window.
 
    type Runner_Finalizer is new Ada.Finalization.Limited_Controlled with null record;
 

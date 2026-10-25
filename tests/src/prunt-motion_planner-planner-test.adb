@@ -3515,10 +3515,172 @@ package body Prunt.Motion_Planner.Planner.Test is
       end;
    end Test_Profile_Extrusion_Limits;
 
+   procedure Test_Inter_Block_Blending (T : in out Trendy_Test.Operation'Class) is
+      Left, Right : aliased Execution_Block (6);
+      Work : aliased Planning_Workspace (Corners_Index'Last);
+      Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Blended : Boolean;
+      Old_Left_Profile : Feedrate_Profile;
+      Before : Time;
+      Following_Density : Dimensionless := 0.1;
+
+      procedure Prepare (Block : aliased out Execution_Block; Following : Boolean; Turn : Boolean);
+      procedure Prepare (Block : aliased out Execution_Block; Following : Boolean; Turn : Boolean) is
+      begin
+         Reset_Early_Limiter_Block (Block);
+         Block.Blendable_End := True;
+         Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
+         Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+         Block.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s ** 2];
+         Block.Params.Axial_Jerk_Maxes := [others => 10_000.0 * mm / s ** 3];
+         Block.Params.Axial_Snap_Maxes := [others => 100_000.0 * mm / s ** 4];
+         Block.Params.Axial_Crackle_Maxes := [others => 1_000_000.0 * mm / s ** 5];
+         Block.Params.Cornering :=
+           (Kind => Circular, Circular_Params =>
+              (Axial_Deviation_Maxes => [others => 0.5 * mm], Corner_Miss_Distance_Max => 0.5 * mm, others => <>));
+         Block.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+         for I in Block.Corners'Range loop
+            Block.Corners (I) :=
+              [X_Axis => (if Following and then Turn then Dimensionless (Block.N_Corners - 1) else
+                 Dimensionless (I - 1) + (if Following then Dimensionless (Block.N_Corners - 1) else 0.0)) * mm,
+               Y_Axis => (if Following and then Turn then Dimensionless (I - 1) else 0.0) * mm,
+               E_Axis => (if Following then
+                 Dimensionless (Block.N_Corners - 1) * 0.1 * mm + Dimensionless (I - 1) * Following_Density * mm
+                 else Dimensionless (I - 1) * 0.1 * mm),
+               others => 0.0 * mm];
+         end loop;
+         Normalize_And_Blend (Block, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (Block, Map);
+         Plan_Fixed_Geometry (Block, Map, Work'Access);
+      end Prepare;
+   begin
+      T.Register;
+      for Turn in Boolean loop
+         Prepare (Left, False, Turn);
+         Prepare (Right, True, Turn);
+         Before := 0.0 * s;
+         for I in Left.Primitives'Range loop
+            Before := @ + Segment_Time (Left'Access, I) + Segment_Time (Right'Access, I);
+         end loop;
+         Old_Left_Profile := Left.Feedrate_Profiles (4);
+         Blend_Blocks (Left, Right, Map, Blended);
+         T.Assert (Blended, "A prepared straight or rounded seam should remove the block stop");
+         T.Assert (Left.Corner_Velocity_Limits (6) > 0.0 * mm / s, "The seam has nonzero speed");
+         T.Assert (Left.Corner_Velocity_Limits (6) = Right.Corner_Velocity_Limits (1), "Seam speed is continuous");
+         T.Assert (abs (Segment_Pos_At_Time (Left'Access, 6, Segment_Time (Left'Access, 6))
+           - Segment_Pos_At_Time (Right'Access, 2, 0.0 * s)) < 1.0E-8 * mm,
+           "XYZ and shortened extrusion are continuous across the seam");
+         if not Turn then
+            T.Assert (Left.Feedrate_Profiles (4) /= Old_Left_Profile,
+              "Removing the slowdown changes profiles more than one segment away");
+         end if;
+         for I in Left.Primitives'Range loop
+            Before := @ - Segment_Time (Left'Access, I) - Segment_Time (Right'Access, I);
+         end loop;
+         T.Assert (Before > 0.0 * s, "The local replacement is faster than the two stopped plans");
+      end loop;
+      Following_Density := 0.2;
+      Prepare (Left, False, False);
+      Prepare (Right, True, False);
+      Blend_Blocks (Left, Right, Map, Blended);
+      T.Assert (Blended and then Left.Corner_Velocity_Limits (6) > 0.0 * mm / s,
+        "A density change keeps moving across the block boundary");
+      T.Assert (abs (Right.Extrusion_Densities (2) - Left.Extrusion_Densities (6)) * Left.Corner_Velocity_Limits (6)
+        <= Left.Params.Extrusion_Velocity_Change_Max,
+        "The seam's E velocity jump obeys its allowance");
+      T.Assert (abs (Segment_Pos_At_Time (Left'Access, 6, Segment_Time (Left'Access, 6))
+        - Segment_Pos_At_Time (Right'Access, 2, 0.0 * s)) < 1.0E-8 * mm,
+        "Both sides evaluate the same boundary extrusion position");
+      Following_Density := 0.1;
+      declare
+         Long_Left, Long_Right : aliased Execution_Block (Corners_Index'Last);
+         Prefix, Suffix : Feedrate_Profile;
+      begin
+         Prepare (Long_Left, False, False);
+         Prepare (Long_Right, True, False);
+         Prefix := Long_Left.Feedrate_Profiles (2);
+         Suffix := Long_Right.Feedrate_Profiles (Corners_Index'Last);
+         Blend_Blocks (Long_Left, Long_Right, Map, Blended);
+         T.Assert (Blended, "The bounded window also blends blocks larger than that window");
+         T.Assert (Long_Left.Feedrate_Profiles (2) = Prefix
+           and then Long_Right.Feedrate_Profiles (Corners_Index'Last) = Suffix,
+           "Profiles outside the bounded window are retained exactly");
+      end;
+      declare
+         E_Left, E_Right : aliased Execution_Block (2);
+      begin
+         Reset_Early_Limiter_Block (E_Left);
+         Reset_Early_Limiter_Block (E_Right);
+         E_Left.Params := Left.Params;
+         E_Right.Params := Left.Params;
+         E_Left.Blendable_End := True;
+         E_Left.Corners (2) (E_Axis) := 1.0 * mm;
+         E_Right.Corners (1) (E_Axis) := 1.0 * mm;
+         E_Right.Corners (2) (E_Axis) := 2.0 * mm;
+         E_Left.Original_Segment_Feedrates := [others => 10.0 * mm / s];
+         E_Right.Original_Segment_Feedrates := [others => 10.0 * mm / s];
+         Normalize_And_Blend (E_Left, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (E_Left, Map);
+         Plan_Fixed_Geometry (E_Left, Map, Work'Access);
+         Normalize_And_Blend (E_Right, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (E_Right, Map);
+         Plan_Fixed_Geometry (E_Right, Map, Work'Access);
+         Blend_Blocks (E_Left, E_Right, Map, Blended);
+         T.Assert (Blended and then E_Left.Corner_Velocity_Limits (2) > 0.0 * mm / s,
+           "Same-direction extrusion-only blocks have a continuous scalar profile");
+      end;
+      declare
+         --  The rounded seam shortens both sides, translating the following references down. The following block
+         --  then retracts to its commanded lower limit entirely inside the replacement window, with no suffix.
+         Retract_Right : aliased Execution_Block (3);
+         Old_End_E     : Length;
+      begin
+         for Bounded in Boolean loop
+            Prepare (Left, False, False);
+            if Bounded then
+               Left.Params.Bounds.Lower_E := -1.0E-6 * mm;
+            end if;
+            Reset_Early_Limiter_Block (Retract_Right);
+            Retract_Right.Params := Left.Params;
+            Retract_Right.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+            Retract_Right.Corners :=
+              [Left.Corners (Left.N_Corners),
+               [X_Axis => 5.0 * mm, Y_Axis => 5.0 * mm, E_Axis => 1.0 * mm, others => 0.0 * mm],
+               [X_Axis => 5.0 * mm, Y_Axis => 10.0 * mm, others => 0.0 * mm]];
+            Normalize_And_Blend (Retract_Right, Map, Work'Access);
+            Tested_Early_Kinematic_Limiter.Run (Retract_Right, Map);
+            Plan_Fixed_Geometry (Retract_Right, Map, Work'Access);
+            Old_End_E := Retract_Right.Extrusion_Reference_Positions (3);
+            Blend_Blocks (Left, Retract_Right, Map, Blended);
+            if Bounded then
+               T.Assert (not Blended and then Retract_Right.Extrusion_Reference_Positions (3) = Old_End_E,
+                 "A window translation below the E bound retains the stopped plans");
+            else
+               T.Assert (Blended and then Retract_Right.Extrusion_Reference_Positions (3) < -1.0E-6 * mm,
+                 "Without the bound the same seam translates the retraction below it");
+            end if;
+         end loop;
+      end;
+      for Barrier in 1 .. 4 loop
+         Prepare (Left, False, False);
+         Prepare (Right, True, False);
+         T.Assert (Blendable_Boundary (Left, Right), "The prepared pair is structurally blendable");
+         case Barrier is
+            when 1 => Left.Blendable_End := False;
+            when 2 => Left.Associated_Overflow_Block := True;
+            when 3 => Left.Corner_Dwell_Times (6) := 1.0 * s;
+            when 4 => Right.Is_Homing_Move := True;
+         end case;
+         T.Assert (not Blendable_Boundary (Left, Right),
+           "End data, overflow, dwell and homing boundaries are rejected before any window is copied");
+      end loop;
+   end Test_Inter_Block_Blending;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
+        [Test_Inter_Block_Blending'Unrestricted_Access,
+         Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
          Test_Profile_Extrusion_Limits'Unrestricted_Access,
          Test_Local_Pair_Stop_Selection'Unrestricted_Access,
          Test_Local_Corner_Selection'Unrestricted_Access,

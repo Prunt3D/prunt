@@ -421,6 +421,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Is_Extra_Data_Overflow_Block : Boolean := False;
          Is_First_Command_In_Block    : Boolean := True;
          Associated_Overflow_Block    : Boolean := False;
+         Blendable_End                : Boolean := True;
          Last_Pos                     : Position := Start_Pos;
 
          procedure Finish_Dequeue_And_Update_Corner_ID (Kind : Command_Kind; Corner_ID : out Planner_Corner_ID);
@@ -567,6 +568,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                         end if;
 
                         Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
+                        Blendable_End := False;
                         Last_Pos := Next_Command.Reset_Pos;
                         Is_Homing_Move := False;
                         exit Read_In_Commands;
@@ -580,6 +582,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                         end if;
 
                         Flush_Resetting_Data := Next_Command.Flush_Resetting_Data;
+                        Blendable_End := False;
                         Next_Params := Limit_Higher_Order_Params (Next_Command.New_Params);
                         Is_Homing_Move := False;
                         exit Read_In_Commands;
@@ -619,7 +622,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                         Last_Pos := Next_Command.Pos;
 
-                        exit Read_In_Commands when N_Corners = Corners_Index'Last;
+                        exit Read_In_Commands when N_Corners = Corners_Index (Max_Corners);
 
                      when Helix_Move_Kind                  =>
                         Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
@@ -640,7 +643,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
                         Last_Pos := Next_Command.Pos;
 
-                        exit Read_In_Commands when N_Corners = Corners_Index'Last;
+                        exit Read_In_Commands when N_Corners = Corners_Index (Max_Corners);
                   end case;
                end if;
             end;
@@ -674,6 +677,8 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          --  This is hacky and not portable, but if we try to assign to the entire record as you normally would then
          --  GCC insists on creating a whole Execution_Block on the stack.
 
+         Block.Blendable_End :=
+           Blendable_End and then not Is_Homing_Move and then Flush_Resetting_Data = Flush_Resetting_Data_Type_Default;
          Block.Kind := (if Is_Extra_Data_Overflow_Block then Extra_Data_Overflow_Block_Kind else Motion_Block_Kind);
          Block.Corners := Corners (1 .. N_Corners);
          for I in Block.Corner_Transitions'Range loop
@@ -694,17 +699,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
          --  Updating the discriminant above bypasses default initialization and changes the offsets of the
          --  variable-sized arrays. Initialize every later-stage field in the new layout before returning it.
-         Block.Loop_Move_Minimum_Time := 0.0 * s;
-         Block.Extrusion_Reference_Positions := [others => 0.0 * mm];
-         Block.Extrusion_Densities := [others => 0.0];
-         Block.Primitive_Distances := [others => 0.0 * mm];
-         Block.Primitive_Start_Distances := [others => 0.0 * mm];
-         Block.Corner_Velocity_Limits := [others => 0.0 * mm / s];
-         Block.Feedrate_Profiles :=
-           [others => (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s])];
-         Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
-         Block.Profile_Windows := [others => <>];
-         Block.Profile_Ends := [others => <>];
+         Clear_Planned_Fields (Block);
 
          if Is_Homing_Move then
             Block.Params.Axial_Shapers := [others => (Kind => Input_Shapers.No_Shaper)];

@@ -28,9 +28,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    pragma Extensions_Allowed (On);
 
    procedure Run
-     (Block     : aliased in out Execution_Block;
-      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace : not null access Planning_Workspace)
+     (Block      : aliased in out Execution_Block;
+      Motor_Map  : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace  : not null access Planning_Workspace;
+      Fixed_Ends : Boolean := False)
    is
       Velocity_Change_Tolerance : constant Velocity := 1.0E-3 * mm / s;
       Cleanup_Iterations        : constant Positive := 4;
@@ -231,8 +232,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       Changed : Boolean := False;
 
    begin
-      Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
-      Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
+      if not Fixed_Ends then
+         Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
+         Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;
+      end if;
       Workspace.Check_Extrusion_Position :=
         (for all I in Block.Corners'Range =>
            Block.Corners (I) (E_Axis) in Block.Params.Bounds.Lower_E .. Block.Params.Bounds.Upper_E);
