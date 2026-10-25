@@ -31,7 +31,6 @@ package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    procedure Run
      (Block       : aliased in out Execution_Block;
       Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace   : not null access constant Planning_Workspace;
       Result      : out Profile_Planning_Result;
       Limit_Scale : Dimensionless := 1.0);
    --  Fills Block.Feedrate_Profiles with profiles based on Block.Corner_Velocity_Limits and Block.Params.
@@ -43,11 +42,10 @@ package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    procedure Select_Feedrate_Profile_Window
      (Block            : not null access Execution_Block;
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace        : not null access constant Planning_Workspace;
       Finishing_Corner : Finishing_Corners_Index;
       Result           : out Profile_Planning_Result;
       Limit_Scale      : Dimensionless);
-   --  Select and certify a single segment with fixed endpoint velocities and extrusion corrections.
+   --  Select and certify a single segment with fixed endpoint velocities.
    --  Also used for local corner alternatives; other segments and junctions remain unchanged.
 
 end Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;

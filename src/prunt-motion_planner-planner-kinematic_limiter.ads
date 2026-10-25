@@ -31,11 +31,8 @@ package Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    procedure Run
      (Block     : aliased in out Execution_Block;
       Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace : not null access Planning_Workspace;
-      Result    : out Profile_Planning_Result);
+      Workspace : not null access Planning_Workspace);
    --  Fill Block.Corner_Velocity_Limits with velocity limits, that when enforced at corners, will prevent other
    --  limits from being violated.
-   --
-   --  Result reports an E transition that cannot be certified at the solved junction speed, allowing a slower retry.
 
 end Prunt.Motion_Planner.Planner.Kinematic_Limiter;
