@@ -27,12 +27,13 @@ package body Prunt.Step_Generator is
    --  Keep rounded PA catch-up commands below the exact hardware limit.
    Catch_Up_Numerical_Safety_Factor : constant Dimensionless := 0.999;
 
-   protected Reset_Control is
+   package Reset_Control is
       procedure Request;
       --  Request that the runner stop at the next reset check. If the runner is idle, acknowledge immediately.
 
-      function Requested return Boolean;
-      --  True while an active runner has not yet acknowledged the current reset request.
+      function Pending return Boolean;
+      --  True while an active runner has not yet acknowledged the current reset request. This does not take a lock
+      --  because Runner polls it while moving, where a protected call could block.
 
       procedure Mark_Running;
       --  Mark the runner as active after setup has completed.
@@ -40,49 +41,84 @@ package body Prunt.Step_Generator is
       procedure Acknowledge;
       --  Mark the runner as stopped and clear any pending reset request.
 
-      entry Wait_For_Acknowledgement;
-      --  Block until Request has been acknowledged or there was no active runner to reset.
-
-   private
-      Reset_Requested    : Boolean := False;
-      Reset_Acknowledged : Boolean := True;
-      Runner_Running     : Boolean := False;
+      procedure Wait_For_Acknowledgement (Timeout : Duration; Acknowledged : out Boolean);
+      --  Block until Request has been acknowledged or there was no active runner to reset. Acknowledged is False if
+      --  Timeout expired first.
    end Reset_Control;
 
-   protected body Reset_Control is
+   package body Reset_Control is
+      Reset_Pending : Boolean := False
+      with Atomic, Volatile;
+      --  Only Lifecycle writes this, so it always agrees with the protected runner state.
+
+      protected Lifecycle is
+         procedure Request;
+         procedure Mark_Running;
+         procedure Acknowledge;
+         entry Wait_For_Acknowledgement;
+      private
+         Reset_Acknowledged : Boolean := True;
+         Runner_Running     : Boolean := False;
+      end Lifecycle;
+
+      protected body Lifecycle is
+         procedure Request is
+         begin
+            if Runner_Running then
+               Reset_Pending := True;
+               Reset_Acknowledged := False;
+            else
+               Reset_Pending := False;
+               Reset_Acknowledged := True;
+            end if;
+         end Request;
+
+         procedure Mark_Running is
+         begin
+            Runner_Running := True;
+            Reset_Pending := False;
+            Reset_Acknowledged := True;
+         end Mark_Running;
+
+         procedure Acknowledge is
+         begin
+            Runner_Running := False;
+            Reset_Pending := False;
+            Reset_Acknowledged := True;
+         end Acknowledge;
+
+         entry Wait_For_Acknowledgement when Reset_Acknowledged is
+         begin
+            null;
+         end Wait_For_Acknowledgement;
+      end Lifecycle;
+
       procedure Request is
       begin
-         if Runner_Running then
-            Reset_Requested := True;
-            Reset_Acknowledged := False;
-         else
-            Reset_Requested := False;
-            Reset_Acknowledged := True;
-         end if;
+         Lifecycle.Request;
       end Request;
 
-      function Requested return Boolean is
-      begin
-         return Reset_Requested;
-      end Requested;
+      function Pending return Boolean is (Reset_Pending);
 
       procedure Mark_Running is
       begin
-         Runner_Running := True;
-         Reset_Requested := False;
-         Reset_Acknowledged := True;
+         Lifecycle.Mark_Running;
       end Mark_Running;
 
       procedure Acknowledge is
       begin
-         Runner_Running := False;
-         Reset_Requested := False;
-         Reset_Acknowledged := True;
+         Lifecycle.Acknowledge;
       end Acknowledge;
 
-      entry Wait_For_Acknowledgement when Reset_Acknowledged is
+      procedure Wait_For_Acknowledgement (Timeout : Duration; Acknowledged : out Boolean) is
       begin
-         null;
+         select
+            Lifecycle.Wait_For_Acknowledgement;
+            Acknowledged := True;
+         or
+            delay Timeout;
+            Acknowledged := False;
+         end select;
       end Wait_For_Acknowledgement;
    end Reset_Control;
 
@@ -129,21 +165,18 @@ package body Prunt.Step_Generator is
    with Atomic, Volatile;
 
    procedure Reset is
+      Acknowledged : Boolean;
    begin
       Reset_Control.Request;
 
       loop
-         select
-            Reset_Control.Wait_For_Acknowledgement;
-            exit;
-         or
-            delay 0.1;
+         Reset_Control.Wait_For_Acknowledgement (0.1, Acknowledged);
+         exit when Acknowledged;
 
-            if Runner'Terminated then
-               Reset_Control.Acknowledge;
-               exit;
-            end if;
-         end select;
+         if Runner'Terminated then
+            Reset_Control.Acknowledge;
+            exit;
+         end if;
       end loop;
    end Reset;
 
@@ -370,8 +403,6 @@ package body Prunt.Step_Generator is
 
       Zero_Length : constant Length := 0.0 * mm;
 
-      procedure Check_Reset (Reset_Requested : out Boolean);
-
       procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean);
 
       function Primary_Pause_Requested return Boolean;
@@ -385,11 +416,6 @@ package body Prunt.Step_Generator is
       function No_Pause_Motor_Is_Pinned
         (Resetting_Data : Pause_Planner.Flush_Resetting_Data_Type; Transform : Kinematic_Transform; Motor : Motor_Name)
          return Boolean;
-
-      procedure Check_Reset (Reset_Requested : out Boolean) is
-      begin
-         Reset_Requested := Reset_Control.Requested;
-      end Check_Reset;
 
       function Primary_Pause_Requested return Boolean is
       begin
@@ -429,7 +455,7 @@ package body Prunt.Step_Generator is
         Block_Executor
           (Active_Planner                    => Planner,
            Allow_Homing                      => True,
-           Check_Reset                       => Check_Reset,
+           Reset_Pending                     => Reset_Control.Pending,
            Start_Block_Callback              => Start_Planner_Block,
            Setup_Loop_Move_Callback          => Setup_Loop_Move,
            Pin_Motor_To_Block_Start_Callback => Pin_Motor_To_Block_Start,
@@ -443,7 +469,7 @@ package body Prunt.Step_Generator is
         Block_Executor
           (Active_Planner                    => Pause_Planner,
            Allow_Homing                      => False,
-           Check_Reset                       => Check_Reset,
+           Reset_Pending                     => Reset_Control.Pending,
            Start_Block_Callback              => Start_Pause_Planner_Block,
            Setup_Loop_Move_Callback          => Reject_Pause_Loop_Move_Setup,
            Pin_Motor_To_Block_Start_Callback => No_Pause_Motor_Is_Pinned,
@@ -465,7 +491,7 @@ package body Prunt.Step_Generator is
             Halt_Control.Acknowledge (True, Commands.Current_Command_Index);
 
             loop
-               Check_Reset (Reset_Requested);
+               Reset_Requested := Reset_Control.Pending;
                exit when Reset_Requested;
                delay 0.1;
             end loop;
@@ -498,7 +524,7 @@ package body Prunt.Step_Generator is
          procedure Wait_For_Resume is
          begin
             loop
-               Check_Reset (Reset_Requested);
+               Reset_Requested := Reset_Control.Pending;
                if Reset_Requested then
                   return;
                end if;
@@ -585,7 +611,7 @@ package body Prunt.Step_Generator is
                when Hardware_Communication_Error =>
                   loop
                      Halt_Control.Acknowledge (False, Commands.Current_Command_Index);
-                     exit when Reset_Control.Requested;
+                     exit when Reset_Control.Pending;
                      delay 0.01;
                   end loop;
                   exit Main;
@@ -593,7 +619,7 @@ package body Prunt.Step_Generator is
                   --  This exception is only raised after the shutdown block has confirmed hardware idle.
                   loop
                      Halt_Control.Acknowledge (True, Commands.Current_Command_Index);
-                     exit when Reset_Control.Requested;
+                     exit when Reset_Control.Pending;
                      delay 0.01;
                   end loop;
                   exit Main;

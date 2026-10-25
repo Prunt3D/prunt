@@ -54,7 +54,7 @@ package body Prunt.Step_Generator.Block_Executor is
       loop
          Active_Planner.Dequeue (Block, Timed_Out);
 
-         Check_Reset (Reset_Requested);
+         Reset_Requested := Reset_Pending;
          if Reset_Requested then
             return;
          end if;

@@ -27,13 +27,14 @@ private generic
    Allow_Homing : Boolean := False;
    --  Whether this executor may run planner homing blocks. Pause-plan executors should leave this False.
 
-   with procedure Check_Reset (Reset_Requested : out Boolean);
-   --  Report whether the step generator has been asked to reset.
+   with function Reset_Pending return Boolean;
+   --  Report whether the step generator has been asked to reset. Execute_Block polls this while moving, so it must not
+   --  block, wait, or call a protected object.
 
    with
      procedure Start_Block_Callback
        (Resetting_Data : Active_Planner.Flush_Resetting_Data_Type; Last_Command_Index : Command_Index);
-   --  Runs immediately before the block's first corner data is processed.
+   --  Runs before the continuous run's first corner data, at a safe stop.
 
    with procedure Setup_Loop_Move_Callback (Resetting_Data : Active_Planner.Flush_Resetting_Data_Type);
    --  Configure the repeated command immediately before it is enqueued.
