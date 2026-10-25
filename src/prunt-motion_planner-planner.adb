@@ -1894,6 +1894,306 @@ package body Prunt.Motion_Planner.Planner is
       return Coast_Deficit + Tail_Excess;
    end Homing_Profile_Violation;
 
+   procedure Blend_Blocks
+     (Left, Right : aliased in out Execution_Block;
+      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Blended     : out Boolean)
+   is
+      --  Only the seam corner, where Left ends and Right begins, gets a new geometry search. The velocity solve covers
+      --  at most Blend_Radius segments on each side of it, regardless of block size, and geometry and speeds outside
+      --  that window stay fixed. Patch corners 1 .. Seam replace Left corners Left_First .. Left_Seam, and Patch
+      --  corners Seam .. Patch.N_Corners replace Right corners 1 .. Right_Last.
+      Left_Seam      : constant Corners_Index := Left.N_Corners;
+      Left_Segments  : constant Corners_Index'Base := Corners_Index'Min (Blend_Radius, Left_Seam - 1);
+      Right_Segments : constant Corners_Index'Base := Corners_Index'Min (Blend_Radius, Right.N_Corners - 1);
+      Left_First     : constant Corners_Index := Left_Seam - Left_Segments;
+      Right_Last     : constant Corners_Index := Right_Segments + 1;
+      Seam           : constant Corners_Index := Left_Segments + 1;
+
+      Geometry     : aliased Execution_Block (3);
+      --  Scratch block holding the retained parts of the two primitives that meet at the seam.
+      Patch        : aliased Execution_Block (Left_Segments + Right_Segments + 1);
+      Work         : aliased Planning_Workspace (Corners_Index'Max (3, Patch.N_Corners));
+      Result       : Profile_Planning_Result;
+      Suffix_Shift : Length;
+      --  E translation of Right's untouched references after the window.
+
+      procedure Blend_Seam;
+      --  Blend the seam corner on Geometry. Using only the retained parts of the primitives guarantees the new corner
+      --  cannot consume a neighbouring transition's allocation. Extrusion densities are authoritative, so they are
+      --  copied rather than renormalized.
+
+      procedure Build_Patch;
+      --  Copy the window into Patch and install the new seam corner. Copied profiles and speeds are only starting
+      --  values; the limiter and profile generator replace every one.
+
+      function Original_Time return Time;
+      --  Time the stopped plans spend on the segments Patch replaces.
+
+      function Patch_Time return Time;
+
+      function E_In_Bounds
+        (Block : Execution_Block; First, Last : Finishing_Corners_Index; Shift : Length) return Boolean;
+      --  Whether segments First .. Last stay within the E bounds with their references translated by Shift.
+
+      procedure Blend_Seam is
+         Left_Start : constant Length := Left.Primitive_Start_Distances (Left_Seam);
+         Right_End  : constant Length := Right.Primitive_Start_Distances (2) + Right.Primitive_Distances (2);
+      begin
+         Initialize_Scratch_Block (Geometry);
+         Geometry.Params := Left.Params;
+         Geometry.Primitives := [Left.Primitives (Left_Seam), Right.Primitives (2)];
+         Geometry.Extrusion_Densities := [Left.Extrusion_Densities (Left_Seam), Right.Extrusion_Densities (2)];
+         Geometry.Corners :=
+           [Primitive_Point_At_Distance (Left'Access, Left_Seam, Left_Start),
+            Left.Corners (Left_Seam),
+            Primitive_Point_At_Distance (Right'Access, 2, Right_End)];
+         --  Primitive points carry E only for E-only moves. Place both retained ends on the commanded density frame so
+         --  the blender's E bound fallback checks these points rather than the neighbouring commanded corners.
+         Geometry.Corners (1) (E_Axis) :=
+           Left.Corners (Left_Seam) (E_Axis)
+           - Left.Extrusion_Densities (Left_Seam) * (Primitive_Length (Left'Access, Left_Seam) - Left_Start);
+         Geometry.Corners (3) (E_Axis) := Right.Corners (1) (E_Axis) + Right.Extrusion_Densities (2) * Right_End;
+
+         Work.Unblended_Extrusion_Positions (1) := Geometry.Corners (1) (E_Axis);
+         for I in Geometry.Primitives'Range loop
+            Work.Unblended_Segment_Lengths (I) := Primitive_Length (Geometry'Access, I);
+            Work.Unblended_Extrusion_Positions (I) :=
+              Work.Unblended_Extrusion_Positions (I - 1)
+              + Geometry.Extrusion_Densities (I) * Work.Unblended_Segment_Lengths (I);
+         end loop;
+         My_Corner_Blender.Run (Geometry, Motor_Map, Work'Access);
+
+         if Geometry.Primitives (2).Kind = Line_Primitive_Kind
+           and then Geometry.Primitives (3).Kind = Line_Primitive_Kind
+           and then Geometry.Extrusion_Densities (2) /= 0.0
+           and then Geometry.Extrusion_Densities (2) = Geometry.Extrusion_Densities (3)
+           and then
+             (for all Axis in Axis_Name =>
+                Axis = E_Axis
+                or else
+                  (Geometry.Corners (1) (Axis) = Geometry.Corners (2) (Axis)
+                   and then Geometry.Corners (2) (Axis) = Geometry.Corners (3) (Axis)))
+         then
+            --  Same-direction E-only moves have a stationary spatial corner and a continuous scalar path. The spatial
+            --  blender deliberately sees zero-length primitives; their E velocity profiles still admit a passthrough.
+            Geometry.Corner_Transitions (2) :=
+              To_Evaluator (Passthrough_At ([Geometry.Corners (2) with delta E_Axis => 0.0 * mm]));
+         end if;
+      end Blend_Seam;
+
+      procedure Build_Patch is
+         Left_Trim   : constant Length := Primitive_Length (Geometry'Access, 2) - Geometry.Primitive_Distances (2);
+         Right_Trim  : constant Length := Geometry.Primitive_Start_Distances (3);
+         --  Path the new seam transition takes from each primitive.
+         Right_Shift : Length;
+         --  E translation of Right's references inside the window.
+      begin
+         Initialize_Scratch_Block (Patch);
+         Patch.Params := Left.Params;
+         Copy_Window (Left, Left_First, Left_Seam, Patch, 1);
+         Copy_Window (Right, 1, Right_Last, Patch, Seam);
+         Patch.Corner_Transitions (Seam) := Geometry.Corner_Transitions (2);
+
+         --  Apply the trims to the original primitive lengths. Measuring the clipped scratch endpoints again can
+         --  differ by an ulp; in particular an untrimmed passthrough must not manufacture an extrusion shortening.
+         Patch.Primitive_Distances (Seam) := Left.Primitive_Distances (Left_Seam) - Left_Trim;
+         Patch.Primitive_Start_Distances (Seam + 1) := Right.Primitive_Start_Distances (2) + Right_Trim;
+         Patch.Primitive_Distances (Seam + 1) := Right.Primitive_Distances (2) - Right_Trim;
+
+         --  Translate existing references by the two local shortening deltas. Reintegrating every density would
+         --  introduce roundoff drift even at an exactly straight seam and lose exact stopped endpoints.
+         Patch.Extrusion_Reference_Positions (Seam) :=
+           Left.Extrusion_Reference_Positions (Left_Seam)
+           + Left.Extrusion_Densities (Left_Seam)
+             * (Segment_Total_Distance (Patch'Access, Seam) - Segment_Total_Distance (Left'Access, Left_Seam));
+         Right_Shift :=
+           Patch.Extrusion_Reference_Positions (Seam) - Right.Extrusion_Reference_Positions (1)
+           + Right.Extrusion_Densities (2)
+             * (Segment_Total_Distance (Patch'Access, Seam + 1) - Segment_Total_Distance (Right'Access, 2));
+         for I in 2 .. Right_Last loop
+            Patch.Extrusion_Reference_Positions (Seam + I - 1) :=
+              Right.Extrusion_Reference_Positions (I) + Right_Shift;
+         end loop;
+
+         for I in Patch.Corners'Range loop
+            Work.Corner_Derivative_Bounds (I) := Derivative_Bounds (Patch.Corner_Transitions (I));
+         end loop;
+         for I in Patch.Primitives'Range loop
+            --  Shortening must still respect the minimum interpolation time.
+            Patch.Limited_Segment_Feedrates (I) :=
+              Velocity'Min
+                (Patch.Limited_Segment_Feedrates (I), Segment_Total_Distance (Patch'Access, I) / Interpolation_Time);
+         end loop;
+      end Build_Patch;
+
+      function Original_Time return Time is
+         Total : Time := 0.0 * s;
+      begin
+         for I in Left_First + 1 .. Left_Seam loop
+            Total := @ + Segment_Time (Left'Access, I);
+         end loop;
+         for I in 2 .. Right_Last loop
+            Total := @ + Segment_Time (Right'Access, I);
+         end loop;
+         return Total;
+      end Original_Time;
+
+      function Patch_Time return Time is
+         Total : Time := 0.0 * s;
+      begin
+         for I in Patch.Primitives'Range loop
+            Total := @ + Segment_Time (Patch'Access, I);
+         end loop;
+         return Total;
+      end Patch_Time;
+
+      function E_In_Bounds
+        (Block : Execution_Block; First, Last : Finishing_Corners_Index; Shift : Length) return Boolean
+      is
+         Lower : constant Length := Block.Params.Bounds.Lower_E;
+         Upper : constant Length := Block.Params.Bounds.Upper_E;
+      begin
+         --  Each segment's reference is monotone, so its endpoints bound it.
+         return
+           (for all I in First .. Last =>
+              Block.Extrusion_Reference_Positions (I - 1) + Shift in Lower .. Upper
+              and then Block.Extrusion_Reference_Positions (I) + Shift in Lower .. Upper);
+      end E_In_Bounds;
+   begin
+      Blended := False;
+
+      begin
+         Blend_Seam;
+         if Policy (Geometry.Corner_Transitions (2)) = Hard_Stop then
+            return;
+         end if;
+
+         Build_Patch;
+         My_Kinematic_Limiter.Run (Patch, Motor_Map, Work'Access, Fixed_Ends => True);
+         if Patch.Corner_Velocity_Limits (Seam) <= 0.0 * mm / s then
+            return;
+         end if;
+         My_Feedrate_Profile_Generator.Run (Patch, Motor_Map, Result);
+         if not Result.Valid or else Patch_Time >= Original_Time then
+            return;
+         end if;
+
+         --  The seam translates references inside the window as well as after it, and the blender only checked its
+         --  scratch frame, so certify every replacement segment. Right's untouched suffix only moves by Suffix_Shift,
+         --  which a linear pass certifies without another solve. This also evaluates every sum the commit assigns.
+         Suffix_Shift :=
+           Patch.Extrusion_Reference_Positions (Patch.N_Corners) - Right.Extrusion_Reference_Positions (Right_Last);
+         if not E_In_Bounds (Patch, 2, Patch.N_Corners, 0.0 * mm)
+           or else not E_In_Bounds (Right, Right_Last + 1, Right.N_Corners, Suffix_Shift)
+         then
+            return;
+         end if;
+      exception
+         when others =>
+            --  The replacement is optional and may fail in any planning stage. Left and Right are not modified before
+            --  the commit below, so both stopped plans remain valid.
+            return;
+      end;
+
+      --  Patch geometry outside the seam equals the originals, so copying whole windows changes only replanned fields.
+      Copy_Window (Patch, 1, Seam, Left, Left_First);
+      Copy_Window (Patch, Seam, Patch.N_Corners, Right, 1);
+      for I in Right_Last + 1 .. Right.N_Corners loop
+         Right.Extrusion_Reference_Positions (I) := @ + Suffix_Shift;
+      end loop;
+      Blended := True;
+   end Blend_Blocks;
+
+   procedure Copy_Window
+     (Source : Execution_Block; First, Last : Corners_Index; Target : in out Execution_Block; Into : Corners_Index) is
+   begin
+      for I in First .. Last loop
+         declare
+            J : constant Corners_Index := Into + (I - First);
+         begin
+            Target.Corners (J) := Source.Corners (I);
+            Target.Corner_Transitions (J) := Source.Corner_Transitions (I);
+            Target.Corner_Velocity_Limits (J) := Source.Corner_Velocity_Limits (I);
+            Target.Extrusion_Reference_Positions (J) := Source.Extrusion_Reference_Positions (I);
+            if I > First then
+               Target.Primitives (J) := Source.Primitives (I);
+               Target.Original_Segment_Feedrates (J) := Source.Original_Segment_Feedrates (I);
+               Target.Limited_Segment_Feedrates (J) := Source.Limited_Segment_Feedrates (I);
+               Target.Corner_Dwell_Times (J) := Source.Corner_Dwell_Times (I);
+               Target.Extrusion_Densities (J) := Source.Extrusion_Densities (I);
+               Target.Primitive_Start_Distances (J) := Source.Primitive_Start_Distances (I);
+               Target.Primitive_Distances (J) := Source.Primitive_Distances (I);
+               Target.Feedrate_Profiles (J) := Source.Feedrate_Profiles (I);
+               Target.Profile_Crackles (J) := Source.Profile_Crackles (I);
+               Target.Profile_Windows (J) := Source.Profile_Windows (I);
+               Target.Profile_Ends (J) := Source.Profile_Ends (I);
+            end if;
+         end;
+      end loop;
+   end Copy_Window;
+
+   procedure Clear_Planned_Fields (Block : not null access Execution_Block) is
+   begin
+      Block.Loop_Move_Minimum_Time := 0.0 * s;
+      Block.Extrusion_Reference_Positions := [others => 0.0 * mm];
+      Block.Extrusion_Densities := [others => 0.0];
+      Block.Primitive_Distances := [others => 0.0 * mm];
+      Block.Primitive_Start_Distances := [others => 0.0 * mm];
+      Block.Corner_Velocity_Limits := [others => 0.0 * mm / s];
+      Block.Feedrate_Profiles :=
+        [others => (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s])];
+      Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
+      Block.Profile_Windows := [others => <>];
+      Block.Profile_Ends := [others => <>];
+   end Clear_Planned_Fields;
+
+   procedure Initialize_Scratch_Block (Block : aliased out Execution_Block) is
+   begin
+      Block.Next_Block_Pos := [others => 0.0 * mm];
+      Block.Is_Homing_Move := False;
+      Block.Corners_Extra_Data_End_Indices := [others => Corner_Extra_Data_Vectors.Extended_Index'First];
+      Block.Corners := [others => [others => 0.0 * mm]];
+      Block.Primitives := [others => Make_Line_Primitive];
+      Block.Original_Segment_Feedrates := [others => 0.0 * mm / s];
+      Block.Limited_Segment_Feedrates := [others => 0.0 * mm / s];
+      Block.Corner_Dwell_Times := [others => 0.0 * s];
+      Clear_Planned_Fields (Block'Access);
+   end Initialize_Scratch_Block;
+
+   procedure Copy_Motion_Window
+     (Source : Execution_Block; First, Last : Corners_Index; Target : aliased out Execution_Block)
+   is
+      Start : constant Corners_Index := Target.N_Corners - (Last - First);
+   begin
+      Initialize_Scratch_Block (Target);
+      Target.Blendable_End := Source.Blendable_End;
+      Target.Kind := Source.Kind;
+      Target.Next_Block_Pos := Source.Next_Block_Pos;
+      Target.Params := Source.Params;
+      Target.First_Corner_ID := Source.First_Corner_ID;
+      Target.Associated_Overflow_Block := Source.Associated_Overflow_Block;
+      Target.Is_Homing_Move := Source.Is_Homing_Move;
+      Target.Loop_Move_Minimum_Time := Source.Loop_Move_Minimum_Time;
+      --  Corners before Start are unused padding. Keep them stationary at the window's first corner.
+      Target.Corners := [others => Source.Corners (First)];
+      Target.Corner_Transitions := [others => Source.Corner_Transitions (First)];
+      Copy_Window (Source, First, Last, Target, Start);
+   end Copy_Motion_Window;
+
+   function Blendable_Boundary (Left, Right : Execution_Block) return Boolean
+   is (Left.Blendable_End
+       and then Left.Kind = Motion_Block_Kind
+       and then Right.Kind = Motion_Block_Kind
+       and then Left.N_Corners >= 2
+       and then Right.N_Corners >= 2
+       and then not Left.Associated_Overflow_Block
+       and then not Left.Is_Homing_Move
+       and then not Right.Is_Homing_Move
+       and then Left.Params = Right.Params
+       and then Left.Corners (Left.N_Corners) = Right.Corners (1)
+       and then Left.Corner_Dwell_Times (Left.N_Corners) = 0.0 * s);
+
    task body Runner is
       Lifetime  : Runner_Finalizer;
       pragma Unreferenced (Lifetime);
@@ -2151,7 +2451,10 @@ package body Prunt.Motion_Planner.Planner is
       Motion_Time  : constant Time := Prefix_Time + Profile_Time + Suffix_Time;
       Distance     : Length;
    begin
-      if Finishing_Corner = Block.N_Corners and then Time_Into_Segment >= Motion_Time then
+      if Finishing_Corner = Block.N_Corners
+        and then Time_Into_Segment >= Motion_Time
+        and then Block.Corner_Velocity_Limits (Finishing_Corner) = 0.0 * mm / s
+      then
          --  Reconstructing the endpoint from direction and distance can leave a rounding residual. Shaper draining
          --  and pause/return plans need the exact stopped position, including any path-length extrusion correction.
          return
