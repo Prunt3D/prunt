@@ -154,8 +154,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       --  Existing fixtures exercise literal commanded densities; rounding has dedicated tests below.
       Block.Params.Extrusion_Rounding_Tolerance := 0.0 * mm;
       Block.Params.Bounds := Rectangular_Bounds ([others => -1.0E100 * mm], [others => 1.0E100 * mm]);
-      Block.Corners_Extra_Data.Clear;
-      Block.Corners_Extra_Data_End_Indices := [others => Block.Corners_Extra_Data.Last_Index];
+      Block.Corners_Extra_Data_End_Indices := [others => Corner_Extra_Data_Vectors.Extended_Index'First];
       Block.Corners := [others => [others => 0.0 * mm]];
       Block.Primitives := [others => Make_Line_Primitive];
       Block.Original_Segment_Feedrates := [others => 0.0 * mm / s];
@@ -1093,6 +1092,7 @@ package body Prunt.Motion_Planner.Planner.Test is
    procedure Test_Helix_Travel_Bounds_Are_Transactional (T : in out Trendy_Test.Operation'Class) is
       Params       : Kinematic_Parameters := (others => <>);
       Block        : aliased Execution_Block;
+      Extra_Data   : Corner_Extra_Data_Vectors.Vector;
       Reset_Called : Boolean;
       Finish       : constant Position := [X_Axis => 1.0 * mm, Y_Axis => 1.0 * mm, others => 0.0 * mm];
       Center       : constant Position := [X_Axis => 1.0 * mm, others => 0.0 * mm];
@@ -1128,7 +1128,7 @@ package body Prunt.Motion_Planner.Planner.Test is
           Feedrate         => 1.0 * mm / s));
       Tested_Preprocessor.Enqueue
         ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
-      Tested_Preprocessor.Run (Block'Access, Initial_Position, Reset_Called);
+      Tested_Preprocessor.Run (Block'Access, Extra_Data, Initial_Position, Reset_Called);
 
       T.Assert (not Reset_Called, "Accepted helix produces a normal motion block");
       T.Assert
@@ -1439,6 +1439,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Params             : Kinematic_Parameters := (others => <>);
       Homing_Block       : aliased Execution_Block;
       Following_Block    : aliased Execution_Block;
+      Extra_Data         : Corner_Extra_Data_Vectors.Vector;
       Reset_Called       : Boolean;
       Observed_Offset    : Position_Offset;
       Resolved_Position  : Position;
@@ -1467,7 +1468,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Ignore_Bounds => True);
       Boundary_Preprocessor.Enqueue
         ((Kind => Homing_Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
-      Boundary_Preprocessor.Run (Homing_Block'Access, Initial_Position, Reset_Called);
+      Boundary_Preprocessor.Run (Homing_Block'Access, Extra_Data, Initial_Position, Reset_Called);
 
       T.Assert (not Reset_Called and then Homing_Block.Is_Homing_Move, "The boundary produces a homing block");
       Boundary_Preprocessor.Publish_Homing_Tail_Offset (Tail_Offset);
@@ -1491,7 +1492,7 @@ package body Prunt.Motion_Planner.Planner.Test is
           Feedrate    => 1.0 * mm / s));
       Boundary_Preprocessor.Enqueue
         ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
-      Boundary_Preprocessor.Run (Following_Block'Access, Stopped_Position, Reset_Called);
+      Boundary_Preprocessor.Run (Following_Block'Access, Extra_Data, Stopped_Position, Reset_Called);
       T.Assert
         (not Reset_Called
          and then Following_Block.Corners (1) = Stopped_Position
@@ -3703,18 +3704,19 @@ package body Prunt.Motion_Planner.Planner.Test is
 
       declare
          Block : aliased Execution_Block;
+         Extra_Data : Corner_Extra_Data_Vectors.Vector;
          Reset_Called : Boolean;
       begin
          Reset_Preprocessor.Setup ((others => <>));
          Reset_Preprocessor.Reset;
          --  Reproduce reset winning the protected lock after the planner has already acquired its slot.
-         Reset_Preprocessor.Run (Block'Access, Initial_Position, Reset_Called);
+         Reset_Preprocessor.Run (Block'Access, Extra_Data, Initial_Position, Reset_Called);
          T.Assert (Reset_Called, "A late Run observes reset rather than killing the planner");
 
          Reset_Preprocessor.Setup ((others => <>));
          Reset_Preprocessor.Enqueue
            ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
-         Reset_Preprocessor.Run (Block'Access, Initial_Position, Reset_Called);
+         Reset_Preprocessor.Run (Block'Access, Extra_Data, Initial_Position, Reset_Called);
          T.Assert (not Reset_Called and then Block.N_Corners = 1, "Preprocessing works after the next setup");
          Reset_Preprocessor.Reset;
       end;

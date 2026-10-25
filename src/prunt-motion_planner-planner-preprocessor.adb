@@ -354,9 +354,13 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Runner.Reset (Command_Queue.Get_Last_Assigned_Corner_ID);
    end Reset;
 
-   procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
+   procedure Run
+     (Block        : not null access Execution_Block;
+      Extra_Data   : in out Corner_Extra_Data_Vectors.Vector;
+      Start_Pos    : Position;
+      Reset_Called : out Boolean) is
    begin
-      Runner.Run (Block, Start_Pos, Reset_Called);
+      Runner.Run (Block, Extra_Data, Start_Pos, Reset_Called);
    end Run;
 
    procedure Publish_Homing_Tail_Offset (Tail_Offset : Position_Offset) is
@@ -397,12 +401,13 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Setup_Done := True;
       end Setup;
 
-      procedure Run (Block : not null access Execution_Block; Start_Pos : Position; Reset_Called : out Boolean) is
-         use type System.Address;
-         Corners_Extra_Data           : Corner_Extra_Data_Vectors.Vector renames Block.Corners_Extra_Data;
-         Extra_Data_Address           : constant System.Address := Corners_Extra_Data'Address;
-         --  This field precedes the discriminant-dependent arrays, so it stays in place when N_Corners changes. Build
-         --  reference-holding data directly in the ring slot instead of copying it from staging storage.
+      procedure Run
+        (Block        : not null access Execution_Block;
+         Extra_Data   : in out Corner_Extra_Data_Vectors.Vector;
+         Start_Pos    : Position;
+         Reset_Called : out Boolean)
+      is
+         Corners_Extra_Data           : Corner_Extra_Data_Vectors.Vector renames Extra_Data;
          Flush_Resetting_Data         : Flush_Resetting_Data_Type := Flush_Resetting_Data_Type_Default;
          N_Corners                    : Corners_Index := 1;
          Block_N_Corners              : Corners_Index
@@ -668,11 +673,6 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block_N_Corners := N_Corners;
          --  This is hacky and not portable, but if we try to assign to the entire record as you normally would then
          --  GCC insists on creating a whole Execution_Block on the stack.
-
-         pragma
-           Assert
-             (Block.Corners_Extra_Data'Address = Extra_Data_Address,
-              "Changing the corner count must not move the extra-data vector.");
 
          Block.Kind := (if Is_Extra_Data_Overflow_Block then Extra_Data_Overflow_Block_Kind else Motion_Block_Kind);
          Block.Corners := Corners (1 .. N_Corners);
