@@ -99,7 +99,12 @@ package body Prunt.Default_Modules.Kinematics is
    begin
       case Cornering.Kind is
          when Smooth_Deviation              =>
-            return (Kind => Motion_Planner.Smooth_Deviation);
+            return
+              (Kind                        => Motion_Planner.Smooth_Deviation,
+               Velocity_Change_Max         => Cornering.Maximum_Velocity_Change,
+               Transition_Distance_Max     => Cornering.Maximum_Transition_Distance,
+               Smoothed_Decrease_Ratio_Min => Cornering.Minimum_Smoothed_Decrease_Ratio,
+               Smoothed_Increase_Ratio_Min => Cornering.Minimum_Smoothed_Increase_Ratio);
 
          when Instantaneous_Velocity_Change =>
             return

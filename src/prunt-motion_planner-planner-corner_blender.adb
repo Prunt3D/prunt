@@ -44,9 +44,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
       Extrusion_Reduction     : Length := 0.0 * mm;
       Reduction_Roundoff      : Length := 0.0 * mm;
       Stop_At_Density_Changes : constant Boolean :=
-        (case Block.Params.Extrusion_Cornering.Kind is
-           when Smooth_Deviation              => Extrusion_Deviation (Block.Params) = 0.0 * mm,
-           when Instantaneous_Velocity_Change => Block.Params.Extrusion_Cornering.Velocity_Change_Max = 0.0 * mm / s);
+        Block.Params.Extrusion_Cornering.Velocity_Change_Max = 0.0 * mm / s;
    begin
       for I in Block.Corners'Range loop
          Original_E (I) := Block.Corners (I) (E_Axis);
@@ -118,7 +116,8 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             end if;
          end loop;
       end if;
-      Assign_Extrusion_Transitions (Block);
+      --  Early_Kinematic_Limiter sizes the transitions once the feedrates are known.
+      Block.Extrusion_Transitions := [others => <>];
    exception
       when others =>
          for I in Block.Corners'Range loop
@@ -148,7 +147,9 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
              and then Block.Extrusion_Densities (I) /= Block.Extrusion_Densities (I + 1)
              and then
                (Block.Params.Extrusion_Cornering.Kind = Instantaneous_Velocity_Change
-                or else not Density_Change_Is_Negligible (Block'Access, I)));
+                or else not Density_Change_Is_Negligible (Block'Access, I))
+             and then not Smooths_Density_Change (Block'Access, I));
+         --  A change that may be smoothed keeps its curve; Extrusion_Junction_Ceiling stops it if no transition fits.
          --  Smooth_Deviation lets roundoff step E's velocity, as Extrusion_Junction_Ceiling does.
 
          type Blend_Settings is record

@@ -35,7 +35,8 @@ package Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
    --  Apply early kinematic limitations to the execution block. The programmed feed-rate is adjusted if
    --  Ignore_E_In_XYZE is False, converting the programmed XYZE feedrate to the planner's XYZ distance coordinates.
    --  After this the total time of each move is adjusted such that no move will be less than Interpolation_Time.
-   --  Finally the axial limits defined in Axial_Velocity_Maxes are applied.
+   --  Then the axial limits defined in Axial_Velocity_Maxes are applied. Finally Assign_Extrusion_Transitions sizes
+   --  the E transitions from the limited feedrates.
    --
    --  Set Normalize_Feedrates to False when rebuilding geometry after feedrates have already been converted.
 
