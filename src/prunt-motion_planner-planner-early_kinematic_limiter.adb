@@ -19,8 +19,6 @@
 
 pragma Check_Float_Overflow;
 
-with Ada.Numerics.Generic_Elementary_Functions;
-
 package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
    pragma Unsuppress (Overflow_Check);
@@ -28,8 +26,6 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
    pragma Unsuppress (Division_Check);
 
    pragma Extensions_Allowed (On);
-
-   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
    procedure Run
      (Block               : aliased in out Execution_Block;
@@ -72,12 +68,8 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
             if not Block.Params.Ignore_E_In_XYZE and then XYZ_Path_Length > 0.0 * mm then
                declare
-                  --  Convert using the accepted density, not the rounded E coordinates. Scale the norm before squaring
-                  --  so E-dominated moves cannot overflow this calculation.
-                  Density       : constant Dimensionless := Block.Extrusion_Densities (I);
-                  Scale         : constant Dimensionless := Dimensionless'Max (1.0, abs Density);
-                  Spatial_Scale : constant Dimensionless :=
-                    (1.0 / Scale) / Dimensionless_Math.Sqrt ((1.0 / Scale) ** 2 + (Density / Scale) ** 2);
+                  --  Convert using the accepted density, not the rounded E coordinates.
+                  Spatial_Scale : constant Dimensionless := XYZE_Spatial_Scale (Block.Extrusion_Densities (I));
                begin
                   --  The programmed feedrate is normalized once, but the configured cap remains in XYZE units and must
                   --  be converted on every run, including geometry recovery with stopped corners.

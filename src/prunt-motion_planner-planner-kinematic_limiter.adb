@@ -79,7 +79,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                   Limit := Motor_Delta_Ceiling_For_Projection (Block.Params, Spatial_Motor_Map (Motor_Map), Limit);
                end if;
          end case;
-         --  Bound both possible junction coasts, including motor deltas.
+         --  Bound both possible junction coasts, including motor deltas and any E density transition they overlap.
          for I in Corner .. Corner + 1 loop
             declare
                Total  : constant Length := Segment_Total_Distance (Block'Access, I);
@@ -92,7 +92,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                Window : constant Profile_Window :=
                  (Start_Distance => (if I = Corner then Total - Width else 0.0 * mm), Distance => Width);
             begin
-               Limit := Constant_Speed_Axial_Ceiling (Block.Params, Extrusion_Bounds (Block'Access, I), Limit);
+               Limit := Constant_Speed_Axial_Ceiling (Block.Params, Extrusion_Bounds (Block'Access, I, Window), Limit);
                Limit := Motor_Delta_Ceiling_For_Window (Block'Access, Motor_Map, I, Window, Limit);
             end;
          end loop;
@@ -295,7 +295,8 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       --
       --  3. The maximum velocity allowed in the segment leading in to and out of the corner.
       --
-      --  4. Extrusion_Velocity_Change_Max, since E's velocity jumps by the density change times the corner velocity.
+      --  4. E's density change: Velocity_Change_Max, since E's velocity jumps by the density change times the corner
+      --     velocity, or the bounds of a Smooth_Deviation transition where the coasts overlap it.
       --
       --  In this pass we are only concerned about the maximum reachable velocity under the above constraints.
       --  Deceleration constraints are added in the reverse pass.

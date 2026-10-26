@@ -51,6 +51,11 @@ pragma Check_Float_Overflow;
 --     geometry becomes a hard stop; nearly straight geometry is represented explicitly as a passthrough.
 --     Stereographic passthroughs also require matching distance derivatives through order four.
 --
+--     In Smooth_Deviation mode each remaining moving density change then gets an E transition: a fixed smooth density
+--     curve over the path either side of its corner, as wide as the neighbouring segments and the E deviation allow.
+--     E stays a function of path position, so the later stages bound its distance derivatives just as they bound
+--     curved XYZ geometry, and no transition depends on the speed through it.
+--
 --  4. Early_Kinematic_Limiter:
 --
 --     Feedrate uses XYZ distance, or E distance for E-only moves. When Ignore_E_In_XYZE is False, the programmed
@@ -515,6 +520,22 @@ private
    type Block_Extrusion_Densities is array (Corners_Index range <>) of Dimensionless;
    --  Signed E displacement per unit of commanded path length. E-only moves use |Delta_E| as path length.
 
+   type Extrusion_Transition is record
+      Half_Width     : Length := 0.0 * mm;
+      Density_Change : Dimensionless := 0.0;
+   end record;
+   --  A Smooth_Deviation density change at a corner, fixed in path distance rather than time. Over Half_Width of path
+   --  on each side of the corner, E's density follows rho_in + Density_Change * h (u), where u runs from 0 to 1 across
+   --  the 2 * Half_Width of the transition and h (u) = 35u^4 - 84u^5 + 70u^6 - 20u^7. h matches the two densities
+   --  through h''' at both edges, so E stays a function of path position with bounded distance derivatives through
+   --  order five, and the existing mixed-derivative certificates bound its time derivatives at any path speed.
+   --
+   --  Density_Change is the outgoing density minus the incoming one, so each segment can evaluate the transitions at
+   --  both of its corners from its own density alone. A zero Half_Width means no transition: E's velocity steps at the
+   --  corner, which Extrusion_Junction_Ceiling limits.
+
+   type Block_Extrusion_Transitions is array (Corners_Index range <>) of Extrusion_Transition;
+
    type Profile_Window is record
       Start_Distance : Length := 0.0 * mm;
       Distance       : Length := 0.0 * mm;
@@ -684,19 +705,54 @@ private
    --  runs of at most Blend_Radius segments.
    --  Homing bypasses selection. These local searches need not find the best combination of corner policies.
 
+   Negligible_Density_Change : constant Dimensionless := 1.0E-12;
+   --  Relative density changes this small are roundoff between nominally equal densities, as when commanded E is not
+   --  normalized. Smooth_Deviation lets E's velocity step by such a change rather than smoothing it or stopping.
+
+   function Density_Change_Is_Negligible
+     (Block : not null access constant Execution_Block; Corner : Corners_Index) return Boolean;
+   --  Whether the density change at interior Corner is within Negligible_Density_Change of both densities.
+
+   function Extrusion_Deviation (Params : Kinematic_Parameters) return Length;
+   --  The E deviation allowed for Smooth_Deviation transitions: the cornering model's E entry, or zero for Sharp_SCV
+   --  and in Instantaneous_Velocity_Change mode.
+
    function Extrusion_Junction_Ceiling
      (Block : not null access constant Execution_Block; Corner : Corners_Index; Limit : Velocity) return Velocity;
-   --  Lower Limit so that E's instantaneous velocity change at an interior corner fits Extrusion_Velocity_Change_Max.
+   --  Lower Limit so that E's instantaneous velocity change at an interior corner fits Velocity_Change_Max. In
+   --  Smooth_Deviation mode a density change needs either a transition, whose derivative bounds limit the coasts
+   --  through it rather than the corner itself, or a stop.
+
+   function Plan_Extrusion_Transition
+     (Block : not null access constant Execution_Block; Corner : Corners_Index; Incoming, Outgoing : Length)
+      return Extrusion_Transition;
+   --  The widest Smooth_Deviation transition at interior Corner that reaches at most Incoming before the corner and
+   --  Outgoing after it, and whose deviation fits Extrusion_Deviation. Its width does not depend on speed, so it is
+   --  planned once with the geometry. Zero when the densities match, the corner stops or nothing fits.
+
+   procedure Assign_Extrusion_Transitions (Block : aliased in out Execution_Block);
+   --  Plan every interior corner's transition from the blended geometry. A segment is shared equally between its two
+   --  corners when both may need one; a block end always keeps half of its segment for a later inter-block blend.
+   --  Transitions may overlap XYZ transitions, since each axis merges its own bounds.
 
    function Extrusion_Reference_At_Distance
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Distance : Length)
       return Length;
-   --  E position after correction for path shortening.
+   --  E position after correction for path shortening, before density transitions.
+
+   function Extrusion_At_Distance
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Distance : Length)
+      return Length;
+   --  E position after correction for path shortening, including the transitions at both of the segment's corners.
 
    function Extrusion_Bounds
-     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index)
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Window : Profile_Window)
       return Unit_Speed_Axial_Derivative_Bounds;
-   --  E moves at the segment's density times the path speed, with no curvature of its own.
+   --  E's distance derivative bounds over Window of the segment: its density between transitions, and the analytical
+   --  bounds of any transition Window overlaps. A zero-length window is a point, inside a transition at its edges.
+
+   function XYZE_Spatial_Scale (Density : Dimensionless) return Dimensionless;
+   --  The ratio of path speed to XYZE speed at the given E density, for converting XYZE feedrates and caps.
 
    function Spatial_Primitive
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index)
@@ -724,7 +780,9 @@ private
       Finishing_Corner : Finishing_Corners_Index;
       Window           : Profile_Window;
       Max_Vel          : Velocity) return Velocity;
-   --  Limit Max_Vel so every motor delta remains within its per-command bound throughout Window.
+   --  Limit Max_Vel so every motor delta remains within its per-command bound throughout Window. Where a density
+   --  transition in Window raises E's density above the segment's own, also keep the XYZE speed within
+   --  Tangential_Velocity_Max, which Limited_Segment_Feedrates converted at the segment's density.
 
    function Window_Axial_Derivative_Bounds
      (Block            : not null access constant Execution_Block;
@@ -835,7 +893,8 @@ private
       Run_First : Finishing_Corners_Index;
       Max_Vel   : Velocity) return Path_Cells;
    --  The run's pieces in run distance, each with its own bounds and ceiling (capped by Max_Vel and its segment's
-   --  feedrate), and a point cell at every interior corner whose E velocity jump limits the speed.
+   --  feedrate), and a point cell at every interior corner whose E velocity jump limits the speed. Pieces also end at
+   --  the edges of E density transitions, so a transition's bounds only cover its own part of a primitive.
 
    function Timing_Total_Distance
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
@@ -845,6 +904,16 @@ private
 
    function Timing_End_Transition_Distance
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
+
+   function Timing_Start_Curve_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
+   --  The run's curved start for split profiles: its XYZ transition portion, or the E density transition at its first
+   --  corner when that reaches further. A split's prefix then holds a tight E transition, while ordinary windows cut
+   --  only at XYZ transitions and accelerate through gentle ones.
+
+   function Timing_End_Curve_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
+   --  The run's curved end, like Timing_Start_Curve_Distance. An E transition never reaches past the curved start.
 
    function Timing_Straight_Distance
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
@@ -1079,6 +1148,11 @@ private
       Extrusion_Reference_Positions : Block_Segment_Lengths (1 .. N_Corners);
       --  Entry I is the E coordinate at boundary I after density normalization and path shortening. Entry 1 is the
       --  block's starting E coordinate.
+
+      Extrusion_Transitions : Block_Extrusion_Transitions (1 .. N_Corners);
+      --  Smooth_Deviation transitions, planned with the geometry. Later stages retain them: a local stop clears only
+      --  its own corner, and an inter-block blend plans only its new seam corner around the transitions it keeps. The
+      --  transitions at a segment's two corners never overlap, so a segment never sees more than one at a point.
 
       --  Early_Kinematic_Limiter
       Limited_Segment_Feedrates : Block_Segment_Feedrates (2 .. N_Corners);

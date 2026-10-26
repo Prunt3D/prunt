@@ -37,8 +37,9 @@ package Prunt.Motion_Planner is
    --  Raised when a planner reset invalidates an in-progress homing-move position handshake.
 
    type Axial_Deviation_Limits is array (Axis_Name) of Length range 0.0 * mm .. Length'Last;
-   --  XYZ entries constrain corner geometry for the purposes of corner blending. The E entry is unused: E follows the
-   --  path-length-corrected reference exactly, and Extrusion_Velocity_Change_Max limits its junction behaviour.
+   --  XYZ entries constrain corner geometry for the purposes of corner blending. In Smooth_Deviation mode the E entry
+   --  limits how far E may depart from the path-length-corrected reference while its density changes; zero requires a
+   --  stop at every remaining density change. The E entry is unused in Instantaneous_Velocity_Change mode.
 
    type Cornering_Kind is (Stereographic, Circular, Biarc, Sharp_SCV);
 
@@ -107,7 +108,28 @@ package Prunt.Motion_Planner is
    --  snap, and crackle limits are waived. Biarc is C1 for certifiable line/helix corners and has the same waiver at both
    --  endpoints and its internal splice. Sharp_SCV is C0 for primitives with usable tangents, so acceleration and
    --  every higher derivative limit are waived at its junction. Unsupported or uncertifiable geometry becomes a hard
-   --  stop. These derivative waivers apply to XYZ; Extrusion_Velocity_Change_Max sets E's junction behavior.
+   --  stop. These derivative waivers apply to XYZ; Extrusion_Cornering selects E's junction behavior.
+
+   type Extrusion_Cornering_Kind is (Smooth_Deviation, Instantaneous_Velocity_Change);
+
+   type Extrusion_Cornering_Parameters (Kind : Extrusion_Cornering_Kind := Smooth_Deviation) is record
+      case Kind is
+         when Smooth_Deviation =>
+            null;
+            --  Where the extrusion density changes at a moving junction, E's density moves between the two segment
+            --  densities along a fixed smooth curve over the path either side of the junction. E stays a function of
+            --  path position, so every E limit holds through the junction. The curve is as wide as the neighbouring
+            --  segments allow, within the E entry of the cornering model's deviation limits. Zero E deviation,
+            --  including Sharp_SCV, requires a stop at every density change.
+
+         when Instantaneous_Velocity_Change =>
+            Velocity_Change_Max : Velocity range 0.0 * mm / s .. Velocity'Last := 1.0 * mm / s;
+            --  Maximum absolute E velocity jump at a moving segment junction where the extrusion density changes. E
+            --  follows the path-length-corrected reference exactly, so the jump is the density change times the
+            --  junction speed. Acceleration and higher derivative limits are waived only at the jump; all E limits
+            --  still apply between junctions. Zero requires a stop at every density change.
+      end case;
+   end record;
 
    type Kinematic_Parameters is record
       Bounds : Workspace_Bounds := (Kind => Rectangular_Workspace, others => <>);
@@ -116,25 +138,21 @@ package Prunt.Motion_Planner is
       --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
       --  planners do.
 
-      Tangential_Velocity_Max       : Velocity := 0.0 * mm / s;
-      Axial_Velocity_Maxes          : Axial_Velocities := [others => 0.0 * mm / s];
-      Axial_Acceleration_Maxes      : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
-      Axial_Jerk_Maxes              : Axial_Jerks := [others => 0.0 * mm / s ** 3];
-      Axial_Snap_Maxes              : Axial_Snaps := [others => 0.0 * mm / s ** 4];
-      Axial_Crackle_Maxes           : Axial_Crackles := [others => 0.0 * mm / s ** 5];
-      Cornering                     : Cornering_Parameters := (others => <>);
-      Extrusion_Velocity_Change_Max : Velocity range 0.0 * mm / s .. Velocity'Last := 1.0 * mm / s;
-      --  Maximum absolute E velocity jump at a moving segment junction where the extrusion density changes. E follows
-      --  the path-length-corrected reference exactly, so the jump is the density change times the junction speed.
-      --  Acceleration and higher derivative limits are waived only at the jump; all E limits still apply between
-      --  junctions. Zero requires a stop at every density change.
-      Extrusion_Rounding_Tolerance  : Length range 0.0 * mm .. Length'Last := 0.000_1 * mm;
+      Tangential_Velocity_Max      : Velocity := 0.0 * mm / s;
+      Axial_Velocity_Maxes         : Axial_Velocities := [others => 0.0 * mm / s];
+      Axial_Acceleration_Maxes     : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
+      Axial_Jerk_Maxes             : Axial_Jerks := [others => 0.0 * mm / s ** 3];
+      Axial_Snap_Maxes             : Axial_Snaps := [others => 0.0 * mm / s ** 4];
+      Axial_Crackle_Maxes          : Axial_Crackles := [others => 0.0 * mm / s ** 5];
+      Cornering                    : Cornering_Parameters := (others => <>);
+      Extrusion_Cornering          : Extrusion_Cornering_Parameters := (others => <>);
+      Extrusion_Rounding_Tolerance : Length range 0.0 * mm .. Length'Last := 0.000_1 * mm;
       --  Maximum change to a segment's commanded E displacement when assigning a common density to a run.
       --  Runs retain their total extrusion before corner shortening. Zero disables density normalization.
-      --  This input-rounding allowance is separate from E's junction velocity change.
-      Axial_Shapers                 : Input_Shapers.Axial_Shaper_Parameters :=
+      --  This input-rounding allowance is separate from E's junction deviation or velocity change.
+      Axial_Shapers                : Input_Shapers.Axial_Shaper_Parameters :=
         [others => (Kind => Input_Shapers.No_Shaper)];
-      Continuous_Timing             : Boolean := False;
+      Continuous_Timing            : Boolean := False;
       --  Experimental. Plan one feedrate profile across each chain of line segments joined by passthrough corners,
       --  so speed keeps changing through those corners instead of returning to zero acceleration, jerk and snap at
       --  every segment boundary. Non-binding curved corners are also joined where the joined profile, certified piece
