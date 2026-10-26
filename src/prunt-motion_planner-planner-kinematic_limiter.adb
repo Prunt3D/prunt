@@ -28,11 +28,14 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    pragma Extensions_Allowed (On);
 
    procedure Run
-     (Block      : aliased in out Execution_Block;
-      Motor_Map  : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace  : not null access Planning_Workspace;
-      Fixed_Ends : Boolean := False)
+     (Block           : aliased in out Execution_Block;
+      Motor_Map       : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace       : not null access Planning_Workspace;
+      Fixed_Ends      : Boolean := False;
+      Forced_Junction : Corners_Index'Base := 0)
    is
+      type Finishing_Corners_Index_Pair is array (1 .. 2) of Finishing_Corners_Index;
+
       Velocity_Change_Tolerance : constant Velocity := 1.0E-3 * mm / s;
       Cleanup_Iterations        : constant Positive := 4;
 
@@ -106,8 +109,9 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       end Clamp_Corner;
 
       function Static_Corner_Limit (Corner : Corners_Index) return Velocity is
-         Limit : Velocity :=
-           Velocity'Min (Block.Limited_Segment_Feedrates (Corner), Block.Limited_Segment_Feedrates (Corner + 1));
+         Incoming : constant Finishing_Corners_Index := Timing_Run_First (Block'Access, Corner);
+         Limit    : Velocity :=
+           Velocity'Min (Timing_Feedrate (Block'Access, Incoming), Timing_Feedrate (Block'Access, Corner + 1));
       begin
          Apply_Corner_Transition_Limits (Corner, Limit);
          Limit := Extrusion_Junction_Ceiling (Block'Access, Corner, Limit);
@@ -115,7 +119,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
          --  A junction speed must be admissible for a profile on both sides. Otherwise the forward pass can arrive
          --  faster than every next-window ceiling, report zero reachability, and permanently clamp the following
          --  junction to a stop even though lowering this junction slightly gives a through profile.
-         for I in Corner .. Corner + 1 loop
+         for I of Finishing_Corners_Index_Pair'[Incoming, Corner + 1] loop
             declare
                Ceiling : Velocity := 0.0 * mm / s;
             begin
@@ -138,20 +142,23 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       procedure Forward_Pass (Monotone : Boolean; Changed : in out Boolean) is
       begin
          for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
-            declare
-               Limit     : constant Velocity := Static_Corner_Limits (I);
-               Reachable : constant Velocity :=
-                 Velocity'Min
-                   (Limit,
-                    Reachable_Cached_Profile_Window_Velocity
-                      (I, Block.Corner_Velocity_Limits (I - 1), Forward => True));
-            begin
-               if Monotone then
-                  Clamp_Corner (I, Reachable, Changed);
-               else
-                  Block.Corner_Velocity_Limits (I) := Reachable;
-               end if;
-            end;
+            if Is_Timing_Junction (Block, I) then
+               declare
+                  Run_First : constant Finishing_Corners_Index := Timing_Run_First (Block'Access, I);
+                  Limit     : constant Velocity := Static_Corner_Limits (I);
+                  Reachable : constant Velocity :=
+                    Velocity'Min
+                      (Limit,
+                       Reachable_Cached_Profile_Window_Velocity
+                         (Run_First, Block.Corner_Velocity_Limits (Run_First - 1), Forward => True));
+               begin
+                  if Monotone then
+                     Clamp_Corner (I, Reachable, Changed);
+                  else
+                     Block.Corner_Velocity_Limits (I) := Reachable;
+                  end if;
+               end;
+            end if;
          end loop;
       end Forward_Pass;
 
@@ -160,26 +167,34 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
          Static_Corner_Limits := [others => 0.0 * mm / s];
 
          for I in Block.Limited_Segment_Feedrates'Range loop
-            declare
-               Windows : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block'Access, I);
-            begin
-               for W in Profile_Window_Candidate_Index loop
-                  if (for all Previous in Profile_Window_Candidate_Index'First .. W - 1 =>
-                        Windows (Previous) /= Windows (W))
-                  then
-                     Window_Evaluations (I) (W) :=
-                       Evaluate_Profile_Window
-                         (Block'Access, Motor_Map, I, Windows (W), Block.Limited_Segment_Feedrates (I));
-                  else
-                     --  Absent transitions make cuts coincide. Do not repeat certification or reachability solves.
-                     Window_Evaluations (I) (W) := (others => <>);
-                  end if;
-               end loop;
-            end;
+            if Timing_Run_First (Block'Access, I) /= I then
+               --  Only a run's first segment holds its windows.
+               Window_Evaluations (I) := [others => (others => <>)];
+            else
+               declare
+                  Windows : constant Profile_Window_Candidates :=
+                    Segment_Profile_Window_Candidates (Block'Access, I);
+               begin
+                  for W in Profile_Window_Candidate_Index loop
+                     if (for all Previous in Profile_Window_Candidate_Index'First .. W - 1 =>
+                           Windows (Previous) /= Windows (W))
+                     then
+                        Window_Evaluations (I) (W) :=
+                          Evaluate_Timing_Window
+                            (Block'Access, Motor_Map, I, Windows (W), Timing_Feedrate (Block'Access, I));
+                     else
+                        --  Absent transitions make cuts coincide. Do not repeat certification or reachability solves.
+                        Window_Evaluations (I) (W) := (others => <>);
+                     end if;
+                  end loop;
+               end;
+            end if;
          end loop;
 
          for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
-            Static_Corner_Limits (I) := Static_Corner_Limit (I);
+            if Is_Timing_Junction (Block, I) then
+               Static_Corner_Limits (I) := Static_Corner_Limit (I);
+            end if;
          end loop;
       end Fill_Static_Caches;
 
@@ -188,7 +203,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       is
          Memo  : Reachable_Velocity_Memo renames Reachable_Memos (Finishing_Corner) (Forward);
          Best  : Velocity := 0.0 * mm / s;
-         Total : constant Length := Segment_Total_Distance (Block'Access, Finishing_Corner);
+         Total : constant Length := Timing_Total_Distance (Block'Access, Finishing_Corner);
       begin
          --  The cached evaluations are fixed for this run, so the result depends only on Fixed_Vel.
          if Memo.Valid and then Identical (Memo.Fixed_Vel, Fixed_Vel) then
@@ -221,17 +236,20 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       procedure Reverse_Pass (Changed : in out Boolean) is
       begin
          for I in reverse Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
-            Clamp_Corner
-              (I,
-               Reachable_Cached_Profile_Window_Velocity
-                 (I + 1, Block.Corner_Velocity_Limits (I + 1), Forward => False),
-               Changed);
+            if Is_Timing_Junction (Block, I) then
+               Clamp_Corner
+                 (I,
+                  Reachable_Cached_Profile_Window_Velocity
+                    (I + 1, Block.Corner_Velocity_Limits (Timing_Run_Last (Block'Access, I + 1)), Forward => False),
+                  Changed);
+            end if;
          end loop;
       end Reverse_Pass;
 
       Changed : Boolean := False;
 
    begin
+      Assign_Timing_Runs (Block, Forced_Junction);
       if not Fixed_Ends then
          Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
          Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;

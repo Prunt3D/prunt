@@ -33,7 +33,8 @@ package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Result      : out Profile_Planning_Result;
       Limit_Scale : Dimensionless := 1.0);
-   --  Fills Block.Feedrate_Profiles with profiles based on Block.Corner_Velocity_Limits and Block.Params.
+   --  Fills Block.Feedrate_Profiles with profiles based on Block.Corner_Velocity_Limits and Block.Params. Each timing
+   --  run gets one profile, at its first segment, followed by Assign_Timing_Members.
    --
    --  Result identifies the first segment that could not be certified. Only a valid result completes the block.
    --
@@ -45,7 +46,7 @@ package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Finishing_Corner : Finishing_Corners_Index;
       Result           : out Profile_Planning_Result;
       Limit_Scale      : Dimensionless);
-   --  Select and certify a single segment with fixed endpoint velocities.
+   --  Select and certify the timing run starting at Finishing_Corner with fixed endpoint velocities.
    --  Also used for local corner alternatives; other segments and junctions remain unchanged.
 
 end Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;

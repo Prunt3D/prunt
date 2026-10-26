@@ -29,13 +29,18 @@ package Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    pragma Unsuppress (Division_Check);
 
    procedure Run
-     (Block      : aliased in out Execution_Block;
-      Motor_Map  : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Workspace  : not null access Planning_Workspace;
-      Fixed_Ends : Boolean := False);
+     (Block           : aliased in out Execution_Block;
+      Motor_Map       : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Workspace       : not null access Planning_Workspace;
+      Fixed_Ends      : Boolean := False;
+      Forced_Junction : Corners_Index'Base := 0);
    --  Fill Block.Corner_Velocity_Limits with velocity limits, that when enforced at corners, will prevent other
    --  limits from being violated.
    --
-   --  Fixed_Ends retains the supplied endpoint velocities for a local replacement window.
+   --  First assigns timing runs (Assign_Timing_Runs). Only run boundaries are junctions: reachability is solved across
+   --  a whole run, and interior corners keep no limit of their own.
+   --
+   --  Fixed_Ends retains the supplied endpoint velocities for a local replacement window. Forced_Junction, if nonzero,
+   --  is a corner that must end a timing run.
 
 end Prunt.Motion_Planner.Planner.Kinematic_Limiter;

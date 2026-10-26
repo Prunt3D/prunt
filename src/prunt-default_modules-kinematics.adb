@@ -170,7 +170,8 @@ package body Prunt.Default_Modules.Kinematics is
               Cornering                     => Build_Cornering_Parameters (Config.Kinematics.Cornering),
               Extrusion_Velocity_Change_Max => Config.Kinematics.Maximum_Extrusion_Velocity_Change,
               Extrusion_Rounding_Tolerance  => Config.Kinematics.Extrusion_Rounding_Tolerance,
-              Axial_Shapers                 => <>),
+              Axial_Shapers                 => <>,
+              Continuous_Timing             => <>),
          Transform  => (Kind => Linear_Transform, others => <>));
    begin
       for M in Motor_Name loop

@@ -134,6 +134,10 @@ package Prunt.Motion_Planner is
       --  This input-rounding allowance is separate from E's junction velocity change.
       Axial_Shapers                 : Input_Shapers.Axial_Shaper_Parameters :=
         [others => (Kind => Input_Shapers.No_Shaper)];
+      Continuous_Timing             : Boolean := False;
+      --  Experimental. Plan one feedrate profile across each chain of line segments joined by passthrough corners,
+      --  so speed keeps changing through those corners instead of returning to zero acceleration, jerk and snap at
+      --  every segment boundary. Other corners, ceiling changes and binding E velocity jumps remain junctions.
    end record;
 
    function XY_Position_Is_In_Bounds (Pos : Position; Params : Kinematic_Parameters) return Boolean;

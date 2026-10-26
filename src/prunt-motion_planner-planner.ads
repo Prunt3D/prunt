@@ -506,6 +506,11 @@ private
    type Block_Corner_Velocity_Limits is array (Corners_Index range <>) of Velocity;
 
    type Block_Segment_Lengths is array (Corners_Index range <>) of Length;
+   type Block_Segment_Times is array (Corners_Index range <>) of Time;
+   type Block_Timing_Run_Offsets is array (Corners_Index range <>) of Corners_Index'Base
+   with Default_Component_Value => 0;
+   --  Segment counts to the ends of a timing run. Zero by default, so a block that was never assigned runs has only
+   --  single-segment runs.
    type Block_Primitive_Derivative_Bounds is array (Corners_Index range <>) of Unit_Speed_Axial_Derivative_Bounds;
    type Block_Extrusion_Densities is array (Corners_Index range <>) of Dimensionless;
    --  Signed E displacement per unit of commanded path length. E-only moves use |Delta_E| as path length.
@@ -727,10 +732,75 @@ private
    function Central_Profile_Start_Velocity
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Velocity;
 
+   --  Continuous timing. A timing run is identified by its first segment. With Params.Continuous_Timing False every
+   --  run has one segment, and each function below reduces to its per-segment counterpart exactly.
+
+   Timing_Run_Feedrate_Tolerance : constant Dimensionless := 1.0E-9;
+   --  Relative feedrate difference below which two segments can share a run. The run uses the lower feedrate.
+
+   function Timing_Run_First
+     (Block : not null access constant Execution_Block; Segment : Finishing_Corners_Index)
+      return Finishing_Corners_Index;
+
+   function Timing_Run_Last
+     (Block : not null access constant Execution_Block; Segment : Finishing_Corners_Index)
+      return Finishing_Corners_Index;
+
+   function Joins_Timing_Run
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Boolean;
+   --  Whether the segments ending and starting at interior Corner can share one profile: an exact line passthrough
+   --  with no dwell, matching feedrates and a non-binding E velocity jump.
+
+   procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Forced_Junction : Corners_Index'Base);
+   --  Group segments into maximal runs joined by Joins_Timing_Run corners. Forced_Junction, when it is a corner of
+   --  Block, always ends a run; pass zero for none. Every run has one segment unless Params.Continuous_Timing.
+
+   function Timing_Total_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
+
+   function Timing_Start_Transition_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
+
+   function Timing_End_Transition_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
+
+   function Timing_Straight_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
+
+   function Timing_Feedrate
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Velocity;
+   --  The lowest limited feedrate of the run's segments.
+
+   function Evaluate_Timing_Window
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Run_First : Finishing_Corners_Index;
+      Window    : Profile_Window;
+      Max_Vel   : Velocity) return Profile_Window_Evaluation;
+   --  Evaluate_Profile_Window for a window in run distance, merging every overlapped segment's bounds and motor-delta
+   --  ceiling.
+
+   function Timing_Motion_Time
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Time;
+   --  The run's planned motion time, excluding the dwell at its last corner.
+
+   function Timing_Distance_At_Time
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
+      return Length;
+
+   function Timing_Velocity_At_Time
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
+      return Velocity;
+
+   procedure Assign_Timing_Members (Block : not null access Execution_Block; Run_First : Finishing_Corners_Index);
+   --  After the profile of the multi-segment run starting at Run_First is selected, solve each segment's offsets and
+   --  duration, and record the run speed at each interior corner.
+
    function Segment_Profile_Window_Candidates
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
       return Profile_Window_Candidates;
-   --  Return the deterministic candidate profile windows for a segment.
+   --  Return the deterministic candidate profile windows, in run distance, for the timing run starting at
+   --  Finishing_Corner.
 
    function Evaluate_Profile_Window
      (Block            : not null access constant Execution_Block;
@@ -902,6 +972,21 @@ private
       Profile_Ends      : Block_Profile_Ends (2 .. N_Corners) := [others => <>];
       --  Enabled entries replace the coasts outside Profile_Windows with generated acceleration profiles. This lets
       --  the retained primitive accelerate independently of tight bounds on the curved ends.
+
+      --  Continuous timing (Params.Continuous_Timing)
+      Timing_Run_Back  : Block_Timing_Run_Offsets (2 .. N_Corners);
+      Timing_Run_Ahead : Block_Timing_Run_Offsets (2 .. N_Corners);
+      --  Segment I belongs to the timing run of segments I - Timing_Run_Back (I) .. I + Timing_Run_Ahead (I), assigned
+      --  by Kinematic_Limiter. A run's interior corners are not junctions: the run has one profile, window and set of
+      --  ends, stored at its first segment and expressed in run distance, and its other entries are unused. Offsets
+      --  are relative, so copying a window that does not cut a run keeps them valid.
+
+      Timing_Distance_Offsets : Block_Segment_Lengths (2 .. N_Corners);
+      Timing_Time_Offsets     : Block_Segment_Times (2 .. N_Corners);
+      Timing_Segment_Times    : Block_Segment_Times (2 .. N_Corners);
+      --  For a segment of a multi-segment run: run distance and run time at its start, and its own duration including
+      --  any dwell. Each time offset is the previous offset plus the previous duration, so evaluating either side of a
+      --  member boundary gives the same run time. Unused for single-segment runs.
    end record;
 
    Blend_Radius : constant Corners_Index := Corners_Index'Min (32, (Corners_Index'Last - 1) / 2);
@@ -1007,9 +1092,12 @@ private
    procedure Initialize_Scratch_Block (Block : aliased out Execution_Block);
    --  Give a numeric scratch block zeroed preprocessor fields and no plan. Callers fill the fields they use.
 
+   function Is_Timing_Junction (Block : Execution_Block; Corner : Corners_Index) return Boolean;
+   --  Whether Corner ends a timing run, so the full motion state there is a plateau that a window can be cut at.
+
    function Blendable_Boundary (Left, Right : Execution_Block) return Boolean;
    --  Structural conditions for Blend_Blocks, excluding the Allow_Blended_Entry policy. Prepare_Blend checks both
-   --  before copying any window.
+   --  before copying any window. Both fixed window ends must be timing junctions, so that no run is cut.
 
    type Runner_Finalizer is new Ada.Finalization.Limited_Controlled with null record;
 
