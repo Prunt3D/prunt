@@ -101,7 +101,7 @@ procedure Helix_Planner_Time is
             Corner_Miss_Distance_Max => Deviation,
             Shape_Bias               => 0.0,
             Circularity              => 0.0)),
-      Extrusion_Velocity_Change_Max => <>,
+      Extrusion_Cornering      => <>,
       Extrusion_Rounding_Tolerance  => <>,
       Axial_Shapers                 => [others => (Kind => Prunt.Input_Shapers.No_Shaper)],
       Continuous_Timing             => False);

@@ -41,7 +41,8 @@ package Prunt.Motion_Planner.Planner.Corner_Blender is
    --  order four; Circular is C1; Biarc is C1 at its endpoints and internal splice; Sharp_SCV is C0.
    --  Unsupported, out-of-bounds, or uncertifiable geometry retains the commanded path and inserts a hard stop.
    --  Extrusion_Density_Normalizer must run first. Geometry recovery retains its exact stored densities. Force_Stops
-   --  restores the original primitives and normalized E reference, stopping at every boundary.
+   --  restores the original primitives and normalized E reference, stopping at every boundary. Finally the E density
+   --  transitions are planned on the resulting geometry.
 
 private
 
