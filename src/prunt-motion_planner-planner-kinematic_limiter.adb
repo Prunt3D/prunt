@@ -58,27 +58,9 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
         Workspace.Reachable_Velocity_Memos (Block.Limited_Segment_Feedrates'Range);
 
       procedure Apply_Corner_Transition_Limits (Corner : Corners_Index; Limit : in out Velocity) is
-         Transition : constant Corner_Transition_Evaluator := Block.Corner_Transitions (Corner);
-         Bounds     : constant Unit_Speed_Axial_Derivative_Bounds := Workspace.Corner_Derivative_Bounds (Corner);
       begin
-         case Policy (Transition) is
-            when Hard_Stop              =>
-               Limit := 0.0 * mm / s;
-
-            when Passthrough            =>
-               null;
-
-            when Square_Corner_Velocity =>
-               Limit := Velocity'Min (Limit, Junction_Velocity_Limit (Transition));
-
-            when Derivative_Bounded     =>
-               if Arc_Length (Transition) <= 0.0 * mm then
-                  Limit := 0.0 * mm / s;
-               else
-                  Limit := Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Limit);
-                  Limit := Motor_Delta_Ceiling_For_Projection (Block.Params, Spatial_Motor_Map (Motor_Map), Limit);
-               end if;
-         end case;
+         Limit :=
+           Corner_Policy_Ceiling (Block'Access, Motor_Map, Corner, Workspace.Corner_Derivative_Bounds (Corner), Limit);
          --  Bound both possible junction coasts, including motor deltas and any E density transition they overlap.
          for I in Corner .. Corner + 1 loop
             declare
@@ -295,8 +277,9 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       --
       --  3. The maximum velocity allowed in the segment leading in to and out of the corner.
       --
-      --  4. E's density change: Velocity_Change_Max, since E's velocity jumps by the density change times the corner
-      --     velocity, or the bounds of a Smooth_Deviation transition where the coasts overlap it.
+      --  4. E's density change: Velocity_Change_Max where it is not smoothed, since E's velocity jumps by the density
+      --     change times the corner velocity, or the bounds of a Smooth_Deviation transition where the coasts overlap
+      --     it. Transitions are sized not to bind here unless their width is capped.
       --
       --  In this pass we are only concerned about the maximum reachable velocity under the above constraints.
       --  Deceleration constraints are added in the reverse pass.

@@ -793,6 +793,11 @@ package body Prunt.Motion_Planner.Planner is
    Transition_Derivative_Maxima : constant array (1 .. 4) of Dimensionless := [35.0 / 16.0, 7.5132, 52.5, 840.0];
    --  Maxima of |h'|, |h''|, |h'''| and |h''''| over [0, 1]. The second is 84 / (5 * Sqrt (5)), rounded up.
 
+   Narrowest_Extrusion_Transition : constant Length := 0.001 * mm;
+   --  A floor on transition half-widths. Nearly unlimited E derivative limits would otherwise give transitions
+   --  so narrow that their profile cuts degenerate. Wider never lowers a corner's ceiling, and the extra deviation is
+   --  negligible.
+
    function Transition_Shape (U : Dimensionless) return Dimensionless
    is (U ** 4 * (35.0 - U * (84.0 - U * (70.0 - 20.0 * U))));
    --  h (U): the fraction of the density change reached at U across the transition.
@@ -825,50 +830,145 @@ package body Prunt.Motion_Planner.Planner is
             when Biarc         => Params.Cornering.Biarc_Params.Axial_Deviation_Maxes (E_Axis),
             when Sharp_SCV     => 0.0 * mm));
 
+   function Smooths_Density_Change
+     (Block : not null access constant Execution_Block; Corner : Corners_Index) return Boolean
+   is
+      Incoming : constant Dimensionless := Block.Extrusion_Densities (Corner);
+      Outgoing : constant Dimensionless := Block.Extrusion_Densities (Corner + 1);
+   begin
+      if Block.Params.Extrusion_Cornering.Kind /= Smooth_Deviation
+        or else Extrusion_Deviation (Block.Params) = 0.0 * mm
+        or else Density_Change_Is_Negligible (Block, Corner)
+      then
+         return False;
+      end if;
+      --  A change that is not negligible has a nonzero density on its larger side.
+      if abs Outgoing <= abs Incoming then
+         return Outgoing / Incoming >= Block.Params.Extrusion_Cornering.Smoothed_Decrease_Ratio_Min;
+      else
+         return Incoming / Outgoing >= Block.Params.Extrusion_Cornering.Smoothed_Increase_Ratio_Min;
+      end if;
+   end Smooths_Density_Change;
+
    function Extrusion_Junction_Ceiling
      (Block : not null access constant Execution_Block; Corner : Corners_Index; Limit : Velocity) return Velocity
    is
-      Change : constant Dimensionless :=
+      Change  : constant Dimensionless :=
         abs (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner));
+      Maximum : constant Velocity := Block.Params.Extrusion_Cornering.Velocity_Change_Max;
    begin
-      case Block.Params.Extrusion_Cornering.Kind is
-         when Smooth_Deviation              =>
-            --  Only roundoff may step E's velocity, so an unsmoothed change needs a stop.
-            return
-              (if Block.Extrusion_Transitions (Corner).Half_Width = 0.0 * mm
-                 and then not Density_Change_Is_Negligible (Block, Corner)
-               then 0.0 * mm / s
-               else Limit);
-
-         when Instantaneous_Velocity_Change =>
-            declare
-               Maximum : constant Velocity := Block.Params.Extrusion_Cornering.Velocity_Change_Max;
-            begin
-               --  The two density-scaled profiles meet directly, so E's velocity jumps by Change * Limit.
-               return (if Change * Limit > Maximum then 0.999 * Maximum / Change else Limit);
-            end;
-      end case;
+      if Block.Extrusion_Transitions (Corner).Half_Width > 0.0 * mm
+        or else
+          (Block.Params.Extrusion_Cornering.Kind = Smooth_Deviation
+           and then Density_Change_Is_Negligible (Block, Corner))
+      then
+         return Limit;
+      end if;
+      --  The two density-scaled profiles meet directly, so E's velocity jumps by Change * Limit.
+      return (if Change * Limit > Maximum then 0.999 * Maximum / Change else Limit);
    end Extrusion_Junction_Ceiling;
 
+   function Corner_Policy_Ceiling
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Corner    : Corners_Index;
+      Bounds    : Unit_Speed_Axial_Derivative_Bounds;
+      Limit     : Velocity) return Velocity
+   is
+      Transition : constant Corner_Transition_Evaluator := Block.Corner_Transitions (Corner);
+   begin
+      case Policy (Transition) is
+         when Hard_Stop              =>
+            return 0.0 * mm / s;
+
+         when Passthrough            =>
+            return Limit;
+
+         when Square_Corner_Velocity =>
+            return Velocity'Min (Limit, Junction_Velocity_Limit (Transition));
+
+         when Derivative_Bounded     =>
+            if Arc_Length (Transition) <= 0.0 * mm then
+               return 0.0 * mm / s;
+            end if;
+            return
+              Motor_Delta_Ceiling_For_Projection
+                (Block.Params,
+                 Spatial_Motor_Map (Motor_Map),
+                 Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Limit));
+      end case;
+   end Corner_Policy_Ceiling;
+
+   function Extrusion_Transition_Reach
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Corner    : Corners_Index) return Length
+   is
+      Change : constant Dimensionless :=
+        abs (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner));
+      Widest : Length := 0.0 * mm;
+      Speed  : Dimensionless;
+      Result : Length := Narrowest_Extrusion_Transition;
+
+      procedure Fit (Maximum, Limit : Dimensionless; Order : Positive);
+      --  Widen Result until the transition's E derivative of this Order at Speed fits Limit, in mm/s**Order. At a
+      --  constant speed v it peaks at v**Order * Change * Maximum / (2 * Half_Width)**(Order - 1).
+
+      procedure Fit (Maximum, Limit : Dimensionless; Order : Positive) is
+      begin
+         Result :=
+           Length'Max (Result, 0.5 * mm * Nth_Root_Ratio (Change * Maximum * Speed ** Order, Limit, Order - 1));
+      end Fit;
+   begin
+      if not Smooths_Density_Change (Block, Corner) then
+         return 0.0 * mm;
+      end if;
+      Widest := Block.Params.Extrusion_Cornering.Transition_Distance_Max;
+      --  Only a quotient beyond every representable cap overflows here, leaving the cap.
+      Widest := Length'Min (Widest, Extrusion_Deviation (Block.Params) / (Change * Transition_Deviation_Ratio));
+      --  Constant_Speed_Axial_Ceiling keeps 0.999 of each limit. The small extra margin keeps roundoff in the root
+      --  from lowering the ceiling the transition should leave alone.
+      Speed :=
+        Corner_Policy_Ceiling
+          (Block,
+           Motor_Map,
+           Corner,
+           Derivative_Bounds (Block.Corner_Transitions (Corner)),
+           Velocity'Min (Block.Limited_Segment_Feedrates (Corner), Block.Limited_Segment_Feedrates (Corner + 1)))
+        / (0.999 * mm / s)
+        * (1.0 + 1.0E-9);
+      if Speed <= 0.0 then
+         --  A stopped corner needs no transition.
+         return 0.0 * mm;
+      end if;
+      Fit
+        (Transition_Derivative_Maxima (1),
+         Dimensionless (Block.Params.Axial_Acceleration_Maxes (E_Axis) / (mm / s ** 2)),
+         2);
+      Fit
+        (Transition_Derivative_Maxima (2), Dimensionless (Block.Params.Axial_Jerk_Maxes (E_Axis) / (mm / s ** 3)), 3);
+      Fit
+        (Transition_Derivative_Maxima (3), Dimensionless (Block.Params.Axial_Snap_Maxes (E_Axis) / (mm / s ** 4)), 4);
+      Fit
+        (Transition_Derivative_Maxima (4),
+         Dimensionless (Block.Params.Axial_Crackle_Maxes (E_Axis) / (mm / s ** 5)),
+         5);
+      return Length'Min (Result, Widest);
+   exception
+      when Constraint_Error =>
+         --  Only an extreme speed or density overflows, and the widest transition slows the corner least.
+         return Widest;
+   end Extrusion_Transition_Reach;
+
    function Plan_Extrusion_Transition
-     (Block : not null access constant Execution_Block; Corner : Corners_Index; Incoming, Outgoing : Length)
+     (Block : not null access constant Execution_Block; Corner : Corners_Index; Reach, Incoming, Outgoing : Length)
       return Extrusion_Transition
    is
-      Change    : constant Dimensionless :=
-        Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner);
-      Allowance : constant Length := Extrusion_Deviation (Block.Params);
-      Half      : Length := Length'Min (Incoming, Outgoing);
+      Change : constant Dimensionless := Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner);
+      Half   : constant Length := Length'Min (Reach, Length'Min (Incoming, Outgoing));
    begin
-      if Density_Change_Is_Negligible (Block, Corner)
-        or else Allowance <= 0.0 * mm
-        or else Half <= 0.0 * mm
-        or else Policy (Block.Corner_Transitions (Corner)) = Hard_Stop
-      then
+      if Half <= 0.0 * mm then
          return (others => <>);
-      end if;
-      --  Every distance derivative bound falls as the transition widens, so use all the room the deviation allows.
-      if abs Change * Transition_Deviation_Ratio * Half > Allowance then
-         Half := Allowance / (abs Change * Transition_Deviation_Ratio);
       end if;
       --  Later stages evaluate the analytical bounds without guards, so reject a transition whose bounds overflow.
       if abs Change * Transition_Derivative_Maxima (4) / (2.0 * Half) ** 4 >= Curvature_To_4'Last then
@@ -880,25 +980,42 @@ package body Prunt.Motion_Planner.Planner is
          return (others => <>);
    end Plan_Extrusion_Transition;
 
-   procedure Assign_Extrusion_Transitions (Block : aliased in out Execution_Block) is
-      function May_Need_Transition (Corner : Corners_Index) return Boolean
-      is (Corner = Block.Corners'First
-          or else Corner = Block.Corners'Last
-          or else
-            (not Density_Change_Is_Negligible (Block'Access, Corner)
-             and then Policy (Block.Corner_Transitions (Corner)) /= Hard_Stop));
+   procedure Assign_Extrusion_Transitions
+     (Block : aliased in out Execution_Block; Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map)
+   is
+      function Room (Segment : Finishing_Corners_Index; Corner, Far_Corner : Corners_Index) return Length;
+      --  The part of Segment that Corner's transition may take, given what Far_Corner, its other end, keeps.
 
-      function Room (Segment : Finishing_Corners_Index; Far_Corner : Corners_Index) return Length
-      is ((if May_Need_Transition (Far_Corner) then 0.5 else 1.0) * Segment_Total_Distance (Block'Access, Segment));
-      --  The part of Segment that a transition at its other corner may take: half when Far_Corner may need one too.
+      function Room (Segment : Finishing_Corners_Index; Corner, Far_Corner : Corners_Index) return Length is
+         Total : constant Length := Segment_Total_Distance (Block'Access, Segment);
+      begin
+         if Far_Corner = Block.Corners'First or else Far_Corner = Block.Corners'Last then
+            return 0.5 * Total;
+         elsif Far_Corner < Corner then
+            --  Already final.
+            return Total - Block.Extrusion_Transitions (Far_Corner).Half_Width;
+         else
+            --  Still holds its reach.
+            return Total - Length'Min (Block.Extrusion_Transitions (Far_Corner).Half_Width, 0.5 * Total);
+         end if;
+      end Room;
    begin
       Block.Extrusion_Transitions := [others => <>];
       if Extrusion_Deviation (Block.Params) = 0.0 * mm then
          return;
       end if;
       for Corner in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
+         Block.Extrusion_Transitions (Corner).Half_Width :=
+           Extrusion_Transition_Reach (Block'Access, Motor_Map, Corner);
+      end loop;
+      for Corner in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
          Block.Extrusion_Transitions (Corner) :=
-           Plan_Extrusion_Transition (Block'Access, Corner, Room (Corner, Corner - 1), Room (Corner + 1, Corner + 1));
+           Plan_Extrusion_Transition
+             (Block'Access,
+              Corner,
+              Block.Extrusion_Transitions (Corner).Half_Width,
+              Room (Corner, Corner, Corner - 1),
+              Room (Corner + 1, Corner, Corner + 1));
       end loop;
    end Assign_Extrusion_Transitions;
 
@@ -3560,15 +3677,6 @@ package body Prunt.Motion_Planner.Planner is
          Patch.Primitive_Start_Distances (Seam + 1) := Right.Primitive_Start_Distances (2) + Right_Trim;
          Patch.Primitive_Distances (Seam + 1) := Right.Primitive_Distances (2) - Right_Trim;
 
-         --  Keep every copied E transition. Only the seam gets a new one, in what the far corners' transitions leave
-         --  of its two shortened segments.
-         Patch.Extrusion_Transitions (Seam) :=
-           Plan_Extrusion_Transition
-             (Patch'Access,
-              Seam,
-              Segment_Total_Distance (Patch'Access, Seam) - Patch.Extrusion_Transitions (Seam - 1).Half_Width,
-              Segment_Total_Distance (Patch'Access, Seam + 1) - Patch.Extrusion_Transitions (Seam + 1).Half_Width);
-
          --  Translate existing references by the two local shortening deltas. Reintegrating every density would
          --  introduce roundoff drift even at an exactly straight seam and lose exact stopped endpoints.
          Patch.Extrusion_Reference_Positions (Seam) :=
@@ -3593,6 +3701,16 @@ package body Prunt.Motion_Planner.Planner is
               Velocity'Min
                 (Patch.Limited_Segment_Feedrates (I), Segment_Total_Distance (Patch'Access, I) / Interpolation_Time);
          end loop;
+
+         --  Keep every copied E transition. Only the seam gets a new one, in what the far corners' transitions leave
+         --  of its two shortened segments.
+         Patch.Extrusion_Transitions (Seam) :=
+           Plan_Extrusion_Transition
+             (Patch'Access,
+              Seam,
+              Extrusion_Transition_Reach (Patch'Access, Motor_Map, Seam),
+              Segment_Total_Distance (Patch'Access, Seam) - Patch.Extrusion_Transitions (Seam - 1).Half_Width,
+              Segment_Total_Distance (Patch'Access, Seam + 1) - Patch.Extrusion_Transitions (Seam + 1).Half_Width);
       end Build_Patch;
 
       function Original_Time return Time is

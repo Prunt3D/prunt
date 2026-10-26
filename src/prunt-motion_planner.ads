@@ -113,21 +113,39 @@ package Prunt.Motion_Planner is
    type Extrusion_Cornering_Kind is (Smooth_Deviation, Instantaneous_Velocity_Change);
 
    type Extrusion_Cornering_Parameters (Kind : Extrusion_Cornering_Kind := Smooth_Deviation) is record
+      Velocity_Change_Max : Velocity range 0.0 * mm / s .. Velocity'Last := 1.0 * mm / s;
+      --  Maximum absolute E velocity jump at a moving segment junction whose density change is not smoothed: every
+      --  such junction in Instantaneous_Velocity_Change mode, and in Smooth_Deviation mode those the ratio minimums
+      --  below exclude or that no transition fits. E follows the path-length-corrected reference exactly there, so
+      --  the jump is the density change times the junction speed. Acceleration and higher derivative limits are
+      --  waived only at the jump; all E limits still apply between junctions. Zero requires a stop at every such
+      --  density change.
+
       case Kind is
          when Smooth_Deviation =>
-            null;
+            Transition_Distance_Max : Length range 0.0 * mm .. Length'Last := 2.0 * mm;
             --  Where the extrusion density changes at a moving junction, E's density moves between the two segment
             --  densities along a fixed smooth curve over the path either side of the junction. E stays a function of
-            --  path position, so every E limit holds through the junction. The curve is as wide as the neighbouring
-            --  segments allow, within the E entry of the cornering model's deviation limits. Zero E deviation,
-            --  including Sharp_SCV, requires a stop at every density change.
+            --  path position, so every E limit holds through the junction. Each curve is the narrowest whose E limits
+            --  do not lower the junction speed that the feedrates and XYZ cornering allow, but it reaches at most this
+            --  far along the path on each side, and within the E entry of the cornering model's deviation limits. A
+            --  change that fits no curve, including any with zero E deviation or Sharp_SCV, is not smoothed.
+
+            Smoothed_Decrease_Ratio_Min : Dimensionless range -1.0 .. 1.0 := 0.1;
+            --  A density change whose magnitude does not grow is smoothed only where the outgoing density divided by
+            --  the incoming density is at least this. The default leaves extrusion stops, reversals and drops below a
+            --  tenth unsmoothed, so E does not keep extruding into a travel move. Zero smooths stops into travel but
+            --  not reversals, -1 smooths every decrease and 1 smooths none.
+
+            Smoothed_Increase_Ratio_Min : Dimensionless range -1.0 .. 1.0 := 0.1;
+            --  A density change whose magnitude grows is smoothed only where the incoming density divided by the
+            --  outgoing density is at least this. The default leaves extrusion starts, reversals and rises from below
+            --  a tenth unsmoothed, so E does not start extruding during a travel move. Zero smooths starts from travel
+            --  but not reversals, -1 smooths every increase and 1 smooths none.
 
          when Instantaneous_Velocity_Change =>
-            Velocity_Change_Max : Velocity range 0.0 * mm / s .. Velocity'Last := 1.0 * mm / s;
-            --  Maximum absolute E velocity jump at a moving segment junction where the extrusion density changes. E
-            --  follows the path-length-corrected reference exactly, so the jump is the density change times the
-            --  junction speed. Acceleration and higher derivative limits are waived only at the jump; all E limits
-            --  still apply between junctions. Zero requires a stop at every density change.
+            null;
+            --  No density change is smoothed.
       end case;
    end record;
 

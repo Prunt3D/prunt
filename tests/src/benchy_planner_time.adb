@@ -173,7 +173,7 @@ begin
                  when E_Jump_Five => 5.0 * mm / s,
                  when others => 0.0 * mm / s));
       when Smooth_E_Deviation | Tight_E_Deviation =>
-         Params.Extrusion_Cornering := (Kind => Smooth_Deviation);
+         Params.Extrusion_Cornering := (Kind => Smooth_Deviation, others => <>);
          if Selected_Case = Tight_E_Deviation then
             Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0002 * mm;
          end if;

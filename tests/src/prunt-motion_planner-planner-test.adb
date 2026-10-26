@@ -47,6 +47,14 @@ package body Prunt.Motion_Planner.Planner.Test is
    is (Kind => Instantaneous_Velocity_Change, Velocity_Change_Max => Maximum);
    --  Instantaneous_Velocity_Change with the given allowance, as most fixtures were written for.
 
+   Smooth_Every_Change : constant Extrusion_Cornering_Parameters :=
+     (Kind                        => Smooth_Deviation,
+      Velocity_Change_Max         => 1.0 * mm / s,
+      Transition_Distance_Max     => 1.0E100 * mm,
+      Smoothed_Decrease_Ratio_Min => -1.0,
+      Smoothed_Increase_Ratio_Min => -1.0);
+   --  Smooth_Deviation that smooths stops, starts and inexact reversals too, wherever the E deviation allows.
+
    use Ada.Numerics.Long_Elementary_Functions;
    package Tested_Corner_Blender is new Corner_Blender;
    package Tested_Density_Normalizer is new Extrusion_Density_Normalizer;
@@ -1872,7 +1880,7 @@ package body Prunt.Motion_Planner.Planner.Test is
    procedure Prepare_Smooth_Extrusion (Block : out Execution_Block; Deviation : Length) is
    begin
       Reset_Early_Limiter_Block (Block);
-      Block.Params.Extrusion_Cornering := (Kind => Smooth_Deviation);
+      Block.Params.Extrusion_Cornering := (Kind => Smooth_Deviation, others => <>);
       Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
       Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
       Block.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s ** 2];
@@ -1976,6 +1984,10 @@ package body Prunt.Motion_Planner.Planner.Test is
          begin
             Prepare_Smooth_Extrusion (Block, Deviation);
             Block.Params.Continuous_Timing := Scenario = Continuous;
+            if Scenario = Zero then
+               --  Nothing can be smoothed, and unsmoothed changes may not step E's velocity.
+               Block.Params.Extrusion_Cornering.Velocity_Change_Max := 0.0 * mm / s;
+            end if;
             --  Densities 0.1, 0.05, 0.08 and 0.08: changes at corners 2 and 3 only.
             Block.Corners :=
               (if Scenario = Turns
@@ -2001,7 +2013,7 @@ package body Prunt.Motion_Planner.Planner.Test is
                   and then Policy (Block.Corner_Transitions (3)) = Hard_Stop
                   and then Block.Corner_Velocity_Limits (2) = 0.0 * mm / s
                   and then Block.Extrusion_Transitions (2).Half_Width = 0.0 * mm,
-                  "Zero E deviation stops at every density change");
+                  "Zero E deviation and velocity change stop at every density change");
                T.Assert
                  (Policy (Block.Corner_Transitions (4)) /= Hard_Stop,
                   "Zero E deviation keeps an unchanged-density corner moving");
@@ -2096,13 +2108,16 @@ package body Prunt.Motion_Planner.Planner.Test is
    begin
       T.Register;
       Prepare_Smooth_Extrusion (Block, 0.1 * mm);
-      --  The short outer segments limit both transitions to 5 mm, leaving the middle of the long segment untouched.
+      Block.Params.Extrusion_Cornering.Transition_Distance_Max := 1.0E100 * mm;
+      --  Tight E limits would widen both transitions without bound, so the short outer segments limit them to 5 mm,
+      --  leaving the middle of the long segment untouched.
       Block.Corners :=
         [[others => 0.0 * mm],
          [X_Axis => 10.0 * mm, E_Axis => 1.0 * mm, others => 0.0 * mm],
          [X_Axis => 40.0 * mm, E_Axis => 2.5 * mm, others => 0.0 * mm],
          [X_Axis => 50.0 * mm, E_Axis => 3.3 * mm, others => 0.0 * mm]];
       Normalize_And_Blend (Block, Motor_Map, Workspace);
+      Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
       declare
          Total  : constant Length := Segment_Total_Distance (Block'Access, I);
          Whole  : constant Unit_Speed_Axial_Derivative_Bounds :=
@@ -2225,6 +2240,211 @@ package body Prunt.Motion_Planner.Planner.Test is
       Check_Executed_Extrusion (T, Left, "Left of seam");
       Check_Executed_Extrusion (T, Right, "Right of seam");
    end Test_Extrusion_Smooth_Seam;
+
+   procedure Test_Extrusion_Smooth_Ratios (T : in out Trendy_Test.Operation'Class) is
+      type Workspace_Access is access Planning_Workspace;
+      Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Block     : aliased Execution_Block (4);
+
+      procedure Plan
+        (Cornering : Extrusion_Cornering_Parameters; Deviation : Length; First, Middle, Last : Dimensionless);
+      --  Three collinear 10 mm moves at the given densities, planned on their fixed geometry. The densities are
+      --  dyadic, so their ratios are exact.
+
+      procedure Plan
+        (Cornering : Extrusion_Cornering_Parameters; Deviation : Length; First, Middle, Last : Dimensionless) is
+      begin
+         Prepare_Smooth_Extrusion (Block, Deviation);
+         Block.Params.Extrusion_Cornering := Cornering;
+         Block.Corners :=
+           [[others => 0.0 * mm],
+            [X_Axis => 10.0 * mm, E_Axis => 10.0 * First * mm, others => 0.0 * mm],
+            [X_Axis => 20.0 * mm, E_Axis => 10.0 * (First + Middle) * mm, others => 0.0 * mm],
+            [X_Axis => 30.0 * mm, E_Axis => 10.0 * (First + Middle + Last) * mm, others => 0.0 * mm]];
+         Normalize_And_Blend (Block, Motor_Map, Workspace);
+         Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
+         Plan_Fixed_Geometry (Block, Motor_Map, Workspace);
+      end Plan;
+
+      function Smoothed (Corner : Corners_Index) return Boolean
+      is (Block.Extrusion_Transitions (Corner).Half_Width > 0.0 * mm);
+
+      procedure Check_Jump (Corner : Corners_Index; Name : String);
+      --  Corner is not smoothed, keeps moving, and steps E's velocity within Velocity_Change_Max.
+
+      procedure Check_Jump (Corner : Corners_Index; Name : String) is
+      begin
+         T.Assert (not Smoothed (Corner), Name & ": the change is not smoothed");
+         T.Assert
+           (Block.Corner_Velocity_Limits (Corner) > 0.0 * mm / s
+            and then
+              abs (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner))
+              * Block.Corner_Velocity_Limits (Corner)
+              <= Block.Params.Extrusion_Cornering.Velocity_Change_Max,
+            Name & ": XYZ keeps moving and E's velocity steps within Velocity_Change_Max");
+      end Check_Jump;
+
+      procedure Check_Stationary_Travel (From, To : Length; Name : String);
+      --  E does not move over the middle segment's travel between From and To.
+
+      procedure Check_Stationary_Travel (From, To : Length; Name : String) is
+      begin
+         for K in 0 .. 100 loop
+            T.Assert
+              (Extrusion_At_Distance (Block'Access, 3, From + (To - From) * Dimensionless (K) / 100.0)
+               = Block.Extrusion_Reference_Positions (2),
+               Name & ": E stays still during the travel move");
+         end loop;
+      end Check_Stationary_Travel;
+
+      Cornering : Extrusion_Cornering_Parameters;
+   begin
+      T.Register;
+
+      --  An extrusion stop and restart around a travel move: by default E steps instead of oozing into the travel.
+      Plan ((others => <>), 0.1 * mm, 0.125, 0.0, 0.125);
+      Check_Jump (2, "Default stop");
+      Check_Jump (3, "Default start");
+      Check_Stationary_Travel (0.0 * mm, Segment_Total_Distance (Block'Access, 3), "Default");
+
+      --  Smoothing them anyway reaches only Transition_Distance_Max into the travel.
+      Cornering := Smooth_Every_Change;
+      Cornering.Transition_Distance_Max := 0.5 * mm;
+      Plan (Cornering, 0.1 * mm, 0.125, 0.0, 0.125);
+      T.Assert
+        (Block.Extrusion_Transitions (2).Half_Width = 0.5 * mm
+         and then Block.Extrusion_Transitions (3).Half_Width = 0.5 * mm,
+         "Tight E limits widen a smoothed stop and start only to Transition_Distance_Max");
+      Check_Stationary_Travel
+        (0.5 * mm, Segment_Total_Distance (Block'Access, 3) - 0.5 * mm, "Smoothed beyond Transition_Distance_Max");
+      Check_Executed_Extrusion (T, Block, "Capped stop and start");
+
+      --  A decrease and an increase with exact ratios of one half.
+      Cornering := (Kind => Smooth_Deviation, others => <>);
+      Plan (Cornering, 0.1 * mm, 0.125, 0.0625, 0.125);
+      T.Assert (Smoothed (2) and then Smoothed (3), "The default ratios smooth a partial density change");
+      Cornering.Smoothed_Decrease_Ratio_Min := 0.501;
+      Cornering.Smoothed_Increase_Ratio_Min := 0.5;
+      Plan (Cornering, 0.1 * mm, 0.125, 0.0625, 0.125);
+      Check_Jump (2, "Decrease below its ratio minimum");
+      T.Assert (Smoothed (3), "An increase at its ratio minimum is smoothed");
+      Cornering.Smoothed_Decrease_Ratio_Min := 0.5;
+      Cornering.Smoothed_Increase_Ratio_Min := 0.501;
+      Plan (Cornering, 0.1 * mm, 0.125, 0.0625, 0.125);
+      T.Assert (Smoothed (2), "A decrease at its ratio minimum is smoothed");
+      Check_Jump (3, "Increase below its ratio minimum");
+
+      --  A reversal while XYZ moves has a negative ratio.
+      Cornering := (Kind => Smooth_Deviation, others => <>);
+      Plan (Cornering, 0.1 * mm, 0.125, -0.0625, -0.0625);
+      Check_Jump (2, "Default reversal");
+      Cornering.Smoothed_Decrease_Ratio_Min := -0.5;
+      Plan (Cornering, 0.1 * mm, 0.125, -0.0625, -0.0625);
+      T.Assert (Smoothed (2), "A negative ratio minimum smooths a partial reversal");
+      Check_Executed_Extrusion (T, Block, "Smoothed reversal");
+
+      --  Without an E deviation nothing is smoothed, but changes still step within Velocity_Change_Max.
+      Plan ((others => <>), 0.0 * mm, 0.125, 0.0625, 0.125);
+      Check_Jump (2, "Zero E deviation decrease");
+      Check_Jump (3, "Zero E deviation increase");
+   end Test_Extrusion_Smooth_Ratios;
+
+   procedure Test_Extrusion_Smooth_Width (T : in out Trendy_Test.Operation'Class) is
+      type Workspace_Access is access Planning_Workspace;
+      Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Block     : aliased Execution_Block (4);
+
+      procedure Prepare (Distance_Max : Length; Scale : Dimensionless := 1.0);
+      --  Three collinear moves whose middle one extrudes half as densely, with E derivative limits loose enough for
+      --  narrow transitions and multiplied by Scale.
+
+      procedure Prepare (Distance_Max : Length; Scale : Dimensionless := 1.0) is
+      begin
+         Prepare_Smooth_Extrusion (Block, 0.1 * mm);
+         Block.Params.Extrusion_Cornering.Transition_Distance_Max := Distance_Max;
+         Block.Params.Axial_Acceleration_Maxes (E_Axis) := Scale * 10_000.0 * mm / s ** 2;
+         Block.Params.Axial_Jerk_Maxes (E_Axis) := Scale * 1.0E6 * mm / s ** 3;
+         Block.Params.Axial_Snap_Maxes (E_Axis) := Scale * 1.0E8 * mm / s ** 4;
+         Block.Params.Axial_Crackle_Maxes (E_Axis) := Scale * 1.0E10 * mm / s ** 5;
+         Block.Original_Segment_Feedrates := [others => 50.0 * mm / s];
+         Block.Corners :=
+           [[others => 0.0 * mm],
+            [X_Axis => 10.0 * mm, E_Axis => 1.25 * mm, others => 0.0 * mm],
+            [X_Axis => 20.0 * mm, E_Axis => 1.875 * mm, others => 0.0 * mm],
+            [X_Axis => 30.0 * mm, E_Axis => 3.125 * mm, others => 0.0 * mm]];
+         Normalize_And_Blend (Block, Motor_Map, Workspace);
+         Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
+      end Prepare;
+
+      function Speed return Velocity
+      is (Velocity'Min (Block.Limited_Segment_Feedrates (2), Block.Limited_Segment_Feedrates (3)));
+      --  The ceiling that the feedrates and the straight junction give corner 2.
+
+      function E_Ceiling return Velocity;
+      --  Speed, lowered by corner 2's transition at a constant speed through it.
+
+      function E_Ceiling return Velocity is
+         Half  : constant Length := Block.Extrusion_Transitions (2).Half_Width;
+         Total : constant Length := Segment_Total_Distance (Block'Access, 2);
+      begin
+         return
+           Velocity'Min
+             (Constant_Speed_Axial_Ceiling
+                (Block.Params,
+                 Extrusion_Bounds (Block'Access, 2, (Start_Distance => Total - Half, Distance => Half)),
+                 Speed),
+              Constant_Speed_Axial_Ceiling
+                (Block.Params,
+                 Extrusion_Bounds (Block'Access, 3, (Start_Distance => 0.0 * mm, Distance => Half)),
+                 Speed));
+      end E_Ceiling;
+
+      Narrowest : Extrusion_Transition;
+   begin
+      T.Register;
+      Prepare (2.0 * mm);
+      Narrowest := Block.Extrusion_Transitions (2);
+      T.Assert
+        (Narrowest.Half_Width > 0.0 * mm
+         and then Narrowest.Half_Width < 2.0 * mm
+         and then abs Narrowest.Density_Change * Narrowest.Half_Width * 35.0 / 256.0 < 0.05 * mm,
+         "Loose E limits give a transition well inside its distance cap and deviation; half-width"
+         & Narrowest.Half_Width'Image);
+      T.Assert (E_Ceiling = Speed, "The transition does not lower the corner's ceiling");
+      Block.Extrusion_Transitions (2).Half_Width := 0.99 * Narrowest.Half_Width;
+      T.Assert (E_Ceiling < Speed, "Any narrower transition would lower the corner's ceiling");
+      Block.Extrusion_Transitions (2) := Narrowest;
+
+      Plan_Fixed_Geometry (Block, Motor_Map, Workspace);
+      T.Assert (Block.Corner_Velocity_Limits (2) > 0.0 * mm / s, "The corner keeps moving");
+      Check_Executed_Extrusion (T, Block, "Narrowest transitions");
+
+      Prepare (0.1 * mm);
+      T.Assert
+        (Block.Extrusion_Transitions (2).Half_Width = 0.1 * mm and then E_Ceiling < Speed,
+         "A capped transition slows the corner rather than reaching further");
+      Plan_Fixed_Geometry (Block, Motor_Map, Workspace);
+      T.Assert
+        (Block.Corner_Velocity_Limits (2) > 0.0 * mm / s and then Block.Corner_Velocity_Limits (2) <= E_Ceiling,
+         "The capped corner moves within its transition's ceiling");
+      Check_Executed_Extrusion (T, Block, "Capped transitions");
+
+      --  Effectively unlimited E limits would need no width at all; the floor keeps the profile cuts well formed.
+      Prepare (2.0 * mm, 1.0E90);
+      T.Assert
+        (Block.Extrusion_Transitions (2).Half_Width = 0.001 * mm and then E_Ceiling = Speed,
+         "Unlimited E limits give the narrowest allowed transition, which leaves the ceiling alone");
+      Plan_Fixed_Geometry (Block, Motor_Map, Workspace);
+      T.Assert (Block.Corner_Velocity_Limits (2) > 0.0 * mm / s, "The narrowest transition keeps the corner moving");
+      T.Assert
+        (abs
+           (Segment_Pos_At_Time (Block'Access, 2, Segment_Time (Block'Access, 2))
+            - Segment_Pos_At_Time (Block'Access, 3, 0.0 * s))
+         < 1.0E-9 * mm,
+         "The narrowest transition executes continuously");
+   end Test_Extrusion_Smooth_Width;
 
    procedure Test_Extrusion_Tangential_Limit (T : in out Trendy_Test.Operation'Class) is
       type Workspace_Access is access Planning_Workspace;
@@ -2546,8 +2766,10 @@ package body Prunt.Motion_Planner.Planner.Test is
    begin
       T.Register;
       for Smoothed in Boolean loop
-         Smooth := Smoothed;
          for Scenario in 1 .. 10 loop
+            --  Sharp_SCV allows no E deviation, so its density changes step E's velocity even when smoothing, and E
+            --  follows the path profile analytically.
+            Smooth := Smoothed and then Scenario /= 8;
             Reset_Early_Limiter_Block (Block);
             Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
             Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
@@ -2566,10 +2788,15 @@ package body Prunt.Motion_Planner.Planner.Test is
                2 => [X_Axis => 10.0 * mm, E_Axis => 2.0 * mm, others => 0.0 * mm],
                3 => [X_Axis => 20.0 * mm, E_Axis => 2.0 * mm, others => 0.0 * mm],
                4 => [X_Axis => 30.0 * mm, E_Axis => 1.0 * mm, others => 0.0 * mm]];
-            if not Smooth then
+            if not Smoothed then
                Block.Params.Extrusion_Cornering := Velocity_Jump ((if Scenario = 2 then 0.0 else 1.0) * mm / s);
-            elsif Scenario = 2 then
-               Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0 * mm;
+            else
+               Block.Params.Extrusion_Cornering := Smooth_Every_Change;
+               if Scenario = 2 then
+                  --  Nothing can be smoothed, and unsmoothed changes may not step E's velocity.
+                  Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0 * mm;
+                  Block.Params.Extrusion_Cornering.Velocity_Change_Max := 0.0 * mm / s;
+               end if;
             end if;
             if Scenario in 3 .. 4 then
                Block.Corners (3) := [X_Axis => 10.0 * mm, E_Axis => -1.0 * mm, others => 0.0 * mm];
@@ -2620,6 +2847,16 @@ package body Prunt.Motion_Planner.Planner.Test is
             end loop;
             if Smooth then
                Check_Executed_Extrusion (T, Block, "Smoothed scenario" & Scenario'Image);
+            elsif Smoothed then
+               for Corner in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
+                  T.Assert
+                    (Block.Extrusion_Transitions (Corner).Half_Width = 0.0 * mm
+                     and then
+                       abs (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner))
+                       * Block.Corner_Velocity_Limits (Corner)
+                       <= Block.Params.Extrusion_Cornering.Velocity_Change_Max,
+                     "Sharp_SCV steps E's velocity within Velocity_Change_Max instead of smoothing");
+               end loop;
             end if;
             if Scenario = 1 then
                T.Assert
@@ -2650,21 +2887,26 @@ package body Prunt.Motion_Planner.Planner.Test is
    end Test_Extrusion_Stops_And_Dominated_Moves;
 
    procedure Test_Extrusion_Transition_Locality (T : in out Trendy_Test.Operation'Class) is
+      type Locality_Mode is (Jumps, Default_Smooth, Smooth_All);
       type Workspace_Access is access Planning_Workspace;
       Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
       Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
    begin
       T.Register;
-      for Smoothed in Boolean loop
+      for Mode in Locality_Mode loop
          for Scenario in 1 .. 4 loop
             declare
                Block : aliased Execution_Block (4);
                Job_Time : Time := 0.0 * s;
+               Smoothed : constant Boolean := Mode = Smooth_All;
+               --  Travel moves are smoothed only in Smooth_All; the default ratios step E's velocity into them.
             begin
                Reset_Early_Limiter_Block (Block);
-               if not Smoothed then
-                  Block.Params.Extrusion_Cornering := Velocity_Jump (1.0 * mm / s);
-               end if;
+               case Mode is
+                  when Jumps          => Block.Params.Extrusion_Cornering := Velocity_Jump (1.0 * mm / s);
+                  when Default_Smooth => null;
+                  when Smooth_All     => Block.Params.Extrusion_Cornering := Smooth_Every_Change;
+               end case;
                Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
                Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
                Block.Params.Axial_Acceleration_Maxes := [others => 1000.0 * mm / s ** 2];
@@ -2749,6 +2991,12 @@ package body Prunt.Motion_Planner.Planner.Test is
                end;
                if Smoothed then
                   Check_Executed_Extrusion (T, Block, "Smoothed locality scenario" & Scenario'Image);
+               end if;
+               if Mode = Default_Smooth and then Scenario = 3 then
+                  T.Assert
+                    (Block.Extrusion_Transitions (2).Half_Width = 0.0 * mm
+                     and then Block.Extrusion_Transitions (3).Half_Width = 0.0 * mm,
+                     "The default ratios do not smooth into or out of a travel move");
                end if;
             end;
          end loop;
@@ -4811,6 +5059,8 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Extrusion_Smooth_Deviation'Unrestricted_Access,
          Test_Extrusion_Smooth_Bounds'Unrestricted_Access,
          Test_Extrusion_Smooth_Seam'Unrestricted_Access,
+         Test_Extrusion_Smooth_Ratios'Unrestricted_Access,
+         Test_Extrusion_Smooth_Width'Unrestricted_Access,
          Test_Profile_Local_Curve_Limits'Unrestricted_Access,
          Test_Profile_Recovery'Unrestricted_Access,
          Test_Fixed_Geometry_Region_Boundary'Unrestricted_Access,

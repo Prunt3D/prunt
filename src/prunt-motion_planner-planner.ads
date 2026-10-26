@@ -51,18 +51,20 @@ pragma Check_Float_Overflow;
 --     geometry becomes a hard stop; nearly straight geometry is represented explicitly as a passthrough.
 --     Stereographic passthroughs also require matching distance derivatives through order four.
 --
---     In Smooth_Deviation mode each remaining moving density change then gets an E transition: a fixed smooth density
---     curve over the path either side of its corner, as wide as the neighbouring segments and the E deviation allow.
---     E stays a function of path position, so the later stages bound its distance derivatives just as they bound
---     curved XYZ geometry, and no transition depends on the speed through it.
---
 --  4. Early_Kinematic_Limiter:
 --
 --     Feedrate uses XYZ distance, or E distance for E-only moves. When Ignore_E_In_XYZE is False, the programmed
 --     XYZE feedrate is converted to these coordinates. The total time of each move is adjusted such that no move will
 --     be less than Interpolation_Time, This ensures that the step generator will not have to skip over many segments
---     in a row, which could cause the command queue to run dry. Finally the axial limits defined in
+--     in a row, which could cause the command queue to run dry. Then the axial limits defined in
 --     Axial_Velocity_Maxes are applied.
+--
+--     Finally, in Smooth_Deviation mode, each moving density change that its ratios allow gets an E transition: a
+--     fixed smooth density curve over the path either side of its corner, just wide enough that E's limits do not
+--     lower the corner speed that the feedrates and XYZ transition allow, within Transition_Distance_Max, the E
+--     deviation and the neighbouring segments. E stays a function of path position, so the later stages bound its
+--     distance derivatives just as they bound curved XYZ geometry, and no transition changes with the speed through
+--     it.
 --
 --  5. Kinematic_Limiter:
 --
@@ -717,23 +719,48 @@ private
    --  The E deviation allowed for Smooth_Deviation transitions: the cornering model's E entry, or zero for Sharp_SCV
    --  and in Instantaneous_Velocity_Change mode.
 
+   function Smooths_Density_Change
+     (Block : not null access constant Execution_Block; Corner : Corners_Index) return Boolean;
+   --  Whether the density change at interior Corner may get a Smooth_Deviation transition: one that is not negligible,
+   --  with a nonzero Extrusion_Deviation, whose density ratio is at least the matching Smoothed ratio minimum.
+
    function Extrusion_Junction_Ceiling
      (Block : not null access constant Execution_Block; Corner : Corners_Index; Limit : Velocity) return Velocity;
-   --  Lower Limit so that E's instantaneous velocity change at an interior corner fits Velocity_Change_Max. In
-   --  Smooth_Deviation mode a density change needs either a transition, whose derivative bounds limit the coasts
-   --  through it rather than the corner itself, or a stop.
+   --  Lower Limit so that E's instantaneous velocity change at an interior corner fits Velocity_Change_Max. A
+   --  Smooth_Deviation transition has no velocity change, since its derivative bounds limit the coasts through it
+   --  rather than the corner itself, and Smooth_Deviation lets roundoff step E's velocity.
+
+   function Corner_Policy_Ceiling
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Corner    : Corners_Index;
+      Bounds    : Unit_Speed_Axial_Derivative_Bounds;
+      Limit     : Velocity) return Velocity;
+   --  Lower Limit to what Corner's transition policy allows: zero for a hard stop or an empty curve, the junction
+   --  velocity of a square corner, or the constant-speed ceiling of a curve's derivative Bounds and XYZ motor deltas.
+
+   function Extrusion_Transition_Reach
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Corner    : Corners_Index) return Length;
+   --  The half-width of the transition that interior Corner would take with unlimited room: the narrowest whose E
+   --  derivative bounds do not lower the corner's ceiling from its feedrates and Corner_Policy_Ceiling, but within
+   --  Transition_Distance_Max and Extrusion_Deviation. Zero when Smooths_Density_Change is False or the corner stops.
 
    function Plan_Extrusion_Transition
-     (Block : not null access constant Execution_Block; Corner : Corners_Index; Incoming, Outgoing : Length)
+     (Block : not null access constant Execution_Block; Corner : Corners_Index; Reach, Incoming, Outgoing : Length)
       return Extrusion_Transition;
-   --  The widest Smooth_Deviation transition at interior Corner that reaches at most Incoming before the corner and
-   --  Outgoing after it, and whose deviation fits Extrusion_Deviation. Its width does not depend on speed, so it is
-   --  planned once with the geometry. Zero when the densities match, the corner stops or nothing fits.
+   --  The transition at interior Corner of half-width Reach, narrowed to reach at most Incoming before the corner and
+   --  Outgoing after it. Zero when that leaves nothing or its bounds would overflow. Narrowing lowers the corner's
+   --  ceiling, but never breaks the deviation or Transition_Distance_Max that Reach already fits.
 
-   procedure Assign_Extrusion_Transitions (Block : aliased in out Execution_Block);
-   --  Plan every interior corner's transition from the blended geometry. A segment is shared equally between its two
-   --  corners when both may need one; a block end always keeps half of its segment for a later inter-block blend.
-   --  Transitions may overlap XYZ transitions, since each axis merges its own bounds.
+   procedure Assign_Extrusion_Transitions
+     (Block : aliased in out Execution_Block; Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map);
+   --  Plan every interior corner's transition from the blended geometry and limited feedrates. Corners are fitted in
+   --  order: each takes what the previous corner's final transition leaves of its incoming segment, and leaves the
+   --  next corner the smaller of that corner's reach and half of their shared segment. A block end always keeps half
+   --  of its segment for a later inter-block blend. Transitions may overlap XYZ transitions, since each axis merges
+   --  its own bounds.
 
    function Extrusion_Reference_At_Distance
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Distance : Length)

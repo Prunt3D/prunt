@@ -113,6 +113,8 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
             Block.Limited_Segment_Feedrates (I) := Feedrate;
          end;
       end loop;
+
+      Assign_Extrusion_Transitions (Block, Motor_Map);
    end Run;
 
 end Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;

@@ -257,7 +257,7 @@ private
 
       Axial_Deviation_Limits : User_Config_Axial_Deviation_Limits_Array := [others => 0.1 * mm];
       --  XYZ entries limit geometric deviation from the commanded path. The E entry limits extrusion error while E's
-      --  density changes in Smooth_Deviation extrusion cornering; zero requires a stop at every density change. The E
+      --  density changes in Smooth_Deviation extrusion cornering; zero leaves every density change instant. The E
       --  entry is unused in Instantaneous_Velocity_Change mode.
 
       Maximum_Corner_Miss_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 0.1 * mm;
@@ -351,22 +351,43 @@ private
       --  Choose how E changes speed when the commanded extrusion per unit path length changes at a junction that XYZ
       --  moves through. E position always accounts for the path shortening caused by XYZ corner blending.
 
+      Maximum_Velocity_Change : Velocity range 0.0 * mm / s .. 1.0E100 * mm / s := 1.0 * mm / s;
+      --  Maximum instantaneous change in E velocity at a segment junction where the extrusion ratio changes without
+      --  being smoothed: every such junction in Instantaneous_Velocity_Change mode, and in Smooth_Deviation mode the
+      --  ones its ratio minimums exclude or that cannot be smoothed. E position follows the path there, so the change
+      --  is the extrusion ratio change times the junction speed and the junction is slowed until it fits. E
+      --  acceleration, jerk, snap and crackle limits are waived only at the instantaneous change; all E limits still
+      --  apply between junctions. Zero requires a stop at every such change in extrusion ratio.
+
       case Kind is
          when Smooth_Deviation =>
-            null;
+            Maximum_Transition_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 2.0 * mm;
             --  E's extrusion ratio changes gradually along the path on both sides of the junction, so every E limit,
             --  including acceleration, jerk, snap and crackle, also holds through the junction. The change is spread
-            --  over as much of the neighbouring segments as the E entry of the cornering model's axial deviation
-            --  limits allows, and that entry bounds how far E departs from the commanded extrusion. Zero E deviation,
-            --  including Sharp_SCV cornering, requires a stop at every change in extrusion ratio.
+            --  over just enough of the path that E's limits do not slow the junction below the speed that the
+            --  feedrate and XYZ cornering allow, but never further than this distance along the path on each side.
+            --  The E entry of the cornering model's axial deviation limits also bounds the spread, and with it how
+            --  far E departs from the commanded extrusion. A change that cannot be spread, including every change with
+            --  zero E deviation or Sharp_SCV cornering, uses Maximum_Velocity_Change instead. Zero spreads no change.
+
+            Minimum_Smoothed_Decrease_Ratio : Dimensionless range -1.0 .. 1.0 := 0.1;
+            --  Where the extrusion ratio falls, the change is spread only if the new ratio divided by the old one is
+            --  at least this; otherwise it is instant, within Maximum_Velocity_Change. The default makes changes into
+            --  moves that extrude less than a tenth as much, do not extrude, or retract instant, so E does not keep
+            --  extruding into a travel move. Zero spreads changes into travel moves but not into retracting moves, -1
+            --  spreads every decrease, and 1 spreads none.
+
+            Minimum_Smoothed_Increase_Ratio : Dimensionless range -1.0 .. 1.0 := 0.1;
+            --  Where the extrusion ratio rises, the change is spread only if the old ratio divided by the new one is
+            --  at least this; otherwise it is instant, within Maximum_Velocity_Change. The default makes changes out
+            --  of moves that extrude less than a tenth as much, do not extrude, or retract instant, so E does not
+            --  start extruding during a travel move. Zero spreads changes out of travel moves but not out of
+            --  retracting moves, -1 spreads every increase, and 1 spreads none.
 
          when Instantaneous_Velocity_Change =>
-            Maximum_Velocity_Change : Velocity range 0.0 * mm / s .. 1.0E100 * mm / s := 1.0 * mm / s;
-            --  Maximum instantaneous change in E velocity at a segment junction where the extrusion ratio changes. E
-            --  position always follows the path, so the change is the extrusion ratio change times the junction speed
-            --  and the junction is slowed until it fits. E acceleration, jerk, snap and crackle limits are waived only
-            --  at the instantaneous change; all E limits still apply between junctions. Zero requires a stop at every
-            --  change in extrusion ratio. The cornering model's E deviation entry is unused.
+            null;
+            --  Every change in extrusion ratio is instant, within Maximum_Velocity_Change. The cornering model's E
+            --  deviation entry is unused.
       end case;
    end record
    with Annotate => (Prunt_Config, User_Config);
