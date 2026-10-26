@@ -173,6 +173,11 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Profile_Windows := [others => <>];
       Block.Profile_Ends := [others => <>];
       Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
+      Block.Timing_Run_Back := [others => 0];
+      Block.Timing_Run_Ahead := [others => 0];
+      Block.Timing_Distance_Offsets := [others => 0.0 * mm];
+      Block.Timing_Time_Offsets := [others => 0.0 * s];
+      Block.Timing_Segment_Times := [others => 0.0 * s];
    end Reset_Early_Limiter_Block;
 
    procedure Assert_Roundoff_Residual
@@ -3676,10 +3681,192 @@ package body Prunt.Motion_Planner.Planner.Test is
       end loop;
    end Test_Inter_Block_Blending;
 
+   procedure Prepare_Continuous_Line
+     (Block      : aliased out Execution_Block;
+      Work       : not null access Planning_Workspace;
+      Continuous : Boolean;
+      Slow_From  : Corners_Index'Base := Corners_Index'Base'Last;
+      Origin     : Position := [others => 0.0 * mm]);
+   --  Plan a 15 mm extruding line along X from Origin, split evenly across Block's segments. Segments from Slow_From on
+   --  have half the feedrate. The slow derivative limits make each short segment's own ramp much slower than one long
+   --  ramp.
+
+   procedure Prepare_Continuous_Line
+     (Block      : aliased out Execution_Block;
+      Work       : not null access Planning_Workspace;
+      Continuous : Boolean;
+      Slow_From  : Corners_Index'Base := Corners_Index'Base'Last;
+      Origin     : Position := [others => 0.0 * mm])
+   is
+      Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+   begin
+      Reset_Early_Limiter_Block (Block);
+      Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
+      Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+      Block.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s ** 2];
+      Block.Params.Axial_Jerk_Maxes := [others => 10_000.0 * mm / s ** 3];
+      Block.Params.Axial_Snap_Maxes := [others => 100_000.0 * mm / s ** 4];
+      Block.Params.Axial_Crackle_Maxes := [others => 1_000_000.0 * mm / s ** 5];
+      Block.Params.Continuous_Timing := Continuous;
+      Block.Original_Segment_Feedrates :=
+        [for I in Block.Original_Segment_Feedrates'Range => (if I >= Slow_From then 50.0 else 100.0) * mm / s];
+      for I in Block.Corners'Range loop
+         Block.Corners (I) :=
+           [Origin with delta
+              X_Axis => Origin (X_Axis) + 15.0 * mm * Dimensionless (I - 1) / Dimensionless (Block.N_Corners - 1),
+              E_Axis => Origin (E_Axis) + 0.75 * mm * Dimensionless (I - 1) / Dimensionless (Block.N_Corners - 1)];
+      end loop;
+      Normalize_And_Blend (Block, Map, Work);
+      Tested_Early_Kinematic_Limiter.Run (Block, Map);
+      Plan_Kinematics (Block, Map, Work);
+   end Prepare_Continuous_Line;
+
+   function Planned_Time (Block : aliased Execution_Block) return Time;
+
+   function Planned_Time (Block : aliased Execution_Block) return Time is
+      Total : Time := 0.0 * s;
+   begin
+      for I in Block.Primitives'Range loop
+         Total := Total + Segment_Time (Block'Access, I);
+      end loop;
+      return Total;
+   end Planned_Time;
+
+   procedure Test_Continuous_Passthrough_Timing (T : in out Trendy_Test.Operation'Class) is
+      Work                      : aliased Planning_Workspace (Corners_Index'Last);
+      One                       : aliased Execution_Block (2);
+      Split, Continuous, Halved : aliased Execution_Block (Corners_Index'Last);
+      Last                      : constant Corners_Index := Corners_Index'Last;
+   begin
+      T.Register;
+      Prepare_Continuous_Line (One, Work'Access, Continuous => False);
+      Prepare_Continuous_Line (Split, Work'Access, Continuous => False);
+      Prepare_Continuous_Line (Continuous, Work'Access, Continuous => True);
+
+      T.Assert
+        ((for all I in Split.Primitives'Range => Split.Timing_Run_Back (I) = 0 and then Split.Timing_Run_Ahead (I) = 0),
+         "Without the switch every segment is its own timing run");
+      T.Assert
+        ((for all I in Continuous.Primitives'Range =>
+            Timing_Run_First (Continuous'Access, I) = 2 and then Timing_Run_Last (Continuous'Access, I) = Last),
+         "With the switch the collinear segments form one timing run");
+
+      T.Assert
+        (Planned_Time (Continuous) < 0.75 * Planned_Time (Split), "One run is much faster than per-segment ramps");
+      T.Assert
+        (abs (Planned_Time (Continuous) - Planned_Time (One)) <= 1.0E-9 * Planned_Time (One),
+         "One run takes as long as one move of the same length");
+      T.Assert
+        (abs (Planned_Time (Continuous) - Timing_Motion_Time (Continuous'Access, 2)) <= 1.0E-12 * s,
+         "Segment durations add up to the run's motion time");
+
+      for I in Continuous.Primitives'First .. Continuous.Primitives'Last - 1 loop
+         declare
+            End_Time  : constant Time := Segment_Time (Continuous'Access, I);
+            End_Pos   : constant Position := Segment_Pos_At_Time (Continuous'Access, I, End_Time);
+            Start_Pos : constant Position := Segment_Pos_At_Time (Continuous'Access, I + 1, 0.0 * s);
+         begin
+            T.Assert (End_Time > 0.0 * s, "Every segment of a run has a positive duration");
+            T.Assert
+              (abs (End_Pos - Start_Pos) < 1.0E-9 * mm and then abs (End_Pos - Continuous.Corners (I)) < 1.0E-9 * mm,
+               "Adjacent segments meet at their shared corner, including E");
+            T.Assert
+              (abs
+                 (Segment_Vel_Ratio_At_Time (Continuous'Access, I, End_Time)
+                  - Segment_Vel_Ratio_At_Time (Continuous'Access, I + 1, 0.0 * s))
+               < 1.0E-9,
+               "Speed is continuous across interior corners");
+            T.Assert (Continuous.Corner_Velocity_Limits (I) > 0.0 * mm / s, "Interior corners are passed while moving");
+         end;
+      end loop;
+
+      declare
+         --  Corner 3 is 2 mm in, while the run is still speeding up. A junction would have zero acceleration there.
+         At_Corner : constant Time := Continuous.Timing_Time_Offsets (4);
+         Step      : constant Time := 0.000_1 * s;
+         Before    : constant Velocity := Timing_Velocity_At_Time (Continuous'Access, 2, At_Corner - Step);
+         After     : constant Velocity := Timing_Velocity_At_Time (Continuous'Access, 2, At_Corner + Step);
+      begin
+         T.Assert ((After - Before) / (2.0 * Step) > 10.0 * mm / s ** 2, "The run keeps accelerating through a corner");
+      end;
+
+      declare
+         --  Step through the block as Block_Executor does, carrying the remainder into each following segment.
+         Current  : Time := 0.0 * s;
+         Previous : Length := 0.0 * mm;
+         Monotone : Boolean := True;
+         Final    : Position := [others => 0.0 * mm];
+      begin
+         for I in Continuous.Primitives'Range loop
+            while Current <= Segment_Time (Continuous'Access, I) loop
+               Final := Segment_Pos_At_Time (Continuous'Access, I, Current);
+               Monotone := Monotone and then Final (X_Axis) >= Previous - 1.0E-12 * mm;
+               Previous := Final (X_Axis);
+               Current := Current + 0.001 * s;
+            end loop;
+            Current := Current - Segment_Time (Continuous'Access, I);
+         end loop;
+         Final := Segment_Pos_At_Time (Continuous'Access, Last, Segment_Time (Continuous'Access, Last));
+         T.Assert (Monotone, "Sampled positions never move backwards across segment boundaries");
+         T.Assert
+           (Final = [Continuous.Corners (Last) with delta E_Axis => Continuous.Extrusion_Reference_Positions (Last)],
+            "The run stops exactly at its commanded end");
+      end;
+
+      Prepare_Continuous_Line (Halved, Work'Access, Continuous => True, Slow_From => 9);
+      T.Assert
+        (Timing_Run_Last (Halved'Access, 2) = 8
+         and then Timing_Run_First (Halved'Access, Last) = 9
+         and then Is_Timing_Junction (Halved, 8)
+         and then not Is_Timing_Junction (Halved, 7),
+         "A feedrate change ends a run and stays a junction");
+   end Test_Continuous_Passthrough_Timing;
+
+   procedure Test_Continuous_Timing_Blend_Seams (T : in out Trendy_Test.Operation'Class) is
+      Work                  : aliased Planning_Workspace (Corners_Index'Last);
+      Map                   : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Left, Right           : aliased Execution_Block (6);
+      Long_Left, Long_Right : aliased Execution_Block (Corners_Index'Last);
+      Blended               : Boolean;
+      Before                : Time;
+   begin
+      T.Register;
+      Prepare_Continuous_Line (Left, Work'Access, Continuous => True);
+      Left.Blendable_End := True;
+      Prepare_Continuous_Line (Right, Work'Access, Continuous => True, Origin => Left.Corners (Left.N_Corners));
+      T.Assert (Blendable_Boundary (Left, Right), "Window ends at run boundaries allow blending");
+      Before := Planned_Time (Left) + Planned_Time (Right);
+
+      Blend_Blocks (Left, Right, Map, Blended);
+      T.Assert (Blended and then Left.Corner_Velocity_Limits (6) > 0.0 * mm / s, "A straight seam keeps moving");
+      T.Assert (Planned_Time (Left) + Planned_Time (Right) < Before, "The blended seam is faster");
+      T.Assert
+        ((for all I in Left.Primitives'Range =>
+            Timing_Run_First (Left'Access, I) = 2 and then Timing_Run_Last (Left'Access, I) = 6)
+         and then
+           (for all I in Right.Primitives'Range =>
+              Timing_Run_First (Right'Access, I) = 2 and then Timing_Run_Last (Right'Access, I) = 6),
+         "The seam stays a junction, so each block keeps its own runs");
+      T.Assert
+        (abs (Segment_Pos_At_Time (Left'Access, 6, Segment_Time (Left'Access, 6))
+           - Segment_Pos_At_Time (Right'Access, 2, 0.0 * s)) < 1.0E-8 * mm,
+         "Position is continuous across the blended seam");
+
+      Prepare_Continuous_Line (Long_Left, Work'Access, Continuous => True);
+      Long_Left.Blendable_End := True;
+      Prepare_Continuous_Line
+        (Long_Right, Work'Access, Continuous => True, Origin => Long_Left.Corners (Long_Left.N_Corners));
+      T.Assert
+        (not Blendable_Boundary (Long_Left, Long_Right),
+         "A run across the fixed splice corner keeps the stopped seam instead of cutting the run");
+   end Test_Continuous_Timing_Blend_Seams;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Inter_Block_Blending'Unrestricted_Access,
+        [Test_Continuous_Passthrough_Timing'Unrestricted_Access,
+         Test_Continuous_Timing_Blend_Seams'Unrestricted_Access,
+         Test_Inter_Block_Blending'Unrestricted_Access,
          Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
          Test_Profile_Extrusion_Limits'Unrestricted_Access,
          Test_Local_Pair_Stop_Selection'Unrestricted_Access,

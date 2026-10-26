@@ -34,7 +34,7 @@ with Prunt.Motion_Planner.Planner;
 procedure Benchy_Planner_Time is
    type Benchmark_Case is
      (Baseline, E_Acceleration, X_Crackle, Mixed_Limits, Circular_Corners, XYZ_Only, Relaxed_E_Limits, Stopped_Path,
-      E_Jump_Zero, E_Jump_One, E_Jump_Five, Rounding_Stress);
+      E_Jump_Zero, E_Jump_One, E_Jump_Five, Rounding_Stress, Continuous);
    Selected_Case : constant Benchmark_Case :=
      (if Ada.Command_Line.Argument_Count >= 1 then Benchmark_Case'Value (Ada.Command_Line.Argument (1)) else Baseline);
    Gcode_Path : constant String :=
@@ -104,7 +104,8 @@ procedure Benchy_Planner_Time is
             Circularity              => 0.0)),
       Extrusion_Velocity_Change_Max => <>,
       Extrusion_Rounding_Tolerance => <>,
-      Axial_Shapers            => [others => (Kind => Prunt.Input_Shapers.No_Shaper)]);
+      Axial_Shapers            => [others => (Kind => Prunt.Input_Shapers.No_Shaper)],
+      Continuous_Timing        => False);
 
    Motor_Map : constant Motor_Position_Map :=
      [X_Axis => [X_Motor => 1.0 / mm, others => 0.0 / mm],
@@ -152,6 +153,8 @@ procedure Benchy_Planner_Time is
 begin
    case Selected_Case is
       when Baseline | XYZ_Only => null;
+      when Continuous =>
+         Params.Continuous_Timing := True;
       when Rounding_Stress =>
          Params.Bounds.Upper_X := 6000.0 * mm;
          Params.Extrusion_Velocity_Change_Max := 0.0 * mm / s;

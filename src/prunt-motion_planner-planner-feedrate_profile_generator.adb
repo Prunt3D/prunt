@@ -35,8 +35,9 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Limit_Scale      : Dimensionless)
    is
       Start_Vel : constant Velocity := Block.Corner_Velocity_Limits (Finishing_Corner - 1);
-      End_Vel   : constant Velocity := Block.Corner_Velocity_Limits (Finishing_Corner);
-      Total     : constant Length := Segment_Total_Distance (Block, Finishing_Corner);
+      End_Vel   : constant Velocity := Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Finishing_Corner));
+      Total     : constant Length := Timing_Total_Distance (Block, Finishing_Corner);
+      Feedrate  : constant Velocity := Timing_Feedrate (Block, Finishing_Corner);
 
       Best_Found   : Boolean := False;
       Best_Time    : Time := 1.0E100 * s;
@@ -64,7 +65,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
       function Conservative_Evaluation (Eval : Profile_Window_Evaluation) return Profile_Window_Evaluation is
          Mixed  : constant Mixed_Derivative_Limit_Result :=
-           Mixed_Derivative_Limits (Block.Params, Eval.Bounds, Block.Limited_Segment_Feedrates (Finishing_Corner));
+           Mixed_Derivative_Limits (Block.Params, Eval.Bounds, Feedrate);
          Result : Profile_Window_Evaluation := Eval;
       begin
          --  Eval.Limits contains tangent-only budgets. Reconstruct the full mixed-limit certificate;
@@ -106,8 +107,8 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       end Conservative_Profile;
 
       procedure Consider_Split_Profile (Conservative : Boolean; Accepted : out Boolean) is
-         Start_Curve   : constant Length := Segment_Start_Transition_Distance (Block, Finishing_Corner);
-         Middle        : constant Length := Segment_Straight_Distance (Block, Finishing_Corner);
+         Start_Curve   : constant Length := Timing_Start_Transition_Distance (Block, Finishing_Corner);
+         Middle        : constant Length := Timing_Straight_Distance (Block, Finishing_Corner);
          Split_Windows : constant array (Positive range 1 .. 3) of Profile_Window :=
            [(Start_Distance => 0.0 * mm, Distance => Start_Curve),
             (Start_Distance => Start_Curve, Distance => Middle),
@@ -126,13 +127,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          --  jerk and snap, and a common velocity solved in both directions. Curvature bounds then constrain
          --  only the portion where they apply, instead of imposing a tiny curve's ceiling on a long straight.
          for I in Split_Windows'Range loop
-            Evals (I) :=
-              Evaluate_Profile_Window
-                (Block,
-                 Motor_Map,
-                 Finishing_Corner,
-                 Split_Windows (I),
-                 Block.Limited_Segment_Feedrates (Finishing_Corner));
+            Evals (I) := Evaluate_Timing_Window (Block, Motor_Map, Finishing_Corner, Split_Windows (I), Feedrate);
             if not Evals (I).Valid then
                return;
             end if;
@@ -245,12 +240,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          then
             declare
                Eval        : Profile_Window_Evaluation :=
-                 Evaluate_Profile_Window
-                   (Block,
-                    Motor_Map,
-                    Finishing_Corner,
-                    Windows (I),
-                    Block.Limited_Segment_Feedrates (Finishing_Corner));
+                 Evaluate_Timing_Window (Block, Motor_Map, Finishing_Corner, Windows (I), Feedrate);
                Prefix_Dist : constant Length := Windows (I).Start_Distance;
                Suffix_Dist : constant Length := Total - Windows (I).Start_Distance - Windows (I).Distance;
             begin
@@ -327,8 +317,13 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    begin
       Result := (Valid => True);
       for I in Block.Feedrate_Profiles'Range loop
-         Select_Feedrate_Profile_Window (Block'Access, Motor_Map, I, Result, Limit_Scale);
-         exit when not Result.Valid;
+         if Timing_Run_First (Block'Access, I) = I then
+            Select_Feedrate_Profile_Window (Block'Access, Motor_Map, I, Result, Limit_Scale);
+            exit when not Result.Valid;
+            if Timing_Run_Last (Block'Access, I) /= I then
+               Assign_Timing_Members (Block'Access, I);
+            end if;
+         end if;
       end loop;
    end Run;
 

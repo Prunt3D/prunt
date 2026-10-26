@@ -103,7 +103,8 @@ procedure Helix_Planner_Time is
             Circularity              => 0.0)),
       Extrusion_Velocity_Change_Max => <>,
       Extrusion_Rounding_Tolerance  => <>,
-      Axial_Shapers                 => [others => (Kind => Prunt.Input_Shapers.No_Shaper)]);
+      Axial_Shapers                 => [others => (Kind => Prunt.Input_Shapers.No_Shaper)],
+      Continuous_Timing             => False);
 
    Motor_Map : constant Motor_Position_Map :=
      [X_Axis => [X_Motor => 1.0 / mm, others => 0.0 / mm],

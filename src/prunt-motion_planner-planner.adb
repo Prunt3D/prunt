@@ -1094,13 +1094,206 @@ package body Prunt.Motion_Planner.Planner is
         + Segment_End_Transition_Distance (Block, Finishing_Corner);
    end Segment_Total_Distance;
 
+   function Timing_Run_First
+     (Block : not null access constant Execution_Block; Segment : Finishing_Corners_Index)
+      return Finishing_Corners_Index
+   is (Segment - Block.Timing_Run_Back (Segment));
+
+   function Timing_Run_Last
+     (Block : not null access constant Execution_Block; Segment : Finishing_Corners_Index)
+      return Finishing_Corners_Index
+   is (Segment + Block.Timing_Run_Ahead (Segment));
+
+   function Is_Timing_Junction (Block : Execution_Block; Corner : Corners_Index) return Boolean
+   is (Corner = Corners_Index'First or else Corner >= Block.N_Corners or else Block.Timing_Run_Ahead (Corner) = 0);
+
+   function Joins_Timing_Run
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Boolean
+   is
+      Incoming : constant Velocity := Block.Limited_Segment_Feedrates (Corner);
+      Outgoing : constant Velocity := Block.Limited_Segment_Feedrates (Corner + 1);
+      Slower   : constant Velocity := Velocity'Min (Incoming, Outgoing);
+   begin
+      --  Only exact line passthroughs join. A change of ceiling or a binding E velocity jump keeps its junction:
+      --  the speed has a plateau there in the continuous design whenever it binds.
+      return
+        Transition_Kind (Block.Corner_Transitions (Corner)) = Passthrough_Transition
+        and then Arc_Length (Block.Corner_Transitions (Corner)) = 0.0 * mm
+        and then Block.Primitives (Corner).Kind = Line_Primitive_Kind
+        and then Block.Primitives (Corner + 1).Kind = Line_Primitive_Kind
+        and then Block.Corner_Dwell_Times (Corner) = 0.0 * s
+        and then Block.Primitive_Distances (Corner) > 0.0 * mm
+        and then Block.Primitive_Distances (Corner + 1) > 0.0 * mm
+        and then Slower > 0.0 * mm / s
+        and then abs (Incoming - Outgoing) <= Timing_Run_Feedrate_Tolerance * Velocity'Max (Incoming, Outgoing)
+        and then Extrusion_Junction_Ceiling (Block, Corner, Slower) = Slower;
+   end Joins_Timing_Run;
+
+   procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Forced_Junction : Corners_Index'Base) is
+      Start : Corners_Index'Base := Finishing_Corners_Index'First;
+      --  First segment of the run being collected. It passes the last corner once the final run is assigned.
+   begin
+      Block.Timing_Run_Back := [others => 0];
+      Block.Timing_Run_Ahead := [others => 0];
+      if not Block.Params.Continuous_Timing or else Block.Is_Homing_Move or else Block.N_Corners < 3 then
+         return;
+      end if;
+
+      for I in Finishing_Corners_Index'First .. Block.N_Corners loop
+         if I = Block.N_Corners or else I = Forced_Junction or else not Joins_Timing_Run (Block'Access, I) then
+            for J in Start .. I loop
+               Block.Timing_Run_Back (J) := J - Start;
+               Block.Timing_Run_Ahead (J) := I - J;
+            end loop;
+            Start := I + 1;
+         end if;
+      end loop;
+   end Assign_Timing_Runs;
+
+   function Timing_Total_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length
+   is
+      Total : Length := 0.0 * mm;
+   begin
+      if Block.Timing_Run_Ahead (Run_First) = 0 then
+         return Segment_Total_Distance (Block, Run_First);
+      end if;
+      --  Accumulate in the same order as Timing_Distance_Offsets so member boundaries agree exactly.
+      for I in Run_First .. Timing_Run_Last (Block, Run_First) loop
+         Total := Total + Segment_Total_Distance (Block, I);
+      end loop;
+      return Total;
+   end Timing_Total_Distance;
+
+   function Timing_Start_Transition_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length
+   is (Segment_Start_Transition_Distance (Block, Run_First));
+
+   function Timing_End_Transition_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length
+   is (Segment_End_Transition_Distance (Block, Timing_Run_Last (Block, Run_First)));
+
+   function Timing_Straight_Distance
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length
+   is (if Block.Timing_Run_Ahead (Run_First) = 0
+       then Block.Primitive_Distances (Run_First)
+       else
+         Timing_Total_Distance (Block, Run_First)
+         - Timing_Start_Transition_Distance (Block, Run_First)
+         - Timing_End_Transition_Distance (Block, Run_First));
+
+   function Timing_Feedrate
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Velocity
+   is
+      Result : Velocity := Block.Limited_Segment_Feedrates (Run_First);
+   begin
+      for I in Run_First + 1 .. Timing_Run_Last (Block, Run_First) loop
+         Result := Velocity'Min (Result, Block.Limited_Segment_Feedrates (I));
+      end loop;
+      return Result;
+   end Timing_Feedrate;
+
+   function Evaluate_Timing_Window
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Run_First : Finishing_Corners_Index;
+      Window    : Profile_Window;
+      Max_Vel   : Velocity) return Profile_Window_Evaluation
+   is
+      Run_Last   : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
+      Window_End : constant Length := Window.Start_Distance + Window.Distance;
+      Bounds     : Unit_Speed_Axial_Derivative_Bounds :=
+        (Velocity     => [others => 0.0],
+         Acceleration => [others => 0.0 / mm],
+         Jerk         => [others => 0.0 / mm ** 2],
+         Snap         => [others => 0.0 / mm ** 3],
+         Crackle      => [others => 0.0 / mm ** 4]);
+      Ceiling    : Velocity;
+      Mixed      : Mixed_Derivative_Limit_Result;
+      Result     : Profile_Window_Evaluation;
+
+      procedure For_Each_Member (Process : not null access procedure (Segment : Finishing_Corners_Index;
+                                                                        Local   : Profile_Window));
+      --  Call Process for every member overlapped by Window, with Window expressed in that member's distance.
+
+      procedure Merge_Member (Segment : Finishing_Corners_Index; Local : Profile_Window);
+      procedure Limit_Member (Segment : Finishing_Corners_Index; Local : Profile_Window);
+
+      procedure For_Each_Member (Process : not null access procedure (Segment : Finishing_Corners_Index;
+                                                                        Local   : Profile_Window))
+      is
+         Offset : Length := 0.0 * mm;
+      begin
+         for I in Run_First .. Run_Last loop
+            declare
+               Member_Distance : constant Length := Segment_Total_Distance (Block, I);
+               Low             : constant Length := Length'Max (Window.Start_Distance, Offset);
+               High            : constant Length := Length'Min (Window_End, Offset + Member_Distance);
+            begin
+               if (if Window.Distance > 0.0 * mm then High > Low else High >= Low) then
+                  Process (I, (Start_Distance => Low - Offset, Distance => High - Low));
+               end if;
+               Offset := Offset + Member_Distance;
+            end;
+         end loop;
+      end For_Each_Member;
+
+      procedure Merge_Member (Segment : Finishing_Corners_Index; Local : Profile_Window) is
+         Member : constant Unit_Speed_Axial_Derivative_Bounds :=
+           Window_Axial_Derivative_Bounds (Block, Segment, Local);
+      begin
+         for A in Axis_Name loop
+            Bounds.Velocity (A) := Dimensionless'Max (Bounds.Velocity (A), Member.Velocity (A));
+            Bounds.Acceleration (A) := Curvature'Max (Bounds.Acceleration (A), Member.Acceleration (A));
+            Bounds.Jerk (A) := Curvature_To_2'Max (Bounds.Jerk (A), Member.Jerk (A));
+            Bounds.Snap (A) := Curvature_To_3'Max (Bounds.Snap (A), Member.Snap (A));
+            Bounds.Crackle (A) := Curvature_To_4'Max (Bounds.Crackle (A), Member.Crackle (A));
+         end loop;
+      end Merge_Member;
+
+      procedure Limit_Member (Segment : Finishing_Corners_Index; Local : Profile_Window) is
+      begin
+         Ceiling := Motor_Delta_Ceiling_For_Window (Block, Motor_Map, Segment, Local, Ceiling);
+      end Limit_Member;
+   begin
+      if Run_Last = Run_First then
+         return Evaluate_Profile_Window (Block, Motor_Map, Run_First, Window, Max_Vel);
+      end if;
+
+      --  The same certificate as Evaluate_Profile_Window, with every member's bounds merged over the part of the
+      --  window it covers. Members are lines; only the first and last can include curved transition portions.
+      For_Each_Member (Merge_Member'Access);
+      Mixed := Mixed_Derivative_Limits (Block.Params, (Velocity => Bounds.Velocity, others => <>), Max_Vel);
+      Ceiling := Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Max_Vel);
+      For_Each_Member (Limit_Member'Access);
+      Result :=
+        (Valid   => Mixed.Valid,
+         Window  => Window,
+         Limits  => Mixed.Limits,
+         Max_Vel => Ceiling,
+         Bounds  => Bounds,
+         Curved  =>
+           (for some Axis in Axis_Name =>
+              Bounds.Acceleration (Axis) /= 0.0 / mm
+              or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
+              or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
+              or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4));
+      if Window.Start_Distance < 0.0 * mm
+        or else Window.Distance < 0.0 * mm
+        or else Window_End > Timing_Total_Distance (Block, Run_First)
+      then
+         Result.Valid := False;
+      end if;
+      return Result;
+   end Evaluate_Timing_Window;
+
    function Segment_Profile_Window_Candidates
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
       return Profile_Window_Candidates
    is
-      Start_Transition : constant Length := Segment_Start_Transition_Distance (Block, Finishing_Corner);
-      End_Transition   : constant Length := Segment_End_Transition_Distance (Block, Finishing_Corner);
-      Total            : constant Length := Segment_Total_Distance (Block, Finishing_Corner);
+      Start_Transition : constant Length := Timing_Start_Transition_Distance (Block, Finishing_Corner);
+      End_Transition   : constant Length := Timing_End_Transition_Distance (Block, Finishing_Corner);
+      Total            : constant Length := Timing_Total_Distance (Block, Finishing_Corner);
       Result           : Profile_Window_Candidates;
       Index            : Profile_Window_Candidate_Index := 1;
       procedure Add (First, Tail : Length);
@@ -1766,8 +1959,10 @@ package body Prunt.Motion_Planner.Planner is
          else
             --  Both adjoining junction ceilings take the minimum of their segments' feedrates, so halving the failed
             --  segment's feedrate also slows its endpoints.
-            Block.Limited_Segment_Feedrates (Result.Failed_Segment) :=
-              Block.Limited_Segment_Feedrates (Result.Failed_Segment) * 0.5;
+            --  A failed timing run halves every segment, so the run keeps one feedrate.
+            for I in Result.Failed_Segment .. Timing_Run_Last (Block'Access, Result.Failed_Segment) loop
+               Block.Limited_Segment_Feedrates (I) := Block.Limited_Segment_Feedrates (I) * 0.5;
+            end loop;
             Attempts (Result.Failed_Segment) := Attempts (Result.Failed_Segment) + 1;
          end if;
       end loop;
@@ -1784,6 +1979,18 @@ package body Prunt.Motion_Planner.Planner is
       E_Shift      : Length := 0.0 * mm;
       Materialized : Corners_Index := 2;
       --  References up to Materialized include E_Shift; later ones are still untranslated.
+
+      function Run_Time_Through (Segment : Finishing_Corners_Index) return Time;
+      --  Time of Segment and the earlier segments of its timing run, which First_Time replaces as a whole.
+
+      function Run_Time_Through (Segment : Finishing_Corners_Index) return Time is
+         Total : Time := 0.0 * s;
+      begin
+         for J in Timing_Run_First (Block'Access, Segment) .. Segment loop
+            Total := Total + Segment_Time (Block'Access, J);
+         end loop;
+         return Total;
+      end Run_Time_Through;
 
       procedure Materialize (Through : Corners_Index) is
       begin
@@ -1843,8 +2050,9 @@ package body Prunt.Motion_Planner.Planner is
          Gain          : out Time;
          First_Time    : out Time)
       is
-         --  Stop at every corner in First .. Last and replan segments First .. Last + 1 with the outer junction
-         --  speeds fixed. Gain is the certified saving; the change is kept only if Keep and it exceeds Required_Gain.
+         --  Stop at every corner in First .. Last and replan the timing runs containing segments First .. Last + 1
+         --  with their outer junction speeds fixed. Gain is the certified saving; the change is kept only if Keep and
+         --  it exceeds Required_Gain.
          type Saved_Segment is record
             Distance, Start_Distance, E_Reference : Length;
             Feedrate                              : Velocity;
@@ -1852,13 +2060,20 @@ package body Prunt.Motion_Planner.Planner is
             Max_Crackle                           : Crackle;
             Window                                : Profile_Window;
             Ends                                  : Profile_End_Pair;
+            Run_Distance_Offset                   : Length;
+            Run_Time_Offset, Run_Segment_Time     : Time;
+            End_Speed                             : Velocity;
          end record;
          type Saved_Corner is record
             Transition : Corner_Transition_Evaluator;
             Bounds     : Unit_Speed_Axial_Derivative_Bounds;
             Speed      : Velocity;
          end record;
-         subtype Window_Segments is Finishing_Corners_Index range First .. Last + 1;
+         subtype Window_Segments is
+           Finishing_Corners_Index range
+             Timing_Run_First (Block'Access, First) .. Timing_Run_Last (Block'Access, Last + 1);
+         --  The stopped corners are junctions, so whole runs border them. Replanning whole runs keeps each run's one
+         --  profile, and its interior corner speeds and member offsets are saved like any other planned field.
          Saved         : constant array (Window_Segments) of Saved_Segment :=
            [for I in Window_Segments =>
               (Block.Primitive_Distances (I),
@@ -1868,7 +2083,11 @@ package body Prunt.Motion_Planner.Planner is
                Block.Feedrate_Profiles (I),
                Block.Profile_Crackles (I),
                Block.Profile_Windows (I),
-               Block.Profile_Ends (I))];
+               Block.Profile_Ends (I),
+               Block.Timing_Distance_Offsets (I),
+               Block.Timing_Time_Offsets (I),
+               Block.Timing_Segment_Times (I),
+               Block.Corner_Velocity_Limits (I))];
          Saved_Corners : constant array (First .. Last) of Saved_Corner :=
            [for J in First .. Last =>
               (Block.Corner_Transitions (J),
@@ -1901,6 +2120,10 @@ package body Prunt.Motion_Planner.Planner is
                Block.Profile_Crackles (I) := Saved (I).Max_Crackle;
                Block.Profile_Windows (I) := Saved (I).Window;
                Block.Profile_Ends (I) := Saved (I).Ends;
+               Block.Timing_Distance_Offsets (I) := Saved (I).Run_Distance_Offset;
+               Block.Timing_Time_Offsets (I) := Saved (I).Run_Time_Offset;
+               Block.Timing_Segment_Times (I) := Saved (I).Run_Segment_Time;
+               Block.Corner_Velocity_Limits (I) := Saved (I).End_Speed;
             end loop;
          end Restore;
       begin
@@ -1941,35 +2164,51 @@ package body Prunt.Motion_Planner.Planner is
               Velocity'Min (Saved (I).Feedrate, Segment_Total_Distance (Block'Access, I) / Interpolation_Time);
          end loop;
          New_Shift := E_Shift + Delta_E;
-         if Workspace.Check_Extrusion_Position and then Delta_E /= 0.0 * mm and then Last + 1 < Block.N_Corners then
+         if Workspace.Check_Extrusion_Position
+           and then Delta_E /= 0.0 * mm
+           and then Window_Segments'Last < Block.N_Corners
+         then
             --  Later profiles change only by an E translation. Suffix bounds avoid scanning or replanning the
             --  rest of the block for each candidate. Conservative bounds may reject a feasible alternative.
-            if Length'Adjacent (Workspace.Suffix_E_Min (Last + 2) + New_Shift, -Length'Last)
+            if Length'Adjacent (Workspace.Suffix_E_Min (Window_Segments'Last + 1) + New_Shift, -Length'Last)
               < Block.Params.Bounds.Lower_E
               or else
-                Length'Adjacent (Workspace.Suffix_E_Max (Last + 2) + New_Shift, Length'Last)
+                Length'Adjacent (Workspace.Suffix_E_Max (Window_Segments'Last + 1) + New_Shift, Length'Last)
                 > Block.Params.Bounds.Upper_E
             then
                Restore;
                return;
             end if;
          end if;
-         for I in Window_Segments loop
-            My_Feedrate_Profile_Generator.Select_Feedrate_Profile_Window
-              (Block'Access, Motor_Map, I, Result, Limit_Scale => 1.0);
-            if not Result.Valid then
-               Restore;
-               return;
-            end if;
-            New_Time := @ + Segment_Time (Block'Access, I);
-            Old_Selected := @ + Old_Times (I);
-            if not (New_Time < (if I = Last + 1 then Old_Selected - Required_Gain else Old_Time)) then
-               Restore;
-               return;
-            end if;
-            if I = First then
-               Outcome := Rejected_Late;
-               First_Time := New_Time;
+         for Run_First in Window_Segments loop
+            if Timing_Run_First (Block'Access, Run_First) = Run_First then
+               declare
+                  Run_Last : constant Finishing_Corners_Index := Timing_Run_Last (Block'Access, Run_First);
+               begin
+                  My_Feedrate_Profile_Generator.Select_Feedrate_Profile_Window
+                    (Block'Access, Motor_Map, Run_First, Result, Limit_Scale => 1.0);
+                  if not Result.Valid then
+                     Restore;
+                     return;
+                  end if;
+                  if Run_Last /= Run_First then
+                     Assign_Timing_Members (Block'Access, Run_First);
+                  end if;
+                  for I in Run_First .. Run_Last loop
+                     New_Time := @ + Segment_Time (Block'Access, I);
+                     Old_Selected := @ + Old_Times (I);
+                  end loop;
+                  if not (New_Time
+                          < (if Run_Last = Window_Segments'Last then Old_Selected - Required_Gain else Old_Time))
+                  then
+                     Restore;
+                     return;
+                  end if;
+                  if Run_First = Window_Segments'First then
+                     Outcome := Rejected_Late;
+                     First_Time := New_Time;
+                  end if;
+               end;
             end if;
          end loop;
          Outcome := Kept;
@@ -2023,8 +2262,8 @@ package body Prunt.Motion_Planner.Planner is
       end loop;
       for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
          --  Apply the cumulative translation to each untouched reference just once, keeping the sweep linear in
-         --  the number of corners.
-         Materialize (I + 1);
+         --  the number of corners. A replanning window ends with the timing run after its last stopped corner.
+         Materialize (Timing_Run_Last (Block'Access, I + 1));
          if Transition_Kind (Block.Corner_Transitions (I)) = Stereographic_Transition then
             declare
                Outcome, Next_Outcome               : Stop_Outcome;
@@ -2038,7 +2277,7 @@ package body Prunt.Motion_Planner.Planner is
                  and then I + 1 < Block.N_Corners
                  and then Transition_Kind (Block.Corner_Transitions (I + 1)) = Stereographic_Transition
                then
-                  Materialize (I + 2);
+                  Materialize (Timing_Run_Last (Block'Access, I + 2));
                   if First_Time
                     + Straight_Bound (I + 1, 0.0 * mm / s, 0.0 * mm / s, Primitive_Length (Block'Access, I + 1))
                     + Straight_Bound
@@ -2048,9 +2287,7 @@ package body Prunt.Motion_Planner.Planner is
                          Block.Primitive_Start_Distances (I + 2)
                          + Block.Primitive_Distances (I + 2)
                          + Segment_End_Transition_Distance (Block'Access, I + 2))
-                    < Segment_Time (Block'Access, I)
-                      + Segment_Time (Block'Access, I + 1)
-                      + Segment_Time (Block'Access, I + 2)
+                    < Run_Time_Through (I) + Segment_Time (Block'Access, I + 1) + Segment_Time (Block'Access, I + 2)
                   then
                      Try_Stops (I, I + 1, False, 0.0 * s, Outcome, Gain, Unused);
                      if Outcome = Kept then
@@ -2269,7 +2506,8 @@ package body Prunt.Motion_Planner.Planner is
          end if;
 
          Build_Patch;
-         My_Kinematic_Limiter.Run (Patch, Motor_Map, Work'Access, Fixed_Ends => True);
+         --  The patch is split back into two blocks at the seam, so no timing run may cross it.
+         My_Kinematic_Limiter.Run (Patch, Motor_Map, Work'Access, Fixed_Ends => True, Forced_Junction => Seam);
          if Patch.Corner_Velocity_Limits (Seam) <= 0.0 * mm / s then
             return;
          end if;
@@ -2327,6 +2565,11 @@ package body Prunt.Motion_Planner.Planner is
                Target.Profile_Crackles (J) := Source.Profile_Crackles (I);
                Target.Profile_Windows (J) := Source.Profile_Windows (I);
                Target.Profile_Ends (J) := Source.Profile_Ends (I);
+               Target.Timing_Run_Back (J) := Source.Timing_Run_Back (I);
+               Target.Timing_Run_Ahead (J) := Source.Timing_Run_Ahead (I);
+               Target.Timing_Distance_Offsets (J) := Source.Timing_Distance_Offsets (I);
+               Target.Timing_Time_Offsets (J) := Source.Timing_Time_Offsets (I);
+               Target.Timing_Segment_Times (J) := Source.Timing_Segment_Times (I);
             end if;
          end;
       end loop;
@@ -2345,6 +2588,11 @@ package body Prunt.Motion_Planner.Planner is
       Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
       Block.Profile_Windows := [others => <>];
       Block.Profile_Ends := [others => <>];
+      Block.Timing_Run_Back := [others => 0];
+      Block.Timing_Run_Ahead := [others => 0];
+      Block.Timing_Distance_Offsets := [others => 0.0 * mm];
+      Block.Timing_Time_Offsets := [others => 0.0 * s];
+      Block.Timing_Segment_Times := [others => 0.0 * s];
    end Clear_Planned_Fields;
 
    procedure Initialize_Scratch_Block (Block : aliased out Execution_Block) is
@@ -2391,7 +2639,9 @@ package body Prunt.Motion_Planner.Planner is
        and then not Right.Is_Homing_Move
        and then Left.Params = Right.Params
        and then Left.Corners (Left.N_Corners) = Right.Corners (1)
-       and then Left.Corner_Dwell_Times (Left.N_Corners) = 0.0 * s);
+       and then Left.Corner_Dwell_Times (Left.N_Corners) = 0.0 * s
+       and then Is_Timing_Junction (Left, Left.N_Corners - Corners_Index'Min (Blend_Radius, Left.N_Corners - 1))
+       and then Is_Timing_Junction (Right, Corners_Index'Min (Blend_Radius, Right.N_Corners - 1) + 1));
 
    procedure Reclaim_Retired is
       Pending : Block_Set;
@@ -2733,9 +2983,148 @@ package body Prunt.Motion_Planner.Planner is
          then Total_Time (Block.Profile_Ends (Corner).Suffix.Profile)
          else
            Constant_Speed_Time
-             (Segment_Total_Distance (Block, Corner) - Window.Start_Distance - Window.Distance,
-              Block.Corner_Velocity_Limits (Corner)));
+             (Timing_Total_Distance (Block, Corner) - Window.Start_Distance - Window.Distance,
+              Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Corner))));
    end Segment_Suffix_Time;
+
+   function Timing_Motion_Time
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Time
+   is (Segment_Prefix_Time (Block, Run_First)
+       + Total_Time (Block.Feedrate_Profiles (Run_First))
+       + Segment_Suffix_Time (Block, Run_First));
+
+   function Timing_Distance_At_Time
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
+      return Length
+   is
+      Window       : constant Profile_Window := Selected_Profile_Window (Block, Run_First);
+      Ends         : constant Profile_End_Pair := Block.Profile_Ends (Run_First);
+      Prefix_Time  : constant Time := Segment_Prefix_Time (Block, Run_First);
+      Profile_Time : constant Time := Total_Time (Block.Feedrate_Profiles (Run_First));
+      Suffix_Time  : constant Time := Segment_Suffix_Time (Block, Run_First);
+      Motion_Time  : constant Time := Prefix_Time + Profile_Time + Suffix_Time;
+   begin
+      if Run_Time >= Motion_Time then
+         return Timing_Total_Distance (Block, Run_First);
+      elsif Run_Time < Prefix_Time then
+         return
+           (if Ends.Enabled
+            then
+              Distance_At_Time
+                (Ends.Prefix.Profile, Run_Time, Ends.Prefix.Max_Crackle, Block.Corner_Velocity_Limits (Run_First - 1))
+            else Block.Corner_Velocity_Limits (Run_First - 1) * Run_Time);
+      elsif Run_Time < Prefix_Time + Profile_Time then
+         return
+           Window.Start_Distance
+           + Distance_At_Time
+               (Block.Feedrate_Profiles (Run_First),
+                Time'Min (Run_Time - Prefix_Time, Profile_Time),
+                Block.Profile_Crackles (Run_First),
+                Central_Profile_Start_Velocity (Block, Run_First));
+      else
+         return
+           Window.Start_Distance
+           + Window.Distance
+           + (if Ends.Enabled
+              then
+                Distance_At_Time
+                  (Ends.Suffix.Profile,
+                   Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time),
+                   Ends.Suffix.Max_Crackle,
+                   Ends.Suffix.Boundary_Velocity)
+              else
+                Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Run_First))
+                * Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time));
+      end if;
+   end Timing_Distance_At_Time;
+
+   function Timing_Velocity_At_Time
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
+      return Velocity
+   is
+      Ends         : constant Profile_End_Pair := Block.Profile_Ends (Run_First);
+      Prefix_Time  : constant Time := Segment_Prefix_Time (Block, Run_First);
+      Profile_Time : constant Time := Total_Time (Block.Feedrate_Profiles (Run_First));
+      Suffix_Time  : constant Time := Segment_Suffix_Time (Block, Run_First);
+   begin
+      if Run_Time < Prefix_Time then
+         return
+           (if Ends.Enabled
+            then
+              Velocity_At_Time
+                (Ends.Prefix.Profile, Run_Time, Ends.Prefix.Max_Crackle, Block.Corner_Velocity_Limits (Run_First - 1))
+            else Block.Corner_Velocity_Limits (Run_First - 1));
+      elsif Run_Time < Prefix_Time + Profile_Time then
+         return
+           Velocity_At_Time
+             (Block.Feedrate_Profiles (Run_First),
+              Time'Min (Run_Time - Prefix_Time, Profile_Time),
+              Block.Profile_Crackles (Run_First),
+              Central_Profile_Start_Velocity (Block, Run_First));
+      else
+         return
+           (if Ends.Enabled
+            then
+              Velocity_At_Time
+                (Ends.Suffix.Profile,
+                 Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time),
+                 Ends.Suffix.Max_Crackle,
+                 Ends.Suffix.Boundary_Velocity)
+            else Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Run_First)));
+      end if;
+   end Timing_Velocity_At_Time;
+
+   procedure Assign_Timing_Members (Block : not null access Execution_Block; Run_First : Finishing_Corners_Index) is
+      Run_Last    : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
+      Motion_Time : constant Time := Timing_Motion_Time (Block, Run_First);
+      Distance    : Length := 0.0 * mm;
+      Start_Time  : Time := 0.0 * s;
+
+      function Time_At_Distance (Target : Length) return Time;
+      --  Run distance never decreases with time, so bisect until the bracket cannot be split any further.
+
+      function Time_At_Distance (Target : Length) return Time is
+         Lower : Time := Start_Time;
+         Upper : Time := Motion_Time;
+         Mid   : Time;
+      begin
+         loop
+            Mid := Lower + 0.5 * (Upper - Lower);
+            exit when Mid = Lower or else Mid = Upper;
+            if Timing_Distance_At_Time (Block, Run_First, Mid) < Target then
+               Lower := Mid;
+            else
+               Upper := Mid;
+            end if;
+         end loop;
+         return Upper;
+      end Time_At_Distance;
+   begin
+      for I in Run_First .. Run_Last loop
+         Block.Timing_Distance_Offsets (I) := Distance;
+         Block.Timing_Time_Offsets (I) := Start_Time;
+         if I = Run_Last then
+            Block.Timing_Segment_Times (I) :=
+              Time'Max (0.0 * s, Motion_Time - Start_Time) + Block.Corner_Dwell_Times (I);
+         else
+            Distance := Distance + Segment_Total_Distance (Block, I);
+            Block.Timing_Segment_Times (I) := Time_At_Distance (Distance) - Start_Time;
+            Start_Time := Start_Time + Block.Timing_Segment_Times (I);
+            --  Interior corners are not junctions. Record the speed there for consumers of corner speeds.
+            Block.Corner_Velocity_Limits (I) := Timing_Velocity_At_Time (Block, Run_First, Start_Time);
+         end if;
+      end loop;
+   end Assign_Timing_Members;
+
+   function Segment_Time
+     (Block : not null access constant Execution_Block; Finishing_Corner : Corners_Index) return Time is
+   begin
+      if Block.Timing_Run_Back (Finishing_Corner) /= 0 or else Block.Timing_Run_Ahead (Finishing_Corner) /= 0 then
+         return Block.Timing_Segment_Times (Finishing_Corner);
+      else
+         return Timing_Motion_Time (Block, Finishing_Corner) + Block.Corner_Dwell_Times (Finishing_Corner);
+      end if;
+   end Segment_Time;
 
    function Central_Profile_Start_Velocity
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Velocity is
@@ -2745,16 +3134,6 @@ package body Prunt.Motion_Planner.Planner is
          then Block.Profile_Ends (Corner).Prefix.Boundary_Velocity
          else Block.Corner_Velocity_Limits (Corner - 1));
    end Central_Profile_Start_Velocity;
-
-   function Segment_Time
-     (Block : not null access constant Execution_Block; Finishing_Corner : Corners_Index) return Time is
-   begin
-      return
-        Segment_Prefix_Time (Block, Finishing_Corner)
-        + Total_Time (Block.Feedrate_Profiles (Finishing_Corner))
-        + Segment_Suffix_Time (Block, Finishing_Corner)
-        + Block.Corner_Dwell_Times (Finishing_Corner);
-   end Segment_Time;
 
    function Segment_Corner_Distance (Block : Execution_Block; Finishing_Corner : Corners_Index) return Length is
    begin
@@ -2775,16 +3154,14 @@ package body Prunt.Motion_Planner.Planner is
       Finishing_Corner  : Finishing_Corners_Index;
       Time_Into_Segment : Time) return Position
    is
-      Window       : constant Profile_Window := Selected_Profile_Window (Block, Finishing_Corner);
-      Ends         : constant Profile_End_Pair := Block.Profile_Ends (Finishing_Corner);
-      Prefix_Time  : constant Time := Segment_Prefix_Time (Block, Finishing_Corner);
-      Profile_Time : constant Time := Total_Time (Block.Feedrate_Profiles (Finishing_Corner));
-      Suffix_Time  : constant Time := Segment_Suffix_Time (Block, Finishing_Corner);
-      Motion_Time  : constant Time := Prefix_Time + Profile_Time + Suffix_Time;
-      Distance     : Length;
+      Run_First   : constant Finishing_Corners_Index := Timing_Run_First (Block, Finishing_Corner);
+      Merged      : constant Boolean := Run_First /= Timing_Run_Last (Block, Finishing_Corner);
+      Run_Time    : constant Time :=
+        (if Merged then Block.Timing_Time_Offsets (Finishing_Corner) + Time_Into_Segment else Time_Into_Segment);
+      Run_Offset  : constant Length := (if Merged then Block.Timing_Distance_Offsets (Finishing_Corner) else 0.0 * mm);
    begin
       if Finishing_Corner = Block.N_Corners
-        and then Time_Into_Segment >= Motion_Time
+        and then Run_Time >= Timing_Motion_Time (Block, Run_First)
         and then Block.Corner_Velocity_Limits (Finishing_Corner) = 0.0 * mm / s
       then
          --  Reconstructing the endpoint from direction and distance can leave a rounding residual. Shaper draining
@@ -2792,42 +3169,10 @@ package body Prunt.Motion_Planner.Planner is
          return
            [Block.Corners (Finishing_Corner) with delta
               E_Axis => Block.Extrusion_Reference_Positions (Finishing_Corner)];
-      elsif Time_Into_Segment >= Motion_Time then
-         Distance := Segment_Total_Distance (Block, Finishing_Corner);
-      elsif Time_Into_Segment < Prefix_Time then
-         Distance :=
-           (if Ends.Enabled
-            then
-              Distance_At_Time
-                (Ends.Prefix.Profile,
-                 Time_Into_Segment,
-                 Ends.Prefix.Max_Crackle,
-                 Block.Corner_Velocity_Limits (Finishing_Corner - 1))
-            else Block.Corner_Velocity_Limits (Finishing_Corner - 1) * Time_Into_Segment);
-      elsif Time_Into_Segment < Prefix_Time + Profile_Time then
-         Distance :=
-           Window.Start_Distance
-           + Distance_At_Time
-               (Block.Feedrate_Profiles (Finishing_Corner),
-                Time'Min (Time_Into_Segment - Prefix_Time, Profile_Time),
-                Block.Profile_Crackles (Finishing_Corner),
-                Central_Profile_Start_Velocity (Block, Finishing_Corner));
-      else
-         Distance :=
-           Window.Start_Distance
-           + Window.Distance
-           + (if Ends.Enabled
-              then
-                Distance_At_Time
-                  (Ends.Suffix.Profile,
-                   Time'Min (Time_Into_Segment - (Prefix_Time + Profile_Time), Suffix_Time),
-                   Ends.Suffix.Max_Crackle,
-                   Ends.Suffix.Boundary_Velocity)
-              else
-                Block.Corner_Velocity_Limits (Finishing_Corner)
-                * Time'Min (Time_Into_Segment - (Prefix_Time + Profile_Time), Suffix_Time));
       end if;
-      return Point_At_Segment_Distance (Block, Finishing_Corner, Distance);
+      return
+        Point_At_Segment_Distance
+          (Block, Finishing_Corner, Timing_Distance_At_Time (Block, Run_First, Run_Time) - Run_Offset);
    end Segment_Pos_At_Time;
 
    function Segment_Vel_Ratio_At_Time
@@ -2835,45 +3180,19 @@ package body Prunt.Motion_Planner.Planner is
       Finishing_Corner  : Finishing_Corners_Index;
       Time_Into_Segment : Time) return Dimensionless
    is
-      Ends         : constant Profile_End_Pair := Block.Profile_Ends (Finishing_Corner);
-      Prefix_Time  : constant Time := Segment_Prefix_Time (Block, Finishing_Corner);
-      Profile_Time : constant Time := Total_Time (Block.Feedrate_Profiles (Finishing_Corner));
-      Suffix_Time  : constant Time := Segment_Suffix_Time (Block, Finishing_Corner);
-      Motion_Time  : constant Time := Prefix_Time + Profile_Time + Suffix_Time;
-      Speed        : Velocity;
+      Run_First : constant Finishing_Corners_Index := Timing_Run_First (Block, Finishing_Corner);
+      Run_Time  : constant Time :=
+        (if Run_First /= Timing_Run_Last (Block, Finishing_Corner)
+         then Block.Timing_Time_Offsets (Finishing_Corner) + Time_Into_Segment
+         else Time_Into_Segment);
    begin
-      if Time_Into_Segment > Motion_Time then
+      if Run_Time > Timing_Motion_Time (Block, Run_First) then
          --  Return 1.0 inside dwell parts so the laser can be set to the programmed power level.
          return 1.0;
-      elsif Time_Into_Segment < Prefix_Time then
-         Speed :=
-           (if Ends.Enabled
-            then
-              Velocity_At_Time
-                (Ends.Prefix.Profile,
-                 Time_Into_Segment,
-                 Ends.Prefix.Max_Crackle,
-                 Block.Corner_Velocity_Limits (Finishing_Corner - 1))
-            else Block.Corner_Velocity_Limits (Finishing_Corner - 1));
-      elsif Time_Into_Segment < Prefix_Time + Profile_Time then
-         Speed :=
-           Velocity_At_Time
-             (Block.Feedrate_Profiles (Finishing_Corner),
-              Time'Min (Time_Into_Segment - Prefix_Time, Profile_Time),
-              Block.Profile_Crackles (Finishing_Corner),
-              Central_Profile_Start_Velocity (Block, Finishing_Corner));
-      else
-         Speed :=
-           (if Ends.Enabled
-            then
-              Velocity_At_Time
-                (Ends.Suffix.Profile,
-                 Time'Min (Time_Into_Segment - (Prefix_Time + Profile_Time), Suffix_Time),
-                 Ends.Suffix.Max_Crackle,
-                 Ends.Suffix.Boundary_Velocity)
-            else Block.Corner_Velocity_Limits (Finishing_Corner));
       end if;
-      return Velocity'Max (0.0 * mm / s, Speed) / Block.Original_Segment_Feedrates (Finishing_Corner);
+      return
+        Velocity'Max (0.0 * mm / s, Timing_Velocity_At_Time (Block, Run_First, Run_Time))
+        / Block.Original_Segment_Feedrates (Finishing_Corner);
    end Segment_Vel_Ratio_At_Time;
 
    function Next_Block_Pos (Block : not null access constant Execution_Block) return Position is
