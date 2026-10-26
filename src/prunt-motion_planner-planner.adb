@@ -836,6 +836,12 @@ package body Prunt.Motion_Planner.Planner is
       Descriptor : constant Path_Primitive := Block.Primitives (Finishing_Corner);
       D          : constant Length := Length'Max (0.0 * mm, Length'Min (Distance, Primitive.Length));
    begin
+      if D = 0.0 * mm then
+         --  Reconstructing a helix start from its phase can leave a rounding residual. A primitive rebuilt from its
+         --  retained start, as at an inter-block seam, must keep a full turn's endpoints exactly coincident.
+         return Block.Corners (Finishing_Corner - 1);
+      end if;
+
       case Primitive.Kind is
          when Line_Primitive_Kind  =>
             return Block.Corners (Finishing_Corner - 1) + Primitive.Direction * D;
@@ -3225,9 +3231,16 @@ package body Prunt.Motion_Planner.Planner is
 
       function Patch_Time return Time;
 
+      function Commanded_E_In_Bounds (Block : Execution_Block) return Boolean;
+      --  Whether Block's own plan holds its E references to the bounds. As in Corner_Blender and Kinematic_Limiter, a
+      --  commanded E outside them (for example after Ignore_Bounds) waives them for the block. Left may be only a
+      --  window of its block, which can only hold it to the bounds more often.
+
       function E_In_Bounds
-        (Block : Execution_Block; First, Last : Finishing_Corners_Index; Shift : Length) return Boolean;
-      --  Whether segments First .. Last stay within the E bounds with their references translated by Shift.
+        (Block : Execution_Block; First, Last : Finishing_Corners_Index; Shift : Length; Checked : Boolean)
+         return Boolean;
+      --  Whether segments First .. Last stay within the E bounds with their references translated by Shift. Any
+      --  finite translation passes unless Checked, but the translated sums are evaluated either way.
 
       procedure Blend_Seam is
          Left_Start : constant Length := Left.Primitive_Start_Distances (Left_Seam);
@@ -3276,9 +3289,14 @@ package body Prunt.Motion_Planner.Planner is
       end Blend_Seam;
 
       procedure Build_Patch is
-         Left_Trim   : constant Length := Primitive_Length (Geometry'Access, 2) - Geometry.Primitive_Distances (2);
-         Right_Trim  : constant Length := Geometry.Primitive_Start_Distances (3);
-         --  Path the new seam transition takes from each primitive.
+         Left_Trim   : constant Length :=
+           Length'Min
+             (Left.Primitive_Distances (Left_Seam),
+              Primitive_Length (Geometry'Access, 2) - Geometry.Primitive_Distances (2));
+         Right_Trim  : constant Length :=
+           Length'Min (Right.Primitive_Distances (2), Geometry.Primitive_Start_Distances (3));
+         --  Path the new seam transition takes from each primitive. A transition that takes a whole retained primitive
+         --  measures its scratch copy, which can exceed the stored retained length by an ulp.
          Right_Shift : Length;
          --  E translation of Right's references inside the window.
       begin
@@ -3341,11 +3359,16 @@ package body Prunt.Motion_Planner.Planner is
          return Total;
       end Patch_Time;
 
+      function Commanded_E_In_Bounds (Block : Execution_Block) return Boolean
+      is (for all Corner of Block.Corners =>
+            Corner (E_Axis) in Block.Params.Bounds.Lower_E .. Block.Params.Bounds.Upper_E);
+
       function E_In_Bounds
-        (Block : Execution_Block; First, Last : Finishing_Corners_Index; Shift : Length) return Boolean
+        (Block : Execution_Block; First, Last : Finishing_Corners_Index; Shift : Length; Checked : Boolean)
+         return Boolean
       is
-         Lower : constant Length := Block.Params.Bounds.Lower_E;
-         Upper : constant Length := Block.Params.Bounds.Upper_E;
+         Lower : constant Length := (if Checked then Block.Params.Bounds.Lower_E else Length'First);
+         Upper : constant Length := (if Checked then Block.Params.Bounds.Upper_E else Length'Last);
       begin
          --  Each segment's reference is monotone, so its endpoints bound it.
          return
@@ -3382,15 +3405,21 @@ package body Prunt.Motion_Planner.Planner is
          end if;
 
          --  The seam translates references inside the window as well as after it, and the blender only checked its
-         --  scratch frame, so certify every replacement segment. Right's untouched suffix only moves by Suffix_Shift,
-         --  which a linear pass certifies without another solve. This also evaluates every sum the commit assigns.
+         --  scratch frame, so certify every replacement segment against the bounds its own block's plan respects.
+         --  Right's untouched suffix only moves by Suffix_Shift, which a linear pass certifies without another solve.
+         --  This also evaluates every sum the commit assigns.
          Suffix_Shift :=
            Patch.Extrusion_Reference_Positions (Patch.N_Corners) - Right.Extrusion_Reference_Positions (Right_Last);
-         if not E_In_Bounds (Patch, 2, Patch.N_Corners, 0.0 * mm)
-           or else not E_In_Bounds (Right, Right_Last + 1, Right.N_Corners, Suffix_Shift)
-         then
-            return;
-         end if;
+         declare
+            Right_Checked : constant Boolean := Commanded_E_In_Bounds (Right);
+         begin
+            if not E_In_Bounds (Patch, 2, Seam, 0.0 * mm, Commanded_E_In_Bounds (Left))
+              or else not E_In_Bounds (Patch, Seam + 1, Patch.N_Corners, 0.0 * mm, Right_Checked)
+              or else not E_In_Bounds (Right, Right_Last + 1, Right.N_Corners, Suffix_Shift, Right_Checked)
+            then
+               return;
+            end if;
+         end;
       exception
          when others =>
             --  The replacement is optional and may fail in any planning stage. Left and Right are not modified before
@@ -3489,7 +3518,9 @@ package body Prunt.Motion_Planner.Planner is
       Target.Associated_Overflow_Block := Source.Associated_Overflow_Block;
       Target.Is_Homing_Move := Source.Is_Homing_Move;
       Target.Loop_Move_Minimum_Time := Source.Loop_Move_Minimum_Time;
-      --  Corners before Start are unused padding. Keep them stationary at the window's first corner.
+      --  Corners before Start are padding, filled only so it holds no unrelated geometry. The segment ending at Start
+      --  would also need the part of the transition at First that precedes the window, so no padding segment is a
+      --  valid motion and callers evaluate only the segments after Start.
       Target.Corners := [others => Source.Corners (First)];
       Target.Corner_Transitions := [others => Source.Corner_Transitions (First)];
       Copy_Window (Source, First, Last, Target, Start);
