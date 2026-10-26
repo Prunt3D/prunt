@@ -1129,7 +1129,25 @@ package body Prunt.Motion_Planner.Planner is
         and then Extrusion_Junction_Ceiling (Block, Corner, Slower) = Slower;
    end Joins_Timing_Run;
 
-   procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Forced_Junction : Corners_Index'Base) is
+   function Can_Merge_Timing_Runs
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Boolean
+   is
+      Transition : constant Corner_Transition_Evaluator := Block.Corner_Transitions (Corner);
+      Incoming   : constant Velocity := Block.Limited_Segment_Feedrates (Corner);
+      Outgoing   : constant Velocity := Block.Limited_Segment_Feedrates (Corner + 1);
+   begin
+      --  Feedrates may differ: each cell keeps its own segment's feedrate as a ceiling, and a merge that would need
+      --  a valley at a slower segment is not faster, so the local search rejects it.
+      return
+        (Policy (Transition) = Passthrough
+         or else (Policy (Transition) = Derivative_Bounded and then Arc_Length (Transition) > 0.0 * mm))
+        and then Block.Corner_Dwell_Times (Corner) = 0.0 * s
+        and then Segment_Total_Distance (Block, Corner) > 0.0 * mm
+        and then Segment_Total_Distance (Block, Corner + 1) > 0.0 * mm
+        and then Velocity'Min (Incoming, Outgoing) > 0.0 * mm / s;
+   end Can_Merge_Timing_Runs;
+
+   procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Joins : Corner_Flags) is
       Start : Corners_Index'Base := Finishing_Corners_Index'First;
       --  First segment of the run being collected. It passes the last corner once the final run is assigned.
    begin
@@ -1140,7 +1158,7 @@ package body Prunt.Motion_Planner.Planner is
       end if;
 
       for I in Finishing_Corners_Index'First .. Block.N_Corners loop
-         if I = Block.N_Corners or else I = Forced_Junction or else not Joins_Timing_Run (Block'Access, I) then
+         if I = Block.N_Corners or else not Joins (I) then
             for J in Start .. I loop
                Block.Timing_Run_Back (J) := J - Start;
                Block.Timing_Run_Ahead (J) := I - J;
@@ -1149,6 +1167,92 @@ package body Prunt.Motion_Planner.Planner is
          end if;
       end loop;
    end Assign_Timing_Runs;
+
+   procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Forced_Junction : Corners_Index'Base) is
+      Joins : Corner_Flags (Block.Corners'Range);
+   begin
+      if Block.Params.Continuous_Timing then
+         for I in Finishing_Corners_Index'First .. Block.N_Corners - 1 loop
+            Joins (I) := I /= Forced_Junction and then Joins_Timing_Run (Block'Access, I);
+         end loop;
+      end if;
+      Assign_Timing_Runs (Block, Joins);
+   end Assign_Timing_Runs;
+
+   function Is_Cellular_Run
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Boolean
+   is (Block.Timing_Run_Ahead (Run_First) /= 0);
+
+   function Timing_Run_Cell_Count
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Natural
+   is (Natural (4 * (Block.Timing_Run_Ahead (Run_First) + 1)));
+
+   function Timing_Run_Cells
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Run_First : Finishing_Corners_Index;
+      Max_Vel   : Velocity) return Path_Cells
+   is
+      Result : Path_Cells (1 .. Timing_Run_Cell_Count (Block, Run_First));
+      Count  : Natural := 0;
+      Offset : Length := 0.0 * mm;
+
+      procedure Add_Piece (Segment : Finishing_Corners_Index; Local_Start, Local_Stop : Length);
+
+      procedure Add_Piece (Segment : Finishing_Corners_Index; Local_Start, Local_Stop : Length) is
+         Local   : constant Profile_Window := (Start_Distance => Local_Start, Distance => Local_Stop - Local_Start);
+         Bounds  : Unit_Speed_Axial_Derivative_Bounds;
+         Ceiling : Velocity;
+      begin
+         if Local_Stop <= Local_Start then
+            return;
+         end if;
+         Bounds := Window_Axial_Derivative_Bounds (Block, Segment, Local);
+         Ceiling :=
+           Constant_Speed_Axial_Ceiling
+             (Block.Params, Bounds, Velocity'Min (Max_Vel, Block.Limited_Segment_Feedrates (Segment)));
+         Ceiling := Motor_Delta_Ceiling_For_Window (Block, Motor_Map, Segment, Local, Ceiling);
+         Count := Count + 1;
+         Result (Count) :=
+           (Start   => Offset + Local_Start,
+            Stop    => Offset + Local_Stop,
+            Bounds  => Bounds,
+            Ceiling => Ceiling,
+            Curved  =>
+              (for some Axis in Axis_Name =>
+                 Bounds.Acceleration (Axis) /= 0.0 / mm
+                 or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
+                 or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
+                 or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4));
+      end Add_Piece;
+   begin
+      for I in Run_First .. Timing_Run_Last (Block, Run_First) loop
+         declare
+            Start_Transition : constant Length := Segment_Start_Transition_Distance (Block, I);
+            End_Start        : constant Length := Start_Transition + Block.Primitive_Distances (I);
+            Total            : constant Length := Segment_Total_Distance (Block, I);
+         begin
+            if I > Run_First then
+               declare
+                  E_Ceiling : constant Velocity := Extrusion_Junction_Ceiling (Block, I - 1, Max_Vel);
+               begin
+                  --  E's velocity jumps by the density change times the speed at the corner itself.
+                  if E_Ceiling < Max_Vel then
+                     Count := Count + 1;
+                     Result (Count) :=
+                       (Start => Offset, Stop => Offset, Bounds => <>, Ceiling => E_Ceiling, Curved => False);
+                  end if;
+               end;
+            end if;
+            Add_Piece (I, 0.0 * mm, Start_Transition);
+            Add_Piece (I, Start_Transition, End_Start);
+            Add_Piece (I, End_Start, Total);
+            --  Accumulate in the same order as Timing_Total_Distance so the run's end agrees exactly.
+            Offset := Offset + Total;
+         end;
+      end loop;
+      return Result (1 .. Count);
+   end Timing_Run_Cells;
 
    function Timing_Total_Distance
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length
@@ -1188,7 +1292,7 @@ package body Prunt.Motion_Planner.Planner is
       Result : Velocity := Block.Limited_Segment_Feedrates (Run_First);
    begin
       for I in Run_First + 1 .. Timing_Run_Last (Block, Run_First) loop
-         Result := Velocity'Min (Result, Block.Limited_Segment_Feedrates (I));
+         Result := Velocity'Max (Result, Block.Limited_Segment_Feedrates (I));
       end loop;
       return Result;
    end Timing_Feedrate;
@@ -1208,16 +1312,16 @@ package body Prunt.Motion_Planner.Planner is
          Jerk         => [others => 0.0 / mm ** 2],
          Snap         => [others => 0.0 / mm ** 3],
          Crackle      => [others => 0.0 / mm ** 4]);
-      Ceiling    : Velocity;
-      Mixed      : Mixed_Derivative_Limit_Result;
-      Result     : Profile_Window_Evaluation;
+      Mixed         : Mixed_Derivative_Limit_Result;
+      Start_Ceiling : Velocity := Max_Vel;
+      End_Ceiling   : Velocity := Max_Vel;
+      Result        : Profile_Window_Evaluation;
 
       procedure For_Each_Member (Process : not null access procedure (Segment : Finishing_Corners_Index;
                                                                         Local   : Profile_Window));
       --  Call Process for every member overlapped by Window, with Window expressed in that member's distance.
 
       procedure Merge_Member (Segment : Finishing_Corners_Index; Local : Profile_Window);
-      procedure Limit_Member (Segment : Finishing_Corners_Index; Local : Profile_Window);
 
       procedure For_Each_Member (Process : not null access procedure (Segment : Finishing_Corners_Index;
                                                                         Local   : Profile_Window))
@@ -1251,33 +1355,42 @@ package body Prunt.Motion_Planner.Planner is
          end loop;
       end Merge_Member;
 
-      procedure Limit_Member (Segment : Finishing_Corners_Index; Local : Profile_Window) is
-      begin
-         Ceiling := Motor_Delta_Ceiling_For_Window (Block, Motor_Map, Segment, Local, Ceiling);
-      end Limit_Member;
    begin
-      if Run_Last = Run_First then
+      if not Is_Cellular_Run (Block, Run_First) then
          return Evaluate_Profile_Window (Block, Motor_Map, Run_First, Window, Max_Vel);
       end if;
 
-      --  The same certificate as Evaluate_Profile_Window, with every member's bounds merged over the part of the
-      --  window it covers. Members are lines; only the first and last can include curved transition portions.
+      --  Merging every member's bounds over the part of the window it covers gives the tangent-only envelope, and the
+      --  merged certificate that the conservative retry uses. Ordinary profiles are certified against the run's
+      --  cells. Each endpoint speed is admitted by the window's cells at that end only, so a low ceiling at one end
+      --  does not cap the other; as for one segment, the junction limits admit the coasts outside the window.
       For_Each_Member (Merge_Member'Access);
       Mixed := Mixed_Derivative_Limits (Block.Params, (Velocity => Bounds.Velocity, others => <>), Max_Vel);
-      Ceiling := Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Max_Vel);
-      For_Each_Member (Limit_Member'Access);
+      for Cell of Timing_Run_Cells (Block, Motor_Map, Run_First, Max_Vel) loop
+         if Cell_Overlaps (Cell, Window.Start_Distance, Window_End) then
+            if Cell.Start <= Window.Start_Distance then
+               Start_Ceiling := Velocity'Min (Start_Ceiling, Cell.Ceiling);
+            end if;
+            if Cell.Stop >= Window_End then
+               End_Ceiling := Velocity'Min (End_Ceiling, Cell.Ceiling);
+            end if;
+         end if;
+      end loop;
       Result :=
-        (Valid   => Mixed.Valid,
-         Window  => Window,
-         Limits  => Mixed.Limits,
-         Max_Vel => Ceiling,
-         Bounds  => Bounds,
-         Curved  =>
+        (Valid         => Mixed.Valid,
+         Window        => Window,
+         Limits        => Mixed.Limits,
+         Max_Vel       => Velocity'Min (Start_Ceiling, End_Ceiling),
+         Start_Max_Vel => Start_Ceiling,
+         End_Max_Vel   => End_Ceiling,
+         Bounds        => Bounds,
+         Curved        =>
            (for some Axis in Axis_Name =>
               Bounds.Acceleration (Axis) /= 0.0 / mm
               or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
               or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
-              or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4));
+              or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4),
+         Cellular      => True);
       if Window.Start_Distance < 0.0 * mm
         or else Window.Distance < 0.0 * mm
         or else Window_End > Timing_Total_Distance (Block, Run_First)
@@ -1326,30 +1439,30 @@ package body Prunt.Motion_Planner.Planner is
       Window           : Profile_Window;
       Max_Vel          : Velocity) return Profile_Window_Evaluation
    is
-      Bounds : constant Unit_Speed_Axial_Derivative_Bounds :=
+      Bounds  : constant Unit_Speed_Axial_Derivative_Bounds :=
         Window_Axial_Derivative_Bounds (Block, Finishing_Corner, Window);
-      Mixed  : constant Mixed_Derivative_Limit_Result :=
+      Mixed   : constant Mixed_Derivative_Limit_Result :=
         Mixed_Derivative_Limits (Block.Params, (Velocity => Bounds.Velocity, others => <>), Max_Vel);
-      Result : Profile_Window_Evaluation;
+      Ceiling : constant Velocity :=
+        Motor_Delta_Ceiling_For_Window
+          (Block, Motor_Map, Finishing_Corner, Window, Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Max_Vel));
+      Result  : Profile_Window_Evaluation;
    begin
       Result :=
-        (Valid   => Mixed.Valid,
-         Window  => Window,
-         Limits  => Mixed.Limits,
-         Max_Vel =>
-           Motor_Delta_Ceiling_For_Window
-             (Block,
-              Motor_Map,
-              Finishing_Corner,
-              Window,
-              Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Max_Vel)),
-         Bounds  => Bounds,
-         Curved  =>
+        (Valid         => Mixed.Valid,
+         Window        => Window,
+         Limits        => Mixed.Limits,
+         Max_Vel       => Ceiling,
+         Start_Max_Vel => Ceiling,
+         End_Max_Vel   => Ceiling,
+         Bounds        => Bounds,
+         Curved        =>
            (for some Axis in Axis_Name =>
               Bounds.Acceleration (Axis) /= 0.0 / mm
               or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
               or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
-              or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4));
+              or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4),
+         Cellular      => False);
       if Window.Start_Distance < 0.0 * mm
         or else Window.Distance < 0.0 * mm
         or else Window.Start_Distance + Window.Distance > Segment_Total_Distance (Block, Finishing_Corner)
@@ -1741,6 +1854,7 @@ package body Prunt.Motion_Planner.Planner is
          --  derivative certificate. Do not turn an unrepresentable ramp into an apparently feasible coast.
          return Result;
       end if;
+      Result.Decel_Crackle := Result.Max_Crackle;
       Actual_Peak := Fast_Velocity_At_Max_Time (Result.Profile.Accel, Result.Max_Crackle, Start_Vel);
       Accel_Distance := Fast_Distance_At_Max_Time (Result.Profile.Accel, Result.Max_Crackle, Start_Vel);
       Decel_Distance := Fast_Distance_At_Max_Time (Result.Profile.Decel, -Result.Max_Crackle, Actual_Peak);
@@ -1793,6 +1907,625 @@ package body Prunt.Motion_Planner.Planner is
       end loop;
       return Velocity'Max (Start_Vel, 0.999 * Lower);
    end Reachable_Window_Velocity;
+
+   type Ramp_Stage_Index is range 0 .. 15;
+
+   type Ramp_State is record
+      X : Length;
+      V : Velocity;
+      A : Acceleration;
+      J : Jerk;
+      S : Snap;
+   end record;
+
+   type Ramp_State_Array is array (Ramp_Stage_Index) of Ramp_State;
+   type Ramp_Stage_Flags is array (Ramp_Stage_Index range 1 .. 15) of Boolean;
+
+   type Ramp_Stages is record
+      States   : Ramp_State_Array;
+      Crackles : Ramp_Stage_Flags;
+   end record;
+   --  States (K) is the motion at the end of stage K, with distance from the start of the ramp. Crackles (K) is True
+   --  if stage K has nonzero crackle and nonzero duration.
+
+   function Ramp_Boundary_States
+     (Times : Feedrate_Profile_Times; Signed_Crackle : Crackle; Start_Vel : Velocity) return Ramp_Stages;
+   --  Integrate the 15 stages documented for Feedrate_Profile_Times exactly.
+
+   function Ramp_Speed_Bound (Stages : Ramp_Stages; X : Length; Accelerating : Boolean) return Velocity;
+   --  An upper bound on the ramp's speed at distance X from its start. Acceleration is monotone inside each stage,
+   --  so v² changes by at most twice the larger endpoint acceleration times the distance travelled in the stage.
+
+   function Ramp_Distance_At_Speed (Stages : Ramp_Stages; Speed : Velocity; Accelerating : Boolean) return Length;
+   --  A lower bound on the distance from the speed-ceiling end of the ramp (its start when accelerating, its end
+   --  otherwise) at which the ramp reaches Speed. That end must be slower than Speed.
+
+   function Ramp_Stage_Peaks (Stages : Ramp_Stages; Low, High : Length; Max_Crackle : Crackle)
+      return Scalar_Derivative_Limits;
+   --  The derivative peaks of the stages that overlap the closed distance interval. Acceleration, jerk and snap are
+   --  monotone inside every stage, so their peaks are at stage ends.
+
+   procedure Certify_Cellular_Ramp
+     (Params      : Kinematic_Parameters;
+      Cells       : Path_Cells;
+      Caches      : in out Path_Cell_Caches;
+      Times       : in out Feedrate_Profile_Times;
+      Max_Crackle : in out Crackle;
+      Start_Vel   : Velocity;
+      Anchor      : Length;
+      Forward     : Boolean;
+      Valid       : out Boolean);
+   --  Stretch one ramp in time until every cell it crosses certifies it. An acceleration ramp starts at run distance
+   --  Anchor (Forward); a deceleration ramp, starting at Start_Vel, ends there. Stretching keeps the velocity change
+   --  and the anchor, and lowers the speed reached at any distance from the anchor. Each cell is certified at the
+   --  highest speed the ramp reaches in it and the derivative peaks of every stage between the anchor and the cell's
+   --  far end. A stretch moves each cell onto stages nearer the anchor, so those peaks only fall, and one stretch
+   --  normally certifies the ramp.
+
+   function Ramp_Boundary_States
+     (Times : Feedrate_Profile_Times; Signed_Crackle : Crackle; Start_Vel : Velocity) return Ramp_Stages
+   is
+      type Stage_Times is array (Ramp_Stage_Index range 1 .. 15) of Time;
+      type Stage_Signs is array (Ramp_Stage_Index range 1 .. 15) of Dimensionless;
+      Durations : constant Stage_Times :=
+        [Times (1), Times (2), Times (1), Times (3), Times (1), Times (2), Times (1), Times (4), Times (1), Times (2),
+         Times (1), Times (3), Times (1), Times (2), Times (1)];
+      Signs     : constant Stage_Signs :=
+        [1.0, 0.0, -1.0, 0.0, -1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, 0.0, -1.0];
+      Result    : Ramp_Stages;
+   begin
+      Result.States (0) :=
+        (X => 0.0 * mm, V => Start_Vel, A => 0.0 * mm / s ** 2, J => 0.0 * mm / s ** 3, S => 0.0 * mm / s ** 4);
+      for K in Ramp_Stage_Index range 1 .. 15 loop
+         declare
+            P : constant Ramp_State := Result.States (K - 1);
+            T : constant Time := Durations (K);
+            C : constant Crackle := Signs (K) * Signed_Crackle;
+         begin
+            Result.States (K) :=
+              (X =>
+                 P.X
+                 + T * (P.V + T * (P.A / 2.0 + T * (P.J / 6.0 + T * (P.S / 24.0 + T * C / 120.0)))),
+               V => P.V + T * (P.A + T * (P.J / 2.0 + T * (P.S / 6.0 + T * C / 24.0))),
+               A => P.A + T * (P.J + T * (P.S / 2.0 + T * C / 6.0)),
+               J => P.J + T * (P.S + T * C / 2.0),
+               S => P.S + T * C);
+            Result.Crackles (K) := Signs (K) /= 0.0 and then T > 0.0 * s;
+         end;
+      end loop;
+      return Result;
+   end Ramp_Boundary_States;
+
+   function Ramp_Speed_Bound (Stages : Ramp_Stages; X : Length; Accelerating : Boolean) return Velocity is
+   begin
+      for K in Ramp_Stage_Index range 1 .. 15 loop
+         if X <= Stages.States (K).X or else K = 15 then
+            declare
+               P     : constant Ramp_State := Stages.States (K - 1);
+               Q     : constant Ramp_State := Stages.States (K);
+               A_Max : constant Acceleration := Acceleration'Max (abs P.A, abs Q.A);
+            begin
+               if Accelerating then
+                  return
+                    Velocity'Min
+                      (Q.V, (P.V * P.V + 2.0 * A_Max * Length'Max (0.0 * mm, X - P.X)) ** (1 / 2));
+               else
+                  return
+                    Velocity'Min
+                      (P.V, (Q.V * Q.V + 2.0 * A_Max * Length'Max (0.0 * mm, Q.X - X)) ** (1 / 2));
+               end if;
+            end;
+         end if;
+      end loop;
+      raise Program_Error;
+   end Ramp_Speed_Bound;
+
+   function Ramp_Distance_At_Speed (Stages : Ramp_Stages; Speed : Velocity; Accelerating : Boolean) return Length is
+      Total : constant Length := Stages.States (15).X;
+   begin
+      if Accelerating then
+         for K in Ramp_Stage_Index range 1 .. 15 loop
+            declare
+               P     : constant Ramp_State := Stages.States (K - 1);
+               Q     : constant Ramp_State := Stages.States (K);
+               A_Max : constant Acceleration := Acceleration'Max (abs P.A, abs Q.A);
+            begin
+               if Q.V >= Speed then
+                  return
+                    (if A_Max > 0.0 * mm / s ** 2
+                     then Length'Min (Q.X, P.X + Length'Max (0.0 * mm, (Speed * Speed - P.V * P.V) / (2.0 * A_Max)))
+                     else P.X);
+               end if;
+            end;
+         end loop;
+         return Total;
+      else
+         for K in reverse Ramp_Stage_Index range 1 .. 15 loop
+            declare
+               P     : constant Ramp_State := Stages.States (K - 1);
+               Q     : constant Ramp_State := Stages.States (K);
+               A_Max : constant Acceleration := Acceleration'Max (abs P.A, abs Q.A);
+            begin
+               if P.V >= Speed then
+                  return
+                    Total
+                    - (if A_Max > 0.0 * mm / s ** 2
+                       then Length'Max (P.X, Q.X - Length'Max (0.0 * mm, (Speed * Speed - Q.V * Q.V) / (2.0 * A_Max)))
+                       else Q.X);
+               end if;
+            end;
+         end loop;
+         return Total;
+      end if;
+   end Ramp_Distance_At_Speed;
+
+   function Ramp_Stage_Peaks (Stages : Ramp_Stages; Low, High : Length; Max_Crackle : Crackle)
+      return Scalar_Derivative_Limits
+   is
+      Result : Scalar_Derivative_Limits :=
+        (0.0 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+   begin
+      for K in Ramp_Stage_Index range 1 .. 15 loop
+         declare
+            P : constant Ramp_State := Stages.States (K - 1);
+            Q : constant Ramp_State := Stages.States (K);
+         begin
+            if P.X <= High and then Q.X >= Low then
+               Result.Acceleration_Max :=
+                 Acceleration'Max (Result.Acceleration_Max, Acceleration'Max (abs P.A, abs Q.A));
+               Result.Jerk_Max := Jerk'Max (Result.Jerk_Max, Jerk'Max (abs P.J, abs Q.J));
+               Result.Snap_Max := Snap'Max (Result.Snap_Max, Snap'Max (abs P.S, abs Q.S));
+               if Stages.Crackles (K) then
+                  Result.Crackle_Max := Max_Crackle;
+               end if;
+            end if;
+         end;
+      end loop;
+      return Result;
+   end Ramp_Stage_Peaks;
+
+   procedure Certify_Cellular_Ramp
+     (Params      : Kinematic_Parameters;
+      Cells       : Path_Cells;
+      Caches      : in out Path_Cell_Caches;
+      Times       : in out Feedrate_Profile_Times;
+      Max_Crackle : in out Crackle;
+      Start_Vel   : Velocity;
+      Anchor      : Length;
+      Forward     : Boolean;
+      Valid       : out Boolean)
+   is
+      Maximum_Stretches       : constant Positive := 16;
+      Mixed_Derivative_Safety : constant Dimensionless := 0.999;
+      --  Mixed_Derivative_Time_Scale multiplies every scale it returns by this factor, so a ramp that already fits
+      --  returns exactly this value.
+   begin
+      Valid := False;
+      for Attempt in 1 .. Maximum_Stretches loop
+         declare
+            Stages    : constant Ramp_Stages :=
+              Ramp_Boundary_States (Times, (if Forward then Max_Crackle else -Max_Crackle), Start_Vel);
+            Ramp      : constant Length := Stages.States (15).X;
+            Span_Low  : constant Length := (if Forward then Anchor else Anchor - Ramp);
+            Span_High : constant Length := (if Forward then Anchor + Ramp else Anchor);
+            Scale     : Dimensionless := 1.0;
+
+            function Speed_Scale (Target : Velocity; Far : Length) return Dimensionless;
+            --  The stretch that brings the speed at local distance Far down to Target. The ramp reaches Far further
+            --  from its slow end after stretching, at the speed the unstretched ramp has proportionally closer.
+
+            function Speed_Scale (Target : Velocity; Far : Length) return Dimensionless is
+               Slow_End : constant Velocity := (if Forward then Start_Vel else Stages.States (15).V);
+               From_End : constant Length := (if Forward then Far else Ramp - Far);
+            begin
+               if Slow_End >= Target or else From_End <= 0.0 * mm then
+                  return 0.0;
+               end if;
+               return (1.0 - 1.0E-9) * Ramp_Distance_At_Speed (Stages, Target, Forward) / From_End;
+            end Speed_Scale;
+         begin
+            if Ramp <= 0.0 * mm then
+               Valid := True;
+               return;
+            end if;
+            for Index in Cells'Range loop
+               if Cells (Index).Stop >= Span_Low and then Cells (Index).Start <= Span_High then
+                  declare
+                     Cell       : Path_Cell renames Cells (Index);
+                     Low        : constant Length := Length'Max (Cell.Start, Span_Low) - Span_Low;
+                     High       : constant Length := Length'Min (Cell.Stop, Span_High) - Span_Low;
+                     Far        : constant Length := (if Forward then High else Low);
+                     Speed      : constant Velocity := Ramp_Speed_Bound (Stages, Far, Forward);
+                     Cell_Scale : Dimensionless;
+                  begin
+                     if Speed > Cell.Ceiling then
+                        Cell_Scale := Speed_Scale (Cell.Ceiling, Far);
+                     elsif not Cell.Curved then
+                        Cell_Scale := 1.0;
+                     else
+                        Cell_Scale :=
+                          Mixed_Derivative_Time_Scale
+                            (Params,
+                             Cell.Bounds,
+                             Speed,
+                             Ramp_Stage_Peaks
+                               (Stages,
+                                (if Forward then 0.0 * mm else Low),
+                                (if Forward then High else Ramp),
+                                Max_Crackle),
+                             Caches (Index));
+                        if Cell_Scale >= Mixed_Derivative_Safety then
+                           --  The solver always reserves its safety factor, so this is a pass.
+                           Cell_Scale := 1.0;
+                        elsif Cell_Scale <= 0.0 then
+                           --  Curvature uses the whole budget at this speed. A slightly lower speed frees some.
+                           Cell_Scale := Speed_Scale (0.99 * Speed, Far);
+                        end if;
+                     end if;
+                     if not (Cell_Scale > 0.0) then
+                        return;
+                     end if;
+                     Scale := Dimensionless'Min (Scale, Cell_Scale);
+                  end;
+               end if;
+            end loop;
+            if Scale >= 1.0 then
+               Valid := True;
+               return;
+            end if;
+            --  Overshoot slightly so that rounding cannot leave the stretched ramp just short of its certificate.
+            Scale := Scale * (1.0 - 1.0E-9);
+            for I in Feedrate_Profile_Times_Index loop
+               Times (I) := Times (I) / Scale;
+            end loop;
+            --  Multiply successively so Scale**4 cannot underflow before multiplication by a large crackle.
+            for I in 1 .. 4 loop
+               Max_Crackle := Max_Crackle * Scale;
+            end loop;
+            if Max_Crackle < Dimensionless'Model_Small * mm / s ** 5 then
+               return;
+            end if;
+         end;
+      end loop;
+   end Certify_Cellular_Ramp;
+
+   function Cellular_Profile_At_Peak
+     (Params                   : Kinematic_Parameters;
+      Cells                    : Path_Cells;
+      Caches                   : in out Path_Cell_Caches;
+      Eval                     : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity) return Window_Profile_Result
+   is
+      Window_Start                   : constant Length := Eval.Window.Start_Distance;
+      Window_End                     : constant Length := Eval.Window.Start_Distance + Eval.Window.Distance;
+      Result                         : Window_Profile_Result;
+      Accel_Valid, Decel_Valid       : Boolean;
+      Accel_Distance, Decel_Distance : Length;
+      Actual_Peak                    : Velocity;
+   begin
+      --  Callers admit the endpoint speeds with Eval's endpoint ceilings; the cells cap the peak.
+      if not Eval.Valid or else Peak < Velocity'Max (Start_Vel, End_Vel) then
+         return Result;
+      elsif Eval.Window.Distance <= 0.0 * mm then
+         Result.Valid := Eval.Window.Distance = 0.0 * mm and then Start_Vel = End_Vel;
+         return Result;
+      elsif Peak <= 0.0 * mm / s then
+         return Result;
+      end if;
+      Result.Max_Crackle := Eval.Limits.Crackle_Max;
+      Result.Decel_Crackle := Eval.Limits.Crackle_Max;
+      Result.Profile.Accel :=
+        Optimal_Profile_For_Delta_V
+          (Peak - Start_Vel,
+           Eval.Limits.Acceleration_Max,
+           Eval.Limits.Jerk_Max,
+           Eval.Limits.Snap_Max,
+           Eval.Limits.Crackle_Max);
+      Result.Profile.Decel :=
+        Optimal_Profile_For_Delta_V
+          (Peak - End_Vel,
+           Eval.Limits.Acceleration_Max,
+           Eval.Limits.Jerk_Max,
+           Eval.Limits.Snap_Max,
+           Eval.Limits.Crackle_Max);
+      Certify_Cellular_Ramp
+        (Params, Cells, Caches, Result.Profile.Accel, Result.Max_Crackle, Start_Vel, Window_Start, True, Accel_Valid);
+      if not Accel_Valid then
+         return (others => <>);
+      end if;
+      Certify_Cellular_Ramp
+        (Params, Cells, Caches, Result.Profile.Decel, Result.Decel_Crackle, Peak, Window_End, False, Decel_Valid);
+      if not Decel_Valid then
+         return (others => <>);
+      end if;
+      if (Peak > Start_Vel and then Result.Max_Crackle < Dimensionless'Model_Small * mm / s ** 5)
+        or else (Peak > End_Vel and then Result.Decel_Crackle < Dimensionless'Model_Small * mm / s ** 5)
+      then
+         return (others => <>);
+      end if;
+      Actual_Peak := Fast_Velocity_At_Max_Time (Result.Profile.Accel, Result.Max_Crackle, Start_Vel);
+      Accel_Distance := Fast_Distance_At_Max_Time (Result.Profile.Accel, Result.Max_Crackle, Start_Vel);
+      Decel_Distance := Fast_Distance_At_Max_Time (Result.Profile.Decel, -Result.Decel_Crackle, Actual_Peak);
+      if Accel_Distance + Decel_Distance > Eval.Window.Distance or else Actual_Peak <= 0.0 * mm / s then
+         return (others => <>);
+      end if;
+      declare
+         Coast_Start : constant Length := Window_Start + Accel_Distance;
+         Coast_End   : constant Length := Window_End - Decel_Distance;
+      begin
+         for Cell of Cells loop
+            if Cell.Start < Coast_End
+              and then Cell.Stop > Coast_Start
+              and then (Cell.Stop > Cell.Start or else Coast_End > Coast_Start)
+              and then Actual_Peak > Cell.Ceiling
+            then
+               return (others => <>);
+            end if;
+         end loop;
+      end;
+      Result.Profile.Coast := (Eval.Window.Distance - Accel_Distance - Decel_Distance) / Actual_Peak;
+      Result.Valid :=
+        Profile_Is_Valid
+          (Result.Profile,
+           Eval.Window.Distance,
+           Start_Vel,
+           End_Vel,
+           Result.Decel_Crackle,
+           Actual_Peak,
+           Accel_Distance,
+           Decel_Distance);
+      return Result;
+   exception
+      when Constraint_Error =>
+         return (others => <>);
+   end Cellular_Profile_At_Peak;
+
+   function Generate_Cellular_Profile
+     (Params             : Kinematic_Parameters;
+      Cells              : Path_Cells;
+      Eval               : Profile_Window_Evaluation;
+      Start_Vel, End_Vel : Velocity) return Window_Profile_Result
+   is
+      Window_End : constant Length := Eval.Window.Start_Distance + Eval.Window.Distance;
+      Best       : Window_Profile_Result;
+      Lower      : Velocity := Velocity'Max (Start_Vel, End_Vel);
+      Upper      : Velocity := 0.0 * mm / s;
+      Lowest     : Velocity := Velocity'Last;
+      Best_Time  : Time := 1.0E100 * s;
+      Straight   : Boolean := True;
+      Caches     : Path_Cell_Caches (Cells'Range);
+
+      Last_Peak       : Velocity := 0.0 * mm / s;
+      Last_Duration   : Time := 1.0E100 * s;
+      Last_Considered : Boolean := False;
+
+      function Consider (Peak : Velocity) return Time;
+
+      function Consider (Peak : Velocity) return Time is
+      begin
+         if Last_Considered and then Identical (Peak, Last_Peak) then
+            return Last_Duration;
+         end if;
+
+         declare
+            Candidate      : constant Window_Profile_Result :=
+              Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Start_Vel, End_Vel, Peak);
+            Candidate_Time : constant Time :=
+              (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
+         begin
+            if Candidate.Valid and then (not Best.Valid or else Candidate_Time < Best_Time) then
+               Best := Candidate;
+               Best_Time := Candidate_Time;
+            end if;
+            Last_Peak := Peak;
+            Last_Duration := Candidate_Time;
+            Last_Considered := True;
+            return Candidate_Time;
+         end;
+      end Consider;
+   begin
+      for Cell of Cells loop
+         if Cell_Overlaps (Cell, Eval.Window.Start_Distance, Window_End) then
+            Straight := Straight and then not Cell.Curved;
+            Upper := Velocity'Max (Upper, Cell.Ceiling);
+            Lowest := Velocity'Min (Lowest, Cell.Ceiling);
+         end if;
+      end loop;
+
+      if not Eval.Valid then
+         return Best;
+      elsif Straight then
+         --  Without curvature the tangent-only optimum under the lowest ceiling is certified, as for one segment.
+         if Lowest < Lower then
+            return Best;
+         end if;
+         Best.Profile :=
+           Optimal_Full_Profile
+             (Start_Vel,
+              Lowest,
+              End_Vel,
+              Eval.Window.Distance,
+              Eval.Limits.Acceleration_Max,
+              Eval.Limits.Jerk_Max,
+              Eval.Limits.Snap_Max,
+              Eval.Limits.Crackle_Max);
+         Best.Max_Crackle := Eval.Limits.Crackle_Max;
+         Best.Decel_Crackle := Eval.Limits.Crackle_Max;
+         Best.Valid := True;
+         return Best;
+      end if;
+
+      --  A curved window's peak may exceed the ceilings of cells that its ramps cross at lower speed, but no peak
+      --  exceeds the ceiling of every cell.
+      if Upper < Lower then
+         return Best;
+      elsif Eval.Window.Distance <= 0.0 * mm then
+         return Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Start_Vel, End_Vel, Lower);
+      end if;
+
+      if Lower > 0.0 * mm / s and then Consider (Lower) = 1.0E100 * s then
+         return Best;
+      end if;
+      if Consider (Upper) = 1.0E100 * s then
+         loop
+            declare
+               Mid : constant Velocity := Lower + 0.5 * (Upper - Lower);
+            begin
+               exit when Mid = Lower or else Mid = Upper or else Upper - Lower <= Cellular_Search_Tolerance * Lower;
+               if Consider (Mid) < 1.0E100 * s then
+                  Lower := Mid;
+               else
+                  Upper := Mid;
+               end if;
+            end;
+         end loop;
+         Upper := Lower;
+      end if;
+      Lower := Velocity'Max (Start_Vel, End_Vel);
+      declare
+         Ratio      : constant Dimensionless := 0.618033988749895;
+         Left       : Velocity := Upper - Ratio * (Upper - Lower);
+         Right      : Velocity := Lower + Ratio * (Upper - Lower);
+         Left_Time  : Time := Consider (Left);
+         Right_Time : Time := Consider (Right);
+      begin
+         for Iteration in 1 .. 12 loop
+            if Left_Time < Right_Time then
+               Upper := Right;
+               Right := Left;
+               Right_Time := Left_Time;
+               Left := Upper - Ratio * (Upper - Lower);
+               Left_Time := Consider (Left);
+            else
+               Lower := Left;
+               Left := Right;
+               Left_Time := Right_Time;
+               Right := Lower + Ratio * (Upper - Lower);
+               Right_Time := Consider (Right);
+            end if;
+         end loop;
+      end;
+      return Best;
+   exception
+      when Constraint_Error =>
+         return Best;
+   end Generate_Cellular_Profile;
+
+   function Reachable_Cellular_Velocity
+     (Params    : Kinematic_Parameters;
+      Cells     : Path_Cells;
+      Eval      : Profile_Window_Evaluation;
+      Fixed_Vel : Velocity;
+      Forward   : Boolean) return Velocity
+   is
+      Window_End : constant Length := Eval.Window.Start_Distance + Eval.Window.Distance;
+      Highest    : Velocity := 0.0 * mm / s;
+      Lowest     : Velocity := Velocity'Last;
+      Straight   : Boolean := True;
+      Lower      : Velocity;
+      Upper      : Velocity;
+      Cap        : Velocity;
+      Caches     : Path_Cell_Caches (Cells'Range);
+
+      function Feasible (Free : Velocity) return Boolean
+      is (if Forward
+          then Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Fixed_Vel, Free, Free).Valid
+          else Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Free, Fixed_Vel, Free).Valid);
+   begin
+      for Cell of Cells loop
+         if Cell_Overlaps (Cell, Eval.Window.Start_Distance, Window_End) then
+            Straight := Straight and then not Cell.Curved;
+            Highest := Velocity'Max (Highest, Cell.Ceiling);
+            Lowest := Velocity'Min (Lowest, Cell.Ceiling);
+         end if;
+      end loop;
+      if Straight then
+         --  The tangent-only problem is symmetric, so both directions reduce to the single-segment solve.
+         return Reachable_Velocity (Fixed_Vel, Lowest, Eval.Window.Distance, Eval.Limits);
+      end if;
+
+      --  No speed at the reached end exceeds that end's ceiling, even where the fixed end is faster.
+      Cap := Velocity'Min (Highest, (if Forward then Eval.End_Max_Vel else Eval.Start_Max_Vel));
+      Lower := Velocity'Min (Fixed_Vel, Cap);
+      if Eval.Window.Distance <= 0.0 * mm or else Cap <= Fixed_Vel then
+         return Lower;
+      end if;
+      --  The tangent-only solve is a cheap upper bound and avoids searching an unnecessarily large speed range.
+      Upper := Reachable_Velocity (Fixed_Vel, Cap, Eval.Window.Distance, Eval.Limits);
+      if Feasible (Upper) then
+         return Upper;
+      end if;
+      loop
+         declare
+            Mid : constant Velocity := Lower + 0.5 * (Upper - Lower);
+         begin
+            exit when Mid = Lower or else Mid = Upper or else Upper - Lower <= Cellular_Search_Tolerance * Lower;
+            if Feasible (Mid) then
+               Lower := Mid;
+            else
+               Upper := Mid;
+            end if;
+         end;
+      end loop;
+      return Velocity'Max (Fixed_Vel, 0.999 * Lower);
+   end Reachable_Cellular_Velocity;
+
+   function Profile_Distance_At_Time
+     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity)
+      return Length
+   is
+      Accel_Time : constant Time := Total_Time (Profile.Accel);
+   begin
+      if Accel_Crackle = Decel_Crackle then
+         return Distance_At_Time (Profile, T, Accel_Crackle, Start_Vel);
+      elsif T <= Accel_Time then
+         return Distance_At_Time (Profile.Accel, T, Accel_Crackle, Start_Vel);
+      end if;
+
+      declare
+         Mid_Vel    : constant Velocity := Velocity_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel);
+         Accel_Dist : constant Length := Distance_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel);
+      begin
+         if T < Accel_Time + Profile.Coast then
+            return Accel_Dist + Mid_Vel * (T - Accel_Time);
+         end if;
+         return
+           Accel_Dist
+           + Mid_Vel * Profile.Coast
+           + Distance_At_Time
+               (Profile.Decel,
+                Time'Min (T - (Accel_Time + Profile.Coast), Total_Time (Profile.Decel)),
+                -Decel_Crackle,
+                Mid_Vel);
+      end;
+   end Profile_Distance_At_Time;
+
+   function Profile_Velocity_At_Time
+     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity)
+      return Velocity
+   is
+      Accel_Time : constant Time := Total_Time (Profile.Accel);
+   begin
+      if Accel_Crackle = Decel_Crackle then
+         return Velocity_At_Time (Profile, T, Accel_Crackle, Start_Vel);
+      elsif T <= Accel_Time then
+         return Velocity_At_Time (Profile.Accel, T, Accel_Crackle, Start_Vel);
+      end if;
+
+      declare
+         Mid_Vel : constant Velocity := Velocity_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel);
+      begin
+         if T < Accel_Time + Profile.Coast then
+            return Mid_Vel;
+         end if;
+         return
+           Velocity_At_Time
+             (Profile.Decel,
+              Time'Min (T - (Accel_Time + Profile.Coast), Total_Time (Profile.Decel)),
+              -Decel_Crackle,
+              Mid_Vel);
+      end;
+   end Profile_Velocity_At_Time;
 
    function Identical (Left, Right : Velocity) return Boolean is
       type Velocity_Bits is mod 2 ** Velocity'Size;
@@ -1855,6 +2588,7 @@ package body Prunt.Motion_Planner.Planner is
               Eval.Limits.Snap_Max,
               Eval.Limits.Crackle_Max);
          Best.Max_Crackle := Eval.Limits.Crackle_Max;
+         Best.Decel_Crackle := Eval.Limits.Crackle_Max;
          Best.Valid := True;
          return Best;
       elsif Eval.Window.Distance <= 0.0 * mm then
@@ -1935,12 +2669,19 @@ package body Prunt.Motion_Planner.Planner is
       Attempts        : Block_Planning_Attempts renames Workspace.Planning_Attempts (Block.Primitives'Range);
    begin
       Attempts := [others => 0];
+      Workspace.Timing_Join_Vetoes (Block.Corners'Range) := [others => False];
       loop
          My_Kinematic_Limiter.Run (Block, Motor_Map, Workspace);
          My_Feedrate_Profile_Generator.Run (Block, Motor_Map, Result, Limit_Scale => (if Stopped then 0.5 else 1.0));
          exit when Result.Valid;
 
-         if not Stopped and then Attempts (Result.Failed_Segment) = Blended_Retries then
+         if Timing_Run_Last (Block'Access, Result.Failed_Segment) /= Result.Failed_Segment then
+            --  A run may need a valley that only a junction provides. Split it before slowing anything down; the
+            --  vetoes only grow, so this happens at most once per corner.
+            for Corner in Result.Failed_Segment .. Timing_Run_Last (Block'Access, Result.Failed_Segment) - 1 loop
+               Workspace.Timing_Join_Vetoes (Corner) := True;
+            end loop;
+         elsif not Stopped and then Attempts (Result.Failed_Segment) = Blended_Retries then
             My_Corner_Blender.Run (Block, Motor_Map, Workspace, Force_Stops => True);
             My_Early_Kinematic_Limiter.Run (Block, Motor_Map, Normalize_Feedrates => False);
             if Block.Is_Homing_Move then
@@ -1958,11 +2699,9 @@ package body Prunt.Motion_Planner.Planner is
                 & ". Check for zero limits or unrepresentable motion.";
          else
             --  Both adjoining junction ceilings take the minimum of their segments' feedrates, so halving the failed
-            --  segment's feedrate also slows its endpoints.
-            --  A failed timing run halves every segment, so the run keeps one feedrate.
-            for I in Result.Failed_Segment .. Timing_Run_Last (Block'Access, Result.Failed_Segment) loop
-               Block.Limited_Segment_Feedrates (I) := Block.Limited_Segment_Feedrates (I) * 0.5;
-            end loop;
+            --  segment's feedrate also slows its endpoints. Failed runs are split above, so only one segment fails.
+            Block.Limited_Segment_Feedrates (Result.Failed_Segment) :=
+              Block.Limited_Segment_Feedrates (Result.Failed_Segment) * 0.5;
             Attempts (Result.Failed_Segment) := Attempts (Result.Failed_Segment) + 1;
          end if;
       end loop;
@@ -2057,7 +2796,7 @@ package body Prunt.Motion_Planner.Planner is
             Distance, Start_Distance, E_Reference : Length;
             Feedrate                              : Velocity;
             Profile                               : Feedrate_Profile;
-            Max_Crackle                           : Crackle;
+            Max_Crackle, Decel_Crackle            : Crackle;
             Window                                : Profile_Window;
             Ends                                  : Profile_End_Pair;
             Run_Distance_Offset                   : Length;
@@ -2082,6 +2821,7 @@ package body Prunt.Motion_Planner.Planner is
                Block.Limited_Segment_Feedrates (I),
                Block.Feedrate_Profiles (I),
                Block.Profile_Crackles (I),
+               Block.Profile_Decel_Crackles (I),
                Block.Profile_Windows (I),
                Block.Profile_Ends (I),
                Block.Timing_Distance_Offsets (I),
@@ -2118,6 +2858,7 @@ package body Prunt.Motion_Planner.Planner is
                Block.Limited_Segment_Feedrates (I) := Saved (I).Feedrate;
                Block.Feedrate_Profiles (I) := Saved (I).Profile;
                Block.Profile_Crackles (I) := Saved (I).Max_Crackle;
+               Block.Profile_Decel_Crackles (I) := Saved (I).Decel_Crackle;
                Block.Profile_Windows (I) := Saved (I).Window;
                Block.Profile_Ends (I) := Saved (I).Ends;
                Block.Timing_Distance_Offsets (I) := Saved (I).Run_Distance_Offset;
@@ -2234,6 +2975,120 @@ package body Prunt.Motion_Planner.Planner is
             Outcome := Rejected_Early;
             Restore;
       end Try_Stops;
+
+      procedure Try_Merge (Corner : Finishing_Corners_Index);
+      --  Join the timing runs ending and starting at Corner and replan the joined run, with whole-window profiles
+      --  only, with its outer junction speeds fixed. Keep it only if it is certified and faster. Geometry and E
+      --  references do not change.
+
+      procedure Merge_Timing_Runs;
+      --  Try_Merge at every non-binding curved junction, in a forward sweep.
+
+      procedure Try_Merge (Corner : Finishing_Corners_Index) is
+         type Saved_Segment is record
+            Profile                           : Feedrate_Profile;
+            Max_Crackle, Decel_Crackle        : Crackle;
+            Window                            : Profile_Window;
+            Ends                              : Profile_End_Pair;
+            Run_Back, Run_Ahead               : Corners_Index'Base;
+            Run_Distance_Offset               : Length;
+            Run_Time_Offset, Run_Segment_Time : Time;
+            End_Speed                         : Velocity;
+         end record;
+         subtype Merged_Segments is
+           Finishing_Corners_Index range
+             Timing_Run_First (Block'Access, Corner) .. Timing_Run_Last (Block'Access, Corner + 1);
+         Saved    : constant array (Merged_Segments) of Saved_Segment :=
+           [for I in Merged_Segments =>
+              (Block.Feedrate_Profiles (I),
+               Block.Profile_Crackles (I),
+               Block.Profile_Decel_Crackles (I),
+               Block.Profile_Windows (I),
+               Block.Profile_Ends (I),
+               Block.Timing_Run_Back (I),
+               Block.Timing_Run_Ahead (I),
+               Block.Timing_Distance_Offsets (I),
+               Block.Timing_Time_Offsets (I),
+               Block.Timing_Segment_Times (I),
+               Block.Corner_Velocity_Limits (I))];
+         Old_Time : Time := 0.0 * s;
+         New_Time : Time := 0.0 * s;
+         Result   : Profile_Planning_Result;
+
+         procedure Restore;
+
+         procedure Restore is
+         begin
+            for I in Saved'Range loop
+               Block.Feedrate_Profiles (I) := Saved (I).Profile;
+               Block.Profile_Crackles (I) := Saved (I).Max_Crackle;
+               Block.Profile_Decel_Crackles (I) := Saved (I).Decel_Crackle;
+               Block.Profile_Windows (I) := Saved (I).Window;
+               Block.Profile_Ends (I) := Saved (I).Ends;
+               Block.Timing_Run_Back (I) := Saved (I).Run_Back;
+               Block.Timing_Run_Ahead (I) := Saved (I).Run_Ahead;
+               Block.Timing_Distance_Offsets (I) := Saved (I).Run_Distance_Offset;
+               Block.Timing_Time_Offsets (I) := Saved (I).Run_Time_Offset;
+               Block.Timing_Segment_Times (I) := Saved (I).Run_Segment_Time;
+               Block.Corner_Velocity_Limits (I) := Saved (I).End_Speed;
+            end loop;
+         end Restore;
+      begin
+         for I in Merged_Segments loop
+            Old_Time := @ + Segment_Time (Block'Access, I);
+            Block.Timing_Run_Back (I) := I - Merged_Segments'First;
+            Block.Timing_Run_Ahead (I) := Merged_Segments'Last - I;
+         end loop;
+         --  A merged run's middle portion holds every curved interior corner, so a split profile would need cellular
+         --  reachability searches there. It rarely decides whether a merge pays, and would dominate the search time.
+         My_Feedrate_Profile_Generator.Select_Feedrate_Profile_Window
+           (Block'Access, Motor_Map, Merged_Segments'First, Result, Limit_Scale => 1.0, Split_Profile => False);
+         if Result.Valid then
+            Assign_Timing_Members (Block'Access, Merged_Segments'First);
+            for I in Merged_Segments loop
+               New_Time := @ + Segment_Time (Block'Access, I);
+            end loop;
+            if New_Time < Old_Time then
+               for I in Merged_Segments loop
+                  for W in Profile_Window_Candidate_Index loop
+                     Workspace.Window_Evaluations (I) (W).Valid := False;
+                  end loop;
+               end loop;
+               return;
+            end if;
+         end if;
+         Restore;
+      exception
+         when Constraint_Error =>
+            Restore;
+      end Try_Merge;
+
+      procedure Merge_Timing_Runs is
+         Left_Splice  : constant Corners_Index :=
+           Block.N_Corners - Corners_Index'Min (Blend_Radius, Block.N_Corners - 1);
+         Right_Splice : constant Corners_Index := Corners_Index'Min (Blend_Radius, Block.N_Corners - 1) + 1;
+      begin
+         if not Block.Params.Continuous_Timing or else Block.Is_Homing_Move then
+            return;
+         end if;
+         for I in Block.Corners'First + 1 .. Block.Corners'Last - 1 loop
+            --  Below its static limit, a junction's speed is set by the maximal ramp on one side of it, so it cannot
+            --  be a speed minimum. A binding junction is a valley, where a joined run could not dip. Block splice
+            --  corners stay junctions so that inter-block blends can still cut there.
+            if Is_Timing_Junction (Block, I)
+              and then I /= Left_Splice
+              and then I /= Right_Splice
+              and then Timing_Run_Last (Block'Access, I + 1) - Timing_Run_First (Block'Access, I) < Blend_Radius
+              and then
+                Block.Corner_Velocity_Limits (I) > Timing_Merge_Minimum_Ratio * Workspace.Static_Corner_Limits (I)
+              and then
+                Block.Corner_Velocity_Limits (I) < (1.0 - Timing_Merge_Margin) * Workspace.Static_Corner_Limits (I)
+              and then Can_Merge_Timing_Runs (Block'Access, I)
+            then
+               Try_Merge (I);
+            end if;
+         end loop;
+      end Merge_Timing_Runs;
    begin
       Workspace.Local_Comparison_Corners := 0;
       Workspace.Local_Stops_Selected := 0;
@@ -2244,6 +3099,7 @@ package body Prunt.Motion_Planner.Planner is
           (for all I in Block.Corner_Transitions'Range =>
              Transition_Kind (Block.Corner_Transitions (I)) /= Stereographic_Transition)
       then
+         Merge_Timing_Runs;
          return;
       end if;
       --  Each reference is monotone within its segment, so its endpoints bound it.
@@ -2303,6 +3159,7 @@ package body Prunt.Motion_Planner.Planner is
             end;
          end if;
       end loop;
+      Merge_Timing_Runs;
    end Plan_Kinematics;
 
    function Homing_Unavoidable_Tail_Time (Block : not null access constant Execution_Block) return Time is
@@ -2506,12 +3363,20 @@ package body Prunt.Motion_Planner.Planner is
          end if;
 
          Build_Patch;
-         --  The patch is split back into two blocks at the seam, so no timing run may cross it.
-         My_Kinematic_Limiter.Run (Patch, Motor_Map, Work'Access, Fixed_Ends => True, Forced_Junction => Seam);
-         if Patch.Corner_Velocity_Limits (Seam) <= 0.0 * mm / s then
-            return;
-         end if;
-         My_Feedrate_Profile_Generator.Run (Patch, Motor_Map, Result);
+         loop
+            --  The patch is split back into two blocks at the seam, so no timing run may cross it.
+            My_Kinematic_Limiter.Run (Patch, Motor_Map, Work'Access, Fixed_Ends => True, Forced_Junction => Seam);
+            if Patch.Corner_Velocity_Limits (Seam) <= 0.0 * mm / s then
+               return;
+            end if;
+            My_Feedrate_Profile_Generator.Run (Patch, Motor_Map, Result);
+            exit when
+              Result.Valid or else Timing_Run_Last (Patch'Access, Result.Failed_Segment) = Result.Failed_Segment;
+            --  As in Plan_Fixed_Geometry, split a run that could not be certified.
+            for Corner in Result.Failed_Segment .. Timing_Run_Last (Patch'Access, Result.Failed_Segment) - 1 loop
+               Work.Timing_Join_Vetoes (Corner) := True;
+            end loop;
+         end loop;
          if not Result.Valid or else Patch_Time >= Original_Time then
             return;
          end if;
@@ -2563,6 +3428,7 @@ package body Prunt.Motion_Planner.Planner is
                Target.Primitive_Distances (J) := Source.Primitive_Distances (I);
                Target.Feedrate_Profiles (J) := Source.Feedrate_Profiles (I);
                Target.Profile_Crackles (J) := Source.Profile_Crackles (I);
+               Target.Profile_Decel_Crackles (J) := Source.Profile_Decel_Crackles (I);
                Target.Profile_Windows (J) := Source.Profile_Windows (I);
                Target.Profile_Ends (J) := Source.Profile_Ends (I);
                Target.Timing_Run_Back (J) := Source.Timing_Run_Back (I);
@@ -2586,6 +3452,7 @@ package body Prunt.Motion_Planner.Planner is
       Block.Feedrate_Profiles :=
         [others => (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s])];
       Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
+      Block.Profile_Decel_Crackles := [others => 0.0 * mm / s ** 5];
       Block.Profile_Windows := [others => <>];
       Block.Profile_Ends := [others => <>];
       Block.Timing_Run_Back := [others => 0];
@@ -3010,16 +3877,21 @@ package body Prunt.Motion_Planner.Planner is
          return
            (if Ends.Enabled
             then
-              Distance_At_Time
-                (Ends.Prefix.Profile, Run_Time, Ends.Prefix.Max_Crackle, Block.Corner_Velocity_Limits (Run_First - 1))
+              Profile_Distance_At_Time
+                (Ends.Prefix.Profile,
+                 Run_Time,
+                 Ends.Prefix.Max_Crackle,
+                 Ends.Prefix.Decel_Crackle,
+                 Block.Corner_Velocity_Limits (Run_First - 1))
             else Block.Corner_Velocity_Limits (Run_First - 1) * Run_Time);
       elsif Run_Time < Prefix_Time + Profile_Time then
          return
            Window.Start_Distance
-           + Distance_At_Time
+           + Profile_Distance_At_Time
                (Block.Feedrate_Profiles (Run_First),
                 Time'Min (Run_Time - Prefix_Time, Profile_Time),
                 Block.Profile_Crackles (Run_First),
+                Block.Profile_Decel_Crackles (Run_First),
                 Central_Profile_Start_Velocity (Block, Run_First));
       else
          return
@@ -3027,10 +3899,11 @@ package body Prunt.Motion_Planner.Planner is
            + Window.Distance
            + (if Ends.Enabled
               then
-                Distance_At_Time
+                Profile_Distance_At_Time
                   (Ends.Suffix.Profile,
                    Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time),
                    Ends.Suffix.Max_Crackle,
+                   Ends.Suffix.Decel_Crackle,
                    Ends.Suffix.Boundary_Velocity)
               else
                 Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Run_First))
@@ -3051,24 +3924,30 @@ package body Prunt.Motion_Planner.Planner is
          return
            (if Ends.Enabled
             then
-              Velocity_At_Time
-                (Ends.Prefix.Profile, Run_Time, Ends.Prefix.Max_Crackle, Block.Corner_Velocity_Limits (Run_First - 1))
+              Profile_Velocity_At_Time
+                (Ends.Prefix.Profile,
+                 Run_Time,
+                 Ends.Prefix.Max_Crackle,
+                 Ends.Prefix.Decel_Crackle,
+                 Block.Corner_Velocity_Limits (Run_First - 1))
             else Block.Corner_Velocity_Limits (Run_First - 1));
       elsif Run_Time < Prefix_Time + Profile_Time then
          return
-           Velocity_At_Time
+           Profile_Velocity_At_Time
              (Block.Feedrate_Profiles (Run_First),
               Time'Min (Run_Time - Prefix_Time, Profile_Time),
               Block.Profile_Crackles (Run_First),
+              Block.Profile_Decel_Crackles (Run_First),
               Central_Profile_Start_Velocity (Block, Run_First));
       else
          return
            (if Ends.Enabled
             then
-              Velocity_At_Time
+              Profile_Velocity_At_Time
                 (Ends.Suffix.Profile,
                  Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time),
                  Ends.Suffix.Max_Crackle,
+                 Ends.Suffix.Decel_Crackle,
                  Ends.Suffix.Boundary_Velocity)
             else Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Run_First)));
       end if;

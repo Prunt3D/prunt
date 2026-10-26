@@ -37,8 +37,9 @@ package Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    --  Fill Block.Corner_Velocity_Limits with velocity limits, that when enforced at corners, will prevent other
    --  limits from being violated.
    --
-   --  First assigns timing runs (Assign_Timing_Runs). Only run boundaries are junctions: reachability is solved across
-   --  a whole run, and interior corners keep no limit of their own.
+   --  First assigns timing runs (Assign_Timing_Runs), keeping every corner in Workspace.Timing_Join_Vetoes a junction.
+   --  Only run boundaries are junctions: reachability is solved across a whole run, and interior corners keep no
+   --  limit of their own.
    --
    --  Fixed_Ends retains the supplied endpoint velocities for a local replacement window. Forced_Junction, if nonzero,
    --  is a corner that must end a timing run.

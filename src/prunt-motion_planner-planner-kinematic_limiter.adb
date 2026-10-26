@@ -111,21 +111,23 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       function Static_Corner_Limit (Corner : Corners_Index) return Velocity is
          Incoming : constant Finishing_Corners_Index := Timing_Run_First (Block'Access, Corner);
          Limit    : Velocity :=
-           Velocity'Min (Timing_Feedrate (Block'Access, Incoming), Timing_Feedrate (Block'Access, Corner + 1));
+           Velocity'Min (Block.Limited_Segment_Feedrates (Corner), Block.Limited_Segment_Feedrates (Corner + 1));
       begin
          Apply_Corner_Transition_Limits (Corner, Limit);
          Limit := Extrusion_Junction_Ceiling (Block'Access, Corner, Limit);
 
          --  A junction speed must be admissible for a profile on both sides. Otherwise the forward pass can arrive
          --  faster than every next-window ceiling, report zero reachability, and permanently clamp the following
-         --  junction to a stop even though lowering this junction slightly gives a through profile.
+         --  junction to a stop even though lowering this junction slightly gives a through profile. The junction
+         --  ends the incoming run and starts the outgoing one.
          for I of Finishing_Corners_Index_Pair'[Incoming, Corner + 1] loop
             declare
                Ceiling : Velocity := 0.0 * mm / s;
             begin
                for Eval of Window_Evaluations (I) loop
                   if Eval.Valid then
-                     Ceiling := Velocity'Max (Ceiling, Eval.Max_Vel);
+                     Ceiling :=
+                       Velocity'Max (Ceiling, (if I = Incoming then Eval.End_Max_Vel else Eval.Start_Max_Vel));
                   end if;
                end loop;
                Limit := Velocity'Min (Limit, Ceiling);
@@ -210,24 +212,36 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
             return Memo.Reachable;
          end if;
 
-         for W in Profile_Window_Candidate_Index loop
-            declare
-               Eval              : Profile_Window_Evaluation renames Window_Evaluations (Finishing_Corner) (W);
-               Constant_Distance : constant Length :=
-                 (if Forward
-                  then Eval.Window.Start_Distance
-                  else Total - Eval.Window.Start_Distance - Eval.Window.Distance);
-               Reachable         : Velocity;
-            begin
-               if Eval.Valid
-                 and then Eval.Max_Vel >= Fixed_Vel
-                 and then (Constant_Distance <= 0.0 * mm or else Fixed_Vel > 0.0 * mm / s)
+         declare
+            Cells : constant Path_Cells :=
+              (if Is_Cellular_Run (Block'Access, Finishing_Corner)
                then
-                  Reachable := Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel);
-                  Best := Velocity'Max (Best, Reachable);
-               end if;
-            end;
-         end loop;
+                 Timing_Run_Cells
+                   (Block'Access, Motor_Map, Finishing_Corner, Timing_Feedrate (Block'Access, Finishing_Corner))
+               else [1 .. 0 => <>]);
+         begin
+            for W in Profile_Window_Candidate_Index loop
+               declare
+                  Eval              : Profile_Window_Evaluation renames Window_Evaluations (Finishing_Corner) (W);
+                  Constant_Distance : constant Length :=
+                    (if Forward
+                     then Eval.Window.Start_Distance
+                     else Total - Eval.Window.Start_Distance - Eval.Window.Distance);
+                  Reachable         : Velocity;
+               begin
+                  if Eval.Valid
+                    and then (if Forward then Eval.Start_Max_Vel else Eval.End_Max_Vel) >= Fixed_Vel
+                    and then (Constant_Distance <= 0.0 * mm or else Fixed_Vel > 0.0 * mm / s)
+                  then
+                     Reachable :=
+                       (if Eval.Cellular
+                        then Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Fixed_Vel, Forward)
+                        else Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel));
+                     Best := Velocity'Max (Best, Reachable);
+                  end if;
+               end;
+            end loop;
+         end;
 
          Memo := (Fixed_Vel => Fixed_Vel, Reachable => Best, Valid => True);
          return Best;
@@ -249,7 +263,16 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       Changed : Boolean := False;
 
    begin
-      Assign_Timing_Runs (Block, Forced_Junction);
+      Workspace.Timing_Joins (Block.Corners'Range) := [others => False];
+      if Block.Params.Continuous_Timing then
+         for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop
+            Workspace.Timing_Joins (I) :=
+              I /= Forced_Junction
+              and then not Workspace.Timing_Join_Vetoes (I)
+              and then Joins_Timing_Run (Block'Access, I);
+         end loop;
+      end if;
+      Assign_Timing_Runs (Block, Workspace.Timing_Joins (Block.Corners'Range));
       if not Fixed_Ends then
          Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'First) := 0.0 * mm / s;
          Block.Corner_Velocity_Limits (Block.Corner_Velocity_Limits'Last) := 0.0 * mm / s;

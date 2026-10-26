@@ -45,8 +45,12 @@ package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Finishing_Corner : Finishing_Corners_Index;
       Result           : out Profile_Planning_Result;
-      Limit_Scale      : Dimensionless);
+      Limit_Scale      : Dimensionless;
+      Split_Profile    : Boolean := True);
    --  Select and certify the timing run starting at Finishing_Corner with fixed endpoint velocities.
    --  Also used for local corner alternatives; other segments and junctions remain unchanged.
+   --
+   --  Split_Profile False considers only whole-window profiles, not separate profiles for the run's end transitions
+   --  and the part between them.
 
 end Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
