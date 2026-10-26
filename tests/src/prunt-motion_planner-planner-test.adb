@@ -3640,12 +3640,14 @@ package body Prunt.Motion_Planner.Planner.Test is
       declare
          --  The rounded seam shortens both sides, translating the following references down. The following block
          --  then retracts to its commanded lower limit entirely inside the replacement window, with no suffix.
+         --  Bypassed commands a retraction past the bound, which waives E bounds for that block, as in its own plan.
+         type Retract_Case is (Unbounded, Bounded, Bypassed);
          Retract_Right : aliased Execution_Block (3);
          Old_End_E     : Length;
       begin
-         for Bounded in Boolean loop
+         for Mode in Retract_Case loop
             Prepare (Left, False, False);
-            if Bounded then
+            if Mode /= Unbounded then
                Left.Params.Bounds.Lower_E := -1.0E-6 * mm;
             end if;
             Reset_Early_Limiter_Block (Retract_Right);
@@ -3654,19 +3656,24 @@ package body Prunt.Motion_Planner.Planner.Test is
             Retract_Right.Corners :=
               [Left.Corners (Left.N_Corners),
                [X_Axis => 5.0 * mm, Y_Axis => 5.0 * mm, E_Axis => 1.0 * mm, others => 0.0 * mm],
-               [X_Axis => 5.0 * mm, Y_Axis => 10.0 * mm, others => 0.0 * mm]];
+               [X_Axis => 5.0 * mm, Y_Axis => 10.0 * mm,
+                E_Axis => (if Mode = Bypassed then -1.0 * mm else 0.0 * mm), others => 0.0 * mm]];
             Normalize_And_Blend (Retract_Right, Map, Work'Access);
             Tested_Early_Kinematic_Limiter.Run (Retract_Right, Map);
             Plan_Fixed_Geometry (Retract_Right, Map, Work'Access);
             Old_End_E := Retract_Right.Extrusion_Reference_Positions (3);
             Blend_Blocks (Left, Retract_Right, Map, Blended);
-            if Bounded then
-               T.Assert (not Blended and then Retract_Right.Extrusion_Reference_Positions (3) = Old_End_E,
-                 "A window translation below the E bound retains the stopped plans");
-            else
-               T.Assert (Blended and then Retract_Right.Extrusion_Reference_Positions (3) < -1.0E-6 * mm,
-                 "Without the bound the same seam translates the retraction below it");
-            end if;
+            case Mode is
+               when Unbounded =>
+                  T.Assert (Blended and then Retract_Right.Extrusion_Reference_Positions (3) < -1.0E-6 * mm,
+                    "Without the bound the same seam translates the retraction below it");
+               when Bounded =>
+                  T.Assert (not Blended and then Retract_Right.Extrusion_Reference_Positions (3) = Old_End_E,
+                    "A window translation below the E bound retains the stopped plans");
+               when Bypassed =>
+                  T.Assert (Blended and then Retract_Right.Extrusion_Reference_Positions (3) < Old_End_E,
+                    "A block whose own commands leave the E bounds is not held to them by a seam either");
+            end case;
          end loop;
       end;
       for Barrier in 1 .. 4 loop
@@ -3683,6 +3690,144 @@ package body Prunt.Motion_Planner.Planner.Test is
            "End data, overflow, dwell and homing boundaries are rejected before any window is copied");
       end loop;
    end Test_Inter_Block_Blending;
+
+   procedure Test_Blend_Seam_Retained_Primitives (T : in out Trendy_Test.Operation'Class) is
+      Work         : aliased Planning_Workspace (Corners_Index'Last);
+      Map          : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Blended      : Boolean;
+      Helix_Blends : Natural := 0;
+      Short_Blends : Natural := 0;
+
+      procedure Configure (Block : out Execution_Block; Helical : Boolean := False);
+      --  Helical seams use Biarc, whose short C1 transitions keep a blended helix/line seam faster than a stop.
+      procedure Configure (Block : out Execution_Block; Helical : Boolean := False) is
+      begin
+         Reset_Early_Limiter_Block (Block);
+         Block.Blendable_End := True;
+         Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
+         Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+         Block.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s ** 2];
+         Block.Params.Axial_Jerk_Maxes := [others => 10_000.0 * mm / s ** 3];
+         Block.Params.Axial_Snap_Maxes := [others => 100_000.0 * mm / s ** 4];
+         Block.Params.Axial_Crackle_Maxes := [others => 1_000_000.0 * mm / s ** 5];
+         if Helical then
+            Block.Params.Cornering :=
+              (Kind => Biarc, Biarc_Params =>
+                 (Axial_Deviation_Maxes => [others => 0.5 * mm], Corner_Miss_Distance_Max => 0.5 * mm,
+                  Trim_Max => 0.5 * mm, others => <>));
+         else
+            Block.Params.Cornering :=
+              (Kind => Stereographic, Stereographic_Params =>
+                 (Axial_Deviation_Maxes => [others => 0.5 * mm], Corner_Miss_Distance_Max => 0.5 * mm,
+                  others => <>));
+         end if;
+         Block.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+      end Configure;
+
+      procedure Plan (Block : aliased in out Execution_Block);
+      procedure Plan (Block : aliased in out Execution_Block) is
+      begin
+         Normalize_And_Blend (Block, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (Block, Map);
+         Plan_Fixed_Geometry (Block, Map, Work'Access);
+      end Plan;
+
+      function Seam_Meets_Primitives (Left, Right : aliased Execution_Block) return Boolean;
+      --  Whether the seam transition starts and ends on the retained primitives that the blended blocks execute.
+      function Seam_Meets_Primitives (Left, Right : aliased Execution_Block) return Boolean is
+         Seam        : constant Corner_Transition_Evaluator := Left.Corner_Transitions (Left.N_Corners);
+         Left_End    : constant Position :=
+           Primitive_Point_At_Distance
+             (Left'Access,
+              Left.N_Corners,
+              Left.Primitive_Start_Distances (Left.N_Corners) + Left.Primitive_Distances (Left.N_Corners));
+         Right_Start : constant Position :=
+           Primitive_Point_At_Distance (Right'Access, 2, Right.Primitive_Start_Distances (2));
+      begin
+         return
+           Point_Distance (Point_At_Distance (Seam, 0.0 * mm), Left_End) <= 1.0E-6 * mm
+           and then Point_Distance (Point_At_Distance (Seam, Arc_Length (Seam)), Right_Start) <= 1.0E-6 * mm;
+      end Seam_Meets_Primitives;
+   begin
+      T.Register;
+
+      --  A spiral lift: a full helical turn starting at a stop, followed by travel along its tangent. The turn's start
+      --  is not on an axis, so reconstructing it from its phase would not be exact.
+      for Step in 0 .. 11 loop
+         declare
+            Theta   : constant Long_Float := 2.0 * Ada.Numerics.Pi * (Long_Float (Step) + 0.37) / 12.0;
+            Start   : constant Position :=
+              [X_Axis => 5.0 * mm * Dimensionless (Cos (Theta)),
+               Y_Axis => 5.0 * mm * Dimensionless (Sin (Theta)),
+               others => 0.0 * mm];
+            Finish  : constant Position := [Start with delta Z_Axis => 2.0 * mm];
+            Travel  : constant Position :=
+              [Finish with delta
+                 X_Axis => Finish (X_Axis) - 10.0 * mm * Dimensionless (Sin (Theta)),
+                 Y_Axis => Finish (Y_Axis) + 10.0 * mm * Dimensionless (Cos (Theta))];
+            Left, Right : aliased Execution_Block (2);
+         begin
+            Configure (Left, Helical => True);
+            Left.Corners := [Start, Finish];
+            Left.Primitives (2) := Make_Helix_Primitive (Start, Finish, [others => 0.0 * mm], Clockwise => False);
+            Plan (Left);
+            declare
+               --  The seam rebuilds the retained turn from its start point, which must stay exactly on its end.
+               Retained_Start : constant Position := Primitive_Point_At_Distance (Left'Access, 2, 0.0 * mm);
+               Retained       : constant Derived_Path_Primitive :=
+                 Derive_Path_Primitive (Left.Primitives (2), Retained_Start, [Finish with delta E_Axis => 0.0 * mm]);
+            begin
+               T.Assert (Retained_Start = Start, "A helix starts exactly at its start corner");
+               T.Assert (Retained.Kind = Helix_Primitive_Kind
+                 and then Retained.Length = Primitive_Length (Left'Access, 2),
+                 "A full helical turn rebuilt from its retained start is still a full turn");
+            end;
+            Configure (Right, Helical => True);
+            Right.Corners := [Finish, Travel];
+            Plan (Right);
+            Blend_Blocks (Left, Right, Map, Blended);
+            if Blended then
+               Helix_Blends := @ + 1;
+               T.Assert (Seam_Meets_Primitives (Left, Right),
+                 "A seam after a full helical turn is built on the executed turn, not on a reconstructed chord");
+            end if;
+         end;
+      end loop;
+      T.Assert (Helix_Blends > 0, "Seams after full helical turns are blended");
+
+      --  A sharp corner consumes the start of the short final segment, and a gentle seam wants more than the rest.
+      --  The diagonal direction makes the reconstructed retained length differ from the stored one in its last bits.
+      for Step in 1 .. 24 loop
+         declare
+            Short  : constant Length := 0.25 * mm * Dimensionless (Step);
+            Corner : constant Position := [X_Axis => 10.0 * mm, others => 0.0 * mm];
+            Finish : constant Position :=
+              [Corner with delta X_Axis => Corner (X_Axis) - 0.866_025_403_784 * Short, Y_Axis => 0.5 * Short];
+            Travel : constant Position :=
+              [Finish with delta
+                 X_Axis => Finish (X_Axis) - 9.396_926_207_86 * mm,
+                 Y_Axis => Finish (Y_Axis) + 3.420_201_433_26 * mm];
+            Left   : aliased Execution_Block (3);
+            Right  : aliased Execution_Block (2);
+         begin
+            Configure (Left);
+            Left.Corners := [[others => 0.0 * mm], Corner, Finish];
+            Plan (Left);
+            Configure (Right);
+            Right.Corners := [Finish, Travel];
+            Plan (Right);
+            Blend_Blocks (Left, Right, Map, Blended);
+            if Blended then
+               Short_Blends := @ + 1;
+               T.Assert ((for all Distance of Left.Primitive_Distances => Distance >= 0.0 * mm)
+                 and then (for all Distance of Right.Primitive_Distances => Distance >= 0.0 * mm),
+                 "A seam that consumes a whole retained primitive leaves no negative primitive distance");
+               T.Assert (Seam_Meets_Primitives (Left, Right), "A seam after a short segment meets its primitives");
+            end if;
+         end;
+      end loop;
+      T.Assert (Short_Blends > 0, "Seams after short segments are blended");
+   end Test_Blend_Seam_Retained_Primitives;
 
    procedure Prepare_Continuous_Line
      (Block      : aliased out Execution_Block;
@@ -4235,6 +4380,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Timing_Join_Vetoes'Unrestricted_Access,
          Test_Cellular_Endpoint_Ceilings'Unrestricted_Access,
          Test_Inter_Block_Blending'Unrestricted_Access,
+         Test_Blend_Seam_Retained_Primitives'Unrestricted_Access,
          Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
          Test_Profile_Extrusion_Limits'Unrestricted_Access,
          Test_Local_Pair_Stop_Selection'Unrestricted_Access,

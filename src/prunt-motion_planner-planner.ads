@@ -1207,6 +1207,8 @@ private
    procedure Copy_Motion_Window
      (Source : Execution_Block; First, Last : Corners_Index; Target : aliased out Execution_Block);
    --  Copy numeric motion fields only, aligning Source (First .. Last) with the end of Target. No user data copying.
+   --  Segments of Target ending at or before the corner aligned with First are padding, not motion, and must never be
+   --  evaluated.
 
    procedure Clear_Planned_Fields (Block : not null access Execution_Block);
    --  Initialize every field written by the stages after the preprocessor, in the block's current layout. This is the
