@@ -32,18 +32,37 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Finishing_Corner : Finishing_Corners_Index;
       Result           : out Profile_Planning_Result;
-      Limit_Scale      : Dimensionless)
+      Limit_Scale      : Dimensionless;
+      Split_Profile    : Boolean := True)
    is
       Start_Vel : constant Velocity := Block.Corner_Velocity_Limits (Finishing_Corner - 1);
       End_Vel   : constant Velocity := Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Finishing_Corner));
       Total     : constant Length := Timing_Total_Distance (Block, Finishing_Corner);
       Feedrate  : constant Velocity := Timing_Feedrate (Block, Finishing_Corner);
 
-      Best_Found   : Boolean := False;
-      Best_Time    : Time := 1.0E100 * s;
-      Best_Profile : Feedrate_Profile :=
+      Best_Found         : Boolean := False;
+      Best_Time          : Time := 1.0E100 * s;
+      Best_Profile       : Feedrate_Profile :=
         (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
-      Best_Eval    : Profile_Window_Evaluation;
+      Best_Eval          : Profile_Window_Evaluation;
+      Best_Decel_Crackle : Crackle := 0.0 * mm / s ** 5;
+
+      function Scaled_Cells return Path_Cells;
+      --  The run's cells with their ceilings reduced by Limit_Scale, like every window's Max_Vel.
+
+      function Scaled_Cells return Path_Cells is
+      begin
+         if not Is_Cellular_Run (Block, Finishing_Corner) then
+            return [1 .. 0 => <>];
+         end if;
+         return Result : Path_Cells := Timing_Run_Cells (Block, Motor_Map, Finishing_Corner, Feedrate) do
+            for Cell of Result loop
+               Cell.Ceiling := Cell.Ceiling * Limit_Scale;
+            end loop;
+         end return;
+      end Scaled_Cells;
+
+      Cells : constant Path_Cells := Scaled_Cells;
 
       type Candidate_Info is record
          Valid    : Boolean := False;
@@ -60,6 +79,9 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       function Conservative_Evaluation (Eval : Profile_Window_Evaluation) return Profile_Window_Evaluation;
       function Conservative_Profile
         (Eval : Profile_Window_Evaluation; First, Last : Velocity) return Window_Profile_Result;
+      function Generate (Eval : Profile_Window_Evaluation; First, Last : Velocity) return Window_Profile_Result;
+      function Reachable (Eval : Profile_Window_Evaluation; Fixed_Vel : Velocity; Forward : Boolean) return Velocity;
+      --  The window or cellular certificate, whichever Eval needs.
       procedure Consider_Split_Profile (Conservative : Boolean; Accepted : out Boolean);
       procedure Try_Conservative_Candidate (I : Profile_Window_Candidate_Index);
 
@@ -72,6 +94,18 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          --  merely passing those budgets to Optimal_Full_Profile would not certify a curved window.
          Result.Valid := Eval.Valid and then Mixed.Valid;
          Result.Max_Vel := Velocity'Min (Eval.Max_Vel, Mixed.Max_Vel * Limit_Scale);
+         if Eval.Cellular then
+            --  A cellular Max_Vel omits the motor-delta and E ceilings, which only its cells hold.
+            for Cell of Cells loop
+               if Cell_Overlaps (Cell, Eval.Window.Start_Distance, Eval.Window.Start_Distance + Eval.Window.Distance)
+               then
+                  Result.Max_Vel := Velocity'Min (Result.Max_Vel, Cell.Ceiling);
+               end if;
+            end loop;
+         end if;
+         --  The conservative profile caps its whole window, including both ends, at Max_Vel.
+         Result.Start_Max_Vel := Result.Max_Vel;
+         Result.End_Max_Vel := Result.Max_Vel;
          Result.Limits :=
            (Mixed.Limits.Acceleration_Max * Limit_Scale,
             Mixed.Limits.Jerk_Max * Limit_Scale,
@@ -99,12 +133,23 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
               Eval.Limits.Snap_Max,
               Eval.Limits.Crackle_Max);
          Result.Max_Crackle := Eval.Limits.Crackle_Max;
+         Result.Decel_Crackle := Eval.Limits.Crackle_Max;
          Result.Valid := True;
          return Result;
       exception
          when Constraint_Error =>
             return (others => <>);
       end Conservative_Profile;
+
+      function Generate (Eval : Profile_Window_Evaluation; First, Last : Velocity) return Window_Profile_Result
+      is (if Eval.Cellular
+          then Generate_Cellular_Profile (Block.Params, Cells, Eval, First, Last)
+          else Generate_Window_Profile (Block.Params, Eval, First, Last));
+
+      function Reachable (Eval : Profile_Window_Evaluation; Fixed_Vel : Velocity; Forward : Boolean) return Velocity
+      is (if Eval.Cellular
+          then Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Fixed_Vel, Forward)
+          else Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel));
 
       procedure Consider_Split_Profile (Conservative : Boolean; Accepted : out Boolean) is
          Start_Curve   : constant Length := Timing_Start_Transition_Distance (Block, Finishing_Corner);
@@ -115,6 +160,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
             (Start_Distance => Start_Curve + Middle, Distance => Total - (Start_Curve + Middle))];
          Evals         : array (Split_Windows'Range) of Profile_Window_Evaluation;
          Profiles      : array (Split_Windows'Range) of Feedrate_Profile;
+         Decels        : array (Split_Windows'Range) of Crackle;
          Speeds        : array (Natural range 0 .. 3) of Velocity;
          Split_Time    : Time := 0.0 * s;
       begin
@@ -132,6 +178,8 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                return;
             end if;
             Evals (I).Max_Vel := @ * Limit_Scale;
+            Evals (I).Start_Max_Vel := @ * Limit_Scale;
+            Evals (I).End_Max_Vel := @ * Limit_Scale;
             Evals (I).Limits.Acceleration_Max := @ * Limit_Scale;
             Evals (I).Limits.Jerk_Max := @ * Limit_Scale;
             Evals (I).Limits.Snap_Max := @ * Limit_Scale;
@@ -143,13 +191,13 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                end if;
             end if;
          end loop;
-         if Start_Vel > Evals (1).Max_Vel or else End_Vel > Evals (3).Max_Vel then
+         if Start_Vel > Evals (1).Start_Max_Vel or else End_Vel > Evals (3).End_Max_Vel then
             return;
          end if;
          Speeds :=
            [Start_Vel,
-            Velocity'Min (Evals (1).Max_Vel, Evals (2).Max_Vel),
-            Velocity'Min (Evals (2).Max_Vel, Evals (3).Max_Vel),
+            Velocity'Min (Evals (1).End_Max_Vel, Evals (2).Start_Max_Vel),
+            Velocity'Min (Evals (2).End_Max_Vel, Evals (3).Start_Max_Vel),
             End_Vel];
          for Iteration in 1 .. 3 loop
             declare
@@ -163,7 +211,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                         then
                           Reachable_Velocity
                             (Speeds (I - 1), Evals (I).Max_Vel, Split_Windows (I).Distance, Evals (I).Limits)
-                        else Reachable_Window_Velocity (Block.Params, Evals (I), Speeds (I - 1))));
+                        else Reachable (Evals (I), Speeds (I - 1), Forward => True)));
                end loop;
                for I in reverse 2 .. 3 loop
                   Speeds (I - 1) :=
@@ -173,7 +221,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                         then
                           Reachable_Velocity
                             (Speeds (I), Evals (I).Max_Vel, Split_Windows (I).Distance, Evals (I).Limits)
-                        else Reachable_Window_Velocity (Block.Params, Evals (I), Speeds (I))));
+                        else Reachable (Evals (I), Speeds (I), Forward => False)));
                end loop;
                --  A sweep depends only on Speeds, so once one leaves them unchanged every later sweep would too.
                exit when Identical (Speeds (1), Previous (1)) and then Identical (Speeds (2), Previous (2));
@@ -184,13 +232,14 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                Solution : constant Window_Profile_Result :=
                  (if Conservative
                   then Conservative_Profile (Evals (I), Speeds (I - 1), Speeds (I))
-                  else Generate_Window_Profile (Block.Params, Evals (I), Speeds (I - 1), Speeds (I)));
+                  else Generate (Evals (I), Speeds (I - 1), Speeds (I)));
             begin
                if not Solution.Valid then
                   return;
                end if;
                Profiles (I) := Solution.Profile;
                Evals (I).Limits.Crackle_Max := Solution.Max_Crackle;
+               Decels (I) := Solution.Decel_Crackle;
                Split_Time := @ + Total_Time (Profiles (I));
                if Conservative and then Split_Time >= Best_Time then
                   --  Valid profile times are nonnegative, so this split can no longer be selected. Only the
@@ -206,10 +255,11 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
             Best_Time := Split_Time;
             Best_Profile := Profiles (2);
             Best_Eval := Evals (2);
+            Best_Decel_Crackle := Decels (2);
             Block.Profile_Ends (Finishing_Corner) :=
               (Enabled => True,
-               Prefix  => (Profiles (1), Evals (1).Limits.Crackle_Max, Speeds (1)),
-               Suffix  => (Profiles (3), Evals (3).Limits.Crackle_Max, Speeds (2)));
+               Prefix  => (Profiles (1), Evals (1).Limits.Crackle_Max, Decels (1), Speeds (1)),
+               Suffix  => (Profiles (3), Evals (3).Limits.Crackle_Max, Decels (3), Speeds (2)));
          end if;
       exception
          when Constraint_Error =>
@@ -245,21 +295,22 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                Suffix_Dist : constant Length := Total - Windows (I).Start_Distance - Windows (I).Distance;
             begin
                Eval.Max_Vel := Eval.Max_Vel * Limit_Scale;
+               Eval.Start_Max_Vel := Eval.Start_Max_Vel * Limit_Scale;
+               Eval.End_Max_Vel := Eval.End_Max_Vel * Limit_Scale;
                Eval.Limits.Acceleration_Max := Eval.Limits.Acceleration_Max * Limit_Scale;
                Eval.Limits.Jerk_Max := Eval.Limits.Jerk_Max * Limit_Scale;
                Eval.Limits.Snap_Max := Eval.Limits.Snap_Max * Limit_Scale;
                Eval.Limits.Crackle_Max := Eval.Limits.Crackle_Max * Limit_Scale;
                if Eval.Valid
-                 and then Eval.Max_Vel >= Start_Vel
-                 and then Eval.Max_Vel >= End_Vel
+                 and then Eval.Start_Max_Vel >= Start_Vel
+                 and then Eval.End_Max_Vel >= End_Vel
                  and then (Prefix_Dist <= 0.0 * mm or else Start_Vel > 0.0 * mm / s)
                  and then (Suffix_Dist <= 0.0 * mm or else End_Vel > 0.0 * mm / s)
                  and then (Windows (I).Distance > 0.0 * mm or else Start_Vel = End_Vel)
                  and then (Windows (I).Distance <= 0.0 * mm or else Eval.Max_Vel > 0.0 * mm / s)
                then
                   declare
-                     Solution : constant Window_Profile_Result :=
-                       Generate_Window_Profile (Block.Params, Eval, Start_Vel, End_Vel);
+                     Solution : constant Window_Profile_Result := Generate (Eval, Start_Vel, End_Vel);
                   begin
                      Candidates (I) :=
                        (Valid    => Solution.Valid,
@@ -285,18 +336,21 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
             Best_Profile := C.Solution.Profile;
             Best_Eval := C.Eval;
             Best_Eval.Limits.Crackle_Max := C.Solution.Max_Crackle;
+            Best_Decel_Crackle := C.Solution.Decel_Crackle;
          end if;
       end loop;
 
-      declare
-         Accepted : Boolean;
-      begin
-         Consider_Split_Profile (Conservative => False, Accepted => Accepted);
-         if not Accepted then
-            --  The gentler split needs its own internal join velocities as well as its own ramps.
-            Consider_Split_Profile (Conservative => True, Accepted => Accepted);
-         end if;
-      end;
+      if Split_Profile then
+         declare
+            Accepted : Boolean;
+         begin
+            Consider_Split_Profile (Conservative => False, Accepted => Accepted);
+            if not Accepted then
+               --  The gentler split needs its own internal join velocities as well as its own ramps.
+               Consider_Split_Profile (Conservative => True, Accepted => Accepted);
+            end if;
+         end;
+      end if;
 
       if not Best_Found then
          Result := (Valid => False, Failed_Segment => Finishing_Corner);
@@ -307,6 +361,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Block.Profile_Windows (Finishing_Corner) := Best_Eval.Window;
       Block.Feedrate_Profiles (Finishing_Corner) := Best_Profile;
       Block.Profile_Crackles (Finishing_Corner) := Best_Eval.Limits.Crackle_Max;
+      Block.Profile_Decel_Crackles (Finishing_Corner) := Best_Decel_Crackle;
    end Select_Feedrate_Profile_Window;
 
    procedure Run

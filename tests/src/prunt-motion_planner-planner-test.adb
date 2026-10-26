@@ -173,6 +173,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Profile_Windows := [others => <>];
       Block.Profile_Ends := [others => <>];
       Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
+      Block.Profile_Decel_Crackles := [others => 0.0 * mm / s ** 5];
       Block.Timing_Run_Back := [others => 0];
       Block.Timing_Run_Ahead := [others => 0];
       Block.Timing_Distance_Offsets := [others => 0.0 * mm];
@@ -3138,8 +3139,10 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Feedrate_Profiles (3) := (Coast => 0.2 * s, others => [others => 0.0 * s]);
       Block.Profile_Ends (3) :=
         (Enabled => True,
-         Prefix => ((Coast => 0.1 * s, others => [others => 0.0 * s]), 0.0 * mm / s ** 5, 1.0 * mm / s),
-         Suffix => ((Coast => 0.3 * s, others => [others => 0.0 * s]), 0.0 * mm / s ** 5, 1.0 * mm / s));
+         Prefix =>
+           ((Coast => 0.1 * s, others => [others => 0.0 * s]), 0.0 * mm / s ** 5, 0.0 * mm / s ** 5, 1.0 * mm / s),
+         Suffix =>
+           ((Coast => 0.3 * s, others => [others => 0.0 * s]), 0.0 * mm / s ** 5, 0.0 * mm / s ** 5, 1.0 * mm / s));
       Duration := Segment_Time (Block'Access, 3);
       --  The segment is valid throughout; subtracting separately rounded prefix/central times must not
       --  send a local query past the suffix's endpoint (0.1 + 0.2 + 0.3 does not round back to 0.3).
@@ -3861,11 +3864,376 @@ package body Prunt.Motion_Planner.Planner.Test is
          "A run across the fixed splice corner keeps the stopped seam instead of cutting the run");
    end Test_Continuous_Timing_Blend_Seams;
 
+   procedure Prepare_Gentle_Corners
+     (Block : aliased out Execution_Block; Work : not null access Planning_Workspace; Continuous : Boolean);
+   --  Plan an extruding path under the Benchy limits: a right angle at corner 4 and gentle stereographic corners
+   --  elsewhere. Corners 2 and 5 follow short moves from a stop, so they are passed while still speeding up.
+
+   procedure Prepare_Gentle_Corners
+     (Block : aliased out Execution_Block; Work : not null access Planning_Workspace; Continuous : Boolean)
+   is
+      Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+   begin
+      Reset_Early_Limiter_Block (Block);
+      Block.Params.Tangential_Velocity_Max := 250.0 * mm / s;
+      Block.Params.Axial_Velocity_Maxes := [others => 250.0 * mm / s];
+      Block.Params.Axial_Acceleration_Maxes := [others => 5_000.0 * mm / s ** 2];
+      Block.Params.Axial_Jerk_Maxes := [others => 500_000.0 * mm / s ** 3];
+      Block.Params.Axial_Snap_Maxes := [others => 500_000_000.0 * mm / s ** 4];
+      Block.Params.Axial_Crackle_Maxes := [others => 500_000_000_000.0 * mm / s ** 5];
+      Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.02 * mm];
+      Block.Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.02 * mm;
+      Block.Params.Continuous_Timing := Continuous;
+      Block.Original_Segment_Feedrates := [others => 250.0 * mm / s];
+      Block.Corners :=
+        [[others => 0.0 * mm],
+         [X_Axis => 3.0 * mm, others => 0.0 * mm],
+         [X_Axis => 13.0 * mm, Y_Axis => 0.2 * mm, others => 0.0 * mm],
+         [X_Axis => 23.0 * mm, Y_Axis => 0.6 * mm, others => 0.0 * mm],
+         [X_Axis => 23.0 * mm, Y_Axis => 3.6 * mm, others => 0.0 * mm],
+         [X_Axis => 22.9 * mm, Y_Axis => 13.6 * mm, others => 0.0 * mm],
+         [X_Axis => 22.5 * mm, Y_Axis => 23.6 * mm, others => 0.0 * mm]];
+      for I in Block.Primitives'Range loop
+         Block.Corners (I) (E_Axis) := Block.Corners (I - 1) (E_Axis) + 0.04 * Primitive_Length (Block'Access, I);
+      end loop;
+      Normalize_And_Blend (Block, Map, Work);
+      Tested_Early_Kinematic_Limiter.Run (Block, Map);
+      Plan_Kinematics (Block, Map, Work);
+   end Prepare_Gentle_Corners;
+
+   procedure Check_Sampled_Axial_Limits
+     (Block : aliased Execution_Block; Name : String; T : in out Trendy_Test.Operation'Class);
+   --  Sample the block as the executor does and bound each axis's velocity, acceleration, jerk and snap by central
+   --  differences. This checks the certified plan without using any planner bound. The tolerances cover the
+   --  differences' truncation error at crackle steps.
+
+   procedure Check_Sampled_Axial_Limits
+     (Block : aliased Execution_Block; Name : String; T : in out Trendy_Test.Operation'Class)
+   is
+      Step    : constant Time := 0.000_05 * s;
+      Count   : constant Positive := Positive (Planned_Time (Block) / Step) + 1;
+      type Samples is array (1 .. Count) of Position;
+      Points  : Samples;
+      Current : Time := 0.0 * s;
+      Segment : Finishing_Corners_Index := Block.Primitives'First;
+   begin
+      for K in Points'Range loop
+         while Current > Segment_Time (Block'Access, Segment) and then Segment < Block.N_Corners loop
+            Current := Current - Segment_Time (Block'Access, Segment);
+            Segment := Segment + 1;
+         end loop;
+         Points (K) :=
+           Segment_Pos_At_Time (Block'Access, Segment, Time'Min (Current, Segment_Time (Block'Access, Segment)));
+         Current := Current + Step;
+      end loop;
+      for Axis in Axis_Name loop
+         declare
+            V_Max : Velocity := 0.0 * mm / s;
+            A_Max : Acceleration := 0.0 * mm / s ** 2;
+            J_Max : Jerk := 0.0 * mm / s ** 3;
+            S_Max : Snap := 0.0 * mm / s ** 4;
+         begin
+            for K in Points'First + 2 .. Points'Last - 2 loop
+               declare
+                  M2 : constant Length := Points (K - 2) (Axis);
+                  M1 : constant Length := Points (K - 1) (Axis);
+                  P0 : constant Length := Points (K) (Axis);
+                  P1 : constant Length := Points (K + 1) (Axis);
+                  P2 : constant Length := Points (K + 2) (Axis);
+               begin
+                  V_Max := Velocity'Max (V_Max, abs (P1 - M1) / (2.0 * Step));
+                  A_Max := Acceleration'Max (A_Max, abs (P1 - 2.0 * P0 + M1) / Step ** 2);
+                  J_Max := Jerk'Max (J_Max, abs (P2 - 2.0 * P1 + 2.0 * M1 - M2) / (2.0 * Step ** 3));
+                  S_Max := Snap'Max (S_Max, abs (P2 - 4.0 * P1 + 6.0 * P0 - 4.0 * M1 + M2) / Step ** 4);
+               end;
+            end loop;
+            T.Assert
+              (V_Max <= 1.001 * Block.Params.Axial_Velocity_Maxes (Axis)
+               and then A_Max <= 1.01 * Block.Params.Axial_Acceleration_Maxes (Axis)
+               and then J_Max <= 1.05 * Block.Params.Axial_Jerk_Maxes (Axis)
+               and then S_Max <= 1.2 * Block.Params.Axial_Snap_Maxes (Axis),
+               Name & ": sampled " & Axis'Image & " derivatives stay within their limits");
+         end;
+      end loop;
+   end Check_Sampled_Axial_Limits;
+
+   procedure Test_Continuous_Curved_Merges (T : in out Trendy_Test.Operation'Class) is
+      Work       : aliased Planning_Workspace (7);
+      Off, On    : aliased Execution_Block (7);
+      Merged     : Natural := 0;
+   begin
+      T.Register;
+      Prepare_Gentle_Corners (Off, Work'Access, Continuous => False);
+      Prepare_Gentle_Corners (On, Work'Access, Continuous => True);
+
+      T.Assert
+        ((for all I in Off.Primitives'Range => Off.Timing_Run_Back (I) = 0 and then Off.Timing_Run_Ahead (I) = 0),
+         "Without the switch no corner is merged");
+      for I in On.Corners'First + 1 .. On.Corners'Last - 1 loop
+         if not Is_Timing_Junction (On, I) then
+            Merged := Merged + 1;
+            T.Assert
+              (Transition_Kind (On.Corner_Transitions (I)) = Stereographic_Transition,
+               "Merged corners are curved stereographic blends");
+         end if;
+      end loop;
+      T.Assert (Merged > 0, "At least one gentle curved corner is merged");
+      T.Assert (Is_Timing_Junction (On, 4), "The binding right angle stays a junction");
+      T.Assert (Planned_Time (On) < Planned_Time (Off), "Merging is kept only where it is faster");
+
+      for I in On.Corners'First + 1 .. On.Corners'Last - 1 loop
+         if not Is_Timing_Junction (On, I) then
+            declare
+               End_Time : constant Time := Segment_Time (On'Access, I);
+            begin
+               T.Assert
+                 (abs (Segment_Pos_At_Time (On'Access, I, End_Time) - Segment_Pos_At_Time (On'Access, I + 1, 0.0 * s))
+                  < 1.0E-9 * mm,
+                  "Position is continuous across a merged curved corner");
+               T.Assert
+                 (abs
+                    (Segment_Vel_Ratio_At_Time (On'Access, I, End_Time)
+                     - Segment_Vel_Ratio_At_Time (On'Access, I + 1, 0.0 * s))
+                  < 1.0E-9,
+                  "Speed is continuous across a merged curved corner");
+            end;
+         end if;
+      end loop;
+
+      Check_Sampled_Axial_Limits (Off, "Per-segment plan", T);
+      Check_Sampled_Axial_Limits (On, "Merged plan", T);
+   end Test_Continuous_Curved_Merges;
+
+   procedure Test_Cellular_Certificate (T : in out Trendy_Test.Operation'Class) is
+      Params  : Kinematic_Parameters;
+      Radius  : constant Length := 5.0 * mm;
+      Curved  : constant Unit_Speed_Axial_Derivative_Bounds :=
+        (Velocity     => [X_Axis | Y_Axis => 1.0, others => 0.0],
+         Acceleration => [X_Axis | Y_Axis => 1.0 / Radius, others => 0.0 / mm],
+         Jerk         => [X_Axis | Y_Axis => 1.0 / Radius ** 2, others => 0.0 / mm ** 2],
+         Snap         => [X_Axis | Y_Axis => 1.0 / Radius ** 3, others => 0.0 / mm ** 3],
+         Crackle      => [X_Axis | Y_Axis => 1.0 / Radius ** 4, others => 0.0 / mm ** 4]);
+      Ceiling : Velocity;
+      Eval    : Profile_Window_Evaluation;
+   begin
+      T.Register;
+      Params.Tangential_Velocity_Max := 250.0 * mm / s;
+      Params.Axial_Velocity_Maxes := [others => 250.0 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 5_000.0 * mm / s ** 2];
+      Params.Axial_Jerk_Maxes := [others => 500_000.0 * mm / s ** 3];
+      Params.Axial_Snap_Maxes := [others => 500_000_000.0 * mm / s ** 4];
+      Params.Axial_Crackle_Maxes := [others => 500_000_000_000.0 * mm / s ** 5];
+      Ceiling := Constant_Speed_Axial_Ceiling (Params, Curved, 250.0 * mm / s);
+      Eval :=
+        (Valid         => True,
+         Window        => (Start_Distance => 0.0 * mm, Distance => 30.0 * mm),
+         Limits        =>
+           Mixed_Derivative_Limits (Params, (Velocity => Curved.Velocity, others => <>), 250.0 * mm / s).Limits,
+         Max_Vel       => Ceiling,
+         Start_Max_Vel => Ceiling,
+         End_Max_Vel   => Ceiling,
+         Bounds        => Curved,
+         Curved        => True,
+         Cellular      => True);
+
+      declare
+         --  A ramp across one constant-curvature cell: tangential acceleration must make room for curvature.
+         Cells  : constant Path_Cells :=
+           [(Start => 0.0 * mm, Stop => 30.0 * mm, Bounds => Curved, Ceiling => Ceiling, Curved => True)];
+         Caches : Path_Cell_Caches (Cells'Range);
+         Result : constant Window_Profile_Result :=
+           Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, 0.0 * mm / s, 0.0 * mm / s, 0.8 * Ceiling);
+      begin
+         T.Assert (Result.Valid, "A ramp across a curved cell converges to a certified stretch");
+         T.Assert
+           (Result.Max_Crackle < Eval.Limits.Crackle_Max and then Result.Decel_Crackle < Eval.Limits.Crackle_Max,
+            "Both ramps are stretched below the tangent-only envelope");
+         for Is_Accel in Boolean loop
+            declare
+               Ramp  : constant Feedrate_Profile_Times :=
+                 (if Is_Accel then Result.Profile.Accel else Result.Profile.Decel);
+               C     : constant Crackle := (if Is_Accel then Result.Max_Crackle else Result.Decel_Crackle);
+               Peaks : constant Scalar_Derivative_Limits :=
+                 (Acceleration_Max => C * Ramp (1) * (Ramp (1) + Ramp (2)) * (2.0 * Ramp (1) + Ramp (2) + Ramp (3)),
+                  Jerk_Max         => C * Ramp (1) * (Ramp (1) + Ramp (2)),
+                  Snap_Max         => C * Ramp (1),
+                  Crackle_Max      => C);
+            begin
+               T.Assert
+                 (Mixed_Derivative_Time_Scale (Params, Curved, 0.8 * Ceiling, Peaks) >= 0.999,
+                  "Each stretched ramp passes the curved cell's certificate directly");
+            end;
+         end loop;
+      end;
+
+      declare
+         --  The same window without curvature needs no stretch.
+         Cells  : constant Path_Cells :=
+           [(Start   => 0.0 * mm,
+             Stop    => 30.0 * mm,
+             Bounds  => (Velocity => Curved.Velocity, others => <>),
+             Ceiling => 250.0 * mm / s,
+             Curved  => False)];
+         Caches : Path_Cell_Caches (Cells'Range);
+         Result : constant Window_Profile_Result :=
+           Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, 0.0 * mm / s, 0.0 * mm / s, 0.8 * Ceiling);
+      begin
+         T.Assert
+           (Result.Valid
+            and then Result.Max_Crackle = Eval.Limits.Crackle_Max
+            and then Result.Decel_Crackle = Eval.Limits.Crackle_Max,
+            "Straight cells keep the tangent-only ramps");
+      end;
+
+      declare
+         type Fractions is array (Positive range <>) of Dimensionless;
+         type Times is array (Positive range <>) of Time;
+         Ramp_Up   : constant Feedrate_Profile_Times := Optimal_Profile_For_Delta_V
+           (50.0 * mm / s, 5_000.0 * mm / s ** 2, 500_000.0 * mm / s ** 3, 5.0E8 * mm / s ** 4, 5.0E11 * mm / s ** 5);
+         Ramp_Down : constant Feedrate_Profile_Times := Optimal_Profile_For_Delta_V
+           (30.0 * mm / s, 2_000.0 * mm / s ** 2, 200_000.0 * mm / s ** 3, 2.0E8 * mm / s ** 4, 2.0E11 * mm / s ** 5);
+         Profile   : constant Feedrate_Profile := (Accel => Ramp_Up, Coast => 0.01 * s, Decel => Ramp_Down);
+         Up        : constant Crackle := 5.0E11 * mm / s ** 5;
+         Down      : constant Crackle := 2.0E11 * mm / s ** 5;
+         Start     : constant Velocity := 10.0 * mm / s;
+         Peak      : constant Velocity := Fast_Velocity_At_Max_Time (Ramp_Up, Up, Start);
+         Total     : constant Time := Total_Time (Profile);
+         Accel_End : constant Time := Total_Time (Ramp_Up);
+         Epsilon   : constant Time := 1.0E-9 * s;
+      begin
+         for Fraction of Fractions'[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] loop
+            T.Assert
+              (Profile_Distance_At_Time (Profile, Fraction * Total, Up, Up, Start)
+               = Distance_At_Time (Profile, Fraction * Total, Up, Start)
+               and then Profile_Velocity_At_Time (Profile, Fraction * Total, Up, Up, Start)
+                        = Velocity_At_Time (Profile, Fraction * Total, Up, Start),
+               "Equal ramp crackles evaluate exactly as one crackle");
+         end loop;
+         T.Assert
+           (abs (Profile_Distance_At_Time (Profile, Total, Up, Down, Start)
+              - (Fast_Distance_At_Max_Time (Ramp_Up, Up, Start) + Peak * Profile.Coast
+                 + Fast_Distance_At_Max_Time (Ramp_Down, -Down, Peak))) < 1.0E-12 * mm
+            and then abs (Profile_Velocity_At_Time (Profile, Total, Up, Down, Start)
+                          - Fast_Velocity_At_Max_Time (Ramp_Down, -Down, Peak)) < 1.0E-9 * mm / s,
+            "Separate ramp crackles drive each ramp to its own end");
+         for Join of Times'[Accel_End, Accel_End + Profile.Coast] loop
+            T.Assert
+              (abs (Profile_Velocity_At_Time (Profile, Join + Epsilon, Up, Down, Start)
+                    - Profile_Velocity_At_Time (Profile, Join - Epsilon, Up, Down, Start)) < 1.0E-6 * mm / s,
+               "Speed is continuous where the coast meets each ramp");
+         end loop;
+      end;
+   end Test_Cellular_Certificate;
+
+   procedure Test_Cellular_Endpoint_Ceilings (T : in out Trendy_Test.Operation'Class) is
+      Work  : aliased Planning_Workspace (6);
+      Block : aliased Execution_Block (6);
+      Map   : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+
+      procedure Prepare (Continuous : Boolean);
+      --  A 10 degree corner at corner 2, a collinear passthrough at corner 3 and a 3 degree corner at corner 4, under
+      --  the Benchy limits. Segments 3 and 4 form one timing run whose start crosses the sharper corner's transition
+      --  and whose end crosses the gentler one's, so its end ceilings differ.
+
+      procedure Prepare (Continuous : Boolean) is
+      begin
+         Reset_Early_Limiter_Block (Block);
+         Block.Params.Tangential_Velocity_Max := 250.0 * mm / s;
+         Block.Params.Axial_Velocity_Maxes := [others => 250.0 * mm / s];
+         Block.Params.Axial_Acceleration_Maxes := [others => 5_000.0 * mm / s ** 2];
+         Block.Params.Axial_Jerk_Maxes := [others => 500_000.0 * mm / s ** 3];
+         Block.Params.Axial_Snap_Maxes := [others => 500_000_000.0 * mm / s ** 4];
+         Block.Params.Axial_Crackle_Maxes := [others => 500_000_000_000.0 * mm / s ** 5];
+         Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.02 * mm];
+         Block.Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.02 * mm;
+         Block.Params.Continuous_Timing := Continuous;
+         Block.Original_Segment_Feedrates := [others => 250.0 * mm / s];
+         --  Corners 2, 3 and 4 are exactly collinear in binary: doubling 0.35 is exact.
+         Block.Corners :=
+           [[others => 0.0 * mm],
+            [X_Axis => 10.0 * mm, others => 0.0 * mm],
+            [X_Axis => 12.0 * mm, Y_Axis => 0.35 * mm, others => 0.0 * mm],
+            [X_Axis => 14.0 * mm, Y_Axis => 0.7 * mm, others => 0.0 * mm],
+            [X_Axis => 24.0 * mm, Y_Axis => 3.0 * mm, others => 0.0 * mm],
+            [X_Axis => 34.0 * mm, Y_Axis => 5.85 * mm, others => 0.0 * mm]];
+         for I in Block.Primitives'Range loop
+            Block.Corners (I) (E_Axis) := Block.Corners (I - 1) (E_Axis) + 0.04 * Primitive_Length (Block'Access, I);
+         end loop;
+         Normalize_And_Blend (Block, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (Block, Map);
+      end Prepare;
+   begin
+      T.Register;
+      Prepare (Continuous => True);
+      Work.Timing_Join_Vetoes (Block.Corners'Range) := [others => False];
+      Tested_Kinematic_Limiter.Run (Block, Map, Work'Access);
+      T.Assert
+        (Timing_Run_First (Block'Access, 3) = 3 and then Timing_Run_Last (Block'Access, 3) = 4,
+         "Segments 3 and 4 form one timing run");
+
+      declare
+         Feedrate : constant Velocity := Timing_Feedrate (Block'Access, 3);
+         Cells    : constant Path_Cells := Timing_Run_Cells (Block'Access, Map, 3, Feedrate);
+         Eval     : constant Profile_Window_Evaluation :=
+           Evaluate_Timing_Window
+             (Block'Access, Map, 3, (Start_Distance => 0.0 * mm, Distance => Timing_Total_Distance (Block'Access, 3)),
+              Feedrate);
+         Fixed    : constant Velocity := 0.5 * Eval.Start_Max_Vel;
+         Reached  : constant Velocity := Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Fixed, True);
+         Back     : constant Velocity :=
+           Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Eval.End_Max_Vel, False);
+         Caches   : Path_Cell_Caches (Cells'Range);
+      begin
+         T.Assert (Eval.Valid and then Eval.Cellular, "The whole-run window is cellular");
+         T.Assert
+           (Eval.Start_Max_Vel = Cells (Cells'First).Ceiling and then Eval.End_Max_Vel = Cells (Cells'Last).Ceiling,
+            "Each endpoint ceiling comes from the cell at that end");
+         T.Assert
+           (Eval.Start_Max_Vel < Eval.End_Max_Vel and then Eval.Max_Vel = Eval.Start_Max_Vel,
+            "The sharp corner's ceiling caps only the start, and Max_Vel is the lower ceiling");
+         T.Assert
+           (Reached > Eval.Start_Max_Vel and then Reached <= Eval.End_Max_Vel,
+            "The reached end may exceed the start's ceiling but not its own");
+         T.Assert
+           (Cellular_Profile_At_Peak (Block.Params, Cells, Caches, Eval, Fixed, Reached, Reached).Valid,
+            "The reached end speed is certified");
+         T.Assert (Back <= Eval.Start_Max_Vel, "Reaching back from a fast end never exceeds the start's ceiling");
+      end;
+
+      --  The limiter and generator must agree on every window, so the block plans without splitting the run.
+      Prepare (Continuous => True);
+      Plan_Kinematics (Block, Map, Work'Access);
+      T.Assert
+        ((for all C in Block.Corners'Range => not Work.Timing_Join_Vetoes (C)), "No timing run had to be split");
+      T.Assert (not Is_Timing_Junction (Block, 3), "The passthrough stays inside its run");
+      Check_Sampled_Axial_Limits (Block, "Asymmetric run", T);
+   end Test_Cellular_Endpoint_Ceilings;
+
+   procedure Test_Timing_Join_Vetoes (T : in out Trendy_Test.Operation'Class) is
+      Work  : aliased Planning_Workspace (Corners_Index'Last);
+      Block : aliased Execution_Block (Corners_Index'Last);
+      Map   : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+   begin
+      T.Register;
+      Prepare_Continuous_Line (Block, Work'Access, Continuous => True);
+      T.Assert (not Is_Timing_Junction (Block, 5), "The collinear line is one run");
+      Work.Timing_Join_Vetoes (Block.Corners'Range) := [5 => True, others => False];
+      Tested_Kinematic_Limiter.Run (Block, Map, Work'Access);
+      T.Assert
+        (Is_Timing_Junction (Block, 5) and then not Is_Timing_Junction (Block, 4)
+         and then not Is_Timing_Junction (Block, 6),
+         "A vetoed corner is a junction and only it splits the run");
+   end Test_Timing_Join_Vetoes;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
         [Test_Continuous_Passthrough_Timing'Unrestricted_Access,
          Test_Continuous_Timing_Blend_Seams'Unrestricted_Access,
+         Test_Continuous_Curved_Merges'Unrestricted_Access,
+         Test_Cellular_Certificate'Unrestricted_Access,
+         Test_Timing_Join_Vetoes'Unrestricted_Access,
+         Test_Cellular_Endpoint_Ceilings'Unrestricted_Access,
          Test_Inter_Block_Blending'Unrestricted_Access,
          Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
          Test_Profile_Extrusion_Limits'Unrestricted_Access,

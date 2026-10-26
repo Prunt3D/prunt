@@ -529,10 +529,12 @@ private
       Profile           : Feedrate_Profile :=
         (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
       Max_Crackle       : Crackle := 0.0 * mm / s ** 5;
+      Decel_Crackle     : Crackle := 0.0 * mm / s ** 5;
       Boundary_Velocity : Velocity := 0.0 * mm / s;
    end record;
    --  Generated motion outside the central profile window. Boundary_Velocity is the velocity at the join with the
-   --  central profile; its acceleration, jerk and snap are zero, as at every full-profile endpoint.
+   --  central profile; its acceleration, jerk and snap are zero, as at every full-profile endpoint. Max_Crackle
+   --  drives the acceleration ramp and Decel_Crackle the deceleration ramp; they differ only for cellular runs.
 
    type Profile_End_Pair is record
       Enabled        : Boolean := False;
@@ -541,21 +543,56 @@ private
    type Block_Profile_Ends is array (Corners_Index range <>) of Profile_End_Pair;
 
    type Profile_Window_Evaluation is record
-      Valid   : Boolean := False;
-      Window  : Profile_Window;
-      Limits  : Scalar_Derivative_Limits;
-      Max_Vel : Velocity := 0.0 * mm / s;
-      Bounds  : Unit_Speed_Axial_Derivative_Bounds;
-      Curved  : Boolean := False;
+      Valid         : Boolean := False;
+      Window        : Profile_Window;
+      Limits        : Scalar_Derivative_Limits;
+      Max_Vel       : Velocity := 0.0 * mm / s;
+      Start_Max_Vel : Velocity := 0.0 * mm / s;
+      End_Max_Vel   : Velocity := 0.0 * mm / s;
+      Bounds        : Unit_Speed_Axial_Derivative_Bounds;
+      Curved        : Boolean := False;
+      Cellular      : Boolean := False;
    end record;
    --  Limits contains the tangent-only envelope. Curved windows retain geometry so each candidate velocity
    --  change can be certified at its own speed and derivative peaks, rather than at an unreachable ceiling.
+   --  Start_Max_Vel and End_Max_Vel admit the speeds at the window's start and end.
+   --
+   --  A Cellular window belongs to a multi-segment timing run, and its profiles are certified against the run's
+   --  Path_Cells. Each endpoint ceiling comes from the cells at that end, Max_Vel is the lower of the two, and the
+   --  cells cap the peak. Its Bounds still merge the whole window, for the conservative retry only. In any other
+   --  window both endpoint ceilings equal Max_Vel.
 
    type Window_Profile_Result is record
-      Valid       : Boolean := False;
-      Profile     : Feedrate_Profile := (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
-      Max_Crackle : Crackle := 0.0 * mm / s ** 5;
+      Valid         : Boolean := False;
+      Profile       : Feedrate_Profile :=
+        (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
+      Max_Crackle   : Crackle := 0.0 * mm / s ** 5;
+      Decel_Crackle : Crackle := 0.0 * mm / s ** 5;
    end record;
+   --  Max_Crackle drives the acceleration ramp and Decel_Crackle the deceleration ramp.
+
+   type Path_Cell is record
+      Start, Stop : Length := 0.0 * mm;
+      Bounds      : Unit_Speed_Axial_Derivative_Bounds;
+      Ceiling     : Velocity := 0.0 * mm / s;
+      Curved      : Boolean := False;
+   end record;
+   --  One geometric piece of a timing run, in run distance: a transition portion, a primitive, or a zero-length point
+   --  where E's velocity jumps. Ceiling combines the constant-speed axial ceiling of Bounds, the motor-delta ceiling
+   --  and the feedrate; a point cell has only its E junction ceiling. Curved is False when Bounds have only velocity
+   --  terms; the tangent-only envelope of a window then already certifies every ramp built from it.
+
+   type Path_Cells is array (Positive range <>) of Path_Cell;
+
+   type Path_Cell_Caches is array (Positive range <>) of Mixed_Derivative_Cache;
+   --  One cache per cell, reusable across every certificate for the same cells and parameters.
+
+   function Cell_Overlaps (Cell : Path_Cell; Low, High : Length) return Boolean
+   is (if Cell.Stop > Cell.Start then Cell.Start < High and then Cell.Stop > Low
+       else Cell.Start >= Low and then Cell.Start <= High);
+   --  Whether a piece overlaps the interval with positive length, or a point cell lies inside it.
+
+   type Corner_Flags is array (Corners_Index range <>) of Boolean with Default_Component_Value => False;
 
    type Profile_Window_Evaluation_Set is array (Profile_Window_Candidate_Index) of Profile_Window_Evaluation;
    type Profile_Window_Evaluation_Cache is array (Finishing_Corners_Index range <>) of Profile_Window_Evaluation_Set;
@@ -589,6 +626,11 @@ private
       Reachable_Velocity_Memos : Reachable_Velocity_Memo_Cache (2 .. Last_Corner);
       --  The latest reachability across each segment in each direction. Lookahead cleanup passes revisit most
       --  segments with an unchanged neighbouring junction speed.
+      Timing_Joins             : Corner_Flags (1 .. Last_Corner);
+      --  Corners that the current timing-run assignment joins.
+      Timing_Join_Vetoes       : Corner_Flags (1 .. Last_Corner);
+      --  Corners that must stay junctions because a run joined across them could not be certified. Cleared with the
+      --  planning attempts.
 
       --  Corner_Blender
       Original_Extrusion_Positions : Block_Segment_Lengths (1 .. Last_Corner);
@@ -637,7 +679,10 @@ private
    --  Replan its two adjoining segments with the outer junctions fixed; keep only certified, faster pairs.
    --  If that fails after the first segment, try stopping at the next corner as well, replanning three segments.
    --  Keep the pair only if it beats both the current plan and stopping at the next corner alone.
-   --  Homing bypasses selection. This local search need not find the best combination of corner policies.
+   --  With Params.Continuous_Timing, a second sweep tries joining the timing runs on either side of each non-binding
+   --  curved junction (Can_Merge_Timing_Runs), again with the outer junctions fixed, and keeps only certified, faster
+   --  runs of at most Blend_Radius segments.
+   --  Homing bypasses selection. These local searches need not find the best combination of corner policies.
 
    function Extrusion_Junction_Ceiling
      (Block : not null access constant Execution_Block; Corner : Corners_Index; Limit : Velocity) return Velocity;
@@ -736,7 +781,18 @@ private
    --  run has one segment, and each function below reduces to its per-segment counterpart exactly.
 
    Timing_Run_Feedrate_Tolerance : constant Dimensionless := 1.0E-9;
-   --  Relative feedrate difference below which two segments can share a run. The run uses the lower feedrate.
+   --  Relative feedrate difference below which Joins_Timing_Run joins two segments.
+
+   Timing_Merge_Margin : constant Dimensionless := 0.05;
+   --  A curved junction is merged only if its planned speed is below its static limit by at least this fraction.
+   --  Such a junction cannot be a speed minimum, so stopping its acceleration there is pure cost.
+
+   Timing_Merge_Minimum_Ratio : constant Dimensionless := 1.0E-6;
+   --  A junction planned at a negligible fraction of its limit is effectively a stop, and stays a junction.
+
+   Cellular_Search_Tolerance : constant Dimensionless := 1.0E-3;
+   --  Relative width at which the cellular speed bisections stop. Every step costs a full cellular certificate, and
+   --  Reachable_Cellular_Velocity keeps only 0.999 of its result, so a finer search buys almost nothing.
 
    function Timing_Run_First
      (Block : not null access constant Execution_Block; Segment : Finishing_Corners_Index)
@@ -751,9 +807,35 @@ private
    --  Whether the segments ending and starting at interior Corner can share one profile: an exact line passthrough
    --  with no dwell, matching feedrates and a non-binding E velocity jump.
 
+   function Can_Merge_Timing_Runs
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Boolean;
+   --  Whether a curved or helical junction at interior Corner could be merged into one run: a passthrough or a
+   --  derivative-bounded transition with no dwell, positive feedrates and positive distance on both sides.
+   --  Plan_Kinematics tries only those junctions that its plan shows are not binding, and keeps a merge only if it
+   --  is faster.
+
+   procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Joins : Corner_Flags);
+   --  Group segments into maximal runs joined at the corners flagged in Joins. Every run has one segment unless
+   --  Params.Continuous_Timing.
+
    procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Forced_Junction : Corners_Index'Base);
    --  Group segments into maximal runs joined by Joins_Timing_Run corners. Forced_Junction, when it is a corner of
    --  Block, always ends a run; pass zero for none. Every run has one segment unless Params.Continuous_Timing.
+
+   function Is_Cellular_Run
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Boolean;
+   --  Whether the run has more than one segment, so its profiles are certified cell by cell.
+
+   function Timing_Run_Cell_Count
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Natural;
+
+   function Timing_Run_Cells
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Run_First : Finishing_Corners_Index;
+      Max_Vel   : Velocity) return Path_Cells;
+   --  The run's pieces in run distance, each with its own bounds and ceiling (capped by Max_Vel and its segment's
+   --  feedrate), and a point cell at every interior corner whose E velocity jump limits the speed.
 
    function Timing_Total_Distance
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Length;
@@ -769,7 +851,7 @@ private
 
    function Timing_Feedrate
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Velocity;
-   --  The lowest limited feedrate of the run's segments.
+   --  The highest limited feedrate of the run's segments. Each of the run's cells keeps its own segment's feedrate.
 
    function Evaluate_Timing_Window
      (Block     : not null access constant Execution_Block;
@@ -777,8 +859,9 @@ private
       Run_First : Finishing_Corners_Index;
       Window    : Profile_Window;
       Max_Vel   : Velocity) return Profile_Window_Evaluation;
-   --  Evaluate_Profile_Window for a window in run distance, merging every overlapped segment's bounds and motor-delta
-   --  ceiling.
+   --  Evaluate_Profile_Window for a window in run distance. A single-segment run is evaluated exactly as before; a
+   --  longer run gives a Cellular evaluation whose Bounds merge every overlapped segment's bounds, and whose
+   --  endpoint ceilings come from the cells containing each end.
 
    function Timing_Motion_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Time;
@@ -830,6 +913,44 @@ private
    function Reachable_Window_Velocity
      (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel : Velocity) return Velocity;
    --  Search velocity changes using the same trajectory certificate as final profile generation.
+
+   function Cellular_Profile_At_Peak
+     (Params                   : Kinematic_Parameters;
+      Cells                    : Path_Cells;
+      Caches                   : in out Path_Cell_Caches;
+      Eval                     : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity) return Window_Profile_Result
+   with Pre => Caches'First = Cells'First and then Caches'Last = Cells'Last;
+   --  Profile_At_Peak for a cellular window. Each ramp is certified separately, in every cell it crosses, at the
+   --  highest speed it reaches there; a ramp that fails is stretched in time and certified again. The coast must stay
+   --  below every cell ceiling it crosses. Caches must only be reused with the same Params and Cells.
+
+   function Generate_Cellular_Profile
+     (Params             : Kinematic_Parameters;
+      Cells              : Path_Cells;
+      Eval               : Profile_Window_Evaluation;
+      Start_Vel, End_Vel : Velocity) return Window_Profile_Result;
+   --  Generate_Window_Profile with the cellular certificate.
+
+   function Reachable_Cellular_Velocity
+     (Params    : Kinematic_Parameters;
+      Cells     : Path_Cells;
+      Eval      : Profile_Window_Evaluation;
+      Fixed_Vel : Velocity;
+      Forward   : Boolean) return Velocity;
+   --  Reachable_Window_Velocity with the cellular certificate. A cellular window is not symmetric, so Forward selects
+   --  whether Fixed_Vel is at the start (reach the end) or at the end (reach the start). The result never exceeds
+   --  the reached end's ceiling.
+
+   function Profile_Distance_At_Time
+     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity)
+      return Length;
+   --  Distance_At_Time with separate ramp crackles. Equal crackles give exactly Distance_At_Time.
+
+   function Profile_Velocity_At_Time
+     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity)
+      return Velocity;
+   --  Velocity_At_Time with separate ramp crackles. Equal crackles give exactly Velocity_At_Time.
 
    function Identical (Left, Right : Velocity) return Boolean;
    --  Compare representations, including the sign of zero, so a deterministic result is reused only for the
@@ -966,10 +1087,12 @@ private
       Corner_Velocity_Limits : Block_Corner_Velocity_Limits (1 .. N_Corners);
 
       --  Feedrate_Profile_Generator
-      Feedrate_Profiles : Block_Feedrate_Profiles (2 .. N_Corners);
-      Profile_Crackles  : Block_Profile_Crackles (2 .. N_Corners);
-      Profile_Windows   : Block_Profile_Windows (2 .. N_Corners);
-      Profile_Ends      : Block_Profile_Ends (2 .. N_Corners) := [others => <>];
+      Feedrate_Profiles      : Block_Feedrate_Profiles (2 .. N_Corners);
+      Profile_Crackles       : Block_Profile_Crackles (2 .. N_Corners);
+      Profile_Decel_Crackles : Block_Profile_Crackles (2 .. N_Corners);
+      --  Crackles of each central profile's acceleration and deceleration ramps. They differ only for cellular runs.
+      Profile_Windows        : Block_Profile_Windows (2 .. N_Corners);
+      Profile_Ends           : Block_Profile_Ends (2 .. N_Corners) := [others => <>];
       --  Enabled entries replace the coasts outside Profile_Windows with generated acceleration profiles. This lets
       --  the retained primitive accelerate independently of tight bounds on the curved ends.
 
@@ -977,9 +1100,10 @@ private
       Timing_Run_Back  : Block_Timing_Run_Offsets (2 .. N_Corners);
       Timing_Run_Ahead : Block_Timing_Run_Offsets (2 .. N_Corners);
       --  Segment I belongs to the timing run of segments I - Timing_Run_Back (I) .. I + Timing_Run_Ahead (I), assigned
-      --  by Kinematic_Limiter. A run's interior corners are not junctions: the run has one profile, window and set of
-      --  ends, stored at its first segment and expressed in run distance, and its other entries are unused. Offsets
-      --  are relative, so copying a window that does not cut a run keeps them valid.
+      --  by Kinematic_Limiter and changed by Plan_Kinematics' local searches. A run's interior corners are not
+      --  junctions: the run has one profile, window and set of ends, stored at its first segment and expressed in run
+      --  distance, and its other entries are unused. Offsets are relative, so copying a window that does not cut a run
+      --  keeps them valid.
 
       Timing_Distance_Offsets : Block_Segment_Lengths (2 .. N_Corners);
       Timing_Time_Offsets     : Block_Segment_Times (2 .. N_Corners);
