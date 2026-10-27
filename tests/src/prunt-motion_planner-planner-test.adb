@@ -2401,6 +2401,39 @@ package body Prunt.Motion_Planner.Planner.Test is
                  Speed));
       end E_Ceiling;
 
+      function Window_Limits (Curved : Boolean) return Scalar_Derivative_Limits;
+      --  The scalar limits at Speed of a window over corner 2's transition on the outgoing segment, or of the same
+      --  window without the transition's curvature.
+
+      function Window_Limits (Curved : Boolean) return Scalar_Derivative_Limits is
+         Bounds : Unit_Speed_Axial_Derivative_Bounds :=
+           Window_Axial_Derivative_Bounds
+             (Block'Access, 3, (Start_Distance => 0.0 * mm, Distance => Block.Extrusion_Transitions (2).Half_Width));
+      begin
+         if not Curved then
+            Bounds.Acceleration (E_Axis) := 0.0 / mm;
+            Bounds.Jerk (E_Axis) := 0.0 / mm ** 2;
+            Bounds.Snap (E_Axis) := 0.0 / mm ** 3;
+            Bounds.Crackle (E_Axis) := 0.0 / mm ** 4;
+         end if;
+         return Mixed_Derivative_Limits (Block.Params, Bounds, Speed).Limits;
+      end Window_Limits;
+
+      function Keeps_Limits return Boolean;
+      --  Whether the transition leaves a profile over it every scalar limit it would have without the curvature.
+
+      function Keeps_Limits return Boolean is
+         With_Transition : constant Scalar_Derivative_Limits := Window_Limits (True);
+         Without         : constant Scalar_Derivative_Limits := Window_Limits (False);
+         Tolerance       : constant Dimensionless := 1.0 - 1.0E-6;
+      begin
+         return
+           With_Transition.Acceleration_Max >= Tolerance * Without.Acceleration_Max
+           and then With_Transition.Jerk_Max >= Tolerance * Without.Jerk_Max
+           and then With_Transition.Snap_Max >= Tolerance * Without.Snap_Max
+           and then With_Transition.Crackle_Max >= Tolerance * Without.Crackle_Max;
+      end Keeps_Limits;
+
       Narrowest : Extrusion_Transition;
    begin
       T.Register;
@@ -2413,8 +2446,9 @@ package body Prunt.Motion_Planner.Planner.Test is
          "Loose E limits give a transition well inside its distance cap and deviation; half-width"
          & Narrowest.Half_Width'Image);
       T.Assert (E_Ceiling = Speed, "The transition does not lower the corner's ceiling");
+      T.Assert (Keeps_Limits, "The transition leaves profiles through it their scalar limits up to the ceiling");
       Block.Extrusion_Transitions (2).Half_Width := 0.99 * Narrowest.Half_Width;
-      T.Assert (E_Ceiling < Speed, "Any narrower transition would lower the corner's ceiling");
+      T.Assert (not Keeps_Limits, "Any narrower transition would take scalar limits from profiles through it");
       Block.Extrusion_Transitions (2) := Narrowest;
 
       Plan_Fixed_Geometry (Block, Motor_Map, Workspace);
