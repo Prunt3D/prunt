@@ -150,7 +150,7 @@ generic
    Runner_CPU : System.Multiprocessors.CPU_Range := System.Multiprocessors.Not_A_Specific_CPU;
    --  CPU to run all motion planning on.
 
-   Max_Corners : Max_Corners_Type := 50_000;
+   Max_Corners : Max_Corners_Type := 5_000;
    --  The maximum number of corners in one execution block. Each planner allocates Block_Capacity blocks of this
    --  size, plus its planning workspace, during initialisation. Increasing this limit increases every slot's storage;
    --  execution blocks are reused without per-block allocation. Once a block reaches the last tenth of this limit it
