@@ -126,12 +126,10 @@ package Prunt.Motion_Planner is
             Transition_Distance_Max : Length range 0.0 * mm .. Length'Last := 2.0 * mm;
             --  Where the extrusion density changes at a moving junction, E's density moves between the two segment
             --  densities along a fixed smooth curve over the path either side of the junction. E stays a function of
-            --  path position, so every E limit holds through the junction. Each curve is the narrowest that leaves
-            --  every profile through it the speed and the acceleration, jerk, snap and crackle it would have without
-            --  the curve, up to the junction speed that the feedrates and XYZ cornering allow, or up to the feedrate
-            --  where the curve reaches past the XYZ corner transition. It reaches at most this far along the path on
-            --  each side, and stays within the E entry of the cornering model's deviation limits. A change that fits
-            --  no curve, including any with zero E deviation or Sharp_SCV, is not smoothed.
+            --  path position, so every E limit holds through the junction. Each curve is the narrowest whose E limits
+            --  do not lower the junction speed that the feedrates and XYZ cornering allow, but it reaches at most this
+            --  far along the path on each side, and within the E entry of the cornering model's deviation limits. A
+            --  change that fits no curve, including any with zero E deviation or Sharp_SCV, is not smoothed.
 
             Smoothed_Decrease_Ratio_Min : Dimensionless range -1.0 .. 1.0 := 0.1;
             --  A density change whose magnitude does not grow is smoothed only where the outgoing density divided by

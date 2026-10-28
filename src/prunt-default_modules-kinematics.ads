@@ -364,9 +364,8 @@ private
             Maximum_Transition_Distance : Length range 0.0 * mm .. 1.0E100 * mm := 2.0 * mm;
             --  E's extrusion ratio changes gradually along the path on both sides of the junction, so every E limit,
             --  including acceleration, jerk, snap and crackle, also holds through the junction. The change is spread
-            --  over just enough of the path that E's limits neither slow the junction below the speed that the
-            --  feedrate and XYZ cornering allow nor reduce the acceleration, jerk, snap and crackle available to the
-            --  motion through it, but never further than this distance along the path on each side.
+            --  over just enough of the path that E's limits do not slow the junction below the speed that the
+            --  feedrate and XYZ cornering allow, but never further than this distance along the path on each side.
             --  The E entry of the cornering model's axial deviation limits also bounds the spread, and with it how
             --  far E departs from the commanded extrusion. A change that cannot be spread, including every change with
             --  zero E deviation or Sharp_SCV cornering, uses Maximum_Velocity_Change instead. Zero spreads no change.

@@ -904,149 +904,21 @@ package body Prunt.Motion_Planner.Planner is
       Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Corner    : Corners_Index) return Length
    is
-      type Order is range 2 .. 5;
-      type Power is range 1 .. 4;
-
-      Change  : constant Dimensionless :=
+      Change : constant Dimensionless :=
         abs (Block.Extrusion_Densities (Corner + 1) - Block.Extrusion_Densities (Corner));
-      Middle  : constant Dimensionless :=
-        abs (0.5 * (Block.Extrusion_Densities (Corner) + Block.Extrusion_Densities (Corner + 1)));
-      Limits  : constant array (Order) of Dimensionless :=
-        [Dimensionless (Block.Params.Axial_Acceleration_Maxes (E_Axis) / (mm / s ** 2)),
-         Dimensionless (Block.Params.Axial_Jerk_Maxes (E_Axis) / (mm / s ** 3)),
-         Dimensionless (Block.Params.Axial_Snap_Maxes (E_Axis) / (mm / s ** 4)),
-         Dimensionless (Block.Params.Axial_Crackle_Maxes (E_Axis) / (mm / s ** 5))];
-      Widest  : Length := 0.0 * mm;
-      Ceiling : Velocity;
-      Result  : Length;
+      Widest : Length := 0.0 * mm;
+      Speed  : Dimensionless;
+      Result : Length := Narrowest_Extrusion_Transition;
 
-      function Narrowest_At (Speed : Velocity; Side : Finishing_Corners_Index) return Length;
-      --  The narrowest half-width at which a window over Side's primitive and its half of the transition keeps a
-      --  constant-speed ceiling of Speed and the scalar limits it has at Speed without the transition. Length'Last
-      --  when no width does.
+      procedure Fit (Maximum, Limit : Dimensionless; Order : Positive);
+      --  Widen Result until the transition's E derivative of this Order at Speed fits Limit, in mm/s**Order. At a
+      --  constant speed v it peaks at v**Order * Change * Maximum / (2 * Half_Width)**(Order - 1).
 
-      function Narrowest_At (Speed : Velocity; Side : Finishing_Corners_Index) return Length is
-         Bounds       : Unit_Speed_Axial_Derivative_Bounds :=
-           Primitive_Derivative_Bounds
-             (Block, Side, Block.Primitive_Start_Distances (Side), Block.Primitive_Distances (Side));
-         Density      : constant Dimensionless := Dimensionless'Max (abs Block.Extrusion_Densities (Side), Middle);
-         --  E's largest density over Side's half of the transition, which runs monotonically to Middle.
-         Margin       : constant Dimensionless := Speed / (0.999 * mm / s) * (1.0 + 1.0E-9);
-         Target       : Mixed_Derivative_Limit_Result;
-         V            : Dimensionless;
-         A, J, S4, C  : Dimensionless := 0.0;
-         Coefficients : array (Order, Power) of Dimensionless := [others => [others => 0.0]];
-         Remainders   : array (Order) of Dimensionless;
-         Low, High    : Dimensionless := Dimensionless'Last;
-         --  Bracket the largest feasible X = 1 / (2 * Half_Width), in 1/mm.
-
-         function Fits (X : Dimensionless) return Boolean;
-         --  Whether every chain-rule budget below fits at X.
-
-         function Fits (X : Dimensionless) return Boolean is
-            Sum : Dimensionless;
-         begin
-            for K in Order loop
-               Sum := 0.0;
-               for P in reverse Power loop
-                  Sum := (Sum + Coefficients (K, P)) * X;
-               end loop;
-               if Sum > Remainders (K) then
-                  return False;
-               end if;
-            end loop;
-            return True;
-         end Fits;
+      procedure Fit (Maximum, Limit : Dimensionless; Order : Positive) is
       begin
-         --  The scalar limits of the window with the transition's density but without its curvature.
-         Bounds.Velocity (E_Axis) := Density;
-         Target := Mixed_Derivative_Limits (Block.Params, Bounds, Speed);
-         V := Target.Max_Vel / (mm / s);
-         if Target.Valid then
-            --  Mixed_Derivative_Limits reports 0.999 of the scale its budgets allow, and the transition must leave
-            --  the window that whole scale.
-            A := Target.Limits.Acceleration_Max / (0.999 * mm / s ** 2);
-            J := Target.Limits.Jerk_Max / (0.999 * mm / s ** 3);
-            S4 := Target.Limits.Snap_Max / (0.999 * mm / s ** 4);
-            C := Target.Limits.Crackle_Max / (0.999 * mm / s ** 5);
-         end if;
-
-         --  E's chain-rule budgets as Mixed_Derivative_Limits evaluates them, with distance derivatives Density and
-         --  Change * Transition_Derivative_Maxima (K - 1) * X ** (K - 1), at speed V and the target's limits. Each
-         --  is a polynomial in X with nonnegative coefficients, so the feasible X form an interval from zero.
-         Coefficients (2, 1) := Change * Transition_Derivative_Maxima (1) * V ** 2;
-         Coefficients (3, 1) := 3.0 * Change * Transition_Derivative_Maxima (1) * V * A;
-         Coefficients (3, 2) := Change * Transition_Derivative_Maxima (2) * V ** 3;
-         Coefficients (4, 1) := Change * Transition_Derivative_Maxima (1) * (4.0 * V * J + 3.0 * A ** 2);
-         Coefficients (4, 2) := 6.0 * Change * Transition_Derivative_Maxima (2) * V ** 2 * A;
-         Coefficients (4, 3) := Change * Transition_Derivative_Maxima (3) * V ** 4;
-         Coefficients (5, 1) := Change * Transition_Derivative_Maxima (1) * (5.0 * V * S4 + 10.0 * A * J);
-         Coefficients (5, 2) := Change * Transition_Derivative_Maxima (2) * (10.0 * V ** 2 * J + 15.0 * V * A ** 2);
-         Coefficients (5, 3) := 10.0 * Change * Transition_Derivative_Maxima (3) * V ** 3 * A;
-         Coefficients (5, 4) := Change * Transition_Derivative_Maxima (4) * V ** 5;
-         Remainders :=
-           [Limits (2) - Density * A, Limits (3) - Density * J, Limits (4) - Density * S4, Limits (5) - Density * C];
-
-         for K in Order loop
-            declare
-               Terms : Natural := 0;
-            begin
-               for P in Power loop
-                  if Coefficients (K, P) > 0.0 then
-                     Terms := Terms + 1;
-                  end if;
-               end loop;
-               if Terms > 0 and then Remainders (K) <= 0.0 then
-                  return Length'Last;
-               end if;
-               --  Each monomial alone bounds the root from above; all of them within an equal share of the budget
-               --  bound it from below, so the bracket spans at most a factor of four.
-               for P in Power loop
-                  if Coefficients (K, P) > 0.0 then
-                     High :=
-                       Dimensionless'Min
-                         (High, Nth_Root_Ratio (Remainders (K), Coefficients (K, P), Positive (P)));
-                     Low :=
-                       Dimensionless'Min
-                         (Low,
-                          Nth_Root_Ratio (Remainders (K), Dimensionless (Terms) * Coefficients (K, P), Positive (P)));
-                  end if;
-               end loop;
-            end;
-            --  The window's constant-speed ceiling keeps 0.999 of each limit; the margin keeps roundoff in the root
-            --  from lowering it below Speed.
-            declare
-               Ceiling_Root : constant Dimensionless :=
-                 Nth_Root_Ratio
-                   (Limits (K),
-                    Change * Transition_Derivative_Maxima (Positive (K) - 1) * Margin ** Positive (K),
-                    Positive (K) - 1);
-            begin
-               High := Dimensionless'Min (High, Ceiling_Root);
-               Low := Dimensionless'Min (Low, Ceiling_Root);
-            end;
-         end loop;
-
-         if Low <= 0.0 then
-            return Length'Last;
-         end if;
-         if Fits (High) then
-            Low := High;
-         else
-            for Iteration in 1 .. 30 loop
-               declare
-                  Mid : constant Dimensionless := Low + 0.5 * (High - Low);
-               begin
-                  if Fits (Mid) then
-                     Low := Mid;
-                  else
-                     High := Mid;
-                  end if;
-               end;
-            end loop;
-         end if;
-         return 0.5 * mm / Low;
-      end Narrowest_At;
+         Result :=
+           Length'Max (Result, 0.5 * mm * Nth_Root_Ratio (Change * Maximum * Speed ** Order, Limit, Order - 1));
+      end Fit;
    begin
       if not Smooths_Density_Change (Block, Corner) then
          return 0.0 * mm;
@@ -1054,39 +926,37 @@ package body Prunt.Motion_Planner.Planner is
       Widest := Block.Params.Extrusion_Cornering.Transition_Distance_Max;
       --  Only a quotient beyond every representable cap overflows here, leaving the cap.
       Widest := Length'Min (Widest, Extrusion_Deviation (Block.Params) / (Change * Transition_Deviation_Ratio));
-      Ceiling :=
+      --  Constant_Speed_Axial_Ceiling keeps 0.999 of each limit. The small extra margin keeps roundoff in the root
+      --  from lowering the ceiling the transition should leave alone.
+      Speed :=
         Corner_Policy_Ceiling
           (Block,
            Motor_Map,
            Corner,
            Derivative_Bounds (Block.Corner_Transitions (Corner)),
-           Velocity'Min (Block.Limited_Segment_Feedrates (Corner), Block.Limited_Segment_Feedrates (Corner + 1)));
-      if Ceiling <= 0.0 * mm / s then
+           Velocity'Min (Block.Limited_Segment_Feedrates (Corner), Block.Limited_Segment_Feedrates (Corner + 1)))
+        / (0.999 * mm / s)
+        * (1.0 + 1.0E-9);
+      if Speed <= 0.0 then
          --  A stopped corner needs no transition.
          return 0.0 * mm;
       end if;
-
-      --  Within the XYZ transition the transition only meets the corner's coasts and curved windows, which move no
-      --  faster than Ceiling. Beyond it on either side it also meets that segment's straight windows, which reach
-      --  the segment's feedrate.
-      Result := Length'Max (Narrowest_At (Ceiling, Corner), Narrowest_At (Ceiling, Corner + 1));
-      for Pass in 1 .. 2 loop
-         exit when Result >= Widest;
-         if Result > Segment_End_Transition_Distance (Block, Corner)
-           and then Block.Limited_Segment_Feedrates (Corner) > Ceiling
-         then
-            Result := Length'Max (Result, Narrowest_At (Block.Limited_Segment_Feedrates (Corner), Corner));
-         end if;
-         if Result > Segment_Start_Transition_Distance (Block, Corner + 1)
-           and then Block.Limited_Segment_Feedrates (Corner + 1) > Ceiling
-         then
-            Result := Length'Max (Result, Narrowest_At (Block.Limited_Segment_Feedrates (Corner + 1), Corner + 1));
-         end if;
-      end loop;
-      return Length'Min (Length'Max (Result, Narrowest_Extrusion_Transition), Widest);
+      Fit
+        (Transition_Derivative_Maxima (1),
+         Dimensionless (Block.Params.Axial_Acceleration_Maxes (E_Axis) / (mm / s ** 2)),
+         2);
+      Fit
+        (Transition_Derivative_Maxima (2), Dimensionless (Block.Params.Axial_Jerk_Maxes (E_Axis) / (mm / s ** 3)), 3);
+      Fit
+        (Transition_Derivative_Maxima (3), Dimensionless (Block.Params.Axial_Snap_Maxes (E_Axis) / (mm / s ** 4)), 4);
+      Fit
+        (Transition_Derivative_Maxima (4),
+         Dimensionless (Block.Params.Axial_Crackle_Maxes (E_Axis) / (mm / s ** 5)),
+         5);
+      return Length'Min (Result, Widest);
    exception
       when Constraint_Error =>
-         --  Only an extreme speed, density or limit overflows, and the widest transition slows the corner least.
+         --  Only an extreme speed or density overflows, and the widest transition slows the corner least.
          return Widest;
    end Extrusion_Transition_Reach;
 

@@ -60,8 +60,8 @@ pragma Check_Float_Overflow;
 --     Axial_Velocity_Maxes are applied.
 --
 --     Finally, in Smooth_Deviation mode, each moving density change that its ratios allow gets an E transition: a
---     fixed smooth density curve over the path either side of its corner, just wide enough that E's limits take
---     neither speed nor scalar limits from the profile windows over it, within Transition_Distance_Max, the E
+--     fixed smooth density curve over the path either side of its corner, just wide enough that E's limits do not
+--     lower the corner speed that the feedrates and XYZ transition allow, within Transition_Distance_Max, the E
 --     deviation and the neighbouring segments. E stays a function of path position, so the later stages bound its
 --     distance derivatives just as they bound curved XYZ geometry, and no transition changes with the speed through
 --     it.
@@ -743,12 +743,9 @@ private
      (Block     : not null access constant Execution_Block;
       Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Corner    : Corners_Index) return Length;
-   --  The half-width of the transition that interior Corner would take with unlimited room: the narrowest at which
-   --  a window over either neighbouring primitive and the transition keeps the constant-speed ceiling and the scalar
-   --  limits from Mixed_Derivative_Limits that it has without the transition's curvature. Windows inside the XYZ
-   --  transition are taken at the corner's ceiling from its feedrates and Corner_Policy_Ceiling, and those beyond it
-   --  at their segment's feedrate. The result is at least 0.001 mm and at most Transition_Distance_Max and what
-   --  Extrusion_Deviation allows. Zero when Smooths_Density_Change is False or the corner stops.
+   --  The half-width of the transition that interior Corner would take with unlimited room: the narrowest whose E
+   --  derivative bounds do not lower the corner's ceiling from its feedrates and Corner_Policy_Ceiling, but within
+   --  Transition_Distance_Max and Extrusion_Deviation. Zero when Smooths_Density_Change is False or the corner stops.
 
    function Plan_Extrusion_Transition
      (Block : not null access constant Execution_Block; Corner : Corners_Index; Reach, Incoming, Outgoing : Length)
