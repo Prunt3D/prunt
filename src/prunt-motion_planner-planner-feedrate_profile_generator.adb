@@ -152,17 +152,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
           else Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel));
 
       procedure Consider_Split_Profile (Conservative : Boolean; Accepted : out Boolean) is
-         Start_Curve   : constant Length := Timing_Start_Curve_Distance (Block, Finishing_Corner);
-         End_Curve     : constant Length := Timing_End_Curve_Distance (Block, Finishing_Corner);
-         Middle        : constant Length :=
-           (if Start_Curve = Timing_Start_Transition_Distance (Block, Finishing_Corner)
-              and then End_Curve = Timing_End_Transition_Distance (Block, Finishing_Corner)
-            then Timing_Straight_Distance (Block, Finishing_Corner)
-            else Total - Start_Curve - End_Curve);
-         Split_Windows : constant array (Positive range 1 .. 3) of Profile_Window :=
-           [(Start_Distance => 0.0 * mm, Distance => Start_Curve),
-            (Start_Distance => Start_Curve, Distance => Middle),
-            (Start_Distance => Start_Curve + Middle, Distance => Total - (Start_Curve + Middle))];
+         Split_Windows : constant Split_Profile_Windows := Timing_Split_Windows (Block, Finishing_Corner);
          Evals         : array (Split_Windows'Range) of Profile_Window_Evaluation;
          Profiles      : array (Split_Windows'Range) of Feedrate_Profile;
          Decels        : array (Split_Windows'Range) of Crackle;
@@ -170,7 +160,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          Split_Time    : Time := 0.0 * s;
       begin
          Accepted := False;
-         if Start_Curve = 0.0 * mm and then Split_Windows (3).Distance = 0.0 * mm then
+         if Split_Windows (1).Distance = 0.0 * mm and then Split_Windows (3).Distance = 0.0 * mm then
             Accepted := True;
             return;
          end if;

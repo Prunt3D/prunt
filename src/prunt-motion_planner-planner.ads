@@ -975,6 +975,18 @@ private
    --  After the profile of the multi-segment run starting at Run_First is selected, solve each segment's offsets and
    --  duration, and record the run speed at each interior corner.
 
+   function Window_Between (First, Last : Length) return Profile_Window;
+   --  The window from First to Last, shortened by roundoff where needed so that it never reaches past Last.
+
+   type Split_Profile_Windows is array (Positive range 1 .. 3) of Profile_Window;
+
+   function Timing_Split_Windows
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index)
+      return Split_Profile_Windows;
+   --  The curved start, the middle and the curved end of the timing run starting at Run_First, as consecutive windows
+   --  covering the run. In a multi-segment run the middle never reaches past the cut where the end curve's cells
+   --  start, and where the curves meet it is empty rather than negative through roundoff.
+
    function Segment_Profile_Window_Candidates
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
       return Profile_Window_Candidates;

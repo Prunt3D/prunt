@@ -4887,6 +4887,35 @@ package body Prunt.Motion_Planner.Planner.Test is
       end;
 
       declare
+         --  A straight window between two tight corners, entered and left at the corners' ceiling, which is all their
+         --  curvature allows. The corners only touch the window's ends, where the ramps begin and end.
+         Corner_Radius  : constant Length := 0.05 * mm;
+         Tight          : constant Unit_Speed_Axial_Derivative_Bounds :=
+           (Velocity     => [X_Axis | Y_Axis => 1.0, others => 0.0],
+            Acceleration => [X_Axis | Y_Axis => 1.0 / Corner_Radius, others => 0.0 / mm],
+            Jerk         => [X_Axis | Y_Axis => 1.0 / Corner_Radius ** 2, others => 0.0 / mm ** 2],
+            Snap         => [X_Axis | Y_Axis => 1.0 / Corner_Radius ** 3, others => 0.0 / mm ** 3],
+            Crackle      => [X_Axis | Y_Axis => 1.0 / Corner_Radius ** 4, others => 0.0 / mm ** 4]);
+         Corner_Ceiling : constant Velocity := Constant_Speed_Axial_Ceiling (Params, Tight, 250.0 * mm / s);
+         Straight       : constant Unit_Speed_Axial_Derivative_Bounds := (Velocity => Curved.Velocity, others => <>);
+         Cells          : constant Path_Cells :=
+           [(Start => 0.0 * mm, Stop => 0.05 * mm, Bounds => Tight, Ceiling => Corner_Ceiling, Curved => True),
+            (Start => 0.05 * mm, Stop => 30.05 * mm, Bounds => Straight, Ceiling => Ceiling, Curved => False),
+            (Start => 30.05 * mm, Stop => 30.1 * mm, Bounds => Tight, Ceiling => Corner_Ceiling, Curved => True)];
+         Caches         : Path_Cell_Caches (Cells'Range);
+         Inner          : constant Profile_Window_Evaluation :=
+           (Eval with delta Window => (Start_Distance => 0.05 * mm, Distance => 30.0 * mm));
+         Result         : constant Window_Profile_Result :=
+           Cellular_Profile_At_Peak (Params, Cells, Caches, Inner, Corner_Ceiling, Corner_Ceiling, 0.8 * Ceiling);
+      begin
+         T.Assert
+           (Result.Valid
+            and then Result.Max_Crackle = Inner.Limits.Crackle_Max
+            and then Result.Decel_Crackle = Inner.Limits.Crackle_Max,
+            "Cells that only touch a ramp's ends leave it unstretched");
+      end;
+
+      declare
          type Fractions is array (Positive range <>) of Dimensionless;
          type Times is array (Positive range <>) of Time;
          Ramp_Up   : constant Feedrate_Profile_Times := Optimal_Profile_For_Delta_V
@@ -4984,7 +5013,18 @@ package body Prunt.Motion_Planner.Planner.Test is
          Back     : constant Velocity :=
            Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Eval.End_Max_Vel, False);
          Caches   : Path_Cell_Caches (Cells'Range);
+         Windows  : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block'Access, 3);
+         Run_End  : constant Length := Timing_Total_Distance (Block'Access, 3);
+         Inner    : constant Length := Run_End - Timing_End_Transition_Distance (Block'Access, 3);
       begin
+         T.Assert
+           ((for some C of Cells => C.Start = Inner and then C.Stop = Run_End),
+            "The run's end transition is cut exactly where its windows leave it out");
+         T.Assert
+           ((for all C of Cells =>
+               (if Cell_Overlaps (C, Windows (4).Start_Distance, Windows (4).Start_Distance + Windows (4).Distance)
+                then C.Stop <= Inner)),
+            "A window that leaves out the end transition overlaps none of it");
          T.Assert (Eval.Valid and then Eval.Cellular, "The whole-run window is cellular");
          T.Assert
            (Eval.Start_Max_Vel = Cells (Cells'First).Ceiling and then Eval.End_Max_Vel = Cells (Cells'Last).Ceiling,
@@ -4999,6 +5039,89 @@ package body Prunt.Motion_Planner.Planner.Test is
            (Cellular_Profile_At_Peak (Block.Params, Cells, Caches, Eval, Fixed, Reached, Reached).Valid,
             "The reached end speed is certified");
          T.Assert (Back <= Eval.Start_Max_Vel, "Reaching back from a fast end never exceeds the start's ceiling");
+      end;
+
+      declare
+         --  Lengthening segment 3 moves where segment 4 starts in run distance, so segment 4's cuts measured from
+         --  either end round differently in each variant. Emptying segment 4's primitive puts its transitions' cuts,
+         --  one measured from each end, at the same point, and so do E transitions that meet inside it. Without a
+         --  density change those transitions add no bounds.
+         type Shape is (Plain, Empty_Primitive, Meeting_Transitions);
+         Base_Primitives  : constant array (3 .. 4) of Length :=
+           [Block.Primitive_Distances (3), Block.Primitive_Distances (4)];
+         Base_Transitions : constant Block_Extrusion_Transitions (3 .. 4) := Block.Extrusion_Transitions (3 .. 4);
+         Feedrate         : constant Velocity := Timing_Feedrate (Block'Access, 3);
+         Gapless          : Boolean := True;
+         Clear            : Boolean := True;
+         Straight         : Boolean := True;
+      begin
+         for Variant in 0 .. 63 loop
+            for Kind in Shape loop
+               Block.Primitive_Distances (3) := Base_Primitives (3) + Dimensionless (Variant) * 1.0E-6 * mm;
+               Block.Primitive_Distances (4) := (if Kind = Empty_Primitive then 0.0 * mm else Base_Primitives (4));
+               Block.Extrusion_Transitions (3 .. 4) := Base_Transitions;
+               if Kind = Meeting_Transitions then
+                  Block.Extrusion_Transitions (4) := (Half_Width => 0.5 * mm, Density_Change => 0.0);
+                  Block.Extrusion_Transitions (3) :=
+                    (Half_Width => Segment_Total_Distance (Block'Access, 4) - 0.5 * mm, Density_Change => 0.0);
+               end if;
+               declare
+                  Cells   : constant Path_Cells := Timing_Run_Cells (Block'Access, Map, 3, Feedrate);
+                  Windows : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block'Access, 3);
+                  Run_End : constant Length := Timing_Total_Distance (Block'Access, 3);
+                  Inner   : constant Length := Run_End - Timing_End_Transition_Distance (Block'Access, 3);
+                  Reach   : Length := 0.0 * mm;
+               begin
+                  for C of Cells loop
+                     Gapless := Gapless and then C.Start <= Reach;
+                     Reach := Length'Max (Reach, C.Stop);
+                  end loop;
+                  Gapless := Gapless and then Reach = Run_End;
+                  Clear :=
+                    Clear
+                    and then
+                      (for all C of Cells =>
+                         (if Cell_Overlaps
+                               (C, Windows (4).Start_Distance, Windows (4).Start_Distance + Windows (4).Distance)
+                          then C.Stop <= Inner));
+                  Straight :=
+                    Straight and then not Evaluate_Timing_Window (Block'Access, Map, 3, Windows (4), Feedrate).Curved;
+               end;
+            end loop;
+         end loop;
+         T.Assert (Gapless, "The run's cells leave no gap where cuts measured from opposite ends meet");
+         T.Assert (Clear, "No variant's window that leaves out the end transition overlaps it");
+         T.Assert (Straight, "A window that leaves out both curves merges none of their bounds");
+      end;
+
+      declare
+         --  An end E transition that reaches back to the curved start leaves the split profile no middle. Measured
+         --  back from the run's end, the middle's end may land an ulp before the start curve's end.
+         Run_End   : constant Length := Timing_Total_Distance (Block'Access, 3);
+         Curve     : constant Length := Timing_Start_Transition_Distance (Block'Access, 3);
+         Roundoffs : Natural := 0;
+         Covering  : Boolean := True;
+      begin
+         Block.Extrusion_Transitions (4).Half_Width := Run_End;
+         for Variant in 1 .. 64 loop
+            Block.Extrusion_Transitions (2).Half_Width := Curve + Dimensionless (Variant) * 0.013 * mm;
+            declare
+               Start_Curve : constant Length := Timing_Start_Curve_Distance (Block'Access, 3);
+               End_Curve   : constant Length := Timing_End_Curve_Distance (Block'Access, 3);
+               Split       : constant Split_Profile_Windows := Timing_Split_Windows (Block'Access, 3);
+            begin
+               if Window_Between (Start_Curve, Run_End - End_Curve).Distance < 0.0 * mm then
+                  Roundoffs := Roundoffs + 1;
+               end if;
+               Covering :=
+                 Covering
+                 and then (for all W of Split => W.Distance >= 0.0 * mm)
+                 and then Split (2).Start_Distance = Start_Curve
+                 and then Split (3).Start_Distance = Split (2).Start_Distance + Split (2).Distance;
+            end;
+         end loop;
+         T.Assert (Roundoffs > 0, "Some variants put the end curve's start an ulp before the start curve's end");
+         T.Assert (Covering, "Curves that meet leave the split an empty middle rather than a negative one");
       end;
 
       --  The limiter and generator must agree on every window, so the block plans without splitting the run.

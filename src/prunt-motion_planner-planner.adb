@@ -1488,24 +1488,114 @@ package body Prunt.Motion_Planner.Planner is
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Natural
    is (Natural (6 * (Block.Timing_Run_Ahead (Run_First) + 1)));
 
+   type Segment_Cut is record
+      Local    : Length;
+      --  Distance along the segment, where its bounds are evaluated.
+      Position : Length;
+      --  Run distance of the same point.
+   end record;
+
+   type Segment_Cuts is array (1 .. 6) of Segment_Cut;
+
+   function Timing_Segment_Cuts
+     (Block     : not null access constant Execution_Block;
+      Run_First : Finishing_Corners_Index;
+      Segment   : Finishing_Corners_Index;
+      Offset    : Length) return Segment_Cuts;
+   --  The ends of Segment's geometric pieces, also cut at the edges of its E density transitions, in increasing order,
+   --  where Segment starts at run distance Offset in the run starting at Run_First. Without transitions the extra
+   --  cuts coincide with the segment's ends. The run's windows start at cuts measured from its start and end at cuts
+   --  measured back from its end, so the first segment places every cut from its start and later segments place cuts
+   --  near their end back from it: a window ending at the run's end transition then never overlaps it through
+   --  roundoff. Cuts at the same point share one position, so the pieces between them leave no gap.
+
+   function Segment_Local_Distance (Cuts : Segment_Cuts; Position : Length) return Length;
+   --  The segment distance at run distance Position. A position at a cut gives that cut's own distance, so a window
+   --  that ends at a cut never reaches into the piece beyond it.
+
+   function Timing_Segment_Cuts
+     (Block     : not null access constant Execution_Block;
+      Run_First : Finishing_Corners_Index;
+      Segment   : Finishing_Corners_Index;
+      Offset    : Length) return Segment_Cuts
+   is
+      Start_Transition : constant Length := Segment_Start_Transition_Distance (Block, Segment);
+      End_Transition   : constant Length := Segment_End_Transition_Distance (Block, Segment);
+      Total            : constant Length := Segment_Total_Distance (Block, Segment);
+      Segment_End      : constant Length := Offset + Total;
+      Start_Extrusion  : constant Length := Length'Min (Total, Block.Extrusion_Transitions (Segment - 1).Half_Width);
+      End_Extrusion    : constant Length := Length'Min (Total, Block.Extrusion_Transitions (Segment).Half_Width);
+
+      function Back (Local, Tail : Length) return Segment_Cut
+      is (Local, (if Segment = Run_First then Offset + Local else Segment_End - Tail));
+      --  The cut at Local, which is Tail before the segment's end.
+
+      Result : Segment_Cuts :=
+        [(0.0 * mm, Offset),
+         (Start_Transition, Offset + Start_Transition),
+         Back (Start_Transition + Block.Primitive_Distances (Segment), End_Transition),
+         (Total, Segment_End),
+         (Start_Extrusion, Offset + Start_Extrusion),
+         Back (Total - End_Extrusion, End_Extrusion)];
+   begin
+      for J in Result'First + 1 .. Result'Last loop
+         declare
+            Next : constant Segment_Cut := Result (J);
+            K    : Positive := J;
+         begin
+            while K > Result'First and then Result (K - 1).Local > Next.Local loop
+               Result (K) := Result (K - 1);
+               K := K - 1;
+            end loop;
+            Result (K) := Next;
+         end;
+      end loop;
+      for J in Result'First + 1 .. Result'Last loop
+         --  Positions measured from opposite ends may cross by roundoff where a piece is negligible.
+         Result (J).Position := Length'Max (Result (J).Position, Result (J - 1).Position);
+      end loop;
+      for J in reverse Result'First .. Result'Last - 1 loop
+         --  Cuts at one point take the later of their positions, so a window ending at any of them overlaps none of
+         --  the pieces after them.
+         if Result (J).Local = Result (J + 1).Local then
+            Result (J).Position := Result (J + 1).Position;
+         end if;
+      end loop;
+      return Result;
+   end Timing_Segment_Cuts;
+
+   function Segment_Local_Distance (Cuts : Segment_Cuts; Position : Length) return Length is
+   begin
+      for J in Cuts'Range loop
+         if Position <= Cuts (J).Position then
+            return
+              (if J = Cuts'First or else Position = Cuts (J).Position
+               then Cuts (J).Local
+               else Length'Min (Cuts (J).Local, Cuts (J - 1).Local + (Position - Cuts (J - 1).Position)));
+         end if;
+      end loop;
+      return Cuts (Cuts'Last).Local;
+   end Segment_Local_Distance;
+
    function Timing_Run_Cells
      (Block     : not null access constant Execution_Block;
       Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
       Run_First : Finishing_Corners_Index;
       Max_Vel   : Velocity) return Path_Cells
    is
-      Result : Path_Cells (1 .. Timing_Run_Cell_Count (Block, Run_First));
-      Count  : Natural := 0;
-      Offset : Length := 0.0 * mm;
+      Result     : Path_Cells (1 .. Timing_Run_Cell_Count (Block, Run_First));
+      Count      : Natural := 0;
+      Last_Piece : Natural := 0;
+      Offset     : Length := 0.0 * mm;
 
-      procedure Add_Piece (Segment : Finishing_Corners_Index; Local_Start, Local_Stop : Length);
+      procedure Add_Piece (Segment : Finishing_Corners_Index; First, Last : Segment_Cut);
 
-      procedure Add_Piece (Segment : Finishing_Corners_Index; Local_Start, Local_Stop : Length) is
-         Local   : constant Profile_Window := (Start_Distance => Local_Start, Distance => Local_Stop - Local_Start);
+      procedure Add_Piece (Segment : Finishing_Corners_Index; First, Last : Segment_Cut) is
+         Local   : constant Profile_Window := (Start_Distance => First.Local, Distance => Last.Local - First.Local);
          Bounds  : Unit_Speed_Axial_Derivative_Bounds;
          Ceiling : Velocity;
       begin
-         if Local_Stop <= Local_Start then
+         if Last.Local <= First.Local then
             return;
          end if;
          Bounds := Window_Axial_Derivative_Bounds (Block, Segment, Local);
@@ -1515,8 +1605,8 @@ package body Prunt.Motion_Planner.Planner is
          Ceiling := Motor_Delta_Ceiling_For_Window (Block, Motor_Map, Segment, Local, Ceiling);
          Count := Count + 1;
          Result (Count) :=
-           (Start   => Offset + Local_Start,
-            Stop    => Offset + Local_Stop,
+           (Start   => First.Position,
+            Stop    => Last.Position,
             Bounds  => Bounds,
             Ceiling => Ceiling,
             Curved  =>
@@ -1525,24 +1615,19 @@ package body Prunt.Motion_Planner.Planner is
                  or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
                  or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
                  or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4));
+         Last_Piece := Count;
       end Add_Piece;
    begin
       for I in Run_First .. Timing_Run_Last (Block, Run_First) loop
          declare
-            Start_Transition : constant Length := Segment_Start_Transition_Distance (Block, I);
-            End_Start        : constant Length := Start_Transition + Block.Primitive_Distances (I);
-            Total            : constant Length := Segment_Total_Distance (Block, I);
-            Cuts             : array (1 .. 6) of Length :=
-              [0.0 * mm,
-               Start_Transition,
-               End_Start,
-               Total,
-               Length'Min (Total, Block.Extrusion_Transitions (I - 1).Half_Width),
-               Length'Max (0.0 * mm, Total - Block.Extrusion_Transitions (I).Half_Width)];
-            --  The geometric pieces, also cut at the edges of E density transitions. Without transitions the extra
-            --  cuts coincide with the segment's ends and add no pieces.
+            Cuts : constant Segment_Cuts := Timing_Segment_Cuts (Block, Run_First, I, Offset);
          begin
             if I > Run_First then
+               if Last_Piece > 0 then
+                  --  The segment's start may share a cut placed back from its end, past the previous segment's end by
+                  --  roundoff. The previous piece reaches it so that the run's cells leave no gap.
+                  Result (Last_Piece).Stop := Cuts (Cuts'First).Position;
+               end if;
                declare
                   E_Ceiling : constant Velocity := Extrusion_Junction_Ceiling (Block, I - 1, Max_Vel);
                begin
@@ -1555,22 +1640,10 @@ package body Prunt.Motion_Planner.Planner is
                end;
             end if;
             for J in Cuts'First + 1 .. Cuts'Last loop
-               declare
-                  Cut : constant Length := Cuts (J);
-                  K   : Positive := J;
-               begin
-                  while K > Cuts'First and then Cuts (K - 1) > Cut loop
-                     Cuts (K) := Cuts (K - 1);
-                     K := K - 1;
-                  end loop;
-                  Cuts (K) := Cut;
-               end;
-            end loop;
-            for J in Cuts'First + 1 .. Cuts'Last loop
                Add_Piece (I, Cuts (J - 1), Cuts (J));
             end loop;
             --  Accumulate in the same order as Timing_Total_Distance so the run's end agrees exactly.
-            Offset := Offset + Total;
+            Offset := Offset + Segment_Total_Distance (Block, I);
          end;
       end loop;
       return Result (1 .. Count);
@@ -1667,7 +1740,8 @@ package body Prunt.Motion_Planner.Planner is
 
       procedure For_Each_Member (Process : not null access procedure (Segment : Finishing_Corners_Index;
                                                                         Local   : Profile_Window));
-      --  Call Process for every member overlapped by Window, with Window expressed in that member's distance.
+      --  Call Process for every member overlapped by Window, with Window expressed in that member's distance through
+      --  the cuts of the run's cells, so a window ending at a cell's edge takes none of the piece beyond it.
 
       procedure Merge_Member (Segment : Finishing_Corners_Index; Local : Profile_Window);
 
@@ -1679,11 +1753,13 @@ package body Prunt.Motion_Planner.Planner is
          for I in Run_First .. Run_Last loop
             declare
                Member_Distance : constant Length := Segment_Total_Distance (Block, I);
+               Cuts            : constant Segment_Cuts := Timing_Segment_Cuts (Block, Run_First, I, Offset);
                Low             : constant Length := Length'Max (Window.Start_Distance, Offset);
                High            : constant Length := Length'Min (Window_End, Offset + Member_Distance);
             begin
                if (if Window.Distance > 0.0 * mm then High > Low else High >= Low) then
-                  Process (I, (Start_Distance => Low - Offset, Distance => High - Low));
+                  Process
+                    (I, Window_Between (Segment_Local_Distance (Cuts, Low), Segment_Local_Distance (Cuts, High)));
                end if;
                Offset := Offset + Member_Distance;
             end;
@@ -1748,6 +1824,39 @@ package body Prunt.Motion_Planner.Planner is
       return Result;
    end Evaluate_Timing_Window;
 
+   function Window_Between (First, Last : Length) return Profile_Window is
+      Dist : Length := Last - First;
+   begin
+      if Dist > 0.0 * mm and then First + Dist > Last then
+         Dist := Length'Adjacent (Dist, 0.0 * mm);
+      end if;
+      return (Start_Distance => First, Distance => Dist);
+   end Window_Between;
+
+   function Timing_Split_Windows
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index)
+      return Split_Profile_Windows
+   is
+      Total       : constant Length := Timing_Total_Distance (Block, Run_First);
+      Start_Curve : constant Length := Timing_Start_Curve_Distance (Block, Run_First);
+      End_Curve   : constant Length := Timing_End_Curve_Distance (Block, Run_First);
+      Middle      : constant Length :=
+        (if Is_Cellular_Run (Block, Run_First)
+         then
+           --  The run's cells are cut back from its end, so the middle must not reach past that cut by roundoff. An
+           --  end curve that reaches back to the start curve may put that cut an ulp before the start curve's end.
+           Length'Max (0.0 * mm, Window_Between (Start_Curve, Total - End_Curve).Distance)
+         elsif Start_Curve = Timing_Start_Transition_Distance (Block, Run_First)
+           and then End_Curve = Timing_End_Transition_Distance (Block, Run_First)
+         then Timing_Straight_Distance (Block, Run_First)
+         else Total - Start_Curve - End_Curve);
+   begin
+      return
+        [(Start_Distance => 0.0 * mm, Distance => Start_Curve),
+         (Start_Distance => Start_Curve, Distance => Middle),
+         (Start_Distance => Start_Curve + Middle, Distance => Total - (Start_Curve + Middle))];
+   end Timing_Split_Windows;
+
    function Segment_Profile_Window_Candidates
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
       return Profile_Window_Candidates
@@ -1760,14 +1869,9 @@ package body Prunt.Motion_Planner.Planner is
       procedure Add (First, Tail : Length);
 
       procedure Add (First, Tail : Length) is
-         Last : constant Length := Total - Tail;
-         Dist : Length := Last - First;
       begin
          --  Rounding must not make a profile overlap the transition that the selected cut excludes.
-         if Dist > 0.0 * mm and then First + Dist > Last then
-            Dist := Length'Adjacent (Dist, 0.0 * mm);
-         end if;
-         Result (Index) := (Start_Distance => First, Distance => Dist);
+         Result (Index) := Window_Between (First, Total - Tail);
          if Index < Profile_Window_Candidate_Index'Last then
             Index := Index + 1;
          end if;
@@ -2481,7 +2585,10 @@ package body Prunt.Motion_Planner.Planner is
                return;
             end if;
             for Index in Cells'Range loop
-               if Cells (Index).Stop >= Span_Low and then Cells (Index).Start <= Span_High then
+               --  A piece that only touches the ramp at an end holds none of its motion: the ramp's derivatives there are
+               --  limits from inside it, and whatever continues the motion (a coast, the other ramp or the window's end
+               --  ceiling) admits the speed there.
+               if Cell_Overlaps (Cells (Index), Span_Low, Span_High) then
                   declare
                      Cell       : Path_Cell renames Cells (Index);
                      Low        : constant Length := Length'Max (Cell.Start, Span_Low) - Span_Low;
