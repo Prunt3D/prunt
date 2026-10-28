@@ -83,10 +83,10 @@ package Prunt.Motion_Planner.Stereographic_Curves is
       Tangent_Derivative_1 : Tangent_Derivative_1_Vector := [others => 0.0 / mm];
       --  Change in direction per unit of distance.
 
-      Tangent_Derivative_2 : Tangent_Derivative_2_Vector := [others => 0.0 / mm ** 2];
+      Tangent_Derivative_2 : Tangent_Derivative_2_Vector := [others => 0.0 / mm**2];
       --  Change in turn rate per squared unit of distance.
 
-      Tangent_Derivative_3 : Tangent_Derivative_3_Vector := [others => 0.0 / mm ** 3];
+      Tangent_Derivative_3 : Tangent_Derivative_3_Vector := [others => 0.0 / mm**3];
       --  Third distance derivative of the tangent.
    end record;
    --  Raw endpoint direction and its first three distance derivatives. Create_Blend validates this record explicitly
@@ -513,7 +513,7 @@ private
    --  Integer representation used while combining Bernstein coefficients. All binomial coefficients needed through
    --  degree eighty-four fit in 128 bits, so coefficient ratios can be formed without first rounding the integers.
 
-   subtype Packed_Binomial_Index is Natural range 0 .. (Maximum_Derivative_Bernstein_Degree + 2) ** 2 / 4 - 1;
+   subtype Packed_Binomial_Index is Natural range 0 .. (Maximum_Derivative_Bernstein_Degree + 2)**2 / 4 - 1;
    --  Each row stores only K <= N/2, using the symmetry C(N,K) = C(N,N-K).
 
    type Exact_Binomial_Table_Type is array (Packed_Binomial_Index) of Exact_Binomial_Value;

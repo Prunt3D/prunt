@@ -33,6 +33,7 @@ project Config_Codegen is
    package Format is
       for Width ("Ada") use "119";
       for Charset ("Ada") use "utf-8";
+      for Override_Layout ("Ada") use ("../formatting.json");
    end Format;
 
 end Config_Codegen;

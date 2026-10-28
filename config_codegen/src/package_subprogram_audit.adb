@@ -31,11 +31,11 @@ with Libadalang.Helpers;
 procedure Package_Subprogram_Audit is
    Finding_Count : Natural := 0;
 
-   function Has_Suffix (Value, Suffix : String) return Boolean is
-     (Value'Length >= Suffix'Length and then Value (Value'Last - Suffix'Length + 1 .. Value'Last) = Suffix);
+   function Has_Suffix (Value, Suffix : String) return Boolean
+   is (Value'Length >= Suffix'Length and then Value (Value'Last - Suffix'Length + 1 .. Value'Last) = Suffix);
 
-   function Line_Image (Line : Natural) return String is
-     (Trim (Line'Image, Both));
+   function Line_Image (Line : Natural) return String
+   is (Trim (Line'Image, Both));
 
    function Display_Filename (Filename : String) return String is
       Current_Directory : constant String := Ada.Directories.Current_Directory;
@@ -137,9 +137,7 @@ begin
    App.Run;
 
    if Finding_Count > 0 then
-      Put_Line
-        (Standard_Error,
-         Line_Image (Finding_Count) & " package-level subprogram audit finding(s).");
+      Put_Line (Standard_Error, Line_Image (Finding_Count) & " package-level subprogram audit finding(s).");
       Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
    end if;
 end Package_Subprogram_Audit;

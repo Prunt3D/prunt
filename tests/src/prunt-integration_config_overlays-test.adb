@@ -18,7 +18,7 @@
 --------------------------------------------------
 
 with Prunt.Config;
-with Prunt.JSON; use Prunt.JSON;
+with Prunt.JSON;  use Prunt.JSON;
 with Trendy_Test; use Trendy_Test;
 
 package body Prunt.Integration_Config_Overlays.Test is
@@ -121,7 +121,7 @@ package body Prunt.Integration_Config_Overlays.Test is
    begin
       T.Register;
 
-      Patch : constant JSON_Value :=
+      Patch  : constant JSON_Value :=
         Config_Patch_For_Overlay (Test_Schema_String, Read ("{""Alpha"": {""Count"": 42}}"));
       Config : constant JSON_Value := Patch.Get ("Config");
       Alpha  : constant JSON_Value := Config.Get ("Alpha").Get ("Config");
@@ -138,8 +138,7 @@ package body Prunt.Integration_Config_Overlays.Test is
       T.Assert (Alpha.Get ("Nested").Get ("Child").Get = "default-child", "Omitted sequence was not defaulted");
       T.Assert (Alpha.Get ("Mode").Get ("Selected").Get = "Disabled", "Omitted variant selection was not defaulted");
       T.Assert
-        (Alpha.Get ("Mode").Get ("Children").Get ("Enabled").Get,
-         "Omitted variant children were not defaulted");
+        (Alpha.Get ("Mode").Get ("Children").Get ("Enabled").Get, "Omitted variant children were not defaulted");
       T.Assert (Beta.Get ("Name").Get = "beta-default", "Omitted module was not defaulted");
    end Test_Defaults_Omitted_Modules_And_Fields;
 
@@ -189,8 +188,7 @@ package body Prunt.Integration_Config_Overlays.Test is
          if Count.Kind = JSON_String_Type then
             Errors.Append
               (Config.Config_Error'
-                 (Path    => Config.Config_Data_Paths.Vector'(["Alpha", "Count"]),
-                  Message => +"wrong type"));
+                 (Path => Config.Config_Data_Paths.Vector'(["Alpha", "Count"]), Message => +"wrong type"));
          end if;
       end Reject_String_Count;
    begin

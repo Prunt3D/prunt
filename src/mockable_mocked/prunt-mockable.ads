@@ -48,14 +48,14 @@ private
       procedure Crash (File_Name : String);
    private
       procedure Checkpoint;
-      Store : File_Maps.Map;
-      Durable : File_Maps.Map;
-      Synced : File_Maps.Map;
-      Remaining : Natural := 0;
+      Store           : File_Maps.Map;
+      Durable         : File_Maps.Map;
+      Synced          : File_Maps.Map;
+      Remaining       : Natural := 0;
       Failure_Enabled : Boolean := False;
-      Lose_Power : Boolean := False;
-      Failure_Name : Ada.Strings.Unbounded.Unbounded_String;
-      Failure_Task : Ada.Task_Identification.Task_Id := Ada.Task_Identification.Null_Task_Id;
+      Lose_Power      : Boolean := False;
+      Failure_Name    : Ada.Strings.Unbounded.Unbounded_String;
+      Failure_Task    : Ada.Task_Identification.Task_Id := Ada.Task_Identification.Null_Task_Id;
    end Filesystem;
 
 end Prunt.Mockable;

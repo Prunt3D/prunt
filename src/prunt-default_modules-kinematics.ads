@@ -235,19 +235,19 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axial_Acceleration_Limits_Array is
-     array (Axis_Name) of Acceleration range 1.0E-6 * mm / s ** 2 .. 1.0E100 * mm / s ** 2
+     array (Axis_Name) of Acceleration range 1.0E-6 * mm / s**2 .. 1.0E100 * mm / s**2
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axial_Jerk_Limits_Array is
-     array (Axis_Name) of Jerk range 1.0E-6 * mm / s ** 3 .. 1.0E100 * mm / s ** 3
+     array (Axis_Name) of Jerk range 1.0E-6 * mm / s**3 .. 1.0E100 * mm / s**3
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axial_Snap_Limits_Array is
-     array (Axis_Name) of Snap range 1.0E-6 * mm / s ** 4 .. 1.0E100 * mm / s ** 4
+     array (Axis_Name) of Snap range 1.0E-6 * mm / s**4 .. 1.0E100 * mm / s**4
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Axial_Crackle_Limits_Array is
-     array (Axis_Name) of Crackle range 1.0E-6 * mm / s ** 5 .. 1.0E100 * mm / s ** 5
+     array (Axis_Name) of Crackle range 1.0E-6 * mm / s**5 .. 1.0E100 * mm / s**5
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config_Cornering_Stereographic is record
@@ -403,8 +403,8 @@ private
       --  change each move's extrusion by up to this much, so moves may share an extrusion ratio within that change.
 
       XYZ_Resolution : Length range 0.0 * mm .. 1.0E100 * mm := 0.001 * mm;
-      --  The smallest step in the G-code's X, Y and Z values, including arc centres, such as 0.001 mm for three decimal
-      --  places. Rounding to it changes each move's length, and with it how much the move extrudes at a given
+      --  The smallest step in the G-code's X, Y and Z values, including arc centres, such as 0.001 mm for three
+      --  decimal places. Rounding to it changes each move's length, and with it how much the move extrudes at a given
       --  extrusion ratio, so moves may share an extrusion ratio within that change.
    end record
    with Annotate => (Prunt_Config, User_Config);
@@ -437,25 +437,25 @@ private
       Axial_Velocity_Limits : User_Config_Axial_Velocity_Limits_Array := [others => 10.0 * mm / s];
       --  This sets the maximum speed for each individual axis.
 
-      Axial_Acceleration_Limits : User_Config_Axial_Acceleration_Limits_Array := [others => 100.0 * mm / s ** 2];
+      Axial_Acceleration_Limits : User_Config_Axial_Acceleration_Limits_Array := [others => 100.0 * mm / s**2];
       --  This sets the maximum acceleration for each individual axis. These values can be set to a very high value to
       --  effectively disable this limit and rely solely on the higher order constraints below.
 
-      Axial_Jerk_Limits : User_Config_Axial_Jerk_Limits_Array := [others => 100.0E2 * mm / s ** 3];
+      Axial_Jerk_Limits : User_Config_Axial_Jerk_Limits_Array := [others => 100.0E2 * mm / s**3];
       --  This sets the maximum jerk for each individual axis. Jerk is the rate of change of acceleration. A good
       --  starting point for tuning is to set the jerk to 100 times the maximum acceleration. This can be achieved by
       --  placing the max acceleration values in these fields and appending E2 to them.
       --
       --  This can be set to a very high value to effectively disable the limit.
 
-      Axial_Snap_Limits : User_Config_Axial_Snap_Limits_Array := [others => 100.0E5 * mm / s ** 4];
+      Axial_Snap_Limits : User_Config_Axial_Snap_Limits_Array := [others => 100.0E5 * mm / s**4];
       --  This sets the maximum snap for each individual axis. Snap is the rate of change of jerk. A good starting
       --  point for tuning is to set the snap to 100,000 times the maximum acceleration. This can be achieved by
       --  placing the max acceleration values in these fields and appending E5 to them.
       --
       --  This can be set to a very high value to effectively disable the limit.
 
-      Axial_Crackle_Limits : User_Config_Axial_Crackle_Limits_Array := [others => 100.0E9 * mm / s ** 5];
+      Axial_Crackle_Limits : User_Config_Axial_Crackle_Limits_Array := [others => 100.0E9 * mm / s**5];
       --  This sets the maximum crackle for each individual axis. Crackle is the rate of change of snap. A good
       --  starting point for tuning is to set the crackle to 1,000,000,000 times the maximum acceleration. This can be
       --  achieved by placing the max acceleration values in these fields and appending E9 to them.
@@ -523,13 +523,13 @@ private
       Has_Axial_Velocity_Limit     : Axial_Update_Set := [others => False];
       Axial_Velocity_Limits        : Axial_Velocities := [others => 1.0E-6 * mm / s];
       Has_Axial_Acceleration_Limit : Axial_Update_Set := [others => False];
-      Axial_Acceleration_Limits    : Axial_Accelerations := [others => 1.0E-6 * mm / s ** 2];
+      Axial_Acceleration_Limits    : Axial_Accelerations := [others => 1.0E-6 * mm / s**2];
       Has_Axial_Jerk_Limit         : Axial_Update_Set := [others => False];
-      Axial_Jerk_Limits            : Axial_Jerks := [others => 1.0E-6 * mm / s ** 3];
+      Axial_Jerk_Limits            : Axial_Jerks := [others => 1.0E-6 * mm / s**3];
       Has_Axial_Snap_Limit         : Axial_Update_Set := [others => False];
-      Axial_Snap_Limits            : Axial_Snaps := [others => 1.0E-6 * mm / s ** 4];
+      Axial_Snap_Limits            : Axial_Snaps := [others => 1.0E-6 * mm / s**4];
       Has_Axial_Crackle_Limit      : Axial_Update_Set := [others => False];
-      Axial_Crackle_Limits         : Axial_Crackles := [others => 1.0E-6 * mm / s ** 5];
+      Axial_Crackle_Limits         : Axial_Crackles := [others => 1.0E-6 * mm / s**5];
    end record;
 
    type Kinematics_Config_Update is new Extra_Block_Resetting_Data with record

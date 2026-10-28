@@ -192,7 +192,9 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
          type Storage_Index is range 1 .. 65;
          package Small_Vectors is new
            Prunt.Bounded_Indefinite_Vectors
-             (Element_Type => Byte_Boolean, Index_Type => Storage_Index, Storage_Size => 64);
+             (Element_Type => Byte_Boolean,
+              Index_Type   => Storage_Index,
+              Storage_Size => 64);
          V : Small_Vectors.Vector;
       begin
          V.Clear;
@@ -206,7 +208,8 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
                V.Append (True);
                T.Fail ("The backing storage should be full");
             exception
-               when Small_Vectors.Out_Of_Space_Error => null;
+               when Small_Vectors.Out_Of_Space_Error =>
+                  null;
             end;
             V.Clear;
             V.Clear;
@@ -244,7 +247,7 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
    begin
       T.Register;
 
-      V : Vector;
+      V           : Vector;
       Long_String : String (1 .. 1000) := (others => 'A');
 
       begin
@@ -261,12 +264,14 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
       T.Register;
 
       declare
-         Armed : Boolean := False;
+         Armed         : Boolean := False;
          Finalizations : Natural := 0;
          type Item is new Ada.Finalization.Controlled with null record;
-         overriding procedure Finalize (Object : in out Item);
+         overriding
+         procedure Finalize (Object : in out Item);
 
-         overriding procedure Finalize (Object : in out Item) is
+         overriding
+         procedure Finalize (Object : in out Item) is
             pragma Unreferenced (Object);
          begin
             Finalizations := @ + 1;
@@ -276,7 +281,7 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
          end Finalize;
 
          package Vectors is new Bounded_Indefinite_Vectors (Item, Test_Index, 512);
-         V : Vectors.Vector;
+         V       : Vectors.Vector;
          Element : Item;
       begin
          for Round in 1 .. 32 loop
@@ -289,7 +294,8 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
                V.Clear;
                T.Fail ("Clear must report a finalizer failure");
             exception
-               when Program_Error => null;
+               when Program_Error =>
+                  null;
             end;
             Armed := False;
             T.Assert (V.Is_Empty, "Clear empties the vector even when finalizers raise");
@@ -310,7 +316,8 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
             end;
             T.Fail ("Scope finalization must report an element finalizer failure");
          exception
-            when Program_Error => null;
+            when Program_Error =>
+               null;
          end;
          Armed := False;
          T.Assert (Finalizations = 5, "Scope finalization still attempts every element's finalizer");
@@ -439,7 +446,7 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
    begin
       T.Register;
 
-      V : Vector;
+      V           : Vector;
       Long_String : String (1 .. 400) := (others => 'A');
 
       V.Append (Long_String);

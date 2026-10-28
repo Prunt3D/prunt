@@ -20,6 +20,7 @@
 with Ada.Strings;                 use Ada.Strings;
 with Ada.Strings.Wide_Wide_Fixed; use Ada.Strings.Wide_Wide_Fixed;
 with Ada.Strings.Fixed;           use Ada.Strings.Fixed;
+with Ada.Strings.Wide_Wide_Unbounded;
 with Ada.Directories;             use Ada.Directories;
 with Langkit_Support.Text;        use Langkit_Support.Text;
 with VSS.Strings.Conversions;
@@ -28,33 +29,6 @@ with Ada.Text_IO;
 package body Config_Parser is
 
    pragma Extensions_Allowed (On);
-
-   function Strip (Str : Text_Type) return Virtual_String is
-   begin
-      if Str (Str'First) = '"' then
-         return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
-      else
-         return To_Virtual_String (Str);
-      end if;
-   end Strip;
-
-   function Argument (Assocs : Assoc_List; Index : Positive) return Text_Type is
-   begin
-      return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
-   end Argument;
-
-   function Has_Argument (Assocs : Assoc_List; Index : Positive) return Boolean is
-     (Assocs.First_Child_Index + Index - 1 <= Assocs.Last_Child_Index);
-
-   function Parse_Unit (Assocs : Assoc_List) return Unit_Data is
-      Conversion : constant Virtual_String := Strip (Argument (Assocs, 3));
-   begin
-      if Has_Argument (Assocs, 4) then
-         return (Conversion => Conversion, Display => Strip (Argument (Assocs, 4)));
-      else
-         return (Conversion => Conversion, Display => Conversion);
-      end if;
-   end Parse_Unit;
 
    procedure Raise_Error (Node : Ada_Node'Class; Message : String) is
    begin
@@ -66,6 +40,57 @@ package body Config_Parser is
          raise Constraint_Error with "Error at " & Node.Image & ": " & Message;
       end if;
    end Raise_Error;
+
+   function Strip (Str : Text_Type) return Virtual_String is
+   begin
+      if Str (Str'First) = '"' then
+         return To_Virtual_String (Str (Str'First + 1 .. Str'Last - 1));
+      else
+         return To_Virtual_String (Str);
+      end if;
+   end Strip;
+
+   function Argument (Assocs : Assoc_List; Index : Positive) return Text_Type is
+      --  String literals joined with "&" are returned as the single string literal they spell, so that long strings
+      --  can be split across lines.
+      use Ada.Strings.Wide_Wide_Unbounded;
+
+      Arg : constant Expr := Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr;
+
+      function Contents (Operand : Expr) return Text_Type is
+         Literal : constant Text_Type := Operand.Text;
+      begin
+         if Operand.Kind /= Ada_String_Literal then
+            Raise_Error (Operand, "Only string literals can be joined with ""&"". " & Literal'Image);
+         end if;
+         return Literal (Literal'First + 1 .. Literal'Last - 1);
+      end Contents;
+
+      Joined : Unbounded_Text_Type;
+   begin
+      if Arg.Kind /= Ada_Concat_Op then
+         return Arg.Text;
+      end if;
+
+      Append (Joined, Contents (Arg.As_Concat_Op.F_First_Operand));
+      for Operand of Arg.As_Concat_Op.F_Other_Operands loop
+         Append (Joined, Contents (Operand.F_Operand));
+      end loop;
+      return '"' & To_Text (Joined) & '"';
+   end Argument;
+
+   function Has_Argument (Assocs : Assoc_List; Index : Positive) return Boolean
+   is (Assocs.First_Child_Index + Index - 1 <= Assocs.Last_Child_Index);
+
+   function Parse_Unit (Assocs : Assoc_List) return Unit_Data is
+      Conversion : constant Virtual_String := Strip (Argument (Assocs, 3));
+   begin
+      if Has_Argument (Assocs, 4) then
+         return (Conversion => Conversion, Display => Strip (Argument (Assocs, 4)));
+      else
+         return (Conversion => Conversion, Display => Conversion);
+      end if;
+   end Parse_Unit;
 
    function Is_Controller_Generic_Discrete_Type (Decl : Base_Type_Decl) return Boolean is
       Name : constant Text_Type := Decl.F_Name.Text;
@@ -293,11 +318,7 @@ package body Config_Parser is
    end Is_Numeric_Base;
 
    procedure Extract_Bounds
-     (Ada_Range : Range_Spec;
-      Min, Max  : out Virtual_String;
-      Error_For : Ada_Node'Class;
-      Context   : String)
-   is
+     (Ada_Range : Range_Spec; Min, Max : out Virtual_String; Error_For : Ada_Node'Class; Context : String) is
    begin
       if Ada_Range.Is_Null then
          Min := "";
@@ -311,10 +332,7 @@ package body Config_Parser is
    end Extract_Bounds;
 
    function Effective_Min
-     (Type_Name        : Virtual_String;
-      Range_Min        : Virtual_String;
-      Annotation_Min   : Virtual_String) return Virtual_String
-   is
+     (Type_Name : Virtual_String; Range_Min : Virtual_String; Annotation_Min : Virtual_String) return Virtual_String is
    begin
       if Range_Min.Is_Empty then
          return Annotation_Min;
@@ -326,10 +344,7 @@ package body Config_Parser is
    end Effective_Min;
 
    function Effective_Max
-     (Type_Name        : Virtual_String;
-      Range_Max        : Virtual_String;
-      Annotation_Max   : Virtual_String) return Virtual_String
-   is
+     (Type_Name : Virtual_String; Range_Max : Virtual_String; Annotation_Max : Virtual_String) return Virtual_String is
    begin
       if Range_Max.Is_Empty then
          return Annotation_Max;
@@ -365,24 +380,24 @@ package body Config_Parser is
                   Register_Implicit_Config_Type (Desig, Implicit_Config);
 
                   Component :=
-                    (Experimental        => False,
-                     Type_Name           => To_Virtual_String (Desig.P_Fully_Qualified_Name),
-                     Default             =>
+                    (Experimental                => False,
+                     Type_Name                   => To_Virtual_String (Desig.P_Fully_Qualified_Name),
+                     Default                     =>
                        (if Comp_Decl.F_Default_Expr.Is_Null
                         then ""
                         else To_Virtual_String (Comp_Decl.F_Default_Expr.Text)),
-                     Description         => Get_Comments_Starting_After (Item.Token_End),
-                     Category            => (others => <>),
-                     Min                 => "",
-                     Max                 => "",
-                     Fixed_Kind          => "",
-                     Options_Expr        => "",
-                     Present_When        => "",
+                     Description                 => Get_Comments_Starting_After (Item.Token_End),
+                     Category                    => (others => <>),
+                     Min                         => "",
+                     Max                         => "",
+                     Fixed_Kind                  => "",
+                     Options_Expr                => "",
+                     Present_When                => "",
                      Dynamic_Present_When_Tag    => "",
                      Dynamic_Present_When_Path   => "",
                      Dynamic_Present_When_Values => [],
-                     Schema_Default_Expr => "",
-                     Unit                => (Conversion => "", Display => ""));
+                     Schema_Default_Expr         => "",
+                     Unit                        => (Conversion => "", Display => ""));
                   begin
                      if not Comp_Decl.F_Aspects.Is_Null then
                         for Assoc of
@@ -415,8 +430,7 @@ package body Config_Parser is
                                     Component.Options_Expr := Strip (Argument (Assocs, 3));
                                  elsif Argument (Assocs, 2) = "Present_When" then
                                     if Has_Argument (Assocs, 4) then
-                                       Raise_Error
-                                         (Assoc, "Present_When accepts one condition expression only.");
+                                       Raise_Error (Assoc, "Present_When accepts one condition expression only.");
                                     end if;
                                     Component.Present_When := Strip (Argument (Assocs, 3));
                                  elsif Argument (Assocs, 2) = "Dynamic_Present_When" then
@@ -439,8 +453,7 @@ package body Config_Parser is
                                     Component.Max := Strip (Argument (Assocs, 3));
                                  else
                                     Raise_Error
-                                      (Assoc,
-                                       "Unhandled Prunt_Config key (" & Argument (Assocs, 2)'Image & ").");
+                                      (Assoc, "Unhandled Prunt_Config key (" & Argument (Assocs, 2)'Image & ").");
                                  end if;
                               end if;
                            end;
@@ -507,8 +520,7 @@ package body Config_Parser is
 
                            if Component.Min.Is_Empty or else Component.Max.Is_Empty then
                               Raise_Error
-                                (Item,
-                                 "Both min and max must be provided by annotations or range constraints.");
+                                (Item, "Both min and max must be provided by annotations or range constraints.");
                            end if;
                         end;
                      end if;
@@ -543,11 +555,8 @@ package body Config_Parser is
            when Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate
          loop
             declare
-               function Argument (Index : Positive) return Text_Type is
-                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
-               begin
-                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
-               end Argument;
+               function Argument (Index : Positive) return Text_Type
+               is (Argument (Assoc.F_Expr.As_Aggregate.F_Assocs, Index));
             begin
                if Argument (1) = "Prunt_Config" then
                   if Argument (2) = "Tabbed" then
@@ -628,11 +637,8 @@ package body Config_Parser is
            when Assoc.F_Id.Text = "Annotate" and then Assoc.F_Expr.Kind in Ada_Aggregate
          loop
             declare
-               function Argument (Index : Positive) return Text_Type is
-                  Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
-               begin
-                  return Assocs.Child (Assocs.First_Child_Index + Index - 1).As_Aggregate_Assoc.F_R_Expr.Text;
-               end Argument;
+               function Argument (Index : Positive) return Text_Type
+               is (Argument (Assoc.F_Expr.As_Aggregate.F_Assocs, Index));
             begin
                if Argument (1) = "Prunt_Config" then
                   if Argument (2) = "Tabbed" then
@@ -695,11 +701,7 @@ package body Config_Parser is
                      if not Constr.Is_Null then
                         if Constr.Kind in Ada_Range_Constraint then
                            Extract_Bounds
-                             (Constr.As_Range_Constraint.F_Range,
-                              Range_Min,
-                              Range_Max,
-                              Constr,
-                              Constr.Text'Image);
+                             (Constr.As_Range_Constraint.F_Range, Range_Min, Range_Max, Constr, Constr.Text'Image);
                         else
                            Raise_Error (Constr, "Only range constraints are supported. " & Constr.Text'Image);
                         end if;
@@ -748,7 +750,7 @@ package body Config_Parser is
            and then Assoc.F_Expr.Kind in Ada_Aggregate
            and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
          loop
-           declare
+            declare
                Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
             begin
                if Argument (Assocs, 1) = "Prunt_Config" then
@@ -778,7 +780,7 @@ package body Config_Parser is
            and then Assoc.F_Expr.Kind in Ada_Aggregate
            and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
          loop
-           declare
+            declare
                Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
             begin
                if Argument (Assocs, 1) = "Prunt_Config" and then Argument (Assocs, 2) = "Unit" then
@@ -800,7 +802,7 @@ package body Config_Parser is
            and then Assoc.F_Expr.Kind in Ada_Aggregate
            and then not Assoc.F_Expr.As_Aggregate.F_Assocs.Is_Null
          loop
-           declare
+            declare
                Assocs : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
             begin
                if Argument (Assocs, 1) = "Prunt_Config" and then Argument (Assocs, 2) = "Unit" then
@@ -885,7 +887,7 @@ package body Config_Parser is
 
    function Format_Gcode_Arguments (Arguments : Gcode_Argument_Maps.Map) return String is
       Result : Virtual_String := "(";
-      First  : Boolean        := True;
+      First  : Boolean := True;
    begin
       for C in Arguments.Iterate loop
          if not First then
@@ -983,8 +985,8 @@ package body Config_Parser is
                         Args : constant Assoc_List := Assoc.F_Expr.As_Aggregate.F_Assocs;
                      begin
                         if Args.Child (Args.First_Child_Index + 0).As_Aggregate_Assoc.F_R_Expr.Text = "Prunt_Config"
-                          and then Args.Child (Args.First_Child_Index + 1).As_Aggregate_Assoc.F_R_Expr.Text
-                                   = "Gcode_Command"
+                          and then
+                            Args.Child (Args.First_Child_Index + 1).As_Aggregate_Assoc.F_R_Expr.Text = "Gcode_Command"
                         then
                            declare
                               Raw_Id : constant Wide_Wide_String :=

@@ -41,7 +41,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X10");
-      Val : Dimensionless := Consume_Float (Args, 'X')
+      Val  : Dimensionless := Consume_Float (Args, 'X')
       with Unreferenced;
       Val2 : Dimensionless := Consume_Float (Args, 'X')
       with Unreferenced;
@@ -57,7 +57,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X10");
-      Val : Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0)
+      Val  : Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0)
       with Unreferenced;
       Val2 : Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0)
       with Unreferenced;
@@ -73,7 +73,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X10");
-      Val : Argument_Integer := Consume_Integer (Args, 'X')
+      Val  : Argument_Integer := Consume_Integer (Args, 'X')
       with Unreferenced;
       Val2 : Argument_Integer := Consume_Integer (Args, 'X')
       with Unreferenced;
@@ -89,7 +89,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X10");
-      Val : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
+      Val  : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
       with Unreferenced;
       Val2 : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
       with Unreferenced;
@@ -105,7 +105,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("A");
-      Val : Boolean := Consume_No_Value_Or_False (Args, 'A')
+      Val  : Boolean := Consume_No_Value_Or_False (Args, 'A')
       with Unreferenced;
       Val2 : Boolean := Consume_No_Value_Or_False (Args, 'A')
       with Unreferenced;
@@ -121,7 +121,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T""a""");
-      Val : Virtual_String := Consume_String (Args, 'T')
+      Val  : Virtual_String := Consume_String (Args, 'T')
       with Unreferenced;
       Val2 : Virtual_String := Consume_String (Args, 'T')
       with Unreferenced;
@@ -137,7 +137,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T""a""");
-      Val : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
+      Val  : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
       with Unreferenced;
       Val2 : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
       with Unreferenced;
@@ -153,7 +153,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X");
-      Val : Dimensionless := Consume_Float (Args, 'X')
+      Val  : Dimensionless := Consume_Float (Args, 'X')
       with Unreferenced;
 
       T.Fail ("Consume_Float No_Value_Kind should raise Parse_Error");
@@ -167,7 +167,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("Y1");
-      Val : Dimensionless := Consume_Float (Args, 'X')
+      Val  : Dimensionless := Consume_Float (Args, 'X')
       with Unreferenced;
 
       T.Fail ("Consume_Float Non_Existent_Kind should raise Parse_Error");
@@ -181,7 +181,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X""abc""");
-      Val : Dimensionless := Consume_Float (Args, 'X')
+      Val  : Dimensionless := Consume_Float (Args, 'X')
       with Unreferenced;
 
       T.Fail ("Consume_Float String_Kind should raise Parse_Error");
@@ -195,7 +195,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X");
-      Val : Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0)
+      Val  : Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0)
       with Unreferenced;
 
       T.Fail ("Consume_Float_Or_Default No_Value_Kind should raise Parse_Error");
@@ -209,7 +209,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X""abc""");
-      Val : Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0)
+      Val  : Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0)
       with Unreferenced;
 
       T.Fail ("Consume_Float_Or_Default String_Kind should raise Parse_Error");
@@ -223,7 +223,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X10.5");
-      Val : constant Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0);
+      Val  : constant Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0);
 
       T.Assert (Val = 10.5);
    end Test_Consume_Float_Or_Default_Float_Kind;
@@ -233,7 +233,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X10");
-      Val : constant Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0);
+      Val  : constant Dimensionless := Consume_Float_Or_Default (Args, 'X', 0.0);
 
       T.Assert (Val = 10.0);
    end Test_Consume_Float_Or_Default_Integer_Kind;
@@ -243,7 +243,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("Y1");
-      Val : constant Dimensionless := Consume_Float_Or_Default (Args, 'X', 5.0);
+      Val  : constant Dimensionless := Consume_Float_Or_Default (Args, 'X', 5.0);
 
       T.Assert (Val = 5.0);
    end Test_Consume_Float_Or_Default_Non_Existent;
@@ -253,7 +253,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X1.5");
-      Val : Argument_Integer := Consume_Integer (Args, 'X')
+      Val  : Argument_Integer := Consume_Integer (Args, 'X')
       with Unreferenced;
 
       T.Fail ("Consume_Integer Float_Kind should raise Parse_Error");
@@ -267,7 +267,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X");
-      Val : Argument_Integer := Consume_Integer (Args, 'X')
+      Val  : Argument_Integer := Consume_Integer (Args, 'X')
       with Unreferenced;
 
       T.Fail ("Consume_Integer No_Value_Kind should raise Parse_Error");
@@ -281,7 +281,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("Y1");
-      Val : Argument_Integer := Consume_Integer (Args, 'X')
+      Val  : Argument_Integer := Consume_Integer (Args, 'X')
       with Unreferenced;
 
       T.Fail ("Consume_Integer Non_Existent_Kind should raise Parse_Error");
@@ -295,7 +295,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X""abc""");
-      Val : Argument_Integer := Consume_Integer (Args, 'X')
+      Val  : Argument_Integer := Consume_Integer (Args, 'X')
       with Unreferenced;
 
       T.Fail ("Consume_Integer String_Kind should raise Parse_Error");
@@ -309,7 +309,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X1.5");
-      Val : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
+      Val  : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
       with Unreferenced;
 
       T.Fail ("Consume_Integer_Or_Default Float_Kind should raise Parse_Error");
@@ -323,7 +323,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X");
-      Val : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
+      Val  : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
       with Unreferenced;
 
       T.Fail ("Consume_Integer_Or_Default No_Value_Kind should raise Parse_Error");
@@ -337,7 +337,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X""abc""");
-      Val : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
+      Val  : Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0)
       with Unreferenced;
 
       T.Fail ("Consume_Integer_Or_Default String_Kind should raise Parse_Error");
@@ -351,7 +351,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X10");
-      Val : constant Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0);
+      Val  : constant Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 0);
 
       T.Assert (Val = 10);
    end Test_Consume_Integer_Or_Default_Integer_Kind;
@@ -361,7 +361,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("Y1");
-      Val : constant Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 5);
+      Val  : constant Argument_Integer := Consume_Integer_Or_Default (Args, 'X', 5);
 
       T.Assert (Val = 5);
    end Test_Consume_Integer_Or_Default_Non_Existent;
@@ -371,7 +371,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("H1.0");
-      Val : Boolean := Consume_No_Value_Or_False (Args, 'H')
+      Val  : Boolean := Consume_No_Value_Or_False (Args, 'H')
       with Unreferenced;
 
       T.Fail ("Consume_No_Value_Or_False Float_Kind should raise Parse_Error");
@@ -385,7 +385,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("H1");
-      Val : Boolean := Consume_No_Value_Or_False (Args, 'H')
+      Val  : Boolean := Consume_No_Value_Or_False (Args, 'H')
       with Unreferenced;
 
       T.Fail ("Consume_No_Value_Or_False Integer_Kind should raise Parse_Error");
@@ -399,7 +399,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("H""a""");
-      Val : Boolean := Consume_No_Value_Or_False (Args, 'H')
+      Val  : Boolean := Consume_No_Value_Or_False (Args, 'H')
       with Unreferenced;
 
       T.Fail ("Consume_No_Value_Or_False String_Kind should raise Parse_Error");
@@ -413,7 +413,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("Y1");
-      Val : constant Boolean := Consume_No_Value_Or_False (Args, 'X');
+      Val  : constant Boolean := Consume_No_Value_Or_False (Args, 'X');
 
       T.Assert (not Val);
    end Test_Consume_No_Value_Or_False_Non_Existent;
@@ -500,7 +500,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T1.0");
-      Val : Virtual_String := Consume_String (Args, 'T')
+      Val  : Virtual_String := Consume_String (Args, 'T')
       with Unreferenced;
 
       T.Fail ("Consume_String Float_Kind should raise Parse_Error");
@@ -514,7 +514,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T1");
-      Val : Virtual_String := Consume_String (Args, 'T')
+      Val  : Virtual_String := Consume_String (Args, 'T')
       with Unreferenced;
 
       T.Fail ("Consume_String Integer_Kind should raise Parse_Error");
@@ -528,7 +528,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T");
-      Val : Virtual_String := Consume_String (Args, 'T')
+      Val  : Virtual_String := Consume_String (Args, 'T')
       with Unreferenced;
 
       T.Fail ("Consume_String No_Value_Kind should raise Parse_Error");
@@ -542,7 +542,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X1");
-      Val : Virtual_String := Consume_String (Args, 'T')
+      Val  : Virtual_String := Consume_String (Args, 'T')
       with Unreferenced;
 
       T.Fail ("Consume_String Non_Existent_Kind should raise Parse_Error");
@@ -556,7 +556,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T1.0");
-      Val : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
+      Val  : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
       with Unreferenced;
 
       T.Fail ("Consume_String_Or_Default Float_Kind should raise Parse_Error");
@@ -570,7 +570,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T1");
-      Val : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
+      Val  : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
       with Unreferenced;
 
       T.Fail ("Consume_String_Or_Default Integer_Kind should raise Parse_Error");
@@ -584,7 +584,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("T");
-      Val : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
+      Val  : Virtual_String := Consume_String_Or_Default (Args, 'T', "")
       with Unreferenced;
 
       T.Fail ("Consume_String_Or_Default No_Value_Kind should raise Parse_Error");
@@ -598,7 +598,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("X1");
-      Val : constant Virtual_String := Consume_String_Or_Default (Args, 'T', "default");
+      Val  : constant Virtual_String := Consume_String_Or_Default (Args, 'T', "default");
 
       T.Assert (Val = "default");
    end Test_Consume_String_Or_Default_Non_Existent;
@@ -608,7 +608,7 @@ package body Prunt.Gcode_Arguments.Test is
       T.Register;
 
       Args : Arguments := Parse_Arguments ("A""foo""");
-      Val : constant Virtual_String := Consume_String_Or_Default (Args, 'A', "bar");
+      Val  : constant Virtual_String := Consume_String_Or_Default (Args, 'A', "bar");
 
       T.Assert (Val = "foo");
       T.Assert (Args.Arguments ('A').Consumed);

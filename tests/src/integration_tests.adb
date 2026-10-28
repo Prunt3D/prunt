@@ -36,8 +36,7 @@ procedure Integration_Tests is
    function Starts_With (Source, Prefix : String) return Boolean is
    begin
       return
-        Source'Length >= Prefix'Length
-        and then Source (Source'First .. Source'First + Prefix'Length - 1) = Prefix;
+        Source'Length >= Prefix'Length and then Source (Source'First .. Source'First + Prefix'Length - 1) = Prefix;
    end Starts_With;
 begin
    for I in 1 .. Argument_Count loop

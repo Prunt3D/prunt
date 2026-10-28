@@ -29,13 +29,8 @@ package Prunt_Simulator_Samples is
 
    Sample_Period_S : constant Long_Float := 1.0 / 20_000.0;
 
-   procedure Reset
-     (Motor_Position : Axis_Position;
-      Switch_State   : Input_Switch_State);
-   procedure Append
-     (Motor_Position : Axis_Position;
-      Command        : Command_Index;
-      Switch_State   : Input_Switch_State);
+   procedure Reset (Motor_Position : Axis_Position; Switch_State : Input_Switch_State);
+   procedure Append (Motor_Position : Axis_Position; Command : Command_Index; Switch_State : Input_Switch_State);
    function JSON_Content return access constant Ada.Streams.Stream_Element_Array;
    function JSON_String_Content return String;
    function Execution_JSON_Content (After_Sequence : Interfaces.Integer_64) return String;

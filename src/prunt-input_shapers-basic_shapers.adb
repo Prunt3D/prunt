@@ -68,8 +68,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
             declare
                K  : constant Dimensionless :=
                  Exp
-                   (-Parameters.Zero_Vibration_Damping_Ratio
-                    * Pi
+                   (-Parameters.Zero_Vibration_Damping_Ratio * Pi
                     / (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2));
                TD : constant Dimensionless :=
                  1.0
@@ -136,8 +135,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
             declare
                K  : constant Dimensionless :=
                  Exp
-                   (-Parameters.Extra_Insensitive_Damping_Ratio
-                    * Pi
+                   (-Parameters.Extra_Insensitive_Damping_Ratio * Pi
                     / (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**(1 / 2));
                TD : constant Dimensionless :=
                  1.0

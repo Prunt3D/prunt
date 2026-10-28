@@ -27,11 +27,11 @@ package body Prunt.Gcode_Queues.Test is
    begin
       T.Register;
 
-      Q : Queue;
-      Line : Virtual_String;
-      Source : Queue_Item_Source;
+      Q           : Queue;
+      Line        : Virtual_String;
+      Source      : Queue_Item_Source;
       End_Of_Item : Boolean;
-      Stopped : Boolean;
+      Stopped     : Boolean;
 
       select
          Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);
@@ -46,9 +46,9 @@ package body Prunt.Gcode_Queues.Test is
       T.Register;
 
       Succeeded : Boolean;
-      Filename : constant String := Prunt.Next_Test_Filename;
-      File : Mockable.Text_IO.File_Type;
-      Q : Queue;
+      Filename  : constant String := Prunt.Next_Test_Filename;
+      File      : Mockable.Text_IO.File_Type;
+      Q         : Queue;
 
       Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
       File.Put_Line ("G1 X1");
@@ -72,7 +72,7 @@ package body Prunt.Gcode_Queues.Test is
       T.Register;
 
       Succeeded : Boolean;
-      Q : Queue;
+      Q         : Queue;
 
       Q.Try_Set_Command ("M112", 1, Succeeded);
       T.Assert (Succeeded, "Failed to queue command");
@@ -86,9 +86,9 @@ package body Prunt.Gcode_Queues.Test is
       T.Register;
 
       Succeeded : Boolean;
-      Filename : constant String := Prunt.Next_Test_Filename;
-      File : Mockable.Text_IO.File_Type;
-      Q : Queue;
+      Filename  : constant String := Prunt.Next_Test_Filename;
+      File      : Mockable.Text_IO.File_Type;
+      Q         : Queue;
 
       Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
       File.Put_Line ("M112");
@@ -114,13 +114,13 @@ package body Prunt.Gcode_Queues.Test is
    begin
       T.Register;
 
-      Succeeded : Boolean;
-      Line : Virtual_String;
-      Source : Queue_Item_Source;
+      Succeeded   : Boolean;
+      Line        : Virtual_String;
+      Source      : Queue_Item_Source;
       End_Of_Item : Boolean;
-      Stopped : Boolean;
-      Cmd : constant Virtual_String := "G28";
-      Q : Queue;
+      Stopped     : Boolean;
+      Cmd         : constant Virtual_String := "G28";
+      Q           : Queue;
 
       Q.Try_Set_Command (Cmd, 42, Succeeded);
       T.Assert (Succeeded, "Failed to queue command");
@@ -140,9 +140,9 @@ package body Prunt.Gcode_Queues.Test is
       T.Register;
 
       Succeeded : Boolean;
-      Filename : constant String := Prunt.Next_Test_Filename;
-      File : Mockable.Text_IO.File_Type;
-      Q : Queue;
+      Filename  : constant String := Prunt.Next_Test_Filename;
+      File      : Mockable.Text_IO.File_Type;
+      Q         : Queue;
 
       Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
       File.Put_Line ("G1");
@@ -171,14 +171,14 @@ package body Prunt.Gcode_Queues.Test is
    begin
       T.Register;
 
-      Succeeded : Boolean;
-      Filename : constant String := Prunt.Next_Test_Filename;
-      File : Mockable.Text_IO.File_Type;
-      Line : Virtual_String;
-      Source : Queue_Item_Source;
+      Succeeded   : Boolean;
+      Filename    : constant String := Prunt.Next_Test_Filename;
+      File        : Mockable.Text_IO.File_Type;
+      Line        : Virtual_String;
+      Source      : Queue_Item_Source;
       End_Of_Item : Boolean;
-      Stopped : Boolean;
-      Q : Queue;
+      Stopped     : Boolean;
+      Q           : Queue;
 
       Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
       File.Close;
@@ -199,7 +199,7 @@ package body Prunt.Gcode_Queues.Test is
       T.Register;
 
       Succeeded : Boolean;
-      Q : Queue;
+      Q         : Queue;
 
       Q.Try_Set_File ("/tmp/prunt_tests/nonexistent_file_e2wrqkjlofdsa8u9erqfwij", Succeeded);
       T.Assert (not Succeeded, "Should return False when file open fails");
@@ -209,14 +209,14 @@ package body Prunt.Gcode_Queues.Test is
    begin
       T.Register;
 
-      Q : Queue;
-      Succeeded : Boolean;
-      Filename : constant String := Prunt.Next_Test_Filename;
-      File : Mockable.Text_IO.File_Type;
-      Line : Virtual_String;
-      Source : Queue_Item_Source;
+      Q           : Queue;
+      Succeeded   : Boolean;
+      Filename    : constant String := Prunt.Next_Test_Filename;
+      File        : Mockable.Text_IO.File_Type;
+      Line        : Virtual_String;
+      Source      : Queue_Item_Source;
       End_Of_Item : Boolean;
-      Stopped : Boolean;
+      Stopped     : Boolean;
 
       Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
       File.Put_Line ("FILE_LINE_1");
@@ -266,20 +266,20 @@ package body Prunt.Gcode_Queues.Test is
    begin
       T.Register;
 
-      Q : Queue;
+      Q        : Queue;
       Filename : constant String := Prunt.Next_Test_Filename;
-      File : Mockable.Text_IO.File_Type;
+      File     : Mockable.Text_IO.File_Type;
 
       Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
       File.Put_Line ("G1 X10");
       File.Put_Line ("G1 Y10");
       File.Close;
 
-      Succeeded : Boolean;
-      Line : Virtual_String;
-      Source : Queue_Item_Source;
+      Succeeded   : Boolean;
+      Line        : Virtual_String;
+      Source      : Queue_Item_Source;
       End_Of_Item : Boolean;
-      Stopped : Boolean;
+      Stopped     : Boolean;
 
       Q.Try_Set_File (+Filename, Succeeded);
       T.Assert (Succeeded, "Failed to queue file");
@@ -307,14 +307,14 @@ package body Prunt.Gcode_Queues.Test is
    begin
       T.Register;
 
-      Q : Queue;
-      Filename : constant String := Prunt.Next_Test_Filename;
-      File : Mockable.Text_IO.File_Type;
-      Succeeded : Boolean;
-      Line : Virtual_String;
-      Source : Queue_Item_Source;
+      Q           : Queue;
+      Filename    : constant String := Prunt.Next_Test_Filename;
+      File        : Mockable.Text_IO.File_Type;
+      Succeeded   : Boolean;
+      Line        : Virtual_String;
+      Source      : Queue_Item_Source;
       End_Of_Item : Boolean;
-      Stopped : Boolean;
+      Stopped     : Boolean;
 
       Mockable.Text_IO.Create (File, Mockable.Text_IO.Out_File, Filename);
       File.Put_Line ("G1 X10");
@@ -348,11 +348,11 @@ package body Prunt.Gcode_Queues.Test is
    begin
       T.Register;
 
-      Q : Queue;
-      Line : Virtual_String;
-      Source : Queue_Item_Source;
+      Q           : Queue;
+      Line        : Virtual_String;
+      Source      : Queue_Item_Source;
       End_Of_Item : Boolean;
-      Stopped : Boolean;
+      Stopped     : Boolean;
 
       Q.Stop_Waiting;
       Q.Get_Next_Line (Line, Source, End_Of_Item, Stopped);

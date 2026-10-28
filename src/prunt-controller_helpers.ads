@@ -80,8 +80,7 @@ private
    function Identifier_Image (Identifier : Module_Types.Gcode_Command_Identifier) return String;
    --  Return a compact G-code identifier string such as G1 or M104.
 
-   function Are_Kinds_Disjoint
-     (Left, Right : Module_Types.Gcode_Argument_Allowed_Kinds) return Boolean;
+   function Are_Kinds_Disjoint (Left, Right : Module_Types.Gcode_Argument_Allowed_Kinds) return Boolean;
    --  Return True when two argument-kind sets have no common allowed kind.
 
    function Overlaps (Left, Right : Gcode_Dispatch_Entry) return Boolean;

@@ -34,7 +34,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
    begin
       T.Register;
 
-      Left : Map;
+      Left  : Map;
       Right : Map;
 
       Left.Insert (1, "A");
@@ -176,11 +176,11 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
    procedure Test_Foreign_Cursors (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
-      M : aliased Map;
+      M     : aliased Map;
       Other : Map;
       M.Insert (1, "A");
       Other.Insert (1, "B");
-      Iter : Map_Iterator_Interfaces.Reversible_Iterator'Class := M.Iterate;
+      Iter  : Map_Iterator_Interfaces.Reversible_Iterator'Class := M.Iterate;
       for Action in 1 .. 5 loop
          begin
             case Action is
@@ -191,6 +191,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
                      T.Assert (R.Element.all = "A");
                      T.Fail ("Foreign constant reference accepted");
                   end;
+
                when 2 =>
                   declare
                      R : constant Reference_Type := M.Reference (Other.First);
@@ -198,6 +199,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
                      T.Assert (R.Element.all = "A");
                      T.Fail ("Foreign mutable reference accepted");
                   end;
+
                when 3 =>
                   declare
                      Foreign : Map_Iterator_Interfaces.Reversible_Iterator'Class := M.Iterate (Other.First);
@@ -205,15 +207,18 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
                      T.Assert (Foreign.First = M.First);
                      T.Fail ("Foreign iterator start accepted");
                   end;
+
                when 4 =>
                   T.Assert (Iter.Next (Other.First) = No_Element);
                   T.Fail ("Foreign Next accepted");
+
                when 5 =>
                   T.Assert (Iter.Previous (Other.First) = No_Element);
                   T.Fail ("Foreign Previous accepted");
             end case;
          exception
-            when Program_Error => null;
+            when Program_Error =>
+               null;
          end;
       end loop;
       T.Assert (Iter.Next (No_Element) = No_Element);
@@ -312,15 +317,25 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
          begin
             begin
                case Action is
-                  when 1 => M.Insert (3, "C");
-                  when 2 => M.Delete (1);
-                  when 3 => M.Exclude (2);
-                  when 4 => M.Include (3, "C");
-                  when 5 => M.Reverse_Clear;
+                  when 1 =>
+                     M.Insert (3, "C");
+
+                  when 2 =>
+                     M.Delete (1);
+
+                  when 3 =>
+                     M.Exclude (2);
+
+                  when 4 =>
+                     M.Include (3, "C");
+
+                  when 5 =>
+                     M.Reverse_Clear;
                end case;
                T.Fail ("Mutation during iteration must raise Program_Error");
             exception
-               when Program_Error => null;
+               when Program_Error =>
+                  null;
             end;
             T.Assert (M.Length = 2 and then M.Contains (1) and then M.Contains (2));
             T.Assert (not M.Contains (3));
@@ -335,7 +350,8 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
             raise Constraint_Error;
          end loop;
       exception
-         when Constraint_Error => null;
+         when Constraint_Error =>
+            null;
       end;
       M.Reverse_Clear;
       T.Assert (M.Is_Empty);
@@ -424,7 +440,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
       M : aliased Map;
       M.Insert (1, "A");
       begin
-         R : constant Constant_Reference_Type := M.Constant_Reference (1);
+         R    : constant Constant_Reference_Type := M.Constant_Reference (1);
          Copy : Map := M;
          T.Assert (Copy = M, "Reference bookkeeping must not affect map equality");
          Copy.Include (1, "Independent copy");
@@ -439,12 +455,14 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
             M.Include (1, "Still referenced");
             T.Fail ("The outer reference must still prevent replacement");
          exception
-            when Program_Error => null;
+            when Program_Error =>
+               null;
          end;
          T.Assert (R.Element.all = "B");
          raise Constraint_Error;
       exception
-         when Constraint_Error => null;
+         when Constraint_Error =>
+            null;
       end;
       M.Include (1, "Released after exception");
       T.Assert (M.Element (1) = "Released after exception");
@@ -452,7 +470,8 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
          R : constant Reference_Type := M.Reference (99);
          T.Fail ("Missing reference should fail: " & R.Element.all);
       exception
-         when Constraint_Error => null;
+         when Constraint_Error =>
+            null;
       end;
       M.Include (1, "No leaked guard");
       T.Assert (M.Element (1) = "No leaked guard");
@@ -485,13 +504,15 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
                   M.Delete (1);
                   T.Fail ("A live reference must prohibit deletion");
                exception
-                  when Program_Error => null;
+                  when Program_Error =>
+                     null;
                end;
                begin
                   M.Include (1, "A replacement with different bounds");
                   T.Fail ("A live reference must prohibit replacement");
                exception
-                  when Program_Error => null;
+                  when Program_Error =>
+                     null;
                end;
                T.Assert (M.Length = 1 and then M.Contains (1));
             end Try_Delete;
@@ -544,7 +565,7 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test is
       M.Insert (20, "Twenty");
       M.Insert (30, "Thirty");
 
-      Count : Ada.Containers.Count_Type := 0;
+      Count    : Ada.Containers.Count_Type := 0;
       Last_Key : Integer := Integer'Last;
 
       for Position in reverse M.Iterate loop

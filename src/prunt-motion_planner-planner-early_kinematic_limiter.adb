@@ -61,8 +61,7 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
 
                when Helix_Primitive_Kind =>
                   XYZ_Path_Length :=
-                    (Primitive.Radius ** 2 + (abs [Primitive.Axial_Per_Phase with delta E_Axis => 0.0 * mm]) ** 2)
-                    ** (1 / 2)
+                    (Primitive.Radius**2 + (abs [Primitive.Axial_Per_Phase with delta E_Axis => 0.0 * mm])**2)**(1 / 2)
                     * abs Primitive.Theta_Delta;
             end case;
 

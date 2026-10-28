@@ -94,9 +94,7 @@ private
    with Annotate => (Prunt_Config, Root_User_Config);
 
    function Current_Speed
-     (Config         : User_Config;
-      Tachometer     : Tachometer_Name;
-      Requires_Fresh : Boolean) return Dimensionless;
+     (Config : User_Config; Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Dimensionless;
    --  Return Tachometer's speed.
 
    procedure Log_Tachometers (Config : User_Config; Requires_Fresh : Boolean);

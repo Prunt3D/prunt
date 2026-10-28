@@ -44,7 +44,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
@@ -79,10 +79,10 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
-      Result : Ada.Exceptions.Exception_Occurrence;
-      Got_Fatal : Boolean;
+      Result     : Ada.Exceptions.Exception_Occurrence;
+      Got_Fatal  : Boolean;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
 
@@ -166,7 +166,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
@@ -182,7 +182,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
@@ -197,7 +197,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
@@ -215,11 +215,11 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
-      First_Occurrence : Ada.Exceptions.Exception_Occurrence;
+      Holder            : Exception_Occurrence_Holder_Type;
+      First_Occurrence  : Ada.Exceptions.Exception_Occurrence;
       Second_Occurrence : Ada.Exceptions.Exception_Occurrence;
-      Result : Ada.Exceptions.Exception_Occurrence;
-      Is_Fatal : Boolean;
+      Result            : Ada.Exceptions.Exception_Occurrence;
+      Is_Fatal          : Boolean;
 
       Raise_And_Save (First_Occurrence, Test_Exception'Identity);
       Raise_And_Save (Second_Occurrence, Other_Exception'Identity);
@@ -239,7 +239,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
@@ -257,11 +257,11 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder                 : Exception_Occurrence_Holder_Type;
       Recoverable_Occurrence : Ada.Exceptions.Exception_Occurrence;
-      Fatal_Occurrence : Ada.Exceptions.Exception_Occurrence;
-      Result : Ada.Exceptions.Exception_Occurrence;
-      Is_Fatal : Boolean;
+      Fatal_Occurrence       : Ada.Exceptions.Exception_Occurrence;
+      Result                 : Ada.Exceptions.Exception_Occurrence;
+      Is_Fatal               : Boolean;
 
       Raise_And_Save (Recoverable_Occurrence, Test_Exception'Identity);
       Raise_And_Save (Fatal_Occurrence, Other_Exception'Identity);
@@ -280,7 +280,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
@@ -298,11 +298,11 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
-      First_Occurrence : Ada.Exceptions.Exception_Occurrence;
+      Holder            : Exception_Occurrence_Holder_Type;
+      First_Occurrence  : Ada.Exceptions.Exception_Occurrence;
       Second_Occurrence : Ada.Exceptions.Exception_Occurrence;
-      Result : Ada.Exceptions.Exception_Occurrence;
-      Is_Fatal : Boolean;
+      Result            : Ada.Exceptions.Exception_Occurrence;
+      Is_Fatal          : Boolean;
 
       Raise_And_Save (First_Occurrence, Test_Exception'Identity);
       Raise_And_Save (Second_Occurrence, Other_Exception'Identity);
@@ -322,7 +322,7 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
@@ -340,10 +340,10 @@ package body Prunt.Exception_Occurrence_Holders.Test is
    begin
       T.Register;
 
-      Holder : Exception_Occurrence_Holder_Type;
+      Holder     : Exception_Occurrence_Holder_Type;
       Occurrence : Ada.Exceptions.Exception_Occurrence;
-      Result : Ada.Exceptions.Exception_Occurrence;
-      Is_Fatal : Boolean;
+      Result     : Ada.Exceptions.Exception_Occurrence;
+      Is_Fatal   : Boolean;
 
       Raise_And_Save (Occurrence, Test_Exception'Identity);
       Holder.Set_Recoverable

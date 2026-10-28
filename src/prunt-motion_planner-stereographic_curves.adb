@@ -51,7 +51,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    Binomial_Table : constant Binomial_Table_Type := Build_Binomial_Table;
 
    function Binomial_Index (N, K : Natural) return Natural
-   is ((N + 1) ** 2 / 4 + Natural'Min (K, N - K));
+   is ((N + 1)**2 / 4 + Natural'Min (K, N - K));
    pragma Inline (Binomial_Index);
    --  C(N,K) = C(N,N-K). Pack only K <= N/2; the preceding rows contain floor((N+1)**2/4) entries.
 
@@ -97,7 +97,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
    function Closure_Envelope_Value (U : Dimensionless) return Dimensionless is
    begin
-      return 256.0 * U ** 4 * (1.0 - U) ** 4;
+      return 256.0 * U**4 * (1.0 - U)**4;
    end Closure_Envelope_Value;
 
    function Factorial (N : Natural) return Dimensionless is
@@ -162,8 +162,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          declare
             T     : constant Dimensionless := Tangent (Axis);
             D1    : constant Dimensionless := Tangent_Derivative_1 (Axis) * mm;
-            D2    : constant Dimensionless := Tangent_Derivative_2 (Axis) * mm ** 2;
-            D3    : constant Dimensionless := Tangent_Derivative_3 (Axis) * mm ** 3;
+            D2    : constant Dimensionless := Tangent_Derivative_2 (Axis) * mm**2;
+            D3    : constant Dimensionless := Tangent_Derivative_3 (Axis) * mm**3;
             T_T   : constant Dimensionless := T * T;
             T_D1  : constant Dimensionless := T * D1;
             T_D2  : constant Dimensionless := T * D2;
@@ -216,7 +216,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       --  Scaling by the largest component keeps Σ(Value/Scale)² away from both overflow and underflow.
       for A in Axis_Name loop
-         Sum := Sum + (Value (A) / Scale) ** 2;
+         Sum := Sum + (Value (A) / Scale)**2;
       end loop;
       Success := True;
       return Scale * Dimensionless_Math.Sqrt (Sum);
@@ -245,7 +245,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       --  Compute ‖Value‖ = Scale·√Σ(Value/Scale)² after removing the physical unit.
       for A in Axis_Name loop
-         Sum := Sum + (Dimensionless (Value (A) / mm) / Scale) ** 2;
+         Sum := Sum + (Dimensionless (Value (A) / mm) / Scale)**2;
       end loop;
       Success := True;
       return Dimensionless (Scale * Dimensionless_Math.Sqrt (Sum)) * mm;
@@ -320,8 +320,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       for A in Axis_Name loop
          if not Is_Finite (Jet.Tangent (A))
            or else not Is_Finite (Dimensionless (Jet.Tangent_Derivative_1 (A) / (1.0 / mm)))
-           or else not Is_Finite (Dimensionless (Jet.Tangent_Derivative_2 (A) / (1.0 / mm ** 2)))
-           or else not Is_Finite (Dimensionless (Jet.Tangent_Derivative_3 (A) / (1.0 / mm ** 3)))
+           or else not Is_Finite (Dimensionless (Jet.Tangent_Derivative_2 (A) / (1.0 / mm**2)))
+           or else not Is_Finite (Dimensionless (Jet.Tangent_Derivative_3 (A) / (1.0 / mm**3)))
          then
             return False;
          end if;
@@ -549,11 +549,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             --  Scaling the normalized distance by λ scales the kth endpoint derivative by λᵏ. Form the analytic
             --  λ-derivative beside it for the closure Jacobian.
             for K in Raw_Taylor'Range loop
-               Start_Scaled (K) := Lambda ** K * Start_Jets (K) (C);
-               Finish_Scaled (K) := Lambda ** K * Finish_Jets (K) (C);
+               Start_Scaled (K) := Lambda**K * Start_Jets (K) (C);
+               Finish_Scaled (K) := Lambda**K * Finish_Jets (K) (C);
                if K > 0 then
-                  D_Start_Scaled (K) := Dimensionless (K) * Lambda ** (K - 1) * Start_Jets (K) (C);
-                  D_Finish_Scaled (K) := Dimensionless (K) * Lambda ** (K - 1) * Finish_Jets (K) (C);
+                  D_Start_Scaled (K) := Dimensionless (K) * Lambda**(K - 1) * Start_Jets (K) (C);
+                  D_Finish_Scaled (K) := Dimensionless (K) * Lambda**(K - 1) * Finish_Jets (K) (C);
                end if;
             end loop;
 
@@ -565,32 +565,31 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             --  through order three.
             Start_Base (0) := Start_Scaled (0);
             Start_Base (1) := Start_Scaled (1) / Warp_Factor;
-            Start_Base (2) := (Start_Scaled (2) + Warp_Difference * Start_Scaled (1)) / Warp_Factor ** 2;
+            Start_Base (2) := (Start_Scaled (2) + Warp_Difference * Start_Scaled (1)) / Warp_Factor**2;
             Start_Base (3) :=
-              (Start_Scaled (3) + 2.0 * Warp_Difference * Start_Scaled (2) + Warp_Difference ** 2 * Start_Scaled (1))
-              / Warp_Factor ** 3;
+              (Start_Scaled (3) + 2.0 * Warp_Difference * Start_Scaled (2) + Warp_Difference**2 * Start_Scaled (1))
+              / Warp_Factor**3;
             D_Start_Base (0) := D_Start_Scaled (0);
             D_Start_Base (1) := D_Start_Scaled (1) / Warp_Factor;
-            D_Start_Base (2) := (D_Start_Scaled (2) + Warp_Difference * D_Start_Scaled (1)) / Warp_Factor ** 2;
+            D_Start_Base (2) := (D_Start_Scaled (2) + Warp_Difference * D_Start_Scaled (1)) / Warp_Factor**2;
             D_Start_Base (3) :=
               (D_Start_Scaled (3) + 2.0 * Warp_Difference * D_Start_Scaled (2)
-               + Warp_Difference ** 2 * D_Start_Scaled (1))
-              / Warp_Factor ** 3;
+               + Warp_Difference**2 * D_Start_Scaled (1))
+              / Warp_Factor**3;
 
             Finish_Base (0) := Finish_Scaled (0);
             Finish_Base (1) := Warp_Factor * Finish_Scaled (1);
-            Finish_Base (2) :=
-              Warp_Factor ** 2 * Finish_Scaled (2) + Warp_Factor * Warp_Difference * Finish_Scaled (1);
+            Finish_Base (2) := Warp_Factor**2 * Finish_Scaled (2) + Warp_Factor * Warp_Difference * Finish_Scaled (1);
             Finish_Base (3) :=
-              Warp_Factor ** 3 * Finish_Scaled (3) + 2.0 * Warp_Factor ** 2 * Warp_Difference * Finish_Scaled (2)
-              + Warp_Factor * Warp_Difference ** 2 * Finish_Scaled (1);
+              Warp_Factor**3 * Finish_Scaled (3) + 2.0 * Warp_Factor**2 * Warp_Difference * Finish_Scaled (2)
+              + Warp_Factor * Warp_Difference**2 * Finish_Scaled (1);
             D_Finish_Base (0) := D_Finish_Scaled (0);
             D_Finish_Base (1) := Warp_Factor * D_Finish_Scaled (1);
             D_Finish_Base (2) :=
-              Warp_Factor ** 2 * D_Finish_Scaled (2) + Warp_Factor * Warp_Difference * D_Finish_Scaled (1);
+              Warp_Factor**2 * D_Finish_Scaled (2) + Warp_Factor * Warp_Difference * D_Finish_Scaled (1);
             D_Finish_Base (3) :=
-              Warp_Factor ** 3 * D_Finish_Scaled (3) + 2.0 * Warp_Factor ** 2 * Warp_Difference * D_Finish_Scaled (2)
-              + Warp_Factor * Warp_Difference ** 2 * D_Finish_Scaled (1);
+              Warp_Factor**3 * D_Finish_Scaled (3) + 2.0 * Warp_Factor**2 * Warp_Difference * D_Finish_Scaled (2)
+              + Warp_Factor * Warp_Difference**2 * D_Finish_Scaled (1);
 
             for I in 0 .. 3 loop
                --  A degree-7 Hermite interpolant has exactly eight endpoint conditions: value plus three derivatives
@@ -726,7 +725,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       R2 : Dimensionless := 0.0;
    begin
       for C in Chart_Component_Index loop
-         R2 := R2 + Y (C) ** 2;
+         R2 := R2 + Y (C)**2;
       end loop;
       declare
          Denominator : constant Dimensionless := 1.0 + R2;
@@ -747,18 +746,18 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       R2     : Dimensionless := 0.0;
    begin
       for C in Chart_Component_Index loop
-         R2 := R2 + Y (C) ** 2;
+         R2 := R2 + Y (C)**2;
       end loop;
       declare
          Denominator : constant Dimensionless := 1.0 + R2;
       begin
          --  Differentiate S₀ = (1 - r²)/(1 + r²) and Sᵢ = 2Yᵢ/(1 + r²) with respect to each Yⱼ.
          for J in Chart_Component_Index loop
-            Result (0, J) := -4.0 * Y (J) / Denominator ** 2;
+            Result (0, J) := -4.0 * Y (J) / Denominator**2;
          end loop;
          for I in Chart_Component_Index loop
             for J in Chart_Component_Index loop
-               Result (I, J) := (if I = J then 2.0 / Denominator else 0.0) - 4.0 * Y (I) * Y (J) / Denominator ** 2;
+               Result (I, J) := (if I = J then 2.0 / Denominator else 0.0) - 4.0 * Y (I) * Y (J) / Denominator**2;
             end loop;
          end loop;
       end;
@@ -1036,7 +1035,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Value  : constant Exact_Binomial_Value := Exact_Binomial (N, K);
                Centre : constant Dimensionless := Dimensionless (Value);
                Factor : constant Positive_Endpoints :=
-                 (if Value <= 2 ** Dimensionless'Machine_Mantissa
+                 (if Value <= 2**Dimensionless'Machine_Mantissa
                   then (Lower => Centre, Upper => Centre)
                   else (Lower => Down (Centre), Upper => Up (Centre)));
             begin
@@ -1601,7 +1600,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
         Complete_Frame (Chord_Direction, Frame (1), Frame (2), Frame (3), Closure_Frame);
 
       function Norm (Value : Raw_Vector_4) return Dimensionless
-      is (Dimensionless_Math.Sqrt (Value (0) ** 2 + Value (1) ** 2 + Value (2) ** 2 + Value (3) ** 2));
+      is (Dimensionless_Math.Sqrt (Value (0)**2 + Value (1)**2 + Value (2)**2 + Value (3)**2));
 
       function Solve_Linear (Matrix : Raw_Matrix_4; Right : Raw_Vector_4; Solution : out Raw_Vector_4) return Boolean;
       --  Solve a four-by-four linear system and report whether a stable solution was found.
@@ -3326,15 +3325,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                --  Interval padding must not turn an algebraic zero into a visible planner bound.
                Result.Velocity (A) := 0.0;
                Result.Acceleration (A) := 0.0 / mm;
-               Result.Jerk (A) := 0.0 / mm ** 2;
-               Result.Snap (A) := 0.0 / mm ** 3;
-               Result.Crackle (A) := 0.0 / mm ** 4;
+               Result.Jerk (A) := 0.0 / mm**2;
+               Result.Snap (A) := 0.0 / mm**3;
+               Result.Crackle (A) := 0.0 / mm**4;
             else
                Result.Velocity (A) := Majorants (A) (0);
                Result.Acceleration (A) := Physical_Bound (Majorants (A) (1), 1) / mm;
-               Result.Jerk (A) := Physical_Bound (Majorants (A) (2), 2) / mm ** 2;
-               Result.Snap (A) := Physical_Bound (Majorants (A) (3), 3) / mm ** 3;
-               Result.Crackle (A) := Physical_Bound (Majorants (A) (4), 4) / mm ** 4;
+               Result.Jerk (A) := Physical_Bound (Majorants (A) (2), 2) / mm**2;
+               Result.Snap (A) := Physical_Bound (Majorants (A) (3), 3) / mm**3;
+               Result.Crackle (A) := Physical_Bound (Majorants (A) (4), 4) / mm**4;
             end if;
          end loop;
          return Result;
@@ -3800,7 +3799,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       elsif Normalized_Distance >= 1.0 then
          return 1.0;
       end if;
-      Lower_Half := U ** 6 * (462.0 + U * (-1_980.0 + U * (3_465.0 + U * (-3_080.0 + U * (1_386.0 - 252.0 * U)))));
+      Lower_Half := U**6 * (462.0 + U * (-1_980.0 + U * (3_465.0 + U * (-3_080.0 + U * (1_386.0 - 252.0 * U)))));
       return (if Normalized_Distance <= 0.5 then Lower_Half else 1.0 - Lower_Half);
    end Endpoint_Smootherstep;
 
@@ -3948,10 +3947,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Result := Interval_Exact (Dimensionless (Jet.Tangent_Derivative_1 (Axis) * mm));
 
             when 2 =>
-               Result := Interval_Exact (Dimensionless (Jet.Tangent_Derivative_2 (Axis) * mm ** 2));
+               Result := Interval_Exact (Dimensionless (Jet.Tangent_Derivative_2 (Axis) * mm**2));
 
             when 3 =>
-               Result := Interval_Exact (Dimensionless (Jet.Tangent_Derivative_3 (Axis) * mm ** 3));
+               Result := Interval_Exact (Dimensionless (Jet.Tangent_Derivative_3 (Axis) * mm**3));
          end case;
          for Exponent in 1 .. Order loop
             Result := Interval_Multiply (Result, Length_Raw);
@@ -4842,7 +4841,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Row_Norm : Dimensionless := 0.0;
          begin
             for Component in Chart_Component_Index loop
-               Row_Norm := Row_Norm + Power_Coefficients (Degree, Component) ** 2;
+               Row_Norm := Row_Norm + Power_Coefficients (Degree, Component)**2;
             end loop;
             if Row_Norm > 0.0 then
                Chart_Degree := Degree;
@@ -5426,7 +5425,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end if;
       --  Combine per-axis error bounds with a scaled Euclidean norm to avoid squaring large absolute coordinates.
       for Axis in Axis_Name loop
-         Sum := Up (Sum + (Axis_Errors (Axis) / Scale) ** 2);
+         Sum := Up (Sum + (Axis_Errors (Axis) / Scale)**2);
       end loop;
       if not Is_Finite (Sum) then
          return Length'Last;
@@ -5465,7 +5464,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Start_Square     : constant Dimensionless := Dot (Start_Tangent, Start_Tangent);
          Finish_Square    : constant Dimensionless := Dot (Finish_Tangent, Finish_Tangent);
          Cross            : constant Dimensionless := Dot (Start_Tangent, Finish_Tangent);
-         Determinant      : constant Dimensionless := Start_Square * Finish_Square - Cross ** 2;
+         Determinant      : constant Dimensionless := Start_Square * Finish_Square - Cross**2;
          --  In the endpoint plane, Start_Dual is orthogonal to the finish tangent and Finish_Dual to the start
          --  tangent. A tangent a·s + b·f + (normal part) projects onto them as a·Δ and b·Δ, where Δ is the Gram
          --  determinant.
@@ -5481,7 +5480,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Along : constant Dimensionless := Dot (Chord_Direction, Start_Tangent) / Start_Square;
                Off   : constant Position_Scale := Chord_Direction - Start_Tangent * Along;
             begin
-               return Cross > 0.0 and then Along > 0.0 and then Dot (Off, Off) <= Chord_Tolerance ** 2;
+               return Cross > 0.0 and then Along > 0.0 and then Dot (Off, Off) <= Chord_Tolerance**2;
             end;
          end if;
          --  Near the start the tangent is s + u·κₛ, whose finish-dual projection u·κₛ·Finish_Dual must not be
@@ -6302,11 +6301,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       begin
          for Axis in Axis_Name loop
             if Request.Start.Jet.Tangent_Derivative_1 (Axis) /= 0.0 / mm
-              or else Request.Start.Jet.Tangent_Derivative_2 (Axis) /= 0.0 / mm ** 2
-              or else Request.Start.Jet.Tangent_Derivative_3 (Axis) /= 0.0 / mm ** 3
+              or else Request.Start.Jet.Tangent_Derivative_2 (Axis) /= 0.0 / mm**2
+              or else Request.Start.Jet.Tangent_Derivative_3 (Axis) /= 0.0 / mm**3
               or else Request.Finish.Jet.Tangent_Derivative_1 (Axis) /= 0.0 / mm
-              or else Request.Finish.Jet.Tangent_Derivative_2 (Axis) /= 0.0 / mm ** 2
-              or else Request.Finish.Jet.Tangent_Derivative_3 (Axis) /= 0.0 / mm ** 3
+              or else Request.Finish.Jet.Tangent_Derivative_2 (Axis) /= 0.0 / mm**2
+              or else Request.Finish.Jet.Tangent_Derivative_3 (Axis) /= 0.0 / mm**3
             then
                return False;
             end if;
@@ -6404,7 +6403,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   --  D_Warp_Jacobian is ∂(dU/dV)/∂log(W), which supplies the derivative needed by the safeguarded
                   --  Newton solve.
                   Warp_Denominator   : constant Dimensionless := Candidate_Warp - (Candidate_Warp - 1.0) * V;
-                  Warp_Jacobian      : constant Dimensionless := Candidate_Warp / Warp_Denominator ** 2;
+                  Warp_Jacobian      : constant Dimensionless := Candidate_Warp / Warp_Denominator**2;
                   D_Warp_Jacobian    : constant Dimensionless :=
                     Warp_Jacobian * (1.0 - 2.0 * Candidate_Warp * (1.0 - V) / Warp_Denominator);
                   --  H is the degree-7 smoothstep
@@ -6413,7 +6412,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   --
                   --  Its first three derivatives vanish at V = 0 and V = 1. Z moves from -Q to +Q; inverse
                   --  stereographic projection then traces the unit tangent from s to f.
-                  H                  : constant Dimensionless := V ** 4 * (35.0 + V * (-84.0 + V * (70.0 - 20.0 * V)));
+                  H                  : constant Dimensionless := V**4 * (35.0 + V * (-84.0 + V * (70.0 - 20.0 * V)));
                   Z                  : constant Dimensionless := Q * (2.0 * H - 1.0);
                   Z2                 : constant Dimensionless := Z * Z;
                   Stereo_Denominator : constant Dimensionless := 1.0 + Z2;
@@ -6878,8 +6877,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   Right_Denominator : constant Dimensionless :=
                     Curve.Warp_Factor - (Curve.Warp_Factor - 1.0) * Right_Node;
 
-                  Left_Jacobian  : constant Dimensionless := Curve.Warp_Factor / Left_Denominator ** 2;
-                  Right_Jacobian : constant Dimensionless := Curve.Warp_Factor / Right_Denominator ** 2;
+                  Left_Jacobian  : constant Dimensionless := Curve.Warp_Factor / Left_Denominator**2;
+                  Right_Jacobian : constant Dimensionless := Curve.Warp_Factor / Right_Denominator**2;
 
                   Left_Tangent  : constant Position_Scale :=
                     Frame_Vector (Curve.Frame, Stereographic (Chart_Value (Curve.Coefficients, Left_Node)));
@@ -6976,7 +6975,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       if Scale > 0.0 then
          for Axis in Axis_Name loop
-            Sum := Up (Sum + Up ((Axis_Correction_Bounds (Axis) / Scale) ** 2));
+            Sum := Up (Sum + Up ((Axis_Correction_Bounds (Axis) / Scale)**2));
          end loop;
          if not Is_Finite (Sum) then
             return Dimensionless'Last;

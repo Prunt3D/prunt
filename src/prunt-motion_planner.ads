@@ -105,8 +105,8 @@ package Prunt.Motion_Planner is
    --  Selects one corner-transition construction and contains only the parameters meaningful to that construction.
    --  Stereographic supports the existing line/helix combinations and matches position through its fourth distance
    --  derivative at each endpoint. Circular transitions are C1 and support line-to-line corners; their endpoint jerk,
-   --  snap, and crackle limits are waived. Biarc is C1 for certifiable line/helix corners and has the same waiver at both
-   --  endpoints and its internal splice. Sharp_SCV is C0 for primitives with usable tangents, so acceleration and
+   --  snap, and crackle limits are waived. Biarc is C1 for certifiable line/helix corners and has the same waiver at
+   --  both endpoints and its internal splice. Sharp_SCV is C0 for primitives with usable tangents, so acceleration and
    --  every higher derivative limit are waived at its junction. Unsupported or uncertifiable geometry becomes a hard
    --  stop. These derivative waivers apply to XYZ; Extrusion_Cornering selects E's junction behavior.
 
@@ -178,10 +178,10 @@ package Prunt.Motion_Planner is
 
       Tangential_Velocity_Max  : Velocity := 0.0 * mm / s;
       Axial_Velocity_Maxes     : Axial_Velocities := [others => 0.0 * mm / s];
-      Axial_Acceleration_Maxes : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
-      Axial_Jerk_Maxes         : Axial_Jerks := [others => 0.0 * mm / s ** 3];
-      Axial_Snap_Maxes         : Axial_Snaps := [others => 0.0 * mm / s ** 4];
-      Axial_Crackle_Maxes      : Axial_Crackles := [others => 0.0 * mm / s ** 5];
+      Axial_Acceleration_Maxes : Axial_Accelerations := [others => 0.0 * mm / s**2];
+      Axial_Jerk_Maxes         : Axial_Jerks := [others => 0.0 * mm / s**3];
+      Axial_Snap_Maxes         : Axial_Snaps := [others => 0.0 * mm / s**4];
+      Axial_Crackle_Maxes      : Axial_Crackles := [others => 0.0 * mm / s**5];
       Cornering                : Cornering_Parameters := (others => <>);
       Extrusion_Cornering      : Extrusion_Cornering_Parameters := (others => <>);
       Extrusion_Normalization  : Extrusion_Normalization_Parameters := (others => <>);
@@ -214,17 +214,17 @@ package Prunt.Motion_Planner is
    type Unit_Speed_Axial_Derivative_Bounds is record
       Velocity     : Unit_Speed_Axial_Velocity_Bounds := [others => 0.0];
       Acceleration : Unit_Speed_Axial_Acceleration_Bounds := [others => 0.0 / mm];
-      Jerk         : Unit_Speed_Axial_Jerk_Bounds := [others => 0.0 / mm ** 2];
-      Snap         : Unit_Speed_Axial_Snap_Bounds := [others => 0.0 / mm ** 3];
-      Crackle      : Unit_Speed_Axial_Crackle_Bounds := [others => 0.0 / mm ** 4];
+      Jerk         : Unit_Speed_Axial_Jerk_Bounds := [others => 0.0 / mm**2];
+      Snap         : Unit_Speed_Axial_Snap_Bounds := [others => 0.0 / mm**3];
+      Crackle      : Unit_Speed_Axial_Crackle_Bounds := [others => 0.0 / mm**4];
    end record;
    --  Component-wise bounds for |d^n x / ds^n| on a unit-speed path in scaled coordinates.
 
    type Scalar_Derivative_Limits is record
-      Acceleration_Max : Acceleration := 1.0E100 * mm / s ** 2;
-      Jerk_Max         : Jerk := 1.0E100 * mm / s ** 3;
-      Snap_Max         : Snap := 1.0E100 * mm / s ** 4;
-      Crackle_Max      : Crackle := 1.0E100 * mm / s ** 5;
+      Acceleration_Max : Acceleration := 1.0E100 * mm / s**2;
+      Jerk_Max         : Jerk := 1.0E100 * mm / s**3;
+      Snap_Max         : Snap := 1.0E100 * mm / s**4;
+      Crackle_Max      : Crackle := 1.0E100 * mm / s**5;
    end record;
 
    type Mixed_Derivative_Limit_Result is record
@@ -264,9 +264,9 @@ package Prunt.Motion_Planner is
    --  jerk, snap and crackle peaks scale by Scale, Scale**2, Scale**3 and Scale**4 respectively. Max_Vel is fixed;
    --  zero means no positive time scale could be certified. Products are evaluated without intermediate overflow.
 
-   type Max_Corners_Type is range 2 .. 2 ** 63 - 1;
+   type Max_Corners_Type is range 2 .. 2**63 - 1;
 
-   type Max_Corners_Extra_Data_Type is range 2 .. 2 ** 63 - 1;
+   type Max_Corners_Extra_Data_Type is range 2 .. 2**63 - 1;
 
    type Feedrate_Profile_Times_Index is range 1 .. 4;
    type Feedrate_Profile_Times is array (Feedrate_Profile_Times_Index) of Time;

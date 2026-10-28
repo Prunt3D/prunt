@@ -28,11 +28,9 @@ package Prunt_Simulator_Machine is
    subtype Loop_Move_Setup is Prunt_Simulator_Types.Generic_Types.Loop_Move_Setup;
 
    type Last_Command_Reporter is access procedure (Index : Command_Index);
-   type Error_Reporter is access procedure
-     (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean);
+   type Error_Reporter is access procedure (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean);
 
-   procedure Set_Reporters
-     (Last_Command : Last_Command_Reporter; Error : Error_Reporter);
+   procedure Set_Reporters (Last_Command : Last_Command_Reporter; Error : Error_Reporter);
 
    procedure Enqueue_Command (Command : Queued_Command);
    procedure Setup_For_Loop_Move (Setup : Loop_Move_Setup);

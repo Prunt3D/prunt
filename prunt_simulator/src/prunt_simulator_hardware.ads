@@ -34,8 +34,7 @@ package Prunt_Simulator_Hardware is
    procedure Reconfigure_Fan (Fan : Fan_Name; PWM_Frequency : Frequency);
    function Get_Tachometer_Frequency (Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Frequency;
    function Get_Input_Switch_State (Switch : Input_Switch_Name) return Boolean;
-   function Get_Input_Switch_State_At_Position
-     (Switch : Input_Switch_Name; Position : Motor_Position) return Boolean;
+   function Get_Input_Switch_State_At_Position (Switch : Input_Switch_Name; Position : Motor_Position) return Boolean;
    --  Return the raw electrical state of Switch at Position. Position is expressed in the motor units emitted by
    --  Prunt.
 
@@ -48,14 +47,11 @@ package Prunt_Simulator_Hardware is
    procedure Reconfigure_Heater
      (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
    procedure Set_Heater_Temperature (Heater : Heater_Name; Target : Temperature);
-   procedure Autotune_Heater
-     (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
+   procedure Autotune_Heater (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
 
-   procedure Reconfigure_Thermistor
-     (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters);
+   procedure Reconfigure_Thermistor (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters);
    function Get_Thermistor_Temperature (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;
-   function Get_Board_Temperature
-     (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature;
+   function Get_Board_Temperature (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature;
    procedure Turn_Power_Supply_On;
    procedure Turn_Power_Supply_Off;
    function Power_Supply_Is_On return Boolean;
@@ -74,8 +70,7 @@ package Prunt_Simulator_Hardware is
             Gcode_Index                     => 0,
             Reconfigure_Fixed_Switching_Fan => Reconfigure_Fan'Access,
             Maximum_PWM_Frequency           => 25_000.0 * hertz)],
-      Tachometer_Hardware              =>
-        [others => (Get_Pulse_Frequency => Get_Tachometer_Frequency'Access)],
+      Tachometer_Hardware              => [others => (Get_Pulse_Frequency => Get_Tachometer_Frequency'Access)],
       Input_Switch_Hardware            =>
         [others => (Visible_To_User => True, Get_State => Get_Input_Switch_State'Access)],
       Heater_Hardware                  =>
@@ -86,10 +81,8 @@ package Prunt_Simulator_Hardware is
             others          => <>)],
       Thermistor_Hardware              =>
         [others =>
-           (Reconfigure     => Reconfigure_Thermistor'Access,
-            Get_Temperature => Get_Thermistor_Temperature'Access)],
-      Board_Temperature_Probe_Hardware =>
-        [others => (Get_Temperature => Get_Board_Temperature'Access)],
+           (Reconfigure => Reconfigure_Thermistor'Access, Get_Temperature => Get_Thermistor_Temperature'Access)],
+      Board_Temperature_Probe_Hardware => [others => (Get_Temperature => Get_Board_Temperature'Access)],
       Power_Control_Hardware           =>
         (Turn_On  => Turn_Power_Supply_On'Access,
          Turn_Off => Turn_Power_Supply_Off'Access,

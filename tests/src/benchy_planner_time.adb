@@ -28,20 +28,35 @@ with Ada.Text_IO;
 with Ada.Unchecked_Conversion;
 with GNAT.OS_Lib;
 with Interfaces;
-with Prunt;                        use Prunt;
+with Prunt;                use Prunt;
 with Prunt.Input_Shapers;
-with Prunt.Motion_Planner;         use Prunt.Motion_Planner;
+with Prunt.Motion_Planner; use Prunt.Motion_Planner;
 with Prunt.Motion_Planner.Planner;
 
 procedure Benchy_Planner_Time is
    type Benchmark_Case is
-     (Baseline, E_Acceleration, X_Crackle, Mixed_Limits, Circular_Corners, XYZ_Only, Relaxed_E_Limits, Stopped_Path,
-      E_Jump_Zero, E_Jump_One, E_Jump_Five, Smooth_E_Deviation, Tight_E_Deviation, Rounding_Stress, Continuous,
-      Varied_Width_Jump, Varied_Width_Smooth);
+     (Baseline,
+      E_Acceleration,
+      X_Crackle,
+      Mixed_Limits,
+      Circular_Corners,
+      XYZ_Only,
+      Relaxed_E_Limits,
+      Stopped_Path,
+      E_Jump_Zero,
+      E_Jump_One,
+      E_Jump_Five,
+      Smooth_E_Deviation,
+      Tight_E_Deviation,
+      Rounding_Stress,
+      Continuous,
+      Varied_Width_Jump,
+      Varied_Width_Smooth);
    Selected_Case : constant Benchmark_Case :=
      (if Ada.Command_Line.Argument_Count >= 1 then Benchmark_Case'Value (Ada.Command_Line.Argument (1)) else Baseline);
-   Gcode_Path : constant String :=
-     (if Ada.Command_Line.Argument_Count >= 2 then Ada.Command_Line.Argument (2)
+   Gcode_Path    : constant String :=
+     (if Ada.Command_Line.Argument_Count >= 2
+      then Ada.Command_Line.Argument (2)
       else "../prunt_simulator/uploads/benchy.gcode");
    use type Ada.Real_Time.Time;
    use type Interfaces.Unsigned_64;
@@ -62,20 +77,20 @@ procedure Benchy_Planner_Time is
 
    package Planner is new
      Prunt.Motion_Planner.Planner
-       (Motor_Name                         => Motor_Name,
-        Motor_Position_Map                 => Motor_Position_Map,
-        Motor_Delta_Limits                 => Motor_Delta_Limits,
-        Maximum_Deltas_Per_Command         => [others => 1.0],
-        Flush_Resetting_Data_Type          => Boolean,
-        Flush_Resetting_Data_Type_Default  => False,
-        Corner_Extra_Data_Type             => Boolean,
-        Home_Move_Minimum_Coast_Time       => 0.000_25 * s,
-        Home_Move_Maximum_Tail_Time        => 1.0E100 * s,
-        Interpolation_Time                 => 0.000_05 * s,
+       (Motor_Name                        => Motor_Name,
+        Motor_Position_Map                => Motor_Position_Map,
+        Motor_Delta_Limits                => Motor_Delta_Limits,
+        Maximum_Deltas_Per_Command        => [others => 1.0],
+        Flush_Resetting_Data_Type         => Boolean,
+        Flush_Resetting_Data_Type_Default => False,
+        Corner_Extra_Data_Type            => Boolean,
+        Home_Move_Minimum_Coast_Time      => 0.000_25 * s,
+        Home_Move_Maximum_Tail_Time       => 1.0E100 * s,
+        Interpolation_Time                => 0.000_05 * s,
         --  Keep one spare corner so the stress fixture's terminal flush joins the motion block instead of
         --  following an automatic capacity flush with an empty block.
-        Max_Corners                        => 50_002,
-        Allow_Blended_Entry                => Block_Allows_Blended_Entry);
+        Max_Corners                       => 50_002,
+        Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
    use type Planner.Corners_Index;
 
@@ -94,10 +109,10 @@ procedure Benchy_Planner_Time is
       Tangential_Velocity_Max  => 250.0 * mm / s,
       Axial_Velocity_Maxes     =>
         [X_Axis | Y_Axis => 250.0 * mm / s, Z_Axis => 25.0 * mm / s, E_Axis => 80.0 * mm / s],
-      Axial_Acceleration_Maxes => [others => 5_000.0 * mm / s ** 2],
-      Axial_Jerk_Maxes         => [others => 500_000.0 * mm / s ** 3],
-      Axial_Snap_Maxes         => [others => 500_000_000.0 * mm / s ** 4],
-      Axial_Crackle_Maxes      => [others => 500_000_000_000.0 * mm / s ** 5],
+      Axial_Acceleration_Maxes => [others => 5_000.0 * mm / s**2],
+      Axial_Jerk_Maxes         => [others => 500_000.0 * mm / s**3],
+      Axial_Snap_Maxes         => [others => 500_000_000.0 * mm / s**4],
+      Axial_Crackle_Maxes      => [others => 500_000_000_000.0 * mm / s**5],
       Cornering                =>
         (Kind                 => Stereographic,
          Stereographic_Params =>
@@ -134,80 +149,91 @@ procedure Benchy_Planner_Time is
       return Long_Float'Value (Line (First .. Last - 1));
    end Value_Of;
 
-   File          : Ada.Text_IO.File_Type;
+   File           : Ada.Text_IO.File_Type;
    Segment_Output : Ada.Text_IO.File_Type;
    Write_Segments : constant Boolean := Ada.Command_Line.Argument_Count >= 3;
-   Line          : String (1 .. 1_024);
-   Last          : Natural;
-   Current_Pos   : Position := [others => 0.0 * mm];
-   Feedrate      : Velocity := 0.1 * mm / s;
-   Commanded_E   : Length := 0.0 * mm;
-   Varied_Width  : constant Boolean := Selected_Case in Varied_Width_Jump | Varied_Width_Smooth;
-   Width_Range   : constant Dimensionless :=
+   Line           : String (1 .. 1_024);
+   Last           : Natural;
+   Current_Pos    : Position := [others => 0.0 * mm];
+   Feedrate       : Velocity := 0.1 * mm / s;
+   Commanded_E    : Length := 0.0 * mm;
+   Varied_Width   : constant Boolean := Selected_Case in Varied_Width_Jump | Varied_Width_Smooth;
+   Width_Range    : constant Dimensionless :=
      Dimensionless'Value (Ada.Environment_Variables.Value ("PRUNT_BENCH_WIDTH_VARIATION", "0.05"));
-   E_Limit_Scale : constant Dimensionless :=
+   E_Limit_Scale  : constant Dimensionless :=
      Dimensionless'Value (Ada.Environment_Variables.Value ("PRUNT_BENCH_E_LIMIT_SCALE", "1.0"));
-   Continuous_On : constant Boolean := Ada.Environment_Variables.Value ("PRUNT_BENCH_CONTINUOUS", "0") = "1";
+   Continuous_On  : constant Boolean := Ada.Environment_Variables.Value ("PRUNT_BENCH_CONTINUOUS", "0") = "1";
    --  Optional overrides: the amplitude of the varied-width cases' extrusion changes, a factor on E's acceleration,
    --  jerk, snap and crackle limits, and Continuous_Timing, for every case.
-   Relative_E    : Boolean := False;
-   Block         : Planner.Block_Handle;
-   Timed_Out     : Boolean;
-   Total         : Time := 0.0 * s;
-   G1_Count      : Natural := 0;
-   Moving_Count  : Natural := 0;
-   Block_Count   : Natural := 0;
-   Segment_Count : Natural := 0;
-   Checksum      : Interfaces.Unsigned_64 := 0;
-   Timeout_Count : Natural := 0;
-   Final_Pos     : Position := [others => 0.0 * mm];
-   Started       : Ada.Real_Time.Time;
+   Relative_E     : Boolean := False;
+   Block          : Planner.Block_Handle;
+   Timed_Out      : Boolean;
+   Total          : Time := 0.0 * s;
+   G1_Count       : Natural := 0;
+   Moving_Count   : Natural := 0;
+   Block_Count    : Natural := 0;
+   Segment_Count  : Natural := 0;
+   Checksum       : Interfaces.Unsigned_64 := 0;
+   Timeout_Count  : Natural := 0;
+   Final_Pos      : Position := [others => 0.0 * mm];
+   Started        : Ada.Real_Time.Time;
 begin
    case Selected_Case is
-      when Baseline | XYZ_Only | Varied_Width_Smooth => null;
-      when Varied_Width_Jump =>
+      when Baseline | XYZ_Only | Varied_Width_Smooth =>
+         null;
+
+      when Varied_Width_Jump                         =>
          Params.Extrusion_Cornering := (Kind => Instantaneous_Velocity_Change, Velocity_Change_Max => 1.0 * mm / s);
-      when Continuous =>
+
+      when Continuous                                =>
          Params.Continuous_Timing := True;
-      when Rounding_Stress =>
+
+      when Rounding_Stress                           =>
          Params.Bounds.Upper_X := 6000.0 * mm;
          Params.Extrusion_Cornering := (Kind => Instantaneous_Velocity_Change, Velocity_Change_Max => 0.0 * mm / s);
-      when E_Jump_Zero | E_Jump_One | E_Jump_Five =>
+
+      when E_Jump_Zero | E_Jump_One | E_Jump_Five    =>
          Params.Extrusion_Cornering :=
-           (Kind => Instantaneous_Velocity_Change,
+           (Kind                => Instantaneous_Velocity_Change,
             Velocity_Change_Max =>
               (case Selected_Case is
-                 when E_Jump_One => 1.0 * mm / s,
+                 when E_Jump_One  => 1.0 * mm / s,
                  when E_Jump_Five => 5.0 * mm / s,
-                 when others => 0.0 * mm / s));
-      when Smooth_E_Deviation | Tight_E_Deviation =>
+                 when others      => 0.0 * mm / s));
+
+      when Smooth_E_Deviation | Tight_E_Deviation    =>
          Params.Extrusion_Cornering := (Kind => Smooth_Deviation, others => <>);
          if Selected_Case = Tight_E_Deviation then
             Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes (E_Axis) := 0.0002 * mm;
          end if;
-      when Relaxed_E_Limits =>
+
+      when Relaxed_E_Limits                          =>
          Params.Axial_Velocity_Maxes (E_Axis) := 1.0E6 * mm / s;
-         Params.Axial_Acceleration_Maxes (E_Axis) := 1.0E12 * mm / s ** 2;
-         Params.Axial_Jerk_Maxes (E_Axis) := 1.0E18 * mm / s ** 3;
-         Params.Axial_Snap_Maxes (E_Axis) := 1.0E24 * mm / s ** 4;
-         Params.Axial_Crackle_Maxes (E_Axis) := 1.0E30 * mm / s ** 5;
-      when Stopped_Path =>
+         Params.Axial_Acceleration_Maxes (E_Axis) := 1.0E12 * mm / s**2;
+         Params.Axial_Jerk_Maxes (E_Axis) := 1.0E18 * mm / s**3;
+         Params.Axial_Snap_Maxes (E_Axis) := 1.0E24 * mm / s**4;
+         Params.Axial_Crackle_Maxes (E_Axis) := 1.0E30 * mm / s**5;
+
+      when Stopped_Path                              =>
          --  Match the geometry used when a zero E allowance prevents corner construction.
          Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.0 * mm];
          Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.0 * mm;
-      when E_Acceleration =>
-         Params.Axial_Acceleration_Maxes (E_Axis) := 50.0 * mm / s ** 2;
-      when X_Crackle =>
-         Params.Axial_Crackle_Maxes (X_Axis) := 500_000_000.0 * mm / s ** 5;
-      when Mixed_Limits =>
-         Params.Axial_Acceleration_Maxes (E_Axis) := 50.0 * mm / s ** 2;
-         Params.Axial_Crackle_Maxes (X_Axis) := 500_000_000.0 * mm / s ** 5;
-      when Circular_Corners =>
+
+      when E_Acceleration                            =>
+         Params.Axial_Acceleration_Maxes (E_Axis) := 50.0 * mm / s**2;
+
+      when X_Crackle                                 =>
+         Params.Axial_Crackle_Maxes (X_Axis) := 500_000_000.0 * mm / s**5;
+
+      when Mixed_Limits                              =>
+         Params.Axial_Acceleration_Maxes (E_Axis) := 50.0 * mm / s**2;
+         Params.Axial_Crackle_Maxes (X_Axis) := 500_000_000.0 * mm / s**5;
+
+      when Circular_Corners                          =>
          Params.Cornering :=
-           (Kind => Circular,
+           (Kind            => Circular,
             Circular_Params =>
-              (Axial_Deviation_Maxes => [others => 0.02 * mm],
-               Corner_Miss_Distance_Max => 0.02 * mm, others => <>));
+              (Axial_Deviation_Maxes => [others => 0.02 * mm], Corner_Miss_Distance_Max => 0.02 * mm, others => <>));
    end case;
    if Ada.Command_Line.Argument_Count >= 4 then
       Params.Extrusion_Normalization.Relative_Adjustment_Max := Dimensionless'Value (Ada.Command_Line.Argument (4));
@@ -224,9 +250,13 @@ begin
    Ada.Text_IO.Put_Line ("width_variation=" & Width_Range'Image);
    Ada.Text_IO.Put_Line ("continuous_timing=" & Params.Continuous_Timing'Image);
    Ada.Text_IO.Put_Line
-     ("extrusion_normalization=" & Params.Extrusion_Normalization.Relative_Adjustment_Max'Image & " +"
-      & Dimensionless'Image (Params.Extrusion_Normalization.E_Resolution / mm) & " mm E +"
-      & Dimensionless'Image (Params.Extrusion_Normalization.XYZ_Resolution / mm) & " mm XYZ");
+     ("extrusion_normalization="
+      & Params.Extrusion_Normalization.Relative_Adjustment_Max'Image
+      & " +"
+      & Dimensionless'Image (Params.Extrusion_Normalization.E_Resolution / mm)
+      & " mm E +"
+      & Dimensionless'Image (Params.Extrusion_Normalization.XYZ_Resolution / mm)
+      & " mm XYZ");
    Ada.Text_IO.Flush;
    if Write_Segments then
       Ada.Text_IO.Create (Segment_Output, Ada.Text_IO.Out_File, Ada.Command_Line.Argument (3));
@@ -276,8 +306,7 @@ begin
                   end;
                elsif Has_Value (Command, 'E') then
                   if Relative_E then
-                     Current_Pos (E_Axis) :=
-                       Current_Pos (E_Axis) + Dimensionless (Value_Of (Command, 'E')) * mm;
+                     Current_Pos (E_Axis) := Current_Pos (E_Axis) + Dimensionless (Value_Of (Command, 'E')) * mm;
                   else
                      Current_Pos (E_Axis) := Dimensionless (Value_Of (Command, 'E')) * mm;
                   end if;
@@ -326,13 +355,12 @@ begin
                   Planner.Prepare_Segment (Block, Corner);
                   Total := Total + Planner.Segment_Time (Block, Corner);
                   Checksum :=
-                    (Checksum xor To_Bits (Long_Float (Planner.Segment_Time (Block, Corner) / s)))
-                    * 1_099_511_628_211;
+                    (Checksum xor To_Bits (Long_Float (Planner.Segment_Time (Block, Corner) / s))) * 1_099_511_628_211;
                   Segment_Count := Segment_Count + 1;
                   if Selected_Case = Rounding_Stress then
                      declare
                         At_End : constant Time := Planner.Segment_Time (Block, Corner);
-                        P : constant Position := Planner.Segment_Pos_At_Time (Block, Corner, At_End);
+                        P      : constant Position := Planner.Segment_Pos_At_Time (Block, Corner, At_End);
                      begin
                         if abs (P (E_Axis) - 0.05 * P (X_Axis)) > 1.0E-8 * mm then
                            raise Program_Error with "normalized E execution drifted in the 50000-segment run";
@@ -347,10 +375,15 @@ begin
                   if Write_Segments then
                      Ada.Text_IO.Put_Line
                        (Segment_Output,
-                        Segment_Count'Image & "," & Dimensionless'Image (Planner.Segment_Time (Block, Corner) / s)
-                        & "," & Dimensionless'Image (Planner.Segment_Corner_Distance (Block, Corner) / mm)
-                        & "," & Dimensionless'Image (Planner.Segment_Vel_Ratio_At_Time
-                          (Block, Corner, Planner.Segment_Time (Block, Corner) / 2.0)));
+                        Segment_Count'Image
+                        & ","
+                        & Dimensionless'Image (Planner.Segment_Time (Block, Corner) / s)
+                        & ","
+                        & Dimensionless'Image (Planner.Segment_Corner_Distance (Block, Corner) / mm)
+                        & ","
+                        & Dimensionless'Image
+                            (Planner.Segment_Vel_Ratio_At_Time
+                               (Block, Corner, Planner.Segment_Time (Block, Corner) / 2.0)));
                   end if;
                end loop;
             end if;

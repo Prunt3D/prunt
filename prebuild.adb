@@ -145,7 +145,7 @@ procedure Prebuild is
             when Directory     =>
                if Simple_Name (Ent) not in "." | ".." then
                   Collect_Files (Full_Name (Ent), Result, Recursive);
-               --  TODO: Does GNAT have some kind of built-in traversal which avoids . and ..?
+                  --  TODO: Does GNAT have some kind of built-in traversal which avoids . and ..?
 
                end if;
 
@@ -261,10 +261,7 @@ procedure Prebuild is
       Ensure_Submodule (Join_Path (["html", "uplot"]), [Uplot_ESM_JS, Uplot_Types]);
       Ensure_Submodule
         (Join_Path (["gnatcoll_modifications_src"]),
-         [Prunt_JSON_Spec,
-          Prunt_JSON_Body,
-          Prunt_LSP_Spec,
-          Prunt_LSP_Body]);
+         [Prunt_JSON_Spec, Prunt_JSON_Body, Prunt_LSP_Spec, Prunt_LSP_Body]);
    end Ensure_Submodules;
 
    procedure Build_Html_Dist is
@@ -420,18 +417,19 @@ procedure Prebuild is
    end Build_Ada_Resources;
 
    procedure Build_Config_Codegen is
-      Target        : constant String := Join_Path ([Working_Dir, "config_codegen", "bin", "config_codegen"]);
-      Sources       : String_Vectors.Vector;
-      Src_Files     : String_Vectors.Vector;
-      VSS_Extra_Old : constant String := Getenv ("VSS_EXTRA_ALIRE_PREFIX").all;
-      VSS_Text_Old  : constant String := Getenv ("VSS_TEXT_ALIRE_PREFIX").all;
-      XMLAda_Old    : constant String := Getenv ("XMLADA_ALIRE_PREFIX").all;
-      LibGPR_Old    : constant String := Getenv ("LIBGPR_ALIRE_PREFIX").all;
-      LibGMP_Old    : constant String := Getenv ("LIBGMP_ALIRE_PREFIX").all;
+      Target                  : constant String :=
+        Join_Path ([Working_Dir, "config_codegen", "bin", "config_codegen"]);
+      Sources                 : String_Vectors.Vector;
+      Src_Files               : String_Vectors.Vector;
+      VSS_Extra_Old           : constant String := Getenv ("VSS_EXTRA_ALIRE_PREFIX").all;
+      VSS_Text_Old            : constant String := Getenv ("VSS_TEXT_ALIRE_PREFIX").all;
+      XMLAda_Old              : constant String := Getenv ("XMLADA_ALIRE_PREFIX").all;
+      LibGPR_Old              : constant String := Getenv ("LIBGPR_ALIRE_PREFIX").all;
+      LibGMP_Old              : constant String := Getenv ("LIBGMP_ALIRE_PREFIX").all;
       Libadalang_Prebuilt_Old : constant String := Getenv ("LIBADALANG_PREBUILT_ALIRE_PREFIX").all;
-      GNATCOLL_Old  : constant String := Getenv ("GNATCOLL_ALIRE_PREFIX").all;
-      GNATCOLL_Minimal_Old : constant String := Getenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX").all;
-      GNAT_Native_Old : constant String := Getenv ("GNAT_NATIVE_ALIRE_PREFIX").all;
+      GNATCOLL_Old            : constant String := Getenv ("GNATCOLL_ALIRE_PREFIX").all;
+      GNATCOLL_Minimal_Old    : constant String := Getenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX").all;
+      GNAT_Native_Old         : constant String := Getenv ("GNAT_NATIVE_ALIRE_PREFIX").all;
    begin
       Collect_Files (Join_Path ([Working_Dir, "config_codegen", "src"]), Src_Files, Recursive => True);
       for F of Src_Files loop

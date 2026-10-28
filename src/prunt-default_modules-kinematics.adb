@@ -147,7 +147,7 @@ package body Prunt.Default_Modules.Kinematics is
       if Scale = 0.0 then
          return 0.0 * mm;
       end if;
-      return Scale * Dimensionless_Math.Sqrt ((DX / Scale) ** 2 + (DY / Scale) ** 2) * mm;
+      return Scale * Dimensionless_Math.Sqrt ((DX / Scale)**2 + (DY / Scale)**2) * mm;
    end Hypot;
 
    procedure Workspace_Tower_Extents
@@ -178,23 +178,22 @@ package body Prunt.Default_Modules.Kinematics is
       Result : Motion_Planner_Configuration :=
         (Parameters =>
            Motion_Planner.Kinematic_Parameters'
-             (Bounds                       => Planner_Workspace_Bounds (Config.Kinematics.Workspace_Bounds),
-              Ignore_E_In_XYZE             => Config.Kinematics.Ignore_E_In_XYZE,
-              Tangential_Velocity_Max      => Config.Kinematics.Maximum_Tangential_Velocity,
-              Axial_Velocity_Maxes         => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
-              Axial_Acceleration_Maxes     => [for X of Config.Kinematics.Axial_Acceleration_Limits => X],
-              Axial_Jerk_Maxes             => [for X of Config.Kinematics.Axial_Jerk_Limits => X],
-              Axial_Snap_Maxes             => [for X of Config.Kinematics.Axial_Snap_Limits => X],
-              Axial_Crackle_Maxes          => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
-              Cornering                    => Build_Cornering_Parameters (Config.Kinematics.Cornering),
-              Extrusion_Cornering          =>
-                Build_Extrusion_Cornering_Parameters (Config.Kinematics.Extrusion_Cornering),
-              Extrusion_Normalization      =>
+             (Bounds                   => Planner_Workspace_Bounds (Config.Kinematics.Workspace_Bounds),
+              Ignore_E_In_XYZE         => Config.Kinematics.Ignore_E_In_XYZE,
+              Tangential_Velocity_Max  => Config.Kinematics.Maximum_Tangential_Velocity,
+              Axial_Velocity_Maxes     => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
+              Axial_Acceleration_Maxes => [for X of Config.Kinematics.Axial_Acceleration_Limits => X],
+              Axial_Jerk_Maxes         => [for X of Config.Kinematics.Axial_Jerk_Limits => X],
+              Axial_Snap_Maxes         => [for X of Config.Kinematics.Axial_Snap_Limits => X],
+              Axial_Crackle_Maxes      => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
+              Cornering                => Build_Cornering_Parameters (Config.Kinematics.Cornering),
+              Extrusion_Cornering      => Build_Extrusion_Cornering_Parameters (Config.Kinematics.Extrusion_Cornering),
+              Extrusion_Normalization  =>
                 (Relative_Adjustment_Max => Config.Kinematics.Extrusion_Normalization.Maximum_Relative_Adjustment,
                  E_Resolution            => Config.Kinematics.Extrusion_Normalization.E_Resolution,
                  XYZ_Resolution          => Config.Kinematics.Extrusion_Normalization.XYZ_Resolution),
-              Axial_Shapers                => <>,
-              Continuous_Timing            => <>),
+              Axial_Shapers            => <>,
+              Continuous_Timing        => <>),
          Transform  => (Kind => Linear_Transform, others => <>));
    begin
       for M in Motor_Name loop
@@ -315,11 +314,11 @@ package body Prunt.Default_Modules.Kinematics is
                         begin
                            Workspace_Tower_Extents
                              (Config.Kinematics.Workspace_Bounds, Params.X, Params.Y, Max_DX, Max_DY, Max_Radius);
-                           Min_Radicand := Params.Arm_Length ** 2 - Max_Radius ** 2;
-                           if Min_Radicand <= 0.0 * mm ** 2 then
+                           Min_Radicand := Params.Arm_Length**2 - Max_Radius**2;
+                           if Min_Radicand <= 0.0 * mm**2 then
                               Min_Height := Length'Small;
                            else
-                              Min_Height := Min_Radicand ** (1 / 2);
+                              Min_Height := Min_Radicand**(1 / 2);
                            end if;
 
                            Delta_Params.Jacobian_Bounds (Motor, X_Axis) :=
@@ -702,7 +701,7 @@ package body Prunt.Default_Modules.Kinematics is
 
       if A.Present then
          begin
-            Updates.Axial_Acceleration_Limits := [others => A.Value * mm / Prunt.s ** 2];
+            Updates.Axial_Acceleration_Limits := [others => A.Value * mm / Prunt.s**2];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Acceleration limit must be between 1.0E-6 and 1.0E100 mm/s^2.";
@@ -715,7 +714,7 @@ package body Prunt.Default_Modules.Kinematics is
 
       if J.Present then
          begin
-            Updates.Axial_Jerk_Limits := [others => J.Value * mm / Prunt.s ** 3];
+            Updates.Axial_Jerk_Limits := [others => J.Value * mm / Prunt.s**3];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Jerk limit must be between 1.0E-6 and 1.0E100 mm/s^3.";
@@ -728,7 +727,7 @@ package body Prunt.Default_Modules.Kinematics is
 
       if S.Present then
          begin
-            Updates.Axial_Snap_Limits := [others => S.Value * mm / Prunt.s ** 4];
+            Updates.Axial_Snap_Limits := [others => S.Value * mm / Prunt.s**4];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Snap limit must be between 1.0E-6 and 1.0E100 mm/s^4.";
@@ -741,7 +740,7 @@ package body Prunt.Default_Modules.Kinematics is
 
       if C.Present then
          begin
-            Updates.Axial_Crackle_Limits := [others => C.Value * mm / Prunt.s ** 5];
+            Updates.Axial_Crackle_Limits := [others => C.Value * mm / Prunt.s**5];
          exception
             when Constraint_Error =>
                raise Gcode_Bad_Inputs_Error with "Crackle limit must be between 1.0E-6 and 1.0E100 mm/s^5.";

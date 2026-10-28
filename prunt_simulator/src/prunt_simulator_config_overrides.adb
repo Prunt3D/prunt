@@ -46,8 +46,7 @@ package body Prunt_Simulator_Config_Overrides is
       Add
         (Result,
          "Homing",
-         Config_Data_Paths.Vector'
-           (["Homing", "Axes", +Axis, "Homing_Method", "Kind", "Selected"]),
+         Config_Data_Paths.Vector'(["Homing", "Axes", +Axis, "Homing_Method", "Kind", "Selected"]),
          Create (+"Set_To_Value"));
    end Add_Homing_Axis;
 
@@ -55,11 +54,7 @@ package body Prunt_Simulator_Config_Overrides is
 
    procedure Add_Motor (Result : in out Config_Override_Vectors.Vector; Motor : String) is
    begin
-      Add
-        (Result,
-         "Motor Drivers",
-         Config_Data_Paths.Vector'(["Motors", +Motor, "Enabled"]),
-         Create (True));
+      Add (Result, "Motor Drivers", Config_Data_Paths.Vector'(["Motors", +Motor, "Enabled"]), Create (True));
       Add
         (Result,
          "Motor Drivers",
@@ -76,46 +71,25 @@ package body Prunt_Simulator_Config_Overrides is
    end Add_Motor;
 
    procedure Add_Axis_Float
-     (Result : in out Config_Override_Vectors.Vector;
-      Field  : String;
-      Axis   : String;
-      Value  : Long_Float);
+     (Result : in out Config_Override_Vectors.Vector; Field : String; Axis : String; Value : Long_Float);
 
    procedure Add_Axis_Float
-     (Result : in out Config_Override_Vectors.Vector;
-      Field  : String;
-      Axis   : String;
-      Value  : Long_Float) is
+     (Result : in out Config_Override_Vectors.Vector; Field : String; Axis : String; Value : Long_Float) is
    begin
-      Add
-        (Result,
-         "Kinematics",
-         Config_Data_Paths.Vector'(["Kinematics", +Field, +Axis]),
-         Create (Value));
+      Add (Result, "Kinematics", Config_Data_Paths.Vector'(["Kinematics", +Field, +Axis]), Create (Value));
    end Add_Axis_Float;
 
-   procedure Add_Kinematics_Float
-     (Result : in out Config_Override_Vectors.Vector; Field : String; Value : Long_Float);
+   procedure Add_Kinematics_Float (Result : in out Config_Override_Vectors.Vector; Field : String; Value : Long_Float);
 
-   procedure Add_Kinematics_Float
-     (Result : in out Config_Override_Vectors.Vector; Field : String; Value : Long_Float) is
+   procedure Add_Kinematics_Float (Result : in out Config_Override_Vectors.Vector; Field : String; Value : Long_Float)
+   is
    begin
-      Add
-        (Result,
-         "Kinematics",
-         Config_Data_Paths.Vector'(["Kinematics", +Field]),
-         Create (Value));
+      Add (Result, "Kinematics", Config_Data_Paths.Vector'(["Kinematics", +Field]), Create (Value));
    end Add_Kinematics_Float;
 
-   procedure Add_Cartesian_Motor
-     (Result : in out Config_Override_Vectors.Vector;
-      Motor  : String;
-      Axis   : String);
+   procedure Add_Cartesian_Motor (Result : in out Config_Override_Vectors.Vector; Motor : String; Axis : String);
 
-   procedure Add_Cartesian_Motor
-     (Result : in out Config_Override_Vectors.Vector;
-      Motor  : String;
-      Axis   : String) is
+   procedure Add_Cartesian_Motor (Result : in out Config_Override_Vectors.Vector; Motor : String; Axis : String) is
    begin
       Add
         (Result,

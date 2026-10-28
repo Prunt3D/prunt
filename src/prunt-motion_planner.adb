@@ -31,13 +31,13 @@ package body Prunt.Motion_Planner is
    type Feedrate_Profile_Stage_Index is range 1 .. 15;
 
    function Derivative_Limits_Are_Valid (Am : Acceleration; Jm : Jerk; Sm : Snap; Cm : Crackle) return Boolean
-   is (Am >= 0.0 * mm / s ** 2
+   is (Am >= 0.0 * mm / s**2
        and then Am <= Acceleration'Last
-       and then Jm >= 0.0 * mm / s ** 3
+       and then Jm >= 0.0 * mm / s**3
        and then Jm <= Jerk'Last
-       and then Sm >= 0.0 * mm / s ** 4
+       and then Sm >= 0.0 * mm / s**4
        and then Sm <= Snap'Last
-       and then Cm >= 0.0 * mm / s ** 5
+       and then Cm >= 0.0 * mm / s**5
        and then Cm <= Crackle'Last);
 
    function Profile_Is_Valid
@@ -80,7 +80,7 @@ package body Prunt.Motion_Planner is
               and then Start_Vel <= Velocity'Last
               and then End_Vel >= 0.0 * mm / s
               and then End_Vel <= Velocity'Last
-              and then Max_Crackle >= 0.0 * mm / s ** 5
+              and then Max_Crackle >= 0.0 * mm / s**5
               and then Max_Crackle <= Crackle'Last
               and then Profile.Coast >= 0.0 * s
               and then Profile.Coast <= Time'Last)
@@ -130,8 +130,7 @@ package body Prunt.Motion_Planner is
             end if;
 
             return
-              Dimensionless_Math.Sqrt ((Pos (X_Axis) / mm) ** 2 + (Pos (Y_Axis) / mm) ** 2)
-              <= Params.Bounds.Radius / mm;
+              Dimensionless_Math.Sqrt ((Pos (X_Axis) / mm)**2 + (Pos (Y_Axis) / mm)**2) <= Params.Bounds.Radius / mm;
       end case;
    end XY_Position_Is_In_Bounds;
 
@@ -163,7 +162,7 @@ package body Prunt.Motion_Planner is
          if Scale = 0.0 then
             return 0.0 * mm;
          end if;
-         return Scale * Dimensionless_Math.Sqrt ((DX / Scale) ** 2 + (DY / Scale) ** 2) * mm;
+         return Scale * Dimensionless_Math.Sqrt ((DX / Scale)**2 + (DY / Scale)**2) * mm;
       end Hypot;
 
       function Phase_Is_On_Arc (Phase, Theta_Start, Theta_Delta : Dimensionless) return Boolean is
@@ -305,7 +304,7 @@ package body Prunt.Motion_Planner is
          Radicand : constant Dimensionless :=
            Dimensionless'Fraction (Numerator)
            / Dimensionless'Fraction (Denominator)
-           * Dimensionless (Dimensionless'Machine_Radix ** Exponent_Remainder);
+           * Dimensionless (Dimensionless'Machine_Radix**Exponent_Remainder);
          Mantissa : constant Dimensionless :=
            (if Degree = 1 then Radicand else Dimensionless_Math."**" (Radicand, 1.0 / Dimensionless (Degree)));
       begin
@@ -355,29 +354,29 @@ package body Prunt.Motion_Planner is
 
          if Bounds.Acceleration (A) > 0.0 / mm then
             Apply_Power_Ceiling
-              (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s ** 2)),
+              (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s**2)),
                Dimensionless (Bounds.Acceleration (A) / (1.0 / mm)),
                2);
          end if;
 
-         if Bounds.Jerk (A) > 0.0 / mm ** 2 then
+         if Bounds.Jerk (A) > 0.0 / mm**2 then
             Apply_Power_Ceiling
-              (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s ** 3)),
-               Dimensionless (Bounds.Jerk (A) / (1.0 / mm ** 2)),
+              (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s**3)),
+               Dimensionless (Bounds.Jerk (A) / (1.0 / mm**2)),
                3);
          end if;
 
-         if Bounds.Snap (A) > 0.0 / mm ** 3 then
+         if Bounds.Snap (A) > 0.0 / mm**3 then
             Apply_Power_Ceiling
-              (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s ** 4)),
-               Dimensionless (Bounds.Snap (A) / (1.0 / mm ** 3)),
+              (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s**4)),
+               Dimensionless (Bounds.Snap (A) / (1.0 / mm**3)),
                4);
          end if;
 
-         if Bounds.Crackle (A) > 0.0 / mm ** 4 then
+         if Bounds.Crackle (A) > 0.0 / mm**4 then
             Apply_Power_Ceiling
-              (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s ** 5)),
-               Dimensionless (Bounds.Crackle (A) / (1.0 / mm ** 4)),
+              (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s**5)),
+               Dimensionless (Bounds.Crackle (A) / (1.0 / mm**4)),
                5);
          end if;
       end loop;
@@ -408,10 +407,10 @@ package body Prunt.Motion_Planner is
       Limit_Scale  : out Dimensionless)
    is
       Base : Scalar_Derivative_Limits :=
-        (Acceleration_Max => 1.0E100 * mm / s ** 2,
-         Jerk_Max         => 1.0E100 * mm / s ** 3,
-         Snap_Max         => 1.0E100 * mm / s ** 4,
-         Crackle_Max      => 1.0E100 * mm / s ** 5);
+        (Acceleration_Max => 1.0E100 * mm / s**2,
+         Jerk_Max         => 1.0E100 * mm / s**3,
+         Snap_Max         => 1.0E100 * mm / s**4,
+         Crackle_Max      => 1.0E100 * mm / s**5);
 
       type Scaled_Nonnegative_Array is array (Positive range <>) of Scaled_Nonnegative;
       type Dimensionless_Array is array (Positive range <>) of Dimensionless;
@@ -701,7 +700,7 @@ package body Prunt.Motion_Planner is
          function Fits (Scale : Dimensionless) return Boolean is
             Value : Scaled_Nonnegative := Zero;
          begin
-            if Use_Normalized and then Scale >= 2.0 ** (-144) and then Scale <= 1.0 then
+            if Use_Normalized and then Scale >= 2.0**(-144) and then Scale <= 1.0 then
                declare
                   pragma Suppress (Overflow_Check);
                   Sum : Dimensionless := 0.0;
@@ -816,7 +815,7 @@ package body Prunt.Motion_Planner is
             return;
          elsif Upper = 0.0 then
             return;
-         elsif Upper < 2.0 ** (-128) then
+         elsif Upper < 2.0**(-128) then
             Fallback;
             return;
          end if;
@@ -833,7 +832,7 @@ package body Prunt.Motion_Planner is
                Upper := Dimensionless'Min (Upper, Nth_Root_Ratio (Remainder, Terms (I), I));
             end if;
          end loop;
-         if Upper < 2.0 ** (-128) then
+         if Upper < 2.0**(-128) then
             Fallback;
             return;
          elsif Fits (Upper) then
@@ -904,44 +903,44 @@ package body Prunt.Motion_Planner is
                   Base_Acceleration_Raw :=
                     Dimensionless'Min
                       (Base_Acceleration_Raw,
-                       Nth_Root_Ratio (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s ** 2)), X1, 1));
+                       Nth_Root_Ratio (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s**2)), X1, 1));
                   Base_Jerk_Raw :=
                     Dimensionless'Min
                       (Base_Jerk_Raw,
-                       Nth_Root_Ratio (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s ** 3)), X1, 1));
+                       Nth_Root_Ratio (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s**3)), X1, 1));
                   Base_Snap_Raw :=
                     Dimensionless'Min
                       (Base_Snap_Raw,
-                       Nth_Root_Ratio (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s ** 4)), X1, 1));
+                       Nth_Root_Ratio (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s**4)), X1, 1));
                   Base_Crackle_Raw :=
                     Dimensionless'Min
                       (Base_Crackle_Raw,
-                       Nth_Root_Ratio (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s ** 5)), X1, 1));
+                       Nth_Root_Ratio (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s**5)), X1, 1));
                end if;
             end;
          end loop;
 
          Base_Acceleration_Raw :=
-           Dimensionless'Min (Base_Acceleration_Raw, Scalar_Maxes.Acceleration_Max / (mm / s ** 2));
-         Base_Jerk_Raw := Dimensionless'Min (Base_Jerk_Raw, Scalar_Maxes.Jerk_Max / (mm / s ** 3));
-         Base_Snap_Raw := Dimensionless'Min (Base_Snap_Raw, Scalar_Maxes.Snap_Max / (mm / s ** 4));
-         Base_Crackle_Raw := Dimensionless'Min (Base_Crackle_Raw, Scalar_Maxes.Crackle_Max / (mm / s ** 5));
+           Dimensionless'Min (Base_Acceleration_Raw, Scalar_Maxes.Acceleration_Max / (mm / s**2));
+         Base_Jerk_Raw := Dimensionless'Min (Base_Jerk_Raw, Scalar_Maxes.Jerk_Max / (mm / s**3));
+         Base_Snap_Raw := Dimensionless'Min (Base_Snap_Raw, Scalar_Maxes.Snap_Max / (mm / s**4));
+         Base_Crackle_Raw := Dimensionless'Min (Base_Crackle_Raw, Scalar_Maxes.Crackle_Max / (mm / s**5));
 
       end if;
 
       if Time_Scaling then
          --  Scale the supplied trajectory itself, without clipping its peaks independently.
-         Base_Acceleration_Raw := Scalar_Maxes.Acceleration_Max / (mm / s ** 2);
-         Base_Jerk_Raw := Scalar_Maxes.Jerk_Max / (mm / s ** 3);
-         Base_Snap_Raw := Scalar_Maxes.Snap_Max / (mm / s ** 4);
-         Base_Crackle_Raw := Scalar_Maxes.Crackle_Max / (mm / s ** 5);
+         Base_Acceleration_Raw := Scalar_Maxes.Acceleration_Max / (mm / s**2);
+         Base_Jerk_Raw := Scalar_Maxes.Jerk_Max / (mm / s**3);
+         Base_Snap_Raw := Scalar_Maxes.Snap_Max / (mm / s**4);
+         Base_Crackle_Raw := Scalar_Maxes.Crackle_Max / (mm / s**5);
       end if;
 
       Base :=
-        (Acceleration_Max => Base_Acceleration_Raw * mm / s ** 2,
-         Jerk_Max         => Base_Jerk_Raw * mm / s ** 3,
-         Snap_Max         => Base_Snap_Raw * mm / s ** 4,
-         Crackle_Max      => Base_Crackle_Raw * mm / s ** 5);
+        (Acceleration_Max => Base_Acceleration_Raw * mm / s**2,
+         Jerk_Max         => Base_Jerk_Raw * mm / s**3,
+         Snap_Max         => Base_Snap_Raw * mm / s**4,
+         Crackle_Max      => Base_Crackle_Raw * mm / s**5);
       Result.Limits := Base;
       Dimensionless_Inputs :=
         Time_Scaling
@@ -953,7 +952,7 @@ package body Prunt.Motion_Planner is
           (for all Value of
              Dimensionless_Array'
                [Base_Acceleration_Raw, Base_Jerk_Raw, Base_Snap_Raw, Base_Crackle_Raw, Result.Max_Vel / (mm / s)] =>
-             Value = 0.0 or else Value in 2.0 ** (-64) .. 2.0 ** 64);
+             Value = 0.0 or else Value in 2.0**(-64) .. 2.0**64);
 
       for A in Axis_Name loop
          if not Cache.Axes_Filled (A) then
@@ -962,13 +961,13 @@ package body Prunt.Motion_Planner is
             Cache.Axes (A) :=
               (X1                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Velocity (A))),
                X2                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Acceleration (A) / (1.0 / mm))),
-               X3                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm ** 2))),
-               X4                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm ** 3))),
-               X5                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm ** 4))),
-               Acceleration_Maximum => To_Scaled (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s ** 2))),
-               Jerk_Maximum         => To_Scaled (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s ** 3))),
-               Snap_Maximum         => To_Scaled (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s ** 4))),
-               Crackle_Maximum      => To_Scaled (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s ** 5))));
+               X3                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm**2))),
+               X4                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm**3))),
+               X5                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm**4))),
+               Acceleration_Maximum => To_Scaled (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s**2))),
+               Jerk_Maximum         => To_Scaled (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s**3))),
+               Snap_Maximum         => To_Scaled (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s**4))),
+               Crackle_Maximum      => To_Scaled (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s**5))));
             Cache.Axes_Filled (A) := True;
             declare
                Coefficients : Mixed_Derivative_Axis_Coefficients renames Cache.Axes (A);
@@ -997,9 +996,9 @@ package body Prunt.Motion_Planner is
                pragma Suppress (Overflow_Check);
                X1           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Velocity (A));
                X2           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Acceleration (A) / (1.0 / mm));
-               X3           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm ** 2));
-               X4           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm ** 3));
-               X5           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm ** 4));
+               X3           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm**2));
+               X4           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm**3));
+               X5           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm**4));
                Speed        : constant Dimensionless := Result.Max_Vel / (mm / s);
                Accel        : constant Dimensionless := Base_Acceleration_Raw;
                Jerk_Peak    : constant Dimensionless := Base_Jerk_Raw;
@@ -1008,21 +1007,21 @@ package body Prunt.Motion_Planner is
             begin
                --  Keep the same left-to-right multiplication and summation order as the scaled monomials.
                Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Acceleration_Maxes (A) / (mm / s ** 2)),
+                 (Dimensionless'Max (0.0, Params.Axial_Acceleration_Maxes (A) / (mm / s**2)),
                   X2 * Speed * Speed,
                   [X1 * Accel]);
                Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Jerk_Maxes (A) / (mm / s ** 3)),
+                 (Dimensionless'Max (0.0, Params.Axial_Jerk_Maxes (A) / (mm / s**3)),
                   X3 * Speed * Speed * Speed,
                   [3.0 * X2 * Speed * Accel, X1 * Jerk_Peak]);
                Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Snap_Maxes (A) / (mm / s ** 4)),
+                 (Dimensionless'Max (0.0, Params.Axial_Snap_Maxes (A) / (mm / s**4)),
                   X4 * Speed * Speed * Speed * Speed,
                   [6.0 * X3 * Speed * Speed * Accel,
                    4.0 * X2 * Speed * Jerk_Peak + 3.0 * X2 * Accel * Accel,
                    X1 * Snap_Peak]);
                Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Crackle_Maxes (A) / (mm / s ** 5)),
+                 (Dimensionless'Max (0.0, Params.Axial_Crackle_Maxes (A) / (mm / s**5)),
                   X5 * Speed * Speed * Speed * Speed * Speed,
                   [10.0 * X4 * Speed * Speed * Speed * Accel,
                    10.0 * X3 * Speed * Speed * Jerk_Peak + 15.0 * X3 * Speed * Accel * Accel,
@@ -1216,31 +1215,31 @@ package body Prunt.Motion_Planner is
       if T < T1 then
          return Cm;
       elsif T < T1 + T2 then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       elsif T < 2.0 * T1 + T2 then
          return -Cm;
       elsif T < 2.0 * T1 + T2 + T3 then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       elsif T < 3.0 * T1 + T2 + T3 then
          return -Cm;
       elsif T < 3.0 * T1 + 2.0 * T2 + T3 then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       elsif T < 4.0 * T1 + 2.0 * T2 + T3 then
          return Cm;
       elsif T < 4.0 * T1 + 2.0 * T2 + T3 + T4 then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       elsif T < 5.0 * T1 + 2.0 * T2 + T3 + T4 then
          return -Cm;
       elsif T < 5.0 * T1 + 3.0 * T2 + T3 + T4 then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       elsif T < 6.0 * T1 + 3.0 * T2 + T3 + T4 then
          return Cm;
       elsif T < 6.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4 then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       elsif T < 7.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4 then
          return Cm;
       elsif T < 7.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4 then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       else
          return -Cm;
       end if;
@@ -1356,7 +1355,7 @@ package body Prunt.Motion_Planner is
       begin
          case Stage is
             when 1  =>
-               return Cm * DT ** 2 / 2.0;
+               return Cm * DT**2 / 2.0;
 
             when 2  =>
                return Jerk_At_Stage (T1, 1) + Cm * DT * T1;
@@ -1368,7 +1367,7 @@ package body Prunt.Motion_Planner is
                return Jerk_At_Stage (T1, 3);
 
             when 5  =>
-               return Jerk_At_Stage (T3, 4) - Cm * DT ** 2 / 2.0;
+               return Jerk_At_Stage (T3, 4) - Cm * DT**2 / 2.0;
 
             when 6  =>
                return Jerk_At_Stage (T1, 5) - Cm * DT * T1;
@@ -1380,7 +1379,7 @@ package body Prunt.Motion_Planner is
                return Jerk_At_Stage (T1, 7);
 
             when 9  =>
-               return Jerk_At_Stage (T4, 8) - Cm * DT ** 2 / 2.0;
+               return Jerk_At_Stage (T4, 8) - Cm * DT**2 / 2.0;
 
             when 10 =>
                return Jerk_At_Stage (T1, 9) - Cm * DT * T1;
@@ -1392,7 +1391,7 @@ package body Prunt.Motion_Planner is
                return Jerk_At_Stage (T1, 11);
 
             when 13 =>
-               return Jerk_At_Stage (T3, 12) + Cm * DT ** 2 / 2.0;
+               return Jerk_At_Stage (T3, 12) + Cm * DT**2 / 2.0;
 
             when 14 =>
                return Jerk_At_Stage (T1, 13) + Cm * DT * T1;
@@ -1455,53 +1454,51 @@ package body Prunt.Motion_Planner is
       begin
          case Stage is
             when 1  =>
-               return Cm * DT ** 3 / 6.0;
+               return Cm * DT**3 / 6.0;
 
             when 2  =>
                return Acceleration_At_Stage (T1, 1) + Cm * DT * T1 * (DT + T1) / 2.0;
 
             when 3  =>
                return
-                 Acceleration_At_Stage (T2, 2)
-                 + Cm * DT * (-DT ** 2 + 3.0 * DT * T1 + 3.0 * T1 * (T1 + 2.0 * T2)) / 6.0;
+                 Acceleration_At_Stage (T2, 2) + Cm * DT * (-DT**2 + 3.0 * DT * T1 + 3.0 * T1 * (T1 + 2.0 * T2)) / 6.0;
 
             when 4  =>
                return Acceleration_At_Stage (T1, 3) + Cm * DT * T1 * (T1 + T2);
 
             when 5  =>
-               return Acceleration_At_Stage (T3, 4) + Cm * DT * (-DT ** 2 + 6.0 * T1 * (T1 + T2)) / 6.0;
+               return Acceleration_At_Stage (T3, 4) + Cm * DT * (-DT**2 + 6.0 * T1 * (T1 + T2)) / 6.0;
 
             when 6  =>
                return Acceleration_At_Stage (T1, 5) + Cm * DT * T1 * (-DT + T1 + 2.0 * T2) / 2.0;
 
             when 7  =>
-               return Acceleration_At_Stage (T2, 6) + Cm * DT * (DT ** 2 - 3.0 * DT * T1 + 3.0 * T1 ** 2) / 6.0;
+               return Acceleration_At_Stage (T2, 6) + Cm * DT * (DT**2 - 3.0 * DT * T1 + 3.0 * T1**2) / 6.0;
 
             when 8  =>
                return Acceleration_At_Stage (T1, 7);
 
             when 9  =>
-               return Acceleration_At_Stage (T4, 8) - Cm * DT ** 3 / 6.0;
+               return Acceleration_At_Stage (T4, 8) - Cm * DT**3 / 6.0;
 
             when 10 =>
                return Acceleration_At_Stage (T1, 9) + Cm * DT * T1 * (-DT - T1) / 2.0;
 
             when 11 =>
                return
-                 Acceleration_At_Stage (T2, 10)
-                 + Cm * DT * (DT ** 2 - 3.0 * DT * T1 - 3.0 * T1 * (T1 + 2.0 * T2)) / 6.0;
+                 Acceleration_At_Stage (T2, 10) + Cm * DT * (DT**2 - 3.0 * DT * T1 - 3.0 * T1 * (T1 + 2.0 * T2)) / 6.0;
 
             when 12 =>
                return Acceleration_At_Stage (T1, 11) - Cm * DT * T1 * (T1 + T2);
 
             when 13 =>
-               return Acceleration_At_Stage (T3, 12) + Cm * DT * (DT ** 2 - 6.0 * T1 * (T1 + T2)) / 6.0;
+               return Acceleration_At_Stage (T3, 12) + Cm * DT * (DT**2 - 6.0 * T1 * (T1 + T2)) / 6.0;
 
             when 14 =>
                return Acceleration_At_Stage (T1, 13) + Cm * DT * T1 * (DT - T1 - 2.0 * T2) / 2.0;
 
             when 15 =>
-               return Acceleration_At_Stage (T2, 14) + Cm * DT * (-DT ** 2 + 3.0 * DT * T1 - 3.0 * T1 ** 2) / 6.0;
+               return Acceleration_At_Stage (T2, 14) + Cm * DT * (-DT**2 + 3.0 * DT * T1 - 3.0 * T1**2) / 6.0;
          end case;
       end Acceleration_At_Stage;
 
@@ -1558,33 +1555,32 @@ package body Prunt.Motion_Planner is
       begin
          case Stage is
             when 1  =>
-               return Start_Vel + Cm * DT ** 4 / 24.0;
+               return Start_Vel + Cm * DT**4 / 24.0;
 
             when 2  =>
-               return
-                 Velocity_At_Stage (T1, 1) + Cm * DT * T1 * (2.0 * DT ** 2 + 3.0 * DT * T1 + 2.0 * T1 ** 2) / 12.0;
+               return Velocity_At_Stage (T1, 1) + Cm * DT * T1 * (2.0 * DT**2 + 3.0 * DT * T1 + 2.0 * T1**2) / 12.0;
 
             when 3  =>
                return
                  Velocity_At_Stage (T2, 2)
                  + Cm
                    * DT
-                   * (-DT ** 3 + 4.0 * DT ** 2 * T1 + 6.0 * DT * T1 * (T1 + 2.0 * T2)
-                      + 4.0 * T1 * (T1 ** 2 + 3.0 * T1 * T2 + 3.0 * T2 ** 2))
+                   * (-DT**3 + 4.0 * DT**2 * T1 + 6.0 * DT * T1 * (T1 + 2.0 * T2)
+                      + 4.0 * T1 * (T1**2 + 3.0 * T1 * T2 + 3.0 * T2**2))
                    / 24.0;
 
             when 4  =>
                return
                  Velocity_At_Stage (T1, 3)
-                 + Cm * DT * T1 * (DT * (T1 + T2) + 2.0 * T1 ** 2 + 3.0 * T1 * T2 + T2 ** 2) / 2.0;
+                 + Cm * DT * T1 * (DT * (T1 + T2) + 2.0 * T1**2 + 3.0 * T1 * T2 + T2**2) / 2.0;
 
             when 5  =>
                return
                  Velocity_At_Stage (T3, 4)
                  + Cm
                    * DT
-                   * (-DT ** 3 + 12.0 * DT * T1 * (T1 + T2)
-                      + 12.0 * T1 * (2.0 * T1 ** 2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2 ** 2 + 2.0 * T2 * T3))
+                   * (-DT**3 + 12.0 * DT * T1 * (T1 + T2)
+                      + 12.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3))
                    / 24.0;
 
             when 6  =>
@@ -1593,8 +1589,8 @@ package body Prunt.Motion_Planner is
                  + Cm
                    * DT
                    * T1
-                   * (-2.0 * DT ** 2 + 3.0 * DT * (T1 + 2.0 * T2) + 22.0 * T1 ** 2 + 30.0 * T1 * T2 + 12.0 * T1 * T3
-                      + 6.0 * T2 ** 2
+                   * (-2.0 * DT**2 + 3.0 * DT * (T1 + 2.0 * T2) + 22.0 * T1**2 + 30.0 * T1 * T2 + 12.0 * T1 * T3
+                      + 6.0 * T2**2
                       + 12.0 * T2 * T3)
                    / 12.0;
 
@@ -1603,22 +1599,18 @@ package body Prunt.Motion_Planner is
                  Velocity_At_Stage (T2, 6)
                  + Cm
                    * DT
-                   * (DT ** 3 - 4.0 * DT ** 2 * T1 + 6.0 * DT * T1 ** 2
-                      + 4.0 * T1 * (11.0 * T1 ** 2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2 ** 2 + 6.0 * T2 * T3))
+                   * (DT**3 - 4.0 * DT**2 * T1 + 6.0 * DT * T1**2
+                      + 4.0 * T1 * (11.0 * T1**2 + 18.0 * T1 * T2 + 6.0 * T1 * T3 + 6.0 * T2**2 + 6.0 * T2 * T3))
                    / 24.0;
 
             when 8  =>
                return
-                 Velocity_At_Stage (T1, 7)
-                 + Cm * DT * T1 * (2.0 * T1 ** 2 + 3.0 * T1 * T2 + T1 * T3 + T2 ** 2 + T2 * T3);
+                 Velocity_At_Stage (T1, 7) + Cm * DT * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3);
 
             when 9  =>
                return
                  Velocity_At_Stage (T4, 8)
-                 + Cm
-                   * DT
-                   * (-DT ** 3 + 24.0 * T1 * (2.0 * T1 ** 2 + 3.0 * T1 * T2 + T1 * T3 + T2 ** 2 + T2 * T3))
-                   / 24.0;
+                 + Cm * DT * (-DT**3 + 24.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T1 * T3 + T2**2 + T2 * T3)) / 24.0;
 
             when 10 =>
                return
@@ -1626,8 +1618,7 @@ package body Prunt.Motion_Planner is
                  + Cm
                    * DT
                    * T1
-                   * (-2.0 * DT ** 2 - 3.0 * DT * T1 + 22.0 * T1 ** 2 + 36.0 * T1 * T2 + 12.0 * T1 * T3
-                      + 12.0 * T2 ** 2
+                   * (-2.0 * DT**2 - 3.0 * DT * T1 + 22.0 * T1**2 + 36.0 * T1 * T2 + 12.0 * T1 * T3 + 12.0 * T2**2
                       + 12.0 * T2 * T3)
                    / 12.0;
 
@@ -1636,8 +1627,8 @@ package body Prunt.Motion_Planner is
                  Velocity_At_Stage (T2, 10)
                  + Cm
                    * DT
-                   * (DT ** 3 - 4.0 * DT ** 2 * T1 - 6.0 * DT * T1 * (T1 + 2.0 * T2)
-                      + 4.0 * T1 * (11.0 * T1 ** 2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2 ** 2 + 6.0 * T2 * T3))
+                   * (DT**3 - 4.0 * DT**2 * T1 - 6.0 * DT * T1 * (T1 + 2.0 * T2)
+                      + 4.0 * T1 * (11.0 * T1**2 + 15.0 * T1 * T2 + 6.0 * T1 * T3 + 3.0 * T2**2 + 6.0 * T2 * T3))
                    / 24.0;
 
             when 12 =>
@@ -1646,7 +1637,7 @@ package body Prunt.Motion_Planner is
                  + Cm
                    * DT
                    * T1
-                   * (-DT * (T1 + T2) + 2.0 * T1 ** 2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2 ** 2 + 2.0 * T2 * T3)
+                   * (-DT * (T1 + T2) + 2.0 * T1**2 + 3.0 * T1 * T2 + 2.0 * T1 * T3 + T2**2 + 2.0 * T2 * T3)
                    / 2.0;
 
             when 13 =>
@@ -1654,7 +1645,7 @@ package body Prunt.Motion_Planner is
                  Velocity_At_Stage (T3, 12)
                  + Cm
                    * DT
-                   * (DT ** 3 - 12.0 * DT * T1 * (T1 + T2) + 12.0 * T1 * (2.0 * T1 ** 2 + 3.0 * T1 * T2 + T2 ** 2))
+                   * (DT**3 - 12.0 * DT * T1 * (T1 + T2) + 12.0 * T1 * (2.0 * T1**2 + 3.0 * T1 * T2 + T2**2))
                    / 24.0;
 
             when 14 =>
@@ -1663,13 +1654,13 @@ package body Prunt.Motion_Planner is
                  + Cm
                    * DT
                    * T1
-                   * (2.0 * DT ** 2 - 3.0 * DT * (T1 + 2.0 * T2) + 2.0 * T1 ** 2 + 6.0 * T1 * T2 + 6.0 * T2 ** 2)
+                   * (2.0 * DT**2 - 3.0 * DT * (T1 + 2.0 * T2) + 2.0 * T1**2 + 6.0 * T1 * T2 + 6.0 * T2**2)
                    / 12.0;
 
             when 15 =>
                return
                  Velocity_At_Stage (T2, 14)
-                 + Cm * DT * (-DT ** 3 + 4.0 * DT ** 2 * T1 - 6.0 * DT * T1 ** 2 + 4.0 * T1 ** 3) / 24.0;
+                 + Cm * DT * (-DT**3 + 4.0 * DT**2 * T1 - 6.0 * DT * T1**2 + 4.0 * T1**3) / 24.0;
          end case;
       end Velocity_At_Stage;
 
@@ -1728,11 +1719,7 @@ package body Prunt.Motion_Planner is
       end record;
 
       Zero_State : constant Profile_State :=
-        (Sn   => 0.0 * mm / s ** 4,
-         Jr   => 0.0 * mm / s ** 3,
-         Acc  => 0.0 * mm / s ** 2,
-         Vel  => 0.0 * mm / s,
-         Dist => 0.0 * mm);
+        (Sn => 0.0 * mm / s**4, Jr => 0.0 * mm / s**3, Acc => 0.0 * mm / s**2, Vel => 0.0 * mm / s, Dist => 0.0 * mm);
 
       function Local_Distance (State : Profile_State; DT : Time; Stage_Crackle : Crackle) return Length;
       --  Return the distance contribution beyond Start_Vel * T from State after DT.
@@ -1788,25 +1775,25 @@ package body Prunt.Motion_Planner is
                return -Cm;
 
             when others          =>
-               return 0.0 * mm / s ** 5;
+               return 0.0 * mm / s**5;
          end case;
       end Stage_Crackle_For;
 
       function Checkpoint_4 return Profile_State is
       begin
          return
-           (Sn   => 0.0 * mm / s ** 4,
+           (Sn   => 0.0 * mm / s**4,
             Jr   => Cm * T1 * (T1 + T2),
             Acc  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2) / 2.0,
-            Vel  => Cm * T1 * (T1 + T2) * (7.0 * T1 ** 2 + 7.0 * T1 * T2 + 2.0 * T2 ** 2) / 12.0,
-            Dist => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2) * (3.0 * T1 ** 2 + 3.0 * T1 * T2 + T2 ** 2) / 24.0);
+            Vel  => Cm * T1 * (T1 + T2) * (7.0 * T1**2 + 7.0 * T1 * T2 + 2.0 * T2**2) / 12.0,
+            Dist => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2) * (3.0 * T1**2 + 3.0 * T1 * T2 + T2**2) / 24.0);
       end Checkpoint_4;
 
       function Checkpoint_8 return Profile_State is
       begin
          return
-           (Sn   => 0.0 * mm / s ** 4,
-            Jr   => 0.0 * mm / s ** 3,
+           (Sn   => 0.0 * mm / s**4,
+            Jr   => 0.0 * mm / s**3,
             Acc  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3),
             Vel  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3) / 2.0,
             Dist =>
@@ -1814,45 +1801,44 @@ package body Prunt.Motion_Planner is
               * T1
               * (T1 + T2)
               * (2.0 * T1 + T2 + T3)
-              * (27.0 * T1 ** 2 + 27.0 * T1 * T2 + 14.0 * T1 * T3 + 7.0 * T2 ** 2 + 7.0 * T2 * T3 + 2.0 * T3 ** 2)
+              * (27.0 * T1**2 + 27.0 * T1 * T2 + 14.0 * T1 * T3 + 7.0 * T2**2 + 7.0 * T2 * T3 + 2.0 * T3**2)
               / 12.0);
       end Checkpoint_8;
 
       function Checkpoint_12 return Profile_State is
       begin
          return
-           (Sn   => 0.0 * mm / s ** 4,
+           (Sn   => 0.0 * mm / s**4,
             Jr   => -Cm * T1 * (T1 + T2),
             Acc  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + 2.0 * T3) / 2.0,
             Vel  =>
               Cm
               * T1
               * (T1 + T2)
-              * (89.0 * T1 ** 2 + 89.0 * T1 * T2 + 60.0 * T1 * T3 + 24.0 * T1 * T4 + 22.0 * T2 ** 2 + 30.0 * T2 * T3
+              * (89.0 * T1**2 + 89.0 * T1 * T2 + 60.0 * T1 * T3 + 24.0 * T1 * T4 + 22.0 * T2**2 + 30.0 * T2 * T3
                  + 12.0 * T2 * T4
-                 + 6.0 * T3 ** 2
+                 + 6.0 * T3**2
                  + 12.0 * T3 * T4)
               / 12.0,
             Dist =>
               Cm
               * T1
               * (T1 + T2)
-              * (390.0 * T1 ** 3 + 585.0 * T1 ** 2 * T2 + 302.0 * T1 ** 2 * T3 + 192.0 * T1 ** 2 * T4
-                 + 293.0 * T1 * T2 ** 2
+              * (390.0 * T1**3 + 585.0 * T1**2 * T2 + 302.0 * T1**2 * T3 + 192.0 * T1**2 * T4 + 293.0 * T1 * T2**2
                  + 302.0 * T1 * T2 * T3
                  + 192.0 * T1 * T2 * T4
-                 + 60.0 * T1 * T3 ** 2
+                 + 60.0 * T1 * T3**2
                  + 120.0 * T1 * T3 * T4
-                 + 24.0 * T1 * T4 ** 2
-                 + 49.0 * T2 ** 3
-                 + 76.0 * T2 ** 2 * T3
-                 + 48.0 * T2 ** 2 * T4
-                 + 30.0 * T2 * T3 ** 2
+                 + 24.0 * T1 * T4**2
+                 + 49.0 * T2**3
+                 + 76.0 * T2**2 * T3
+                 + 48.0 * T2**2 * T4
+                 + 30.0 * T2 * T3**2
                  + 60.0 * T2 * T3 * T4
-                 + 12.0 * T2 * T4 ** 2
-                 + 4.0 * T3 ** 3
-                 + 12.0 * T3 ** 2 * T4
-                 + 12.0 * T3 * T4 ** 2)
+                 + 12.0 * T2 * T4**2
+                 + 4.0 * T3**3
+                 + 12.0 * T3**2 * T4
+                 + 12.0 * T3 * T4**2)
               / 24.0);
       end Checkpoint_12;
 
@@ -1918,43 +1904,43 @@ package body Prunt.Motion_Planner is
                Advance (State, T1, Cm);
             end if;
             if Stage >= 3 then
-               Advance (State, T2, 0.0 * mm / s ** 5);
+               Advance (State, T2, 0.0 * mm / s**5);
             end if;
 
          when 4 .. 7   =>
             State := Checkpoint_4;
             if Stage >= 5 then
-               Advance (State, T3, 0.0 * mm / s ** 5);
+               Advance (State, T3, 0.0 * mm / s**5);
             end if;
             if Stage >= 6 then
                Advance (State, T1, -Cm);
             end if;
             if Stage >= 7 then
-               Advance (State, T2, 0.0 * mm / s ** 5);
+               Advance (State, T2, 0.0 * mm / s**5);
             end if;
 
          when 8 .. 11  =>
             State := Checkpoint_8;
             if Stage >= 9 then
-               Advance (State, T4, 0.0 * mm / s ** 5);
+               Advance (State, T4, 0.0 * mm / s**5);
             end if;
             if Stage >= 10 then
                Advance (State, T1, -Cm);
             end if;
             if Stage >= 11 then
-               Advance (State, T2, 0.0 * mm / s ** 5);
+               Advance (State, T2, 0.0 * mm / s**5);
             end if;
 
          when 12 .. 15 =>
             State := Checkpoint_12;
             if Stage >= 13 then
-               Advance (State, T3, 0.0 * mm / s ** 5);
+               Advance (State, T3, 0.0 * mm / s**5);
             end if;
             if Stage >= 14 then
                Advance (State, T1, Cm);
             end if;
             if Stage = 15 then
-               Advance (State, T2, 0.0 * mm / s ** 5);
+               Advance (State, T2, 0.0 * mm / s**5);
             end if;
       end case;
 
@@ -1968,7 +1954,7 @@ package body Prunt.Motion_Planner is
       if T <= Total_Time (Profile.Accel) then
          return Crackle_At_Time (Profile.Accel, T, Max_Crackle);
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
-         return 0.0 * mm / s ** 5;
+         return 0.0 * mm / s**5;
       else
          declare
             Decel_T : constant Time :=
@@ -1987,7 +1973,7 @@ package body Prunt.Motion_Planner is
       if T <= Total_Time (Profile.Accel) then
          return Snap_At_Time (Profile.Accel, T, Max_Crackle);
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
-         return 0.0 * mm / s ** 4;
+         return 0.0 * mm / s**4;
       else
          declare
             Decel_T : constant Time :=
@@ -2005,7 +1991,7 @@ package body Prunt.Motion_Planner is
       if T <= Total_Time (Profile.Accel) then
          return Jerk_At_Time (Profile.Accel, T, Max_Crackle);
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
-         return 0.0 * mm / s ** 3;
+         return 0.0 * mm / s**3;
       else
          declare
             Decel_T : constant Time :=
@@ -2023,7 +2009,7 @@ package body Prunt.Motion_Planner is
       if T <= Total_Time (Profile.Accel) then
          return Acceleration_At_Time (Profile.Accel, T, Max_Crackle);
       elsif T < Total_Time (Profile.Accel) + Profile.Coast then
-         return 0.0 * mm / s ** 2;
+         return 0.0 * mm / s**2;
       else
          declare
             Decel_T : constant Time :=
@@ -2122,7 +2108,7 @@ package body Prunt.Motion_Planner is
          Upper : Time := 86_400.0 * s;
          --  A maximum of 24 hours should be more than enough.
 
-         type Casted_Time is mod 2 ** 64;
+         type Casted_Time is mod 2**64;
          function Cast_Time is new Ada.Unchecked_Conversion (Time, Casted_Time);
          function Cast_Time is new Ada.Unchecked_Conversion (Casted_Time, Time);
       begin
@@ -2154,10 +2140,7 @@ package body Prunt.Motion_Planner is
         or else not Derivative_Limits_Are_Valid (Am, Jm, Sm, Cm)
       then
          raise Constraint_Error with "Invalid distance-profile inputs.";
-      elsif Am = 0.0 * mm / s ** 2
-        or else Jm = 0.0 * mm / s ** 3
-        or else Sm = 0.0 * mm / s ** 4
-        or else Cm = 0.0 * mm / s ** 5
+      elsif Am = 0.0 * mm / s**2 or else Jm = 0.0 * mm / s**3 or else Sm = 0.0 * mm / s**4 or else Cm = 0.0 * mm / s**5
       then
          if D = 0.0 * mm then
             return ([others => 0.0 * s], Region_5, 1);
@@ -2194,7 +2177,7 @@ package body Prunt.Motion_Planner is
                --  Reachable: None (Test Case D1.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
          else
-            T2 := Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) - 1.5 * Sm / Cm;
+            T2 := Dimensionless_Math.Sqrt (0.25 * Sm**2 / Cm**2 + Am / Sm) - 1.5 * Sm / Cm;
             if T2 >= 0.0 * s then
                --  Am >= 2.0 * Sm ** 3 / Cm ** 2
                Region := Region_2;
@@ -2213,11 +2196,11 @@ package body Prunt.Motion_Planner is
                Cases :=
                  [
                   --  Reachable: Am (Test Case D3.4)
-                  4 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  4 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                   --  Impossible case.
-                  3 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  3 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                   --  Impossible case.
-                  2 => [(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  2 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                   --  Reachable: None (Test Case D3.1)
                   1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
             end if;
@@ -2242,11 +2225,11 @@ package body Prunt.Motion_Planner is
             Cases :=
               [
                --  Reachable: Am (Test Case D5.4)
-               4 => [(Am / (2.0 * Cm)) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               4 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               3 => [(Am / (2.0 * Cm)) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               3 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               2 => [(Am / (2.0 * Cm)) ** (1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               2 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D5.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
          end if;
@@ -2307,7 +2290,7 @@ package body Prunt.Motion_Planner is
          Upper : Time := 86_400.0 * s;
          --  A maximum of 24 hours should be more than enough.
 
-         type Casted_Time is mod 2 ** 64;
+         type Casted_Time is mod 2**64;
          function Cast_Time is new Ada.Unchecked_Conversion (Time, Casted_Time);
          function Cast_Time is new Ada.Unchecked_Conversion (Casted_Time, Time);
       begin
@@ -2336,10 +2319,7 @@ package body Prunt.Motion_Planner is
    begin
       if not (Vd <= Velocity'Last) or else not Derivative_Limits_Are_Valid (Am, Jm, Sm, Cm) then
          raise Constraint_Error with "Invalid velocity-profile inputs.";
-      elsif Am = 0.0 * mm / s ** 2
-        or else Jm = 0.0 * mm / s ** 3
-        or else Sm = 0.0 * mm / s ** 4
-        or else Cm = 0.0 * mm / s ** 5
+      elsif Am = 0.0 * mm / s**2 or else Jm = 0.0 * mm / s**3 or else Sm = 0.0 * mm / s**4 or else Cm = 0.0 * mm / s**5
       then
          if Vd = 0.0 * mm / s then
             return ([others => 0.0 * s], Region_5, 1);
@@ -2378,12 +2358,12 @@ package body Prunt.Motion_Planner is
                --  Reachable: Sm, Jm, Am (Test Case V1.4)
                return ([Sm / Cm, T2, T3, T4], Region, 4);
             end if;
-            T3 := 0.5 * Dimensionless_Math.Sqrt ((Jm / Sm + Sm / Cm) ** 2 + 4.0 * Vd / Jm) - 1.5 * (Jm / Sm + Sm / Cm);
+            T3 := 0.5 * Dimensionless_Math.Sqrt ((Jm / Sm + Sm / Cm)**2 + 4.0 * Vd / Jm) - 1.5 * (Jm / Sm + Sm / Cm);
             if T3 > 0.0 * s then
                --  Vd > 2.0 * Jm * (Jm / Sm + Sm / Cm) ** 2
                --  Reachable: Sm, Jm (Test Case V1.3)
                return ([Sm / Cm, T2, T3, 0.0 * s], Region, 3);
-            elsif Vd > 8.0 * Sm ** 4 / Cm ** 3 then
+            elsif Vd > 8.0 * Sm**4 / Cm**3 then
                --  Reachable: Sm (Test Case V1.2)
                return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
             else
@@ -2394,16 +2374,16 @@ package body Prunt.Motion_Planner is
                   1);
             end if;
          end if;
-         T2 := Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) - 1.5 * Sm / Cm;
+         T2 := Dimensionless_Math.Sqrt (0.25 * Sm**2 / Cm**2 + Am / Sm) - 1.5 * Sm / Cm;
          if T2 >= 0.0 * s then
             --  Am >= 2.0 * Sm ** 3 / Cm ** 2
             Region := Region_2;
-            T4 := Vd / Am - Sm / Cm - 2.0 * Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm);
+            T4 := Vd / Am - Sm / Cm - 2.0 * Dimensionless_Math.Sqrt (0.25 * Sm**2 / Cm**2 + Am / Sm);
             if T4 > 0.0 * s then
                --  Vd > Am * (2.0 * Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) + Sm / Cm)
                --  Reachable: Sm, Am (Test Case V2.4)
                return ([Sm / Cm, T2, 0.0 * s, T4], Region, 4);
-            elsif Vd > 8.0 * Sm ** 4 / Cm ** 3 then
+            elsif Vd > 8.0 * Sm**4 / Cm**3 then
                --  Reachable: Sm (Test Case V2.2)
                return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
             else
@@ -2415,11 +2395,11 @@ package body Prunt.Motion_Planner is
             end if;
          else
             Region := Region_3;
-            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm) ** (1 / 3);
+            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm)**(1 / 3);
             if T4 > 0.0 * s then
                --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3)
                --  Reachable: Am (Test Case V3.4)
-               return ([(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
+               return ([(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
             else
                --  Reachable: None (Test Case V3.1)
                return
@@ -2453,11 +2433,11 @@ package body Prunt.Motion_Planner is
             end if;
          else
             Region := Region_5;
-            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm) ** (1 / 3);
+            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm)**(1 / 3);
             if T4 > 0.0 * s then
                --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3)
                --  Reachable: Am (Test Case V5.4)
-               return ([(0.5 * Am / Cm) ** (1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
+               return ([(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
             else
                --  Reachable: None (Test Case V5.1)
                return
@@ -2515,10 +2495,10 @@ package body Prunt.Motion_Planner is
          return (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
       end if;
 
-      if Acceleration_Max = 0.0 * mm / s ** 2
-        or else Jerk_Max = 0.0 * mm / s ** 3
-        or else Snap_Max = 0.0 * mm / s ** 4
-        or else Crackle_Max = 0.0 * mm / s ** 5
+      if Acceleration_Max = 0.0 * mm / s**2
+        or else Jerk_Max = 0.0 * mm / s**3
+        or else Snap_Max = 0.0 * mm / s**4
+        or else Crackle_Max = 0.0 * mm / s**5
       then
          if Start_Vel /= End_Vel or else Start_Vel = 0.0 * mm / s then
             raise Constraint_Error with "This motion requires positive derivative limits.";
@@ -2541,8 +2521,8 @@ package body Prunt.Motion_Planner is
          Profile_Distance : constant Length :=
            Fast_Distance_At_Max_Time
              (Profile,
-              (if Start_Vel < End_Vel then Crackle_Max / (mm / s ** 5) else -Crackle_Max / (mm / s ** 5))
-              * (mm / s ** 5), --  Temporarily drop the dimension otherwise gnatcov breaks it.
+              (if Start_Vel < End_Vel then Crackle_Max / (mm / s**5) else -Crackle_Max / (mm / s**5))
+              * (mm / s**5), --  Temporarily drop the dimension otherwise gnatcov breaks it.
               Start_Vel);
       begin
          if Distance < Profile_Distance then
@@ -2566,7 +2546,7 @@ package body Prunt.Motion_Planner is
          else
             Profile.Coast := 0.0 * s;
             declare
-               type Casted_Vel is mod 2 ** 64;
+               type Casted_Vel is mod 2**64;
                function Cast_Vel is new Ada.Unchecked_Conversion (Velocity, Casted_Vel);
                function Cast_Vel is new Ada.Unchecked_Conversion (Casted_Vel, Velocity);
                Upper : Velocity := Max_Vel;

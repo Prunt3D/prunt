@@ -21,7 +21,7 @@ pragma Extensions_Allowed (On);
 
 package Prunt.Input_Shapers is
 
-   type Cycle_Count is range -2 ** 63 + 1 .. 2 ** 63 - 1;
+   type Cycle_Count is range -2**63 + 1 .. 2**63 - 1;
 
    subtype Shaper_Damping_Ratio is Dimensionless range 0.0 .. 1.0 with Annotate => (Prunt_Config, Unit, "", "×");
    subtype Residual_Vibration_Level is Dimensionless range 0.0 .. 1.0 with Annotate => (Prunt_Config, Unit, "", "×");

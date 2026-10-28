@@ -427,7 +427,7 @@ package Prunt.Config is
    procedure Reset_Live_To_Stored (This : Config_File);
    --  Discard all pending changes in the live configuration and revert to the version stored on disk.
 
-   type Save_Counter is range 0 .. 2 ** 63 - 1;
+   type Save_Counter is range 0 .. 2**63 - 1;
 
    function Last_Save (This : Config_File) return Save_Counter;
    --  Incremented when Save is called of a Config_Data.

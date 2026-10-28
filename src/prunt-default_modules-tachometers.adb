@@ -209,14 +209,14 @@ package body Prunt.Default_Modules.Tachometers is
             end if;
          or
             when Current_Auto_Report_Interval > 0.0 =>
-            delay until Next_Auto_Report;
+               delay until Next_Auto_Report;
 
-            Log_Tachometers (Config_Ref, Requires_Fresh => False);
+               Log_Tachometers (Config_Ref, Requires_Fresh => False);
 
-            Next_Auto_Report := Next_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
-            if Ada.Real_Time.Clock > Next_Auto_Report then
-               Next_Auto_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
-            end if;
+               Next_Auto_Report := Next_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+               if Ada.Real_Time.Clock > Next_Auto_Report then
+                  Next_Auto_Report := Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+               end if;
          end select;
       end loop;
    end Status_Updater;

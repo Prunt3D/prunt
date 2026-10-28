@@ -31,51 +31,69 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
    end record;
 
    overriding
-   function Get_Last_Position (This : Mock_Planner) return Position is ([others => 0.0 * mm]);
+   function Get_Last_Position (This : Mock_Planner) return Position
+   is ([others => 0.0 * mm]);
    overriding
    function Get_Last_Kinematic_Parameters (This : Mock_Planner) return Motion_Planner.Kinematic_Parameters
    is ((others => <>));
    overriding
-   function Get_State_Anchor_Corner_ID (This : Mock_Planner) return Planner_Corner_ID is (0);
+   function Get_State_Anchor_Corner_ID (This : Mock_Planner) return Planner_Corner_ID
+   is (0);
    overriding
-   function Get_Last_Executed_Corner_ID (This : Mock_Planner) return Planner_Corner_ID is (0);
+   function Get_Last_Executed_Corner_ID (This : Mock_Planner) return Planner_Corner_ID
+   is (0);
    overriding
    procedure Mark_Axis_Homed (This : Mock_Planner; Axis : Axis_Name) is null;
    overriding
    procedure Mark_Axis_Unhomed (This : Mock_Planner; Axis : Axis_Name) is null;
    overriding
-   function Axis_Is_Homed (This : Mock_Planner; Axis : Axis_Name) return Boolean is (True);
+   function Axis_Is_Homed (This : Mock_Planner; Axis : Axis_Name) return Boolean
+   is (True);
    overriding
-   function Cancellation_Is_Active (This : Mock_Planner) return Boolean is (False);
+   function Cancellation_Is_Active (This : Mock_Planner) return Boolean
+   is (False);
    overriding
    procedure Add_Corner
-     (This : Mock_Planner; Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s;
-      Require_Homed : Boolean := True) is null;
+     (This          : Mock_Planner;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True)
+   is null;
    overriding
    procedure Add_Helix
-     (This : Mock_Planner; Center : Position; Pos : Position; Clockwise : Boolean; Feedrate : Velocity;
-      Dwell_After : Time := 0.0 * s; Require_Homed : Boolean := True) is null;
+     (This          : Mock_Planner;
+      Center        : Position;
+      Pos           : Position;
+      Clockwise     : Boolean;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True)
+   is null;
    overriding
    procedure Add_Corner_Data (This : Mock_Planner; Corner_Data : Extra_Corner_Data'Class) is null;
    overriding
    procedure Flush
-     (This : Mock_Planner;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+     (This : Mock_Planner; Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
    overriding
    procedure Resolve_Homing_Move (This : Mock_Planner; Stopped_Position : Position) is null;
    overriding
    procedure Flush_And_Change_Kinematic_Parameters
-     (This : Mock_Planner; Params : Motion_Planner.Kinematic_Parameters;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is null;
+     (This       : Mock_Planner;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is null;
    overriding
    procedure Flush_And_Reset_Position
-     (This : Mock_Planner; New_Position : Position;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is null;
+     (This         : Mock_Planner;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is null;
 
    overriding
    procedure Flush
-     (This : Mock_Planner;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+     (This : Mock_Planner; Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is
    begin
       This.Pending.Replace_Element (Extra_Data);
    end Flush;
@@ -85,7 +103,8 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
    end record;
 
    overriding
-   function Get_Last_Command_Index (This : Mock_Context) return Command_Index is (42);
+   function Get_Last_Command_Index (This : Mock_Context) return Command_Index
+   is (42);
    overriding
    procedure Wait_For_Idle (This : Mock_Context);
    overriding
@@ -119,15 +138,15 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
 
    procedure Test_Smart_Plug_Shutdown (T : in out Trendy_Test.Operation'Class) is
       Instance : Module_Instance;
-      Pending : aliased Events.Holder;
-      Planner : constant Mock_Planner := (Pending => Pending'Unchecked_Access);
-      Context : Mock_Context;
-      Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Pending  : aliased Events.Holder;
+      Planner  : constant Mock_Planner := (Pending => Pending'Unchecked_Access);
+      Context  : Mock_Context;
+      Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;
 
       procedure Dispatch (Line : Virtual_String);
 
       procedure Dispatch (Line : Virtual_String) is
-         Args : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments (Line);
+         Args   : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments (Line);
          Number : constant Gcode_Arguments.Argument_Integer := Args.Consume_Integer ('M');
       begin
          Instance.Gcode_Dispatch (Ref, Args, Planner, ('M', Number));
@@ -143,7 +162,8 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
          Pending.Element.Process_After_Block (Context);
          T.Fail ("shutdown must leave the current step-generator block");
       exception
-         when Controller_Shutdown_Requested => null;
+         when Controller_Shutdown_Requested =>
+            null;
       end;
       T.Assert (Trace = "idle;shutdown;", "shutdown must follow confirmed physical idle");
 
@@ -153,7 +173,8 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
          Pending.Element.Process_After_Block (Context);
          T.Fail ("a failed idle wait must propagate");
       exception
-         when Hardware_Communication_Error => null;
+         when Hardware_Communication_Error =>
+            null;
       end;
       T.Assert (Trace = "idle;", "failed idle must propagate to the controller's emergency shutdown path");
       Context.Fail_Idle := False;
@@ -164,7 +185,8 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
             Dispatch (Line);
             T.Fail ("only bare P may select smart plug shutdown");
          exception
-            when Gcode_Bad_Inputs_Error => null;
+            when Gcode_Bad_Inputs_Error =>
+               null;
          end;
          T.Assert (Pending.Is_Empty, "invalid variants must not enqueue work");
       end loop;
@@ -189,18 +211,18 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
       T.Register (Parallelize => False);
       declare
          Plug_Module : Module;
-         File : constant Config.Config_File :=
+         File        : constant Config.Config_File :=
            Config.Create ("smart_plug_disabled_shutdown.json", ["Smart Plug" => Plug_Module.Config_Schema]);
-         Status : Status_Manager.Status_Emitter;
-         Instance : My_Modules.Module_Instance'Class :=
+         Status      : Status_Manager.Status_Emitter;
+         Instance    : My_Modules.Module_Instance'Class :=
            Plug_Module.Initialize
              (File.Get_Data ("Smart Plug"), Report_Config_Error'Access, Status, Get_Other_Instance'Access);
-         Pending : aliased Events.Holder;
-         Planner : constant Mock_Planner := (Pending => Pending'Unchecked_Access);
-         Context : Mock_Context;
-         Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-         Args : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments ("M81 P");
-         Number : constant Gcode_Arguments.Argument_Integer := Args.Consume_Integer ('M');
+         Pending     : aliased Events.Holder;
+         Planner     : constant Mock_Planner := (Pending => Pending'Unchecked_Access);
+         Context     : Mock_Context;
+         Ref         : My_Modules.Module_Instance_Shared_Pointers.Ref;
+         Args        : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments ("M81 P");
+         Number      : constant Gcode_Arguments.Argument_Integer := Args.Consume_Integer ('M');
       begin
          T.Assert (not Read_Configuration (File.Get_Data ("Smart Plug")).Enabled, "plug must be disabled");
          Trace := "";
@@ -212,7 +234,8 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
             Pending.Element.Process_After_Block (Context);
             T.Fail ("shutdown must leave the current step-generator block even without a plug");
          exception
-            when Controller_Shutdown_Requested => null;
+            when Controller_Shutdown_Requested =>
+               null;
          end;
          T.Assert (Trace = "idle;shutdown;", "a disabled plug must still shut down after physical idle");
       end;
@@ -222,9 +245,10 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
 
    function All_Tests return Test_Group is
    begin
-      return [Test_Saved_Changes_Wait_For_Restart'Unrestricted_Access,
-              Test_Smart_Plug_Shutdown'Unrestricted_Access,
-              Test_Shutdown_Without_Plug'Unrestricted_Access];
+      return
+        [Test_Saved_Changes_Wait_For_Restart'Unrestricted_Access,
+         Test_Smart_Plug_Shutdown'Unrestricted_Access,
+         Test_Shutdown_Without_Plug'Unrestricted_Access];
    end All_Tests;
 
    procedure Test_Saved_Changes_Wait_For_Restart (T : in out Trendy_Test.Operation'Class) is
@@ -233,20 +257,20 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
 
       declare
          Plug_Module : Module;
-         File : constant Config.Config_File :=
+         File        : constant Config.Config_File :=
            Config.Create ("smart_plug_saved_changes.json", ["Smart Plug" => Plug_Module.Config_Schema]);
-         Result : Virtual_String;
-         Errors : Config.Config_Error_Vectors.Vector;
+         Result      : Virtual_String;
+         Errors      : Config.Config_Error_Vectors.Vector;
          pragma Unreferenced (Result);
       begin
          T.Assert
-           (not Read_Configuration (File.Get_Data ("Smart Plug")).Enabled,
-            "startup loads the disabled default");
+           (not Read_Configuration (File.Get_Data ("Smart Plug")).Enabled, "startup loads the disabled default");
 
          File.Apply_Untrusted_Patch
            ("{""Prunt config version"":1,""Config"":{""Smart Plug"":{""Version"":1,""Config"":{""Smart_Plug"":{"
             & """Kind"":{""Selected"":""Enabled"",""Children"":{""Enabled"":{""Host"":""plug.local""}}}}}}}}",
-            Result, Errors);
+            Result,
+            Errors);
          T.Assert (Errors.Is_Empty, "saved enable patch is valid");
          T.Assert
            (not Read_Configuration (File.Get_Data ("Smart Plug")).Enabled,
@@ -261,7 +285,8 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
          File.Apply_Untrusted_Patch
            ("{""Prunt config version"":1,""Config"":{""Smart Plug"":{""Version"":1,""Config"":{""Smart_Plug"":{"
             & """Kind"":{""Children"":{""Enabled"":{""Host"":""replacement.local"",""Watchdog_Seconds"":120}}}}}}}}",
-            Result, Errors);
+            Result,
+            Errors);
          T.Assert (Errors.Is_Empty, "saved host and timeout patch is valid");
          T.Assert
            (Read_Configuration (File.Get_Data ("Smart Plug")).Host = "plug.local"
@@ -277,7 +302,8 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
          File.Apply_Untrusted_Patch
            ("{""Prunt config version"":1,""Config"":{""Smart Plug"":{""Version"":1,""Config"":{""Smart_Plug"":{"
             & """Kind"":{""Selected"":""Disabled""}}}}}}",
-            Result, Errors);
+            Result,
+            Errors);
          T.Assert (Errors.Is_Empty, "saved disable patch is valid");
          T.Assert
            (Read_Configuration (File.Get_Data ("Smart Plug")).Enabled,

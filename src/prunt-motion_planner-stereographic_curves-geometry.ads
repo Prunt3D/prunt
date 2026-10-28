@@ -41,9 +41,8 @@ package Prunt.Motion_Planner.Stereographic_Curves.Geometry is
    --  uncertainty after the fixed-work analysis.
 
    function Maximum_Deviation_From_Line_Corner
-     (Curve                  : Stereographic_Curve;
-      Start, Corner, Finish : Position;
-      Maximum_Interval_Width : Length) return Distance_Interval
+     (Curve : Stereographic_Curve; Start, Corner, Finish : Position; Maximum_Interval_Width : Length)
+      return Distance_Interval
    with
      Pre =>
        Maximum_Interval_Width > 0.0 * mm
@@ -183,9 +182,8 @@ private
    --  Combine the curve's per-axis derivative certificate into an upper bound on Euclidean curvature magnitude.
 
    function Curvature_Capsule_Radius
-     (Curve                          : Stereographic_Curve;
-      Start_Parameter, End_Parameter : Curve_Parameter;
-      Curvature_Upper                : Curvature) return Length
+     (Curve : Stereographic_Curve; Start_Parameter, End_Parameter : Curve_Parameter; Curvature_Upper : Curvature)
+      return Length
    with
      Pre =>
        Start_Parameter <= End_Parameter

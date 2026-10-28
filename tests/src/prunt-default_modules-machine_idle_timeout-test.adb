@@ -89,7 +89,7 @@ package body Prunt.Default_Modules.Machine_Idle_Timeout.Test is
       end;
    end Test_Activity_Restarts_Timeout;
 
-   function All_Tests return Trendy_Test.Test_Group is
-     (Trendy_Test.Test_Group'[1 => Test_Activity_Restarts_Timeout'Unrestricted_Access]);
+   function All_Tests return Trendy_Test.Test_Group
+   is (Trendy_Test.Test_Group'[1 => Test_Activity_Restarts_Timeout'Unrestricted_Access]);
 
 end Prunt.Default_Modules.Machine_Idle_Timeout.Test;

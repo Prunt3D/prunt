@@ -30,7 +30,7 @@ procedure Config_Codegen is
    pragma Extensions_Allowed (On);
 
    Modules : Module_Data_Vectors.Vector := [];
-   Config : Config_Maps.Map := [];
+   Config  : Config_Maps.Map := [];
 
    procedure Process_Unit (Context : Libadalang.Helpers.App_Job_Context; Unit : Analysis_Unit) is
       pragma Unreferenced (Context);

@@ -120,7 +120,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       At_High   : constant Dimensionless :=
         abs (Cos_Coefficient * Math.Cos (High) + Sin_Coefficient * Math.Sin (High));
       Amplitude : constant Dimensionless :=
-        Math.Sqrt (Dimensionless'Max (0.0, Cos_Coefficient ** 2 + Sin_Coefficient ** 2));
+        Math.Sqrt (Dimensionless'Max (0.0, Cos_Coefficient**2 + Sin_Coefficient**2));
       Phase     : Dimensionless := 0.0;
    begin
       if Amplitude > 0.0 then
@@ -152,7 +152,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
             High_Value : constant Dimensionless := A * Math.Cos (Theta_High) + B * Math.Sin (Theta_High);
             Minimum    : Dimensionless := Dimensionless'Min (Low_Value, High_Value);
             Maximum    : Dimensionless := Dimensionless'Max (Low_Value, High_Value);
-            Amplitude  : constant Dimensionless := Math.Sqrt (Dimensionless'Max (0.0, A ** 2 + B ** 2));
+            Amplitude  : constant Dimensionless := Math.Sqrt (Dimensionless'Max (0.0, A**2 + B**2));
             Phase      : Dimensionless := 0.0;
          begin
             if Amplitude > 0.0 then
@@ -207,9 +207,9 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          begin
             R.Velocity (Axis) := Tangent_Max;
             R.Acceleration (Axis) := Curvature'Adjacent (Radial_Max * K, Curvature'Last);
-            R.Jerk (Axis) := Curvature_To_2'Adjacent (Tangent_Max * K ** 2, Curvature_To_2'Last);
-            R.Snap (Axis) := Curvature_To_3'Adjacent (Radial_Max * K ** 3, Curvature_To_3'Last);
-            R.Crackle (Axis) := Curvature_To_4'Adjacent (Tangent_Max * K ** 4, Curvature_To_4'Last);
+            R.Jerk (Axis) := Curvature_To_2'Adjacent (Tangent_Max * K**2, Curvature_To_2'Last);
+            R.Snap (Axis) := Curvature_To_3'Adjacent (Radial_Max * K**3, Curvature_To_3'Last);
+            R.Crackle (Axis) := Curvature_To_4'Adjacent (Tangent_Max * K**4, Curvature_To_4'Last);
          end;
       end loop;
       return R;
@@ -277,7 +277,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       if not N_Good then
          return;
       end if;
-      Radius := Chord ** 2 / (2.0 * Perp_Length);
+      Radius := Chord**2 / (2.0 * Perp_Length);
       if Radius <= 1.0E-12 * mm or else not Finite (Dimensionless (Radius / mm)) then
          return;
       end if;
@@ -411,7 +411,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          return (Status => Radius_Limit_Exceeded, Transition => <>);
       end if;
       Theta := Math.Arctan (Sin_Half, Math.Sqrt (0.5 * (1.0 + Dot_Value))) * 2.0 * mm;
-      N := (T1 - T0 * Dot_Value) / Math.Sqrt (Dimensionless'Max (Epsilon, 1.0 - Dot_Value ** 2));
+      N := (T1 - T0 * Dot_Value) / Math.Sqrt (Dimensionless'Max (Epsilon, 1.0 - Dot_Value**2));
       U := N * (-1.0);
       Arc :=
         (Centre        => Start_Point + N * Radius,
@@ -583,7 +583,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          for Axis in Axis_Name loop
             B := B + 2.0 * Dimensionless (V (Axis) / mm) * (T0 (Axis) + Ratio * T1 (Axis));
          end loop;
-         Discriminant := B ** 2 + 4.0 * A * VV;
+         Discriminant := B**2 + 4.0 * A * VV;
          if A <= 1.0E-14 or else Discriminant <= 0.0 then
             return Result;
          end if;
@@ -647,7 +647,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          return (Status => Invalid_Input, Transition => <>);
       end if;
       for Axis in Axis_Name loop
-         VV := VV + Dimensionless ((V (Axis) / mm) ** 2);
+         VV := VV + Dimensionless ((V (Axis) / mm)**2);
       end loop;
       TT := 1.0 - Dot (T0, T1);
       if VV <= 1.0E-20 or else TT <= 1.0E-12 then
@@ -817,7 +817,7 @@ package body Prunt.Motion_Planner.Corner_Transitions is
          when Stereographic_Transition                                             =>
             return (4, False, 0);
 
-         when Circular_Transition                                                 =>
+         when Circular_Transition                                                  =>
             return (1, False, 0);
 
          when Biarc_Transition                                                     =>
@@ -985,13 +985,13 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       return Unit_Speed_Axial_Derivative_Bounds is
    begin
       case Evaluator.Kind_Value is
-         when Circular_Transition  =>
+         when Circular_Transition =>
             return Arc_Bounds (Evaluator.Circle, Start_Distance, End_Distance);
 
-         when Biarc_Transition     =>
+         when Biarc_Transition    =>
             return Biarc_Bounds (Evaluator.Two_Arcs, Start_Distance, End_Distance);
 
-         when others               =>
+         when others              =>
             return Evaluator.Bounds;
       end case;
    end Derivative_Bounds;
@@ -1152,21 +1152,21 @@ package body Prunt.Motion_Planner.Corner_Transitions is
      (Evaluator : Corner_Transition_Evaluator; Start_Distance, End_Distance : Length) return Position_Envelope is
    begin
       case Evaluator.Kind_Value is
-         when Circular_Transition  =>
+         when Circular_Transition =>
             return
               Pad_Envelope
                 (Arc_Envelope (Evaluator.Circle, Start_Distance, End_Distance),
                  Evaluator.Error,
                  Evaluator.Constant_Axes);
 
-         when Biarc_Transition     =>
+         when Biarc_Transition    =>
             return
               Pad_Envelope
                 (Biarc_Envelope (Evaluator.Two_Arcs, Start_Distance, End_Distance),
                  Evaluator.Error,
                  Evaluator.Constant_Axes);
 
-         when others               =>
+         when others              =>
             return
               Range_Envelope
                 (Point_At_Distance (Evaluator, Start_Distance),

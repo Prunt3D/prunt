@@ -790,7 +790,7 @@ private
 
    Startup_Position : constant Position := [others => 0.0 * mm];
 
-   type Cancellation_Generation_Type is mod 2 ** 64;
+   type Cancellation_Generation_Type is mod 2**64;
 
    type Gcode_Command_Lifecycle_State is (Queued_State, Running_State);
 
@@ -818,9 +818,9 @@ private
 
    type Idle_Notification_Phase is (Active, Starting_Idle, Idle, Ending_Idle);
 
-   type Idle_Activity_Generation is mod 2 ** 64;
+   type Idle_Activity_Generation is mod 2**64;
 
-   type Idle_Completion_Serial is mod 2 ** 64;
+   type Idle_Completion_Serial is mod 2**64;
 
    type Idle_Activity_Completion is record
       Generation         : Idle_Activity_Generation;
@@ -933,7 +933,7 @@ private
    end Gcode_Cancellation_Barrier;
 
    type Homed_Axis_Array is array (Axis_Name) of Boolean;
-   type Homing_Update_Generation is mod 2 ** 64;
+   type Homing_Update_Generation is mod 2**64;
    type Homing_Update_Generation_Array is array (Axis_Name) of Homing_Update_Generation;
    type Homing_Update_Processed_Array is array (Axis_Name) of Boolean;
 

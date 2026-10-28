@@ -27,9 +27,9 @@ with Prunt_Simulator_Samples;
 
 package body Prunt_Simulator_Machine is
 
-   Maximum_Tail_Length : constant Positive := Prunt_Simulator_Types.Maximum_Loop_Move_Tail_Length;
-   Queue_Capacity      : constant Positive := Maximum_Tail_Length + 1;
-   Delay_Batch_Size    : constant Positive := 100;
+   Maximum_Tail_Length        : constant Positive := Prunt_Simulator_Types.Maximum_Loop_Move_Tail_Length;
+   Queue_Capacity             : constant Positive := Maximum_Tail_Length + 1;
+   Delay_Batch_Size           : constant Positive := 100;
    Unsafe_Queue_Stall_Timeout : constant Duration := 0.100;
 
    function Environment_Boolean (Name : String; Default : Boolean) return Boolean;
@@ -72,10 +72,10 @@ package body Prunt_Simulator_Machine is
       entry Dequeue (Item : out Command_Queue_Item);
       procedure Clear;
    private
-      Commands : Command_Array (1 .. Queue_Capacity);
-      Count    : Natural := 0;
-      Head     : Positive := 1;
-      Tail     : Positive := 1;
+      Commands               : Command_Array (1 .. Queue_Capacity);
+      Count                  : Natural := 0;
+      Head                   : Positive := 1;
+      Tail                   : Positive := 1;
       Has_Pending_Loop_Setup : Boolean := False;
       Pending_Loop_Setup     : Loop_Move_Setup := (others => <>);
    end Command_Queue;
@@ -172,14 +172,12 @@ package body Prunt_Simulator_Machine is
          Last_Executed := Index;
       end Report;
 
-      procedure Execute (Item : Command_Queue_Item; Physical_Pos : out Motor_Position)
-      is
+      procedure Execute (Item : Command_Queue_Item; Physical_Pos : out Motor_Position) is
          Command : Queued_Command renames Item.Command;
       begin
          pragma Assert (Item.Kind = Motion_Command);
          for Motor in Prunt_Simulator_Types.Motor_Name loop
-            Execution_State.Physical_Pos (Motor) :=
-              @ + Command.Pos (Motor) - Logical_Pos (Motor);
+            Execution_State.Physical_Pos (Motor) := @ + Command.Pos (Motor) - Logical_Pos (Motor);
          end loop;
          Logical_Pos := Command.Pos;
          Physical_Pos := Execution_State.Physical_Pos;
@@ -237,14 +235,14 @@ package body Prunt_Simulator_Machine is
    end Sample_Period_Delay;
 
    task body Executor is
-      Item          : Command_Queue_Item;
-      Tail_Items    : constant Command_Array_Access := new Command_Array (1 .. Maximum_Tail_Length);
-      Tail_Length   : Natural range 0 .. Maximum_Tail_Length := 0;
-      Start_Logical_Pos    : Motor_Position;
-      Replay_Logical_Pos   : Motor_Position;
-      Replay_Physical_Pos  : Motor_Position;
+      Item                  : Command_Queue_Item;
+      Tail_Items            : constant Command_Array_Access := new Command_Array (1 .. Maximum_Tail_Length);
+      Tail_Length           : Natural range 0 .. Maximum_Tail_Length := 0;
+      Start_Logical_Pos     : Motor_Position;
+      Replay_Logical_Pos    : Motor_Position;
+      Replay_Physical_Pos   : Motor_Position;
       Executed_Physical_Pos : Motor_Position;
-      Loop_Delta           : Motor_Position;
+      Loop_Delta            : Motor_Position;
       Pending_Delay_Samples : Natural range 0 .. Delay_Batch_Size := 0;
 
       procedure Account_For_Tick;
@@ -277,8 +275,8 @@ package body Prunt_Simulator_Machine is
             Command_Queue.Dequeue (Next_Item);
          or
             delay Unsafe_Queue_Stall_Timeout;
-            raise Program_Error with
-              "Simulator command queue stalled after a command which was not safe to stop after.";
+            raise Program_Error
+              with "Simulator command queue stalled after a command which was not safe to stop after.";
          end select;
       end Dequeue_After_Unsafe_Command;
 
@@ -322,14 +320,13 @@ package body Prunt_Simulator_Machine is
             Replay_Logical_Pos := Start_Logical_Pos;
             Replay_Physical_Pos := Execution_State.Physical_Position;
             Loop_Delta :=
-              [for Motor in Prunt_Simulator_Types.Motor_Name =>
-                 Item.Command.Pos (Motor) - Start_Logical_Pos (Motor)];
+              [for Motor in Prunt_Simulator_Types.Motor_Name => Item.Command.Pos (Motor) - Start_Logical_Pos (Motor)];
 
             declare
                type Motor_Loop_State is (Stationary, Repeating, Tailing, Complete);
                type Motor_Loop_State_Array is array (Prunt_Simulator_Types.Motor_Name) of Motor_Loop_State;
-               type Motor_Tail_Index_Array is array (Prunt_Simulator_Types.Motor_Name) of Natural
-                 range 0 .. Maximum_Tail_Length;
+               type Motor_Tail_Index_Array is
+                 array (Prunt_Simulator_Types.Motor_Name) of Natural range 0 .. Maximum_Tail_Length;
 
                State                    : Motor_Loop_State_Array := [others => Stationary];
                Trigger_Logical_Position : Motor_Position := Start_Logical_Pos;
@@ -375,20 +372,19 @@ package body Prunt_Simulator_Machine is
 
                   for Motor in Prunt_Simulator_Types.Motor_Name loop
                      case State (Motor) is
-                        when Repeating                     =>
+                        when Repeating             =>
                            Replay_Logical_Pos (Motor) := @ + Loop_Delta (Motor);
                            Replay_Physical_Pos (Motor) := @ + Loop_Delta (Motor);
 
-                        when Tailing                       =>
+                        when Tailing               =>
                            declare
-                              Tail_Index          : constant Positive := Next_Tail_Index (Motor);
+                              Tail_Index           : constant Positive := Next_Tail_Index (Motor);
                               New_Logical_Position : constant Dimensionless :=
                                 Trigger_Logical_Position (Motor)
                                 + Tail_Items (Tail_Index).Command.Pos (Motor)
                                 - Item.Command.Pos (Motor);
                            begin
-                              Replay_Physical_Pos (Motor) :=
-                                @ + New_Logical_Position - Replay_Logical_Pos (Motor);
+                              Replay_Physical_Pos (Motor) := @ + New_Logical_Position - Replay_Logical_Pos (Motor);
                               Replay_Logical_Pos (Motor) := New_Logical_Position;
                               if Tail_Index = Tail_Length then
                                  State (Motor) := Complete;
@@ -397,7 +393,7 @@ package body Prunt_Simulator_Machine is
                               end if;
                            end;
 
-                        when Stationary | Complete         =>
+                        when Stationary | Complete =>
                            null;
                      end case;
                   end loop;
@@ -411,7 +407,7 @@ package body Prunt_Simulator_Machine is
                         begin
                            if Prunt_Simulator_Hardware.Get_Input_Switch_State_At_Position
                                 (Condition.Input_Switch, Replay_Physical_Pos)
-                              = Condition.Stop_State
+                             = Condition.Stop_State
                            then
                               Trigger_Logical_Position (Motor) := Replay_Logical_Pos (Motor);
                               if Tail_Length = 0 then
@@ -453,10 +449,7 @@ package body Prunt_Simulator_Machine is
             Publish (Executed_Physical_Pos, Item.Command.Index);
          end if;
 
-         if Item.Kind = Logical_Position_Reset
-           or else Item.Is_Loop_Move
-           or else Item.Command.Safe_Stop_After
-         then
+         if Item.Kind = Logical_Position_Reset or else Item.Is_Loop_Move or else Item.Command.Safe_Stop_After then
             Command_Queue.Dequeue (Item);
          else
             Dequeue_After_Unsafe_Command (Item);

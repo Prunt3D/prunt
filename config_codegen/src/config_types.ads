@@ -73,27 +73,26 @@ package Config_Types is
       --  Category assigns a root component to a browser category, independently of its name or module owner.
       --  Components sharing an Id must use the same Label and Order. Lower Order values appear first.
 
-      Experimental        : Boolean := False;
+      Experimental                : Boolean := False;
       --  Annotate => (Prunt_Config, Experimental) hides a component by default in the UI.
-      Type_Name           : Virtual_String;
+      Type_Name                   : Virtual_String;
       --  Type name is fully qualified.
-      Default             : Virtual_String;
-      Description         : Virtual_String;
-      Category            : Category_Data;
-      Min                 : Virtual_String;
-      Max                 : Virtual_String;
-      Fixed_Kind          : Virtual_String;
-      Options_Expr        : Virtual_String;
-      Present_When        : Virtual_String;
+      Default                     : Virtual_String;
+      Description                 : Virtual_String;
+      Category                    : Category_Data;
+      Min                         : Virtual_String;
+      Max                         : Virtual_String;
+      Fixed_Kind                  : Virtual_String;
+      Options_Expr                : Virtual_String;
+      Present_When                : Virtual_String;
       Dynamic_Present_When_Tag    : Virtual_String;
       Dynamic_Present_When_Path   : Virtual_String;
       Dynamic_Present_When_Values : String_Vectors.Vector;
-      Schema_Default_Expr : Virtual_String;
-      Unit                : Unit_Data;
+      Schema_Default_Expr         : Virtual_String;
+      Unit                        : Unit_Data;
    end record;
 
-   package Component_Data_Maps is new
-     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Component_Data);
+   package Component_Data_Maps is new Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Component_Data);
 
    type Variant_Case_Data is record
       --  The members of this record represent the following parts of a record variant case:
@@ -111,11 +110,9 @@ package Config_Types is
       Description : Virtual_String;
    end record;
 
-   package Variant_Case_Maps is new
-     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Variant_Case_Data);
+   package Variant_Case_Maps is new Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Variant_Case_Data);
 
-   package Virtual_String_Maps is new
-     Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Virtual_String);
+   package Virtual_String_Maps is new Indefinite_Ordered_Maps_With_Insertion_Order (Virtual_String, Virtual_String);
 
    type Record_Data (Has_Variant : Boolean := False) is record
       --  The members of this record represent the following parts of a record declaration:

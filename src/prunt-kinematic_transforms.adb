@@ -52,14 +52,14 @@ package body Prunt.Kinematic_Transforms is
                              Transform.Delta_Params.Towers (Motor_Params.Tower);
                            DX       : constant Length := Pos (X_Axis) - Params.X;
                            DY       : constant Length := Pos (Y_Axis) - Params.Y;
-                           Radicand : constant Area := Params.Arm_Length ** 2 - DX ** 2 - DY ** 2;
+                           Radicand : constant Area := Params.Arm_Length**2 - DX**2 - DY**2;
                            Carriage : Length;
                         begin
-                           if Radicand <= 0.0 * mm ** 2 then
+                           if Radicand <= 0.0 * mm**2 then
                               raise Constraint_Error with "Delta position is outside the reachable workspace.";
                            end if;
 
-                           Carriage := Pos (Z_Axis) + Radicand ** (1 / 2);
+                           Carriage := Pos (Z_Axis) + Radicand**(1 / 2);
                            Result (Motor) := Carriage * Motor_Params.Units_Per_Distance;
                         end;
 
@@ -284,9 +284,9 @@ package body Prunt.Kinematic_Transforms is
          E_Y := (1.0 / J) * Remainder;
          E_Z := Cross (E_X, E_Y);
 
-         X := (R_1 ** 2 - R_2 ** 2 + D ** 2) / (2.0 * D);
-         Y := (R_1 ** 2 - R_3 ** 2 + I ** 2 + J ** 2 - 2.0 * I * X) / (2.0 * J);
-         Z_Squared := R_1 ** 2 - X ** 2 - Y ** 2;
+         X := (R_1**2 - R_2**2 + D**2) / (2.0 * D);
+         Y := (R_1**2 - R_3**2 + I**2 + J**2 - 2.0 * I * X) / (2.0 * J);
+         Z_Squared := R_1**2 - X**2 - Y**2;
          if Z_Squared <= 0.0 then
             raise Constraint_Error with "Delta carriage positions have no nonsingular Cartesian solution.";
          end if;

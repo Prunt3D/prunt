@@ -173,7 +173,8 @@ private
         Annotate =>
           (Prunt_Config,
            Options_Expr,
-           "[for M in Motor_Name when TMC2240_Drivers_Module.Motor_Hardware (M).Kind = TMC2240_UART_Kind => +(M'Image)]");
+           "[for M in Motor_Name "
+           & "when TMC2240_Drivers_Module.Motor_Hardware (M).Kind = TMC2240_UART_Kind => +(M'Image)]");
       --  Motor whose StallGuard2 output stops the homing move. The motor must drive the axis or delta tower being
       --  homed.
 
@@ -195,7 +196,8 @@ private
         Annotate =>
           (Prunt_Config,
            Options_Expr,
-           "[for M in Motor_Name when TMC2240_Drivers_Module.Motor_Hardware (M).Kind = TMC2240_UART_Kind => +(M'Image)]");
+           "[for M in Motor_Name "
+           & "when TMC2240_Drivers_Module.Motor_Hardware (M).Kind = TMC2240_UART_Kind => +(M'Image)]");
       --  Motor whose StallGuard4 output stops the homing move. The motor must drive the axis or delta tower being
       --  homed.
 
@@ -223,7 +225,8 @@ private
               Annotate =>
                 (Prunt_Config,
                  Options_Expr,
-                 "[for S in Input_Switch_Name when Input_Switches_Module.Input_Switch_Hardware (S).Visible_To_User => +(S'Image)]");
+                 "[for S in Input_Switch_Name "
+                 & "when Input_Switches_Module.Input_Switch_Hardware (S).Visible_To_User => +(S'Image)]");
             --  Physical endstop input. Its normally-closed setting determines the triggered state.
 
          when StallGuard2 =>

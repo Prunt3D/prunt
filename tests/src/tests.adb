@@ -83,14 +83,15 @@ procedure Tests is
        (My_Controller_Generic_Types => Machine_Idle_Timeout_Test_Controller_Types,
         My_Logger                   => Machine_Idle_Timeout_Test_Logger);
    package Machine_Idle_Timeout_Test_Config_Saving is new Machine_Idle_Timeout_Test_Default_Modules.Config_Saving;
-   package Cold_Extrusion_Thermistors is new Machine_Idle_Timeout_Test_Default_Modules.Thermistors
-     (Thermistor_Hardware => [others => (Reconfigure => null, Get_Temperature => null)]);
+   package Cold_Extrusion_Thermistors is new
+     Machine_Idle_Timeout_Test_Default_Modules.Thermistors
+       (Thermistor_Hardware => [others => (Reconfigure => null, Get_Temperature => null)]);
    package Cold_Extrusion_Blocking_Tracker is new Machine_Idle_Timeout_Test_Default_Modules.Blocking_Tracker;
    Heater_Disable_Count : Natural := 0;
-   Fail_Heater_Start : Boolean := False;
+   Fail_Heater_Start    : Boolean := False;
 
    procedure Reconfigure_Heater
-     (Heater : Machine_Idle_Timeout_Test_Name;
+     (Heater     : Machine_Idle_Timeout_Test_Name;
       Parameters : Prunt.Heater_Parameters;
       Thermistor : Machine_Idle_Timeout_Test_Name)
    is
@@ -105,27 +106,34 @@ procedure Tests is
       end if;
    end Reconfigure_Heater;
 
-   procedure Set_Heater_Temperature
-     (Heater : Machine_Idle_Timeout_Test_Name; Temperature : Prunt.Temperature) is null;
+   procedure Set_Heater_Temperature (Heater : Machine_Idle_Timeout_Test_Name; Temperature : Prunt.Temperature) is null;
 
-   package Cold_Extrusion_Heaters is new Machine_Idle_Timeout_Test_Default_Modules.Heaters
-     (Heater_Hardware =>
-        [others => (Reconfigure => Reconfigure_Heater'Unrestricted_Access,
-                    Set_Temperature => Set_Heater_Temperature'Unrestricted_Access, Autotune => null, others => <>)],
-      Thermistors_Module => Cold_Extrusion_Thermistors,
-      Blocking_Tracker_Module => Cold_Extrusion_Blocking_Tracker);
+   package Cold_Extrusion_Heaters is new
+     Machine_Idle_Timeout_Test_Default_Modules.Heaters
+       (Heater_Hardware         =>
+          [others =>
+             (Reconfigure     => Reconfigure_Heater'Unrestricted_Access,
+              Set_Temperature => Set_Heater_Temperature'Unrestricted_Access,
+              Autotune        => null,
+              others          => <>)],
+        Thermistors_Module      => Cold_Extrusion_Thermistors,
+        Blocking_Tracker_Module => Cold_Extrusion_Blocking_Tracker);
    package Cold_Extrusion_Test is new Cold_Extrusion_Heaters.Test (Heater_Disable_Count, Fail_Heater_Start);
    package Excessive_Extrusion_Motor_Drivers is new Machine_Idle_Timeout_Test_Default_Modules.Motor_Drivers;
-   package Excessive_Extrusion_Transforms is new Prunt.Kinematic_Transforms
-     (Machine_Idle_Timeout_Test_Name, Machine_Idle_Timeout_Test_Controller_Types.Motor_Position);
-   package Excessive_Extrusion_Kinematics is new Machine_Idle_Timeout_Test_Default_Modules.Kinematics
-     (Transforms => Excessive_Extrusion_Transforms,
-      Config_Saving_Module => Machine_Idle_Timeout_Test_Config_Saving,
-      Motor_Drivers_Module => Excessive_Extrusion_Motor_Drivers);
-   package Excessive_Extrusion_Motion is new Machine_Idle_Timeout_Test_Default_Modules.Motion
-     (Config_Saving_Module => Machine_Idle_Timeout_Test_Config_Saving,
-      Kinematics_Module => Excessive_Extrusion_Kinematics,
-      Pending_State_Queue_Length => 10);
+   package Excessive_Extrusion_Transforms is new
+     Prunt.Kinematic_Transforms
+       (Machine_Idle_Timeout_Test_Name,
+        Machine_Idle_Timeout_Test_Controller_Types.Motor_Position);
+   package Excessive_Extrusion_Kinematics is new
+     Machine_Idle_Timeout_Test_Default_Modules.Kinematics
+       (Transforms           => Excessive_Extrusion_Transforms,
+        Config_Saving_Module => Machine_Idle_Timeout_Test_Config_Saving,
+        Motor_Drivers_Module => Excessive_Extrusion_Motor_Drivers);
+   package Excessive_Extrusion_Motion is new
+     Machine_Idle_Timeout_Test_Default_Modules.Motion
+       (Config_Saving_Module       => Machine_Idle_Timeout_Test_Config_Saving,
+        Kinematics_Module          => Excessive_Extrusion_Kinematics,
+        Pending_State_Queue_Length => 10);
    package Excessive_Extrusion_Test is new Excessive_Extrusion_Motion.Test;
    Power_Trace : VSS.Strings.Virtual_String;
 
@@ -139,7 +147,8 @@ procedure Tests is
       Power_Trace.Append ("off;");
    end Turn_Power_Off;
 
-   function Power_Is_On return Boolean is (True);
+   function Power_Is_On return Boolean
+   is (True);
 
    procedure Request_Smart_Plug_Shutdown is
    begin
@@ -147,12 +156,15 @@ procedure Tests is
       raise Prunt.Controller_Shutdown_Requested;
    end Request_Smart_Plug_Shutdown;
 
-   package Power_Control_Module is new Machine_Idle_Timeout_Test_Default_Modules.Power_Control
-     (Power_Control_Hardware =>
-        (Turn_On => Turn_Power_On'Unrestricted_Access, Turn_Off => Turn_Power_Off'Unrestricted_Access,
-         Is_On => Power_Is_On'Unrestricted_Access));
-   package Smart_Plugs_Module is new Machine_Idle_Timeout_Test_Default_Modules.Smart_Plugs
-     (Request_Smart_Plug_Shutdown => Request_Smart_Plug_Shutdown);
+   package Power_Control_Module is new
+     Machine_Idle_Timeout_Test_Default_Modules.Power_Control
+       (Power_Control_Hardware =>
+          (Turn_On  => Turn_Power_On'Unrestricted_Access,
+           Turn_Off => Turn_Power_Off'Unrestricted_Access,
+           Is_On    => Power_Is_On'Unrestricted_Access));
+   package Smart_Plugs_Module is new
+     Machine_Idle_Timeout_Test_Default_Modules.Smart_Plugs
+       (Request_Smart_Plug_Shutdown => Request_Smart_Plug_Shutdown);
    package Smart_Plugs_Test is new Smart_Plugs_Module.Test (Power_Trace);
    package Dispatch_Helpers is new Prunt.Controller_Helpers (Machine_Idle_Timeout_Test_Controller_Types);
 
@@ -161,13 +173,14 @@ procedure Tests is
       use Dispatch_Helpers;
       package Modules renames Machine_Idle_Timeout_Test_Controller_Types.My_Modules;
 
-      Both_Modules : constant Gcode_Dispatch_Maps.Map := Build_Gcode_Dispatch_Map
-        (["Power Control" => Power_Control_Module.Module'(Modules.Module with null record),
-          "Smart Plug" => Smart_Plugs_Module.Module'(Modules.Module with null record)]);
-      Only_Smart_Plugs : constant Gcode_Dispatch_Maps.Map := Build_Gcode_Dispatch_Map
-        (["Smart Plug" => Smart_Plugs_Module.Module'(Modules.Module with null record)]);
-      Bare_Args : constant Prunt.Gcode_Arguments.Arguments := Prunt.Gcode_Arguments.Parse_Arguments ("M81");
-      Plug_Args : constant Prunt.Gcode_Arguments.Arguments := Prunt.Gcode_Arguments.Parse_Arguments ("M81 P");
+      Both_Modules     : constant Gcode_Dispatch_Maps.Map :=
+        Build_Gcode_Dispatch_Map
+          (["Power Control" => Power_Control_Module.Module'(Modules.Module with null record),
+            "Smart Plug"    => Smart_Plugs_Module.Module'(Modules.Module with null record)]);
+      Only_Smart_Plugs : constant Gcode_Dispatch_Maps.Map :=
+        Build_Gcode_Dispatch_Map (["Smart Plug" => Smart_Plugs_Module.Module'(Modules.Module with null record)]);
+      Bare_Args        : constant Prunt.Gcode_Arguments.Arguments := Prunt.Gcode_Arguments.Parse_Arguments ("M81");
+      Plug_Args        : constant Prunt.Gcode_Arguments.Arguments := Prunt.Gcode_Arguments.Parse_Arguments ("M81 P");
    begin
       T.Register;
       T.Assert
@@ -184,9 +197,11 @@ procedure Tests is
          "the smart plug module must not claim bare M81");
    end Test_Smart_Plugs_Gcode_Routing;
 
-   Timeout_Report_Count : Natural := 0 with Atomic, Volatile;
+   Timeout_Report_Count : Natural := 0
+   with Atomic, Volatile;
 
-   function Get_Timeout_Report_Count return Natural is (Timeout_Report_Count);
+   function Get_Timeout_Report_Count return Natural
+   is (Timeout_Report_Count);
 
    procedure Request_Machine_Idle_Timeout_Shutdown (Message : String) is
       pragma Unreferenced (Message);
@@ -207,7 +222,8 @@ procedure Tests is
         Request_Shutdown     => Request_Machine_Idle_Timeout_Shutdown);
    package Machine_Idle_Timeout_Test is new
      Machine_Idle_Timeout_Test_Module.Test
-       (Get_Report_Count => Get_Timeout_Report_Count, Reset_Report_Count => Reset_Timeout_Report_Count);
+       (Get_Report_Count   => Get_Timeout_Report_Count,
+        Reset_Report_Count => Reset_Timeout_Report_Count);
 
    package Moving_Averages_Float is new Prunt.Moving_Averages (Float);
    package Moving_Averages_Float_Test is new Moving_Averages_Float.Test;
@@ -234,8 +250,8 @@ procedure Tests is
       end if;
    end Filter;
 
-   function Is_Xcov_Dump return Boolean is
-     (Ada.Command_Line.Argument_Count >= 1 and then Ada.Command_Line.Argument (1) = "xcov_dump");
+   function Is_Xcov_Dump return Boolean
+   is (Ada.Command_Line.Argument_Count >= 1 and then Ada.Command_Line.Argument (1) = "xcov_dump");
 
    procedure Xcov_Dump (Name : String) is
    begin

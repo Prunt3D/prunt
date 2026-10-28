@@ -38,7 +38,7 @@ package body Prunt.Step_Generator.Block_Executor is
             X : constant Dimensionless := Dimensionless (Value) / Dimensionless (Pause_Slew_Index'Last);
             Y : constant Dimensionless := 1.0 - X;
          begin
-            return Y ** 5 / (X ** 5 + Y ** 5) * Interpolation_Time;
+            return Y**5 / (X**5 + Y**5) * Interpolation_Time;
          end;
       end if;
    end Pause_Slew_Interpolation_Time;

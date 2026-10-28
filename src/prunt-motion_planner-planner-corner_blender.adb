@@ -297,7 +297,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                if Bounds (Axis) < 0.0 or else Bounds (Axis) >= Dimensionless'Last then
                   return Dimensionless'Last;
                end if;
-               Square_Sum := Round_Up (Square_Sum + Round_Up (Bounds (Axis) ** 2));
+               Square_Sum := Round_Up (Square_Sum + Round_Up (Bounds (Axis)**2));
             end loop;
             return Round_Up (Dimensionless_Math.Sqrt (Square_Sum));
          exception
@@ -313,7 +313,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          begin
             Turn := Incoming_Tangent - Outgoing_Tangent;
             for Axis in Axis_Name loop
-               Turn_Norm := Turn_Norm + Turn (Axis) ** 2;
+               Turn_Norm := Turn_Norm + Turn (Axis)**2;
             end loop;
             Turn_Norm := Dimensionless_Math.Sqrt (Turn_Norm);
             if Turn_Norm <= 128.0 * Dimensionless'Model_Epsilon then
@@ -359,7 +359,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          begin
             for M in Motor_Name loop
                declare
-                  Norm_Squared_Upper : Curvature_To_2 := 0.0 / mm ** 2;
+                  Norm_Squared_Upper : Curvature_To_2 := 0.0 / mm**2;
                begin
                   for A in Axis_Name loop
                      if Motor_Map (A, M) /= 0.0 / mm then
@@ -367,7 +367,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                         declare
                            Coefficient_Upper : constant Curvature := Round_Curvature_Up (abs Motor_Map (A, M));
                            Square_Upper      : constant Curvature_To_2 :=
-                             Curvature_To_2'Adjacent (Coefficient_Upper ** 2, Curvature_To_2'Last);
+                             Curvature_To_2'Adjacent (Coefficient_Upper**2, Curvature_To_2'Last);
                         begin
                            if Square_Upper > Curvature_To_2'Last - Norm_Squared_Upper then
                               return 0.0 * mm;
@@ -378,9 +378,9 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                      end if;
                   end loop;
 
-                  if Norm_Squared_Upper > 0.0 / mm ** 2 then
+                  if Norm_Squared_Upper > 0.0 / mm**2 then
                      declare
-                        Norm_Upper : constant Curvature := Round_Curvature_Up (Norm_Squared_Upper ** (1 / 2));
+                        Norm_Upper : constant Curvature := Round_Curvature_Up (Norm_Squared_Upper**(1 / 2));
                         Allowable  : constant Length := Motor_Error_Fraction / Norm_Upper;
                      begin
                         Result := Length'Min (Result, Round_Length_Down_Nonnegative (Allowable));
@@ -435,7 +435,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                     Primitive_Direction_At_Distance (Block'Access, I + 1, 0.0 * mm);
                   Dot_Tangents     : constant Dimensionless :=
                     Clamp_Unit_Dot (Dot (Incoming_Tangent, Outgoing_Tangent));
-                  Secondary_Sine   : constant Dimensionless := ((1.0 - Dot_Tangents) / 2.0) ** (1 / 2);
+                  Secondary_Sine   : constant Dimensionless := ((1.0 - Dot_Tangents) / 2.0)**(1 / 2);
                begin
                   return
                     Angle_Elementary_Functions.Sin (90.0 * deg - 0.5 * Corner_Transition_Min_Corner_Angle)
@@ -490,12 +490,12 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                     [for Axis in Axis_Name => Outgoing.Tangent_Derivative_1 (Axis) * mm])
                  and then
                    Matches
-                     ([for Axis in Axis_Name => Incoming.Tangent_Derivative_2 (Axis) * mm ** 2],
-                      [for Axis in Axis_Name => Outgoing.Tangent_Derivative_2 (Axis) * mm ** 2])
+                     ([for Axis in Axis_Name => Incoming.Tangent_Derivative_2 (Axis) * mm**2],
+                      [for Axis in Axis_Name => Outgoing.Tangent_Derivative_2 (Axis) * mm**2])
                  and then
                    Matches
-                     ([for Axis in Axis_Name => Incoming.Tangent_Derivative_3 (Axis) * mm ** 3],
-                      [for Axis in Axis_Name => Outgoing.Tangent_Derivative_3 (Axis) * mm ** 3]);
+                     ([for Axis in Axis_Name => Incoming.Tangent_Derivative_3 (Axis) * mm**3],
+                      [for Axis in Axis_Name => Outgoing.Tangent_Derivative_3 (Axis) * mm**3]);
             end;
          exception
             when Constraint_Error =>
@@ -608,7 +608,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                Endpoint_Upper       : constant Length :=
                  Length'Min (Point_Distance_Upper (Point, Start_Point), Point_Distance_Upper (Point, End_Point));
             begin
-               if Den <= 0.0 * mm ** 2 then
+               if Den <= 0.0 * mm**2 then
                   return Endpoint_Upper;
                else
                   declare
@@ -666,7 +666,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                Two_Pi               : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
                Travel               : Dimensionless;
             begin
-               if Rise_Squared <= 0.0 * mm ** 2 then
+               if Rise_Squared <= 0.0 * mm**2 then
                   --  A planar arc has one distance minimum per turn, at the phase of Point. The section minimum is
                   --  there when the section contains that phase and at an endpoint otherwise.
                   if DX = 0.0 * mm and then DY = 0.0 * mm then
@@ -737,14 +737,14 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                              Rise_Squared + Primitive.Radius * (DX * Cos_Phase + DY * Sin_Phase);
                            Next      : Dimensionless := 0.5 * (Lower + Upper);
                         begin
-                           exit when Slope = 0.0 * mm ** 2;
-                           if Slope > 0.0 * mm ** 2 then
+                           exit when Slope = 0.0 * mm**2;
+                           if Slope > 0.0 * mm**2 then
                               Upper := Travel;
                            else
                               Lower := Travel;
                            end if;
 
-                           if Bend > 0.0 * mm ** 2 then
+                           if Bend > 0.0 * mm**2 then
                               Next := Travel - Slope / Bend;
                            end if;
                            --  A converged Newton step rounds onto the bracket end just set to Travel, so it is kept
@@ -985,7 +985,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                      Base_Width          : Length;
                   begin
                      case Block.Params.Cornering.Kind is
-                        when Stereographic     =>
+                        when Stereographic =>
                            declare
                               Cos_Half_Theta : constant Dimensionless :=
                                 Dimensionless_Math.Sqrt
@@ -1013,8 +1013,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                                          + Dimensionless
                                              ((Outgoing_Jet.Tangent_Derivative_1 (Axis)
                                                - Incoming_Jet.Tangent_Derivative_1 (Axis))
-                                              * mm)
-                                           ** 2;
+                                              * mm)**2;
                                        if Settings.Deviation (Axis) > 0.0 * mm then
                                           Tightest := Length'Min (Tightest, Settings.Deviation (Axis));
                                        end if;
@@ -1043,7 +1042,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                               Target_Outgoing_Trims (I) := Base_Width * Out_Mult;
                            end;
 
-                        when Circular          =>
+                        when Circular      =>
                            declare
                               Sin_Half : constant Dimensionless :=
                                 Dimensionless_Math.Sqrt
@@ -1064,7 +1063,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                               Target_Outgoing_Trims (I) := Base_Width;
                            end;
 
-                        when Biarc =>
+                        when Biarc         =>
                            declare
                               Trim_Max : constant Length := Settings.Trim_Max;
                            begin
@@ -1075,7 +1074,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                                 Length'Min (Trim_Max, Multiply_Length_Upper (Base_Width, Out_Mult));
                            end;
 
-                        when Sharp_SCV         =>
+                        when Sharp_SCV     =>
                            raise Program_Error with "sharp SCV does not allocate corner trims";
                      end case;
                   end;

@@ -136,7 +136,7 @@ package body Prunt is
    end "abs";
 
    function "abs" (Left : Position_Offset) return Length is
-      Square_Sum : Area := 0.0 * mm ** 2;
+      Square_Sum : Area := 0.0 * mm**2;
    begin
       for X of Left loop
          Square_Sum := Square_Sum + X * X;
@@ -166,7 +166,7 @@ package body Prunt is
    end Dot;
 
    function Dot (Left, Right : Position_Offset) return Area is
-      Sum : Area := 0.0 * mm ** 2;
+      Sum : Area := 0.0 * mm**2;
    begin
       for I in Axis_Name loop
          Sum := Sum + Left (I) * Right (I);

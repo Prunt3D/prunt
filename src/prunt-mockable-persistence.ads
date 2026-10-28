@@ -25,7 +25,8 @@ package Prunt.Mockable.Persistence is
    type Writer_Lease is new Ada.Finalization.Limited_Controlled with private;
    procedure Acquire (Lease : in out Writer_Lease; File_Name : String);
    function Name (Lease : Writer_Lease) return String;
-   overriding procedure Finalize (Lease : in out Writer_Lease);
+   overriding
+   procedure Finalize (Lease : in out Writer_Lease);
 
    procedure Copy (Source, Target : String);
    procedure Sync (File_Name : String);

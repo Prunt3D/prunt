@@ -42,39 +42,41 @@ package body Prunt.Step_Generator_Restart_Test is
          type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
          type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
 
-         package Planner is new Motion_Planner.Planner
-           (Motor_Name                        => Motor_Name,
-            Motor_Position_Map                => Motor_Position_Map,
-            Motor_Delta_Limits                => Motor_Delta_Limits,
-            Maximum_Deltas_Per_Command         => [others => 1.0],
-            Flush_Resetting_Data_Type         => Boolean,
-            Flush_Resetting_Data_Type_Default => False,
-            Corner_Extra_Data_Type            => Boolean,
-            Home_Move_Minimum_Coast_Time       => 0.005 * s,
-            Home_Move_Maximum_Tail_Time        => 1.0 * s,
-            Interpolation_Time                => 0.001 * s,
-            Max_Corners                       => 10,
-            Max_Corners_Extra_Data_Count       => 10,
-            Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10,
-            Allow_Blended_Entry               => Block_Allows_Blended_Entry);
+         package Planner is new
+           Motion_Planner.Planner
+             (Motor_Name                        => Motor_Name,
+              Motor_Position_Map                => Motor_Position_Map,
+              Motor_Delta_Limits                => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command        => [others => 1.0],
+              Flush_Resetting_Data_Type         => Boolean,
+              Flush_Resetting_Data_Type_Default => False,
+              Corner_Extra_Data_Type            => Boolean,
+              Home_Move_Minimum_Coast_Time      => 0.005 * s,
+              Home_Move_Maximum_Tail_Time       => 1.0 * s,
+              Interpolation_Time                => 0.001 * s,
+              Max_Corners                       => 10,
+              Max_Corners_Extra_Data_Count      => 10,
+              Max_Corners_Extra_Data_Storage    => 1_024,
+              Input_Queue_Length                => 10,
+              Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
-         package Pause_Planner is new Motion_Planner.Planner
-           (Motor_Name                        => Motor_Name,
-            Motor_Position_Map                => Motor_Position_Map,
-            Motor_Delta_Limits                => Motor_Delta_Limits,
-            Maximum_Deltas_Per_Command         => [others => 1.0],
-            Flush_Resetting_Data_Type         => Boolean,
-            Flush_Resetting_Data_Type_Default => False,
-            Corner_Extra_Data_Type            => Boolean,
-            Home_Move_Minimum_Coast_Time       => 0.005 * s,
-            Home_Move_Maximum_Tail_Time        => 1.0 * s,
-            Interpolation_Time                => 0.001 * s,
-            Max_Corners                       => 10,
-            Max_Corners_Extra_Data_Count       => 10,
-            Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10,
-            Allow_Blended_Entry               => Block_Allows_Blended_Entry);
+         package Pause_Planner is new
+           Motion_Planner.Planner
+             (Motor_Name                        => Motor_Name,
+              Motor_Position_Map                => Motor_Position_Map,
+              Motor_Delta_Limits                => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command        => [others => 1.0],
+              Flush_Resetting_Data_Type         => Boolean,
+              Flush_Resetting_Data_Type_Default => False,
+              Corner_Extra_Data_Type            => Boolean,
+              Home_Move_Minimum_Coast_Time      => 0.005 * s,
+              Home_Move_Maximum_Tail_Time       => 1.0 * s,
+              Interpolation_Time                => 0.001 * s,
+              Max_Corners                       => 10,
+              Max_Corners_Extra_Data_Count      => 10,
+              Max_Corners_Extra_Data_Storage    => 1_024,
+              Input_Queue_Length                => 10,
+              Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
          protected Hardware is
             procedure Check_Idle (Index : Command_Index);
@@ -89,10 +91,10 @@ package body Prunt.Step_Generator_Restart_Test is
             entry Wait_For_Idle_Failure;
             entry Wait_For_Block (Index : out Command_Index; Invalid_Wait : out Boolean);
          private
-            Shut_Down : Boolean := False;
-            Unexpected_Access : Boolean := False;
-            Fail_Idle : Boolean := False;
-            Idle_Failed : Boolean := False;
+            Shut_Down                  : Boolean := False;
+            Unexpected_Access          : Boolean := False;
+            Fail_Idle                  : Boolean := False;
+            Idle_Failed                : Boolean := False;
             Last_Executed              : Command_Index := 0;
             Last_Block                 : Command_Index := 0;
             Block_Complete             : Boolean := False;
@@ -148,9 +150,11 @@ package body Prunt.Step_Generator_Restart_Test is
                null;
             end Wait_For_Idle_Failure;
 
-            function Accessed_After_Shutdown return Boolean is (Unexpected_Access);
+            function Accessed_After_Shutdown return Boolean
+            is (Unexpected_Access);
 
-            function Last_Command return Command_Index is (Last_Executed);
+            function Last_Command return Command_Index
+            is (Last_Executed);
 
             entry Wait_For_Shutdown when Shut_Down is
             begin
@@ -186,7 +190,8 @@ package body Prunt.Step_Generator_Restart_Test is
             Hardware.Execute (Index);
          end Enqueue_Command;
 
-         function Extrusion_Is_Allowed return Boolean is (True);
+         function Extrusion_Is_Allowed return Boolean
+         is (True);
 
          procedure Finish_Block (Data : Boolean; Pos : Motor_Position; Index : Command_Index) is
             pragma Unreferenced (Pos);
@@ -207,7 +212,7 @@ package body Prunt.Step_Generator_Restart_Test is
             procedure Release;
             entry Wait_For_Release;
          private
-            Entered : Boolean := False;
+            Entered  : Boolean := False;
             Released : Boolean := False;
          end Pause_Gate;
 
@@ -258,7 +263,8 @@ package body Prunt.Step_Generator_Restart_Test is
             Wait_Until_Idle (Index);
          end Finish_Pause_Block;
 
-         function Is_Pause_Plan_Done (Data : Boolean) return Boolean is (Data);
+         function Is_Pause_Plan_Done (Data : Boolean) return Boolean
+         is (Data);
 
          function Pin_Motor (Data, Transform : Boolean; Motor : Motor_Name) return Boolean is
             pragma Unreferenced (Data, Transform, Motor);
@@ -281,49 +287,50 @@ package body Prunt.Step_Generator_Restart_Test is
             Hardware.Check_Idle (Index);
          end Wait_Until_Idle;
 
-         package Stepgen is new Step_Generator
-           (Planner                       => Planner,
-            Pause_Planner                 => Pause_Planner,
-            Motor_Name                    => Motor_Name,
-            Motor_Position                => Motor_Position,
-            Kinematic_Transform           => Boolean,
-            Setup_Loop_Move                => Setup_Loop_Move,
-            Pin_Motor_To_Block_Start       => Pin_Motor,
-            Transform_To_Motor_Position    => To_Motor,
-            Transform_Motor_Affects_Axis    => Affects_Axis,
-            Motor_Delta_Limits             => Motor_Delta_Limits,
-            Maximum_Deltas_Per_Command     => [others => 1.0],
-            Start_Planner_Block            => Start_Block,
-            Start_Pause_Planner_Block      => Start_Pause_Block,
-            Enqueue_Command                => Enqueue_Command,
-            Extrusion_Is_Allowed           => Extrusion_Is_Allowed,
-            Start_Corner                   => Start_Corner,
-            Start_Pause_Corner             => Start_Corner,
-            Finish_Planner_Block           => Finish_Block,
-            Finish_Pause_Planner_Block     => Finish_Pause_Block,
-            Is_Pause_Plan_Done             => Is_Pause_Plan_Done,
-            Handle_Pause                   => Handle_Pause,
-            Handle_Resume                  => Handle_Pause,
-            Wait_Until_Idle                => Wait_Until_Idle,
-            Interpolation_Time            => 0.001 * s,
-            Runner_CPU                    => System.Multiprocessors.Not_A_Specific_CPU);
+         package Stepgen is new
+           Step_Generator
+             (Planner                      => Planner,
+              Pause_Planner                => Pause_Planner,
+              Motor_Name                   => Motor_Name,
+              Motor_Position               => Motor_Position,
+              Kinematic_Transform          => Boolean,
+              Setup_Loop_Move              => Setup_Loop_Move,
+              Pin_Motor_To_Block_Start     => Pin_Motor,
+              Transform_To_Motor_Position  => To_Motor,
+              Transform_Motor_Affects_Axis => Affects_Axis,
+              Motor_Delta_Limits           => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command   => [others => 1.0],
+              Start_Planner_Block          => Start_Block,
+              Start_Pause_Planner_Block    => Start_Pause_Block,
+              Enqueue_Command              => Enqueue_Command,
+              Extrusion_Is_Allowed         => Extrusion_Is_Allowed,
+              Start_Corner                 => Start_Corner,
+              Start_Pause_Corner           => Start_Corner,
+              Finish_Planner_Block         => Finish_Block,
+              Finish_Pause_Planner_Block   => Finish_Pause_Block,
+              Is_Pause_Plan_Done           => Is_Pause_Plan_Done,
+              Handle_Pause                 => Handle_Pause,
+              Handle_Resume                => Handle_Pause,
+              Wait_Until_Idle              => Wait_Until_Idle,
+              Interpolation_Time           => 0.001 * s,
+              Runner_CPU                   => System.Multiprocessors.Not_A_Specific_CPU);
 
-         Params : constant Motion_Planner.Kinematic_Parameters :=
+         Params          : constant Motion_Planner.Kinematic_Parameters :=
            (Tangential_Velocity_Max  => 10.0 * mm / s,
             Axial_Velocity_Maxes     => [others => 10.0 * mm / s],
-            Axial_Acceleration_Maxes => [others => 100.0 * mm / s ** 2],
-            Axial_Jerk_Maxes         => [others => 1_000.0 * mm / s ** 3],
-            Axial_Snap_Maxes         => [others => 10_000.0 * mm / s ** 4],
-            Axial_Crackle_Maxes      => [others => 100_000.0 * mm / s ** 5],
-            others                  => <>);
-         Motor_Map : constant Motor_Position_Map :=
+            Axial_Acceleration_Maxes => [others => 100.0 * mm / s**2],
+            Axial_Jerk_Maxes         => [others => 1_000.0 * mm / s**3],
+            Axial_Snap_Maxes         => [others => 10_000.0 * mm / s**4],
+            Axial_Crackle_Maxes      => [others => 100_000.0 * mm / s**5],
+            others                   => <>);
+         Motor_Map       : constant Motor_Position_Map :=
            [X_Axis => [others => 1.0 / mm], others => [others => 0.0 / mm]];
-         Previous_Index : Command_Index;
-         Current_Index  : Command_Index;
-         Idle_Confirmed : Boolean;
-         Halt_Index : Command_Index;
+         Previous_Index  : Command_Index;
+         Current_Index   : Command_Index;
+         Idle_Confirmed  : Boolean;
+         Halt_Index      : Command_Index;
          Primary_Running : Boolean := False;
-         Pause_Running : Boolean := False;
+         Pause_Running   : Boolean := False;
          Runners_Stopped : Boolean := False;
 
          procedure Move is
@@ -504,7 +511,8 @@ package body Prunt.Step_Generator_Restart_Test is
             Stepgen.Soft_Halt;
             T.Fail ("the legacy halt API must also report a failed stop");
          exception
-            when Hardware_Communication_Error => null;
+            when Hardware_Communication_Error =>
+               null;
          end;
 
          Reset_Planners;
@@ -513,9 +521,9 @@ package body Prunt.Step_Generator_Restart_Test is
          Pause_Planner.Runner.Setup (Params, Motor_Map);
          Pause_Running := True;
          declare
-            Blocks : array (1 .. Planner.Block_Capacity) of Planner.Block_Handle;
+            Blocks       : array (1 .. Planner.Block_Capacity) of Planner.Block_Handle;
             Pause_Blocks : array (1 .. Pause_Planner.Block_Capacity) of Pause_Planner.Block_Handle;
-            Timed_Out : Boolean;
+            Timed_Out    : Boolean;
          begin
             for I in Blocks'Range loop
                Planner.Enqueue_Flush (False);
@@ -551,7 +559,7 @@ package body Prunt.Step_Generator_Restart_Test is
                function Finalizer_Failed return Boolean;
                entry Wait_For_Stop (Index : out Command_Index);
             private
-               Last_Command : Command_Index := 0;
+               Last_Command           : Command_Index := 0;
                Stopped, Armed, Failed : Boolean := False;
             end Hardware;
 
@@ -568,7 +576,8 @@ package body Prunt.Step_Generator_Restart_Test is
                   Failed := @ or else Fail;
                end Finalize_Data;
 
-               function Finalizer_Failed return Boolean is (Failed);
+               function Finalizer_Failed return Boolean
+               is (Failed);
 
                procedure Finish_Block (Index : Command_Index) is
                begin
@@ -586,24 +595,47 @@ package body Prunt.Step_Generator_Restart_Test is
             type Data is new Ada.Finalization.Controlled with record
                Inject_Failure : Boolean := False;
             end record;
-            overriding procedure Finalize (Object : in out Data);
+            overriding
+            procedure Finalize (Object : in out Data);
 
             type Motor_Name is (Motor);
             type Motor_Position is array (Motor_Name) of Dimensionless;
             type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
             type Motor_Limits is array (Motor_Name) of Dimensionless;
-            package Planner is new Motion_Planner.Planner
-              (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Boolean, False, Data,
-               0.005 * s, 1.0 * s, 0.001 * s,
-               Max_Corners => 4, Max_Corners_Extra_Data_Count => 4,
-               Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 8,
-               Allow_Blended_Entry            => Block_Allows_Blended_Entry);
-            package Pause_Planner is new Motion_Planner.Planner
-              (Motor_Name, Motor_Map, Motor_Limits, [others => 1.0], Boolean, False, Data,
-               0.005 * s, 1.0 * s, 0.001 * s,
-               Max_Corners => 4, Max_Corners_Extra_Data_Count => 4,
-               Max_Corners_Extra_Data_Storage => 512, Input_Queue_Length => 8,
-               Allow_Blended_Entry            => Block_Allows_Blended_Entry);
+            package Planner is new
+              Motion_Planner.Planner
+                (Motor_Name,
+                 Motor_Map,
+                 Motor_Limits,
+                 [others => 1.0],
+                 Boolean,
+                 False,
+                 Data,
+                 0.005 * s,
+                 1.0 * s,
+                 0.001 * s,
+                 Max_Corners                    => 4,
+                 Max_Corners_Extra_Data_Count   => 4,
+                 Max_Corners_Extra_Data_Storage => 512,
+                 Input_Queue_Length             => 8,
+                 Allow_Blended_Entry            => Block_Allows_Blended_Entry);
+            package Pause_Planner is new
+              Motion_Planner.Planner
+                (Motor_Name,
+                 Motor_Map,
+                 Motor_Limits,
+                 [others => 1.0],
+                 Boolean,
+                 False,
+                 Data,
+                 0.005 * s,
+                 1.0 * s,
+                 0.001 * s,
+                 Max_Corners                    => 4,
+                 Max_Corners_Extra_Data_Count   => 4,
+                 Max_Corners_Extra_Data_Storage => 512,
+                 Input_Queue_Length             => 8,
+                 Allow_Blended_Entry            => Block_Allows_Blended_Entry);
 
             function Affects_Axis (Transform : Boolean; Motor : Motor_Name; Axis : Axis_Name) return Boolean is
                pragma Unreferenced (Transform, Motor);
@@ -623,9 +655,11 @@ package body Prunt.Step_Generator_Restart_Test is
                Hardware.Execute (Index);
             end Enqueue_Command;
 
-            function Extrusion_Is_Allowed return Boolean is (True);
+            function Extrusion_Is_Allowed return Boolean
+            is (True);
 
-            overriding procedure Finalize (Object : in out Data) is
+            overriding
+            procedure Finalize (Object : in out Data) is
                Fail : Boolean;
             begin
                if Object.Inject_Failure then
@@ -648,10 +682,11 @@ package body Prunt.Step_Generator_Restart_Test is
                end if;
             end Finish_Block;
 
-            procedure Finish_Pause_Block
-              (Resetting_Data : Boolean; Pos : Motor_Position; Index : Command_Index) is null;
+            procedure Finish_Pause_Block (Resetting_Data : Boolean; Pos : Motor_Position; Index : Command_Index)
+            is null;
             procedure Handle_Pause (Pos : Position; Index : Command_Index) is null;
-            function Is_Pause_Plan_Done (Resetting_Data : Boolean) return Boolean is (Resetting_Data);
+            function Is_Pause_Plan_Done (Resetting_Data : Boolean) return Boolean
+            is (Resetting_Data);
 
             function Pin_Motor (Resetting_Data, Transform : Boolean; Motor : Motor_Name) return Boolean is
                pragma Unreferenced (Resetting_Data, Transform, Motor);
@@ -667,43 +702,45 @@ package body Prunt.Step_Generator_Restart_Test is
 
             procedure Wait_Until_Idle (Index : Command_Index);
 
-            package Stepgen is new Step_Generator
-              (Planner                       => Planner,
-               Pause_Planner                 => Pause_Planner,
-               Motor_Name                    => Motor_Name,
-               Motor_Position                => Motor_Position,
-               Kinematic_Transform           => Boolean,
-               Setup_Loop_Move                => Setup_Loop_Move,
-               Pin_Motor_To_Block_Start       => Pin_Motor,
-               Transform_To_Motor_Position    => To_Motor,
-               Transform_Motor_Affects_Axis    => Affects_Axis,
-               Motor_Delta_Limits             => Motor_Limits,
-               Maximum_Deltas_Per_Command     => [others => 1.0],
-               Start_Planner_Block            => Start_Block,
-               Start_Pause_Planner_Block      => Start_Block,
-               Enqueue_Command                => Enqueue_Command,
-               Extrusion_Is_Allowed           => Extrusion_Is_Allowed,
-               Start_Corner                   => Start_Corner,
-               Start_Pause_Corner             => Start_Corner,
-               Finish_Planner_Block           => Finish_Block,
-               Finish_Pause_Planner_Block     => Finish_Pause_Block,
-               Is_Pause_Plan_Done             => Is_Pause_Plan_Done,
-               Handle_Pause                   => Handle_Pause,
-               Handle_Resume                  => Handle_Pause,
-               Wait_Until_Idle                => Wait_Until_Idle,
-               Interpolation_Time            => 0.001 * s,
-               Runner_CPU                    => System.Multiprocessors.Not_A_Specific_CPU);
+            package Stepgen is new
+              Step_Generator
+                (Planner                      => Planner,
+                 Pause_Planner                => Pause_Planner,
+                 Motor_Name                   => Motor_Name,
+                 Motor_Position               => Motor_Position,
+                 Kinematic_Transform          => Boolean,
+                 Setup_Loop_Move              => Setup_Loop_Move,
+                 Pin_Motor_To_Block_Start     => Pin_Motor,
+                 Transform_To_Motor_Position  => To_Motor,
+                 Transform_Motor_Affects_Axis => Affects_Axis,
+                 Motor_Delta_Limits           => Motor_Limits,
+                 Maximum_Deltas_Per_Command   => [others => 1.0],
+                 Start_Planner_Block          => Start_Block,
+                 Start_Pause_Planner_Block    => Start_Block,
+                 Enqueue_Command              => Enqueue_Command,
+                 Extrusion_Is_Allowed         => Extrusion_Is_Allowed,
+                 Start_Corner                 => Start_Corner,
+                 Start_Pause_Corner           => Start_Corner,
+                 Finish_Planner_Block         => Finish_Block,
+                 Finish_Pause_Planner_Block   => Finish_Pause_Block,
+                 Is_Pause_Plan_Done           => Is_Pause_Plan_Done,
+                 Handle_Pause                 => Handle_Pause,
+                 Handle_Resume                => Handle_Pause,
+                 Wait_Until_Idle              => Wait_Until_Idle,
+                 Interpolation_Time           => 0.001 * s,
+                 Runner_CPU                   => System.Multiprocessors.Not_A_Specific_CPU);
 
-            Params : constant Motion_Planner.Kinematic_Parameters :=
+            Params                     : constant Motion_Planner.Kinematic_Parameters :=
               (Tangential_Velocity_Max  => 10.0 * mm / s,
                Axial_Velocity_Maxes     => [others => 10.0 * mm / s],
-               Axial_Acceleration_Maxes => [others => 100.0 * mm / s ** 2],
-               Axial_Jerk_Maxes         => [others => 1_000.0 * mm / s ** 3],
-               Axial_Snap_Maxes         => [others => 10_000.0 * mm / s ** 4],
-               Axial_Crackle_Maxes      => [others => 100_000.0 * mm / s ** 5],
-               others                  => <>);
-            Map : constant Motor_Map := [X_Axis => [others => 1.0 / mm], others => [others => 0.0 / mm]];
-            Idle_Confirmed : Boolean;
+               Axial_Acceleration_Maxes => [others => 100.0 * mm / s**2],
+               Axial_Jerk_Maxes         => [others => 1_000.0 * mm / s**3],
+               Axial_Snap_Maxes         => [others => 10_000.0 * mm / s**4],
+               Axial_Crackle_Maxes      => [others => 100_000.0 * mm / s**5],
+               others                   => <>);
+            Map                        : constant Motor_Map :=
+              [X_Axis => [others => 1.0 / mm], others => [others => 0.0 / mm]];
+            Idle_Confirmed             : Boolean;
             Expected_Index, Halt_Index : Command_Index;
 
             procedure Stop_Runners is
@@ -717,7 +754,8 @@ package body Prunt.Step_Generator_Restart_Test is
                      Pause_Planner.Reset;
                   end select;
                exception
-                  when others => null;
+                  when others =>
+                     null;
                end;
                abort Planner.Runner, Pause_Planner.Runner;
             end Stop_Runners;
@@ -764,7 +802,7 @@ package body Prunt.Step_Generator_Restart_Test is
       end loop;
    end Test_Halt_With_Cleanup_Failure;
 
-   function All_Tests return Trendy_Test.Test_Group is
-     ([Test_Command_Indices_After_Restart'Access, Test_Halt_With_Cleanup_Failure'Access]);
+   function All_Tests return Trendy_Test.Test_Group
+   is ([Test_Command_Indices_After_Restart'Access, Test_Halt_With_Cleanup_Failure'Access]);
 
 end Prunt.Step_Generator_Restart_Test;

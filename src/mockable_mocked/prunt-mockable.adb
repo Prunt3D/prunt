@@ -62,15 +62,16 @@ package body Prunt.Mockable is
       procedure Crash (File_Name : String) is
          function Belongs (Name : String) return Boolean;
 
-         function Belongs (Name : String) return Boolean is
-           (Name = File_Name or else Name = File_Name & ".tmp"
-            or else Ada.Strings.Fixed.Index (Name, File_Name & "_backup_") = 1);
+         function Belongs (Name : String) return Boolean
+         is (Name = File_Name
+             or else Name = File_Name & ".tmp"
+             or else Ada.Strings.Fixed.Index (Name, File_Name & "_backup_") = 1);
 
          Cursor : File_Maps.Cursor := Store.First;
       begin
          while File_Maps.Has_Element (Cursor) loop
             declare
-               Name : constant String := File_Maps.Key (Cursor);
+               Name     : constant String := File_Maps.Key (Cursor);
                Previous : File_Maps.Cursor := Cursor;
             begin
                File_Maps.Next (Cursor);

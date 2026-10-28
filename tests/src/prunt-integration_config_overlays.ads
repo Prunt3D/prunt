@@ -28,8 +28,9 @@ package Prunt.Integration_Config_Overlays is
    procedure Apply_Config_Overlay
      (Schema_String : Virtual_String;
       Overlay       : JSON_Value;
-      Apply         : access procedure
-        (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector));
+      Apply         :
+        access procedure
+          (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector));
    --  Expand and apply a compact overlay through the normal controller config patch path.
 
 end Prunt.Integration_Config_Overlays;

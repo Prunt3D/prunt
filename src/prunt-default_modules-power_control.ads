@@ -95,7 +95,7 @@ private
       overriding
       procedure Finalize;
    private
-      Started : Boolean := False;
+      Started  : Boolean := False;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
    end Module_Instance;
 

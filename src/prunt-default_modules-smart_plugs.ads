@@ -96,7 +96,7 @@ private
    with Annotate => (Prunt_Config, User_Config);
 
    type User_Config is record
-      Smart_Plug : User_Config_Plug := (others => <>)with
+      Smart_Plug : User_Config_Plug := (others => <>) with
         Annotate => (Prunt_Config, Category, "machine", "Machine", 10);
    end record
    with Annotate => (Prunt_Config, Root_User_Config);

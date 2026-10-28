@@ -281,7 +281,7 @@ package body Prunt.Default_Modules.Motion is
       if Scale = 0.0 * mm then
          return 0.0 * mm;
       end if;
-      return Scale * Dimensionless_Math.Sqrt ((DX / Scale) ** 2 + (DY / Scale) ** 2);
+      return Scale * Dimensionless_Math.Sqrt ((DX / Scale)**2 + (DY / Scale)**2);
    end Linear_XY_Distance;
 
    function Helix_XY_Distance (Start_Pos, Finish_Pos, Center : Position; Clockwise : Boolean) return Length is
@@ -392,13 +392,11 @@ package body Prunt.Default_Modules.Motion is
    function To_Current_Units_Axis_Position
      (Value : Dimensionless; Axis : Axis_Name; State : Motion_State) return Length
    is (if Axis = E_Axis and then State.Volumetric_Enabled
-       then Value * (Unit_Scale (State.Units) / mm) ** 3 * mm
+       then Value * (Unit_Scale (State.Units) / mm)**3 * mm
        else To_Current_Units_Length (Value, State.Units));
 
    function Volumetric_Multiplier (State : Motion_State) return Dimensionless
-   is (if State.Volumetric_Enabled
-       then 1.0 / (Ada.Numerics.Pi * (State.Filament_Diameter / (2.0 * mm)) ** 2)
-       else 1.0);
+   is (if State.Volumetric_Enabled then 1.0 / (Ada.Numerics.Pi * (State.Filament_Diameter / (2.0 * mm))**2) else 1.0);
 
    function To_Current_Units_Feedrate (Value : Dimensionless; Units : Linear_Units_Mode) return Velocity
    is (Value * Unit_Scale (Units) / min);
@@ -581,7 +579,7 @@ package body Prunt.Default_Modules.Motion is
                declare
                   DX             : constant Dimensionless := Result (X_Axis) / mm;
                   DY             : constant Dimensionless := Result (Y_Axis) / mm;
-                  Norm           : constant Dimensionless := Dimensionless_Math.Sqrt (DX ** 2 + DY ** 2);
+                  Norm           : constant Dimensionless := Dimensionless_Math.Sqrt (DX**2 + DY**2);
                   Clipped_Radius : constant Length := Length'Adjacent (Params.Bounds.Radius, 0.0 * mm);
                   Ratio          : constant Dimensionless := (Clipped_Radius / mm) / Norm;
                begin
@@ -1128,7 +1126,7 @@ package body Prunt.Default_Modules.Motion is
 
          function Hypot (DX, DY : Length) return Length is
          begin
-            return Dimensionless_Math.Sqrt ((DX / mm) ** 2 + (DY / mm) ** 2) * mm;
+            return Dimensionless_Math.Sqrt ((DX / mm)**2 + (DY / mm)**2) * mm;
          end Hypot;
 
          procedure Validate_Position (Pos : Position; Params : Motion_Planner.Kinematic_Parameters) is
@@ -1250,7 +1248,7 @@ package body Prunt.Default_Modules.Motion is
                Side       : constant Dimensionless := (if Clockwise = Major then 1.0 else -1.0);
                H          : constant Length :=
                  (if Radius > Half_Chord
-                  then Dimensionless_Math.Sqrt (((Radius - Half_Chord) * (Radius + Half_Chord)) / mm ** 2) * mm
+                  then Dimensionless_Math.Sqrt (((Radius - Half_Chord) * (Radius + Half_Chord)) / mm**2) * mm
                   else 0.0 * mm);
             begin
                if not X.Present and then not Y.Present then
@@ -1285,7 +1283,7 @@ package body Prunt.Default_Modules.Motion is
          begin
             Use_Linear_Fallback :=
               XY_Chord > 0.0 * mm
-              and then (Finish_Radius <= 0.0 * mm or else (Cross = 0.0 * mm ** 2 and then Dot > 0.0 * mm ** 2));
+              and then (Finish_Radius <= 0.0 * mm or else (Cross = 0.0 * mm**2 and then Dot > 0.0 * mm**2));
 
             if Start_Radius <= 0.0 * mm then
                raise Gcode_Bad_Inputs_Error with "G2/G3 radius must be non-zero.";

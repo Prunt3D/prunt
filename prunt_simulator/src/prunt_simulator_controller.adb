@@ -38,14 +38,12 @@ package body Prunt_Simulator_Controller is
    Interpolation_Time         : constant Time := 0.000_05 * s;
    Executed_Position_Capacity : constant Positive := 65_536;
 
-   function Get_Board_Specific_Documentation
-     (Key : VSS.Strings.Virtual_String) return VSS.Strings.Virtual_String;
+   function Get_Board_Specific_Documentation (Key : VSS.Strings.Virtual_String) return VSS.Strings.Virtual_String;
    function Get_Extra_HTTP_Content
      (Name : VSS.Strings.Virtual_String) return access constant Ada.Streams.Stream_Element_Array;
    procedure Report_Executor_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean);
 
-   function Get_Board_Specific_Documentation
-     (Key : VSS.Strings.Virtual_String) return VSS.Strings.Virtual_String is
+   function Get_Board_Specific_Documentation (Key : VSS.Strings.Virtual_String) return VSS.Strings.Virtual_String is
    begin
       pragma Unreferenced (Key);
       return +"";
@@ -92,6 +90,5 @@ package body Prunt_Simulator_Controller is
 
 begin
    Prunt_Simulator_Machine.Set_Reporters
-     (Last_Command  => Controller.Report_Last_Command_Executed'Access,
-      Error         => Report_Executor_Error'Access);
+     (Last_Command => Controller.Report_Last_Command_Executed'Access, Error => Report_Executor_Error'Access);
 end Prunt_Simulator_Controller;

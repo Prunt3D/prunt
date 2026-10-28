@@ -34,7 +34,7 @@ with Prunt.Controller;
 with Prunt.Controller_Generic_Types;
 with Prunt.Integration_Config_Overlays;
 with Prunt.Integration_Test_Catalog;
-with Prunt.JSON; use Prunt.JSON;
+with Prunt.JSON;            use Prunt.JSON;
 with Prunt.Mockable.Text_IO;
 with Prunt.Thermistors;
 with VSS.Strings.Conversions;
@@ -69,18 +69,18 @@ package body Prunt.Integration_Test_Harness is
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis);
    type Axis_Position is array (Axis_Name) of Long_Float;
 
-   Base_Sample_Rate_Hz       : constant Positive := 2_000;
-   Sample_Rate_Hz            : constant Positive := 10_000;
-   Sample_Rate_Scale         : constant Positive := Sample_Rate_Hz / Base_Sample_Rate_Hz;
-   Sample_Period_S           : constant Long_Float := 1.0 / Long_Float (Sample_Rate_Hz);
-   Command_Queue_Capacity    : constant Positive := 128;
+   Base_Sample_Rate_Hz                    : constant Positive := 2_000;
+   Sample_Rate_Hz                         : constant Positive := 10_000;
+   Sample_Rate_Scale                      : constant Positive := Sample_Rate_Hz / Base_Sample_Rate_Hz;
+   Sample_Period_S                        : constant Long_Float := 1.0 / Long_Float (Sample_Rate_Hz);
+   Command_Queue_Capacity                 : constant Positive := 128;
    Hardware_Maximum_Loop_Move_Tail_Length : constant Positive := Command_Queue_Capacity - 1;
-   Short_Empty_Wait_Limit    : constant Natural := 50;
-   Submit_Empty_Wait_Limit   : constant Natural := 200 * Sample_Rate_Scale;
-   Long_Empty_Wait_Limit     : constant Natural := 2_000 * Sample_Rate_Scale;
-   Cancel_Empty_Wait_Limit   : constant Natural := 30_000 * Sample_Rate_Scale;
-   Idle_Stable_Position_Count : constant Natural := 20;
-   Submit_Timeout_S          : constant Duration := 300.0;
+   Short_Empty_Wait_Limit                 : constant Natural := 50;
+   Submit_Empty_Wait_Limit                : constant Natural := 200 * Sample_Rate_Scale;
+   Long_Empty_Wait_Limit                  : constant Natural := 2_000 * Sample_Rate_Scale;
+   Cancel_Empty_Wait_Limit                : constant Natural := 30_000 * Sample_Rate_Scale;
+   Idle_Stable_Position_Count             : constant Natural := 20;
+   Submit_Timeout_S                       : constant Duration := 300.0;
 
    type Sample is record
       T            : Long_Float := 0.0;
@@ -110,12 +110,12 @@ package body Prunt.Integration_Test_Harness is
 
    type Machine_Queue_Item (Kind : Machine_Queue_Item_Kind := Command_Item) is record
       case Kind is
-         when Command_Item         =>
-            Command : Queued_Command :=
-              (Index => 0, Pos => [others => 0.0], Safe_Stop_After => True);
+         when Command_Item =>
+            Command      : Queued_Command := (Index => 0, Pos => [others => 0.0], Safe_Stop_After => True);
             Is_Loop_Move : Boolean := False;
             Loop_Setup   : Loop_Move_Setup := (others => <>);
-         when Reset_Position_Item  =>
+
+         when Reset_Position_Item =>
             Reset_Pos : Motor_Position := [others => 0.0];
       end case;
    end record;
@@ -136,11 +136,11 @@ package body Prunt.Integration_Test_Harness is
         (Kind : String; Label : String; Target : String := ""; Value : String := ""; Command : Command_Index := 0);
       procedure Record_Executed_Command (Command : Queued_Command);
       procedure Record_Executed_Loop_Command
-        (Command : Queued_Command;
-         Setup : Loop_Move_Setup;
-         Tail : Loop_Move_Tail_Array;
+        (Command     : Queued_Command;
+         Setup       : Loop_Move_Setup;
+         Tail        : Loop_Move_Tail_Array;
          Tail_Length : Loop_Move_Tail_Index;
-         Timed_Out : out Boolean);
+         Timed_Out   : out Boolean);
       procedure Record_Executed_Reset_Position (Pos : Motor_Position);
       function Current_Time return Long_Float;
       function Current_Position return Axis_Position;
@@ -149,23 +149,23 @@ package body Prunt.Integration_Test_Harness is
       function Event_Count return Natural;
       procedure Snapshot (Samples_Out : out Sample_Vectors.Vector; Events_Out : out Event_Vectors.Vector);
    private
-      Queue         : Machine_Queue_Array (1 .. Command_Queue_Capacity);
-      Count         : Natural := 0;
-      Head          : Positive := 1;
-      Tail          : Positive := 1;
-      Started       : Boolean := False;
-      Now_S         : Long_Float := 0.0;
-      Last_Pos      : Axis_Position := [others => 0.0];
-      Last_Motor_Pos : Motor_Position := [others => 0.0];
-      Last_Vel      : Axis_Position := [others => 0.0];
-      Last_Accel    : Axis_Position := [others => 0.0];
-      Last_Jerk     : Axis_Position := [others => 0.0];
-      Last_Snap     : Axis_Position := [others => 0.0];
-      Last_Command  : Command_Index := 0;
+      Queue                  : Machine_Queue_Array (1 .. Command_Queue_Capacity);
+      Count                  : Natural := 0;
+      Head                   : Positive := 1;
+      Tail                   : Positive := 1;
+      Started                : Boolean := False;
+      Now_S                  : Long_Float := 0.0;
+      Last_Pos               : Axis_Position := [others => 0.0];
+      Last_Motor_Pos         : Motor_Position := [others => 0.0];
+      Last_Vel               : Axis_Position := [others => 0.0];
+      Last_Accel             : Axis_Position := [others => 0.0];
+      Last_Jerk              : Axis_Position := [others => 0.0];
+      Last_Snap              : Axis_Position := [others => 0.0];
+      Last_Command           : Command_Index := 0;
       Has_Pending_Loop_Setup : Boolean := False;
       Pending_Loop_Setup     : Loop_Move_Setup := (others => <>);
-      Samples       : Sample_Vectors.Vector;
-      Events        : Event_Vectors.Vector;
+      Samples                : Sample_Vectors.Vector;
+      Events                 : Event_Vectors.Vector;
    end Machine;
 
    protected Controller_Task_State is
@@ -174,7 +174,7 @@ package body Prunt.Integration_Test_Harness is
       procedure Mark_Stopped (Why : String);
       function Stopped return Boolean;
    private
-      Has_Stopped : Boolean := False;
+      Has_Stopped  : Boolean := False;
       Stop_Message : Unbounded_String;
    end Controller_Task_State;
 
@@ -200,13 +200,12 @@ package body Prunt.Integration_Test_Harness is
    procedure Report_Command_Executed (Index : Command_Index);
    procedure Reset_Position (Pos : Motor_Position);
    procedure Run_Action
-     (Action       : JSON_Value;
-      Submit       : access procedure
-        (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
-      Submit_File  : access procedure (Path : Virtual_String; Succeeded : out Boolean);
-      Cancel       : access procedure (Succeeded : out Boolean));
-   procedure Run_Cancel_At
-     (Time_S : Long_Float; Cancel : access procedure (Succeeded : out Boolean));
+     (Action      : JSON_Value;
+      Submit      :
+        access procedure (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
+      Submit_File : access procedure (Path : Virtual_String; Succeeded : out Boolean);
+      Cancel      : access procedure (Succeeded : out Boolean));
+   procedure Run_Cancel_At (Time_S : Long_Float; Cancel : access procedure (Succeeded : out Boolean));
    procedure Run_Expectations (Expect : JSON_Value);
    function To_Axis_Position (Pos : Motor_Position) return Axis_Position;
    procedure Wait_For_Gcode_Ready;
@@ -224,13 +223,10 @@ package body Prunt.Integration_Test_Harness is
    procedure Reconfigure_Heater
      (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
    procedure Set_Heater_Temperature (Heater : Heater_Name; Target : Temperature);
-   procedure Autotune_Heater
-     (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
-   procedure Reconfigure_Thermistor
-     (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters);
+   procedure Autotune_Heater (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name);
+   procedure Reconfigure_Thermistor (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters);
    function Get_Thermistor_Temperature (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;
-   function Get_Board_Temperature
-     (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature;
+   function Get_Board_Temperature (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature;
    procedure Turn_Power_Supply_On;
    procedure Turn_Power_Supply_Off;
    function Power_Supply_Is_On return Boolean;
@@ -250,28 +246,27 @@ package body Prunt.Integration_Test_Harness is
             Enable                    => Enable_Motor'Access,
             Disable                   => Disable_Motor'Access)],
       Fan_Hardware                     =>
-        [Dummy_Fan =>
+        [Dummy_Fan           =>
            (Kind                            => Fixed_Switching_Kind,
             Set_Duty_Cycle                  => Set_Fan_Duty_Cycle'Access,
             Gcode_Index                     => 0,
             Reconfigure_Fixed_Switching_Fan => Reconfigure_Fan'Access,
             Maximum_PWM_Frequency           => 25_000.0 * hertz),
-         Low_Side_Dummy_Fan =>
-           (Kind                                     => Low_Or_High_Side_Switching_Kind,
-            Set_Duty_Cycle                           => Set_Fan_Duty_Cycle'Access,
-            Gcode_Index                              => 1,
+         Low_Side_Dummy_Fan  =>
+           (Kind                                       => Low_Or_High_Side_Switching_Kind,
+            Set_Duty_Cycle                             => Set_Fan_Duty_Cycle'Access,
+            Gcode_Index                                => 1,
             Reconfigure_Low_Or_High_Side_Switching_Fan => Reconfigure_Low_Or_High_Side_Fan'Access,
-            Maximum_Low_Side_PWM_Frequency           => 20_000.0 * hertz,
-            Maximum_High_Side_PWM_Frequency          => 25_000.0 * hertz),
+            Maximum_Low_Side_PWM_Frequency             => 20_000.0 * hertz,
+            Maximum_High_Side_PWM_Frequency            => 25_000.0 * hertz),
          High_Side_Dummy_Fan =>
-           (Kind                                     => Low_Or_High_Side_Switching_Kind,
-            Set_Duty_Cycle                           => Set_Fan_Duty_Cycle'Access,
-            Gcode_Index                              => 2,
+           (Kind                                       => Low_Or_High_Side_Switching_Kind,
+            Set_Duty_Cycle                             => Set_Fan_Duty_Cycle'Access,
+            Gcode_Index                                => 2,
             Reconfigure_Low_Or_High_Side_Switching_Fan => Reconfigure_Low_Or_High_Side_Fan'Access,
-            Maximum_Low_Side_PWM_Frequency           => 20_000.0 * hertz,
-            Maximum_High_Side_PWM_Frequency          => 25_000.0 * hertz)],
-      Tachometer_Hardware              =>
-        [others => (Get_Pulse_Frequency => Get_Tachometer_Frequency'Access)],
+            Maximum_Low_Side_PWM_Frequency             => 20_000.0 * hertz,
+            Maximum_High_Side_PWM_Frequency            => 25_000.0 * hertz)],
+      Tachometer_Hardware              => [others => (Get_Pulse_Frequency => Get_Tachometer_Frequency'Access)],
       Input_Switch_Hardware            =>
         [others => (Visible_To_User => True, Get_State => Get_Input_Switch_State'Access)],
       Heater_Hardware                  =>
@@ -282,10 +277,8 @@ package body Prunt.Integration_Test_Harness is
             others          => <>)],
       Thermistor_Hardware              =>
         [others =>
-           (Reconfigure     => Reconfigure_Thermistor'Access,
-            Get_Temperature => Get_Thermistor_Temperature'Access)],
-      Board_Temperature_Probe_Hardware =>
-        [others => (Get_Temperature => Get_Board_Temperature'Access)],
+           (Reconfigure => Reconfigure_Thermistor'Access, Get_Temperature => Get_Thermistor_Temperature'Access)],
+      Board_Temperature_Probe_Hardware => [others => (Get_Temperature => Get_Board_Temperature'Access)],
       Power_Control_Hardware           =>
         (Turn_On  => Turn_Power_Supply_On'Access,
          Turn_Off => Turn_Power_Supply_Off'Access,
@@ -407,11 +400,11 @@ package body Prunt.Integration_Test_Harness is
       end Record_Event;
 
       procedure Record_Executed_Command (Command : Queued_Command) is
-         New_Pos : constant Axis_Position := To_Axis_Position (Command.Pos);
-         New_Vel : Axis_Position;
-         New_Accel : Axis_Position;
-         New_Jerk : Axis_Position;
-         New_Snap : Axis_Position;
+         New_Pos     : constant Axis_Position := To_Axis_Position (Command.Pos);
+         New_Vel     : Axis_Position;
+         New_Accel   : Axis_Position;
+         New_Jerk    : Axis_Position;
+         New_Snap    : Axis_Position;
          New_Crackle : Axis_Position;
       begin
          Now_S := Now_S + Sample_Period_S;
@@ -445,14 +438,14 @@ package body Prunt.Integration_Test_Harness is
       end Record_Executed_Command;
 
       procedure Record_Executed_Loop_Command
-        (Command : Queued_Command;
-         Setup : Loop_Move_Setup;
-         Tail : Loop_Move_Tail_Array;
+        (Command     : Queued_Command;
+         Setup       : Loop_Move_Setup;
+         Tail        : Loop_Move_Tail_Array;
          Tail_Length : Loop_Move_Tail_Index;
-         Timed_Out : out Boolean)
+         Timed_Out   : out Boolean)
       is
-         Executed_Command    : Queued_Command := Tail (Tail_Length);
-         Any_Moving_Motor    : Boolean := False;
+         Executed_Command : Queued_Command := Tail (Tail_Length);
+         Any_Moving_Motor : Boolean := False;
       begin
          Timed_Out := False;
 
@@ -573,10 +566,13 @@ package body Prunt.Integration_Test_Harness is
       case Axis is
          when X_Axis =>
             return "X";
+
          when Y_Axis =>
             return "Y";
+
          when Z_Axis =>
             return "Z";
+
          when E_Axis =>
             return "E";
       end case;
@@ -663,7 +659,7 @@ package body Prunt.Integration_Test_Harness is
 
          if Found then
             case Item.Kind is
-               when Command_Item         =>
+               when Command_Item        =>
                   if Item.Is_Loop_Move then
                      Tail_Length := 0;
                      loop
@@ -683,11 +679,7 @@ package body Prunt.Integration_Test_Harness is
                      end loop;
 
                      Machine.Record_Executed_Loop_Command
-                       (Item.Command,
-                        Item.Loop_Setup,
-                        Loop_Tail,
-                        Loop_Move_Tail_Index (Tail_Length),
-                        Timed_Out);
+                       (Item.Command, Item.Loop_Setup, Loop_Tail, Loop_Move_Tail_Index (Tail_Length), Timed_Out);
                      Assert (not Timed_Out, "A loop move exceeded its maximum loop count.");
                      Report_Command_Executed (Loop_Tail (Tail_Length).Index);
                   else
@@ -695,7 +687,7 @@ package body Prunt.Integration_Test_Harness is
                      Report_Command_Executed (Item.Command.Index);
                   end if;
 
-               when Reset_Position_Item  =>
+               when Reset_Position_Item =>
                   Machine.Record_Executed_Reset_Position (Item.Reset_Pos);
             end case;
             Empty_Waits := 0;
@@ -708,11 +700,11 @@ package body Prunt.Integration_Test_Harness is
    end Advance_To;
 
    procedure Advance_Until_Idle (Timeout_S : Long_Float) is
-      Sim_Deadline : constant Long_Float := Machine.Current_Time + Timeout_S;
-      Wall_Deadline : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (120.0));
-      Last_Pos : Axis_Position := Machine.Current_Position;
-      Start_Event_Count : constant Natural := Machine.Event_Count;
-      Start_Sample_Count : constant Natural := Machine.Sample_Count;
+      Sim_Deadline          : constant Long_Float := Machine.Current_Time + Timeout_S;
+      Wall_Deadline         : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (120.0));
+      Last_Pos              : Axis_Position := Machine.Current_Position;
+      Start_Event_Count     : constant Natural := Machine.Event_Count;
+      Start_Sample_Count    : constant Natural := Machine.Sample_Count;
       Stable_Position_Count : Natural := 0;
 
       function Same_Position (Left, Right : Axis_Position) return Boolean;
@@ -733,13 +725,10 @@ package body Prunt.Integration_Test_Harness is
 
          declare
             Current_Event_Count : constant Natural := Machine.Event_Count;
-            Had_Activity : constant Boolean :=
+            Had_Activity        : constant Boolean :=
               Machine.Sample_Count > Start_Sample_Count or else Current_Event_Count > Start_Event_Count;
          begin
-            if
-              Had_Activity
-              and then Same_Position (Machine.Current_Position, Last_Pos)
-            then
+            if Had_Activity and then Same_Position (Machine.Current_Position, Last_Pos) then
                Stable_Position_Count := Stable_Position_Count + 1;
             else
                Stable_Position_Count := 0;
@@ -800,8 +789,7 @@ package body Prunt.Integration_Test_Harness is
    begin
       Machine.Snapshot (Samples, Events);
       for E of Events loop
-         if
-           To_String (E.Kind) = Kind
+         if To_String (E.Kind) = Kind
            and then To_String (E.Label) = Label
            and then To_String (E.Target) = Target
            and then To_String (E.Value) = Value
@@ -899,10 +887,7 @@ package body Prunt.Integration_Test_Harness is
 
       for Axis of Axes loop
          Add_Override
-           (Result,
-            "Homing",
-            ["Homing", "Axes", Axis, "Homing_Method", "Kind", "Selected"],
-            Create (+"Set_To_Value"));
+           (Result, "Homing", ["Homing", "Axes", Axis, "Homing_Method", "Kind", "Selected"], Create (+"Set_To_Value"));
       end loop;
 
       for Motor of Motors loop
@@ -931,17 +916,20 @@ package body Prunt.Integration_Test_Harness is
          "Kinematics",
          ["Kinematics", "Workspace_Bounds", "Kind", "Children", "Rectangular", "Upper_Y"],
          Create (Long_Float'(300.0)));
-      Add_Override
-        (Result, "Kinematics", ["Kinematics", "Workspace_Bounds", "Upper_Z"], Create (Long_Float'(300.0)));
+      Add_Override (Result, "Kinematics", ["Kinematics", "Workspace_Bounds", "Upper_Z"], Create (Long_Float'(300.0)));
       Add_Override
         (Result, "Kinematics", ["Kinematics", "Workspace_Bounds", "Lower_E"], Create (Long_Float'(-1.0E100)));
       Add_Override
         (Result, "Kinematics", ["Kinematics", "Workspace_Bounds", "Upper_E"], Create (Long_Float'(1.0E100)));
       Add_Override (Result, "Kinematics", ["Kinematics", "Maximum_Tangential_Velocity"], Create (Long_Float'(250.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "X_AXIS"], Create (Long_Float'(250.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "Y_AXIS"], Create (Long_Float'(250.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "Z_AXIS"], Create (Long_Float'(25.0)));
-      Add_Override (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "E_AXIS"], Create (Long_Float'(80.0)));
+      Add_Override
+        (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "X_AXIS"], Create (Long_Float'(250.0)));
+      Add_Override
+        (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "Y_AXIS"], Create (Long_Float'(250.0)));
+      Add_Override
+        (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "Z_AXIS"], Create (Long_Float'(25.0)));
+      Add_Override
+        (Result, "Kinematics", ["Kinematics", "Axial_Velocity_Limits", "E_AXIS"], Create (Long_Float'(80.0)));
       for Axis of Axes loop
          Add_Override
            (Result,
@@ -1015,7 +1003,7 @@ package body Prunt.Integration_Test_Harness is
       return Result;
    end Build_Config_Overrides;
 
-   Integration_Config_Path : constant String := "integration_test_config.json";
+   Integration_Config_Path        : constant String := "integration_test_config.json";
    Integration_Interpolation_Time : constant Time := Dimensionless (Sample_Period_S) * s;
 
    package Controller_Instance is new
@@ -1062,9 +1050,7 @@ package body Prunt.Integration_Test_Harness is
       end loop;
    end Wait_For_Motion;
 
-   procedure Run_Cancel_At
-     (Time_S : Long_Float; Cancel : access procedure (Succeeded : out Boolean))
-   is
+   procedure Run_Cancel_At (Time_S : Long_Float; Cancel : access procedure (Succeeded : out Boolean)) is
    begin
       Advance_To (Time_S, Cancel_Empty_Wait_Limit);
       Assert
@@ -1126,11 +1112,11 @@ package body Prunt.Integration_Test_Harness is
    end Run_Cancel_At;
 
    procedure Run_Action
-     (Action       : JSON_Value;
-      Submit       : access procedure
-        (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
-      Submit_File  : access procedure (Path : Virtual_String; Succeeded : out Boolean);
-      Cancel       : access procedure (Succeeded : out Boolean))
+     (Action      : JSON_Value;
+      Submit      :
+        access procedure (Command : Virtual_String; Succeeded : out Boolean; Command_ID : out Gcode_Command_ID);
+      Submit_File : access procedure (Path : Virtual_String; Succeeded : out Boolean);
+      Cancel      : access procedure (Succeeded : out Boolean))
    is
       Kind : constant String := VSS.Strings.Conversions.To_UTF_8_String (Virtual_String'(Action.Get ("kind").Get));
    begin
@@ -1151,8 +1137,7 @@ package body Prunt.Integration_Test_Harness is
             end loop;
 
             Assert
-              (Success,
-               "Controller rejected G-code command: " & VSS.Strings.Conversions.To_UTF_8_String (Command));
+              (Success, "Controller rejected G-code command: " & VSS.Strings.Conversions.To_UTF_8_String (Command));
             Assert (Command_ID /= 0, "Controller accepted a G-code command without assigning an ID.");
             Advance_By (0.002, Submit_Empty_Wait_Limit);
          end;
@@ -1195,9 +1180,7 @@ package body Prunt.Integration_Test_Harness is
                   Assert (Ada.Calendar.Clock < Deadline, "Timed out submitting G-code file.");
                end loop;
             end;
-            Assert
-              (Success,
-               "Controller rejected G-code file: " & VSS.Strings.Conversions.To_UTF_8_String (Path));
+            Assert (Success, "Controller rejected G-code file: " & VSS.Strings.Conversions.To_UTF_8_String (Path));
          end;
       elsif Kind = "advance_to_s" then
          Advance_To (Long_Float'(Action.Get ("time_s").Get), Long_Empty_Wait_Limit);
@@ -1301,12 +1284,7 @@ package body Prunt.Integration_Test_Harness is
             begin
                Assert
                  (abs (Actual - Expected) <= Tolerance,
-                  "Axis "
-                  & Name_String
-                  & " final position was "
-                  & Image (Actual)
-                  & ", expected "
-                  & Image (Expected));
+                  "Axis " & Name_String & " final position was " & Image (Actual) & ", expected " & Image (Expected));
             end Check_Axis;
          begin
             if Expect.Has_Field ("position_tolerance") then
@@ -1352,12 +1330,7 @@ package body Prunt.Integration_Test_Harness is
 
                Assert
                  (Actual <= Max_Value,
-                  "Axis "
-                  & Name_String
-                  & " sampled position exceeded "
-                  & Image (Max_Value)
-                  & ": "
-                  & Image (Actual));
+                  "Axis " & Name_String & " sampled position exceeded " & Image (Max_Value) & ": " & Image (Actual));
             end Check_Axis;
          begin
             Machine.Snapshot (Samples, Events);
@@ -1459,12 +1432,7 @@ package body Prunt.Integration_Test_Harness is
 
                Assert
                  (Actual <= Max_Value,
-                  "Axis "
-                  & Name_String
-                  & " sampled delta exceeded "
-                  & Image (Max_Value)
-                  & ": "
-                  & Image (Actual));
+                  "Axis " & Name_String & " sampled delta exceeded " & Image (Max_Value) & ": " & Image (Actual));
             end Check_Axis;
          begin
             Machine.Snapshot (Samples, Events);
@@ -1502,12 +1470,7 @@ package body Prunt.Integration_Test_Harness is
 
                Assert
                  (Actual >= Min_Value,
-                  "Axis "
-                  & Name_String
-                  & " sampled delta did not reach "
-                  & Image (Min_Value)
-                  & ": "
-                  & Image (Actual));
+                  "Axis " & Name_String & " sampled delta did not reach " & Image (Min_Value) & ": " & Image (Actual));
             end Check_Axis;
          begin
             Machine.Snapshot (Samples, Events);
@@ -1518,8 +1481,7 @@ package body Prunt.Integration_Test_Harness is
 
       if Expect.Has_Field ("min_samples") then
          Assert
-           (Machine.Sample_Count >= Natural'(Expect.Get ("min_samples").Get),
-            "Trace did not contain enough samples.");
+           (Machine.Sample_Count >= Natural'(Expect.Get ("min_samples").Get), "Trace did not contain enough samples.");
       end if;
 
       if Expect.Has_Field ("min_events") then
@@ -1532,7 +1494,7 @@ package body Prunt.Integration_Test_Harness is
             procedure Check_Event_Count (Name : Virtual_String; Value : JSON_Value);
 
             procedure Check_Event_Count (Name : Virtual_String; Value : JSON_Value) is
-               Kind : constant String := VSS.Strings.Conversions.To_UTF_8_String (Name);
+               Kind     : constant String := VSS.Strings.Conversions.To_UTF_8_String (Name);
                Expected : constant Natural := Natural'(Value.Get);
                Actual   : constant Natural := Event_Kind_Count (Kind);
             begin
@@ -1548,21 +1510,17 @@ package body Prunt.Integration_Test_Harness is
       if Expect.Has_Field ("events") then
          for Expected_Event of Expect.Get_Array ("events") loop
             declare
-               Kind      : constant String :=
-                 Expected_Event_Field (Expected_Event, "kind");
-               Label     : constant String :=
-                 Expected_Event_Field (Expected_Event, "label");
-               Target    : constant String :=
-                 Expected_Event_Field (Expected_Event, "target");
-               Value     : constant String :=
-                 Expected_Event_Field (Expected_Event, "value");
-               Expected  : constant Natural :=
+               Kind       : constant String := Expected_Event_Field (Expected_Event, "kind");
+               Label      : constant String := Expected_Event_Field (Expected_Event, "label");
+               Target     : constant String := Expected_Event_Field (Expected_Event, "target");
+               Value      : constant String := Expected_Event_Field (Expected_Event, "value");
+               Expected   : constant Natural :=
                  (if Expected_Event.Has_Field ("count")
                   then Natural'(Expected_Event.Get ("count").Get)
                   elsif Expected_Event.Has_Field ("min_count")
                   then Natural'(Expected_Event.Get ("min_count").Get)
                   else 1);
-               Actual    : constant Natural := Event_Match_Count (Kind, Label, Target, Value);
+               Actual     : constant Natural := Event_Match_Count (Kind, Label, Target, Value);
                Is_Minimum : constant Boolean :=
                  Expected_Event.Has_Field ("min_count") and then not Expected_Event.Has_Field ("count");
             begin
@@ -1581,8 +1539,8 @@ package body Prunt.Integration_Test_Harness is
 
       if Expect.Has_Field ("event_order") then
          declare
-            Samples : Sample_Vectors.Vector;
-            Events  : Event_Vectors.Vector;
+            Samples      : Sample_Vectors.Vector;
+            Events       : Event_Vectors.Vector;
             Search_Start : Natural := 1;
          begin
             Machine.Snapshot (Samples, Events);
@@ -1614,22 +1572,22 @@ package body Prunt.Integration_Test_Harness is
    end Run_Expectations;
 
    procedure Record_Final_Trace (Scenario : JSON_Value; Name : String) is
-      Samples : Sample_Vectors.Vector;
-      Events  : Event_Vectors.Vector;
-      Trace   : constant JSON_Value := Create_Object;
-      Axes    : JSON_Array := Empty_Array;
-      T       : JSON_Array := Empty_Array;
-      Commands : JSON_Array := Empty_Array;
-      Position : JSON_Array := Empty_Array;
-      Velocity : JSON_Array := Empty_Array;
-      Accel    : JSON_Array := Empty_Array;
-      Jerk     : JSON_Array := Empty_Array;
-      Snap     : JSON_Array := Empty_Array;
-      Crackle  : JSON_Array := Empty_Array;
+      Samples     : Sample_Vectors.Vector;
+      Events      : Event_Vectors.Vector;
+      Trace       : constant JSON_Value := Create_Object;
+      Axes        : JSON_Array := Empty_Array;
+      T           : JSON_Array := Empty_Array;
+      Commands    : JSON_Array := Empty_Array;
+      Position    : JSON_Array := Empty_Array;
+      Velocity    : JSON_Array := Empty_Array;
+      Accel       : JSON_Array := Empty_Array;
+      Jerk        : JSON_Array := Empty_Array;
+      Snap        : JSON_Array := Empty_Array;
+      Crackle     : JSON_Array := Empty_Array;
       Event_Array : JSON_Array := Empty_Array;
-      Output_Dir : constant String := "integration_traces";
+      Output_Dir  : constant String := "integration_traces";
       Output_Path : constant String := Output_Dir & "/" & Name & ".json";
-      File : Ada.Text_IO.File_Type;
+      File        : Ada.Text_IO.File_Type;
    begin
       Machine.Snapshot (Samples, Events);
       Ada.Directories.Create_Path (Output_Dir);
@@ -1640,11 +1598,11 @@ package body Prunt.Integration_Test_Harness is
 
       for Axis in Axis_Name loop
          declare
-            Pos_Axis : JSON_Array := Empty_Array;
-            Vel_Axis : JSON_Array := Empty_Array;
-            Acc_Axis : JSON_Array := Empty_Array;
-            Jerk_Axis : JSON_Array := Empty_Array;
-            Snap_Axis : JSON_Array := Empty_Array;
+            Pos_Axis     : JSON_Array := Empty_Array;
+            Vel_Axis     : JSON_Array := Empty_Array;
+            Acc_Axis     : JSON_Array := Empty_Array;
+            Jerk_Axis    : JSON_Array := Empty_Array;
+            Snap_Axis    : JSON_Array := Empty_Array;
             Crackle_Axis : JSON_Array := Empty_Array;
          begin
             for S of Samples loop
@@ -1710,8 +1668,8 @@ package body Prunt.Integration_Test_Harness is
    end Record_Final_Trace;
 
    procedure Run_Scenario (Name : String; Xcov_Dump : Boolean) is
-      Scenario : constant JSON_Value := Read_File (Find_Scenario_Path (Name)).Value;
-      Expected_Controller_Failure : constant String := Expected_Controller_Failure_Contains (Scenario);
+      Scenario                     : constant JSON_Value := Read_File (Find_Scenario_Path (Name)).Value;
+      Expected_Controller_Failure  : constant String := Expected_Controller_Failure_Contains (Scenario);
       Expecting_Controller_Failure : constant Boolean := Expected_Controller_Failure /= "";
       Observed_Controller_Failure  : Boolean := False;
       task type Controller_Task_Type;
@@ -1722,16 +1680,12 @@ package body Prunt.Integration_Test_Harness is
          Message : constant String := Controller_Task_State.Message;
       begin
          if not Controller_Task_State.Stopped then
-            raise Program_Error
-              with "Expected controller task failure containing: " & Expected_Controller_Failure;
+            raise Program_Error with "Expected controller task failure containing: " & Expected_Controller_Failure;
          end if;
 
          if Ada.Strings.Fixed.Index (Message, Expected_Controller_Failure) = 0 then
             raise Program_Error
-              with "Controller task failure did not contain """
-                   & Expected_Controller_Failure
-                   & """: "
-                   & Message;
+              with "Controller task failure did not contain """ & Expected_Controller_Failure & """: " & Message;
          end if;
 
          Observed_Controller_Failure := True;
@@ -1744,7 +1698,8 @@ package body Prunt.Integration_Test_Harness is
             Last_Error : constant String := Controller_Instance.Last_Error_Message;
          begin
             if Last_Error = "" then
-               Controller_Task_State.Mark_Stopped ("Controller task stopped before the integration scenario completed.");
+               Controller_Task_State.Mark_Stopped
+                 ("Controller task stopped before the integration scenario completed.");
             else
                Controller_Task_State.Mark_Stopped ("Controller task stopped after error: " & Last_Error);
             end if;
@@ -1753,8 +1708,7 @@ package body Prunt.Integration_Test_Harness is
          when E : others =>
             Controller_Task_State.Mark_Stopped ("Controller task failed: " & Ada.Exceptions.Exception_Information (E));
             Ada.Text_IO.Put_Line
-              (Ada.Text_IO.Standard_Error,
-               "Controller task failed: " & Ada.Exceptions.Exception_Information (E));
+              (Ada.Text_IO.Standard_Error, "Controller task failed: " & Ada.Exceptions.Exception_Information (E));
       end Controller_Task_Type;
 
       type Controller_Task_Access is access Controller_Task_Type;
@@ -1866,9 +1820,7 @@ package body Prunt.Integration_Test_Harness is
         ("fan",
          "reconfigure_low_or_high_side",
          Fan'Image,
-         Image (Long_Float (PWM_Frequency / hertz))
-         & " "
-         & Boolean'Image (Use_High_Side_Switching));
+         Image (Long_Float (PWM_Frequency / hertz)) & " " & Boolean'Image (Use_High_Side_Switching));
    end Reconfigure_Low_Or_High_Side_Fan;
 
    function Get_Tachometer_Frequency (Tachometer : Tachometer_Name; Requires_Fresh : Boolean) return Frequency is
@@ -1895,15 +1847,14 @@ package body Prunt.Integration_Test_Harness is
       Log_Event ("heater", "set_temperature", Heater'Image, Image (Long_Float (Target / celsius)));
    end Set_Heater_Temperature;
 
-   procedure Autotune_Heater
-     (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name) is
+   procedure Autotune_Heater (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name)
+   is
    begin
       pragma Unreferenced (Params);
       Log_Event ("heater", "autotune", Heater'Image, Assigned_Thermistor'Image);
    end Autotune_Heater;
 
-   procedure Reconfigure_Thermistor
-     (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters) is
+   procedure Reconfigure_Thermistor (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters) is
    begin
       pragma Unreferenced (Params);
       Log_Event ("thermistor", "reconfigure", Thermistor'Image);
@@ -1915,8 +1866,8 @@ package body Prunt.Integration_Test_Harness is
       return 25.0 * celsius;
    end Get_Thermistor_Temperature;
 
-   function Get_Board_Temperature
-     (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature is
+   function Get_Board_Temperature (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature
+   is
    begin
       Log_Event ("board_temperature", "read_temperature", Probe'Image, Boolean'Image (Requires_Fresh));
       return 25.0 * celsius;

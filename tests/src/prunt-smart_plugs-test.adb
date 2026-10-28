@@ -22,7 +22,7 @@ with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Ada.Real_Time; use Ada.Real_Time;
 with GNATCOLL.JSON; use GNATCOLL.JSON;
-with Trendy_Test; use Trendy_Test;
+with Trendy_Test;   use Trendy_Test;
 with VSS.Strings.Conversions;
 
 package body Prunt.Smart_Plugs.Test is
@@ -30,17 +30,16 @@ package body Prunt.Smart_Plugs.Test is
    package Commands is new Ada.Containers.Indefinite_Vectors (Positive, String);
    use type Commands.Vector;
    --  Tests sharing this mock transport register for sequential execution.
-   Calls : Commands.Vector;
-   Device_On : Boolean := False;
-   Indexed : Boolean := False;
-   Fail_Command : Virtual_String;
-   Bad_Boot : Boolean := False;
-   Bad_Timer : Boolean := False;
-   Fail_After_On : Boolean := False;
+   Calls                  : Commands.Vector;
+   Device_On              : Boolean := False;
+   Indexed                : Boolean := False;
+   Fail_Command           : Virtual_String;
+   Bad_Boot               : Boolean := False;
+   Bad_Timer              : Boolean := False;
+   Fail_After_On          : Boolean := False;
    Switch_Off_During_Feed : Boolean := False;
 
-   Test_Config : constant Plug_Config :=
-     (Enabled => True, Host => "10.1.1.29", Watchdog_Seconds => 60, others => <>);
+   Test_Config : constant Plug_Config := (Enabled => True, Host => "10.1.1.29", Watchdog_Seconds => 60, others => <>);
 
    procedure Test_Boot_Off_Must_Be_Confirmed (T : in out Operation'Class);
    procedure Test_Expired_Lease_Never_Repowers (T : in out Operation'Class);
@@ -61,16 +60,22 @@ package body Prunt.Smart_Plugs.Test is
 
    function All_Tests return Test_Group is
    begin
-      return [Test_Manual_On_Arms_Before_Power'Unrestricted_Access, Test_Startup_Only_Observes'Unrestricted_Access,
-              Test_Manual_Off_Stops_Refresh'Unrestricted_Access, Test_Timer_Must_Be_Confirmed'Unrestricted_Access,
-              Test_Boot_Off_Must_Be_Confirmed'Unrestricted_Access,
-              Test_Lost_On_Response_Retries_Only_Off'Unrestricted_Access,
-              Test_Failed_Feed_Disarms'Unrestricted_Access, Test_Expired_Lease_Never_Repowers'Unrestricted_Access,
-              Test_External_Off_Is_Respected'Unrestricted_Access, Test_Failed_Off_Is_Retried'Unrestricted_Access,
-              Test_Timeout_Encoding'Unrestricted_Access, Test_Invalid_Or_Disabled_Config'Unrestricted_Access,
-              Test_Unconfigured_Controller'Unrestricted_Access,
-              Test_Reconfiguration_Discards_Pending_Commands'Unrestricted_Access,
-              Test_Disabled_Worker_Shutdown'Unrestricted_Access];
+      return
+        [Test_Manual_On_Arms_Before_Power'Unrestricted_Access,
+         Test_Startup_Only_Observes'Unrestricted_Access,
+         Test_Manual_Off_Stops_Refresh'Unrestricted_Access,
+         Test_Timer_Must_Be_Confirmed'Unrestricted_Access,
+         Test_Boot_Off_Must_Be_Confirmed'Unrestricted_Access,
+         Test_Lost_On_Response_Retries_Only_Off'Unrestricted_Access,
+         Test_Failed_Feed_Disarms'Unrestricted_Access,
+         Test_Expired_Lease_Never_Repowers'Unrestricted_Access,
+         Test_External_Off_Is_Respected'Unrestricted_Access,
+         Test_Failed_Off_Is_Retried'Unrestricted_Access,
+         Test_Timeout_Encoding'Unrestricted_Access,
+         Test_Invalid_Or_Disabled_Config'Unrestricted_Access,
+         Test_Unconfigured_Controller'Unrestricted_Access,
+         Test_Reconfiguration_Discards_Pending_Commands'Unrestricted_Access,
+         Test_Disabled_Worker_Shutdown'Unrestricted_Access];
    end All_Tests;
 
    function Handle_Command (Host : Virtual_String; Command : String) return JSON_Value is
@@ -113,7 +118,7 @@ package body Prunt.Smart_Plugs.Test is
    function Request (Host : Virtual_String; Path : String) return JSON_Value is
       use Ada.Strings.Unbounded;
       Decoded : Unbounded_String := To_Unbounded_String (Path);
-      Space : Natural;
+      Space   : Natural;
    begin
       if Ada.Strings.Fixed.Index (Path, "/cm?cmnd=") /= Path'First then
          raise Constraint_Error with "Unexpected command path";
@@ -156,9 +161,9 @@ package body Prunt.Smart_Plugs.Test is
    begin
       T.Register;
       declare
-         Control : aliased Controller;
+         Control     : aliased Controller;
          Worker_Task : Worker (Control'Access);
-         Accepted : Boolean;
+         Accepted    : Boolean;
       begin
          Control.Configure ((others => <>));
          Control.Switch (True, Accepted);
@@ -297,10 +302,10 @@ package body Prunt.Smart_Plugs.Test is
    end Test_Manual_On_Arms_Before_Power;
 
    procedure Test_Reconfiguration_Discards_Pending_Commands (T : in out Operation'Class) is
-      State : Shared_State;
-      Accepted : Boolean;
-      Config : Plug_Config;
-      Action : Power_Request;
+      State       : Shared_State;
+      Accepted    : Boolean;
+      Config      : Plug_Config;
+      Action      : Power_Request;
       Replacement : constant Plug_Config := (Test_Config with delta Host => "replacement.local");
    begin
       T.Register;
@@ -313,13 +318,15 @@ package body Prunt.Smart_Plugs.Test is
       State.Configure (Replacement);
       T.Assert (not State.Can_Switch, "changed configuration must disable readiness until applied");
       State.Take (Config, Action);
-      T.Assert (Config = Replacement and then Action = No_Request,
-                "a queued command for the old device must not operate its replacement");
+      T.Assert
+        (Config = Replacement and then Action = No_Request,
+         "a queued command for the old device must not operate its replacement");
       State.Submit (Turn_On, Accepted);
       T.Assert (not Accepted, "commands wait until changed settings have been applied");
       State.Publish ((Config => Test_Config, Power => On, Watchdog_Active => True, others => <>));
-      T.Assert (State.Snapshot.Busy and then not State.Snapshot.Watchdog_Active,
-                "a result for the previous device must not appear as the replacement's status");
+      T.Assert
+        (State.Snapshot.Busy and then not State.Snapshot.Watchdog_Active,
+         "a result for the previous device must not appear as the replacement's status");
       State.Publish ((Config => Replacement, Power => Off, others => <>));
       State.Submit (Turn_Off, Accepted);
       T.Assert (Accepted);
@@ -366,7 +373,7 @@ package body Prunt.Smart_Plugs.Test is
    end Test_Timer_Must_Be_Confirmed;
 
    procedure Test_Unconfigured_Controller (T : in out Operation'Class) is
-      Control : Controller;
+      Control  : Controller;
       Accepted : Boolean;
    begin
       T.Register;

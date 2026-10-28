@@ -576,8 +576,8 @@ private
    type Profile_End is record
       Profile           : Feedrate_Profile :=
         (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
-      Max_Crackle       : Crackle := 0.0 * mm / s ** 5;
-      Decel_Crackle     : Crackle := 0.0 * mm / s ** 5;
+      Max_Crackle       : Crackle := 0.0 * mm / s**5;
+      Decel_Crackle     : Crackle := 0.0 * mm / s**5;
       Boundary_Velocity : Velocity := 0.0 * mm / s;
    end record;
    --  Generated motion outside the central profile window. Boundary_Velocity is the velocity at the join with the
@@ -614,8 +614,8 @@ private
       Valid         : Boolean := False;
       Profile       : Feedrate_Profile :=
         (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
-      Max_Crackle   : Crackle := 0.0 * mm / s ** 5;
-      Decel_Crackle : Crackle := 0.0 * mm / s ** 5;
+      Max_Crackle   : Crackle := 0.0 * mm / s**5;
+      Decel_Crackle : Crackle := 0.0 * mm / s**5;
    end record;
    --  Max_Crackle drives the acceleration ramp and Decel_Crackle the deceleration ramp.
 
@@ -636,7 +636,8 @@ private
    --  One cache per cell, reusable across every certificate for the same cells and parameters.
 
    function Cell_Overlaps (Cell : Path_Cell; Low, High : Length) return Boolean
-   is (if Cell.Stop > Cell.Start then Cell.Start < High and then Cell.Stop > Low
+   is (if Cell.Stop > Cell.Start
+       then Cell.Start < High and then Cell.Stop > Low
        else Cell.Start >= Low and then Cell.Start <= High);
    --  Whether a piece overlaps the interval with positive length, or a point cell lies inside it.
 
@@ -1290,7 +1291,7 @@ private
    type Block_Indices is array (Block_Index) of Block_Index;
    type Block_Set is array (Block_Index) of Boolean;
 
-   type Reset_Epoch is mod 2 ** 32;
+   type Reset_Epoch is mod 2**32;
    type Block_Epochs is array (Block_Index) of Reset_Epoch;
 
    protected Block_Ring is

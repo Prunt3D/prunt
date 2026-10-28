@@ -123,10 +123,10 @@ private
    --  string to match against must be wrapped in quotation marks and must come after the `P` parameter letter.
 
    procedure Set_Machine_Name
-     (This    : Module_Instance;
+     (This     : Module_Instance;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Planner : Planner_Interface'Class;
-      P       : Virtual_String
+      Planner  : Planner_Interface'Class;
+      P        : Virtual_String
       --  Machine name to set.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M550");

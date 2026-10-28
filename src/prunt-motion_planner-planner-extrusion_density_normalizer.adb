@@ -128,11 +128,15 @@ package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
               (case Spatial.Kind is
                  when Line_Primitive_Kind  =>
                    --  Equal coordinates round identically, so only the axes the line moves along contribute.
-                   abs Spatial.Direction (X_Axis) + abs Spatial.Direction (Y_Axis) + abs Spatial.Direction (Z_Axis),
+                   abs Spatial.Direction (X_Axis)
+                   + abs Spatial.Direction (Y_Axis)
+                   + abs Spatial.Direction (Z_Axis),
                  when Helix_Primitive_Kind =>
-                   --  Rounding the ends and centre moves the radius by at most Sqrt (2) resolutions, the swept angle by
-                   --  at most 2 * Sqrt (2) resolutions over the radius, and the axial travel by one resolution.
-                   Sqrt_2 * (abs Spatial.Theta_Delta + 2.0) + 1.0);
+                   --  Rounding the ends and centre moves the radius by at most Sqrt (2) resolutions, the swept angle
+                   --  by at most 2 * Sqrt (2) resolutions over the radius, and the axial travel by one resolution.
+                   Sqrt_2
+                   * (abs Spatial.Theta_Delta + 2.0)
+                   + 1.0);
             Block.Extrusion_Densities (I) := (if Lengths (I) > 0.0 * mm then Change / Lengths (I) else 0.0);
             if Segment_Run = No_Run then
                Finish_Run;

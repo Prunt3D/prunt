@@ -17,7 +17,6 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Ada.Real_Time;
 with Prunt.Thermistors;
 
 with Prunt.Default_Modules.Heaters.Config_Paths;

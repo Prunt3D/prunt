@@ -52,16 +52,20 @@ package body Prunt.Default_Modules.Motion.Test is
    end record;
 
    overriding
-   function Get_Last_Position (This : Mock_Planner) return Position is (This.Data.Pos);
+   function Get_Last_Position (This : Mock_Planner) return Position
+   is (This.Data.Pos);
    overriding
    function Get_Last_Kinematic_Parameters (This : Mock_Planner) return Motion_Planner.Kinematic_Parameters
    is ((Bounds =>
-          (Kind => Motion_Planner.Rectangular_Workspace,
+          (Kind                        => Motion_Planner.Rectangular_Workspace,
            Lower_X | Lower_Y | Lower_Z => -1000.0 * mm,
            Upper_X | Upper_Y | Upper_Z => 1000.0 * mm,
-           Lower_E => -1.0E100 * mm, Upper_E => 1.0E100 * mm), others => <>));
+           Lower_E                     => -1.0E100 * mm,
+           Upper_E                     => 1.0E100 * mm),
+        others => <>));
    overriding
-   function Get_State_Anchor_Corner_ID (This : Mock_Planner) return Planner_Corner_ID is (This.Data.Count);
+   function Get_State_Anchor_Corner_ID (This : Mock_Planner) return Planner_Corner_ID
+   is (This.Data.Count);
    overriding
    function Get_Last_Executed_Corner_ID (This : Mock_Planner) return Planner_Corner_ID
    is (Planner_Corner_ID'Min (This.Data.Count, This.Data.Executed));
@@ -70,37 +74,53 @@ package body Prunt.Default_Modules.Motion.Test is
    overriding
    procedure Mark_Axis_Unhomed (This : Mock_Planner; Axis : Axis_Name) is null;
    overriding
-   function Axis_Is_Homed (This : Mock_Planner; Axis : Axis_Name) return Boolean is (True);
+   function Axis_Is_Homed (This : Mock_Planner; Axis : Axis_Name) return Boolean
+   is (True);
    overriding
-   function Cancellation_Is_Active (This : Mock_Planner) return Boolean is (False);
+   function Cancellation_Is_Active (This : Mock_Planner) return Boolean
+   is (False);
    overriding
    procedure Add_Corner
-     (This : Mock_Planner; Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s;
+     (This          : Mock_Planner;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
       Require_Homed : Boolean := True);
    overriding
    procedure Add_Helix
-     (This : Mock_Planner; Center : Position; Pos : Position; Clockwise : Boolean; Feedrate : Velocity;
-      Dwell_After : Time := 0.0 * s; Require_Homed : Boolean := True);
+     (This          : Mock_Planner;
+      Center        : Position;
+      Pos           : Position;
+      Clockwise     : Boolean;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True);
    overriding
    procedure Add_Corner_Data (This : Mock_Planner; Corner_Data : Extra_Corner_Data'Class) is null;
    overriding
    procedure Flush
-     (This : Mock_Planner;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+     (This : Mock_Planner; Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
    overriding
    procedure Resolve_Homing_Move (This : Mock_Planner; Stopped_Position : Position) is null;
    overriding
    procedure Flush_And_Change_Kinematic_Parameters
-     (This : Mock_Planner; Params : Motion_Planner.Kinematic_Parameters;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is null;
+     (This       : Mock_Planner;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is null;
    overriding
    procedure Flush_And_Reset_Position
-     (This : Mock_Planner; New_Position : Position;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is null;
+     (This         : Mock_Planner;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is null;
 
    overriding
    procedure Add_Corner
-     (This : Mock_Planner; Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s;
+     (This          : Mock_Planner;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
       Require_Homed : Boolean := True)
    is
       pragma Unreferenced (Dwell_After, Require_Homed);
@@ -112,8 +132,13 @@ package body Prunt.Default_Modules.Motion.Test is
 
    overriding
    procedure Add_Helix
-     (This : Mock_Planner; Center : Position; Pos : Position; Clockwise : Boolean; Feedrate : Velocity;
-      Dwell_After : Time := 0.0 * s; Require_Homed : Boolean := True)
+     (This          : Mock_Planner;
+      Center        : Position;
+      Pos           : Position;
+      Clockwise     : Boolean;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True)
    is
       pragma Unreferenced (Center, Clockwise);
    begin
@@ -126,19 +151,21 @@ package body Prunt.Default_Modules.Motion.Test is
    end record;
 
    overriding
-   function Get_Pause_Position (This : Mock_Pause_Context) return Position is (This.Pos);
+   function Get_Pause_Position (This : Mock_Pause_Context) return Position
+   is (This.Pos);
    overriding
-   function Get_Last_Command_Index (This : Mock_Pause_Context) return Command_Index is (0);
+   function Get_Last_Command_Index (This : Mock_Pause_Context) return Command_Index
+   is (0);
 
    function Create_Instance
-     (Settings : User_Config; Status : Status_Manager.Status_Emitter;
-      Settings_Data : access Config.Config_Data := null)
-      return My_Modules.Module_Instance_Shared_Pointers.Ref;
+     (Settings      : User_Config;
+      Status        : Status_Manager.Status_Emitter;
+      Settings_Data : access Config.Config_Data := null) return My_Modules.Module_Instance_Shared_Pointers.Ref;
 
    function Create_Instance
-     (Settings : User_Config; Status : Status_Manager.Status_Emitter;
-      Settings_Data : access Config.Config_Data := null)
-      return My_Modules.Module_Instance_Shared_Pointers.Ref
+     (Settings      : User_Config;
+      Status        : Status_Manager.Status_Emitter;
+      Settings_Data : access Config.Config_Data := null) return My_Modules.Module_Instance_Shared_Pointers.Ref
    is
       Data : Config.Config_Data;
 
@@ -162,8 +189,8 @@ package body Prunt.Default_Modules.Motion.Test is
    procedure Dispatch_Command
      (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Mock_Planner; Line : Virtual_String)
    is
-      Args : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments (Line);
-      Letter : constant Gcode_Identifier_Argument_Index :=
+      Args    : Gcode_Arguments.Arguments := Gcode_Arguments.Parse_Arguments (Line);
+      Letter  : constant Gcode_Identifier_Argument_Index :=
         (if Args.Kind ('M') = Gcode_Arguments.Non_Existent_Kind then 'G' else 'M');
       Command : constant Gcode_Command_Identifier := (Letter, Args.Consume_Integer (Letter));
    begin
@@ -173,8 +200,8 @@ package body Prunt.Default_Modules.Motion.Test is
 
    overriding
    procedure Flush
-     (This : Mock_Planner;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+     (This : Mock_Planner; Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is
    begin
       if Extra_Data in Motion_Report_Event then
          This.Data.Report := Motion_Report_Event (Extra_Data).Message;
@@ -182,16 +209,24 @@ package body Prunt.Default_Modules.Motion.Test is
    end Flush;
 
    function Linear_Rejected
-     (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Mock_Planner; E : Dimensionless;
-      X : Gcode_Optional_Float := (Present => False); Y : Gcode_Optional_Float := (Present => False);
-      Z : Gcode_Optional_Float := (Present => False); F : Gcode_Optional_Float := (Present => False);
-      Rapid : Boolean := False) return Boolean;
+     (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Mock_Planner;
+      E        : Dimensionless;
+      X        : Gcode_Optional_Float := (Present => False);
+      Y        : Gcode_Optional_Float := (Present => False);
+      Z        : Gcode_Optional_Float := (Present => False);
+      F        : Gcode_Optional_Float := (Present => False);
+      Rapid    : Boolean := False) return Boolean;
 
    function Linear_Rejected
-     (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref; Planner : Mock_Planner; E : Dimensionless;
-      X : Gcode_Optional_Float := (Present => False); Y : Gcode_Optional_Float := (Present => False);
-      Z : Gcode_Optional_Float := (Present => False); F : Gcode_Optional_Float := (Present => False);
-      Rapid : Boolean := False) return Boolean is
+     (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner  : Mock_Planner;
+      E        : Dimensionless;
+      X        : Gcode_Optional_Float := (Present => False);
+      Y        : Gcode_Optional_Float := (Present => False);
+      Z        : Gcode_Optional_Float := (Present => False);
+      F        : Gcode_Optional_Float := (Present => False);
+      Rapid    : Boolean := False) return Boolean is
    begin
       Module_Instance (Instance.Get.Element.all).Execute_Linear_Move
         (Planner, X, Y, Z, (Present => True, Value => E), F, Rapid);
@@ -202,32 +237,48 @@ package body Prunt.Default_Modules.Motion.Test is
    end Linear_Rejected;
 
    procedure Test_Excessive_Extrusion_Arcs (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device     : constant Module := (My_Modules.Module with null record);
+      Status     : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
-      Settings : User_Config;
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
-      Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Missing : constant Gcode_Optional_Float := (Present => False);
-      Start_Pos : constant Position := [X_Axis => 10.0 * mm, others => 0.0 * mm];
+      Settings   : User_Config;
+      Data       : aliased Mock_Planner_Data;
+      Planner    : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Instance   : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Missing    : constant Gcode_Optional_Float := (Present => False);
+      Start_Pos  : constant Position := [X_Axis => 10.0 * mm, others => 0.0 * mm];
       Finish_Pos : constant Position := [Y_Axis => 10.0 * mm, others => 0.0 * mm];
-      Center : constant Position := [others => 0.0 * mm];
+      Center     : constant Position := [others => 0.0 * mm];
 
       function Arc_Rejected
-        (E : Dimensionless; Full_Circle : Boolean := False; Clockwise : Boolean := False;
-         Radius_Form : Boolean := False; Radius : Dimensionless := 10.0;
-         Finish_X : Dimensionless := 0.0; Finish_Y : Dimensionless := 10.0) return Boolean;
+        (E           : Dimensionless;
+         Full_Circle : Boolean := False;
+         Clockwise   : Boolean := False;
+         Radius_Form : Boolean := False;
+         Radius      : Dimensionless := 10.0;
+         Finish_X    : Dimensionless := 0.0;
+         Finish_Y    : Dimensionless := 10.0) return Boolean;
 
       function Arc_Rejected
-        (E : Dimensionless; Full_Circle : Boolean := False; Clockwise : Boolean := False;
-         Radius_Form : Boolean := False; Radius : Dimensionless := 10.0;
-         Finish_X : Dimensionless := 0.0; Finish_Y : Dimensionless := 10.0) return Boolean is
+        (E           : Dimensionless;
+         Full_Circle : Boolean := False;
+         Clockwise   : Boolean := False;
+         Radius_Form : Boolean := False;
+         Radius      : Dimensionless := 10.0;
+         Finish_X    : Dimensionless := 0.0;
+         Finish_Y    : Dimensionless := 10.0) return Boolean is
       begin
          Module_Instance (Instance.Get.Element.all).Execute_Arc_Move
-           (Planner, (True, (if Full_Circle then 10.0 else Finish_X)),
-            (True, (if Full_Circle then 0.0 else Finish_Y)), Missing, (True, E), (True, 600.0),
-            Clockwise => Clockwise, Offset_Form => not Radius_Form, I => (True, -10.0), J => Missing, R => Radius);
+           (Planner,
+            (True, (if Full_Circle then 10.0 else Finish_X)),
+            (True, (if Full_Circle then 0.0 else Finish_Y)),
+            Missing,
+            (True, E),
+            (True, 600.0),
+            Clockwise   => Clockwise,
+            Offset_Form => not Radius_Form,
+            I           => (True, -10.0),
+            J           => Missing,
+            R           => Radius);
          return False;
       exception
          when Error : Gcode_Bad_Inputs_Error =>
@@ -235,13 +286,13 @@ package body Prunt.Default_Modules.Motion.Test is
       end Arc_Rejected;
    begin
       T.Register;
-      T.Assert (abs (Linear_XY_Distance (Start_Pos, Finish_Pos) - (200.0 * mm ** 2) ** (1 / 2)) < 1.0E-10 * mm);
-      T.Assert (abs (Helix_XY_Distance (Start_Pos, Finish_Pos, Center, False) - 5.0 * Ada.Numerics.Pi * mm)
-                  < 1.0E-10 * mm);
-      T.Assert (abs (Helix_XY_Distance (Start_Pos, Finish_Pos, Center, True) - 15.0 * Ada.Numerics.Pi * mm)
-                  < 1.0E-10 * mm);
+      T.Assert (abs (Linear_XY_Distance (Start_Pos, Finish_Pos) - (200.0 * mm**2)**(1 / 2)) < 1.0E-10 * mm);
+      T.Assert
+        (abs (Helix_XY_Distance (Start_Pos, Finish_Pos, Center, False) - 5.0 * Ada.Numerics.Pi * mm) < 1.0E-10 * mm);
+      T.Assert
+        (abs (Helix_XY_Distance (Start_Pos, Finish_Pos, Center, True) - 15.0 * Ada.Numerics.Pi * mm) < 1.0E-10 * mm);
       Settings.Excessive_Extrusion_Prevention :=
-        (Extrusion_Only => (Kind => Enabled, Maximum_Length => 1.0 * mm),
+        (Extrusion_Only        => (Kind => Enabled, Maximum_Length => 1.0 * mm),
          Extrusion_To_XY_Ratio => (Kind => Enabled, Maximum_Ratio => 0.25));
       Data.Pos := Start_Pos;
       Instance := Create_Instance (Settings, Status.Get_Emitter ("Motion"));
@@ -283,11 +334,11 @@ package body Prunt.Default_Modules.Motion.Test is
    end Test_Excessive_Extrusion_Arcs;
 
    procedure Test_Excessive_Extrusion_Defaults_And_Limits (T : in out Trendy_Test.Operation'Class) is
-      Settings : User_Config_Excessive_Extrusion_Prevention;
-      Schema : constant Config.Config_Property_Maps.Map := Build_Schema;
-      Guards : constant Config.Config_Property_Parameters_Sequence :=
+      Settings    : User_Config_Excessive_Extrusion_Prevention;
+      Schema      : constant Config.Config_Property_Maps.Map := Build_Schema;
+      Guards      : constant Config.Config_Property_Parameters_Sequence :=
         Config.Config_Property_Parameters_Sequence (Schema ("Excessive_Extrusion_Prevention"));
-      Only_Limit : constant Config.Config_Property_Parameters_Sequence :=
+      Only_Limit  : constant Config.Config_Property_Parameters_Sequence :=
         Config.Config_Property_Parameters_Sequence (Guards.Children ("Extrusion_Only"));
       Ratio_Limit : constant Config.Config_Property_Parameters_Sequence :=
         Config.Config_Property_Parameters_Sequence (Guards.Children ("Extrusion_To_XY_Ratio"));
@@ -305,10 +356,8 @@ package body Prunt.Default_Modules.Motion.Test is
    begin
       T.Register;
       T.Assert (Settings.Extrusion_Only.Kind = Disabled and then Settings.Extrusion_To_XY_Ratio.Kind = Disabled);
-      T.Assert
-        (Config.Config_Property_Parameters_Variant (Only_Limit.Children ("Kind")).Default = "Disabled");
-      T.Assert
-        (Config.Config_Property_Parameters_Variant (Ratio_Limit.Children ("Kind")).Default = "Disabled");
+      T.Assert (Config.Config_Property_Parameters_Variant (Only_Limit.Children ("Kind")).Default = "Disabled");
+      T.Assert (Config.Config_Property_Parameters_Variant (Ratio_Limit.Children ("Kind")).Default = "Disabled");
       T.Assert (not Rejected (1.0E100 * mm, 0.0 * mm), "extrusion-only guard defaults to disabled");
       T.Assert (not Rejected (1.0E100 * mm, 1.0E-100 * mm), "ratio guard defaults to disabled");
 
@@ -331,12 +380,12 @@ package body Prunt.Default_Modules.Motion.Test is
    end Test_Excessive_Extrusion_Defaults_And_Limits;
 
    procedure Test_Excessive_Extrusion_Linear_Moves (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device   : constant Module := (My_Modules.Module with null record);
+      Status   : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
       Settings : User_Config;
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Data     : aliased Mock_Planner_Data;
+      Planner  : constant Mock_Planner := (Data => Data'Unchecked_Access);
       Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
    begin
       T.Register;
@@ -346,7 +395,7 @@ package body Prunt.Default_Modules.Motion.Test is
         (not Linear_Rejected (Instance, Planner, 200.0, X => (True, 0.001)), "disabled ratio permits large moves");
 
       Settings.Excessive_Extrusion_Prevention :=
-        (Extrusion_Only => (Kind => Enabled, Maximum_Length => 5.0 * mm),
+        (Extrusion_Only        => (Kind => Enabled, Maximum_Length => 5.0 * mm),
          Extrusion_To_XY_Ratio => (Kind => Enabled, Maximum_Ratio => 0.25));
       Data := (others => <>);
       Instance := Create_Instance (Settings, Status.Get_Emitter ("Motion"));
@@ -392,14 +441,14 @@ package body Prunt.Default_Modules.Motion.Test is
    end Test_Excessive_Extrusion_Linear_Moves;
 
    procedure Test_Excessive_Extrusion_Recovery_And_Pause (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device   : constant Module := (My_Modules.Module with null record);
+      Status   : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
       Settings : User_Config;
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Data     : aliased Mock_Planner_Data;
+      Planner  : constant Mock_Planner := (Data => Data'Unchecked_Access);
       Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Context : Mock_Pause_Context;
+      Context  : Mock_Pause_Context;
       Rejected : Boolean;
    begin
       T.Register;
@@ -415,8 +464,9 @@ package body Prunt.Default_Modules.Motion.Test is
          when Gcode_Bad_Inputs_Error =>
             Rejected := True;
       end;
-      T.Assert (Rejected and then Data.Count = 2 and then Data.Pos (Z_Axis) = 2.0 * mm,
-                "rejected recovery does not lower Z or queue extrusion");
+      T.Assert
+        (Rejected and then Data.Count = 2 and then Data.Pos (Z_Axis) = 2.0 * mm,
+         "rejected recovery does not lower Z or queue extrusion");
       Module_Instance (Instance.Get.Element.all).Apply_Retraction_Settings
         (Planner, (Present => False), (True, 4.0), (Present => False));
       Module_Instance (Instance.Get.Element.all).Execute_Recover (Planner);
@@ -432,7 +482,7 @@ package body Prunt.Default_Modules.Motion.Test is
 
       Data := (others => <>);
       Settings.Pause_Park :=
-        (Kind => Relative_Park_Move,
+        (Kind               => Relative_Park_Move,
          Relative_Park_Move => (X_Offset => 10.0 * mm, Z_Offset => 2.0 * mm, E_Offset => 6.0 * mm, others => <>));
       Instance := Create_Instance (Settings, Status.Get_Emitter ("Motion"));
       Rejected := False;
@@ -458,12 +508,12 @@ package body Prunt.Default_Modules.Motion.Test is
    end Test_Excessive_Extrusion_Recovery_And_Pause;
 
    procedure Test_Volumetric_Arcs_And_Guards (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device   : constant Module := (My_Modules.Module with null record);
+      Status   : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
       Settings : User_Config;
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Data     : aliased Mock_Planner_Data;
+      Planner  : constant Mock_Planner := (Data => Data'Unchecked_Access);
       Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Rejected : Boolean := False;
    begin
@@ -472,13 +522,14 @@ package body Prunt.Default_Modules.Motion.Test is
       Settings.Motion_Gcode.Default_Filament_Diameter := 2.0 * mm;
       Settings.Motion_Gcode.Default_E_Positioning := Relative_E_Positioning_Mode;
       Settings.Excessive_Extrusion_Prevention :=
-        (Extrusion_Only => (Kind => Enabled, Maximum_Length => 5.0 * mm),
+        (Extrusion_Only        => (Kind => Enabled, Maximum_Length => 5.0 * mm),
          Extrusion_To_XY_Ratio => (Kind => Enabled, Maximum_Ratio => 0.25));
       Data.Pos (X_Axis) := 10.0 * mm;
       Instance := Create_Instance (Settings, Status.Get_Emitter ("Motion"));
       Dispatch_Command (Instance, Planner, "G3 X0 Y10 I-10 E10 F600");
-      T.Assert (Data.Helices = 1 and then abs (Data.Pos (E_Axis) - 10.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
-                "arc extrusion is converted to filament length before checking the XY ratio");
+      T.Assert
+        (Data.Helices = 1 and then abs (Data.Pos (E_Axis) - 10.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
+         "arc extrusion is converted to filament length before checking the XY ratio");
       Dispatch_Command (Instance, Planner, "M221 S200");
       begin
          Dispatch_Command (Instance, Planner, "G2 X10 Y0 J-10 E10");
@@ -489,8 +540,9 @@ package body Prunt.Default_Modules.Motion.Test is
       T.Assert (Rejected and then Data.Count = 1, "flow-scaled volumetric arcs reject before queuing");
       Dispatch_Command (Instance, Planner, "G2 J-10 E2");
       Dispatch_Command (Instance, Planner, "G3 X10 Y0 R10 E4");
-      T.Assert (Data.Helices = 3 and then abs (Data.Pos (E_Axis) - 22.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
-                "full-circle and radius-form arcs use the same volumetric conversion");
+      T.Assert
+        (Data.Helices = 3 and then abs (Data.Pos (E_Axis) - 22.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
+         "full-circle and radius-form arcs use the same volumetric conversion");
 
       Data := (others => <>);
       Instance := Create_Instance (Settings, Status.Get_Emitter ("Motion"));
@@ -501,13 +553,13 @@ package body Prunt.Default_Modules.Motion.Test is
    end Test_Volumetric_Arcs_And_Guards;
 
    procedure Test_Volumetric_Inch_Units_And_Retract (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device         : constant Module := (My_Modules.Module with null record);
+      Status         : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
-      Settings : User_Config;
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
-      Instance : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Settings       : User_Config;
+      Data           : aliased Mock_Planner_Data;
+      Planner        : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Instance       : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Before_Retract : Length;
    begin
       T.Register;
@@ -520,19 +572,23 @@ package body Prunt.Default_Modules.Motion.Test is
       Dispatch_Command (Instance, Planner, "M200 D0.1");
       Dispatch_Command (Instance, Planner, "G92 E0.01");
       Dispatch_Command (Instance, Planner, "G1 X1 E0.02 F60");
-      T.Assert (abs (Data.Pos (E_Axis) - 0.01 * 25.4 ** 3 / (Ada.Numerics.Pi * 1.27 ** 2) * mm)
-                  < 1.0E-10 * mm, "G20 uses cubic inches for E and linear inches for filament diameter");
-      T.Assert (Data.Pos (X_Axis) = 25.4 * mm and then Data.Feedrate = 25.4 * mm / s,
-                "XYZ and F retain their linear unit conversion");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - 0.01 * 25.4**3 / (Ada.Numerics.Pi * 1.27**2) * mm) < 1.0E-10 * mm,
+         "G20 uses cubic inches for E and linear inches for filament diameter");
+      T.Assert
+        (Data.Pos (X_Axis) = 25.4 * mm and then Data.Feedrate = 25.4 * mm / s,
+         "XYZ and F retain their linear unit conversion");
       Before_Retract := Data.Pos (E_Axis);
       Dispatch_Command (Instance, Planner, "G10");
-      T.Assert (abs (Data.Pos (E_Axis) - Before_Retract + 3.0 * mm) < 1.0E-10 * mm,
-                "firmware retract length remains a filament length");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - Before_Retract + 3.0 * mm) < 1.0E-10 * mm,
+         "firmware retract length remains a filament length");
       Dispatch_Command (Instance, Planner, "G11");
       T.Assert (abs (Data.Pos (E_Axis) - Before_Retract - 1.0 * mm) < 1.0E-10 * mm);
       Dispatch_Command (Instance, Planner, "G1 E0.02");
-      T.Assert (abs (Data.Pos (E_Axis) - Before_Retract - 1.0 * mm) < 1.0E-10 * mm,
-                "firmware retraction and recovery preserve logical volumetric E");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - Before_Retract - 1.0 * mm) < 1.0E-10 * mm,
+         "firmware retraction and recovery preserve logical volumetric E");
       Dispatch_Command (Instance, Planner, "G21");
       Dispatch_Command (Instance, Planner, "G92 E0");
       Dispatch_Command (Instance, Planner, "M83");
@@ -540,26 +596,28 @@ package body Prunt.Default_Modules.Motion.Test is
       Dispatch_Command (Instance, Planner, "M209 S1");
       Before_Retract := Data.Pos (E_Axis);
       Dispatch_Command (Instance, Planner, "G1 E-20");
-      T.Assert (abs (Data.Pos (E_Axis) - Before_Retract + 3.0 * mm) < 1.0E-10 * mm,
-                "auto-retract thresholds compare the equivalent filament length");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - Before_Retract + 3.0 * mm) < 1.0E-10 * mm,
+         "auto-retract thresholds compare the equivalent filament length");
       Dispatch_Command (Instance, Planner, "G1 E20");
       T.Assert (abs (Data.Pos (E_Axis) - Before_Retract - 1.0 * mm) < 1.0E-10 * mm);
       Dispatch_Command (Instance, Planner, "G60 S0");
       Dispatch_Command (Instance, Planner, "G61 E10");
       Before_Retract := Data.Pos (E_Axis);
       Dispatch_Command (Instance, Planner, "M82");
-      T.Assert (not Linear_Rejected (Instance, Planner, Before_Retract / mm + 10.0),
-                "saved-position E offsets use volumetric coordinates without moving E");
+      T.Assert
+        (not Linear_Rejected (Instance, Planner, Before_Retract / mm + 10.0),
+         "saved-position E offsets use volumetric coordinates without moving E");
       T.Assert (abs (Data.Pos (E_Axis) - Before_Retract) < 1.0E-10 * mm);
    end Test_Volumetric_Inch_Units_And_Retract;
 
    procedure Test_Volumetric_Linear_Moves (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device   : constant Module := (My_Modules.Module with null record);
+      Status   : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
       Settings : User_Config;
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Data     : aliased Mock_Planner_Data;
+      Planner  : constant Mock_Planner := (Data => Data'Unchecked_Access);
       Instance : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Create_Instance (Settings, Status.Get_Emitter ("Motion"));
    begin
@@ -567,35 +625,40 @@ package body Prunt.Default_Modules.Motion.Test is
       Dispatch_Command (Instance, Planner, "M200 D2");
       Dispatch_Command (Instance, Planner, "G92 E100");
       Dispatch_Command (Instance, Planner, "G1 X10 E110");
-      T.Assert (abs (Data.Pos (E_Axis) - 10.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
-                "absolute volumetric E is measured from G92");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - 10.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
+         "absolute volumetric E is measured from G92");
       Dispatch_Command (Instance, Planner, "M221 S200");
       Dispatch_Command (Instance, Planner, "G1 E120");
-      T.Assert (abs (Data.Pos (E_Axis) - 30.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
-                "M221 scales filament movement without changing logical E");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - 30.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
+         "M221 scales filament movement without changing logical E");
       Dispatch_Command (Instance, Planner, "M200 D4");
       Dispatch_Command (Instance, Planner, "G1 E130");
-      T.Assert (abs (Data.Pos (E_Axis) - 35.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
-                "a diameter change affects only the next E displacement");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - 35.0 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
+         "a diameter change affects only the next E displacement");
       Dispatch_Command (Instance, Planner, "M200 S0");
       Dispatch_Command (Instance, Planner, "G1 E131");
-      T.Assert (abs (Data.Pos (E_Axis) - 35.0 / Ada.Numerics.Pi * mm - 2.0 * mm) < 1.0E-10 * mm,
-                "disabling volumetric mode preserves the logical E coordinate");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - 35.0 / Ada.Numerics.Pi * mm - 2.0 * mm) < 1.0E-10 * mm,
+         "disabling volumetric mode preserves the logical E coordinate");
       Dispatch_Command (Instance, Planner, "M200 D2");
       Dispatch_Command (Instance, Planner, "M83");
       Dispatch_Command (Instance, Planner, "G1 E-2");
       Dispatch_Command (Instance, Planner, "G0 E4");
-      T.Assert (abs (Data.Pos (E_Axis) - 39.0 / Ada.Numerics.Pi * mm - 2.0 * mm) < 1.0E-10 * mm,
-                "relative retractions and rapid extrusion use the same volume and flow scaling");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - 39.0 / Ada.Numerics.Pi * mm - 2.0 * mm) < 1.0E-10 * mm,
+         "relative retractions and rapid extrusion use the same volume and flow scaling");
    end Test_Volumetric_Linear_Moves;
 
    procedure Test_Volumetric_Settings (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device   : constant Module := (My_Modules.Module with null record);
+      Status   : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
       Settings : User_Config;
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Data     : aliased Mock_Planner_Data;
+      Planner  : constant Mock_Planner := (Data => Data'Unchecked_Access);
       Instance : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Create_Instance (Settings, Status.Get_Emitter ("Motion"));
 
@@ -604,8 +667,10 @@ package body Prunt.Default_Modules.Motion.Test is
       procedure Assert_Settings (Enabled : Boolean; Diameter : Dimensionless) is
       begin
          Dispatch_Command (Instance, Planner, "M200 T0");
-         T.Assert (Ada.Strings.Fixed.Index (Conversions.To_UTF_8_String (Data.Report),
-                                           "M200: S = " & (if Enabled then "1" else "0")) = 1);
+         T.Assert
+           (Ada.Strings.Fixed.Index
+              (Conversions.To_UTF_8_String (Data.Report), "M200: S = " & (if Enabled then "1" else "0"))
+            = 1);
          declare
             Flow : constant Prunt.JSON.JSON_Value := Prunt.JSON.Read (Status.JSON_Data).Get ("Motion").Get ("Flow");
          begin
@@ -647,16 +712,16 @@ package body Prunt.Default_Modules.Motion.Test is
    end Test_Volumetric_Settings;
 
    procedure Test_Volumetric_State_And_Config (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device        : constant Module := (My_Modules.Module with null record);
+      Status        : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Motion" => Device.Status_Schema]);
-      File : constant Config.Config_File :=
+      File          : constant Config.Config_File :=
         Config.Create (Conversions.To_UTF_8_String (Next_Test_Filename), ["Motion" => Device.Config_Schema]);
-      Config_Data : aliased Config.Config_Data := File.Get_Data ("Motion");
-      Settings : User_Config := Config_Data_To_User_Config (Config_Data);
-      Data : aliased Mock_Planner_Data;
-      Planner : constant Mock_Planner := (Data => Data'Unchecked_Access);
-      Instance : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
+      Config_Data   : aliased Config.Config_Data := File.Get_Data ("Motion");
+      Settings      : User_Config := Config_Data_To_User_Config (Config_Data);
+      Data          : aliased Mock_Planner_Data;
+      Planner       : constant Mock_Planner := (Data => Data'Unchecked_Access);
+      Instance      : constant My_Modules.Module_Instance_Shared_Pointers.Ref :=
         Create_Instance (Settings, Status.Get_Emitter ("Motion"), Config_Data'Access);
       Before_Cancel : Position;
    begin
@@ -670,16 +735,17 @@ package body Prunt.Default_Modules.Motion.Test is
       Dispatch_Command (Instance, Planner, "M200 D4");
       Module_Instance (Instance.Get.Element.all).Prepare_Config_For_Save;
       Settings := Config_Data_To_User_Config (Config_Data);
-      T.Assert (Settings.Motion_Gcode.Default_Volumetric_Enabled
-                and then Settings.Motion_Gcode.Default_Filament_Diameter = 2.0 * mm,
-                "M500 saves the committed volumetric settings");
+      T.Assert
+        (Settings.Motion_Gcode.Default_Volumetric_Enabled
+         and then Settings.Motion_Gcode.Default_Filament_Diameter = 2.0 * mm,
+         "M500 saves the committed volumetric settings");
       Module_Instance (Instance.Get.Element.all).Catch_Up_Planner_State (1);
       declare
          Flow : constant Prunt.JSON.JSON_Value := Prunt.JSON.Read (Status.JSON_Data).Get ("Motion").Get ("Flow");
       begin
          T.Assert (Flow.Get ("Volumetric enabled").Get);
-         T.Assert (Long_Float'(Flow.Get ("Filament diameter").Get) = 4.0,
-                   "status catches up to the executed settings");
+         T.Assert
+           (Long_Float'(Flow.Get ("Filament diameter").Get) = 4.0, "status catches up to the executed settings");
       end;
       Dispatch_Command (Instance, Planner, "G1 E20");
       Dispatch_Command (Instance, Planner, "M200 S0 D3");
@@ -687,15 +753,18 @@ package body Prunt.Default_Modules.Motion.Test is
       Data.Pos := Before_Cancel;
       Module_Instance (Instance.Get.Element.all).Handle_Cancel (1, 2, Data.Pos);
       Dispatch_Command (Instance, Planner, "M200");
-      T.Assert (Ada.Strings.Fixed.Index (Conversions.To_UTF_8_String (Data.Report), "M200: S = 1") = 1,
-                "cancellation discards unexecuted volumetric changes");
+      T.Assert
+        (Ada.Strings.Fixed.Index (Conversions.To_UTF_8_String (Data.Report), "M200: S = 1") = 1,
+         "cancellation discards unexecuted volumetric changes");
       Dispatch_Command (Instance, Planner, "G1 E20");
-      T.Assert (abs (Data.Pos (E_Axis) - 12.5 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
-                "subsequent moves use the restored diameter and logical E");
+      T.Assert
+        (abs (Data.Pos (E_Axis) - 12.5 / Ada.Numerics.Pi * mm) < 1.0E-10 * mm,
+         "subsequent moves use the restored diameter and logical E");
       Module_Instance (Instance.Get.Element.all).Prepare_Config_For_Save;
       Settings := Config_Data_To_User_Config (Config_Data);
-      T.Assert (Settings.Motion_Gcode.Default_Volumetric_Enabled
-                and then Settings.Motion_Gcode.Default_Filament_Diameter = 4.0 * mm);
+      T.Assert
+        (Settings.Motion_Gcode.Default_Volumetric_Enabled
+         and then Settings.Motion_Gcode.Default_Filament_Diameter = 4.0 * mm);
    end Test_Volumetric_State_And_Config;
 
    function All_Tests return Trendy_Test.Test_Group

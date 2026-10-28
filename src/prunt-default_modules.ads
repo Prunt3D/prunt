@@ -32,12 +32,12 @@ generic
    with package My_Controller_Generic_Types is new Prunt.Controller_Generic_Types (<>);
    with package My_Logger is new Prunt.Logger;
 package Prunt.Default_Modules is
+   pragma Warnings (Off, "use clause for package ""My_Controller_Generic_Types"" has no effect");
+   --  Used by child units.
    use My_Controller_Generic_Types;
+   pragma Warnings (On, "use clause for package ""My_Controller_Generic_Types"" has no effect");
 
    package My_Modules renames My_Controller_Generic_Types.My_Modules;
-
-   use type My_Controller_Generic_Types.Motor_Name;
-   use type My_Controller_Generic_Types.Input_Switch_Name;
 
    subtype Planner_Interface is Module_Types.Planner_Interface;
 end Prunt.Default_Modules;

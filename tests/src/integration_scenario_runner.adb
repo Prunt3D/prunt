@@ -24,7 +24,7 @@ with Prunt.Integration_Test_Harness;
 procedure Integration_Scenario_Runner is
    use Ada.Command_Line;
 
-   Scenario : Unbounded_String;
+   Scenario  : Unbounded_String;
    Xcov_Dump : Boolean := False;
 
    Scenario_Prefix : constant String := "--scenario=";
@@ -34,8 +34,7 @@ procedure Integration_Scenario_Runner is
    function Starts_With (Source, Prefix : String) return Boolean is
    begin
       return
-        Source'Length >= Prefix'Length
-        and then Source (Source'First .. Source'First + Prefix'Length - 1) = Prefix;
+        Source'Length >= Prefix'Length and then Source (Source'First .. Source'First + Prefix'Length - 1) = Prefix;
    end Starts_With;
 begin
    for I in 1 .. Argument_Count loop

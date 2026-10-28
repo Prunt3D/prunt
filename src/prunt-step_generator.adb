@@ -98,7 +98,8 @@ package body Prunt.Step_Generator is
          Lifecycle.Request;
       end Request;
 
-      function Pending return Boolean is (Reset_Pending);
+      function Pending return Boolean
+      is (Reset_Pending);
 
       procedure Mark_Running is
       begin

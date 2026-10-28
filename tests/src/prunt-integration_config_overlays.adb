@@ -43,8 +43,7 @@ package body Prunt.Integration_Config_Overlays is
       function Default_From_Property (Property : JSON_Value) return JSON_Value is
          Kind : constant String := VSS.Strings.Conversions.To_UTF_8_String (Property.Get ("Kind"));
       begin
-         if
-           Kind = "Boolean"
+         if Kind = "Boolean"
            or else Kind = "Discrete"
            or else Kind = "String"
            or else Kind = "Integer"
@@ -94,8 +93,7 @@ package body Prunt.Integration_Config_Overlays is
 
          procedure Merge_Field (Name : Virtual_String; Field : JSON_Value) is
          begin
-            if
-              Target.Has_Field (Name)
+            if Target.Has_Field (Name)
               and then Target.Get (Name).Kind = JSON_Object_Type
               and then Field.Kind = JSON_Object_Type
             then
@@ -158,8 +156,9 @@ package body Prunt.Integration_Config_Overlays is
    procedure Apply_Config_Overlay
      (Schema_String : Virtual_String;
       Overlay       : JSON_Value;
-      Apply         : access procedure
-        (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector))
+      Apply         :
+        access procedure
+          (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector))
    is
       Patch  : constant JSON_Value := Config_Patch_For_Overlay (Schema_String, Overlay);
       Result : Virtual_String;

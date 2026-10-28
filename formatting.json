@@ -6,6 +6,433 @@
         "document": "recurse",
         "bubbleUpTrailingTrivias": false
       }
+    },
+    "ComponentDecl": {
+      "node": [
+        {
+          "kind": "group",
+          "document": {
+            "kind": "recurse_field",
+            "field": "f_ids"
+          }
+        },
+        "whitespace",
+        {
+          "kind": "tableSeparator",
+          "text": ":"
+        },
+        {
+          "kind": "group",
+          "document": [
+            {
+              "kind": "continuationLineIndent",
+              "contents": [
+                "line",
+                {
+                  "kind": "recurse_field",
+                  "field": "f_component_def"
+                }
+              ]
+            }
+          ],
+          "id": "component_type"
+        },
+        {
+          "kind": "recurse_field",
+          "field": "f_default_expr"
+        },
+        {
+          "kind": "recurse_field",
+          "field": "f_aspects"
+        },
+        {
+          "kind": "text",
+          "text": ";"
+        }
+      ],
+      "fields": {
+        "f_default_expr": [
+          "whitespace",
+          {
+            "kind": "text",
+            "text": ":="
+          },
+          {
+            "kind": "ifBreak",
+            "breakContents": {
+              "kind": "continuationLineIndent",
+              "contents": {
+                "kind": "continuationLineIndent",
+                "contents": {
+                  "kind": "group",
+                  "document": [
+                    "line",
+                    "recurse"
+                  ]
+                }
+              }
+            },
+            "flatContents": {
+              "kind": "continuationLineIndent",
+              "contents": {
+                "kind": "group",
+                "document": [
+                  "line",
+                  "recurse"
+                ]
+              }
+            },
+            "groupId": "component_type"
+          }
+        ],
+        "f_aspects": [
+          "whitespace",
+          "recurse"
+        ]
+      }
+    },
+    "BinOp": {
+      "node": {
+        "kind": "group",
+        "document": [
+          {
+            "kind": "if",
+            "condition": {
+              "kind": "is_a",
+              "node": {
+                "kind": "eval_member",
+                "prefix": "this_node",
+                "member": "f_right"
+              },
+              "pattern": {
+                "kind": "or",
+                "patterns": [
+                  {
+                    "kind": "node",
+                    "type": "RelationOp"
+                  },
+                  {
+                    "kind": "not",
+                    "pattern": {
+                      "kind": "node",
+                      "type": "BinOp"
+                    }
+                  }
+                ]
+              }
+            },
+            "then": {
+              "kind": "recurse_field",
+              "field": "f_left"
+            },
+            "else": {
+              "kind": "group",
+              "document": {
+                "kind": "recurse_field",
+                "field": "f_left"
+              }
+            }
+          },
+          {
+            "kind": "if",
+            "condition": {
+              "kind": "is_a",
+              "node": {
+                "kind": "eval_member",
+                "prefix": "this_node",
+                "member": "f_op"
+              },
+              "pattern": {
+                "kind": "node",
+                "type": "OpPow"
+              }
+            },
+            "then": [],
+            "else": [
+              "line",
+              "flushLineBreaks"
+            ]
+          },
+          {
+            "kind": "group",
+            "document": [
+              {
+                "kind": "continuationLineIndent",
+                "contents": [
+                  {
+                    "kind": "recurse_field",
+                    "field": "f_op"
+                  },
+                  {
+                    "kind": "if",
+                    "condition": {
+                      "kind": "is_a",
+                      "node": {
+                        "kind": "eval_member",
+                        "prefix": "this_node",
+                        "member": "f_op"
+                      },
+                      "pattern": {
+                        "kind": "node",
+                        "type": "OpPow"
+                      }
+                    },
+                    "then": [],
+                    "else": {
+                      "kind": "if",
+                      "condition": {
+                        "kind": "is_a",
+                        "node": {
+                          "kind": "eval_member",
+                          "prefix": "this_node",
+                          "member": "f_op"
+                        },
+                        "pattern": {
+                          "kind": "or",
+                          "patterns": [
+                            {
+                              "kind": "node",
+                              "type": "OpPlus"
+                            },
+                            {
+                              "kind": "node",
+                              "type": "OpMinus"
+                            },
+                            {
+                              "kind": "node",
+                              "type": "OpMult"
+                            },
+                            {
+                              "kind": "node",
+                              "type": "OpDiv"
+                            },
+                            {
+                              "kind": "node",
+                              "type": "OpEq"
+                            },
+                            {
+                              "kind": "node",
+                              "type": "OpGt"
+                            },
+                            {
+                              "kind": "node",
+                              "type": "OpLt"
+                            }
+                          ]
+                        }
+                      },
+                      "then": [
+                        "whitespace",
+                        "flushLineBreaks"
+                      ],
+                      "else": "line"
+                    }
+                  },
+                  {
+                    "kind": "group",
+                    "document": {
+                      "kind": "innerRoot",
+                      "contents": {
+                        "kind": "recurse_field",
+                        "field": "f_right"
+                      },
+                      "bubbleUpLeadingTrivias": true,
+                      "bubbleUpTrailingTrivias": true
+                    }
+                  }
+                ],
+                "bubbleUpLeadingTrivias": true,
+                "bubbleUpTrailingTrivias": true
+              }
+            ]
+          }
+        ]
+      },
+      "fields": {
+        "f_left": {
+          "kind": "if",
+          "condition": {
+            "kind": "is_a",
+            "node": "this_field",
+            "pattern": {
+              "kind": "node",
+              "type": "BinOp"
+            }
+          },
+          "then": "recurse_flatten",
+          "else": "recurse"
+        }
+      }
+    },
+    "SelectWhenPart": {
+      "node": {
+        "kind": "if",
+        "condition": {
+          "kind": "is_empty",
+          "node": {
+            "kind": "eval_member",
+            "prefix": "this_node",
+            "member": "f_cond_expr"
+          }
+        },
+        "then": [
+          {
+            "kind": "recurse_field",
+            "field": "f_cond_expr"
+          },
+          {
+            "kind": "recurse_field",
+            "field": "f_stmts"
+          }
+        ],
+        "else": [
+          {
+            "kind": "recurse_field",
+            "field": "f_cond_expr"
+          },
+          {
+            "kind": "indent",
+            "contents": [
+              "hardline",
+              {
+                "kind": "recurse_field",
+                "field": "f_stmts"
+              }
+            ]
+          }
+        ]
+      },
+      "fields": {
+        "f_cond_expr": [
+          {
+            "kind": "text",
+            "text": "when"
+          },
+          "whitespace",
+          "recurse",
+          "whitespace",
+          {
+            "kind": "text",
+            "text": "=>"
+          }
+        ]
+      }
+    },
+    "EntryBody": {
+      "node": {
+        "kind": "group",
+        "document": [
+          {
+            "kind": "group",
+            "document": [
+              {
+                "kind": "group",
+                "document": [
+                  {
+                    "kind": "group",
+                    "document": [
+                      {
+                        "kind": "text",
+                        "text": "entry"
+                      },
+                      "whitespace",
+                      {
+                        "kind": "recurse_field",
+                        "field": "f_entry_name"
+                      },
+                      {
+                        "kind": "recurse_field",
+                        "field": "f_index_spec"
+                      },
+                      {
+                        "kind": "recurse_field",
+                        "field": "f_params"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "recurse_field",
+                    "field": "f_aspects"
+                  },
+                  {
+                    "kind": "continuationLineIndent",
+                    "contents": [
+                      "line",
+                      {
+                        "kind": "group",
+                        "document": [
+                          {
+                            "kind": "text",
+                            "text": "when"
+                          },
+                          {
+                            "kind": "recurse_field",
+                            "field": "f_barrier"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "line",
+              {
+                "kind": "text",
+                "text": "is"
+              }
+            ]
+          },
+          {
+            "kind": "indent",
+            "contents": [
+              {
+                "kind": "recurse_field",
+                "field": "f_decls"
+              }
+            ]
+          },
+          "hardlineWithoutBreakParent",
+          {
+            "kind": "text",
+            "text": "begin"
+          },
+          {
+            "kind": "recurse_field",
+            "field": "f_stmts"
+          },
+          "hardlineWithoutBreakParent",
+          {
+            "kind": "text",
+            "text": "end"
+          },
+          {
+            "kind": "recurse_field",
+            "field": "f_end_name"
+          },
+          {
+            "kind": "text",
+            "text": ";"
+          }
+        ]
+      },
+      "fields": {
+        "f_aspects": [
+          "line",
+          "recurse"
+        ],
+        "f_end_name": [
+          "whitespace",
+          "recurse"
+        ],
+        "f_index_spec": [
+          "whitespace",
+          "recurse"
+        ],
+        "f_barrier": [
+          "whitespace",
+          "recurse"
+        ]
+      }
     }
   }
 }

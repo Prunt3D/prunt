@@ -41,15 +41,15 @@ package body Prunt_Simulator_Hardware is
    function Environment_Kinematics return Simulator_Kinematics_Kind;
    function Environment_Endstop_Direction (Switch : Input_Switch_Name) return Endstop_Direction_Kind;
 
-   function Motor_Label (Motor : Motor_Name) return String is
-     (case Motor is
+   function Motor_Label (Motor : Motor_Name) return String
+   is (case Motor is
          when X_Motor => "X",
          when Y_Motor => "Y",
          when Z_Motor => "Z",
          when E_Motor => "E");
 
-   function Endstop_Label (Switch : Input_Switch_Name) return String is
-     (case Switch is
+   function Endstop_Label (Switch : Input_Switch_Name) return String
+   is (case Switch is
          when X_Endstop => "X",
          when Y_Endstop => "Y",
          when Z_Endstop => "Z");
@@ -133,14 +133,12 @@ package body Prunt_Simulator_Hardware is
         Environment_Float ("PRUNT_SIM_MOTOR_" & Motor_Label (Motor) & "_STEPS_PER_MM", 1.0, True)];
 
    Motor_Reversed : constant Motor_Boolean_Array :=
-     [for Motor in Motor_Name =>
-        Environment_Boolean ("PRUNT_SIM_MOTOR_" & Motor_Label (Motor) & "_REVERSED", False)];
+     [for Motor in Motor_Name => Environment_Boolean ("PRUNT_SIM_MOTOR_" & Motor_Label (Motor) & "_REVERSED", False)];
 
    Initial_Motor_Position : constant Motor_Position :=
      [for Motor in Motor_Name =>
         Dimensionless
-          (Environment_Float
-             ("PRUNT_SIM_INITIAL_MOTOR_" & Motor_Label (Motor) & "_POSITION", 0.0, False))];
+          (Environment_Float ("PRUNT_SIM_INITIAL_MOTOR_" & Motor_Label (Motor) & "_POSITION", 0.0, False))];
 
    Endstop_Trigger_MM : constant Endstop_Float_Array :=
      [for Switch in Input_Switch_Name =>
@@ -189,24 +187,24 @@ package body Prunt_Simulator_Hardware is
          when Cartesian    =>
             return
               (case Switch is
-                  when X_Endstop => Motor_X,
-                  when Y_Endstop => Motor_Y,
-                  when Z_Endstop => Motor_Distance_MM (Position, Z_Motor));
+                 when X_Endstop => Motor_X,
+                 when Y_Endstop => Motor_Y,
+                 when Z_Endstop => Motor_Distance_MM (Position, Z_Motor));
 
          when Core_XY      =>
             return
               (case Switch is
-                  when X_Endstop => (Motor_X + Motor_Y) / 2.0,
-                  when Y_Endstop => (Motor_X - Motor_Y) / 2.0,
-                  when Z_Endstop => Motor_Distance_MM (Position, Z_Motor));
+                 when X_Endstop => (Motor_X + Motor_Y) / 2.0,
+                 when Y_Endstop => (Motor_X - Motor_Y) / 2.0,
+                 when Z_Endstop => Motor_Distance_MM (Position, Z_Motor));
 
          when Linear_Delta =>
             --  Delta endstops are attached to the three independently moving tower carriages. X/Y/Z name tower A/B/C.
             return
               (case Switch is
-                  when X_Endstop => Motor_X,
-                  when Y_Endstop => Motor_Y,
-                  when Z_Endstop => Motor_Distance_MM (Position, Z_Motor));
+                 when X_Endstop => Motor_X,
+                 when Y_Endstop => Motor_Y,
+                 when Z_Endstop => Motor_Distance_MM (Position, Z_Motor));
       end case;
    end Endstop_Coordinate_MM;
 
@@ -264,17 +262,16 @@ package body Prunt_Simulator_Hardware is
       return Get_Input_Switch_State_At_Position (Switch, Motor_Position_State.Get);
    end Get_Input_Switch_State;
 
-   function Get_Initial_Motor_Position return Motor_Position is
-     (Initial_Motor_Position);
+   function Get_Initial_Motor_Position return Motor_Position
+   is (Initial_Motor_Position);
 
-   function Get_Input_Switch_State_At_Position
-     (Switch : Input_Switch_Name; Position : Motor_Position) return Boolean
+   function Get_Input_Switch_State_At_Position (Switch : Input_Switch_Name; Position : Motor_Position) return Boolean
    is
       Coordinate : constant Long_Float := Endstop_Coordinate_MM (Position, Switch);
       Triggered  : constant Boolean :=
         (case Endstop_Direction (Switch) is
-            when Minimum => Coordinate <= Endstop_Trigger_MM (Switch),
-            when Maximum => Coordinate >= Endstop_Trigger_MM (Switch));
+           when Minimum => Coordinate <= Endstop_Trigger_MM (Switch),
+           when Maximum => Coordinate >= Endstop_Trigger_MM (Switch));
    begin
       --  A normally-open switch drives the raw input high when triggered; a normally-closed switch drives it low.
       return Triggered /= Endstop_Normally_Closed (Switch);
@@ -298,15 +295,14 @@ package body Prunt_Simulator_Hardware is
       null;
    end Set_Heater_Temperature;
 
-   procedure Autotune_Heater
-     (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name) is
+   procedure Autotune_Heater (Heater : Heater_Name; Params : Heater_Parameters; Assigned_Thermistor : Thermistor_Name)
+   is
    begin
       pragma Unreferenced (Heater, Params, Assigned_Thermistor);
       null;
    end Autotune_Heater;
 
-   procedure Reconfigure_Thermistor
-     (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters) is
+   procedure Reconfigure_Thermistor (Thermistor : Thermistor_Name; Params : Thermistors.Thermistor_Parameters) is
    begin
       pragma Unreferenced (Thermistor, Params);
       null;
@@ -318,8 +314,8 @@ package body Prunt_Simulator_Hardware is
       return 25.0 * celsius;
    end Get_Thermistor_Temperature;
 
-   function Get_Board_Temperature
-     (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature is
+   function Get_Board_Temperature (Probe : Board_Temperature_Probe_Name; Requires_Fresh : Boolean) return Temperature
+   is
    begin
       pragma Unreferenced (Probe, Requires_Fresh);
       return 25.0 * celsius;

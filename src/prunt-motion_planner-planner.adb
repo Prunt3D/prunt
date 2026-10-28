@@ -183,7 +183,7 @@ package body Prunt.Motion_Planner.Planner is
          Ready_Count := @ - 1;
       end Dequeue;
 
-      entry Begin_Release(for Index in Block_Index) when not Blocks (Index).Planner_Reading is
+      entry Begin_Release (for Index in Block_Index) when not Blocks (Index).Planner_Reading is
       begin
          --  Planner_Reading changes only inside this object's procedures, whose completion re-evaluates the barrier.
          pragma Assert (Blocks (Index).State in Borrowed | Linked);
@@ -249,7 +249,7 @@ package body Prunt.Motion_Planner.Planner is
       end Defer_Cleanup_Error;
 
       entry Take_Cleanup_Error (Error : in out Cleanup_Exceptions.Holder)
-        when(for all Pending of Deferred_Cleanup => not Pending)
+        when (for all Pending of Deferred_Cleanup => not Pending)
       is
       begin
          Cleanup_Exceptions.Transfer (From => Deferred_Error, To => Error);
@@ -309,7 +309,7 @@ package body Prunt.Motion_Planner.Planner is
       end if;
 
       for Coefficient of Coefficients loop
-         Square_Sum := Square_Sum + (Coefficient / Scale) ** 2;
+         Square_Sum := Square_Sum + (Coefficient / Scale)**2;
       end loop;
 
       declare
@@ -695,8 +695,8 @@ package body Prunt.Motion_Planner.Planner is
       declare
          Start_Offset  : constant Position_Offset := Start_Point - Primitive.Center;
          End_Offset    : constant Position_Offset := End_Point - Primitive.Center;
-         Start_Radius  : constant Length := (Start_Offset (X_Axis) ** 2 + Start_Offset (Y_Axis) ** 2) ** (1 / 2);
-         End_Radius    : constant Length := (End_Offset (X_Axis) ** 2 + End_Offset (Y_Axis) ** 2) ** (1 / 2);
+         Start_Radius  : constant Length := (Start_Offset (X_Axis)**2 + Start_Offset (Y_Axis)**2)**(1 / 2);
+         End_Radius    : constant Length := (End_Offset (X_Axis)**2 + End_Offset (Y_Axis)**2)**(1 / 2);
          Theta_Start   : constant Dimensionless :=
            Dimensionless_Math.Arctan (Start_Offset (Y_Axis) / mm, Start_Offset (X_Axis) / mm);
          Two_Pi        : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
@@ -750,7 +750,7 @@ package body Prunt.Motion_Planner.Planner is
 
          declare
             Axial_Per_Phase   : constant Position_Offset := Axial_Delta * (1.0 / Theta_Delta);
-            Length_Per_Radian : constant Length := (Start_Radius ** 2 + (abs Axial_Per_Phase) ** 2) ** (1 / 2);
+            Length_Per_Radian : constant Length := (Start_Radius**2 + (abs Axial_Per_Phase)**2)**(1 / 2);
          begin
             return
               (Kind              => Helix_Primitive_Kind,
@@ -821,7 +821,7 @@ package body Prunt.Motion_Planner.Planner is
    --  negligible.
 
    function Transition_Shape (U : Dimensionless) return Dimensionless
-   is (U ** 4 * (35.0 - U * (84.0 - U * (70.0 - 20.0 * U))));
+   is (U**4 * (35.0 - U * (84.0 - U * (70.0 - 20.0 * U))));
    --  h (U): the fraction of the density change reached at U across the transition.
 
    function Transition_Offset (Transition : Extrusion_Transition; Distance : Length) return Length;
@@ -833,7 +833,7 @@ package body Prunt.Motion_Planner.Planner is
       Width : constant Length := 2.0 * Transition.Half_Width;
       U     : constant Dimensionless := Distance / Width;
    begin
-      return Transition.Density_Change * Width * U ** 5 * (7.0 - U * (14.0 - U * (10.0 - 2.5 * U)));
+      return Transition.Density_Change * Width * U**5 * (7.0 - U * (14.0 - U * (10.0 - 2.5 * U)));
    end Transition_Offset;
 
    function Density_Change_Is_Negligible
@@ -938,8 +938,7 @@ package body Prunt.Motion_Planner.Planner is
 
       procedure Fit (Maximum, Limit : Dimensionless; Order : Positive) is
       begin
-         Result :=
-           Length'Max (Result, 0.5 * mm * Nth_Root_Ratio (Change * Maximum * Speed ** Order, Limit, Order - 1));
+         Result := Length'Max (Result, 0.5 * mm * Nth_Root_Ratio (Change * Maximum * Speed**Order, Limit, Order - 1));
       end Fit;
    begin
       if not Smooths_Density_Change (Block, Corner) then
@@ -965,16 +964,12 @@ package body Prunt.Motion_Planner.Planner is
       end if;
       Fit
         (Transition_Derivative_Maxima (1),
-         Dimensionless (Block.Params.Axial_Acceleration_Maxes (E_Axis) / (mm / s ** 2)),
+         Dimensionless (Block.Params.Axial_Acceleration_Maxes (E_Axis) / (mm / s**2)),
          2);
+      Fit (Transition_Derivative_Maxima (2), Dimensionless (Block.Params.Axial_Jerk_Maxes (E_Axis) / (mm / s**3)), 3);
+      Fit (Transition_Derivative_Maxima (3), Dimensionless (Block.Params.Axial_Snap_Maxes (E_Axis) / (mm / s**4)), 4);
       Fit
-        (Transition_Derivative_Maxima (2), Dimensionless (Block.Params.Axial_Jerk_Maxes (E_Axis) / (mm / s ** 3)), 3);
-      Fit
-        (Transition_Derivative_Maxima (3), Dimensionless (Block.Params.Axial_Snap_Maxes (E_Axis) / (mm / s ** 4)), 4);
-      Fit
-        (Transition_Derivative_Maxima (4),
-         Dimensionless (Block.Params.Axial_Crackle_Maxes (E_Axis) / (mm / s ** 5)),
-         5);
+        (Transition_Derivative_Maxima (4), Dimensionless (Block.Params.Axial_Crackle_Maxes (E_Axis) / (mm / s**5)), 5);
       return Length'Min (Result, Widest);
    exception
       when Constraint_Error =>
@@ -993,7 +988,7 @@ package body Prunt.Motion_Planner.Planner is
          return (others => <>);
       end if;
       --  Later stages evaluate the analytical bounds without guards, so reject a transition whose bounds overflow.
-      if abs Change * Transition_Derivative_Maxima (4) / (2.0 * Half) ** 4 >= Curvature_To_4'Last then
+      if abs Change * Transition_Derivative_Maxima (4) / (2.0 * Half)**4 >= Curvature_To_4'Last then
          return (others => <>);
       end if;
       return (Half_Width => Half, Density_Change => Change);
@@ -1102,9 +1097,9 @@ package body Prunt.Motion_Planner.Planner is
                 (abs (Density + Side * Transition.Density_Change * Transition_Shape (Near / Width)),
                  abs (Density + Side * Transition.Density_Change * Transition_Shape (Far / Width))));
          Result.Acceleration (E_Axis) := Curvature'Max (@, Change * Transition_Derivative_Maxima (1) / Width);
-         Result.Jerk (E_Axis) := Curvature_To_2'Max (@, Change * Transition_Derivative_Maxima (2) / Width ** 2);
-         Result.Snap (E_Axis) := Curvature_To_3'Max (@, Change * Transition_Derivative_Maxima (3) / Width ** 3);
-         Result.Crackle (E_Axis) := Curvature_To_4'Max (@, Change * Transition_Derivative_Maxima (4) / Width ** 4);
+         Result.Jerk (E_Axis) := Curvature_To_2'Max (@, Change * Transition_Derivative_Maxima (2) / Width**2);
+         Result.Snap (E_Axis) := Curvature_To_3'Max (@, Change * Transition_Derivative_Maxima (3) / Width**3);
+         Result.Crackle (E_Axis) := Curvature_To_4'Max (@, Change * Transition_Derivative_Maxima (4) / Width**4);
       end Include;
    begin
       if Start.Half_Width > 0.0 * mm and then (Low < Start.Half_Width or else (Point and then Low = Start.Half_Width))
@@ -1127,7 +1122,7 @@ package body Prunt.Motion_Planner.Planner is
       Scale : constant Dimensionless := Dimensionless'Max (1.0, abs Density);
    begin
       --  Scale the norm before squaring so E-dominated moves cannot overflow this calculation.
-      return (1.0 / Scale) / Dimensionless_Math.Sqrt ((1.0 / Scale) ** 2 + (Density / Scale) ** 2);
+      return (1.0 / Scale) / Dimensionless_Math.Sqrt ((1.0 / Scale)**2 + (Density / Scale)**2);
    end XYZE_Spatial_Scale;
 
    function Primitive_Length
@@ -1221,8 +1216,8 @@ package body Prunt.Motion_Planner.Planner is
       Result    : Endpoint_Tangent_Jet :=
         (Tangent              => [others => 0.0],
          Tangent_Derivative_1 => [others => 0.0 / mm],
-         Tangent_Derivative_2 => [others => 0.0 / mm ** 2],
-         Tangent_Derivative_3 => [others => 0.0 / mm ** 3]);
+         Tangent_Derivative_2 => [others => 0.0 / mm**2],
+         Tangent_Derivative_3 => [others => 0.0 / mm**3]);
    begin
       case Primitive.Kind is
          when Line_Primitive_Kind  =>
@@ -1265,9 +1260,9 @@ package body Prunt.Motion_Planner.Planner is
       Result    : Unit_Speed_Axial_Derivative_Bounds :=
         (Velocity     => [others => 0.0],
          Acceleration => [others => 0.0 / mm],
-         Jerk         => [others => 0.0 / mm ** 2],
-         Snap         => [others => 0.0 / mm ** 3],
-         Crackle      => [others => 0.0 / mm ** 4]);
+         Jerk         => [others => 0.0 / mm**2],
+         Snap         => [others => 0.0 / mm**3],
+         Crackle      => [others => 0.0 / mm**4]);
    begin
       case Primitive.Kind is
          when Line_Primitive_Kind  =>
@@ -1634,9 +1629,9 @@ package body Prunt.Motion_Planner.Planner is
             Curved  =>
               (for some Axis in Axis_Name =>
                  Bounds.Acceleration (Axis) /= 0.0 / mm
-                 or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
-                 or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
-                 or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4));
+                 or else Bounds.Jerk (Axis) /= 0.0 / mm**2
+                 or else Bounds.Snap (Axis) /= 0.0 / mm**3
+                 or else Bounds.Crackle (Axis) /= 0.0 / mm**4));
          Last_Piece := Count;
       end Add_Piece;
    begin
@@ -1747,28 +1742,28 @@ package body Prunt.Motion_Planner.Planner is
       Window    : Profile_Window;
       Max_Vel   : Velocity) return Profile_Window_Evaluation
    is
-      Run_Last   : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
-      Window_End : constant Length := Window.Start_Distance + Window.Distance;
-      Bounds     : Unit_Speed_Axial_Derivative_Bounds :=
+      Run_Last      : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
+      Window_End    : constant Length := Window.Start_Distance + Window.Distance;
+      Bounds        : Unit_Speed_Axial_Derivative_Bounds :=
         (Velocity     => [others => 0.0],
          Acceleration => [others => 0.0 / mm],
-         Jerk         => [others => 0.0 / mm ** 2],
-         Snap         => [others => 0.0 / mm ** 3],
-         Crackle      => [others => 0.0 / mm ** 4]);
+         Jerk         => [others => 0.0 / mm**2],
+         Snap         => [others => 0.0 / mm**3],
+         Crackle      => [others => 0.0 / mm**4]);
       Mixed         : Mixed_Derivative_Limit_Result;
       Start_Ceiling : Velocity := Max_Vel;
       End_Ceiling   : Velocity := Max_Vel;
       Result        : Profile_Window_Evaluation;
 
-      procedure For_Each_Member (Process : not null access procedure (Segment : Finishing_Corners_Index;
-                                                                        Local   : Profile_Window));
+      procedure For_Each_Member
+        (Process : not null access procedure (Segment : Finishing_Corners_Index; Local : Profile_Window));
       --  Call Process for every member overlapped by Window, with Window expressed in that member's distance through
       --  the cuts of the run's cells, so a window ending at a cell's edge takes none of the piece beyond it.
 
       procedure Merge_Member (Segment : Finishing_Corners_Index; Local : Profile_Window);
 
-      procedure For_Each_Member (Process : not null access procedure (Segment : Finishing_Corners_Index;
-                                                                        Local   : Profile_Window))
+      procedure For_Each_Member
+        (Process : not null access procedure (Segment : Finishing_Corners_Index; Local : Profile_Window))
       is
          Offset : Length := 0.0 * mm;
       begin
@@ -1833,9 +1828,9 @@ package body Prunt.Motion_Planner.Planner is
          Curved        =>
            (for some Axis in Axis_Name =>
               Bounds.Acceleration (Axis) /= 0.0 / mm
-              or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
-              or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
-              or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4),
+              or else Bounds.Jerk (Axis) /= 0.0 / mm**2
+              or else Bounds.Snap (Axis) /= 0.0 / mm**3
+              or else Bounds.Crackle (Axis) /= 0.0 / mm**4),
          Cellular      => True);
       if Window.Start_Distance < 0.0 * mm
         or else Window.Distance < 0.0 * mm
@@ -1933,9 +1928,9 @@ package body Prunt.Motion_Planner.Planner is
          Curved        =>
            (for some Axis in Axis_Name =>
               Bounds.Acceleration (Axis) /= 0.0 / mm
-              or else Bounds.Jerk (Axis) /= 0.0 / mm ** 2
-              or else Bounds.Snap (Axis) /= 0.0 / mm ** 3
-              or else Bounds.Crackle (Axis) /= 0.0 / mm ** 4),
+              or else Bounds.Jerk (Axis) /= 0.0 / mm**2
+              or else Bounds.Snap (Axis) /= 0.0 / mm**3
+              or else Bounds.Crackle (Axis) /= 0.0 / mm**4),
          Cellular      => False);
       if Window.Start_Distance < 0.0 * mm
         or else Window.Distance < 0.0 * mm
@@ -1954,9 +1949,9 @@ package body Prunt.Motion_Planner.Planner is
       Result : Unit_Speed_Axial_Derivative_Bounds :=
         (Velocity     => [others => 0.0],
          Acceleration => [others => 0.0 / mm],
-         Jerk         => [others => 0.0 / mm ** 2],
-         Snap         => [others => 0.0 / mm ** 3],
-         Crackle      => [others => 0.0 / mm ** 4]);
+         Jerk         => [others => 0.0 / mm**2],
+         Snap         => [others => 0.0 / mm**3],
+         Crackle      => [others => 0.0 / mm**4]);
 
       Start_Transition : constant Length := Segment_Start_Transition_Distance (Block, Finishing_Corner);
       Middle           : constant Length := Block.Primitive_Distances (Finishing_Corner);
@@ -2266,7 +2261,7 @@ package body Prunt.Motion_Planner.Planner is
    is
       Result                         : Window_Profile_Result;
       Peaks                          : Scalar_Derivative_Limits :=
-        (0.0 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+        (0.0 * mm / s**2, 0.0 * mm / s**3, 0.0 * mm / s**4, 0.0 * mm / s**5);
       Scale                          : Dimensionless := 1.0;
       Distance                       : Length;
       Accel_Distance, Decel_Distance : Length;
@@ -2325,8 +2320,7 @@ package body Prunt.Motion_Planner.Planner is
             Result.Max_Crackle := @ * Scale;
          end loop;
       end if;
-      if (Peak > Start_Vel or else Peak > End_Vel)
-        and then Result.Max_Crackle < Dimensionless'Model_Small * mm / s ** 5
+      if (Peak > Start_Vel or else Peak > End_Vel) and then Result.Max_Crackle < Dimensionless'Model_Small * mm / s**5
       then
          --  Underflow or subnormal rounding would invalidate both the preserved velocity change and its
          --  derivative certificate. Do not turn an unrepresentable ramp into an apparently feasible coast.
@@ -2418,8 +2412,8 @@ package body Prunt.Motion_Planner.Planner is
    --  A lower bound on the distance from the speed-ceiling end of the ramp (its start when accelerating, its end
    --  otherwise) at which the ramp reaches Speed. That end must be slower than Speed.
 
-   function Ramp_Stage_Peaks (Stages : Ramp_Stages; Low, High : Length; Max_Crackle : Crackle)
-      return Scalar_Derivative_Limits;
+   function Ramp_Stage_Peaks
+     (Stages : Ramp_Stages; Low, High : Length; Max_Crackle : Crackle) return Scalar_Derivative_Limits;
    --  The derivative peaks of the stages that overlap the closed distance interval. Acceleration, jerk and snap are
    --  monotone inside every stage, so their peaks are at stage ends.
 
@@ -2446,14 +2440,27 @@ package body Prunt.Motion_Planner.Planner is
       type Stage_Times is array (Ramp_Stage_Index range 1 .. 15) of Time;
       type Stage_Signs is array (Ramp_Stage_Index range 1 .. 15) of Dimensionless;
       Durations : constant Stage_Times :=
-        [Times (1), Times (2), Times (1), Times (3), Times (1), Times (2), Times (1), Times (4), Times (1), Times (2),
-         Times (1), Times (3), Times (1), Times (2), Times (1)];
+        [Times (1),
+         Times (2),
+         Times (1),
+         Times (3),
+         Times (1),
+         Times (2),
+         Times (1),
+         Times (4),
+         Times (1),
+         Times (2),
+         Times (1),
+         Times (3),
+         Times (1),
+         Times (2),
+         Times (1)];
       Signs     : constant Stage_Signs :=
         [1.0, 0.0, -1.0, 0.0, -1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, 0.0, -1.0];
       Result    : Ramp_Stages;
    begin
       Result.States (0) :=
-        (X => 0.0 * mm, V => Start_Vel, A => 0.0 * mm / s ** 2, J => 0.0 * mm / s ** 3, S => 0.0 * mm / s ** 4);
+        (X => 0.0 * mm, V => Start_Vel, A => 0.0 * mm / s**2, J => 0.0 * mm / s**3, S => 0.0 * mm / s**4);
       for K in Ramp_Stage_Index range 1 .. 15 loop
          declare
             P : constant Ramp_State := Result.States (K - 1);
@@ -2461,9 +2468,7 @@ package body Prunt.Motion_Planner.Planner is
             C : constant Crackle := Signs (K) * Signed_Crackle;
          begin
             Result.States (K) :=
-              (X =>
-                 P.X
-                 + T * (P.V + T * (P.A / 2.0 + T * (P.J / 6.0 + T * (P.S / 24.0 + T * C / 120.0)))),
+              (X => P.X + T * (P.V + T * (P.A / 2.0 + T * (P.J / 6.0 + T * (P.S / 24.0 + T * C / 120.0)))),
                V => P.V + T * (P.A + T * (P.J / 2.0 + T * (P.S / 6.0 + T * C / 24.0))),
                A => P.A + T * (P.J + T * (P.S / 2.0 + T * C / 6.0)),
                J => P.J + T * (P.S + T * C / 2.0),
@@ -2484,13 +2489,9 @@ package body Prunt.Motion_Planner.Planner is
                A_Max : constant Acceleration := Acceleration'Max (abs P.A, abs Q.A);
             begin
                if Accelerating then
-                  return
-                    Velocity'Min
-                      (Q.V, (P.V * P.V + 2.0 * A_Max * Length'Max (0.0 * mm, X - P.X)) ** (1 / 2));
+                  return Velocity'Min (Q.V, (P.V * P.V + 2.0 * A_Max * Length'Max (0.0 * mm, X - P.X))**(1 / 2));
                else
-                  return
-                    Velocity'Min
-                      (P.V, (Q.V * Q.V + 2.0 * A_Max * Length'Max (0.0 * mm, Q.X - X)) ** (1 / 2));
+                  return Velocity'Min (P.V, (Q.V * Q.V + 2.0 * A_Max * Length'Max (0.0 * mm, Q.X - X))**(1 / 2));
                end if;
             end;
          end if;
@@ -2510,7 +2511,7 @@ package body Prunt.Motion_Planner.Planner is
             begin
                if Q.V >= Speed then
                   return
-                    (if A_Max > 0.0 * mm / s ** 2
+                    (if A_Max > 0.0 * mm / s**2
                      then Length'Min (Q.X, P.X + Length'Max (0.0 * mm, (Speed * Speed - P.V * P.V) / (2.0 * A_Max)))
                      else P.X);
                end if;
@@ -2527,7 +2528,7 @@ package body Prunt.Motion_Planner.Planner is
                if P.V >= Speed then
                   return
                     Total
-                    - (if A_Max > 0.0 * mm / s ** 2
+                    - (if A_Max > 0.0 * mm / s**2
                        then Length'Max (P.X, Q.X - Length'Max (0.0 * mm, (Speed * Speed - Q.V * Q.V) / (2.0 * A_Max)))
                        else Q.X);
                end if;
@@ -2537,11 +2538,10 @@ package body Prunt.Motion_Planner.Planner is
       end if;
    end Ramp_Distance_At_Speed;
 
-   function Ramp_Stage_Peaks (Stages : Ramp_Stages; Low, High : Length; Max_Crackle : Crackle)
-      return Scalar_Derivative_Limits
+   function Ramp_Stage_Peaks
+     (Stages : Ramp_Stages; Low, High : Length; Max_Crackle : Crackle) return Scalar_Derivative_Limits
    is
-      Result : Scalar_Derivative_Limits :=
-        (0.0 * mm / s ** 2, 0.0 * mm / s ** 3, 0.0 * mm / s ** 4, 0.0 * mm / s ** 5);
+      Result : Scalar_Derivative_Limits := (0.0 * mm / s**2, 0.0 * mm / s**3, 0.0 * mm / s**4, 0.0 * mm / s**5);
    begin
       for K in Ramp_Stage_Index range 1 .. 15 loop
          declare
@@ -2607,9 +2607,9 @@ package body Prunt.Motion_Planner.Planner is
                return;
             end if;
             for Index in Cells'Range loop
-               --  A piece that only touches the ramp at an end holds none of its motion: the ramp's derivatives there are
-               --  limits from inside it, and whatever continues the motion (a coast, the other ramp or the window's end
-               --  ceiling) admits the speed there.
+               --  A piece that only touches the ramp at an end holds none of its motion: the ramp's derivatives there
+               --  are limits from inside it, and whatever continues the motion (a coast, the other ramp or the
+               --  window's end ceiling) admits the speed there.
                if Cell_Overlaps (Cells (Index), Span_Low, Span_High) then
                   declare
                      Cell       : Path_Cell renames Cells (Index);
@@ -2663,7 +2663,7 @@ package body Prunt.Motion_Planner.Planner is
             for I in 1 .. 4 loop
                Max_Crackle := Max_Crackle * Scale;
             end loop;
-            if Max_Crackle < Dimensionless'Model_Small * mm / s ** 5 then
+            if Max_Crackle < Dimensionless'Model_Small * mm / s**5 then
                return;
             end if;
          end;
@@ -2719,8 +2719,8 @@ package body Prunt.Motion_Planner.Planner is
       if not Decel_Valid then
          return (others => <>);
       end if;
-      if (Peak > Start_Vel and then Result.Max_Crackle < Dimensionless'Model_Small * mm / s ** 5)
-        or else (Peak > End_Vel and then Result.Decel_Crackle < Dimensionless'Model_Small * mm / s ** 5)
+      if (Peak > Start_Vel and then Result.Max_Crackle < Dimensionless'Model_Small * mm / s**5)
+        or else (Peak > End_Vel and then Result.Decel_Crackle < Dimensionless'Model_Small * mm / s**5)
       then
          return (others => <>);
       end if;
@@ -2952,8 +2952,7 @@ package body Prunt.Motion_Planner.Planner is
    end Reachable_Cellular_Velocity;
 
    function Profile_Distance_At_Time
-     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity)
-      return Length
+     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity) return Length
    is
       Accel_Time : constant Time := Total_Time (Profile.Accel);
    begin
@@ -3009,7 +3008,7 @@ package body Prunt.Motion_Planner.Planner is
    end Profile_Velocity_At_Time;
 
    function Identical (Left, Right : Velocity) return Boolean is
-      type Velocity_Bits is mod 2 ** Velocity'Size;
+      type Velocity_Bits is mod 2**Velocity'Size;
       function To_Bits is new Ada.Unchecked_Conversion (Velocity, Velocity_Bits);
    begin
       return To_Bits (Left) = To_Bits (Right);
@@ -3040,18 +3039,19 @@ package body Prunt.Motion_Planner.Planner is
          end if;
 
          declare
-            Candidate : constant Window_Profile_Result :=
+            Candidate          : constant Window_Profile_Result :=
               Profile_At_Peak (Params, Eval, Start_Vel, End_Vel, Peak, Cache);
-            Duration  : constant Time := (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
+            Candidate_Duration : constant Time :=
+              (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
          begin
-            if Candidate.Valid and then (not Best.Valid or else Duration < Best_Time) then
+            if Candidate.Valid and then (not Best.Valid or else Candidate_Duration < Best_Time) then
                Best := Candidate;
-               Best_Time := Duration;
+               Best_Time := Candidate_Duration;
             end if;
             Last_Peak := Peak;
-            Last_Duration := Duration;
+            Last_Duration := Candidate_Duration;
             Last_Considered := True;
-            return Duration;
+            return Candidate_Duration;
          end;
       end Consider;
    begin
@@ -3212,6 +3212,8 @@ package body Prunt.Motion_Planner.Planner is
          return Total;
       end Run_Time_Through;
 
+      procedure Materialize (Through : Corners_Index);
+
       procedure Materialize (Through : Corners_Index) is
       begin
          while Materialized < Through loop
@@ -3219,6 +3221,9 @@ package body Prunt.Motion_Planner.Planner is
             Block.Extrusion_Reference_Positions (Materialized) := @ + E_Shift;
          end loop;
       end Materialize;
+
+      function Straight_Bound
+        (Segment : Finishing_Corners_Index; Start_Vel, End_Vel : Velocity; Distance : Length) return Time;
 
       function Straight_Bound
         (Segment : Finishing_Corners_Index; Start_Vel, End_Vel : Velocity; Distance : Length) return Time
@@ -3231,8 +3236,9 @@ package body Prunt.Motion_Planner.Planner is
            Length'Max (Start_Transition, Block.Extrusion_Transitions (Segment - 1).Half_Width);
          Straight         : constant Length :=
            (if Start = Start_Transition
-              and then Block.Extrusion_Transitions (Segment).Half_Width
-                       <= Segment_End_Transition_Distance (Block'Access, Segment)
+              and then
+                Block.Extrusion_Transitions (Segment).Half_Width
+                <= Segment_End_Transition_Distance (Block'Access, Segment)
             then Block.Primitive_Distances (Segment)
             else
               Segment_Total_Distance (Block'Access, Segment)
@@ -3248,10 +3254,7 @@ package body Prunt.Motion_Planner.Planner is
               (Start_Distance => Start, Distance => Straight),
               Block.Limited_Segment_Feedrates (Segment));
       begin
-         if not Eval.Valid
-           or else Straight <= 0.0 * mm
-           or else Eval.Max_Vel < Velocity'Max (Start_Vel, End_Vel)
-         then
+         if not Eval.Valid or else Straight <= 0.0 * mm or else Eval.Max_Vel < Velocity'Max (Start_Vel, End_Vel) then
             return 0.0 * s;
          end if;
          begin
@@ -3282,6 +3285,14 @@ package body Prunt.Motion_Planner.Planner is
          Required_Gain : Time;
          Outcome       : out Stop_Outcome;
          Gain          : out Time;
+         First_Time    : out Time);
+
+      procedure Try_Stops
+        (First, Last   : Finishing_Corners_Index;
+         Keep          : Boolean;
+         Required_Gain : Time;
+         Outcome       : out Stop_Outcome;
+         Gain          : out Time;
          First_Time    : out Time)
       is
          --  Stop at every corner in First .. Last and replan the timing runs containing segments First .. Last + 1
@@ -3305,8 +3316,8 @@ package body Prunt.Motion_Planner.Planner is
             Extrusion  : Extrusion_Transition;
          end record;
          subtype Window_Segments is
-           Finishing_Corners_Index range
-             Timing_Run_First (Block'Access, First) .. Timing_Run_Last (Block'Access, Last + 1);
+           Finishing_Corners_Index
+             range Timing_Run_First (Block'Access, First) .. Timing_Run_Last (Block'Access, Last + 1);
          --  The stopped corners are junctions, so whole runs border them. Replanning whole runs keeps each run's one
          --  profile, and its interior corner speeds and member offsets are saved like any other planned field.
          Saved         : constant array (Window_Segments) of Saved_Segment :=
@@ -3340,6 +3351,8 @@ package body Prunt.Motion_Planner.Planner is
          Delta_E       : Length := 0.0 * mm;
          New_Shift     : Length;
          Result        : Profile_Planning_Result;
+
+         procedure Restore;
 
          procedure Restore is
          begin
@@ -3496,8 +3509,8 @@ package body Prunt.Motion_Planner.Planner is
             End_Speed                         : Velocity;
          end record;
          subtype Merged_Segments is
-           Finishing_Corners_Index range
-             Timing_Run_First (Block'Access, Corner) .. Timing_Run_Last (Block'Access, Corner + 1);
+           Finishing_Corners_Index
+             range Timing_Run_First (Block'Access, Corner) .. Timing_Run_Last (Block'Access, Corner + 1);
          Saved    : constant array (Merged_Segments) of Saved_Segment :=
            [for I in Merged_Segments =>
               (Block.Feedrate_Profiles (I),
@@ -3992,8 +4005,8 @@ package body Prunt.Motion_Planner.Planner is
       Block.Corner_Velocity_Limits := [others => 0.0 * mm / s];
       Block.Feedrate_Profiles :=
         [others => (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s])];
-      Block.Profile_Crackles := [others => 0.0 * mm / s ** 5];
-      Block.Profile_Decel_Crackles := [others => 0.0 * mm / s ** 5];
+      Block.Profile_Crackles := [others => 0.0 * mm / s**5];
+      Block.Profile_Decel_Crackles := [others => 0.0 * mm / s**5];
       Block.Profile_Windows := [others => <>];
       Block.Profile_Ends := [others => <>];
       Block.Timing_Run_Back := [others => 0];
@@ -4576,11 +4589,11 @@ package body Prunt.Motion_Planner.Planner is
       Finishing_Corner  : Finishing_Corners_Index;
       Time_Into_Segment : Time) return Position
    is
-      Run_First   : constant Finishing_Corners_Index := Timing_Run_First (Block, Finishing_Corner);
-      Merged      : constant Boolean := Run_First /= Timing_Run_Last (Block, Finishing_Corner);
-      Run_Time    : constant Time :=
+      Run_First  : constant Finishing_Corners_Index := Timing_Run_First (Block, Finishing_Corner);
+      Merged     : constant Boolean := Run_First /= Timing_Run_Last (Block, Finishing_Corner);
+      Run_Time   : constant Time :=
         (if Merged then Block.Timing_Time_Offsets (Finishing_Corner) + Time_Into_Segment else Time_Into_Segment);
-      Run_Offset  : constant Length := (if Merged then Block.Timing_Distance_Offsets (Finishing_Corner) else 0.0 * mm);
+      Run_Offset : constant Length := (if Merged then Block.Timing_Distance_Offsets (Finishing_Corner) else 0.0 * mm);
    begin
       if Finishing_Corner = Block.N_Corners
         and then Run_Time >= Timing_Motion_Time (Block, Run_First)

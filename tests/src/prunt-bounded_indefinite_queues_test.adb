@@ -38,7 +38,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
 
       Q1 : Test_Queues.Queue;
       Q2 : Test_Queues.Queue;
-      S : String (1 .. 3);
+      S  : String (1 .. 3);
 
       Q1.Enqueue ("One");
       Q1.Enqueue ("Two");
@@ -67,7 +67,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
 
       Q1 : Small_Queues.Queue;
       Q2 : Small_Queues.Queue;
-      S : String (1 .. 1);
+      S  : String (1 .. 1);
 
       Q1.Enqueue ("A");
       Q1.Enqueue ("B");
@@ -101,11 +101,13 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
          --  GNAT caps controlled types at Maximum_Alignment.
 
          Adjustments : Natural := 0;
-         overriding procedure Adjust (Object : in out Aligned_Item);
+         overriding
+         procedure Adjust (Object : in out Aligned_Item);
       end Alignment_Checks;
 
       package body Alignment_Checks is
-         overriding procedure Adjust (Object : in out Aligned_Item) is
+         overriding
+         procedure Adjust (Object : in out Aligned_Item) is
          begin
             --  Adjust runs on the actual pool allocation, unlike a returned copy
             --  from Peek or Dequeue. Enqueue uses a copy, so Initialize is not called.
@@ -119,11 +121,11 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
         Prunt.Bounded_Indefinite_Queues (Element_Type => Aligned_Item, Storage_Size => 1024);
    begin
       T.Register;
-      Q : Aligned_Queues.Queue;
-      Item : Aligned_Item;
+      Q        : Aligned_Queues.Queue;
+      Item     : Aligned_Item;
       Out_Item : Aligned_Item;
-      Head : Positive := 1;
-      Tail : Natural := 0;
+      Head     : Positive := 1;
+      Tail     : Natural := 0;
       Failures : Natural := 0;
 
       for I in 1 .. 200 loop
@@ -153,22 +155,21 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
    procedure Test_Alignment_Collision (T : in out Trendy_Test.Operation'Class) is
       --  Distinct variable-sized payloads expose overwrites of still-live data,
       --  including when a node fits but its element allocation must roll back.
-      package Small_Queues is new
-        Prunt.Bounded_Indefinite_Queues (Element_Type => String, Storage_Size => 256);
+      package Small_Queues is new Prunt.Bounded_Indefinite_Queues (Element_Type => String, Storage_Size => 256);
 
-      function Payload (Index : Positive) return String is
-        (1 .. 1 + (Index * 17 mod 73) => Character'Val (33 + Index mod 90));
+      function Payload (Index : Positive) return String
+      is (1 .. 1 + (Index * 17 mod 73) => Character'Val (33 + Index mod 90));
    begin
       T.Register;
-      Q : Small_Queues.Queue;
-      Head : Positive := 1;
-      Tail : Natural := 0;
+      Q        : Small_Queues.Queue;
+      Head     : Positive := 1;
+      Tail     : Natural := 0;
       Failures : Natural := 0;
 
       for I in 1 .. 1000 loop
          declare
             Value : constant String := Payload (Tail + 1);
-            Fits : constant Boolean := Q.Can_Enqueue (Value);
+            Fits  : constant Boolean := Q.Can_Enqueue (Value);
          begin
             begin
                Q.Enqueue (Value);
@@ -345,7 +346,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
    begin
       T.Register;
 
-      Q : Test_Queues.Queue;
+      Q    : Test_Queues.Queue;
       Item : String (1 .. 5);
 
       Q.Clear;
@@ -439,7 +440,7 @@ package body Prunt.Bounded_Indefinite_Queues_Test is
    begin
       T.Register;
 
-      Q : Finalization_Queues.Queue;
+      Q       : Finalization_Queues.Queue;
       Counter : Counter_Access := new Integer'(0);
 
       declare

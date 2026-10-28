@@ -29,13 +29,13 @@ package Prunt is
 
    type Motor_Hardware_Kind is (Basic_Motor_Kind, TMC2240_UART_Kind);
 
-   type Command_Index is range 0 .. 2 ** 63 - 2;
+   type Command_Index is range 0 .. 2**63 - 2;
 
-   type Loop_Move_Count is range 0 .. 2 ** 31 - 1;
+   type Loop_Move_Count is range 0 .. 2**31 - 1;
 
-   type Planner_Corner_ID is range 0 .. 2 ** 63 - 2;
+   type Planner_Corner_ID is range 0 .. 2**63 - 2;
 
-   type Gcode_Command_ID is range 0 .. 2 ** 63 - 2;
+   type Gcode_Command_ID is range 0 .. 2**63 - 2;
    --  Identifies an interactively submitted G-code command. Zero is reserved for the absence of an interactive
    --  command.
 
@@ -195,6 +195,7 @@ package Prunt is
    with Dimension => (Symbol => "Hz/degC", Second => -1, Celsius => -1, others => 0);
 
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis) with Annotate => (Prunt_Config, User_Config);
+   pragma Ordered (Axis_Name);  --  X_Axis .. Z_Axis selects the spatial axes.
 
    type Position is array (Axis_Name) of Length;
    type Position_Offset is new Position;
@@ -301,7 +302,7 @@ package Prunt is
       end case;
    end record;
 
-   type File_Line_Count is range 0 .. 2 ** 63 - 1;
+   type File_Line_Count is range 0 .. 2**63 - 1;
 
    type PID_Autotune_Cycle_Count is range 2 .. 1_000;
 

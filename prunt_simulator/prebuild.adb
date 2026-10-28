@@ -69,10 +69,7 @@ procedure Prebuild is
    begin
       Create_Path (Dist_Base);
       Start_Search
-        (Search    => Search,
-         Directory => Src_Base,
-         Pattern   => "",
-         Filter    => [Ordinary_File => True, others => False]);
+        (Search => Search, Directory => Src_Base, Pattern => "", Filter => [Ordinary_File => True, others => False]);
 
       while More_Entries (Search) loop
          Get_Next_Entry (Search, Ent);
@@ -132,7 +129,8 @@ procedure Prebuild is
    end Prepend_To_File;
 
    procedure Build_Ada_Resources is
-      Target   : constant String := Join_Path ([Working_Dir, "generated_src_extras", "prunt_simulator_extra_resources.adb"]);
+      Target   : constant String :=
+        Join_Path ([Working_Dir, "generated_src_extras", "prunt_simulator_extra_resources.adb"]);
       Pragma_1 : constant String :=
         "pragma Warnings (Off, ""array aggregate using () is an obsolescent syntax, use [] instead"");" & ASCII.LF;
       Pragma_2 : constant String :=

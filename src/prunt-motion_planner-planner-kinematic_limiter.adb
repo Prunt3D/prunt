@@ -156,8 +156,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                Window_Evaluations (I) := [others => (others => <>)];
             else
                declare
-                  Windows : constant Profile_Window_Candidates :=
-                    Segment_Profile_Window_Candidates (Block'Access, I);
+                  Windows : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block'Access, I);
                begin
                   for W in Profile_Window_Candidate_Index loop
                      if (for all Previous in Profile_Window_Candidate_Index'First .. W - 1 =>

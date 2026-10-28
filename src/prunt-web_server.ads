@@ -207,7 +207,7 @@ private
    procedure Write (Stream : access Root_Stream_Type'Class; Item : Extra_Client_Content);
    for Extra_Client_Content'Write use Write;
 
-   type WebSocket_Message_Index_Type is mod 2 ** 32;
+   type WebSocket_Message_Index_Type is mod 2**32;
 
    type Prunt_Client
      (Listener       : access Connections_Server'Class;

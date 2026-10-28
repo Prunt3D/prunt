@@ -28,8 +28,7 @@ package body Prunt.Thermistors.Test is
    package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
 
    procedure Test_Thermistor (T : in out Trendy_Test.Operation'Class) is
-      Minimum_Test_Temperature : constant Integer :=
-        (if Params.Kind = Callendar_Van_Dusen_Kind then -200 else -250);
+      Minimum_Test_Temperature : constant Integer := (if Params.Kind = Callendar_Van_Dusen_Kind then -200 else -250);
    begin
       T.Register;
       if Params.Kind not in Steinhart_Hart_Kind | Callendar_Van_Dusen_Kind then
@@ -37,19 +36,20 @@ package body Prunt.Thermistors.Test is
       end if;
 
       for I in Minimum_Test_Temperature .. 2000 loop
-         Temp : constant Temperature := Dimensionless (I) * celsius;
+         Temp                  : constant Temperature := Dimensionless (I) * celsius;
          Calculated_Resistance : constant Resistance :=
            Temperature_To_Resistance
-             ((Params with delta
+             ((Params
+               with delta
                  Minimum_Temperature => Dimensionless (Minimum_Test_Temperature) * celsius,
                  Maximum_Temperature => 2000.0 * celsius),
               Temp);
-         Expected_Resistance : constant Resistance :=
+         Expected_Resistance   : constant Resistance :=
            (if Params.Kind = Steinhart_Hart_Kind
             then Newton_Inverse_Solve_Steinhart_Hart (Params, Temp)
             else Solve_Callendar_Van_Dusen (Params, Temp));
-         Difference : constant Resistance := abs (Calculated_Resistance - Expected_Resistance);
-         Tolerance : constant Resistance := abs (Expected_Resistance * 1.0E-12);
+         Difference            : constant Resistance := abs (Calculated_Resistance - Expected_Resistance);
+         Tolerance             : constant Resistance := abs (Expected_Resistance * 1.0E-12);
 
          T.Assert
            (Difference < Tolerance,
@@ -69,10 +69,10 @@ package body Prunt.Thermistors.Test is
       R_Guess : Dimensionless := 10.0;
    begin
       for I in 1 .. 100 loop
-         Body_Val : constant Dimensionless :=
-           Params.SH_A + Params.SH_B * Math.Log (R_Guess) + Params.SH_C * Math.Log (R_Guess) ** 3 - 1.0 / Temp_K;
+         Body_Val       : constant Dimensionless :=
+           Params.SH_A + Params.SH_B * Math.Log (R_Guess) + Params.SH_C * Math.Log (R_Guess)**3 - 1.0 / Temp_K;
          Derivative_Val : constant Dimensionless :=
-           (Params.SH_B + 3.0 * Params.SH_C * Math.Log (R_Guess) ** 2) / R_Guess;
+           (Params.SH_B + 3.0 * Params.SH_C * Math.Log (R_Guess)**2) / R_Guess;
 
          R_Guess := Dimensionless'Max (1.0E-9, R_Guess - Body_Val / Derivative_Val);
       end loop;
@@ -81,7 +81,7 @@ package body Prunt.Thermistors.Test is
 
    function Solve_Callendar_Van_Dusen (Params : Thermistor_Parameters; Temp : Temperature) return Resistance is
    begin
-      return Params.CVD_R0 * (1.0 + Params.CVD_A * Temp / celsius + Params.CVD_B * (Temp / celsius) ** 2);
+      return Params.CVD_R0 * (1.0 + Params.CVD_A * Temp / celsius + Params.CVD_B * (Temp / celsius)**2);
    end Solve_Callendar_Van_Dusen;
 
    procedure Test_ATC_Semitec_104GT_2 is new
@@ -262,9 +262,7 @@ package body Prunt.Thermistors.Test is
       declare
          Expected : constant Resistance := Solve_Callendar_Van_Dusen (Decreasing, 5_000.0 * celsius);
       begin
-         T.Assert
-           (abs (Temperature_To_Resistance (Decreasing, 5_000.0 * celsius) - Expected)
-            < Expected * 1.0E-12);
+         T.Assert (abs (Temperature_To_Resistance (Decreasing, 5_000.0 * celsius) - Expected) < Expected * 1.0E-12);
       end;
       T.Assert (Callendar_Van_Dusen_Model_Is_Valid (Linear));
       T.Assert (not Callendar_Van_Dusen_Model_Is_Valid (Degenerate));
@@ -281,7 +279,7 @@ package body Prunt.Thermistors.Test is
 
       Small_B_And_C : constant Thermistor_Parameters :=
         (Kind                => Steinhart_Hart_Kind,
-         SH_A                => Inv_T - 1.0E-15 * Expected_X - 5.0E-13 * Expected_X ** 3,
+         SH_A                => Inv_T - 1.0E-15 * Expected_X - 5.0E-13 * Expected_X**3,
          SH_B                => 1.0E-15,
          SH_C                => 5.0E-13,
          Minimum_Temperature => 24.99 * celsius,
@@ -289,7 +287,7 @@ package body Prunt.Thermistors.Test is
 
       Zero_B : constant Thermistor_Parameters :=
         (Kind                => Steinhart_Hart_Kind,
-         SH_A                => Inv_T - 5.0E-7 * Expected_X ** 3,
+         SH_A                => Inv_T - 5.0E-7 * Expected_X**3,
          SH_B                => 0.0,
          SH_C                => 5.0E-7,
          Minimum_Temperature => 20.0 * celsius,
@@ -349,8 +347,7 @@ package body Prunt.Thermistors.Test is
 
       T.Assert (Steinhart_Hart_Model_Is_Valid (Small_B_And_C));
       T.Assert
-        (abs (Temperature_To_Resistance (Small_B_And_C, Temp) - Expected_Resistance)
-           < Expected_Resistance * 1.0E-8,
+        (abs (Temperature_To_Resistance (Small_B_And_C, Temp) - Expected_Resistance) < Expected_Resistance * 1.0E-8,
          "Expected"
          & Dimensionless'Image (Expected_Resistance / ohm)
          & " ohm, got"
@@ -358,15 +355,12 @@ package body Prunt.Thermistors.Test is
          & " ohm.");
 
       T.Assert (Steinhart_Hart_Model_Is_Valid (Zero_B));
-      T.Assert
-        (abs (Temperature_To_Resistance (Zero_B, Temp) - Expected_Resistance)
-         < Expected_Resistance * 1.0E-12);
+      T.Assert (abs (Temperature_To_Resistance (Zero_B, Temp) - Expected_Resistance) < Expected_Resistance * 1.0E-12);
 
       T.Assert (Steinhart_Hart_Model_Is_Valid (Zero_A));
       T.Assert (Steinhart_Hart_Model_Is_Valid (Decreasing));
       T.Assert
-        (abs (Temperature_To_Resistance (Decreasing, Temp) - Expected_Resistance)
-         < Expected_Resistance * 1.0E-12);
+        (abs (Temperature_To_Resistance (Decreasing, Temp) - Expected_Resistance) < Expected_Resistance * 1.0E-12);
       T.Assert (not Steinhart_Hart_Model_Is_Valid (Degenerate));
       T.Assert (not Steinhart_Hart_Model_Is_Valid (Non_Monotonic));
       T.Assert (not Steinhart_Hart_Model_Is_Valid (Out_Of_Range));

@@ -23,6 +23,8 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
 
    use type Key_Vectors.Cursor;
 
+   procedure Check_Position (Container : Map; Position : Cursor);
+
    procedure Check_Position (Container : Map; Position : Cursor) is
    begin
       if Position = No_Element then
@@ -46,6 +48,8 @@ package body Prunt.Indefinite_Ordered_Maps_With_Insertion_Order is
          Object.Count := null;
       end if;
    end Finalize;
+
+   function Hold_Reference (Container : Map) return Reference_Control;
 
    function Hold_Reference (Container : Map) return Reference_Control is
       Count : constant Reference_Count_Access := Container.References'Unrestricted_Access;

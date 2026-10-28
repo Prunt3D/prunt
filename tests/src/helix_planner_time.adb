@@ -15,9 +15,9 @@ with Ada.Text_IO;
 with Ada.Unchecked_Conversion;
 with GNAT.OS_Lib;
 with Interfaces;
-with Prunt;                        use Prunt;
+with Prunt;                use Prunt;
 with Prunt.Input_Shapers;
-with Prunt.Motion_Planner;         use Prunt.Motion_Planner;
+with Prunt.Motion_Planner; use Prunt.Motion_Planner;
 with Prunt.Motion_Planner.Planner;
 
 procedure Helix_Planner_Time is
@@ -27,22 +27,24 @@ procedure Helix_Planner_Time is
 
    type Benchmark_Case is (Stereographic_Case, Circular_Case, Biarc_Case);
    subtype Benchmark_Move_Count is Positive range 1 .. 50_000;
-   Selected_Case : constant Benchmark_Case :=
-     (if Ada.Command_Line.Argument_Count >= 1 then Benchmark_Case'Value (Ada.Command_Line.Argument (1))
+   Selected_Case  : constant Benchmark_Case :=
+     (if Ada.Command_Line.Argument_Count >= 1
+      then Benchmark_Case'Value (Ada.Command_Line.Argument (1))
       else Stereographic_Case);
-   Move_Count    : constant Benchmark_Move_Count :=
+   Move_Count     : constant Benchmark_Move_Count :=
      (if Ada.Command_Line.Argument_Count >= 2
-      then Benchmark_Move_Count'Value (Ada.Command_Line.Argument (2)) else 20_000);
+      then Benchmark_Move_Count'Value (Ada.Command_Line.Argument (2))
+      else 20_000);
    --  A third argument of 0 disables extrusion, so E stays fixed at every corner.
-   E_Per_mm      : constant Long_Float :=
+   E_Per_mm       : constant Long_Float :=
      (if Ada.Command_Line.Argument_Count >= 3 then Long_Float'Value (Ada.Command_Line.Argument (3)) else 0.04);
    --  A fourth argument of STEEP gives every arc a large Z rise and makes some arcs full circles.
-   Steep         : constant Boolean :=
+   Steep          : constant Boolean :=
      Ada.Command_Line.Argument_Count >= 4 and then Ada.Command_Line.Argument (4) = "STEEP";
    --  Optional fifth argument: CSV of exact segment-time bits for diagnosing checksum differences.
    Write_Segments : constant Boolean := Ada.Command_Line.Argument_Count >= 5;
    Segment_Output : Ada.Text_IO.File_Type;
-   Climbing      : Boolean := True;
+   Climbing       : Boolean := True;
 
    type Motor_Name is (X_Motor, Y_Motor, Z_Motor, E_Motor);
    type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
@@ -58,18 +60,18 @@ procedure Helix_Planner_Time is
 
    package Planner is new
      Prunt.Motion_Planner.Planner
-       (Motor_Name                         => Motor_Name,
-        Motor_Position_Map                 => Motor_Position_Map,
-        Motor_Delta_Limits                 => Motor_Delta_Limits,
-        Maximum_Deltas_Per_Command         => [others => 1.0],
-        Flush_Resetting_Data_Type          => Boolean,
-        Flush_Resetting_Data_Type_Default  => False,
-        Corner_Extra_Data_Type             => Boolean,
-        Home_Move_Minimum_Coast_Time       => 0.000_25 * s,
-        Home_Move_Maximum_Tail_Time        => 1.0E100 * s,
-        Interpolation_Time                 => 0.000_05 * s,
-        Max_Corners                        => 50_002,
-        Allow_Blended_Entry                => Block_Allows_Blended_Entry);
+       (Motor_Name                        => Motor_Name,
+        Motor_Position_Map                => Motor_Position_Map,
+        Motor_Delta_Limits                => Motor_Delta_Limits,
+        Maximum_Deltas_Per_Command        => [others => 1.0],
+        Flush_Resetting_Data_Type         => Boolean,
+        Flush_Resetting_Data_Type_Default => False,
+        Corner_Extra_Data_Type            => Boolean,
+        Home_Move_Minimum_Coast_Time      => 0.000_25 * s,
+        Home_Move_Maximum_Tail_Time       => 1.0E100 * s,
+        Interpolation_Time                => 0.000_05 * s,
+        Max_Corners                       => 50_002,
+        Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
    use type Planner.Corners_Index;
 
@@ -90,10 +92,10 @@ procedure Helix_Planner_Time is
       Tangential_Velocity_Max  => 250.0 * mm / s,
       Axial_Velocity_Maxes     =>
         [X_Axis | Y_Axis => 250.0 * mm / s, Z_Axis => 25.0 * mm / s, E_Axis => 80.0 * mm / s],
-      Axial_Acceleration_Maxes => [others => 5_000.0 * mm / s ** 2],
-      Axial_Jerk_Maxes         => [others => 500_000.0 * mm / s ** 3],
-      Axial_Snap_Maxes         => [others => 500_000_000.0 * mm / s ** 4],
-      Axial_Crackle_Maxes      => [others => 500_000_000_000.0 * mm / s ** 5],
+      Axial_Acceleration_Maxes => [others => 5_000.0 * mm / s**2],
+      Axial_Jerk_Maxes         => [others => 500_000.0 * mm / s**3],
+      Axial_Snap_Maxes         => [others => 500_000_000.0 * mm / s**4],
+      Axial_Crackle_Maxes      => [others => 500_000_000_000.0 * mm / s**5],
       Cornering                =>
         (Kind                 => Stereographic,
          Stereographic_Params =>
@@ -155,12 +157,14 @@ begin
    case Selected_Case is
       when Stereographic_Case =>
          null;
-      when Circular_Case =>
+
+      when Circular_Case      =>
          Params.Cornering :=
            (Kind            => Circular,
             Circular_Params =>
               (Axial_Deviation_Maxes => [others => Deviation], Corner_Miss_Distance_Max => Deviation, others => <>));
-      when Biarc_Case =>
+
+      when Biarc_Case         =>
          Params.Cornering :=
            (Kind         => Biarc,
             Biarc_Params =>
@@ -185,7 +189,7 @@ begin
          --  left tangent apart from a small kink, which is the common arc-fitted-slicer case.
          Kink       : constant Long_Float :=
            (if Uniform < 0.25 then Uniform (-0.05, 0.05) else Uniform (-0.6 * Pi, 0.6 * Pi));
-         Far_Out    : constant Boolean := Sqrt ((X - Center_XY) ** 2 + (Y - Center_XY) ** 2) > 60.0;
+         Far_Out    : constant Boolean := Sqrt ((X - Center_XY)**2 + (Y - Center_XY)**2) > 60.0;
          Choice     : constant Long_Float := Uniform;
          Speed      : constant Velocity := Dimensionless (Uniform (40.0, 200.0)) * mm / s;
          Layer_Rise : constant Boolean := Uniform < 0.02;
@@ -212,8 +216,7 @@ begin
          else
             declare
                Clockwise : constant Boolean := Uniform < 0.5;
-               Radius    : constant Long_Float :=
-                 (if Uniform < 0.3 then Uniform (0.4, 2.0) else Uniform (2.0, 40.0));
+               Radius    : constant Long_Float := (if Uniform < 0.3 then Uniform (0.4, 2.0) else Uniform (2.0, 40.0));
                Full      : constant Boolean := Steep and then Uniform < 0.05;
                Sweep     : constant Long_Float :=
                  (if Full then 2.0 * Pi else Uniform (0.1, 1.5)) * (if Clockwise then -1.0 else 1.0);
@@ -226,8 +229,11 @@ begin
                End_Phi   : constant Long_Float := Start_Phi + Sweep;
                Arc_mm    : constant Long_Float := Radius * abs Sweep;
                Rise      : constant Long_Float :=
-                 (if Steep then Uniform (0.2, 4.0) * (if Climbing then 1.0 else -1.0)
-                  elsif Layer_Rise then 0.3 else 0.0);
+                 (if Steep
+                  then Uniform (0.2, 4.0) * (if Climbing then 1.0 else -1.0)
+                  elsif Layer_Rise
+                  then 0.3
+                  else 0.0);
             begin
                if Full then
                   X := Old_X;

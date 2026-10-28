@@ -17,7 +17,7 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Trendy_Test;             use Trendy_Test;
+with Trendy_Test; use Trendy_Test;
 
 package body Prunt.Dummy_Allocator.Test is
 
@@ -29,8 +29,8 @@ package body Prunt.Dummy_Allocator.Test is
    begin
       T.Register;
 
-      Pool : Prunt.Dummy_Allocator.Dummy_Pool_Type;
-      Addr : System.Address;
+      Pool   : Prunt.Dummy_Allocator.Dummy_Pool_Type;
+      Addr   : System.Address;
       Target : aliased Integer;
 
       Prunt.Dummy_Allocator.Next_Allocation_Address := Target'Address;

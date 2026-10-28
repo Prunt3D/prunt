@@ -145,12 +145,12 @@ package body Prunt.Default_Modules.Machine_Idle_Timeout is
             Reset_Deadline;
          or
             when Current_Timeout > 0.0 and then Machine_Was_Idle =>
-            delay until Deadline;
+               delay until Deadline;
 
-            --  Disarm before reporting so a delayed controller shutdown cannot report the same timeout twice.
-            Current_Timeout := 0.0;
-            Deadline := Ada.Real_Time.Time_Last;
-            Request_Shutdown ("M85 inactivity timeout expired.");
+               --  Disarm before reporting so a delayed controller shutdown cannot report the same timeout twice.
+               Current_Timeout := 0.0;
+               Deadline := Ada.Real_Time.Time_Last;
+               Request_Shutdown ("M85 inactivity timeout expired.");
          end select;
       end loop;
    end Inactivity_Watchdog;

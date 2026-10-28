@@ -40,8 +40,7 @@ package body Prunt.Step_Generator_Shaping_Test is
       Smooth_Added_Part_Only : Boolean;
       Timing                 : Pause_Timing;
       Across_Blocks          : Boolean := False;
-      Reset_Instead          : Boolean := False)
-   is
+      Reset_Instead          : Boolean := False) is
    begin
       declare
          type Motor_Name is (X_Motor, Y_Motor, Z_Motor, E_Motor);
@@ -49,10 +48,12 @@ package body Prunt.Step_Generator_Shaping_Test is
          type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
          type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
 
-         Stream_Blocks : constant Positive := 20;
-         Policy_Calls : Natural := 0 with Atomic;
-         Publication_Complete, Producer_Failed : Boolean := False with Atomic;
-         Stream_Gate : Positive := 1;
+         Stream_Blocks                         : constant Positive := 20;
+         Policy_Calls                          : Natural := 0
+         with Atomic;
+         Publication_Complete, Producer_Failed : Boolean := False
+         with Atomic;
+         Stream_Gate                           : Positive := 1;
          function Allow_Stream_Entry (Data : Boolean) return Boolean is
             pragma Unreferenced (Data);
          begin
@@ -60,39 +61,41 @@ package body Prunt.Step_Generator_Shaping_Test is
             return True;
          end Allow_Stream_Entry;
 
-         package Planner is new Motion_Planner.Planner
-           (Motor_Name                        => Motor_Name,
-            Motor_Position_Map                => Motor_Position_Map,
-            Motor_Delta_Limits                => Motor_Delta_Limits,
-            Maximum_Deltas_Per_Command         => [others => 1.0],
-            Flush_Resetting_Data_Type         => Boolean,
-            Flush_Resetting_Data_Type_Default => False,
-            Corner_Extra_Data_Type            => Boolean,
-            Home_Move_Minimum_Coast_Time       => 0.005 * s,
-            Home_Move_Maximum_Tail_Time        => 1.0 * s,
-            Interpolation_Time                => 0.001 * s,
-            Max_Corners                       => 10,
-            Max_Corners_Extra_Data_Count       => 10,
-            Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10,
-            Allow_Blended_Entry               => Allow_Stream_Entry);
+         package Planner is new
+           Motion_Planner.Planner
+             (Motor_Name                        => Motor_Name,
+              Motor_Position_Map                => Motor_Position_Map,
+              Motor_Delta_Limits                => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command        => [others => 1.0],
+              Flush_Resetting_Data_Type         => Boolean,
+              Flush_Resetting_Data_Type_Default => False,
+              Corner_Extra_Data_Type            => Boolean,
+              Home_Move_Minimum_Coast_Time      => 0.005 * s,
+              Home_Move_Maximum_Tail_Time       => 1.0 * s,
+              Interpolation_Time                => 0.001 * s,
+              Max_Corners                       => 10,
+              Max_Corners_Extra_Data_Count      => 10,
+              Max_Corners_Extra_Data_Storage    => 1_024,
+              Input_Queue_Length                => 10,
+              Allow_Blended_Entry               => Allow_Stream_Entry);
 
-         package Pause_Planner is new Motion_Planner.Planner
-           (Motor_Name                        => Motor_Name,
-            Motor_Position_Map                => Motor_Position_Map,
-            Motor_Delta_Limits                => Motor_Delta_Limits,
-            Maximum_Deltas_Per_Command         => [others => 1.0],
-            Flush_Resetting_Data_Type         => Boolean,
-            Flush_Resetting_Data_Type_Default => False,
-            Corner_Extra_Data_Type            => Boolean,
-            Home_Move_Minimum_Coast_Time       => 0.005 * s,
-            Home_Move_Maximum_Tail_Time        => 1.0 * s,
-            Interpolation_Time                => 0.001 * s,
-            Max_Corners                       => 10,
-            Max_Corners_Extra_Data_Count       => 10,
-            Max_Corners_Extra_Data_Storage     => 1_024,
-            Input_Queue_Length                => 10,
-            Allow_Blended_Entry               => Block_Allows_Blended_Entry);
+         package Pause_Planner is new
+           Motion_Planner.Planner
+             (Motor_Name                        => Motor_Name,
+              Motor_Position_Map                => Motor_Position_Map,
+              Motor_Delta_Limits                => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command        => [others => 1.0],
+              Flush_Resetting_Data_Type         => Boolean,
+              Flush_Resetting_Data_Type_Default => False,
+              Corner_Extra_Data_Type            => Boolean,
+              Home_Move_Minimum_Coast_Time      => 0.005 * s,
+              Home_Move_Maximum_Tail_Time       => 1.0 * s,
+              Interpolation_Time                => 0.001 * s,
+              Max_Corners                       => 10,
+              Max_Corners_Extra_Data_Count      => 10,
+              Max_Corners_Extra_Data_Storage    => 1_024,
+              Input_Queue_Length                => 10,
+              Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
          End_Pos           : constant Position := [others => 100.123 * mm];
          Request_Pause     : access procedure;
@@ -151,17 +154,20 @@ package body Prunt.Step_Generator_Shaping_Test is
             accept Start;
             for I in 1 .. Stream_Blocks loop
                Planner.Enqueue_Move
-                 ((if I = Stream_Blocks then End_Pos else
-                    Position'[others => End_Pos (X_Axis) * Dimensionless (I) / Dimensionless (Stream_Blocks)]),
-                  10.0 * mm / s, Ignore_Bounds => True);
+                 ((if I = Stream_Blocks
+                   then End_Pos
+                   else Position'[others => End_Pos (X_Axis) * Dimensionless (I) / Dimensionless (Stream_Blocks)]),
+                  10.0 * mm / s,
+                  Ignore_Bounds => True);
                Planner.Enqueue_Flush (False);
             end loop;
-            Planner.Enqueue_Move (End_Pos + Position_Offset'[others => 10.0 * mm], 10.0 * mm / s,
-                                  Ignore_Bounds => True);
+            Planner.Enqueue_Move
+              (End_Pos + Position_Offset'[others => 10.0 * mm], 10.0 * mm / s, Ignore_Bounds => True);
             Tail := Planner.Enqueue_Homing_Flush (False);
             Publication_Complete := abs Tail > 0.0 * mm;
          exception
-            when others => Producer_Failed := True;
+            when others =>
+               Producer_Failed := True;
          end Stream_Producer;
 
          procedure Enqueue_Command
@@ -173,9 +179,10 @@ package body Prunt.Step_Generator_Shaping_Test is
          is
             pragma Unreferenced (Motor_Pos, Vel_Ratio);
          begin
-            if Across_Blocks and then Stream_Gate < Stream_Blocks
-              and then Pos (X_Axis) >= End_Pos (X_Axis) * (Dimensionless (Stream_Gate) - 0.5)
-                / Dimensionless (Stream_Blocks)
+            if Across_Blocks
+              and then Stream_Gate < Stream_Blocks
+              and then
+                Pos (X_Axis) >= End_Pos (X_Axis) * (Dimensionless (Stream_Gate) - 0.5) / Dimensionless (Stream_Blocks)
             then
                --  Simulate hardware backpressure using only atomic publication witnesses. Keep planning one
                --  boundary ahead of the next block's decision point while exercising real moving handoffs.
@@ -184,9 +191,12 @@ package body Prunt.Step_Generator_Shaping_Test is
                   raise Program_Error with "Streaming planner failed to stay ahead of the simulated hardware";
                then abort
                   loop
-                     exit when Producer_Failed or else
-                       (if Stream_Gate < Stream_Blocks - 2 then Policy_Calls > Stream_Gate + 1
-                        else Publication_Complete);
+                     exit when
+                       Producer_Failed
+                       or else
+                         (if Stream_Gate < Stream_Blocks - 2
+                          then Policy_Calls > Stream_Gate + 1
+                          else Publication_Complete);
                      delay 0.001;
                   end loop;
                end select;
@@ -208,9 +218,9 @@ package body Prunt.Step_Generator_Shaping_Test is
                if not Pause_Sent
                  and then
                    (case Timing is
-                      when During_Motion => Primary_Count = 500,
+                      when During_Motion  => Primary_Count = 500,
                       when Near_Block_End => Pos (X_Axis) >= 99.0 * mm,
-                      when During_Drain => Pos (X_Axis) = End_Pos (X_Axis) and then not Safe_Stop_After)
+                      when During_Drain   => Pos (X_Axis) = End_Pos (X_Axis) and then not Safe_Stop_After)
                then
                   Pause_Sent := True;
                   if Reset_Instead then
@@ -222,7 +232,8 @@ package body Prunt.Step_Generator_Shaping_Test is
             end if;
          end Enqueue_Command;
 
-         function Extrusion_Is_Allowed return Boolean is (True);
+         function Extrusion_Is_Allowed return Boolean
+         is (True);
 
          procedure Finish_Block (Data : Boolean; Pos : Motor_Position; Index : Command_Index) is
             pragma Unreferenced (Data, Pos, Index);
@@ -269,7 +280,8 @@ package body Prunt.Step_Generator_Shaping_Test is
             Pause_Planner.Enqueue_Flush (True);
          end Handle_Resume;
 
-         function Is_Pause_Plan_Done (Data : Boolean) return Boolean is (Data);
+         function Is_Pause_Plan_Done (Data : Boolean) return Boolean
+         is (Data);
 
          function Pin_Motor (Data, Transform : Boolean; Motor : Motor_Name) return Boolean is
             pragma Unreferenced (Data, Transform, Motor);
@@ -294,41 +306,42 @@ package body Prunt.Step_Generator_Shaping_Test is
          function To_Motor (Pos : Position; Transform : Boolean) return Motor_Position;
          procedure Wait_Until_Idle (Index : Command_Index);
 
-         package Stepgen is new Step_Generator
-           (Planner                       => Planner,
-            Pause_Planner                 => Pause_Planner,
-            Motor_Name                    => Motor_Name,
-            Motor_Position                => Motor_Position,
-            Kinematic_Transform           => Boolean,
-            Setup_Loop_Move                => Setup_Loop_Move,
-            Pin_Motor_To_Block_Start       => Pin_Motor,
-            Transform_To_Motor_Position    => To_Motor,
-            Transform_Motor_Affects_Axis    => Affects_Axis,
-            Motor_Delta_Limits             => Motor_Delta_Limits,
-            Maximum_Deltas_Per_Command     => [others => 1.0],
-            Start_Planner_Block            => Start_Block,
-            Start_Pause_Planner_Block      => Start_Pause_Block,
-            Enqueue_Command                => Enqueue_Command,
-            Extrusion_Is_Allowed           => Extrusion_Is_Allowed,
-            Start_Corner                   => Start_Corner,
-            Start_Pause_Corner             => Start_Corner,
-            Finish_Planner_Block           => Finish_Block,
-            Finish_Pause_Planner_Block     => Finish_Pause_Block,
-            Is_Pause_Plan_Done             => Is_Pause_Plan_Done,
-            Handle_Pause                   => Handle_Pause,
-            Handle_Resume                  => Handle_Resume,
-            Wait_Until_Idle                => Wait_Until_Idle,
-            Interpolation_Time            => 0.001 * s,
-            Runner_CPU                    => System.Multiprocessors.Not_A_Specific_CPU);
+         package Stepgen is new
+           Step_Generator
+             (Planner                      => Planner,
+              Pause_Planner                => Pause_Planner,
+              Motor_Name                   => Motor_Name,
+              Motor_Position               => Motor_Position,
+              Kinematic_Transform          => Boolean,
+              Setup_Loop_Move              => Setup_Loop_Move,
+              Pin_Motor_To_Block_Start     => Pin_Motor,
+              Transform_To_Motor_Position  => To_Motor,
+              Transform_Motor_Affects_Axis => Affects_Axis,
+              Motor_Delta_Limits           => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command   => [others => 1.0],
+              Start_Planner_Block          => Start_Block,
+              Start_Pause_Planner_Block    => Start_Pause_Block,
+              Enqueue_Command              => Enqueue_Command,
+              Extrusion_Is_Allowed         => Extrusion_Is_Allowed,
+              Start_Corner                 => Start_Corner,
+              Start_Pause_Corner           => Start_Corner,
+              Finish_Planner_Block         => Finish_Block,
+              Finish_Pause_Planner_Block   => Finish_Pause_Block,
+              Is_Pause_Plan_Done           => Is_Pause_Plan_Done,
+              Handle_Pause                 => Handle_Pause,
+              Handle_Resume                => Handle_Resume,
+              Wait_Until_Idle              => Wait_Until_Idle,
+              Interpolation_Time           => 0.001 * s,
+              Runner_CPU                   => System.Multiprocessors.Not_A_Specific_CPU);
 
-         Params : Motion_Planner.Kinematic_Parameters :=
+         Params    : Motion_Planner.Kinematic_Parameters :=
            (Tangential_Velocity_Max  => 10.0 * mm / s,
             Axial_Velocity_Maxes     => [others => 10.0 * mm / s],
-            Axial_Acceleration_Maxes => [others => 100.0 * mm / s ** 2],
-            Axial_Jerk_Maxes         => [others => 1_000.0 * mm / s ** 3],
-            Axial_Snap_Maxes         => [others => 10_000.0 * mm / s ** 4],
-            Axial_Crackle_Maxes      => [others => 100_000.0 * mm / s ** 5],
-            others                  => <>);
+            Axial_Acceleration_Maxes => [others => 100.0 * mm / s**2],
+            Axial_Jerk_Maxes         => [others => 1_000.0 * mm / s**3],
+            Axial_Snap_Maxes         => [others => 10_000.0 * mm / s**4],
+            Axial_Crackle_Maxes      => [others => 100_000.0 * mm / s**5],
+            others                   => <>);
          Motor_Map : constant Motor_Position_Map :=
            [for Axis in Axis_Name =>
               [for Motor in Motor_Name =>
@@ -387,7 +400,7 @@ package body Prunt.Step_Generator_Shaping_Test is
             Pressure_Advance_Smooth_Levels          => 3);
          if Across_Blocks then
             Params.Bounds :=
-              (Kind => Motion_Planner.Rectangular_Workspace,
+              (Kind                                  => Motion_Planner.Rectangular_Workspace,
                Lower_X | Lower_Y | Lower_Z | Lower_E => -1000.0 * mm,
                Upper_X | Upper_Y | Upper_Z | Upper_E => 1000.0 * mm);
          end if;
@@ -420,9 +433,16 @@ package body Prunt.Step_Generator_Shaping_Test is
          Stop_Runners;
          T.Assert
            (not Timed_Out,
-            "Timed out completing shaped pause/park/resume motion; terminated=" & Runner_Terminated'Image
-            & ", commands=" & Last_Index'Image & ", pauses=" & Pause_Count'Image
-            & ", stops=" & Safe_Stops'Image & ", last=" & Last_Pos'Image);
+            "Timed out completing shaped pause/park/resume motion; terminated="
+            & Runner_Terminated'Image
+            & ", commands="
+            & Last_Index'Image
+            & ", pauses="
+            & Pause_Count'Image
+            & ", stops="
+            & Safe_Stops'Image
+            & ", last="
+            & Last_Pos'Image);
          if Across_Blocks then
             --  A reset stops consuming the stream, so its producer may still be waiting for a free slot.
             T.Assert
@@ -495,12 +515,12 @@ package body Prunt.Step_Generator_Shaping_Test is
         (T, Smooth_Added_Part_Only => False, Timing => During_Motion, Across_Blocks => True, Reset_Instead => True);
    end Test_Inter_Block_Reset_Pauses;
 
-   function All_Tests return Trendy_Test.Test_Group is
-     ([Test_Inter_Block_Shaped_Pause'Access,
-       Test_Inter_Block_Reset_Pauses'Access,
-       Test_Shaped_Pause_Smooth_All'Access,
-       Test_Shaped_Pause_Smooth_Added'Access,
-       Test_Shaped_Pause_During_Drain'Access,
-       Test_Shaped_Pause_Near_Block_End'Access]);
+   function All_Tests return Trendy_Test.Test_Group
+   is ([Test_Inter_Block_Shaped_Pause'Access,
+        Test_Inter_Block_Reset_Pauses'Access,
+        Test_Shaped_Pause_Smooth_All'Access,
+        Test_Shaped_Pause_Smooth_Added'Access,
+        Test_Shaped_Pause_During_Drain'Access,
+        Test_Shaped_Pause_Near_Block_End'Access]);
 
 end Prunt.Step_Generator_Shaping_Test;

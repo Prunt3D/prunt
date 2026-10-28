@@ -29,46 +29,64 @@ package body Prunt.Default_Modules.Heaters.Test is
    end record;
 
    overriding
-   function Get_Last_Position (This : Mock_Planner) return Position is (raise Program_Error);
+   function Get_Last_Position (This : Mock_Planner) return Position
+   is (raise Program_Error);
    overriding
    function Get_Last_Kinematic_Parameters (This : Mock_Planner) return Motion_Planner.Kinematic_Parameters
    is (raise Program_Error);
    overriding
-   function Get_State_Anchor_Corner_ID (This : Mock_Planner) return Planner_Corner_ID is (raise Program_Error);
+   function Get_State_Anchor_Corner_ID (This : Mock_Planner) return Planner_Corner_ID
+   is (raise Program_Error);
    overriding
-   function Get_Last_Executed_Corner_ID (This : Mock_Planner) return Planner_Corner_ID is (raise Program_Error);
+   function Get_Last_Executed_Corner_ID (This : Mock_Planner) return Planner_Corner_ID
+   is (raise Program_Error);
    overriding
    procedure Mark_Axis_Homed (This : Mock_Planner; Axis : Axis_Name) is null;
    overriding
    procedure Mark_Axis_Unhomed (This : Mock_Planner; Axis : Axis_Name) is null;
    overriding
-   function Axis_Is_Homed (This : Mock_Planner; Axis : Axis_Name) return Boolean is (raise Program_Error);
+   function Axis_Is_Homed (This : Mock_Planner; Axis : Axis_Name) return Boolean
+   is (raise Program_Error);
    overriding
-   function Cancellation_Is_Active (This : Mock_Planner) return Boolean is (False);
+   function Cancellation_Is_Active (This : Mock_Planner) return Boolean
+   is (False);
    overriding
    procedure Add_Corner
-     (This : Mock_Planner; Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s;
-      Require_Homed : Boolean := True) is null;
+     (This          : Mock_Planner;
+      Pos           : Position;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True)
+   is null;
    overriding
    procedure Add_Helix
-     (This : Mock_Planner; Center : Position; Pos : Position; Clockwise : Boolean; Feedrate : Velocity;
-      Dwell_After : Time := 0.0 * s; Require_Homed : Boolean := True) is null;
+     (This          : Mock_Planner;
+      Center        : Position;
+      Pos           : Position;
+      Clockwise     : Boolean;
+      Feedrate      : Velocity;
+      Dwell_After   : Time := 0.0 * s;
+      Require_Homed : Boolean := True)
+   is null;
    overriding
    procedure Add_Corner_Data (This : Mock_Planner; Corner_Data : Extra_Corner_Data'Class);
    overriding
    procedure Flush
-     (This : Mock_Planner;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+     (This : Mock_Planner; Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
    overriding
    procedure Resolve_Homing_Move (This : Mock_Planner; Stopped_Position : Position) is null;
    overriding
    procedure Flush_And_Change_Kinematic_Parameters
-     (This : Mock_Planner; Params : Motion_Planner.Kinematic_Parameters;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is null;
+     (This       : Mock_Planner;
+      Params     : Motion_Planner.Kinematic_Parameters;
+      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is null;
    overriding
    procedure Flush_And_Reset_Position
-     (This : Mock_Planner; New_Position : Position;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is null;
+     (This         : Mock_Planner;
+      New_Position : Position;
+      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is null;
 
    overriding
    procedure Add_Corner_Data (This : Mock_Planner; Corner_Data : Extra_Corner_Data'Class) is
@@ -82,8 +100,8 @@ package body Prunt.Default_Modules.Heaters.Test is
 
    overriding
    procedure Flush
-     (This : Mock_Planner;
-      Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+     (This : Mock_Planner; Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+   is
    begin
       if This.Reject_Queue then
          raise Gcode_Temporarily_Rejected_Error;
@@ -93,7 +111,7 @@ package body Prunt.Default_Modules.Heaters.Test is
    end Flush;
 
    protected type Mock_Thermistors is new My_Modules.Module_Instance_Parent
-     and Thermistors_Module.Module_Instance_Interface with
+   and Thermistors_Module.Module_Instance_Interface with
       procedure Set_Temperature (Value : Temperature);
       procedure Set_Failed (Value : Boolean);
       overriding
@@ -104,7 +122,7 @@ package body Prunt.Default_Modules.Heaters.Test is
       function Get_Temperature (Thermistor : Thermistor_Name; Requires_Fresh : Boolean) return Temperature;
    private
       Current : Temperature := 20.0 * celsius;
-      Failed : Boolean := False;
+      Failed  : Boolean := False;
    end Mock_Thermistors;
 
    --  Avoid GNAT's crash when this test type inherits the null interface primitive.
@@ -128,8 +146,8 @@ package body Prunt.Default_Modules.Heaters.Test is
          return True;
       end Thermistor_Is_Enabled_In_Config;
 
-      function Get_Thermistor_Parameters
-        (Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters is
+      function Get_Thermistor_Parameters (Thermistor : Thermistor_Name) return Prunt.Thermistors.Thermistor_Parameters
+      is
          pragma Unreferenced (Thermistor);
       begin
          return (Kind => Prunt.Thermistors.Disabled_Kind, Maximum_Temperature => 300.0 * celsius, others => <>);
@@ -150,7 +168,7 @@ package body Prunt.Default_Modules.Heaters.Test is
    procedure Test_Cold_Extrusion (T : in out Trendy_Test.Operation'Class) is
       use type Ada.Real_Time.Time;
       Sensor_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Settings : User_Config;
+      Settings   : User_Config;
 
       function Create_Sensor return My_Modules.Module_Instance_Parent'Class;
       procedure Wait_For_Permission (Expected : Boolean);
@@ -183,7 +201,7 @@ package body Prunt.Default_Modules.Heaters.Test is
            (Kind => Enabled, Minimum_Temperature => 170.0 * celsius);
          declare
             Raised : Boolean := False;
-            Safe : Boolean;
+            Safe   : Boolean;
          begin
             begin
                Safe := Extrusion_Temperature_Is_Safe (Settings, Sensor_Ref);
@@ -245,14 +263,14 @@ package body Prunt.Default_Modules.Heaters.Test is
    end Test_Cold_Extrusion;
 
    procedure Test_Cold_Extrusion_Setpoints (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device     : constant Module := (My_Modules.Module with null record);
+      Status     : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Heaters" => Device.Status_Schema]);
-      Settings : User_Config;
+      Settings   : User_Config;
       Sensor_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Heater_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      H : constant Heater_Name := Heater_Name'First;
-      Planner : Mock_Planner;
+      H          : constant Heater_Name := Heater_Name'First;
+      Planner    : Mock_Planner;
 
       function Create_Sensor return My_Modules.Module_Instance_Parent'Class;
       function Create_Heater return My_Modules.Module_Instance_Parent'Class;
@@ -271,7 +289,9 @@ package body Prunt.Default_Modules.Heaters.Test is
       begin
          return Result : Module_Instance do
             Result.Initialize
-              (Settings, Status.Get_Emitter ("Heaters"), Sensor_Ref,
+              (Settings,
+               Status.Get_Emitter ("Heaters"),
+               Sensor_Ref,
                My_Modules.Module_Instance_Shared_Pointers.Null_Ref);
          end return;
       end Create_Heater;
@@ -325,18 +345,36 @@ package body Prunt.Default_Modules.Heaters.Test is
                begin
                   begin
                      case Command is
-                        when 1 => Set_Hotend_Temperature (Heater_Ref, Planner, 200.0);
-                        when 2 => Set_Bed_Temperature (Heater_Ref, Planner, 200.0);
-                        when 3 => Set_Chamber_Temperature (Heater_Ref, Planner, 200.0);
-                        when 4 => Wait_For_Hotend_Temperature_Heat (Heater_Ref, Planner, 200.0);
-                        when 5 => Wait_For_Hotend_Temperature_Heat_Or_Cool (Heater_Ref, Planner, 200.0);
-                        when 6 => Wait_For_Bed_Temperature_Heat (Heater_Ref, Planner, 200.0);
-                        when 7 => Wait_For_Bed_Temperature_Heat_Or_Cool (Heater_Ref, Planner, 200.0);
-                        when 8 => Wait_For_Chamber_Temperature_Heat (Heater_Ref, Planner, 200.0);
-                        when 9 => Wait_For_Chamber_Temperature_Heat_Or_Cool (Heater_Ref, Planner, 200.0);
+                        when 1 =>
+                           Set_Hotend_Temperature (Heater_Ref, Planner, 200.0);
+
+                        when 2 =>
+                           Set_Bed_Temperature (Heater_Ref, Planner, 200.0);
+
+                        when 3 =>
+                           Set_Chamber_Temperature (Heater_Ref, Planner, 200.0);
+
+                        when 4 =>
+                           Wait_For_Hotend_Temperature_Heat (Heater_Ref, Planner, 200.0);
+
+                        when 5 =>
+                           Wait_For_Hotend_Temperature_Heat_Or_Cool (Heater_Ref, Planner, 200.0);
+
+                        when 6 =>
+                           Wait_For_Bed_Temperature_Heat (Heater_Ref, Planner, 200.0);
+
+                        when 7 =>
+                           Wait_For_Bed_Temperature_Heat_Or_Cool (Heater_Ref, Planner, 200.0);
+
+                        when 8 =>
+                           Wait_For_Chamber_Temperature_Heat (Heater_Ref, Planner, 200.0);
+
+                        when 9 =>
+                           Wait_For_Chamber_Temperature_Heat_Or_Cool (Heater_Ref, Planner, 200.0);
                      end case;
                   exception
-                     when Gcode_Temporarily_Rejected_Error => Rejected := True;
+                     when Gcode_Temporarily_Rejected_Error =>
+                        Rejected := True;
                   end;
                   T.Assert (Rejected = Reject, "handler propagates queue rejection");
                   if Reject then
@@ -385,13 +423,13 @@ package body Prunt.Default_Modules.Heaters.Test is
    end Test_Cold_Extrusion_Setpoints;
 
    procedure Test_Heater_Release (T : in out Trendy_Test.Operation'Class) is
-      Device : constant Module := (My_Modules.Module with null record);
-      Status : constant Status_Manager.Status_Data_Collection :=
+      Device      : constant Module := (My_Modules.Module with null record);
+      Status      : constant Status_Manager.Status_Data_Collection :=
         Status_Manager.Build_Collection (["Heaters" => Device.Status_Schema]);
-      Settings : User_Config;
-      Sensor_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Settings    : User_Config;
+      Sensor_Ref  : My_Modules.Module_Instance_Shared_Pointers.Ref;
       Sensor_Weak : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;
-      Planner : Mock_Planner;
+      Planner     : Mock_Planner;
       type Startup_State is (Unstarted, Started, Failed_Start, Failed_Release);
 
       function Create_Heater return My_Modules.Module_Instance_Parent'Class;
@@ -401,7 +439,9 @@ package body Prunt.Default_Modules.Heaters.Test is
       begin
          return Instance : Module_Instance do
             Instance.Initialize
-              (Settings, Status.Get_Emitter ("Heaters"), Sensor_Ref,
+              (Settings,
+               Status.Get_Emitter ("Heaters"),
+               Sensor_Ref,
                My_Modules.Module_Instance_Shared_Pointers.Null_Ref);
          end return;
       end Create_Heater;
@@ -433,7 +473,8 @@ package body Prunt.Default_Modules.Heaters.Test is
                         Module_Instance (Instance_Ref.Get.Element.all).Start (Instance_Ref.Weak, Planner);
                         T.Assert (State /= Failed_Start, "startup failure must be exercised");
                      exception
-                        when Hardware_Communication_Error => T.Assert (State = Failed_Start);
+                        when Hardware_Communication_Error =>
+                           T.Assert (State = Failed_Start);
                      end;
                   end if;
                   Fail_Heater_Start := State = Failed_Release;
@@ -443,7 +484,8 @@ package body Prunt.Default_Modules.Heaters.Test is
                   T.Assert (Heater_Disable_Count = 0, "cleanup must wait for the last shared reference");
                end;
             exception
-               when Hardware_Communication_Error | Program_Error => Release_Failed := True;
+               when Hardware_Communication_Error | Program_Error =>
+                  Release_Failed := True;
             end;
             Fail_Heater_Start := False;
             T.Assert (Release_Failed = (State = Failed_Release), "release must propagate cleanup failures");
@@ -461,9 +503,10 @@ package body Prunt.Default_Modules.Heaters.Test is
       Extrusion_Allowed_Until := Ada.Real_Time.Time_Last;
    end Test_Heater_Release;
 
-   function All_Tests return Trendy_Test.Test_Group is
-     (Trendy_Test.Test_Group'
-        [Test_Cold_Extrusion'Unrestricted_Access, Test_Cold_Extrusion_Setpoints'Unrestricted_Access,
-         Test_Heater_Release'Unrestricted_Access]);
+   function All_Tests return Trendy_Test.Test_Group
+   is (Trendy_Test.Test_Group'
+         [Test_Cold_Extrusion'Unrestricted_Access,
+          Test_Cold_Extrusion_Setpoints'Unrestricted_Access,
+          Test_Heater_Release'Unrestricted_Access]);
 
 end Prunt.Default_Modules.Heaters.Test;

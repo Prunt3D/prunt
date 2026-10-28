@@ -14,34 +14,53 @@ procedure Runtime_Math_Time is
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
    type Kernel_Kind is
-     (Power_Half, Square_Root, Power_Quarter, Square_Root_Twice, Power_Third, Power_Fifth,
-      Attribute_Exponent, Bits_Exponent, Attribute_Fraction, Bits_Fraction, Attribute_Scaling, Attribute_Adjacent);
-   Selected : constant Kernel_Kind := Kernel_Kind'Value (Ada.Command_Line.Argument (1));
+     (Power_Half,
+      Square_Root,
+      Power_Quarter,
+      Square_Root_Twice,
+      Power_Third,
+      Power_Fifth,
+      Attribute_Exponent,
+      Bits_Exponent,
+      Attribute_Fraction,
+      Bits_Fraction,
+      Attribute_Scaling,
+      Attribute_Adjacent);
+   Selected   : constant Kernel_Kind := Kernel_Kind'Value (Ada.Command_Line.Argument (1));
    Iterations : constant Positive :=
      (if Ada.Command_Line.Argument_Count >= 2 then Positive'Value (Ada.Command_Line.Argument (2)) else 10_000_000);
 
-   type Float_Bits is mod 2 ** 64;
+   type Float_Bits is mod 2**64;
    function To_Bits is new Ada.Unchecked_Conversion (Dimensionless, Float_Bits);
    function From_Bits is new Ada.Unchecked_Conversion (Float_Bits, Dimensionless);
    Exponent_Mask : constant Float_Bits := 16#7FF0_0000_0000_0000#;
 
-   function Half (X : Dimensionless) return Dimensionless is (X ** (1 / 2));
-   function Root (X : Dimensionless) return Dimensionless is (Dimensionless_Math.Sqrt (X));
-   function Quarter (X : Dimensionless) return Dimensionless is (X ** (1 / 4));
+   function Half (X : Dimensionless) return Dimensionless
+   is (X**(1 / 2));
+   function Root (X : Dimensionless) return Dimensionless
+   is (Dimensionless_Math.Sqrt (X));
+   function Quarter (X : Dimensionless) return Dimensionless
+   is (X**(1 / 4));
    function Root_Twice (X : Dimensionless) return Dimensionless
    is (Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (X)));
-   function Third (X : Dimensionless) return Dimensionless is (X ** (1 / 3));
-   function Fifth (X : Dimensionless) return Dimensionless is (X ** (1 / 5));
-   function Exponent (X : Dimensionless) return Dimensionless is (Dimensionless (Dimensionless'Exponent (X)));
-   function Fraction (X : Dimensionless) return Dimensionless is (Dimensionless'Fraction (X));
-   function Scaling (X : Dimensionless) return Dimensionless is (Dimensionless'Scaling (X, -3));
-   function Adjacent (X : Dimensionless) return Dimensionless is (Dimensionless'Adjacent (X, Dimensionless'Last));
+   function Third (X : Dimensionless) return Dimensionless
+   is (X**(1 / 3));
+   function Fifth (X : Dimensionless) return Dimensionless
+   is (X**(1 / 5));
+   function Exponent (X : Dimensionless) return Dimensionless
+   is (Dimensionless (Dimensionless'Exponent (X)));
+   function Fraction (X : Dimensionless) return Dimensionless
+   is (Dimensionless'Fraction (X));
+   function Scaling (X : Dimensionless) return Dimensionless
+   is (Dimensionless'Scaling (X, -3));
+   function Adjacent (X : Dimensionless) return Dimensionless
+   is (Dimensionless'Adjacent (X, Dimensionless'Last));
 
    function Fast_Exponent (X : Dimensionless) return Dimensionless;
    function Fast_Fraction (X : Dimensionless) return Dimensionless;
 
    function Fast_Exponent (X : Dimensionless) return Dimensionless is
-      Biased : constant Float_Bits := (To_Bits (X) and Exponent_Mask) / 2 ** 52;
+      Biased : constant Float_Bits := (To_Bits (X) and Exponent_Mask) / 2**52;
    begin
       if Biased = 0 or else Biased = 16#7FF# then
          return Dimensionless (Dimensionless'Exponent (X));
@@ -51,12 +70,12 @@ procedure Runtime_Math_Time is
 
    function Fast_Fraction (X : Dimensionless) return Dimensionless is
       Bits   : constant Float_Bits := To_Bits (X);
-      Biased : constant Float_Bits := (Bits and Exponent_Mask) / 2 ** 52;
+      Biased : constant Float_Bits := (Bits and Exponent_Mask) / 2**52;
    begin
       if Biased = 0 or else Biased = 16#7FF# then
          return Dimensionless'Fraction (X);
       end if;
-      return From_Bits ((Bits and not Exponent_Mask) or 1022 * 2 ** 52);
+      return From_Bits ((Bits and not Exponent_Mask) or 1022 * 2**52);
    end Fast_Fraction;
 
    generic
@@ -64,7 +83,7 @@ procedure Runtime_Math_Time is
    procedure Measure;
 
    procedure Measure is
-      Sum : Dimensionless := 0.0;
+      Sum     : Dimensionless := 0.0;
       Started : constant Ada.Real_Time.Time := Ada.Real_Time.Clock;
    begin
       for I in 1 .. Iterations loop
@@ -90,17 +109,40 @@ procedure Runtime_Math_Time is
 begin
    Ada.Text_IO.Put_Line ("kernel=" & Selected'Image & " iterations=" & Iterations'Image);
    case Selected is
-      when Power_Half => Measure_Half;
-      when Square_Root => Measure_Root;
-      when Power_Quarter => Measure_Quarter;
-      when Square_Root_Twice => Measure_Root_Twice;
-      when Power_Third => Measure_Third;
-      when Power_Fifth => Measure_Fifth;
-      when Attribute_Exponent => Measure_Exponent;
-      when Bits_Exponent => Measure_Fast_Exponent;
-      when Attribute_Fraction => Measure_Fraction;
-      when Bits_Fraction => Measure_Fast_Fraction;
-      when Attribute_Scaling => Measure_Scaling;
-      when Attribute_Adjacent => Measure_Adjacent;
+      when Power_Half         =>
+         Measure_Half;
+
+      when Square_Root        =>
+         Measure_Root;
+
+      when Power_Quarter      =>
+         Measure_Quarter;
+
+      when Square_Root_Twice  =>
+         Measure_Root_Twice;
+
+      when Power_Third        =>
+         Measure_Third;
+
+      when Power_Fifth        =>
+         Measure_Fifth;
+
+      when Attribute_Exponent =>
+         Measure_Exponent;
+
+      when Bits_Exponent      =>
+         Measure_Fast_Exponent;
+
+      when Attribute_Fraction =>
+         Measure_Fraction;
+
+      when Bits_Fraction      =>
+         Measure_Fast_Fraction;
+
+      when Attribute_Scaling  =>
+         Measure_Scaling;
+
+      when Attribute_Adjacent =>
+         Measure_Adjacent;
    end case;
 end Runtime_Math_Time;

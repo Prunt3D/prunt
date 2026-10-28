@@ -56,9 +56,11 @@ package body Prunt.Mockable.Persistence is
       Lease.Held := True;
    end Acquire;
 
-   function Name (Lease : Writer_Lease) return String is (To_String (Lease.File_Name));
+   function Name (Lease : Writer_Lease) return String
+   is (To_String (Lease.File_Name));
 
-   overriding procedure Finalize (Lease : in out Writer_Lease) is
+   overriding
+   procedure Finalize (Lease : in out Writer_Lease) is
    begin
       if Lease.Held then
          Writers.Release (GNAT.OS_Lib.Normalize_Pathname (Name (Lease)));

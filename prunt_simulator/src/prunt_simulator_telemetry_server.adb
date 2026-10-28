@@ -19,25 +19,25 @@
 
 with Ada.Environment_Variables;
 with Ada.Exceptions;
-with Ada.Streams;           use Ada.Streams;
-with Ada.Strings;           use Ada.Strings;
-with Ada.Strings.Fixed;     use Ada.Strings.Fixed;
+with Ada.Streams;       use Ada.Streams;
+with Ada.Strings;       use Ada.Strings;
+with Ada.Strings.Fixed; use Ada.Strings.Fixed;
 with Ada.Text_IO;
-with GNAT.Sockets;          use GNAT.Sockets;
+with GNAT.Sockets;      use GNAT.Sockets;
 with Interfaces;
 with Prunt_Simulator_Samples;
 
 package body Prunt_Simulator_Telemetry_Server is
 
-   Environment_Name             : constant String := "PRUNT_SIM_TELEMETRY_PORT";
-   Maximum_Request_Bytes         : constant Positive := 4_096;
-   Request_Chunk_Bytes           : constant Positive := 1_024;
-   Response_Chunk_Bytes          : constant Positive := 16_384;
-   Client_Timeout                : constant Timeval_Duration := 1.0;
-   Listener_Poll_Interval        : constant Selector_Duration := 0.1;
-   Execution_Path_Prefix         : constant String := "/execution_samples_after_";
-   JSON_Suffix                   : constant String := ".json";
-   Position_Samples_Path         : constant String := "/position_samples.json";
+   Environment_Name       : constant String := "PRUNT_SIM_TELEMETRY_PORT";
+   Maximum_Request_Bytes  : constant Positive := 4_096;
+   Request_Chunk_Bytes    : constant Positive := 1_024;
+   Response_Chunk_Bytes   : constant Positive := 16_384;
+   Client_Timeout         : constant Timeval_Duration := 1.0;
+   Listener_Poll_Interval : constant Selector_Duration := 0.1;
+   Execution_Path_Prefix  : constant String := "/execution_samples_after_";
+   JSON_Suffix            : constant String := ".json";
+   Position_Samples_Path  : constant String := "/position_samples.json";
 
    Listener : Socket_Type := No_Socket;
    Enabled  : Boolean := False;
@@ -103,8 +103,7 @@ package body Prunt_Simulator_Telemetry_Server is
       while Offset < Data'Length loop
          Count := Natural'Min (Response_Chunk_Bytes, Data'Length - Offset);
          for I in 1 .. Count loop
-            Buffer (Stream_Element_Offset (I)) :=
-              Stream_Element (Character'Pos (Data (Data'First + Offset + I - 1)));
+            Buffer (Stream_Element_Offset (I)) := Stream_Element (Character'Pos (Data (Data'First + Offset + I - 1)));
          end loop;
 
          Send_Socket (Client, Buffer (1 .. Stream_Element_Offset (Count)), Last);
@@ -240,8 +239,7 @@ package body Prunt_Simulator_Telemetry_Server is
                   Send_Response (Client, 200, "OK", "application/json; charset=utf-8", Payload);
                end;
             elsif Target'Length > Execution_Path_Prefix'Length + JSON_Suffix'Length
-              and then Target (Target'First .. Target'First + Execution_Path_Prefix'Length - 1)
-                = Execution_Path_Prefix
+              and then Target (Target'First .. Target'First + Execution_Path_Prefix'Length - 1) = Execution_Path_Prefix
               and then Target (Target'Last - JSON_Suffix'Length + 1 .. Target'Last) = JSON_Suffix
             then
                declare
@@ -275,11 +273,7 @@ package body Prunt_Simulator_Telemetry_Server is
                end;
             else
                Send_Response
-                 (Client,
-                  404,
-                  "Not Found",
-                  "text/plain; charset=utf-8",
-                  "Telemetry endpoint not found." & ASCII.LF);
+                 (Client, 404, "Not Found", "text/plain; charset=utf-8", "Telemetry endpoint not found." & ASCII.LF);
             end if;
          end;
       end;

@@ -23,9 +23,9 @@ with System; use System;
 
 package Prunt.TMC_Types.TMC2240 is
 
-   type UART_Node_Address is range 0 .. 2 ** 8 - 1 with Size => 8;
-   type UART_Sync_Nibble is range 0 .. 2 ** 4 - 1 with Size => 4;
-   type UART_CRC is mod 2 ** 8 with Size => 8;
+   type UART_Node_Address is range 0 .. 2**8 - 1 with Size => 8;
+   type UART_Sync_Nibble is range 0 .. 2**4 - 1 with Size => 4;
+   type UART_CRC is mod 2**8 with Size => 8;
 
    type GCONF is record
       Reserved_1       : Unsigned_1;
@@ -218,9 +218,9 @@ package Prunt.TMC_Types.TMC2240 is
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type ADC_V_Supply_Volts_Type is delta 0.009_732 range 0.0 .. 0.009_732 * (2 ** 13 - 1)
+   type ADC_V_Supply_Volts_Type is delta 0.009_732 range 0.0 .. 0.009_732 * (2**13 - 1)
    with Size => 13, Small => 0.009_732;
-   type ADC_AIN_Volts_Type is delta 0.000_305_2 range 0.0 .. 0.000_305_2 * (2 ** 13 - 1)
+   type ADC_AIN_Volts_Type is delta 0.000_305_2 range 0.0 .. 0.000_305_2 * (2**13 - 1)
    with Size => 13, Small => 0.000_305_2;
 
    type ADC_VSUPPLY_AIN is record
@@ -231,7 +231,7 @@ package Prunt.TMC_Types.TMC2240 is
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type ADC_Temp_Almost_Kelvin_Type is delta 10.0 / 77.0 range 0.0 .. 10.0 / 77.0 * (2.0 ** 13 - 1.0)
+   type ADC_Temp_Almost_Kelvin_Type is delta 10.0 / 77.0 range 0.0 .. 10.0 / 77.0 * (2.0**13 - 1.0)
    with Size => 13, Small => 10.0 / 77.0;
    --  This range starts at −2038.0/(77.0/10.0) celsius (approx -264), but GNAT will not generate a biased
    --  representation for delta types, so we can not represent this in kelvin.
@@ -463,7 +463,7 @@ package Prunt.TMC_Types.TMC2240 is
    end record
    with Bit_Order => Low_Order_First, Scalar_Storage_Order => Low_Order_First, Size => 32, Pack;
 
-   type UART_Byte is mod 2 ** 8 with Size => 8;
+   type UART_Byte is mod 2**8 with Size => 8;
    type UART_Data_Byte_Array is array (1 .. 8) of UART_Byte with Pack;
    type UART_Query_Byte_Array is array (1 .. 4) of UART_Byte with Pack;
 

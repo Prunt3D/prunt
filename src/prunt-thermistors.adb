@@ -23,12 +23,12 @@ package body Prunt.Thermistors is
 
    function Steinhart_Hart_Value (Params : Thermistor_Parameters; Ln_R : Dimensionless) return Dimensionless is
    begin
-      return Params.SH_A + Ln_R * (Params.SH_B + Params.SH_C * Ln_R ** 2);
+      return Params.SH_A + Ln_R * (Params.SH_B + Params.SH_C * Ln_R**2);
    end Steinhart_Hart_Value;
 
    function Steinhart_Hart_Is_Increasing (Params : Thermistor_Parameters) return Boolean is
       Derivative_At_Zero : constant Dimensionless := Params.SH_B;
-      Derivative_At_Edge : constant Dimensionless := Params.SH_B + 3.0 * Params.SH_C * Maximum_Abs_Ln_R ** 2;
+      Derivative_At_Edge : constant Dimensionless := Params.SH_B + 3.0 * Params.SH_C * Maximum_Abs_Ln_R**2;
    begin
       return
         Derivative_At_Zero >= 0.0
@@ -38,7 +38,7 @@ package body Prunt.Thermistors is
 
    function Steinhart_Hart_Is_Decreasing (Params : Thermistor_Parameters) return Boolean is
       Derivative_At_Zero : constant Dimensionless := Params.SH_B;
-      Derivative_At_Edge : constant Dimensionless := Params.SH_B + 3.0 * Params.SH_C * Maximum_Abs_Ln_R ** 2;
+      Derivative_At_Edge : constant Dimensionless := Params.SH_B + 3.0 * Params.SH_C * Maximum_Abs_Ln_R**2;
    begin
       return
         Derivative_At_Zero <= 0.0

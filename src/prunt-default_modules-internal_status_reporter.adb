@@ -159,15 +159,15 @@ package body Prunt.Default_Modules.Internal_Status_Reporter is
             end if;
          or
             when Current_Auto_Report_Interval > 0.0 =>
-            delay until Next_Position_Auto_Report;
-            Log_Position;
+               delay until Next_Position_Auto_Report;
+               Log_Position;
 
-            Next_Position_Auto_Report :=
-              Next_Position_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
-            if Next_Position_Auto_Report > Ada.Real_Time.Clock then
                Next_Position_Auto_Report :=
-                 Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
-            end if;
+                 Next_Position_Auto_Report + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+               if Next_Position_Auto_Report > Ada.Real_Time.Clock then
+                  Next_Position_Auto_Report :=
+                    Ada.Real_Time.Clock + Ada.Real_Time.To_Time_Span (Current_Auto_Report_Interval);
+               end if;
          end select;
       end loop;
    end Status_Updater;

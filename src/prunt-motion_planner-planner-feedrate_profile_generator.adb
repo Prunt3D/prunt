@@ -45,7 +45,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       Best_Profile       : Feedrate_Profile :=
         (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
       Best_Eval          : Profile_Window_Evaluation;
-      Best_Decel_Crackle : Crackle := 0.0 * mm / s ** 5;
+      Best_Decel_Crackle : Crackle := 0.0 * mm / s**5;
 
       function Scaled_Cells return Path_Cells;
       --  The run's cells with their ceilings reduced by Limit_Scale, like every window's Max_Vel.

@@ -31,8 +31,8 @@ package body Prunt_Simulator_Samples is
    Execution_Response_Sample_Capacity : constant Positive := 8_192;
    Max_Response_Bytes                 : constant Positive := 96 * 1_024 * 1_024;
    --  One-tick fifth differences amplify position roundoff enough to swamp the plotted crackle signal.
-   Derivative_Step    : constant Positive := 5;
-   Derivative_Period  : constant Long_Float := Sample_Period_S * Long_Float (Derivative_Step);
+   Derivative_Step                    : constant Positive := 5;
+   Derivative_Period                  : constant Long_Float := Sample_Period_S * Long_Float (Derivative_Step);
 
    type Sample is record
       Sequence     : Interfaces.Integer_64 := 0;
@@ -53,18 +53,11 @@ package body Prunt_Simulator_Samples is
    type Response_Slot_Array is array (Response_Slot_Index) of Response_Access;
 
    protected Ring_Buffer is
-      procedure Reset
-        (Motor_Position : Axis_Position; Switch_State : Input_Switch_State);
-      procedure Append
-        (Motor_Position : Axis_Position;
-         Command        : Command_Index;
-         Switch_State   : Input_Switch_State);
+      procedure Reset (Motor_Position : Axis_Position; Switch_State : Input_Switch_State);
+      procedure Append (Motor_Position : Axis_Position; Command : Command_Index; Switch_State : Input_Switch_State);
       procedure Snapshot (Output : out Sample_Array; Length : out Natural; Epoch : out Natural);
       procedure Snapshot_After
-        (After_Sequence : Interfaces.Integer_64;
-         Output         : out Sample_Array;
-         Length         : out Natural;
-         Epoch          : out Natural);
+        (After_Sequence : Interfaces.Integer_64; Output : out Sample_Array; Length : out Natural; Epoch : out Natural);
    private
       Samples       : Sample_Array (1 .. Sample_Capacity);
       Count         : Natural := 0;
@@ -86,7 +79,7 @@ package body Prunt_Simulator_Samples is
    procedure Append_Sample_Number_Array
      (Output : in out Unbounded_String; Samples : Sample_Array; First : Positive; Last : Natural);
    procedure Append_Axis_Number_Arrays
-     (Output : in out Unbounded_String;
+     (Output  : in out Unbounded_String;
       Samples : Sample_Array;
       First   : Positive;
       Last    : Natural;
@@ -126,8 +119,7 @@ package body Prunt_Simulator_Samples is
    end Response_Builder;
 
    protected body Ring_Buffer is
-      procedure Reset
-        (Motor_Position : Axis_Position; Switch_State : Input_Switch_State) is
+      procedure Reset (Motor_Position : Axis_Position; Switch_State : Input_Switch_State) is
       begin
          Count := 0;
          Next := 1;
@@ -136,11 +128,7 @@ package body Prunt_Simulator_Samples is
          Append (Motor_Position, 0, Switch_State);
       end Reset;
 
-      procedure Append
-        (Motor_Position : Axis_Position;
-         Command        : Command_Index;
-         Switch_State   : Input_Switch_State)
-      is
+      procedure Append (Motor_Position : Axis_Position; Command : Command_Index; Switch_State : Input_Switch_State) is
          New_Sample : Sample;
 
          function Previous_Index (Steps_Back : Positive) return Positive;
@@ -212,10 +200,7 @@ package body Prunt_Simulator_Samples is
       end Snapshot;
 
       procedure Snapshot_After
-        (After_Sequence : Interfaces.Integer_64;
-         Output         : out Sample_Array;
-         Length         : out Natural;
-         Epoch          : out Natural)
+        (After_Sequence : Interfaces.Integer_64; Output : out Sample_Array; Length : out Natural; Epoch : out Natural)
       is
          Start           : constant Positive := (if Count = Sample_Capacity then Next else 1);
          Oldest_Sequence : Interfaces.Integer_64;
@@ -259,10 +244,13 @@ package body Prunt_Simulator_Samples is
       case Axis is
          when X_Axis =>
             return "X";
+
          when Y_Axis =>
             return "Y";
+
          when Z_Axis =>
             return "Z";
+
          when E_Axis =>
             return "E";
       end case;
@@ -292,7 +280,7 @@ package body Prunt_Simulator_Samples is
    end Append_Sample_Number_Array;
 
    procedure Append_Axis_Number_Arrays
-     (Output : in out Unbounded_String;
+     (Output  : in out Unbounded_String;
       Samples : Sample_Array;
       First   : Positive;
       Last    : Natural;
@@ -510,17 +498,12 @@ package body Prunt_Simulator_Samples is
       return To_String (Output);
    end Build_Execution_JSON;
 
-   procedure Reset
-     (Motor_Position : Axis_Position;
-      Switch_State   : Input_Switch_State) is
+   procedure Reset (Motor_Position : Axis_Position; Switch_State : Input_Switch_State) is
    begin
       Ring_Buffer.Reset (Motor_Position, Switch_State);
    end Reset;
 
-   procedure Append
-     (Motor_Position : Axis_Position;
-      Command        : Command_Index;
-      Switch_State   : Input_Switch_State) is
+   procedure Append (Motor_Position : Axis_Position; Command : Command_Index; Switch_State : Input_Switch_State) is
    begin
       Ring_Buffer.Append (Motor_Position, Command, Switch_State);
    end Append;
