@@ -20,6 +20,7 @@
 pragma Extensions_Allowed (On);
 
 with Ada.Command_Line;
+with Ada.Environment_Variables;
 with Ada.Numerics.Long_Elementary_Functions;
 with Ada.Real_Time;
 with Ada.Strings.Fixed;
@@ -105,7 +106,7 @@ procedure Benchy_Planner_Time is
             Shape_Bias               => 0.0,
             Circularity              => 0.0)),
       Extrusion_Cornering      => <>,
-      Extrusion_Rounding_Tolerance => <>,
+      Extrusion_Normalization  => <>,
       Axial_Shapers            => [others => (Kind => Prunt.Input_Shapers.No_Shaper)],
       Continuous_Timing        => False);
 
@@ -142,6 +143,13 @@ procedure Benchy_Planner_Time is
    Feedrate      : Velocity := 0.1 * mm / s;
    Commanded_E   : Length := 0.0 * mm;
    Varied_Width  : constant Boolean := Selected_Case in Varied_Width_Jump | Varied_Width_Smooth;
+   Width_Range   : constant Dimensionless :=
+     Dimensionless'Value (Ada.Environment_Variables.Value ("PRUNT_BENCH_WIDTH_VARIATION", "0.05"));
+   E_Limit_Scale : constant Dimensionless :=
+     Dimensionless'Value (Ada.Environment_Variables.Value ("PRUNT_BENCH_E_LIMIT_SCALE", "1.0"));
+   Continuous_On : constant Boolean := Ada.Environment_Variables.Value ("PRUNT_BENCH_CONTINUOUS", "0") = "1";
+   --  Optional overrides: the amplitude of the varied-width cases' extrusion changes, a factor on E's acceleration,
+   --  jerk, snap and crackle limits, and Continuous_Timing, for every case.
    Relative_E    : Boolean := False;
    Block         : Planner.Block_Handle;
    Timed_Out     : Boolean;
@@ -202,10 +210,23 @@ begin
                Corner_Miss_Distance_Max => 0.02 * mm, others => <>));
    end case;
    if Ada.Command_Line.Argument_Count >= 4 then
-      Params.Extrusion_Rounding_Tolerance := Dimensionless'Value (Ada.Command_Line.Argument (4)) * mm;
+      Params.Extrusion_Normalization.Relative_Adjustment_Max := Dimensionless'Value (Ada.Command_Line.Argument (4));
+   end if;
+   Params.Axial_Acceleration_Maxes (E_Axis) := E_Limit_Scale * Params.Axial_Acceleration_Maxes (E_Axis);
+   Params.Axial_Jerk_Maxes (E_Axis) := E_Limit_Scale * Params.Axial_Jerk_Maxes (E_Axis);
+   Params.Axial_Snap_Maxes (E_Axis) := E_Limit_Scale * Params.Axial_Snap_Maxes (E_Axis);
+   Params.Axial_Crackle_Maxes (E_Axis) := E_Limit_Scale * Params.Axial_Crackle_Maxes (E_Axis);
+   if Continuous_On then
+      Params.Continuous_Timing := True;
    end if;
    Ada.Text_IO.Put_Line ("case=" & Selected_Case'Image);
-   Ada.Text_IO.Put_Line ("rounding_tolerance_mm=" & Dimensionless'Image (Params.Extrusion_Rounding_Tolerance / mm));
+   Ada.Text_IO.Put_Line ("e_limit_scale=" & E_Limit_Scale'Image);
+   Ada.Text_IO.Put_Line ("width_variation=" & Width_Range'Image);
+   Ada.Text_IO.Put_Line ("continuous_timing=" & Params.Continuous_Timing'Image);
+   Ada.Text_IO.Put_Line
+     ("extrusion_normalization=" & Params.Extrusion_Normalization.Relative_Adjustment_Max'Image & " +"
+      & Dimensionless'Image (Params.Extrusion_Normalization.E_Resolution / mm) & " mm E +"
+      & Dimensionless'Image (Params.Extrusion_Normalization.XYZ_Resolution / mm) & " mm XYZ");
    Ada.Text_IO.Flush;
    if Write_Segments then
       Ada.Text_IO.Create (Segment_Output, Ada.Text_IO.Out_File, Ada.Command_Line.Argument (3));
@@ -241,13 +262,14 @@ begin
                end if;
                if Has_Value (Command, 'E') and then Varied_Width then
                   declare
-                     --  Emulate variable-width perimeters: every move extrudes up to 5% more or less than commanded,
-                     --  so nearly every junction changes density.
+                     --  Emulate variable-width perimeters: every move extrudes up to Width_Range (5% by default)
+                     --  more or less than commanded, so nearly every junction changes density.
                      Value  : constant Length := Dimensionless (Value_Of (Command, 'E')) * mm;
                      Next_E : constant Length := (if Relative_E then Commanded_E + Value else Value);
                      Factor : constant Dimensionless :=
                        1.0
-                       + 0.05 * Dimensionless (Ada.Numerics.Long_Elementary_Functions.Sin (0.7 * Long_Float (G1_Count)));
+                       + Width_Range
+                         * Dimensionless (Ada.Numerics.Long_Elementary_Functions.Sin (0.7 * Long_Float (G1_Count)));
                   begin
                      Current_Pos (E_Axis) := Current_Pos (E_Axis) + (Next_E - Commanded_E) * Factor;
                      Commanded_E := Next_E;

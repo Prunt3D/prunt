@@ -149,6 +149,26 @@ package Prunt.Motion_Planner is
       end case;
    end record;
 
+   type Extrusion_Normalization_Parameters is record
+      Relative_Adjustment_Max : Dimensionless range 0.0 .. 1.0 := 0.005;
+      --  A segment's E displacement may always change by this fraction of itself, so a run treats real density
+      --  differences below it as negligible.
+
+      E_Resolution : Length range 0.0 * mm .. Length'Last := 0.000_01 * mm;
+      --  The resolution of commanded E coordinates. Rounding both ends of a segment changes its E displacement by at
+      --  most this.
+
+      XYZ_Resolution : Length range 0.0 * mm .. Length'Last := 0.001 * mm;
+      --  The resolution of commanded X, Y and Z coordinates, including a helix's centre. Rounding them changes a
+      --  segment's length, and so the E displacement that a given density gives it.
+   end record;
+   --  How far Extrusion_Density_Normalizer may change a segment's commanded E displacement when it gives a run of
+   --  segments one common density: the larger of Relative_Adjustment_Max of the displacement, and what rounding to
+   --  the two resolutions could explain if the segment truly had the run's density. That bound scales with the run's
+   --  density, not the segment's own, so a short move that commands far more E than its length explains stays a
+   --  boundary. All zero disables density normalization. Runs retain their total extrusion before corner shortening.
+   --  This is separate from E's junction deviation and velocity change.
+
    type Kinematic_Parameters is record
       Bounds : Workspace_Bounds := (Kind => Rectangular_Workspace, others => <>);
 
@@ -156,21 +176,18 @@ package Prunt.Motion_Planner is
       --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
       --  planners do.
 
-      Tangential_Velocity_Max      : Velocity := 0.0 * mm / s;
-      Axial_Velocity_Maxes         : Axial_Velocities := [others => 0.0 * mm / s];
-      Axial_Acceleration_Maxes     : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
-      Axial_Jerk_Maxes             : Axial_Jerks := [others => 0.0 * mm / s ** 3];
-      Axial_Snap_Maxes             : Axial_Snaps := [others => 0.0 * mm / s ** 4];
-      Axial_Crackle_Maxes          : Axial_Crackles := [others => 0.0 * mm / s ** 5];
-      Cornering                    : Cornering_Parameters := (others => <>);
-      Extrusion_Cornering          : Extrusion_Cornering_Parameters := (others => <>);
-      Extrusion_Rounding_Tolerance : Length range 0.0 * mm .. Length'Last := 0.000_1 * mm;
-      --  Maximum change to a segment's commanded E displacement when assigning a common density to a run.
-      --  Runs retain their total extrusion before corner shortening. Zero disables density normalization.
-      --  This input-rounding allowance is separate from E's junction deviation or velocity change.
-      Axial_Shapers                : Input_Shapers.Axial_Shaper_Parameters :=
+      Tangential_Velocity_Max  : Velocity := 0.0 * mm / s;
+      Axial_Velocity_Maxes     : Axial_Velocities := [others => 0.0 * mm / s];
+      Axial_Acceleration_Maxes : Axial_Accelerations := [others => 0.0 * mm / s ** 2];
+      Axial_Jerk_Maxes         : Axial_Jerks := [others => 0.0 * mm / s ** 3];
+      Axial_Snap_Maxes         : Axial_Snaps := [others => 0.0 * mm / s ** 4];
+      Axial_Crackle_Maxes      : Axial_Crackles := [others => 0.0 * mm / s ** 5];
+      Cornering                : Cornering_Parameters := (others => <>);
+      Extrusion_Cornering      : Extrusion_Cornering_Parameters := (others => <>);
+      Extrusion_Normalization  : Extrusion_Normalization_Parameters := (others => <>);
+      Axial_Shapers            : Input_Shapers.Axial_Shaper_Parameters :=
         [others => (Kind => Input_Shapers.No_Shaper)];
-      Continuous_Timing            : Boolean := False;
+      Continuous_Timing        : Boolean := False;
       --  Experimental. Plan one feedrate profile across each chain of line segments joined by passthrough corners,
       --  so speed keeps changing through those corners instead of returning to zero acceleration, jerk and snap at
       --  every segment boundary. Non-binding curved corners are also joined where the joined profile, certified piece

@@ -189,7 +189,10 @@ package body Prunt.Default_Modules.Kinematics is
               Cornering                    => Build_Cornering_Parameters (Config.Kinematics.Cornering),
               Extrusion_Cornering          =>
                 Build_Extrusion_Cornering_Parameters (Config.Kinematics.Extrusion_Cornering),
-              Extrusion_Rounding_Tolerance => Config.Kinematics.Extrusion_Rounding_Tolerance,
+              Extrusion_Normalization      =>
+                (Relative_Adjustment_Max => Config.Kinematics.Extrusion_Normalization.Maximum_Relative_Adjustment,
+                 E_Resolution            => Config.Kinematics.Extrusion_Normalization.E_Resolution,
+                 XYZ_Resolution          => Config.Kinematics.Extrusion_Normalization.XYZ_Resolution),
               Axial_Shapers                => <>,
               Continuous_Timing            => <>),
          Transform  => (Kind => Linear_Transform, others => <>));

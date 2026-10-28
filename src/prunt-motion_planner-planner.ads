@@ -37,8 +37,9 @@ pragma Check_Float_Overflow;
 --  2. Extrusion_Density_Normalizer:
 --
 --     Adjacent same-direction spatial extrusion segments can share one density if each segment's extrusion adjustment
---     fits Extrusion_Rounding_Tolerance. Runs retain their total extrusion before path shortening. The assigned
---     densities remain authoritative through all later stages, including geometry recovery.
+--     fits Extrusion_Normalization: a fraction of its extrusion, or what rounding of the commanded coordinates could
+--     explain at that density. Runs retain their total extrusion before path shortening. The assigned densities remain
+--     authoritative through all later stages, including geometry recovery.
 --
 --  3. Corner-transition construction:
 --
@@ -641,6 +642,9 @@ private
       Unblended_Extrusion_Positions : Block_Segment_Lengths (1 .. Last_Corner);
       --  Original scalar path lengths and normalized E boundary positions, before XYZ corner shortening.
       --  Corner_Blender uses these on the initial pass and on geometry recovery without rederiving densities.
+      Unblended_Length_Spreads      : Block_Extrusion_Densities (2 .. Last_Corner);
+      --  A first-order bound on how far rounding the XYZ coordinates changes each original path length, per unit of
+      --  XYZ_Resolution. Used only while normalizing densities.
 
       --  Kinematic_Limiter
       Static_Corner_Limits     : Block_Corner_Velocity_Limits (1 .. Last_Corner);

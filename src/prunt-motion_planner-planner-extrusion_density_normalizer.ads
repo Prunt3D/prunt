@@ -30,8 +30,9 @@ package Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
 
    procedure Run (Block : aliased in out Execution_Block; Workspace : not null access Planning_Workspace);
    --  Assign densities once, before corner blending. Each same-direction XYZ/E run uses its total E divided by total
-   --  original path length only while every segment's E adjustment fits Extrusion_Rounding_Tolerance.  Travel,
-   --  reversals, E-only moves and dwells terminate runs. Zero tolerance preserves the original ratios.  The pass is
-   --  linear in the segment count; all corner-sized storage belongs to Block or Workspace.
+   --  original path length only while every segment's E adjustment fits Params.Extrusion_Normalization at that
+   --  density. Travel, reversals, E-only moves and dwells terminate runs. All-zero normalization parameters preserve
+   --  the original ratios. The pass is linear in the segment count; all corner-sized storage belongs to Block or
+   --  Workspace.
 
 end Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer;

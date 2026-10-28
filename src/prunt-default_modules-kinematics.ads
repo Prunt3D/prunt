@@ -392,6 +392,23 @@ private
    end record
    with Annotate => (Prunt_Config, User_Config);
 
+   type User_Config_Extrusion_Normalization is record
+      Maximum_Relative_Adjustment : Dimensionless range 0.0 .. 1.0 := 0.005;
+      --  Neighbouring moves may share one extrusion ratio if that changes each move's extrusion by at most this
+      --  fraction of it, so differences in extrusion ratio smaller than this are treated as negligible. Zero still
+      --  removes the differences that rounding in the G-code can explain.
+
+      E_Resolution : Length range 0.0 * mm .. 1.0E100 * mm := 0.000_01 * mm;
+      --  The smallest step in the G-code's E values, such as 0.00001 mm for five decimal places. Rounding to it can
+      --  change each move's extrusion by up to this much, so moves may share an extrusion ratio within that change.
+
+      XYZ_Resolution : Length range 0.0 * mm .. 1.0E100 * mm := 0.001 * mm;
+      --  The smallest step in the G-code's X, Y and Z values, including arc centres, such as 0.001 mm for three decimal
+      --  places. Rounding to it changes each move's length, and with it how much the move extrudes at a given
+      --  extrusion ratio, so moves may share an extrusion ratio within that change.
+   end record
+   with Annotate => (Prunt_Config, User_Config);
+
    type User_Config_Kinematics is record
       --  This section contains settings related to the machine's movement, geometry, and motion planning.
 
@@ -452,13 +469,11 @@ private
       --  Select how E changes speed where the commanded extrusion per unit path length changes, independently of the
       --  XYZ corner-transition model.
 
-      Extrusion_Rounding_Tolerance : Length range 0.0 * mm .. 1.0E100 * mm := 0.01 * mm;
-      --  Maximum adjustment to the extrusion amount of each segment, in mm of E, when removing density differences
-      --  caused by rounded G-code. Account for both E and XYZ rounding when choosing this value. Each accepted run
-      --  uses one common density and retains its total extrusion before corner shortening.  Travel, reversals, E-only
-      --  moves and dwells remain boundaries. Zero disables this normalization. This bounds each segment's adjustment,
-      --  not cumulative E position error inside a run. The separate extrusion cornering allowance applies after
-      --  density normalization and blending.
+      Extrusion_Normalization : User_Config_Extrusion_Normalization := (others => <>);
+      --  Removes differences in extrusion ratio between neighbouring extruding moves that come from rounded G-code or
+      --  are too small to matter, so that the moves share one ratio and E need not change speed between them. Each
+      --  run of moves keeps its total extrusion. Travel, retraction, E-only moves and dwells always end a run. Setting
+      --  every value to zero disables this. The extrusion cornering settings apply afterwards.
 
       Kinematics_Kind : User_Config_Kinematics_Variant := (others => <>);
       --  This selects the kinematic layout and allows motors to be assigned to the axes they control.

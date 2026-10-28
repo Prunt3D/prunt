@@ -154,6 +154,13 @@ package body Prunt.Motion_Planner.Planner.Test is
       return [for Axis in Axis_Name => Long_Float (Jet.Tangent_Derivative_3 (Axis) * mm ** 3)];
    end Raw_Derivative_3;
 
+   No_Normalization : constant Extrusion_Normalization_Parameters :=
+     (Relative_Adjustment_Max => 0.0, E_Resolution => 0.0 * mm, XYZ_Resolution => 0.0 * mm);
+
+   function Fixed_Normalization (Allowance : Length) return Extrusion_Normalization_Parameters
+   is ((Relative_Adjustment_Max => 0.0, E_Resolution => Allowance, XYZ_Resolution => 0.0 * mm));
+   --  Let every segment's E displacement change by Allowance, whatever the run's density.
+
    procedure Reset_Early_Limiter_Block (Block : out Execution_Block) is
    begin
       Block.Extrusion_Reference_Positions := [others => 0.0 * mm];
@@ -164,7 +171,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Next_Block_Pos := [others => 0.0 * mm];
       Block.Params := (others => <>);
       --  Existing fixtures exercise literal commanded densities; rounding has dedicated tests below.
-      Block.Params.Extrusion_Rounding_Tolerance := 0.0 * mm;
+      Block.Params.Extrusion_Normalization := No_Normalization;
       Block.Params.Bounds := Rectangular_Bounds ([others => -1.0E100 * mm], [others => 1.0E100 * mm]);
       Block.Corners_Extra_Data_End_Indices := [others => Corner_Extra_Data_Vectors.Extended_Index'First];
       Block.Corners := [others => [others => 0.0 * mm]];
@@ -1526,7 +1533,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       T.Register;
       for Direction in -1 .. 1 when Direction /= 0 loop
          Reset_Early_Limiter_Block (Block);
-         Block.Params.Extrusion_Rounding_Tolerance := 0.000_1 * mm;
+         Block.Params.Extrusion_Normalization := Fixed_Normalization (0.000_1 * mm);
          Block.Corners :=
            [[others => 0.0 * mm],
             [X_Axis => 1.0 * mm, E_Axis => 0.050_03 * mm, others => 0.0 * mm],
@@ -1544,7 +1551,8 @@ package body Prunt.Motion_Planner.Planner.Test is
                T.Assert (Block.Extrusion_Densities (I) = Dimensionless (Direction) * 0.05,
                  "Every segment in the run stores exactly the same total-preserving density");
                T.Assert (abs (Block.Extrusion_Densities (I) * Primitive_Length (Block'Access, I)
-                 - (Original (I) (E_Axis) - Original (I - 1) (E_Axis))) <= Block.Params.Extrusion_Rounding_Tolerance,
+                 - (Original (I) (E_Axis) - Original (I - 1) (E_Axis)))
+                 <= Block.Params.Extrusion_Normalization.E_Resolution,
                  "The actual extrusion adjustment of every segment obeys the local allowance");
             end loop;
             T.Assert (Workspace.Unblended_Extrusion_Positions (4) = Original (4) (E_Axis),
@@ -1552,14 +1560,14 @@ package body Prunt.Motion_Planner.Planner.Test is
             T.Assert (abs (Workspace.Unblended_Extrusion_Positions (2)
               - Dimensionless (Direction) * 0.05 * mm) < 1.0E-15 * mm,
               "The interior E reference uses the normalized density");
-            Block.Params.Extrusion_Rounding_Tolerance := 0.000_01 * mm;
+            Block.Params.Extrusion_Normalization := Fixed_Normalization (0.000_01 * mm);
             Tested_Density_Normalizer.Run (Block, Workspace);
             for I in Block.Primitives'Range loop
                T.Assert (Block.Extrusion_Densities (I)
                  = (Original (I) (E_Axis) - Original (I - 1) (E_Axis)) / Primitive_Length (Block'Access, I),
                  "A tighter allowance retains distinct densities when no pair can be normalized");
             end loop;
-            Block.Params.Extrusion_Rounding_Tolerance := 0.0 * mm;
+            Block.Params.Extrusion_Normalization := No_Normalization;
             Tested_Density_Normalizer.Run (Block, Workspace);
             T.Assert (Workspace.Unblended_Extrusion_Positions (1 .. 4)
               = Block_Segment_Lengths'[for P of Original => P (E_Axis)],
@@ -1584,7 +1592,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       T.Register;
       for Scenario in 1 .. 6 loop
          Reset_Early_Limiter_Block (Block);
-         Block.Params.Extrusion_Rounding_Tolerance := 0.000_1 * mm;
+         Block.Params.Extrusion_Normalization := Fixed_Normalization (0.000_1 * mm);
          Block.Corners :=
            [[others => 0.0 * mm],
             [X_Axis => 1.0 * mm, E_Axis => 0.050_03 * mm, others => 0.0 * mm],
@@ -1620,7 +1628,7 @@ package body Prunt.Motion_Planner.Planner.Test is
    begin
       T.Register;
       Reset_Early_Limiter_Block (Block);
-      Block.Params.Extrusion_Rounding_Tolerance := 0.000_1 * mm;
+      Block.Params.Extrusion_Normalization := Fixed_Normalization (0.000_1 * mm);
       Block.Params.Bounds.Lower_E := 0.0 * mm;
       Block.Params.Bounds.Upper_E := 0.1 * mm;
       Block.Corners :=
@@ -1646,7 +1654,7 @@ package body Prunt.Motion_Planner.Planner.Test is
    begin
       T.Register;
       Reset_Early_Limiter_Block (Block);
-      Block.Params.Extrusion_Rounding_Tolerance := 0.001 * mm;
+      Block.Params.Extrusion_Normalization := Fixed_Normalization (0.001 * mm);
       Block.Corners :=
         [[others => 0.0 * mm],
          [X_Axis => 1.0 * mm, E_Axis => 1.0 * mm, others => 0.0 * mm],
@@ -1665,6 +1673,81 @@ package body Prunt.Motion_Planner.Planner.Test is
         "Closing a run preserves its extrusion total before starting the next run");
    end Test_Extrusion_Density_Rounding_Intersection;
 
+   procedure Test_Extrusion_Density_Normalization_Allowances (T : in out Trendy_Test.Operation'Class) is
+      type Workspace_Access is access Planning_Workspace;
+      Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
+      Block     : aliased Execution_Block (4);
+
+      procedure Prepare (Nudge_E : Length);
+      --  Two 10 mm moves at 0.05 mm of E per mm, joined by a 0.001 mm move that extrudes Nudge_E.
+
+      function Shared return Boolean
+      is (Block.Extrusion_Densities (2) = Block.Extrusion_Densities (3)
+          and then Block.Extrusion_Densities (3) = Block.Extrusion_Densities (4));
+
+      procedure Prepare (Nudge_E : Length) is
+      begin
+         Reset_Early_Limiter_Block (Block);
+         Block.Params.Extrusion_Normalization := (others => <>);
+         Block.Corners :=
+           [[others => 0.0 * mm],
+            [X_Axis => 10.0 * mm, E_Axis => 0.5 * mm, others => 0.0 * mm],
+            [X_Axis => 10.001 * mm, E_Axis => 0.5 * mm + Nudge_E, others => 0.0 * mm],
+            [X_Axis => 20.001 * mm, E_Axis => 1.0 * mm + Nudge_E, others => 0.0 * mm]];
+      end Prepare;
+   begin
+      T.Register;
+
+      Prepare (0.000_08 * mm);
+      Tested_Density_Normalizer.Run (Block, Workspace);
+      T.Assert
+        ((for all I in Block.Primitives'Range => Workspace.Unblended_Length_Spreads (I) = 1.0),
+         "A move along one axis can change length by one XYZ resolution");
+      T.Assert
+        (Shared,
+         "Rounding the short move's ends to the XYZ resolution explains its extrusion at the run's density");
+      Block.Params.Extrusion_Normalization.XYZ_Resolution := 0.0 * mm;
+      Tested_Density_Normalizer.Run (Block, Workspace);
+      T.Assert (not Shared, "The E resolution alone does not explain the short move's extrusion");
+
+      --  An E-dominated move, such as a nudge that primes, is a boundary: its length's rounding is judged at the run's
+      --  density, not at its own.
+      Prepare (0.1 * mm);
+      Tested_Density_Normalizer.Run (Block, Workspace);
+      T.Assert
+        (Block.Extrusion_Densities (3)
+         = (Block.Corners (3) (E_Axis) - Block.Corners (2) (E_Axis)) / Primitive_Length (Block'Access, 3),
+         "A short move that extrudes far more than its length explains keeps its own density");
+
+      --  Long moves whose densities differ by a few tenths of a percent, beyond what rounding explains.
+      Reset_Early_Limiter_Block (Block);
+      Block.Corners :=
+        [[others => 0.0 * mm],
+         [X_Axis => 10.0 * mm, E_Axis => 0.5 * mm, others => 0.0 * mm],
+         [X_Axis => 20.0 * mm, E_Axis => 1.002 * mm, others => 0.0 * mm],
+         [X_Axis => 30.0 * mm, E_Axis => 1.501 * mm, others => 0.0 * mm]];
+      Block.Params.Extrusion_Normalization := (others => <>);
+      Tested_Density_Normalizer.Run (Block, Workspace);
+      T.Assert (Shared, "Differences below the relative allowance are treated as negligible");
+      for I in Block.Primitives'Range loop
+         T.Assert
+           (abs (Block.Extrusion_Densities (I) * Primitive_Length (Block'Access, I)
+                 - (Block.Corners (I) (E_Axis) - Block.Corners (I - 1) (E_Axis)))
+            <= 0.005 * abs (Block.Corners (I) (E_Axis) - Block.Corners (I - 1) (E_Axis)),
+            "No move's extrusion changes by more than the relative allowance");
+      end loop;
+      Block.Params.Extrusion_Normalization.Relative_Adjustment_Max := 0.001;
+      Tested_Density_Normalizer.Run (Block, Workspace);
+      T.Assert (not Shared, "A smaller relative allowance keeps the real differences");
+      Block.Params.Extrusion_Normalization := No_Normalization;
+      Tested_Density_Normalizer.Run (Block, Workspace);
+      T.Assert
+        ((for all I in Block.Primitives'Range =>
+            Block.Extrusion_Densities (I)
+            = (Block.Corners (I) (E_Axis) - Block.Corners (I - 1) (E_Axis)) / Primitive_Length (Block'Access, I)),
+         "All-zero parameters disable normalization");
+   end Test_Extrusion_Density_Normalization_Allowances;
+
    procedure Test_Extrusion_Density_Rounding_Execution (T : in out Trendy_Test.Operation'Class) is
       type Workspace_Access is access Planning_Workspace;
       Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
@@ -1674,7 +1757,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       T.Register;
       Reset_Early_Limiter_Block (Block);
       Block.Params.Ignore_E_In_XYZE := False;
-      Block.Params.Extrusion_Rounding_Tolerance := 0.000_1 * mm;
+      Block.Params.Extrusion_Normalization := Fixed_Normalization (0.000_1 * mm);
       Block.Params.Extrusion_Cornering := Velocity_Jump (0.0 * mm / s);
       Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
       Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
@@ -3832,7 +3915,7 @@ package body Prunt.Motion_Planner.Planner.Test is
                Block.Corners (3) (E_Axis) :=
                  (case Mode is when 2 => 1.2, when 3 => -0.8, when others => 0.8) * mm;
                if Mode = 4 then
-                  Block.Params.Extrusion_Rounding_Tolerance := 0.0001 * mm;
+                  Block.Params.Extrusion_Normalization := Fixed_Normalization (0.0001 * mm);
                   Block.Params.Bounds.Upper_E := 0.8 * mm;
                   Block.Corners (2) (E_Axis) := @ + 0.00001 * mm;
                end if;
@@ -5176,6 +5259,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Extrusion_Density_Rounding_Boundaries'Unrestricted_Access,
          Test_Extrusion_Density_Rounding_Bounds'Unrestricted_Access,
          Test_Extrusion_Density_Rounding_Intersection'Unrestricted_Access,
+         Test_Extrusion_Density_Normalization_Allowances'Unrestricted_Access,
          Test_Extrusion_Density_Rounding_Execution'Unrestricted_Access,
          Test_Extrusion_Zero_Allowance_Geometry'Unrestricted_Access,
          Test_Extrusion_Instantaneous_Velocity_Change'Unrestricted_Access,
