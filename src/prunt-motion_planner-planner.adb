@@ -211,12 +211,18 @@ package body Prunt.Motion_Planner.Planner is
          end if;
       end Request_Collection;
 
+      pragma Warnings (Off, "potentially unsynchronized barrier");
+      --  TODO: GNAT bug (Slot incorrectly gets a warning, Blocks incorrectly doesn't).
       entry Wait_For_Retirement (Pending : out Block_Set; Stop : out Boolean)
         when Runner_Terminated
         or else Collection_Requested
-        or else (for some Slot of Blocks.all => Slot.State in Linked | Retired)
+        or else (for some Slot of Blocks.all => Slot.State = Linked)
+        or else (for some Slot of Blocks.all => Slot.State = Retired)
       is
       begin
+         --  The barrier scans for Linked before Retired. A consumer retires its predecessor before claiming the Linked
+         --  successor, and only this object moves a slot out of Retired, so a hand-off that hides the successor from
+         --  the first scan leaves the retired predecessor for the second.
          Collection_Requested := False;
          Collect_Retired (Pending);
          for Index in Block_Index loop
@@ -226,6 +232,7 @@ package body Prunt.Motion_Planner.Planner is
          end loop;
          Stop := Runner_Terminated and then (for all Taken of Pending => not Taken);
       end Wait_For_Retirement;
+      pragma Warnings (On, "potentially unsynchronized barrier");
 
       entry Wait_For_Collection_Request when Runner_Terminated or else Collection_Requested is
       begin
@@ -248,12 +255,15 @@ package body Prunt.Motion_Planner.Planner is
          Deferred_Error.Save (Occurrence);
       end Defer_Cleanup_Error;
 
+      pragma Warnings (Off, "potentially unsynchronized barrier");
+      --  As for Wait_For_Retirement.
       entry Take_Cleanup_Error (Error : in out Cleanup_Exceptions.Holder)
         when (for all Pending of Deferred_Cleanup => not Pending)
       is
       begin
          Cleanup_Exceptions.Transfer (From => Deferred_Error, To => Error);
       end Take_Cleanup_Error;
+      pragma Warnings (On, "potentially unsynchronized barrier");
    end Block_Ring;
 
    procedure Cleanup_Block (Index : Block_Index; Error : in out Cleanup_Exceptions.Holder);
