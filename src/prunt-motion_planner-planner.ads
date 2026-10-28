@@ -26,8 +26,12 @@ pragma Check_Float_Overflow;
 --  The package works by collecting a series of corners before processing them as a single batch, called an
 --  Execution_Block with a stopped fallback plan. Adjacent queued blocks without end data can be linked by a
 --  certified local blend before execution borrows them. Corners are collected until a flush command is received
---  or the block is full. A full block waits for the next command to establish whether its final corner has overflow
---  data before being published. Each stage of the planning pipeline is implemented in a child package of this one:
+--  or the block is full. Once a block holds the last tenth of Max_Corners, Max_Corners_Extra_Data_Count or
+--  Max_Corners_Extra_Data_Storage, it also ends before any move that does not continue its last extrusion run: a
+--  travel, E reversal or E-only move, any move after a travel or E-only move, or any move after a dwell. A full block
+--  therefore rarely splits an extrusion run. A limit below 10 has no such window. A full block waits for the next
+--  command to establish whether its final corner has overflow data before being published. Each stage of the planning
+--  pipeline is implemented in a child package of this one:
 --
 --  1. Preprocessor:
 --
@@ -122,7 +126,7 @@ generic
    --  be used to indicate if a move is a homing move or if the machine should pause after completion.
 
    Flush_Resetting_Data_Type_Default : Flush_Resetting_Data_Type;
-   --  Data for blocks that end only because they reached a capacity limit. Such boundaries may be blended with the
+   --  Data for blocks that end without a flush, at or near a capacity limit. Such boundaries may be blended with the
    --  next block, so a flush whose Data equals this value does not guarantee a stop. Use a distinct default if every
    --  explicit flush must stop.
 
@@ -149,15 +153,20 @@ generic
    Max_Corners : Max_Corners_Type := 50_000;
    --  The maximum number of corners in one execution block. Each planner allocates Block_Capacity blocks of this
    --  size, plus its planning workspace, during initialisation. Increasing this limit increases every slot's storage;
-   --  execution blocks are reused without per-block allocation.
+   --  execution blocks are reused without per-block allocation. Once a block reaches the last tenth of this limit it
+   --  ends before the first move that does not continue its last extrusion run, including any move after a travel or
+   --  E-only move. Limits below 10 have no such window.
 
    Max_Corners_Extra_Data_Count : Max_Corners_Extra_Data_Type := 1_000;
+   --  The maximum number of Corner_Extra_Data_Type items in one block. Like Max_Corners, a block holding the last
+   --  tenth of this limit ends before the first move that does not continue its last extrusion run.
 
    Max_Corners_Extra_Data_Storage : System.Storage_Elements.Storage_Count := 1_000_000;
    --  The maximum amount of data in storage elements that the vector of Corner_Extra_Data_Type for a block may use for
    --  its backing storage. If a motion block runs out of space for extra data, the remaining data for the same corner
    --  is emitted in one or more Extra_Data_Overflow_Block_Kind blocks. If a Corner_Extra_Data_Type does not fit in an
-   --  empty block then an error will be raised.
+   --  empty block then an error will be raised. Like Max_Corners, a block using the last tenth of this storage ends
+   --  before the first move that does not continue its last extrusion run.
 
    Max_Corners_Extra_Data_Per_Corner : Max_Corners_Extra_Data_Type := 10;
    --  The maximum amount of extra data that can be processed for a corner before forcing a motion block boundary.
@@ -501,6 +510,21 @@ private
 
    function Primitive_Phase_At_Distance (Primitive : Derived_Path_Primitive; Distance : Length) return Dimensionless;
    --  Return the helix phase at Distance after clamping the distance to Primitive's extent.
+
+   type Run_Direction is (No_Run, Extruding, Retracting);
+   --  The E direction of a run of segments that Extrusion_Density_Normalizer may give one common density.
+
+   function Segment_Run_Direction (Spatial_Length, E_Change : Length) return Run_Direction;
+   --  The run direction of a segment with XYZ path length Spatial_Length and E displacement E_Change. Travel and
+   --  E-only moves join no run.
+
+   function Primitive_Run_Direction
+     (Primitive : Path_Primitive; Start_Point, End_Point : Position) return Run_Direction;
+   --  The Segment_Run_Direction of Primitive between the supplied endpoints, measuring its path with E ignored.
+
+   function Continues_Run (Run, Next : Run_Direction; Dwell_Between : Time) return Boolean;
+   --  Whether a segment in direction Next can join a run in direction Run across a corner that dwells for
+   --  Dwell_Between. A travel, E reversal, E-only move or dwell ends the run.
 
    type Block_Path_Primitives is array (Corners_Index range <>) of Path_Primitive;
 

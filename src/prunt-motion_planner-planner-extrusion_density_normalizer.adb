@@ -41,7 +41,7 @@ package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
       Reference             : Block_Segment_Lengths renames
         Workspace.Unblended_Extrusion_Positions (Block.Corners'Range);
       First, Last           : Finishing_Corners_Index := Finishing_Corners_Index'First;
-      Active                : Boolean := False;
+      Active_Run            : Run_Direction := No_Run;
       Run_Length            : Length := 0.0 * mm;
       Length_Roundoff       : Length := 0.0 * mm;
       Lower, Upper, Density : Dimensionless := 0.0;
@@ -73,7 +73,7 @@ package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
          Distance, Roundoff : Length := 0.0 * mm;
          Start_E, End_E     : Length;
       begin
-         if not Active or else First = Last then
+         if Active_Run = No_Run or else First = Last then
             return;
          end if;
          Start_E := Block.Corners (First - 1) (E_Axis);
@@ -114,12 +114,14 @@ package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
       end loop;
       for I in Block.Primitives'Range loop
          declare
-            Spatial : constant Derived_Path_Primitive :=
+            Spatial     : constant Derived_Path_Primitive :=
               Derive_Path_Primitive
                 (Block.Primitives (I),
                  [Block.Corners (I - 1) with delta E_Axis => 0.0 * mm],
                  [Block.Corners (I) with delta E_Axis => 0.0 * mm]);
-            Change  : constant Length := Block.Corners (I) (E_Axis) - Block.Corners (I - 1) (E_Axis);
+            Change      : constant Length := Block.Corners (I) (E_Axis) - Block.Corners (I - 1) (E_Axis);
+            Segment_Run : constant Run_Direction :=
+              (if Disabled then No_Run else Segment_Run_Direction (Spatial.Length, Change));
          begin
             Lengths (I) := (if Spatial.Length > 0.0 * mm then Spatial.Length else Primitive_Length (Block'Access, I));
             Spreads (I) :=
@@ -132,9 +134,9 @@ package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
                    --  at most 2 * Sqrt (2) resolutions over the radius, and the axial travel by one resolution.
                    Sqrt_2 * (abs Spatial.Theta_Delta + 2.0) + 1.0);
             Block.Extrusion_Densities (I) := (if Lengths (I) > 0.0 * mm then Change / Lengths (I) else 0.0);
-            if Disabled or else Spatial.Length = 0.0 * mm or else Change = 0.0 * mm then
+            if Segment_Run = No_Run then
                Finish_Run;
-               Active := False;
+               Active_Run := No_Run;
             else
                declare
                   Magnitude                               : constant Length := abs Change;
@@ -165,9 +167,9 @@ package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
                   Trial_Lower, Trial_Upper, Trial_Density : Dimensionless;
                   Append                                  : Boolean := False;
                begin
-                  if Active
-                    and then Block.Corner_Dwell_Times (I - 1) = 0.0 * s
-                    and then (Change > 0.0 * mm) = (Density > 0.0)
+                  --  No run is active at the first segment, which has no corner dwell before it.
+                  if Active_Run /= No_Run
+                    and then Continues_Run (Active_Run, Segment_Run, Block.Corner_Dwell_Times (I - 1))
                   then
                      Add_Length (Lengths (I), Trial_Length, Trial_Roundoff);
                      Trial_Lower := Dimensionless'Max (Lower, Low);
@@ -186,7 +188,7 @@ package body Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer is
                      Finish_Run;
                      First := I;
                      Last := I;
-                     Active := True;
+                     Active_Run := Segment_Run;
                      Run_Length := Lengths (I);
                      Length_Roundoff := 0.0 * mm;
                      Lower := Low;

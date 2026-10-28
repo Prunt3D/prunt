@@ -152,6 +152,13 @@ package body Prunt.Bounded_Indefinite_Vectors is
       end loop;
    end Process_Range;
 
+   function Storage_Used (This : Vector) return Storage_Count is
+      use type System.Address;
+   begin
+      --  No init required. A vector without a subpool has never allocated.
+      return (if This.Subpool = null then 0 else This.Subpool.Current_Free - This.Storage'Address);
+   end Storage_Used;
+
    package body Subpool_Support is
 
       use type System.Address;

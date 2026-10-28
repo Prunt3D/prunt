@@ -79,6 +79,8 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
 
 private
 
+   use type System.Storage_Elements.Storage_Offset;
+
    type Command_Queue_Array_Type is array (1 .. Input_Queue_Length) of Command;
 
    package Corner_Extra_Data_Queues is new
@@ -168,6 +170,15 @@ private
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices_Access :=
         new Block_Corners_Extra_Data_End_Indices (1 .. Corners_Index'Last);
    end Runner;
+
+   Natural_End_Corners            : constant Finishing_Corners_Index := Corners_Index (Max_Corners - Max_Corners / 10);
+   Natural_End_Extra_Data_Count   : constant Corners_Extra_Data_Index :=
+     Corners_Extra_Data_Index (Max_Corners_Extra_Data_Count - Max_Corners_Extra_Data_Count / 10);
+   Natural_End_Extra_Data_Storage : constant System.Storage_Elements.Storage_Count :=
+     Max_Corners_Extra_Data_Storage - Max_Corners_Extra_Data_Storage / 10;
+   --  Once a block holds this many corners, extra data items or storage elements of extra data, it ends before the
+   --  next move that does not continue its last extrusion run. A block cut at any of these capacity limits therefore
+   --  rarely splits a run that Extrusion_Density_Normalizer could have joined.
 
    procedure Check_Bounds (Pos : Position; Params : Kinematic_Parameters);
    --  Check if a given position is within the machine's boundaries defined in Params. Raises Out_Of_Bounds_Error

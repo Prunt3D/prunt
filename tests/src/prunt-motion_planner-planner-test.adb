@@ -17,7 +17,9 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Exceptions;
 with Ada.Numerics.Long_Elementary_Functions;
+with Ada.Strings.Unbounded;
 with Prunt.Motion_Planner.Planner.Corner_Blender;
 with Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Preprocessor;
@@ -64,6 +66,7 @@ package body Prunt.Motion_Planner.Planner.Test is
    package Tested_Preprocessor is new Preprocessor;
    package Boundary_Preprocessor is new Preprocessor;
    package Reset_Preprocessor is new Preprocessor;
+   package Natural_End_Preprocessor is new Preprocessor;
 
    Identity_Tolerance_Factor : constant Long_Float := 32_768.0;
 
@@ -4192,6 +4195,237 @@ package body Prunt.Motion_Planner.Planner.Test is
       end;
    end Test_Preprocessor_Run_After_Reset;
 
+   procedure Test_Preprocessor_Natural_Block_Ends (T : in out Trendy_Test.Operation'Class) is
+      type Command_Array is array (Positive range <>) of Command;
+
+      Window_Start : constant Corners_Index := Corners_Index (Max_Corners - Max_Corners / 10);
+      --  Corner count from which the preprocessor ends a block at the next natural boundary.
+      Window       : constant Positive := Positive (Corners_Index (Max_Corners) - Window_Start);
+      --  Moves that take a block from Window_Start corners to Max_Corners.
+      Lead_In      : constant Natural := Natural (Window_Start) - 1;
+      --  Moves that bring the first block to Window_Start corners.
+      Arc_Center   : constant Position :=
+        [X_Axis => Dimensionless (Lead_In) * mm, Y_Axis => 1.0 * mm, others => 0.0 * mm];
+      --  The centre of unit-radius arcs that start where the lead-in ends.
+      Params       : Kinematic_Parameters := (others => <>);
+      Flush        : constant Command :=
+        (Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default);
+      Extra_Item   : constant Command := (Kind => Corner_Extra_Data_Kind);
+
+      Extra_Window_Start : constant Positive :=
+        Positive (Max_Corners_Extra_Data_Count - Max_Corners_Extra_Data_Count / 10);
+      --  Extra data items from which the preprocessor ends a block at the next natural boundary.
+      Large_Extra_Size   : constant Positive :=
+        Positive (Max_Corners_Extra_Data_Storage) - Positive (Max_Corners_Extra_Data_Storage) / 20;
+      --  One item of this size, plus its bounds, uses the last tenth of extra-data storage without exhausting it.
+
+      function Move (X, E : Dimensionless; Dwell_After : Time := 0.0 * s) return Command
+      is (Kind        => Move_Kind,
+          Dwell_After => Dwell_After,
+          Pos         => [X_Axis => X * mm, E_Axis => E * mm, others => 0.0 * mm],
+          Feedrate    => 1.0 * mm / s);
+
+      function Arc (X, Y, E : Dimensionless) return Command
+      is (Kind        => Helix_Move_Kind,
+          Dwell_After => 0.0 * s,
+          Pos         => [X_Axis => X * mm, Y_Axis => Y * mm, E_Axis => E * mm, others => 0.0 * mm],
+          Feedrate    => 1.0 * mm / s,
+          Center      => Arc_Center,
+          Clockwise   => False);
+
+      function Run_Moves
+        (From, To : Positive; E_Step : Dimensionless := 0.1; Final_Dwell : Time := 0.0 * s) return Command_Array
+      is ([for I in From .. To =>
+             Move (Dimensionless (I), E_Step * Dimensionless (I), (if I = To then Final_Dwell else 0.0 * s))]);
+      --  Unit moves along X from X = From to X = To, each changing E by E_Step.
+
+      function With_Extra (Moves : Command_Array) return Command_Array
+      is ([for I in 1 .. 2 * Moves'Length => (if I mod 2 = 1 then Moves (Moves'First + (I - 1) / 2) else Extra_Item)]);
+      --  Moves, each followed by one extra data item for its corner.
+
+      function Is_Move (Comm : Command) return Boolean
+      is (Comm.Kind in Move_Kind | Helix_Move_Kind);
+
+      function Primitive_Kind (Comm : Command) return Path_Primitive_Kind
+      is (if Comm.Kind = Helix_Move_Kind then Helix_Primitive_Kind else Line_Primitive_Kind);
+
+      function Move_Commands (Commands : Command_Array) return Command_Array is
+         Result : Command_Array (1 .. Commands'Length);
+         Count  : Natural := 0;
+      begin
+         for Comm of Commands loop
+            if Is_Move (Comm) then
+               Count := @ + 1;
+               Result (Count) := Comm;
+            end if;
+         end loop;
+         return Result (1 .. Count);
+      end Move_Commands;
+
+      function Extra_Before (Commands : Command_Array; Move_Number : Positive) return Natural is
+         Moves, Extra : Natural := 0;
+      begin
+         --  Count the extra data items that precede the Move_Number-th move, or all of them if there is no such move.
+         for Comm of Commands loop
+            if Is_Move (Comm) then
+               Moves := @ + 1;
+               exit when Moves = Move_Number;
+            elsif Comm.Kind = Corner_Extra_Data_Kind then
+               Extra := @ + 1;
+            end if;
+         end loop;
+         return Extra;
+      end Extra_Before;
+
+      procedure Check
+        (Commands : Command_Array; Expected_Corners : Corners_Index; Name : String; Extra_Size : Positive := 1)
+      is
+         Moves                     : constant Command_Array := Move_Commands (Commands);
+         First, Second             : aliased Execution_Block;
+         First_Extra, Second_Extra : Corner_Extra_Data_Vectors.Vector;
+         First_Reset, Second_Reset : Boolean := True;
+         Rejection                 : Ada.Strings.Unbounded.Unbounded_String;
+      begin
+         Natural_End_Preprocessor.Setup (Params);
+         declare
+            --  The fixture's input queue is shorter than a block, so feed it while the preprocessor consumes. The
+            --  second flush turns a block that wrongly takes the first one into a failure rather than a hang.
+            task Producer;
+            task body Producer is
+               Extra : aliased constant Corner_Extra_Data_Type := Extra_Data_Of_Size (Extra_Size);
+            begin
+               for Comm of Command_Array'(Commands & Flush & Flush) loop
+                  if Comm.Kind = Corner_Extra_Data_Kind then
+                     Natural_End_Preprocessor.Enqueue (Comm, Extra => Extra'Access);
+                  else
+                     Natural_End_Preprocessor.Enqueue (Comm);
+                  end if;
+               end loop;
+            exception
+               when Error : others =>
+                  --  Release the consumer, so a rejected command fails the test rather than hanging it.
+                  Rejection :=
+                    Ada.Strings.Unbounded.To_Unbounded_String (Ada.Exceptions.Exception_Information (Error));
+                  Natural_End_Preprocessor.Reset;
+            end Producer;
+         begin
+            Natural_End_Preprocessor.Run (First'Access, First_Extra, Initial_Position, First_Reset);
+            Natural_End_Preprocessor.Run (Second'Access, Second_Extra, First.Next_Block_Pos, Second_Reset);
+         exception
+            when others =>
+               --  Release a producer waiting on the full queue before this block waits for it.
+               Natural_End_Preprocessor.Reset;
+               raise;
+         end;
+         Natural_End_Preprocessor.Reset;
+
+         T.Assert
+           (Ada.Strings.Unbounded.Length (Rejection) = 0,
+            Name & ": every command is accepted, but " & Ada.Strings.Unbounded.To_String (Rejection));
+         T.Assert (not First_Reset and then not Second_Reset, Name & ": both blocks are assembled");
+         T.Assert
+           (First.N_Corners = Expected_Corners,
+            Name & ": the first block has" & Expected_Corners'Image & " corners, not" & First.N_Corners'Image);
+         T.Assert
+           (First.Blendable_End and then not First.Associated_Overflow_Block,
+            Name & ": the boundary remains blendable without an overflow block");
+         if Second.N_Corners >= 2 and then Second.N_Corners = Corners_Index (Moves'Length) - First.N_Corners + 2 then
+            T.Assert
+              (Second.Corners (1) = First.Corners (First.N_Corners)
+               and then Second.Corners (2) = Moves (Positive (First.N_Corners)).Pos,
+               Name & ": the next block starts at the boundary with the deferred move");
+            T.Assert
+              ((for all I in 2 .. First.N_Corners =>
+                  First.Primitives (I).Kind = Primitive_Kind (Moves (Positive (I) - 1)))
+               and then
+                 (for all I in 2 .. Second.N_Corners =>
+                    Second.Primitives (I).Kind = Primitive_Kind (Moves (Positive (First.N_Corners + I) - 2))),
+               Name & ": every move keeps its primitive kind on both sides of the boundary");
+         else
+            T.Fail (Name & ": the next block holds every remaining move");
+         end if;
+         T.Assert
+           (Second.First_Corner_ID = First.First_Corner_ID + Planner_Corner_ID (First.N_Corners - 1),
+            Name & ": the boundary corner keeps one ID and the deferred move is not consumed");
+         T.Assert
+           (Natural (First_Extra.Last_Index) = Extra_Before (Commands, Positive (First.N_Corners))
+            and then
+              Natural (First_Extra.Last_Index) + Natural (Second_Extra.Last_Index)
+              = Extra_Before (Commands, Moves'Length + 1),
+            Name & ": the boundary corner keeps its extra data and the next block holds the rest");
+      end Check;
+
+      Early_Boundaries : Command_Array := Run_Moves (1, Lead_In + Window + 1);
+   begin
+      T.Register;
+
+      Params.Bounds := Rectangular_Bounds ([others => -100.0 * mm], [others => 100.0 * mm]);
+
+      Check
+        (Run_Moves (1, Lead_In)
+         & Move (Dimensionless (Lead_In + 1), 0.1 * Dimensionless (Lead_In))
+         & Move (Dimensionless (Lead_In + 2), 0.1 * Dimensionless (Lead_In + 1)),
+         Window_Start,
+         "Travel");
+      Check
+        (Run_Moves (1, Lead_In + Window - 1)
+         & Move (Dimensionless (Lead_In + Window), 0.1 * Dimensionless (Lead_In + Window - 1)),
+         Corners_Index (Max_Corners) - 1,
+         "Travel at the end of the window");
+      Check
+        (Run_Moves (1, Lead_In) & Move (Dimensionless (Lead_In + 1), 0.1 * Dimensionless (Lead_In) - 0.05),
+         Window_Start,
+         "E reversal");
+      Check
+        (Run_Moves (1, Lead_In) & Move (Dimensionless (Lead_In), 0.1 * Dimensionless (Lead_In + 1)),
+         Window_Start,
+         "Same-direction E-only move");
+      Check
+        (Run_Moves (1, Lead_In, Final_Dwell => 0.1 * s)
+         & Move (Dimensionless (Lead_In + 1), 0.1 * Dimensionless (Lead_In + 1)),
+         Window_Start,
+         "Dwell");
+      Check (Run_Moves (1, Lead_In + Window + 1), Corners_Index (Max_Corners), "Continuing extrusion");
+      Check
+        (Run_Moves (1, Lead_In + Window - 1, E_Step => -0.1) & Move (Dimensionless (Lead_In + Window), 0.0),
+         Corners_Index (Max_Corners) - 1,
+         "Retraction run ended by a reversal");
+      Check
+        (Run_Moves (1, Lead_In)
+         & Arc (Dimensionless (Lead_In + 1), 1.0, 0.1 * Dimensionless (Lead_In + 1))
+         & Arc (Dimensionless (Lead_In), 2.0, 0.1 * Dimensionless (Lead_In + 1)),
+         Window_Start + 1,
+         "Helical extrusion then helical travel");
+
+      --  Extra data opens the same window long before the block reaches Max_Corners. The segment accepted before the
+      --  window opens is still judged, whether it extrudes or travels.
+      Check
+        (With_Extra (Run_Moves (1, Extra_Window_Start))
+         & Run_Moves (Extra_Window_Start + 1, Extra_Window_Start + 1)
+         & Move (Dimensionless (Extra_Window_Start + 2), 0.1 * Dimensionless (Extra_Window_Start + 1)),
+         Corners_Index (Extra_Window_Start + 2),
+         "Extra data count");
+      Check
+        (With_Extra (Run_Moves (1, Extra_Window_Start - 1))
+         & Move (Dimensionless (Extra_Window_Start), 0.1 * Dimensionless (Extra_Window_Start - 1))
+         & Extra_Item
+         & Run_Moves (Extra_Window_Start + 1, Extra_Window_Start + 1),
+         Corners_Index (Extra_Window_Start + 1),
+         "Travel before the extra data count window");
+      Check
+        (Run_Moves (1, 3) & Extra_Item & Run_Moves (4, 5) & Move (6.0, 0.5) & Run_Moves (7, 7),
+         6,
+         "Extra data storage",
+         Extra_Size => Large_Extra_Size);
+
+      --  Boundaries before the window do not end the block.
+      Early_Boundaries (3) := Move (3.0, 0.2);
+      Early_Boundaries (5) := Move (5.0, 0.5, 0.1 * s);
+      Early_Boundaries (7) := Move (7.0, 0.55);
+      Early_Boundaries (9) := Move (8.0, 0.9);
+      Check (Early_Boundaries, Corners_Index (Max_Corners), "Early boundaries");
+   end Test_Preprocessor_Natural_Block_Ends;
+
    procedure Test_Profile_Extrusion_Limits (T : in out Trendy_Test.Operation'Class) is
       type Workspace_Access is access Planning_Workspace;
       Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
@@ -5244,6 +5478,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Inter_Block_Blending'Unrestricted_Access,
          Test_Blend_Seam_Retained_Primitives'Unrestricted_Access,
          Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
+         Test_Preprocessor_Natural_Block_Ends'Unrestricted_Access,
          Test_Profile_Extrusion_Limits'Unrestricted_Access,
          Test_Local_Pair_Stop_Selection'Unrestricted_Access,
          Test_Local_Corner_Selection'Unrestricted_Access,

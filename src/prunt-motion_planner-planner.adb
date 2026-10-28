@@ -771,6 +771,28 @@ package body Prunt.Motion_Planner.Planner is
       return Primitive.Theta_Start + Sign * Clamped / Primitive.Length_Per_Radian;
    end Primitive_Phase_At_Distance;
 
+   function Segment_Run_Direction (Spatial_Length, E_Change : Length) return Run_Direction is
+   begin
+      if E_Change = 0.0 * mm or else Spatial_Length = 0.0 * mm then
+         return No_Run;
+      end if;
+
+      return (if E_Change > 0.0 * mm then Extruding else Retracting);
+   end Segment_Run_Direction;
+
+   function Primitive_Run_Direction
+     (Primitive : Path_Primitive; Start_Point, End_Point : Position) return Run_Direction
+   is
+      Spatial : constant Derived_Path_Primitive :=
+        Derive_Path_Primitive
+          (Primitive, [Start_Point with delta E_Axis => 0.0 * mm], [End_Point with delta E_Axis => 0.0 * mm]);
+   begin
+      return Segment_Run_Direction (Spatial.Length, End_Point (E_Axis) - Start_Point (E_Axis));
+   end Primitive_Run_Direction;
+
+   function Continues_Run (Run, Next : Run_Direction; Dwell_Between : Time) return Boolean
+   is (Next /= No_Run and then Next = Run and then Dwell_Between = 0.0 * s);
+
    function Spatial_Primitive
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Derived_Path_Primitive
    is

@@ -423,6 +423,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Associated_Overflow_Block    : Boolean := False;
          Blendable_End                : Boolean := True;
          Last_Pos                     : Position := Start_Pos;
+         Last_Run                     : Run_Direction := No_Run;
+         Last_Run_Known               : Boolean := False;
+         --  When Last_Run_Known, Last_Run is the run direction of the block's last segment. Segments are only judged
+         --  once the block is near capacity, so the segment accepted before that is judged when it is first needed.
+
+         function Near_Capacity return Boolean
+         is (N_Corners >= Natural_End_Corners
+             or else Corners_Extra_Data.Last_Index >= Natural_End_Extra_Data_Count
+             or else Corners_Extra_Data.Storage_Used >= Natural_End_Extra_Data_Storage);
+         --  Whether the block holds the last tenth of its corner, extra-data count or extra-data storage capacity.
 
          procedure Finish_Dequeue_And_Update_Corner_ID (Kind : Command_Kind; Corner_ID : out Planner_Corner_ID);
          --  Commit the current dequeue transaction and update the runner's mirror of command-queue corner ID state.
@@ -608,42 +618,65 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                           = Max_Corners_Extra_Data_Type'Base (Max_Corners_Extra_Data_Per_Corner);
                         exit Read_In_Commands when Corners_Extra_Data.Last_Index = Corners_Extra_Data_Index'Last;
 
-                     when Move_Kind                        =>
-                        Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
-                        exit Read_In_Commands when Reset_Called;
-                        N_Corners := N_Corners + 1;
-                        Extra_Data_This_Corner := 0;
-                        Current_Corner_ID := Accepted_Corner_ID;
-                        Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data.Last_Index;
-                        Corners (N_Corners) := Next_Command.Pos;
-                        Primitives (N_Corners) := Make_Line_Primitive;
-                        Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
-                        Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
+                     when Move_Kind | Helix_Move_Kind      =>
+                        declare
+                           Near_Full   : constant Boolean := N_Corners > Corners_Index'First and then Near_Capacity;
+                           --  Only a block with a segment can end at a natural boundary.
+                           Primitive   : Path_Primitive := Make_Line_Primitive;
+                           Segment_Run : Run_Direction := No_Run;
+                        begin
+                           begin
+                              if Next_Command.Kind = Helix_Move_Kind then
+                                 Primitive :=
+                                   Make_Helix_Primitive
+                                     (Corners (N_Corners),
+                                      Next_Command.Pos,
+                                      Next_Command.Center,
+                                      Next_Command.Clockwise);
+                              end if;
 
-                        Last_Pos := Next_Command.Pos;
+                              if Near_Full then
+                                 Segment_Run :=
+                                   Primitive_Run_Direction (Primitive, Corners (N_Corners), Next_Command.Pos);
+                                 if not Last_Run_Known then
+                                    Last_Run :=
+                                      Primitive_Run_Direction
+                                        (Primitives (N_Corners), Corners (N_Corners - 1), Corners (N_Corners));
+                                 end if;
+                              end if;
+                           exception
+                              when others =>
+                                 --  Close the move's dequeue transaction so the queue stays usable after the error.
+                                 Command_Queue.Cancel_Dequeue (Reset_Called);
+                                 raise;
+                           end;
 
-                        exit Read_In_Commands when N_Corners = Corners_Index (Max_Corners);
+                           if Near_Full
+                             and then not Continues_Run (Last_Run, Segment_Run, Corner_Dwell_Times (N_Corners))
+                           then
+                              --  The block's last run ends here anyway, so leave this move for the next block rather
+                              --  than splitting a later run at a capacity limit.
+                              Command_Queue.Cancel_Dequeue (Reset_Called);
+                              exit Read_In_Commands;
+                           end if;
 
-                     when Helix_Move_Kind                  =>
-                        Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
-                        exit Read_In_Commands when Reset_Called;
-                        N_Corners := N_Corners + 1;
-                        Extra_Data_This_Corner := 0;
-                        Current_Corner_ID := Accepted_Corner_ID;
-                        Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data.Last_Index;
-                        Corners (N_Corners) := Next_Command.Pos;
-                        Primitives (N_Corners) :=
-                          Make_Helix_Primitive
-                            (Corners (N_Corners - 1),
-                             Corners (N_Corners),
-                             Next_Command.Center,
-                             Next_Command.Clockwise);
-                        Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
-                        Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
+                           Finish_Dequeue_And_Update_Corner_ID (Next_Command.Kind, Accepted_Corner_ID);
+                           exit Read_In_Commands when Reset_Called;
+                           N_Corners := N_Corners + 1;
+                           Extra_Data_This_Corner := 0;
+                           Current_Corner_ID := Accepted_Corner_ID;
+                           Corners_Extra_Data_End_Indices (N_Corners) := Corners_Extra_Data.Last_Index;
+                           Corners (N_Corners) := Next_Command.Pos;
+                           Primitives (N_Corners) := Primitive;
+                           Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
+                           Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
 
-                        Last_Pos := Next_Command.Pos;
+                           Last_Pos := Next_Command.Pos;
+                           Last_Run := Segment_Run;
+                           Last_Run_Known := Near_Full;
 
-                        exit Read_In_Commands when N_Corners = Corners_Index (Max_Corners);
+                           exit Read_In_Commands when N_Corners = Corners_Index (Max_Corners);
+                        end;
                   end case;
                end if;
             end;
@@ -664,7 +697,8 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
          if Current_Corner_ID /= 0 and then Current_Input_Corner_ID = Current_Corner_ID then
             --  A capacity boundary leaves the last corner open. An empty queue does not close that corner: wait for a
-            --  command to determine whether its extra data continues in an overflow block.
+            --  command to determine whether its extra data continues in an overflow block. A natural end leaves its
+            --  move queued, so it never waits.
             pragma Warnings (Off, "potentially blocking operation in protected operation");
             Command_Queue.Wait_For_Corner_Continuation (Associated_Overflow_Block, Reset_Called);
             pragma Warnings (On, "potentially blocking operation in protected operation");

@@ -22,6 +22,8 @@ pragma Extensions_Allowed (On);
 with Trendy_Test;
 
 generic
+   with function Extra_Data_Of_Size (Size : Positive) return Corner_Extra_Data_Type;
+   --  Extra data whose stored size grows with Size, so tests can fill a block's extra-data storage.
 package Prunt.Motion_Planner.Planner.Test is
 
    function All_Tests return Trendy_Test.Test_Group;

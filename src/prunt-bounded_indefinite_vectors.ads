@@ -69,6 +69,10 @@ package Prunt.Bounded_Indefinite_Vectors is
    function Is_Empty (This : Vector) return Boolean;
    --  Return True when This contains no elements.
 
+   function Storage_Used (This : Vector) return System.Storage_Elements.Storage_Count;
+   --  Return how much of the backing storage This's elements occupy, including alignment padding. Clear returns it to
+   --  zero.
+
 private
 
    use System.Storage_Elements;

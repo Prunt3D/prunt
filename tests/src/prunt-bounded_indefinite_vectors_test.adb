@@ -28,6 +28,8 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
 
    pragma Extensions_Allowed (On);
 
+   use type System.Storage_Elements.Storage_Offset;
+
    type Test_Index is range 1 .. 5;
 
    package Test_Vectors is new
@@ -478,6 +480,25 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
       end;
    end Test_Storage_Exhausted_Bytes;
 
+   procedure Test_Storage_Used (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      V : Vector;
+
+      T.Assert (V.Storage_Used = 0, "A new vector uses no storage");
+      V.Append ((1 .. 100 => 'A'));
+      T.Assert (V.Storage_Used >= 100, "An element's storage is counted");
+      declare
+         One_Element : constant System.Storage_Elements.Storage_Count := V.Storage_Used;
+      begin
+         V.Append ((1 .. 200 => 'B'));
+         T.Assert (V.Storage_Used >= One_Element + 200, "Later elements add their storage");
+      end;
+      V.Clear;
+      T.Assert (V.Storage_Used = 0, "Clear releases all storage");
+   end Test_Storage_Used;
+
    procedure Test_Zero_Size_Storage (T : in out Trendy_Test.Operation'Class) is
       type Null_Record is null record;
       package Zero_Vectors is new
@@ -520,6 +541,7 @@ package body Prunt.Bounded_Indefinite_Vectors_Test is
          Test_Process_Range_Index_Error'Access,
          Test_Storage_Exhausted'Access,
          Test_Storage_Exhausted_Bytes'Access,
+         Test_Storage_Used'Access,
          Test_Zero_Size_Storage'Access];
    end All_Tests;
 
