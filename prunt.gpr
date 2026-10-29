@@ -27,7 +27,7 @@ project Prunt is
 
    for Object_Dir use "obj/" & Build_Profile;
    for Create_Missing_Dirs use "True";
-   for Library_Dir use "lib";
+   for Library_Dir use "lib/" & Build_Profile;
 
    type Library_Type_Type is ("relocatable", "static", "static-pic");
    Library_Type : Library_Type_Type :=

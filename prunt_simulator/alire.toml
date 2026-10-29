@@ -22,6 +22,11 @@ executables = ["prunt_simulator"]
 "*".ada_version = []
 "*".source_encoding = []
 
+[build-profiles]
+# Prunt release builds use -gnatp, which changes which finalization routines its controlled types export, so a
+# development simulator cannot link against a release Prunt. Use `alr build --profiles=*=release` for release builds.
+prunt = "development"
+
 [[actions]]
 type = "pre-build"
 command = ["gnatmake", "-gnat2022", "-gnatW8", "-gnata", "-g", "prebuild.adb", "-o", "prebuild", "-bargs", "-Es"]
