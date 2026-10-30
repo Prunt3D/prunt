@@ -583,6 +583,53 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          Name & " point-distance upper bound is compatible with dense samples");
    end Assert_Geometry_Intervals_Cover_Dense_Samples;
 
+   procedure Test_Bernstein_Cancellation (T : in out Trendy_Test.Operation'Class) is
+      type Exponent_Array is array (Positive range <>) of Integer;
+      Exponents : constant Exponent_Array := [-540, -500, -64, 0, 64, 450];
+      use type Interfaces.Integer_128;
+      use type Interfaces.Unsigned_128;
+   begin
+      T.Register;
+      --  Alternating exact controls represent (1-2U)**42. Multiplication by constant controls elevates it to
+      --  degree 84. Sum the signed binomial products exactly in 128-bit integers before the final division;
+      --  this oracle retains cancellation which a floating-point reference convolution could lose.
+      for Exponent of Exponents loop
+         declare
+            Scale   : constant Dimensionless := Dimensionless'Scaling (1.0, Exponent);
+            Left    : constant Interval_Polynomial :=
+              [for I in 0 .. 42 => Interval_Exact (if I mod 2 = 0 then Scale else -Scale)];
+            Right   : constant Interval_Polynomial (0 .. 42) := [others => Interval_Exact (Scale)];
+            Product : constant Interval_Polynomial := Multiply_Bernstein (Left, Right);
+         begin
+            for K in Product'Range loop
+               declare
+                  Numerator : Interfaces.Integer_128 := 0;
+                  Divisor   : constant Long_Long_Float := Long_Long_Float (Exact_Binomial (84, K));
+               begin
+                  for I in Natural'Max (0, K - 42) .. Natural'Min (42, K) loop
+                     declare
+                        Term : constant Interfaces.Integer_128 :=
+                          Interfaces.Integer_128 (Exact_Binomial (42, I) * Exact_Binomial (42, K - I));
+                     begin
+                        Numerator := Numerator + (if I mod 2 = 0 then Term else -Term);
+                     end;
+                  end loop;
+                  declare
+                     Expected : constant Long_Long_Float :=
+                       (Long_Long_Float (Numerator) / Divisor) * Long_Long_Float (Scale) * Long_Long_Float (Scale);
+                  begin
+                     T.Assert
+                       (Product (K).Valid
+                        and then Long_Long_Float (Product (K).Lower) <= Expected
+                        and then Long_Long_Float (Product (K).Upper) >= Expected,
+                        "High-degree cancellation is enclosed" & Exponent'Image & K'Image);
+                  end;
+               end;
+            end loop;
+         end;
+      end loop;
+   end Test_Bernstein_Cancellation;
+
    procedure Test_Bernstein_Product_Enclosures (T : in out Trendy_Test.Operation'Class) is
       Cases : constant Interval_Polynomial :=
         [(Lower => -5.0, Upper => -2.0, Valid => True),
@@ -2663,6 +2710,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
    begin
       return
         [Test_Numeric_Check_Recovery'Access,
+         Test_Bernstein_Cancellation'Access,
          Test_Bernstein_Product_Enclosures'Access,
          Test_Bernstein_Products'Access,
          Test_Interval_Multiplication_Sign_Cases'Access,

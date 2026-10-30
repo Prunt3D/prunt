@@ -290,6 +290,14 @@ package body Prunt.Motion_Planner is
          return 0.0;
       elsif Denominator <= 0.0 then
          return Dimensionless'Last;
+      elsif Degree = 1
+        and then Dimensionless'Machine_Radix = 2
+        and then Numerator in 2.0**(-128) .. 2.0**128
+        and then Denominator in 2.0**(-128) .. 2.0**128
+      then
+         --  Both the quotient and its operands are normal. Power-of-two normalization cannot change the
+         --  rounded quotient here, so avoid decomposing and reconstructing the common tangent-only ratio.
+         return Numerator / Denominator;
       end if;
 
       Exponent_Difference := Dimensionless'Exponent (Numerator) - Dimensionless'Exponent (Denominator);
@@ -2453,6 +2461,12 @@ package body Prunt.Motion_Planner is
      (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
       return Feedrate_Profile_Times is
    begin
+      if Delta_V = 0.0 * mm / s
+        and then Derivative_Limits_Are_Valid (Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max)
+      then
+         --  Reachability certificates put the peak at one endpoint, so one ramp is usually empty.
+         return [others => 0.0 * s];
+      end if;
       return Optimal_Profile_For_Delta_V_Internal (Delta_V, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max).Profile;
    end Optimal_Profile_For_Delta_V;
 

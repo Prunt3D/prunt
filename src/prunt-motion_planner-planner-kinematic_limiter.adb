@@ -151,27 +151,11 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
          Static_Corner_Limits := [others => 0.0 * mm / s];
 
          for I in Block.Limited_Segment_Feedrates'Range loop
-            if Timing_Run_First (Block'Access, I) /= I then
-               --  Only a run's first segment holds its windows.
-               Window_Evaluations (I) := [others => (others => <>)];
-            else
-               declare
-                  Windows : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block'Access, I);
-               begin
-                  for W in Profile_Window_Candidate_Index loop
-                     if (for all Previous in Profile_Window_Candidate_Index'First .. W - 1 =>
-                           Windows (Previous) /= Windows (W))
-                     then
-                        Window_Evaluations (I) (W) :=
-                          Evaluate_Timing_Window
-                            (Block'Access, Motor_Map, I, Windows (W), Timing_Feedrate (Block'Access, I));
-                     else
-                        --  Absent transitions make cuts coincide. Do not repeat certification or reachability solves.
-                        Window_Evaluations (I) (W) := (others => <>);
-                     end if;
-                  end loop;
-               end;
-            end if;
+            --  Only a run's first segment holds its windows.
+            Window_Evaluations (I) :=
+              (if Timing_Run_First (Block'Access, I) = I
+               then Evaluate_Run_Windows (Block'Access, Motor_Map, I)
+               else [others => (others => <>)]);
          end loop;
 
          for I in Block.Corner_Velocity_Limits'First + 1 .. Block.Corner_Velocity_Limits'Last - 1 loop

@@ -28,12 +28,13 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    pragma Extensions_Allowed (On);
 
    procedure Select_Feedrate_Profile_Window
-     (Block            : not null access Execution_Block;
-      Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Finishing_Corner : Finishing_Corners_Index;
-      Result           : out Profile_Planning_Result;
-      Limit_Scale      : Dimensionless;
-      Split_Profile    : Boolean := True)
+     (Block              : not null access Execution_Block;
+      Motor_Map          : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Finishing_Corner   : Finishing_Corners_Index;
+      Window_Evaluations : Profile_Window_Evaluation_Set;
+      Result             : out Profile_Planning_Result;
+      Limit_Scale        : Dimensionless;
+      Split_Profile      : Boolean := True)
    is
       Start_Vel : constant Velocity := Block.Corner_Velocity_Limits (Finishing_Corner - 1);
       End_Vel   : constant Velocity := Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Finishing_Corner));
@@ -75,6 +76,24 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
       Windows    : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block, Finishing_Corner);
       Candidates : Candidate_Info_Array;
+
+      Split_Evaluations : array (Split_Profile_Windows'Range) of Profile_Window_Evaluation;
+      Split_Evaluated   : array (Split_Profile_Windows'Range) of Boolean := [others => False];
+      --  Unscaled split window evaluations, kept for the conservative split retry.
+
+      function Evaluate_Split (Window : Profile_Window) return Profile_Window_Evaluation;
+      --  The unscaled evaluation of a split window, reusing a whole-window candidate's where they coincide.
+
+      function Evaluate_Split (Window : Profile_Window) return Profile_Window_Evaluation is
+      begin
+         for I in Profile_Window_Candidate_Index loop
+            if Windows (I) = Window then
+               --  The first equal candidate holds the evaluation; later duplicates are left empty.
+               return Window_Evaluations (I);
+            end if;
+         end loop;
+         return Evaluate_Timing_Window (Block, Motor_Map, Finishing_Corner, Window, Feedrate);
+      end Evaluate_Split;
 
       function Conservative_Evaluation (Eval : Profile_Window_Evaluation) return Profile_Window_Evaluation;
       function Conservative_Profile
@@ -168,7 +187,11 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          --  jerk and snap, and a common velocity solved in both directions. Curvature bounds then constrain
          --  only the portion where they apply, instead of imposing a tiny curve's ceiling on a long straight.
          for I in Split_Windows'Range loop
-            Evals (I) := Evaluate_Timing_Window (Block, Motor_Map, Finishing_Corner, Split_Windows (I), Feedrate);
+            if not Split_Evaluated (I) then
+               Split_Evaluations (I) := Evaluate_Split (Split_Windows (I));
+               Split_Evaluated (I) := True;
+            end if;
+            Evals (I) := Split_Evaluations (I);
             if not Evals (I).Valid then
                return;
             end if;
@@ -284,8 +307,7 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          if (for all Previous in Profile_Window_Candidate_Index'First .. I - 1 => Windows (Previous) /= Windows (I))
          then
             declare
-               Eval        : Profile_Window_Evaluation :=
-                 Evaluate_Timing_Window (Block, Motor_Map, Finishing_Corner, Windows (I), Feedrate);
+               Eval        : Profile_Window_Evaluation := Window_Evaluations (I);
                Prefix_Dist : constant Length := Windows (I).Start_Distance;
                Suffix_Dist : constant Length := Total - Windows (I).Start_Distance - Windows (I).Distance;
             begin
@@ -360,15 +382,21 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    end Select_Feedrate_Profile_Window;
 
    procedure Run
-     (Block       : aliased in out Execution_Block;
-      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Result      : out Profile_Planning_Result;
-      Limit_Scale : Dimensionless := 1.0) is
+     (Block              : aliased in out Execution_Block;
+      Motor_Map          : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Window_Evaluations : Profile_Window_Evaluation_Cache;
+      Result             : out Profile_Planning_Result;
+      Limit_Scale        : Dimensionless := 1.0) is
    begin
       Result := (Valid => True);
       for I in Block.Feedrate_Profiles'Range loop
          if Timing_Run_First (Block'Access, I) = I then
-            Select_Feedrate_Profile_Window (Block'Access, Motor_Map, I, Result, Limit_Scale);
+            --  Evaluations of other geometry, members or feedrates would certify the run against the wrong limits.
+            pragma
+              Assert
+                (Window_Evaluations (I) = Evaluate_Run_Windows (Block'Access, Motor_Map, I),
+                 "Window evaluations do not match the current block");
+            Select_Feedrate_Profile_Window (Block'Access, Motor_Map, I, Window_Evaluations (I), Result, Limit_Scale);
             exit when not Result.Valid;
             if Timing_Run_Last (Block'Access, I) /= I then
                Assign_Timing_Members (Block'Access, I);

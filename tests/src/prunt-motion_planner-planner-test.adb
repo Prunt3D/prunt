@@ -17,6 +17,7 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Assertions;
 with Ada.Exceptions;
 with Ada.Numerics.Long_Elementary_Functions;
 with Ada.Strings.Unbounded;
@@ -3607,7 +3608,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          --  failed segment; recovery must rebuild a certifiable original path rather than accept stale profiles.
          Block.Limited_Segment_Feedrates := [others => 0.0 * mm / s];
          Tested_Kinematic_Limiter.Run (Block, Motor_Map, Workspace);
-         Tested_Profile_Generator.Run (Block, Motor_Map, Result);
+         Tested_Profile_Generator.Run (Block, Motor_Map, Workspace.Window_Evaluations, Result);
          T.Assert (not Result.Valid, "Profile exhaustion is reported for retry");
          Plan_Kinematics (Block, Motor_Map, Workspace);
          T.Assert
@@ -3833,7 +3834,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       declare
          Junction : constant Velocity := Block.Corner_Velocity_Limits (2);
       begin
-         Tested_Profile_Generator.Run (Block, Motor_Map, Planning_Result);
+         Tested_Profile_Generator.Run (Block, Motor_Map, Workspace.Window_Evaluations, Planning_Result);
          T.Assert (Planning_Result.Valid, "Generation can realize the speeds certified by lookahead without retry");
          T.Assert (Block.Corner_Velocity_Limits (2) = Junction, "Profile generation preserves the lookahead junction");
          for I in Block.Primitives'Range loop
@@ -4029,7 +4030,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Normalize_And_Blend (Block, Motor_Map, Workspace);
          Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
          Tested_Kinematic_Limiter.Run (Block, Motor_Map, Workspace);
-         Tested_Profile_Generator.Run (Block, Motor_Map, Result);
+         Tested_Profile_Generator.Run (Block, Motor_Map, Workspace.Window_Evaluations, Result);
          T.Assert (Result.Valid, "Chain generation realizes lookahead" & Trial'Image);
       end loop;
    end Test_Small_Arc_Chain;
@@ -4209,9 +4210,6 @@ package body Prunt.Motion_Planner.Planner.Test is
                      and then Block.Primitive_Distances = Stopped.Primitive_Distances
                      and then Block.Primitive_Start_Distances = Stopped.Primitive_Start_Distances,
                      "Stopped selection restores the untrimmed spatial path and its extrusion reference");
-                  T.Assert
-                    ((for all E of Workspace.Window_Evaluations => (for all W of E => not W.Valid)),
-                     "Rejected geometry leaves no cached windows");
                else
                   T.Assert
                     (Block.Corner_Transitions = Curves and then Block.Extrusion_Reference_Positions = References,
@@ -4736,7 +4734,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Feedrates : constant Block_Segment_Feedrates := Block.Limited_Segment_Feedrates;
       begin
          Tested_Profile_Generator.Select_Feedrate_Profile_Window
-           (Block'Access, Motor_Map, I, Result, Limit_Scale => 1.0);
+           (Block'Access, Motor_Map, I, Evaluate_Run_Windows (Block'Access, Motor_Map, I), Result, Limit_Scale => 1.0);
          T.Assert (Result.Valid, "The curved window has a certified profile");
          T.Assert
            (Block.Corner_Transitions = Curves
@@ -4756,6 +4754,114 @@ package body Prunt.Motion_Planner.Planner.Test is
             T);
       end;
    end Test_Profile_Extrusion_Limits;
+
+   procedure Check_Window_Handoff
+     (Block           : aliased in out Execution_Block;
+      Map             : Motor_Position_Map;
+      Work            : not null access Planning_Workspace;
+      Scale           : Dimensionless;
+      Name            : String;
+      T               : in out Trendy_Test.Operation'Class;
+      Slow_Down       : Boolean := False;
+      Fixed_Ends      : Boolean := False;
+      Forced_Junction : Corners_Index'Base := 0);
+   --  Run a limiter pass, then check that it leaves each run's Evaluate_Run_Windows in Work and that Block's profiles
+   --  generate from them. Slow_Down halves every corner speed between the pass and the generation, which the
+   --  evaluations must not depend on.
+
+   procedure Check_Window_Handoff
+     (Block           : aliased in out Execution_Block;
+      Map             : Motor_Position_Map;
+      Work            : not null access Planning_Workspace;
+      Scale           : Dimensionless;
+      Name            : String;
+      T               : in out Trendy_Test.Operation'Class;
+      Slow_Down       : Boolean := False;
+      Fixed_Ends      : Boolean := False;
+      Forced_Junction : Corners_Index'Base := 0)
+   is
+      Result : Profile_Planning_Result;
+   begin
+      Tested_Kinematic_Limiter.Run (Block, Map, Work, Fixed_Ends, Forced_Junction);
+      if Slow_Down then
+         for I in Block.Corner_Velocity_Limits'Range loop
+            Block.Corner_Velocity_Limits (I) := @ * 0.5;
+         end loop;
+      end if;
+      T.Assert
+        ((for all I in Block.Feedrate_Profiles'Range =>
+            Timing_Run_First (Block'Access, I) /= I
+            or else Work.Window_Evaluations (I) = Evaluate_Run_Windows (Block'Access, Map, I)),
+         Name & ": the limiter leaves every run's window evaluations for the block it planned");
+      Tested_Profile_Generator.Run (Block, Map, Work.Window_Evaluations, Result, Scale);
+      T.Assert (Result.Valid, Name & ": profiles generated from the limiter's window evaluations are certified");
+   end Check_Window_Handoff;
+
+   procedure Test_Profile_Window_Handoff (T : in out Trendy_Test.Operation'Class) is
+      Work   : aliased Planning_Workspace (Corners_Index'Last);
+      Block  : aliased Execution_Block (4);
+      Map    : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Result : Profile_Planning_Result;
+
+      Assertions_Enabled : Boolean := False;
+
+      function Enable_Assertions return Boolean;
+      --  Only evaluated when assertions are enabled, as they are for the instance under test in this unit.
+
+      function Enable_Assertions return Boolean is
+      begin
+         Assertions_Enabled := True;
+         return True;
+      end Enable_Assertions;
+   begin
+      T.Register;
+      pragma Assert (Enable_Assertions);
+      Reset_Early_Limiter_Block (Block);
+      Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
+      Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+      Block.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s**2];
+      Block.Params.Axial_Jerk_Maxes := [others => 10_000.0 * mm / s**3];
+      Block.Params.Axial_Snap_Maxes := [others => 100_000.0 * mm / s**4];
+      Block.Params.Axial_Crackle_Maxes := [others => 1_000_000.0 * mm / s**5];
+      Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.02 * mm];
+      Block.Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.02 * mm;
+      Block.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+      Block.Corners :=
+        [[others => 0.0 * mm],
+         [X_Axis => 10.0 * mm, E_Axis => 0.4 * mm, others => 0.0 * mm],
+         [X_Axis | Y_Axis => 10.0 * mm, E_Axis => 0.8 * mm, others => 0.0 * mm],
+         [Y_Axis => 10.0 * mm, E_Axis => 1.2 * mm, others => 0.0 * mm]];
+      Normalize_And_Blend (Block, Map, Work'Access);
+      Tested_Early_Kinematic_Limiter.Run (Block, Map);
+      Check_Window_Handoff (Block, Map, Work'Access, 1.0, "Ordinary profiles", T);
+      Check_Window_Handoff (Block, Map, Work'Access, 0.5, "Recovery profiles", T, Slow_Down => True);
+
+      --  The generator takes the evaluations as given, so evaluations of other geometry or feedrates must be rejected
+      --  wherever assertions are enabled.
+      if Assertions_Enabled then
+         declare
+            Poisoned : Natural := 0;
+         begin
+            Tested_Kinematic_Limiter.Run (Block, Map, Work'Access);
+            for I in Block.Feedrate_Profiles'Range loop
+               for Eval of Work.Window_Evaluations (I) loop
+                  if Eval.Valid then
+                     Eval.Max_Vel := @ + 1.0 * mm / s;
+                     Poisoned := @ + 1;
+                  end if;
+               end loop;
+            end loop;
+            T.Assert (Poisoned > 0, "The limiter leaves valid window evaluations");
+            Tested_Profile_Generator.Run (Block, Map, Work.Window_Evaluations, Result);
+            T.Assert (False, "Stale window evaluations are rejected");
+         exception
+            when Error : Ada.Assertions.Assertion_Error =>
+               T.Assert
+                 (Ada.Exceptions.Exception_Message (Error) = "Window evaluations do not match the current block",
+                  "Only the window evaluation check rejects stale evaluations");
+         end;
+      end if;
+   end Test_Profile_Window_Handoff;
 
    procedure Test_Inter_Block_Blending (T : in out Trendy_Test.Operation'Class) is
       Left, Right       : aliased Execution_Block (6);
@@ -5253,6 +5359,87 @@ package body Prunt.Motion_Planner.Planner.Test is
          and then not Is_Timing_Junction (Halved, 7),
          "A feedrate change ends a run and stays a junction");
    end Test_Continuous_Passthrough_Timing;
+
+   procedure Test_Continuous_Profile_Window_Handoff (T : in out Trendy_Test.Operation'Class) is
+      Work  : aliased Planning_Workspace (Corners_Index'Last);
+      Block : aliased Execution_Block (12);
+      Map   : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+   begin
+      T.Register;
+      --  The slower second half is its own run, so the block has two cellular runs with different ceilings.
+      Prepare_Continuous_Line (Block, Work'Access, Continuous => True, Slow_From => 7);
+      Check_Window_Handoff (Block, Map, Work'Access, 1.0, "Continuous runs", T);
+      T.Assert
+        (Timing_Run_Last (Block'Access, 2) = 6 and then Timing_Run_Last (Block'Access, 7) = Block.N_Corners,
+         "The limiter pass forms two multi-segment runs");
+      T.Assert
+        ((for some Eval of Work.Window_Evaluations (2) => Eval.Valid and then Eval.Cellular),
+         "The limiter hands over cellular window evaluations");
+
+      --  Inline blending replans a patch with fixed ends and a junction forced at its seam.
+      Check_Window_Handoff
+        (Block, Map, Work'Access, 1.0, "Forced junction", T, Fixed_Ends => True, Forced_Junction => 4);
+      T.Assert
+        (Timing_Run_Last (Block'Access, 2) = 4 and then Timing_Run_Last (Block'Access, 5) = 6,
+         "The forced junction splits the first run");
+   end Test_Continuous_Profile_Window_Handoff;
+
+   procedure Test_Prepared_Timing_Evaluation (T : in out Trendy_Test.Operation'Class) is
+      type Times is array (Positive range <>) of Time;
+
+      Work      : aliased Planning_Workspace (Corners_Index'Last);
+      Block     : aliased Execution_Block (12);
+      Exercised : Boolean := False;
+   begin
+      T.Register;
+      Prepare_Continuous_Line (Block, Work'Access, Continuous => True, Slow_From => 7);
+      for Run_First in Block.Primitives'Range loop
+         if Timing_Run_First (Block'Access, Run_First) = Run_First then
+            declare
+               Timing    : constant Timing_Evaluation :=
+                 Prepare_Timing_Evaluation (Block'Access, Run_First, With_Ramp_End => True);
+               Accel_End : constant Time := Timing.Prefix_Time + Timing.Ramp_End.Accel_Time;
+               Coast_End : constant Time := Accel_End + Block.Feedrate_Profiles (Run_First).Coast;
+               Exact     : Boolean := True;
+
+               procedure Compare (Run_Time : Time);
+
+               procedure Compare (Run_Time : Time) is
+               begin
+                  Exact :=
+                    Exact
+                    and then Timing_Distance_At_Time (Block'Access, Run_First, Run_Time, Timing)
+                             = Timing_Distance_At_Time (Block'Access, Run_First, Run_Time)
+                    and then Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time, Timing)
+                             = Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time);
+               end Compare;
+            begin
+               T.Assert
+                 (Timing.Motion_Time = Timing_Motion_Time (Block'Access, Run_First),
+                  "Prepared and unprepared motion times agree for run" & Run_First'Image);
+               T.Assert
+                 (Assigned_Timing_Evaluation (Block'Access, Run_First)
+                  = Prepare_Timing_Evaluation (Block'Access, Run_First),
+                  "Timing from assigned members agrees exactly with a scan of run" & Run_First'Image);
+               Exercised := Exercised or else Timing.Ramp_End.Accel_Time < Timing.Profile_Time;
+               for K in 0 .. 1_000 loop
+                  Compare (Timing.Motion_Time * (Dimensionless (K) / 1_000.0));
+               end loop;
+               for Boundary of Times'[Accel_End, Coast_End, Timing.Prefix_Time + Timing.Profile_Time] loop
+                  Compare (Time'Adjacent (Boundary, -Time'Last));
+                  Compare (Boundary);
+                  Compare (Time'Adjacent (Boundary, Time'Last));
+               end loop;
+               --  Member boundaries are where Assign_Timing_Members' bisections ended.
+               for I in Run_First .. Timing_Run_Last (Block'Access, Run_First) loop
+                  Compare (Block.Timing_Time_Offsets (I));
+               end loop;
+               T.Assert (Exact, "Prepared timing evaluates run" & Run_First'Image & " exactly as unprepared timing");
+            end;
+         end if;
+      end loop;
+      T.Assert (Exercised, "Some run continues beyond its acceleration ramp");
+   end Test_Prepared_Timing_Evaluation;
 
    procedure Test_Continuous_Timing_Blend_Seams (T : in out Trendy_Test.Operation'Class) is
       Work                  : aliased Planning_Workspace (Corners_Index'Last);
@@ -5793,6 +5980,8 @@ package body Prunt.Motion_Planner.Planner.Test is
    begin
       return
         [Test_Continuous_Passthrough_Timing'Unrestricted_Access,
+         Test_Continuous_Profile_Window_Handoff'Unrestricted_Access,
+         Test_Prepared_Timing_Evaluation'Unrestricted_Access,
          Test_Continuous_Timing_Blend_Seams'Unrestricted_Access,
          Test_Continuous_Curved_Merges'Unrestricted_Access,
          Test_Cellular_Certificate'Unrestricted_Access,
@@ -5803,6 +5992,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Preprocessor_Run_After_Reset'Unrestricted_Access,
          Test_Preprocessor_Natural_Block_Ends'Unrestricted_Access,
          Test_Profile_Extrusion_Limits'Unrestricted_Access,
+         Test_Profile_Window_Handoff'Unrestricted_Access,
          Test_Local_Pair_Stop_Selection'Unrestricted_Access,
          Test_Local_Corner_Selection'Unrestricted_Access,
          Test_Stopped_Duration_Selection'Unrestricted_Access,

@@ -43,5 +43,9 @@ package Prunt.Motion_Planner.Planner.Kinematic_Limiter is
    --
    --  Fixed_Ends retains the supplied endpoint velocities for a local replacement window. Forced_Junction, if nonzero,
    --  is a corner that must end a timing run.
+   --
+   --  Workspace.Window_Evaluations is left holding Evaluate_Run_Windows for each of Block's runs. The passes change
+   --  only corner speeds, which no window evaluation reads, so these are the evaluations that
+   --  Feedrate_Profile_Generator.Run takes for Block as the pass leaves it.
 
 end Prunt.Motion_Planner.Planner.Kinematic_Limiter;

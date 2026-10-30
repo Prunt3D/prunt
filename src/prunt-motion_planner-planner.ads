@@ -674,7 +674,8 @@ private
       --  Kinematic_Limiter
       Static_Corner_Limits     : Block_Corner_Velocity_Limits (1 .. Last_Corner);
       Window_Evaluations       : Profile_Window_Evaluation_Cache (2 .. Last_Corner);
-      --  Cache the limits for each corner and candidate window across forward/reverse lookahead passes.
+      --  Evaluate_Run_Windows for each run of the latest limiter pass, used by its forward/reverse lookahead passes
+      --  and passed to the profile generation that follows it.
       Reachable_Velocity_Memos : Reachable_Velocity_Memo_Cache (2 .. Last_Corner);
       --  The latest reachability across each segment in each direction. Lookahead cleanup passes revisit most
       --  segments with an unchanged neighbouring junction speed.
@@ -886,7 +887,9 @@ private
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Time;
 
    function Segment_Suffix_Time
-     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Time;
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Run_Distance : Length)
+      return Time;
+   --  Run_Distance is the Timing_Total_Distance of the run starting at Corner.
 
    function Central_Profile_Start_Velocity
      (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Velocity;
@@ -1000,6 +1003,53 @@ private
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
       return Velocity;
 
+   type Accel_Ramp_End is record
+      Accel_Time : Time := 0.0 * s;
+      Mid_Vel    : Velocity := 0.0 * mm / s;
+      Accel_Dist : Length := 0.0 * mm;
+   end record;
+   --  Where a profile's acceleration ramp ends. Its coast and deceleration continue from there.
+
+   type Timing_Evaluation (Has_Ramp_End : Boolean := False) is record
+      Prefix_Time, Profile_Time, Suffix_Time, Motion_Time : Time;
+      Total_Distance                                      : Length;
+      case Has_Ramp_End is
+         when True =>
+            Ramp_End : Accel_Ramp_End;
+
+         when False =>
+            null;
+      end case;
+   end record;
+   --  Fixed data for repeated evaluation of one run's selected profile. Its distance and suffix time can take a scan
+   --  of the run, which must not be repeated at every bisection for every member of a continuous run. Ramp_End is the
+   --  central profile's, so evaluations beyond it need not integrate the acceleration ramp again.
+
+   function Prepare_Timing_Evaluation
+     (Block         : not null access constant Execution_Block;
+      Run_First     : Finishing_Corners_Index;
+      With_Ramp_End : Boolean := False) return Timing_Evaluation;
+   --  Scans a multi-segment run for its distance, so it holds before the run's members are assigned.
+
+   function Assigned_Timing_Evaluation
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Timing_Evaluation;
+   --  Prepare_Timing_Evaluation once Assign_Timing_Members has placed the run's members, taking the run's distance
+   --  from its last member's offset instead of a scan. Execution evaluates a run at every interpolation step, and a
+   --  continuous run can span most of a block.
+
+   function Timing_Distance_At_Time
+     (Block     : not null access constant Execution_Block;
+      Run_First : Finishing_Corners_Index;
+      Run_Time  : Time;
+      Timing    : Timing_Evaluation) return Length;
+
+   function Timing_Velocity_At_Time
+     (Block     : not null access constant Execution_Block;
+      Run_First : Finishing_Corners_Index;
+      Run_Time  : Time;
+      Timing    : Timing_Evaluation) return Velocity;
+   --  As above, with Timing prepared for Run_First's current profile. Results are identical either way.
+
    procedure Assign_Timing_Members (Block : not null access Execution_Block; Run_First : Finishing_Corners_Index);
    --  After the profile of the multi-segment run starting at Run_First is selected, solve each segment's offsets and
    --  duration, and record the run speed at each interior corner.
@@ -1021,6 +1071,13 @@ private
       return Profile_Window_Candidates;
    --  Return the deterministic candidate profile windows, in run distance, for the timing run starting at
    --  Finishing_Corner.
+
+   function Evaluate_Run_Windows
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Run_First : Finishing_Corners_Index) return Profile_Window_Evaluation_Set;
+   --  Evaluate_Timing_Window at the run's feedrate for each of Segment_Profile_Window_Candidates. Absent transitions
+   --  make cuts coincide; a candidate equal to an earlier one is left empty rather than evaluated again.
 
    function Evaluate_Profile_Window
      (Block            : not null access constant Execution_Block;

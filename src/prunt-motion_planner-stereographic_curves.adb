@@ -803,8 +803,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
    function Inflate_Finite (Value : Dimensionless; Upward : Boolean) return Dimensionless is
       pragma Suppress (Overflow_Check);
-      Padding : constant Dimensionless :=
-        Dimensionless'Max (2.0 * Dimensionless'Model_Epsilon * abs Value, Dimensionless'Model_Small);
+      --  Roundoff_Padding's formula without its overflow check. Not 'Max: GNAT guards that with a NaN test, which
+      --  measurably slows the interval kernels this is inlined into. Both forms give Model_Small for NaN.
+      Relative : constant Dimensionless := 2.0 * Dimensionless'Model_Epsilon * abs Value;
+      Padding  : constant Dimensionless :=
+        (if Relative > Dimensionless'Model_Small then Relative else Dimensionless'Model_Small);
    begin
       return (if Upward then Value + Padding else Value - Padding);
    end Inflate_Finite;
@@ -4656,6 +4659,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Numerators             : array (Axis_Name) of Real_Polynomial := [others => [others => 0.0]];
       Roots                  : Complex_Root_Array := [others => Compose_From_Cartesian (0.0, 0.0)];
       Denominator_Derivative : Real_Polynomial := [others => 0.0];
+      Pole_Derivatives       : Complex_Root_Array := [others => Compose_From_Cartesian (0.0, 0.0)];
       Real_Poles             : Temporary_Real_Poles := [others => 0.0];
       Pair_Poles             : Temporary_Complex_Poles := [others => Compose_From_Cartesian (0.0, 0.0)];
       Real_Pole_Count        : Natural range 0 .. Maximum_Rational_Degree := 0;
@@ -4893,32 +4897,51 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          end loop;
       end if;
 
-      for Index in 1 .. Denominator_Degree loop
-         --  DGEEV supplies approximate companion-matrix eigenvalues. Up to three Newton steps reduce the polynomial
-         --  residual, but a step is accepted only when it improves |D(p)|.
-         for Pass in 1 .. 3 loop
-            exit when not Complex_Is_Finite (Roots (Index)) or else abs Roots (Index) > 1.0E6;
-            declare
-               Value      : constant Complex := Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index));
-               Derivative : constant Complex :=
-                 Evaluate_Polynomial (Denominator_Derivative, Denominator_Degree - 1, Roots (Index));
-            begin
-               exit when
-                 not Complex_Is_Finite (Value)
-                 or else not Complex_Is_Finite (Derivative)
-                 or else abs Derivative <= 64.0 * Dimensionless'Model_Epsilon;
-               declare
-                  Trial : constant Complex := Roots (Index) - Value / Derivative;
-               begin
-                  if Complex_Is_Finite (Trial)
-                    and then abs Evaluate_Polynomial (Denominator, Denominator_Degree, Trial) < abs Value
-                  then
-                     Roots (Index) := Trial;
-                  end if;
-               end;
-            end;
+      declare
+         Conjugate_Next : Boolean := False;
+      begin
+         for Index in 1 .. Denominator_Degree loop
+            if Conjugate_Next then
+               Roots (Index) := Conjugate (Roots (Index - 1));
+               Conjugate_Next := False;
+            else
+               --  A real polynomial has conjugate roots. DGEEV returns conjugate pairs together; only share a
+               --  refinement when the supplied pair is exactly conjugate. Both roots are still validated below.
+               Conjugate_Next :=
+                 Index < Denominator_Degree
+                 and then Im (Roots (Index)) > 0.0
+                 and then Roots (Index + 1) = Conjugate (Roots (Index));
+               --  Up to three Newton steps reduce the companion eigenvalue's polynomial residual, accepting
+               --  only a step which improves |D(p)|.
+               for Pass in 1 .. 3 loop
+                  exit when not Complex_Is_Finite (Roots (Index)) or else abs Roots (Index) > 1.0E6;
+                  declare
+                     Value      : constant Complex :=
+                       Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index));
+                     Derivative : constant Complex :=
+                       Evaluate_Polynomial (Denominator_Derivative, Denominator_Degree - 1, Roots (Index));
+                  begin
+                     exit when
+                       not Complex_Is_Finite (Value)
+                       or else not Complex_Is_Finite (Derivative)
+                       or else abs Derivative <= 64.0 * Dimensionless'Model_Epsilon;
+                     declare
+                        Trial : constant Complex := Roots (Index) - Value / Derivative;
+                     begin
+                        if Complex_Is_Finite (Trial)
+                          and then abs Evaluate_Polynomial (Denominator, Denominator_Degree, Trial) < abs Value
+                        then
+                           Roots (Index) := Trial;
+                        else
+                           --  Retrying an unchanged root would repeat the same rejected step.
+                           exit;
+                        end if;
+                     end;
+                  end;
+               end loop;
+            end if;
          end loop;
-      end loop;
+      end;
 
       for Index in 1 .. Denominator_Degree loop
          declare
@@ -5025,74 +5048,80 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          end;
       end loop;
 
-      for Axis in Axis_Name loop
+      --  D'(p) is shared by all axis residues at a pole. Evaluate and validate it once, including poles whose
+      --  conjugate components were merged above; the residue numerator remains axis-specific.
+      for Slot in 1 .. Real_Pole_Count + Pair_Count loop
          declare
-            Remainder : Real_Polynomial := Numerators (Axis);
-            Quotient  : Dimensionless;
+            Root       : constant Complex :=
+              (if Slot <= Real_Pole_Count
+               then Compose_From_Cartesian (Real_Poles (Slot), 0.0)
+               else Pair_Poles (Slot - Real_Pole_Count));
+            Derivative : constant Complex :=
+              Evaluate_Polynomial (Denominator_Derivative, Denominator_Degree - 1, Root);
          begin
-            --  Numerator and denominator have equal degree, so polynomial division leaves one constant quotient.
-            --  For each simple pole p, the partial-fraction residue is
-            --
-            --     r = Remainder(p)/D′(p).
-            if Denominator_Degree = 0 then
-               Quotient := Remainder (0) / Denominator (0);
-               Remainder (0) := 0.0;
-            else
-               Quotient := Remainder (Denominator_Degree) / Denominator (Denominator_Degree);
-               for Degree in 0 .. Denominator_Degree loop
-                  Remainder (Degree) := Remainder (Degree) - Quotient * Denominator (Degree);
-               end loop;
+            if not Complex_Is_Finite (Derivative)
+              or else Dimensionless (abs Derivative) <= 64.0 * Dimensionless'Model_Epsilon
+            then
+               return Realtime_Representation_Insufficient;
             end if;
-            Cache.Constant_Tangent (Axis) := Quotient;
-
-            for Index in 1 .. Real_Pole_Count loop
-               declare
-                  Root       : constant Complex := Compose_From_Cartesian (Real_Poles (Index), 0.0);
-                  Derivative : constant Complex :=
-                    Evaluate_Polynomial (Denominator_Derivative, Denominator_Degree - 1, Root);
-                  Residue    : Complex;
-               begin
-                  if Dimensionless (abs Derivative) <= 64.0 * Dimensionless'Model_Epsilon then
-                     return Realtime_Representation_Insufficient;
-                  end if;
-                  Residue := Evaluate_Polynomial (Remainder, Denominator_Degree - 1, Root) / Derivative;
-                  if not Complex_Is_Finite (Residue) then
-                     return Realtime_Representation_Insufficient;
-                  end if;
-                  Cache.Pole_Slots (Index).Residue_Component (Axis) := Dimensionless (Re (Residue));
-               end;
-            end loop;
-            for Pair in 1 .. Pair_Count loop
-               declare
-                  Real_Slot      : constant Rational_Degree_Slot :=
-                    Complex_Pair_Real_Slot (Cache, Rational_Pair_Index (Pair));
-                  Imaginary_Slot : constant Rational_Degree_Slot :=
-                    Complex_Pair_Imaginary_Slot (Cache, Rational_Pair_Index (Pair));
-                  Root           : constant Complex := Pair_Poles (Pair);
-                  Derivative     : constant Complex :=
-                    Evaluate_Polynomial (Denominator_Derivative, Denominator_Degree - 1, Root);
-                  Residue        : Complex;
-               begin
-                  if Dimensionless (abs Derivative) <= 64.0 * Dimensionless'Model_Epsilon then
-                     return Realtime_Representation_Insufficient;
-                  end if;
-                  Residue := Evaluate_Polynomial (Remainder, Denominator_Degree - 1, Root) / Derivative;
-                  if not Complex_Is_Finite (Residue) then
-                     return Realtime_Representation_Insufficient;
-                  end if;
-                  Cache.Pole_Slots (Real_Slot).Residue_Component (Axis) := Dimensionless (Re (Residue));
-                  Cache.Pole_Slots (Imaginary_Slot).Residue_Component (Axis) := Dimensionless (Im (Residue));
-               end;
-            end loop;
+            Pole_Derivatives (Slot) := Derivative;
          end;
       end loop;
 
+      --  Structurally constant axes retain their initially zero quotient and residues.
       for Axis in Axis_Name loop
-         if Curve.Structurally_Constant_Axes (Axis) then
-            Cache.Constant_Tangent (Axis) := 0.0;
-            for Slot in Rational_Degree_Slot loop
-               Cache.Pole_Slots (Slot).Residue_Component (Axis) := 0.0;
-            end loop;
+         if not Curve.Structurally_Constant_Axes (Axis) then
+            declare
+               Remainder : Real_Polynomial := Numerators (Axis);
+               Quotient  : Dimensionless;
+            begin
+               --  Numerator and denominator have equal degree, so polynomial division leaves one constant quotient.
+               --  For each simple pole p, the partial-fraction residue is
+               --
+               --     r = Remainder(p)/D′(p).
+               if Denominator_Degree = 0 then
+                  Quotient := Remainder (0) / Denominator (0);
+                  Remainder (0) := 0.0;
+               else
+                  Quotient := Remainder (Denominator_Degree) / Denominator (Denominator_Degree);
+                  for Degree in 0 .. Denominator_Degree loop
+                     Remainder (Degree) := Remainder (Degree) - Quotient * Denominator (Degree);
+                  end loop;
+               end if;
+               Cache.Constant_Tangent (Axis) := Quotient;
+
+               for Index in 1 .. Real_Pole_Count loop
+                  declare
+                     Root       : constant Complex := Compose_From_Cartesian (Real_Poles (Index), 0.0);
+                     Derivative : constant Complex := Pole_Derivatives (Index);
+                     Residue    : Complex;
+                  begin
+                     Residue := Evaluate_Polynomial (Remainder, Denominator_Degree - 1, Root) / Derivative;
+                     if not Complex_Is_Finite (Residue) then
+                        return Realtime_Representation_Insufficient;
+                     end if;
+                     Cache.Pole_Slots (Index).Residue_Component (Axis) := Dimensionless (Re (Residue));
+                  end;
+               end loop;
+               for Pair in 1 .. Pair_Count loop
+                  declare
+                     Real_Slot      : constant Rational_Degree_Slot :=
+                       Complex_Pair_Real_Slot (Cache, Rational_Pair_Index (Pair));
+                     Imaginary_Slot : constant Rational_Degree_Slot :=
+                       Complex_Pair_Imaginary_Slot (Cache, Rational_Pair_Index (Pair));
+                     Root           : constant Complex := Pair_Poles (Pair);
+                     Derivative     : constant Complex := Pole_Derivatives (Real_Pole_Count + Pair);
+                     Residue        : Complex;
+                  begin
+                     Residue := Evaluate_Polynomial (Remainder, Denominator_Degree - 1, Root) / Derivative;
+                     if not Complex_Is_Finite (Residue) then
+                        return Realtime_Representation_Insufficient;
+                     end if;
+                     Cache.Pole_Slots (Real_Slot).Residue_Component (Axis) := Dimensionless (Re (Residue));
+                     Cache.Pole_Slots (Imaginary_Slot).Residue_Component (Axis) := Dimensionless (Im (Residue));
+                  end;
+               end loop;
+            end;
          end if;
       end loop;
       if not Rational_Antiderivative_Is_Well_Formed (Cache) then

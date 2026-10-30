@@ -29,26 +29,33 @@ package Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
    pragma Unsuppress (Division_Check);
 
    procedure Run
-     (Block       : aliased in out Execution_Block;
-      Motor_Map   : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Result      : out Profile_Planning_Result;
-      Limit_Scale : Dimensionless := 1.0);
+     (Block              : aliased in out Execution_Block;
+      Motor_Map          : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Window_Evaluations : Profile_Window_Evaluation_Cache;
+      Result             : out Profile_Planning_Result;
+      Limit_Scale        : Dimensionless := 1.0);
    --  Fills Block.Feedrate_Profiles with profiles based on Block.Corner_Velocity_Limits and Block.Params. Each timing
    --  run gets one profile, at its first segment, followed by Assign_Timing_Members.
+   --
+   --  Window_Evaluations (I) is Evaluate_Run_Windows for each run starting at I, as Kinematic_Limiter.Run leaves them
+   --  in its workspace. Builds with assertions enabled evaluate them again and fail if they differ.
    --
    --  Result identifies the first segment that could not be certified. Only a valid result completes the block.
    --
    --  Limit_Scale reserves additional derivative and velocity margin for the stopped recovery path.
 
    procedure Select_Feedrate_Profile_Window
-     (Block            : not null access Execution_Block;
-      Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
-      Finishing_Corner : Finishing_Corners_Index;
-      Result           : out Profile_Planning_Result;
-      Limit_Scale      : Dimensionless;
-      Split_Profile    : Boolean := True);
+     (Block              : not null access Execution_Block;
+      Motor_Map          : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Finishing_Corner   : Finishing_Corners_Index;
+      Window_Evaluations : Profile_Window_Evaluation_Set;
+      Result             : out Profile_Planning_Result;
+      Limit_Scale        : Dimensionless;
+      Split_Profile      : Boolean := True);
    --  Select and certify the timing run starting at Finishing_Corner with fixed endpoint velocities.
    --  Also used for local corner alternatives; other segments and junctions remain unchanged.
+   --
+   --  Window_Evaluations is Evaluate_Run_Windows for the run with its current geometry, members and feedrates.
    --
    --  Split_Profile False considers only whole-window profiles, not separate profiles for the run's end transitions
    --  and the part between them.

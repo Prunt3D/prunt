@@ -1,14 +1,17 @@
 --  Deterministic benchmark for stereographic corner duration selection.
 --
 --  Plans repeated square corners with configurable deviation, leg length and extrusion density. Prints planner
---  wall time and total motion duration, checking that the complete path was planned as one block.
+--  wall time, total motion duration and a bit-level checksum of every segment time, checking that the complete path
+--  was planned as one block.
 
 pragma Extensions_Allowed (On);
 
 with Ada.Command_Line;
 with Ada.Real_Time;
 with Ada.Text_IO;
+with Ada.Unchecked_Conversion;
 with GNAT.OS_Lib;
+with Interfaces;
 with Prunt;                use Prunt;
 with Prunt.Motion_Planner; use Prunt.Motion_Planner;
 with Prunt.Motion_Planner.Planner;
@@ -18,6 +21,7 @@ with Prunt.Motion_Planner.Planner;
 
 procedure Corner_Planner_Time is
    use type Ada.Real_Time.Time;
+   use type Interfaces.Unsigned_64;
    Deviation : constant Length := Dimensionless'Value (Ada.Command_Line.Argument (1)) * mm;
    Moves     : constant Positive :=
      (if Ada.Command_Line.Argument_Count >= 2 then Positive'Value (Ada.Command_Line.Argument (2)) else 2);
@@ -28,6 +32,8 @@ procedure Corner_Planner_Time is
    type Motor_Name is (Motor);
    type Motor_Map_Type is array (Axis_Name, Motor_Name) of Curvature;
    type Motor_Limits is array (Motor_Name) of Dimensionless;
+
+   function To_Bits is new Ada.Unchecked_Conversion (Long_Float, Interfaces.Unsigned_64);
 
    function Block_Allows_Blended_Entry (Data : Boolean) return Boolean is
       pragma Unreferenced (Data);
@@ -59,6 +65,7 @@ procedure Corner_Planner_Time is
    Segment_Count : Natural := 0;
    Block_Count   : Natural := 0;
    Timeouts      : Natural := 0;
+   Checksum      : Interfaces.Unsigned_64 := 0;
 begin
    if Moves > 5000 then
       raise Constraint_Error with "at most 5000 moves fit in this benchmark block";
@@ -120,8 +127,13 @@ begin
             Block_Count := @ + 1;
             for I in Planner.Finishing_Corners_Index'First .. Planner.Corner_Count (Block) loop
                Planner.Prepare_Segment (Block, I);
-               Motion_Time := @ + Planner.Segment_Time (Block, I);
-               Segment_Count := @ + 1;
+               declare
+                  T : constant Time := Planner.Segment_Time (Block, I);
+               begin
+                  Motion_Time := @ + T;
+                  Segment_Count := @ + 1;
+                  Checksum := (Checksum xor To_Bits (Long_Float (T / s))) * 1_099_511_628_211;
+               end;
             end loop;
             exit Blocks_Loop when Planner.Flush_Resetting_Data (Block);
             exit when not Planner.Has_Next_Block (Block);
@@ -139,6 +151,7 @@ begin
    Ada.Text_IO.Put_Line ("total_planned_seconds=" & Dimensionless'Image (Motion_Time / s));
    Ada.Text_IO.Put_Line ("planned_segments=" & Segment_Count'Image);
    Ada.Text_IO.Put_Line ("planned_blocks=" & Block_Count'Image);
+   Ada.Text_IO.Put_Line ("segment_time_checksum=" & Checksum'Image);
    --  All validation and timing are complete. Match the other benchmark drivers: shutdown of the persistent
    --  planner task is outside the measurement and must not introduce a Reset rendezvous race.
    Planner.Release (Block);

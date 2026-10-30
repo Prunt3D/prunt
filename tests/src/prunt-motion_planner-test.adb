@@ -303,6 +303,32 @@ package body Prunt.Motion_Planner.Test is
       end loop;
    end Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios;
 
+   procedure Test_Linear_Ratio_Normalization (T : in out Trendy_Test.Operation'Class) is
+      type Exponents is array (Positive range <>) of Integer;
+      Edges : constant Exponents := [-129, -128, -127, -1, 0, 1, 127, 128, 129];
+   begin
+      T.Register;
+      for N of Edges loop
+         for D of Edges loop
+            for I in 0 .. 31 loop
+               declare
+                  Numerator   : constant Dimensionless := Dimensionless'Scaling (0.5 + Dimensionless (I) / 64.0, N);
+                  Denominator : constant Dimensionless :=
+                    Dimensionless'Scaling (0.5 + Dimensionless (31 - I) / 64.0, D);
+                  Expected    : constant Dimensionless :=
+                    Dimensionless'Scaling
+                      (Dimensionless'Fraction (Numerator) / Dimensionless'Fraction (Denominator),
+                       Dimensionless'Exponent (Numerator) - Dimensionless'Exponent (Denominator));
+               begin
+                  T.Assert
+                    (Nth_Root_Ratio (Numerator, Denominator, 1) = Expected,
+                     "Direct and exponent-normalized linear ratios agree exactly at fast-path boundaries");
+               end;
+            end loop;
+         end loop;
+      end loop;
+   end Test_Linear_Ratio_Normalization;
+
    procedure Test_Mixed_Derivative_Does_Not_Floor_Residual (T : in out Trendy_Test.Operation'Class) is
       Params   : Kinematic_Parameters;
       Bounds   : Unit_Speed_Axial_Derivative_Bounds;
@@ -2698,6 +2724,7 @@ package body Prunt.Motion_Planner.Test is
          Test_Mixed_Derivative_Normalization'Access,
          Test_Constant_Speed_Axial_Ceiling'Access,
          Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios'Access,
+         Test_Linear_Ratio_Normalization'Access,
          Test_Mixed_Derivative_Does_Not_Floor_Residual'Access,
          Test_Mixed_Derivative_Stable_Snap_Quadratic'Access,
          Test_Mixed_Derivative_Stable_Crackle_Quadratic'Access,

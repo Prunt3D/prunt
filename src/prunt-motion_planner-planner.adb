@@ -19,6 +19,7 @@
 
 pragma Check_Float_Overflow;
 
+with Ada.Assertions;
 with Ada.Numerics;
 with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Unchecked_Conversion;
@@ -651,14 +652,16 @@ package body Prunt.Motion_Planner.Planner is
       Pi            : constant Dimensionless := Ada.Numerics.Pi;
       Two_Pi        : constant Dimensionless := 2.0 * Pi;
       Operand_Scale : constant Curvature := abs Offset + abs Amplitude;
-      Result        : Curvature :=
-        Curvature'Max
-          (abs (Offset + Amplitude * Dimensionless_Math.Sin (Low)),
-           abs (Offset + Amplitude * Dimensionless_Math.Sin (High)));
+      Result        : Curvature;
    begin
       if Amplitude = 0.0 / mm then
          return abs Offset;
       end if;
+
+      Result :=
+        Curvature'Max
+          (abs (Offset + Amplitude * Dimensionless_Math.Sin (Low)),
+           abs (Offset + Amplitude * Dimensionless_Math.Sin (High)));
 
       if Interval_Contains_Phase (Low, High, 0.5 * Pi, Two_Pi) then
          Result := Curvature'Max (Result, abs (Offset + Amplitude));
@@ -1911,6 +1914,24 @@ package body Prunt.Motion_Planner.Planner is
       return Result;
    end Segment_Profile_Window_Candidates;
 
+   function Evaluate_Run_Windows
+     (Block     : not null access constant Execution_Block;
+      Motor_Map : Prunt.Motion_Planner.Planner.Motor_Position_Map;
+      Run_First : Finishing_Corners_Index) return Profile_Window_Evaluation_Set
+   is
+      Windows  : constant Profile_Window_Candidates := Segment_Profile_Window_Candidates (Block, Run_First);
+      Feedrate : constant Velocity := Timing_Feedrate (Block, Run_First);
+   begin
+      return Result : Profile_Window_Evaluation_Set do
+         for W in Profile_Window_Candidate_Index loop
+            if (for all Previous in Profile_Window_Candidate_Index'First .. W - 1 => Windows (Previous) /= Windows (W))
+            then
+               Result (W) := Evaluate_Timing_Window (Block, Motor_Map, Run_First, Windows (W), Feedrate);
+            end if;
+         end loop;
+      end return;
+   end Evaluate_Run_Windows;
+
    function Evaluate_Profile_Window
      (Block            : not null access constant Execution_Block;
       Motor_Map        : Prunt.Motion_Planner.Planner.Motor_Position_Map;
@@ -2158,22 +2179,24 @@ package body Prunt.Motion_Planner.Planner is
             Result := Velocity'Min (Result, Block.Params.Tangential_Velocity_Max * XYZE_Spatial_Scale (E_Bound));
          end if;
          for M in Motor_Name loop
-            declare
-               Coefficients : constant Projection_Coefficients :=
-                 [Motor_Projection_Coefficients (Motor_Map, M) with delta E_Axis => 0.0 / mm];
-               Projection   : constant Curvature :=
-                 Shaper_Aware_Projection_Bound (Block.Params, Coefficients, Scaled_Curvature_Norm (Coefficients))
-                 + abs Motor_Map (E_Axis, M) * E_Bound;
-            begin
-               if Projection > 0.0 / mm and then E_Bound > 0.0 and then Motor_Map (E_Axis, M) /= 0.0 / mm then
-                  Result :=
-                    Velocity'Min
-                      (Result,
-                       Motor_Delta_Numerical_Safety_Factor
-                       * Maximum_Deltas_Per_Command (M)
-                       / (Interpolation_Time * Projection));
-               end if;
-            end;
+            if E_Bound > 0.0 and then Motor_Map (E_Axis, M) /= 0.0 / mm then
+               declare
+                  Coefficients : constant Projection_Coefficients :=
+                    [Motor_Projection_Coefficients (Motor_Map, M) with delta E_Axis => 0.0 / mm];
+                  Projection   : constant Curvature :=
+                    Shaper_Aware_Projection_Bound (Block.Params, Coefficients, Scaled_Curvature_Norm (Coefficients))
+                    + abs Motor_Map (E_Axis, M) * E_Bound;
+               begin
+                  if Projection > 0.0 / mm then
+                     Result :=
+                       Velocity'Min
+                         (Result,
+                          Motor_Delta_Numerical_Safety_Factor
+                          * Maximum_Deltas_Per_Command (M)
+                          / (Interpolation_Time * Projection));
+                  end if;
+               end;
+            end if;
          end loop;
       end;
 
@@ -2961,34 +2984,71 @@ package body Prunt.Motion_Planner.Planner is
       return Velocity'Max (Fixed_Vel, 0.999 * Lower);
    end Reachable_Cellular_Velocity;
 
-   function Profile_Distance_At_Time
-     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity) return Length
+   function Accel_Ramp_End_Of
+     (Profile : Feedrate_Profile; Accel_Crackle : Crackle; Start_Vel : Velocity) return Accel_Ramp_End;
+
+   function Distance_After_Accel_Ramp
+     (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Ramp_End : Accel_Ramp_End) return Length;
+   --  Profile_Distance_At_Time for T beyond the acceleration ramp, which ends at Ramp_End.
+
+   function Velocity_After_Accel_Ramp
+     (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Accel_Time : Time; Mid_Vel : Velocity)
+      return Velocity;
+   --  Profile_Velocity_At_Time for T beyond the acceleration ramp, which ends at Accel_Time with Mid_Vel.
+
+   function Accel_Ramp_End_Of
+     (Profile : Feedrate_Profile; Accel_Crackle : Crackle; Start_Vel : Velocity) return Accel_Ramp_End
    is
       Accel_Time : constant Time := Total_Time (Profile.Accel);
    begin
-      if Accel_Crackle = Decel_Crackle then
-         return Distance_At_Time (Profile, T, Accel_Crackle, Start_Vel);
-      elsif T <= Accel_Time then
+      return
+        (Accel_Time => Accel_Time,
+         Mid_Vel    => Velocity_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel),
+         Accel_Dist => Distance_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel));
+   end Accel_Ramp_End_Of;
+
+   function Distance_After_Accel_Ramp
+     (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Ramp_End : Accel_Ramp_End) return Length is
+   begin
+      if T < Ramp_End.Accel_Time + Profile.Coast then
+         return Ramp_End.Accel_Dist + Ramp_End.Mid_Vel * (T - Ramp_End.Accel_Time);
+      end if;
+      return
+        Ramp_End.Accel_Dist
+        + Ramp_End.Mid_Vel * Profile.Coast
+        + Distance_At_Time
+            (Profile.Decel,
+             Time'Min (T - (Ramp_End.Accel_Time + Profile.Coast), Total_Time (Profile.Decel)),
+             -Decel_Crackle,
+             Ramp_End.Mid_Vel);
+   end Distance_After_Accel_Ramp;
+
+   function Profile_Distance_At_Time
+     (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity) return Length
+   is
+   begin
+      --  Equal crackles need no separate path: this is Distance_At_Time's arithmetic, step for step.
+      if T <= Total_Time (Profile.Accel) then
          return Distance_At_Time (Profile.Accel, T, Accel_Crackle, Start_Vel);
       end if;
-
-      declare
-         Mid_Vel    : constant Velocity := Velocity_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel);
-         Accel_Dist : constant Length := Distance_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel);
-      begin
-         if T < Accel_Time + Profile.Coast then
-            return Accel_Dist + Mid_Vel * (T - Accel_Time);
-         end if;
-         return
-           Accel_Dist
-           + Mid_Vel * Profile.Coast
-           + Distance_At_Time
-               (Profile.Decel,
-                Time'Min (T - (Accel_Time + Profile.Coast), Total_Time (Profile.Decel)),
-                -Decel_Crackle,
-                Mid_Vel);
-      end;
+      return
+        Distance_After_Accel_Ramp (Profile, T, Decel_Crackle, Accel_Ramp_End_Of (Profile, Accel_Crackle, Start_Vel));
    end Profile_Distance_At_Time;
+
+   function Velocity_After_Accel_Ramp
+     (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Accel_Time : Time; Mid_Vel : Velocity)
+      return Velocity is
+   begin
+      if T < Accel_Time + Profile.Coast then
+         return Mid_Vel;
+      end if;
+      return
+        Velocity_At_Time
+          (Profile.Decel,
+           Time'Min (T - (Accel_Time + Profile.Coast), Total_Time (Profile.Decel)),
+           -Decel_Crackle,
+           Mid_Vel);
+   end Velocity_After_Accel_Ramp;
 
    function Profile_Velocity_At_Time
      (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity)
@@ -2996,25 +3056,17 @@ package body Prunt.Motion_Planner.Planner is
    is
       Accel_Time : constant Time := Total_Time (Profile.Accel);
    begin
-      if Accel_Crackle = Decel_Crackle then
-         return Velocity_At_Time (Profile, T, Accel_Crackle, Start_Vel);
-      elsif T <= Accel_Time then
+      --  Equal crackles need no separate path: this is Velocity_At_Time's arithmetic, step for step.
+      if T <= Accel_Time then
          return Velocity_At_Time (Profile.Accel, T, Accel_Crackle, Start_Vel);
       end if;
-
-      declare
-         Mid_Vel : constant Velocity := Velocity_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel);
-      begin
-         if T < Accel_Time + Profile.Coast then
-            return Mid_Vel;
-         end if;
-         return
-           Velocity_At_Time
-             (Profile.Decel,
-              Time'Min (T - (Accel_Time + Profile.Coast), Total_Time (Profile.Decel)),
-              -Decel_Crackle,
-              Mid_Vel);
-      end;
+      return
+        Velocity_After_Accel_Ramp
+          (Profile,
+           T,
+           Decel_Crackle,
+           Accel_Time,
+           Velocity_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel));
    end Profile_Velocity_At_Time;
 
    function Identical (Left, Right : Velocity) return Boolean is
@@ -3163,7 +3215,8 @@ package body Prunt.Motion_Planner.Planner is
       Workspace.Timing_Join_Vetoes (Block.Corners'Range) := [others => False];
       loop
          My_Kinematic_Limiter.Run (Block, Motor_Map, Workspace);
-         My_Feedrate_Profile_Generator.Run (Block, Motor_Map, Result, Limit_Scale => (if Stopped then 0.5 else 1.0));
+         My_Feedrate_Profile_Generator.Run
+           (Block, Motor_Map, Workspace.Window_Evaluations, Result, Limit_Scale => (if Stopped then 0.5 else 1.0));
          exit when Result.Valid;
 
          if Timing_Run_Last (Block'Access, Result.Failed_Segment) /= Result.Failed_Segment then
@@ -3450,7 +3503,12 @@ package body Prunt.Motion_Planner.Planner is
                   Run_Last : constant Finishing_Corners_Index := Timing_Run_Last (Block'Access, Run_First);
                begin
                   My_Feedrate_Profile_Generator.Select_Feedrate_Profile_Window
-                    (Block'Access, Motor_Map, Run_First, Result, Limit_Scale => 1.0);
+                    (Block'Access,
+                     Motor_Map,
+                     Run_First,
+                     Evaluate_Run_Windows (Block'Access, Motor_Map, Run_First),
+                     Result,
+                     Limit_Scale => 1.0);
                   if not Result.Valid then
                      Restore;
                      return;
@@ -3489,9 +3547,6 @@ package body Prunt.Motion_Planner.Planner is
          end loop;
          for I in Saved'Range loop
             Workspace.Planning_Attempts (I) := 0;
-            for W in Profile_Window_Candidate_Index loop
-               Workspace.Window_Evaluations (I) (W).Valid := False;
-            end loop;
          end loop;
       exception
          when Constraint_Error =>
@@ -3565,18 +3620,19 @@ package body Prunt.Motion_Planner.Planner is
          --  A merged run's middle portion holds every curved interior corner, so a split profile would need cellular
          --  reachability searches there. It rarely decides whether a merge pays, and would dominate the search time.
          My_Feedrate_Profile_Generator.Select_Feedrate_Profile_Window
-           (Block'Access, Motor_Map, Merged_Segments'First, Result, Limit_Scale => 1.0, Split_Profile => False);
+           (Block'Access,
+            Motor_Map,
+            Merged_Segments'First,
+            Evaluate_Run_Windows (Block'Access, Motor_Map, Merged_Segments'First),
+            Result,
+            Limit_Scale   => 1.0,
+            Split_Profile => False);
          if Result.Valid then
             Assign_Timing_Members (Block'Access, Merged_Segments'First);
             for I in Merged_Segments loop
                New_Time := @ + Segment_Time (Block'Access, I);
             end loop;
             if New_Time < Old_Time then
-               for I in Merged_Segments loop
-                  for W in Profile_Window_Candidate_Index loop
-                     Workspace.Window_Evaluations (I) (W).Valid := False;
-                  end loop;
-               end loop;
                return;
             end if;
          end if;
@@ -3925,7 +3981,7 @@ package body Prunt.Motion_Planner.Planner is
             if Patch.Corner_Velocity_Limits (Seam) <= 0.0 * mm / s then
                return;
             end if;
-            My_Feedrate_Profile_Generator.Run (Patch, Motor_Map, Result);
+            My_Feedrate_Profile_Generator.Run (Patch, Motor_Map, Work.Window_Evaluations, Result);
             exit when
               Result.Valid or else Timing_Run_Last (Patch'Access, Result.Failed_Segment) = Result.Failed_Segment;
             --  As in Plan_Fixed_Geometry, split a run that could not be certified.
@@ -3954,6 +4010,9 @@ package body Prunt.Motion_Planner.Planner is
             end if;
          end;
       exception
+         when Ada.Assertions.Assertion_Error =>
+            --  A failed assertion is a planner defect, not a rejected replacement.
+            raise;
          when others =>
             --  The replacement is optional and may fail in any planning stage. Left and Right are not modified before
             --  the commit below, so both stopped plans remain valid.
@@ -4407,7 +4466,8 @@ package body Prunt.Motion_Planner.Planner is
    end Segment_Prefix_Time;
 
    function Segment_Suffix_Time
-     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Time
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index; Run_Distance : Length)
+      return Time
    is
       Window : constant Profile_Window := Block.Profile_Windows (Corner);
    begin
@@ -4416,29 +4476,98 @@ package body Prunt.Motion_Planner.Planner is
          then Total_Time (Block.Profile_Ends (Corner).Suffix.Profile)
          else
            Constant_Speed_Time
-             (Timing_Total_Distance (Block, Corner) - Window.Start_Distance - Window.Distance,
+             (Run_Distance - Window.Start_Distance - Window.Distance,
               Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Corner))));
    end Segment_Suffix_Time;
 
    function Timing_Motion_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Time
-   is (Segment_Prefix_Time (Block, Run_First)
-       + Total_Time (Block.Feedrate_Profiles (Run_First))
-       + Segment_Suffix_Time (Block, Run_First));
+   is (Prepare_Timing_Evaluation (Block, Run_First).Motion_Time);
+
+   function Timing_Evaluation_For
+     (Block         : not null access constant Execution_Block;
+      Run_First     : Finishing_Corners_Index;
+      Run_Distance  : Length;
+      With_Ramp_End : Boolean) return Timing_Evaluation;
+   --  Prepare_Timing_Evaluation for a run whose distance is already known.
+
+   function Timing_Evaluation_For
+     (Block         : not null access constant Execution_Block;
+      Run_First     : Finishing_Corners_Index;
+      Run_Distance  : Length;
+      With_Ramp_End : Boolean) return Timing_Evaluation
+   is
+      Prefix  : constant Time := Segment_Prefix_Time (Block, Run_First);
+      Profile : constant Time := Total_Time (Block.Feedrate_Profiles (Run_First));
+      Suffix  : constant Time := Segment_Suffix_Time (Block, Run_First, Run_Distance);
+      Motion  : constant Time := Prefix + Profile + Suffix;
+   begin
+      if not With_Ramp_End then
+         return
+           (Has_Ramp_End   => False,
+            Prefix_Time    => Prefix,
+            Profile_Time   => Profile,
+            Suffix_Time    => Suffix,
+            Motion_Time    => Motion,
+            Total_Distance => Run_Distance);
+      end if;
+      return
+        (Has_Ramp_End   => True,
+         Prefix_Time    => Prefix,
+         Profile_Time   => Profile,
+         Suffix_Time    => Suffix,
+         Motion_Time    => Motion,
+         Total_Distance => Run_Distance,
+         Ramp_End       =>
+           Accel_Ramp_End_Of
+             (Block.Feedrate_Profiles (Run_First),
+              Block.Profile_Crackles (Run_First),
+              Central_Profile_Start_Velocity (Block, Run_First)));
+   end Timing_Evaluation_For;
+
+   function Prepare_Timing_Evaluation
+     (Block         : not null access constant Execution_Block;
+      Run_First     : Finishing_Corners_Index;
+      With_Ramp_End : Boolean := False) return Timing_Evaluation
+   is (Timing_Evaluation_For (Block, Run_First, Timing_Total_Distance (Block, Run_First), With_Ramp_End));
+
+   function Assigned_Timing_Evaluation
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Timing_Evaluation
+   is
+      Run_Last : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
+      Distance : constant Length :=
+        (if Run_Last = Run_First
+         then Segment_Total_Distance (Block, Run_First)
+         else Block.Timing_Distance_Offsets (Run_Last) + Segment_Total_Distance (Block, Run_Last));
+      --  The member offsets accumulate from zero in Timing_Total_Distance's order, so this is its sum exactly.
+   begin
+      pragma
+        Assert
+          (Distance = Timing_Total_Distance (Block, Run_First),
+           "Timing run members were not assigned for the current geometry");
+      return Timing_Evaluation_For (Block, Run_First, Distance, With_Ramp_End => False);
+   end Assigned_Timing_Evaluation;
 
    function Timing_Distance_At_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
       return Length
+   is (Timing_Distance_At_Time (Block, Run_First, Run_Time, Prepare_Timing_Evaluation (Block, Run_First)));
+
+   function Timing_Distance_At_Time
+     (Block     : not null access constant Execution_Block;
+      Run_First : Finishing_Corners_Index;
+      Run_Time  : Time;
+      Timing    : Timing_Evaluation) return Length
    is
       Window       : constant Profile_Window := Selected_Profile_Window (Block, Run_First);
       Ends         : constant Profile_End_Pair := Block.Profile_Ends (Run_First);
-      Prefix_Time  : constant Time := Segment_Prefix_Time (Block, Run_First);
-      Profile_Time : constant Time := Total_Time (Block.Feedrate_Profiles (Run_First));
-      Suffix_Time  : constant Time := Segment_Suffix_Time (Block, Run_First);
-      Motion_Time  : constant Time := Prefix_Time + Profile_Time + Suffix_Time;
+      Prefix_Time  : constant Time := Timing.Prefix_Time;
+      Profile_Time : constant Time := Timing.Profile_Time;
+      Suffix_Time  : constant Time := Timing.Suffix_Time;
+      Motion_Time  : constant Time := Timing.Motion_Time;
    begin
       if Run_Time >= Motion_Time then
-         return Timing_Total_Distance (Block, Run_First);
+         return Timing.Total_Distance;
       elsif Run_Time < Prefix_Time then
          return
            (if Ends.Enabled
@@ -4451,14 +4580,22 @@ package body Prunt.Motion_Planner.Planner is
                  Block.Corner_Velocity_Limits (Run_First - 1))
             else Block.Corner_Velocity_Limits (Run_First - 1) * Run_Time);
       elsif Run_Time < Prefix_Time + Profile_Time then
-         return
-           Window.Start_Distance
-           + Profile_Distance_At_Time
-               (Block.Feedrate_Profiles (Run_First),
-                Time'Min (Run_Time - Prefix_Time, Profile_Time),
-                Block.Profile_Crackles (Run_First),
-                Block.Profile_Decel_Crackles (Run_First),
-                Central_Profile_Start_Velocity (Block, Run_First));
+         declare
+            Profile : constant Feedrate_Profile := Block.Feedrate_Profiles (Run_First);
+            T       : constant Time := Time'Min (Run_Time - Prefix_Time, Profile_Time);
+         begin
+            return
+              Window.Start_Distance
+              + (if Timing.Has_Ramp_End and then T > Timing.Ramp_End.Accel_Time
+                 then Distance_After_Accel_Ramp (Profile, T, Block.Profile_Decel_Crackles (Run_First), Timing.Ramp_End)
+                 else
+                   Profile_Distance_At_Time
+                     (Profile,
+                      T,
+                      Block.Profile_Crackles (Run_First),
+                      Block.Profile_Decel_Crackles (Run_First),
+                      Central_Profile_Start_Velocity (Block, Run_First)));
+         end;
       else
          return
            Window.Start_Distance
@@ -4480,11 +4617,18 @@ package body Prunt.Motion_Planner.Planner is
    function Timing_Velocity_At_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
       return Velocity
+   is (Timing_Velocity_At_Time (Block, Run_First, Run_Time, Prepare_Timing_Evaluation (Block, Run_First)));
+
+   function Timing_Velocity_At_Time
+     (Block     : not null access constant Execution_Block;
+      Run_First : Finishing_Corners_Index;
+      Run_Time  : Time;
+      Timing    : Timing_Evaluation) return Velocity
    is
       Ends         : constant Profile_End_Pair := Block.Profile_Ends (Run_First);
-      Prefix_Time  : constant Time := Segment_Prefix_Time (Block, Run_First);
-      Profile_Time : constant Time := Total_Time (Block.Feedrate_Profiles (Run_First));
-      Suffix_Time  : constant Time := Segment_Suffix_Time (Block, Run_First);
+      Prefix_Time  : constant Time := Timing.Prefix_Time;
+      Profile_Time : constant Time := Timing.Profile_Time;
+      Suffix_Time  : constant Time := Timing.Suffix_Time;
    begin
       if Run_Time < Prefix_Time then
          return
@@ -4498,13 +4642,27 @@ package body Prunt.Motion_Planner.Planner is
                  Block.Corner_Velocity_Limits (Run_First - 1))
             else Block.Corner_Velocity_Limits (Run_First - 1));
       elsif Run_Time < Prefix_Time + Profile_Time then
-         return
-           Profile_Velocity_At_Time
-             (Block.Feedrate_Profiles (Run_First),
-              Time'Min (Run_Time - Prefix_Time, Profile_Time),
-              Block.Profile_Crackles (Run_First),
-              Block.Profile_Decel_Crackles (Run_First),
-              Central_Profile_Start_Velocity (Block, Run_First));
+         declare
+            Profile : constant Feedrate_Profile := Block.Feedrate_Profiles (Run_First);
+            T       : constant Time := Time'Min (Run_Time - Prefix_Time, Profile_Time);
+         begin
+            return
+              (if Timing.Has_Ramp_End and then T > Timing.Ramp_End.Accel_Time
+               then
+                 Velocity_After_Accel_Ramp
+                   (Profile,
+                    T,
+                    Block.Profile_Decel_Crackles (Run_First),
+                    Timing.Ramp_End.Accel_Time,
+                    Timing.Ramp_End.Mid_Vel)
+               else
+                 Profile_Velocity_At_Time
+                   (Profile,
+                    T,
+                    Block.Profile_Crackles (Run_First),
+                    Block.Profile_Decel_Crackles (Run_First),
+                    Central_Profile_Start_Velocity (Block, Run_First)));
+         end;
       else
          return
            (if Ends.Enabled
@@ -4521,7 +4679,9 @@ package body Prunt.Motion_Planner.Planner is
 
    procedure Assign_Timing_Members (Block : not null access Execution_Block; Run_First : Finishing_Corners_Index) is
       Run_Last    : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
-      Motion_Time : constant Time := Timing_Motion_Time (Block, Run_First);
+      Timing      : constant Timing_Evaluation := Prepare_Timing_Evaluation (Block, Run_First, With_Ramp_End => True);
+      --  Most member boundaries of a long run lie beyond its acceleration ramp, so bisect from its prepared end.
+      Motion_Time : constant Time := Timing.Motion_Time;
       Distance    : Length := 0.0 * mm;
       Start_Time  : Time := 0.0 * s;
 
@@ -4536,7 +4696,7 @@ package body Prunt.Motion_Planner.Planner is
          loop
             Mid := Lower + 0.5 * (Upper - Lower);
             exit when Mid = Lower or else Mid = Upper;
-            if Timing_Distance_At_Time (Block, Run_First, Mid) < Target then
+            if Timing_Distance_At_Time (Block, Run_First, Mid, Timing) < Target then
                Lower := Mid;
             else
                Upper := Mid;
@@ -4556,7 +4716,7 @@ package body Prunt.Motion_Planner.Planner is
             Block.Timing_Segment_Times (I) := Time_At_Distance (Distance) - Start_Time;
             Start_Time := Start_Time + Block.Timing_Segment_Times (I);
             --  Interior corners are not junctions. Record the speed there for consumers of corner speeds.
-            Block.Corner_Velocity_Limits (I) := Timing_Velocity_At_Time (Block, Run_First, Start_Time);
+            Block.Corner_Velocity_Limits (I) := Timing_Velocity_At_Time (Block, Run_First, Start_Time, Timing);
          end if;
       end loop;
    end Assign_Timing_Members;
@@ -4604,9 +4764,10 @@ package body Prunt.Motion_Planner.Planner is
       Run_Time   : constant Time :=
         (if Merged then Block.Timing_Time_Offsets (Finishing_Corner) + Time_Into_Segment else Time_Into_Segment);
       Run_Offset : constant Length := (if Merged then Block.Timing_Distance_Offsets (Finishing_Corner) else 0.0 * mm);
+      Timing     : constant Timing_Evaluation := Assigned_Timing_Evaluation (Block, Run_First);
    begin
       if Finishing_Corner = Block.N_Corners
-        and then Run_Time >= Timing_Motion_Time (Block, Run_First)
+        and then Run_Time >= Timing.Motion_Time
         and then Block.Corner_Velocity_Limits (Finishing_Corner) = 0.0 * mm / s
       then
          --  Reconstructing the endpoint from direction and distance can leave a rounding residual. Shaper draining
@@ -4617,7 +4778,7 @@ package body Prunt.Motion_Planner.Planner is
       end if;
       return
         Point_At_Segment_Distance
-          (Block, Finishing_Corner, Timing_Distance_At_Time (Block, Run_First, Run_Time) - Run_Offset);
+          (Block, Finishing_Corner, Timing_Distance_At_Time (Block, Run_First, Run_Time, Timing) - Run_Offset);
    end Segment_Pos_At_Time;
 
    function Segment_Vel_Ratio_At_Time
@@ -4630,13 +4791,14 @@ package body Prunt.Motion_Planner.Planner is
         (if Run_First /= Timing_Run_Last (Block, Finishing_Corner)
          then Block.Timing_Time_Offsets (Finishing_Corner) + Time_Into_Segment
          else Time_Into_Segment);
+      Timing    : constant Timing_Evaluation := Assigned_Timing_Evaluation (Block, Run_First);
    begin
-      if Run_Time > Timing_Motion_Time (Block, Run_First) then
+      if Run_Time > Timing.Motion_Time then
          --  Return 1.0 inside dwell parts so the laser can be set to the programmed power level.
          return 1.0;
       end if;
       return
-        Velocity'Max (0.0 * mm / s, Timing_Velocity_At_Time (Block, Run_First, Run_Time))
+        Velocity'Max (0.0 * mm / s, Timing_Velocity_At_Time (Block, Run_First, Run_Time, Timing))
         / Block.Original_Segment_Feedrates (Finishing_Corner);
    end Segment_Vel_Ratio_At_Time;
 
