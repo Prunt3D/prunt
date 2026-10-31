@@ -1,7 +1,20 @@
 {
-  "description": "Exercise G2/G3 offset and radius forms, including degenerate-arc line fallback.",
-  "config": {},
+  "description": "Exercise G2/G3 offset and radius forms, including degenerate-arc line fallback. The workspace extends below Y=0 because the undersized radius-form arc widens into a semicircle that dips below it.",
+  "config": {
+    "Kinematics": {
+      "Kinematics": {
+        "Workspace_Bounds": {
+          "Kind": {
+            "Children": {
+              "Rectangular": { "Lower_Y": -10.0 }
+            }
+          }
+        }
+      }
+    }
+  },
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "M82" },
@@ -30,6 +43,6 @@
     "sample_position_reaches": { "Y": 204.5, "Z": 3.95, "E": 3.95 },
     "sample_position_drops_below": { "Y": -0.5 },
     "min_samples": 1,
-    "event_counts": { "gcode": 18 }
+    "event_counts": { "gcode": 19 }
   }
 }

@@ -2,6 +2,7 @@
   "description": "Exercise automatic firmware retract and recover from E-only moves.",
   "config": {},
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "M83" },

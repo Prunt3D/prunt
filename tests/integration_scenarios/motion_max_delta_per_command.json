@@ -12,6 +12,7 @@
     }
   },
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "G1 X100 F1200000" },
@@ -23,6 +24,6 @@
     "max_sample_delta": { "X": 1.000001 },
     "sample_delta_reaches": { "X": 0.95 },
     "min_samples": 20,
-    "event_counts": { "gcode": 3 }
+    "event_counts": { "gcode": 4 }
   }
 }

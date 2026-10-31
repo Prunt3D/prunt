@@ -2,6 +2,7 @@
   "description": "Exercise runtime pause and resume with no park move configured.",
   "config": {},
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "G1 X60 Y30 F600" },

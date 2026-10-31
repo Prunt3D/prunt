@@ -34,6 +34,7 @@
     }
   },
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G1 X20 F900" },
     { "kind": "submit_gcode", "command": "M140 S55" },
     { "kind": "submit_gcode", "command": "G1 X40 Y10 F900" },
@@ -43,11 +44,12 @@
     "final_position": { "X": 40.0, "Y": 10.0, "Z": 0.0, "E": 0.0 },
     "position_tolerance": 0.05,
     "min_samples": 1,
-    "event_counts": { "gcode": 3, "heater": 1 },
+    "event_counts": { "gcode": 4, "heater": 1 },
     "events": [
       { "kind": "heater", "label": "set_temperature", "target": "DUMMY_HEATER", "value": "5.50000000000000E+01" }
     ],
     "event_order": [
+      { "kind": "gcode", "label": "submit_gcode", "value": "G28" },
       { "kind": "gcode", "label": "submit_gcode", "value": "G1 X20 F900" },
       { "kind": "gcode", "label": "submit_gcode", "value": "M140 S55" },
       { "kind": "gcode", "label": "submit_gcode", "value": "G1 X40 Y10 F900" },

@@ -2,6 +2,7 @@
   "description": "Exercise motion modal state transitions: G20/G21, G90/G91, M82/M83, and G92 offsets.",
   "config": {},
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "G0 X20 Y10 F1200" },

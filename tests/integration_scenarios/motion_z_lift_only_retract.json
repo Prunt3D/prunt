@@ -2,6 +2,7 @@
   "description": "Exercise firmware retract with Z lift but zero E movement.",
   "config": {},
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "M207 S0 F600 Z0.5" },

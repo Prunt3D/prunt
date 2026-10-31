@@ -2,6 +2,7 @@
   "description": "Exercise rapid G0 motion with and without an explicit feedrate.",
   "config": {},
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "G0 X2 Y3" },

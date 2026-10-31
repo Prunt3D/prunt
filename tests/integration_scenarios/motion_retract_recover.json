@@ -2,6 +2,7 @@
   "description": "Exercise explicit G11 recover, including the no-op case before a retract.",
   "config": {},
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "M207 S2 F600 Z0.5" },

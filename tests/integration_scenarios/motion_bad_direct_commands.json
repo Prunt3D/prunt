@@ -2,6 +2,7 @@
   "description": "Reject bad motion G-code submitted as direct commands while keeping the processor alive.",
   "config": {},
   "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
     { "kind": "submit_gcode", "command": "G21" },
     { "kind": "submit_gcode", "command": "G90" },
     { "kind": "submit_gcode", "command": "M82" },

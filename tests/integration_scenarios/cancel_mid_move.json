@@ -5,6 +5,7 @@
     {
       "kind": "submit_gcode_file",
       "commands": [
+        "G28",
         "G1 X200 F1200",
         "G1 Y20 F1200"
       ]
@@ -16,7 +17,7 @@
     "max_position": { "X": 80.0, "Y": 1.0 },
     "max_sample_position": { "X": 80.0, "Y": 1.0 },
     "min_samples": 1,
-    "event_counts": { "gcode": 3, "cancel": 2 },
+    "event_counts": { "gcode": 4, "cancel": 2 },
     "events": [
       { "kind": "cancel", "label": "cancel_requested" },
       { "kind": "cancel", "label": "cancel_completed" }
