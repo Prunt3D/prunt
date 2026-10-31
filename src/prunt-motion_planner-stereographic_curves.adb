@@ -5530,14 +5530,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return False;
    end No_Bulge_Is_Possible;
 
-   function Build_Candidate
+   function Build_Ideal_Candidate
      (Request                             : Blend_Request;
       Chord_Length                        : Length;
       Chord_Direction                     : Position_Scale;
       Frame                               : Frame_Vector_Array;
       Start_Chart_Jets, Finish_Chart_Jets : Chart_Jet_Array;
       Warp_Factor                         : Dimensionless;
-      Initial_Closure                     : Closure_Seed) return Candidate_Result
+      Initial_Closure                     : Closure_Seed) return Ideal_Candidate
    is
       Maximum_Lambda   : constant Dimensionless := Dimensionless (Request.Maximum_Arc_Length / Chord_Length);
       Epsilon          : constant Dimensionless := Dimensionless (Request.Maximum_Position_Error / Chord_Length);
@@ -5595,9 +5595,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    begin
       if not Solution.Success then
          if Solution.Numerically_Unsafe then
-            return (Status => Candidate_Numerically_Unsafe);
+            return (Status => Candidate_Numerically_Unsafe, others => <>);
          else
-            return (Status => Candidate_Closure_Failed);
+            return (Status => Candidate_Closure_Failed, others => <>);
          end if;
       end if;
 
@@ -5664,6 +5664,533 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             end loop;
          end;
 
+         return
+           (Status        => Candidate_Success,
+            Coefficients  => Coefficients,
+            Effective_C0  => Effective_C0,
+            Length_Value  => Length_Value,
+            Bulge_Allowed => Bulge_Allowed);
+      end;
+   end Build_Ideal_Candidate;
+
+   function Ideal_Geometry_Is_Certified
+     (Frame           : Frame_Vector_Array;
+      Coefficients    : Bernstein_Chart;
+      Bulge_Allowed   : Boolean;
+      Chord_Direction : Position_Scale) return Boolean
+   is
+      subtype Interval_Bernstein is Interval_Polynomial;
+
+      function Strict_Bernstein_Nonnegative
+        (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean;
+      function Certify_Planar_Control_Hull (Applicable : out Boolean) return Boolean;
+      function Certify_Planar_No_Bulge (Applicable : out Boolean) return Boolean;
+      function Certify_Spatial_No_Bulge return Boolean;
+      function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean;
+
+      function Strict_Bernstein_Nonnegative
+        (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean
+      is
+         All_Nonnegative : Boolean := True;
+         All_Negative    : Boolean := True;
+      begin
+         --  A nonnegative lower bound on every control certifies p(U) ≥ 0 by the Bernstein convex-hull
+         --  property. If the full hull straddles zero, bisect with de Casteljau and retry each half.
+         for Coefficient of Coefficients loop
+            if not Coefficient.Valid then
+               return False;
+            end if;
+            All_Nonnegative := All_Nonnegative and then Coefficient.Lower >= 0.0;
+            All_Negative := All_Negative and then Coefficient.Upper < 0.0;
+         end loop;
+         if All_Nonnegative then
+            return True;
+         elsif All_Negative or else Depth = 0 or else Coefficients'Length = 1 then
+            return False;
+         end if;
+
+         declare
+            Degree : constant Natural := Coefficients'Length - 1;
+            Work   : Interval_Bernstein (0 .. Degree) := Coefficients;
+            Left   : Interval_Bernstein (0 .. Degree) := [others => Interval_Exact (0.0)];
+            Right  : Interval_Bernstein (0 .. Degree) := [others => Interval_Exact (0.0)];
+         begin
+            Left (0) := Work (0);
+            Right (Degree) := Work (Degree);
+            for Level in 1 .. Degree loop
+               for I in 0 .. Degree - Level loop
+                  Work (I) := Interval_Multiply (Interval_Exact (0.5), Interval_Add (Work (I), Work (I + 1)));
+               end loop;
+               Left (Level) := Work (0);
+               Right (Degree - Level) := Work (Degree - Level);
+            end loop;
+            return
+              Strict_Bernstein_Nonnegative (Left, Depth - 1)
+              and then Strict_Bernstein_Nonnegative (Right, Depth - 1);
+         end;
+      end Strict_Bernstein_Nonnegative;
+
+      function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval;
+      --  Enclose a ratio whose numerator is nonnegative and denominator is positive.
+
+      function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval is
+         Value : Dimensionless;
+      begin
+         if Numerator < 0.0 or else Denominator <= 0.0 then
+            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+         end if;
+         Value := Numerator / Denominator;
+         return Checked_Interval (Down (Value), Up (Value));
+      exception
+         when Constraint_Error =>
+            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
+      end Positive_Ratio;
+
+      function Certify_Planar_Control_Hull (Applicable : out Boolean) return Boolean is
+         Start_Value  : constant Dimensionless := Coefficients (0, 1);
+         Finish_Value : constant Dimensionless := Coefficients (Fixed_Chart_Degree, 1);
+         Lower_Value  : constant Dimensionless := Dimensionless'Min (Start_Value, Finish_Value);
+         Upper_Value  : constant Dimensionless := Dimensionless'Max (Start_Value, Finish_Value);
+         Cross_Factor : constant Interval :=
+           Interval_Add
+             (Interval_Exact (1.0),
+              Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value)));
+      begin
+         Applicable := False;
+         for C in 2 .. 3 loop
+            for I in Chart_Coefficient_Index loop
+               if Coefficients (I, C) /= 0.0 then
+                  return False;
+               end if;
+            end loop;
+         end loop;
+         Applicable := True;
+
+         --  A scalar Bernstein polynomial lies in the convex hull of its controls. Keeping every control
+         --  between the two endpoint chart values therefore keeps the entire ideal tangent in their cone;
+         --  monotonicity in the parameter is unnecessary. The positive cross factor selects the minor
+         --  inverse-stereographic arc in one open hemisphere.
+         if Cross_Factor.Lower <= 0.0 then
+            return False;
+         end if;
+         for I in Chart_Coefficient_Index loop
+            if Coefficients (I, 1) < Lower_Value or else Coefficients (I, 1) > Upper_Value then
+               return False;
+            end if;
+         end loop;
+         return True;
+      end Certify_Planar_Control_Hull;
+
+      function Certify_Planar_No_Bulge (Applicable : out Boolean) return Boolean is
+         Start_Factor_Order          : constant Positive :=
+           (if (for all I in 1 .. 3 => Coefficients (I, 1) = Coefficients (0, 1)) then 4 else 1);
+         Finish_Factor_Order         : constant Positive :=
+           (if (for all I in 5 .. Fixed_Chart_Degree - 1 =>
+                  Coefficients (I, 1) = Coefficients (Fixed_Chart_Degree, 1))
+            then 4
+            else 1);
+         Start_Quotient              : Interval_Bernstein (0 .. Fixed_Chart_Degree - Start_Factor_Order) :=
+           [others => Interval_Exact (0.0)];
+         Finish_Quotient             : Interval_Bernstein (0 .. Fixed_Chart_Degree - Finish_Factor_Order) :=
+           [others => Interval_Exact (0.0)];
+         Start_Factor, Finish_Factor : Interval_Bernstein (Chart_Coefficient_Index) :=
+           [others => Interval_Exact (0.0)];
+         Start_Product               :
+           Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Start_Factor_Order) :=
+             [others => Interval_Exact (0.0)];
+         Finish_Product              :
+           Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Finish_Factor_Order) :=
+             [others => Interval_Exact (0.0)];
+         Start_Value                 : constant Dimensionless := Coefficients (0, 1);
+         Finish_Value                : constant Dimensionless := Coefficients (Fixed_Chart_Degree, 1);
+
+         Orientation      : Interval;
+         Orientation_Sign : Dimensionless;
+      begin
+         Applicable := False;
+         for C in 2 .. 3 loop
+            for I in Chart_Coefficient_Index loop
+               if Coefficients (I, C) /= 0.0 then
+                  return False;
+               end if;
+            end loop;
+         end loop;
+         Applicable := True;
+
+         --  For the planar inverse-stereographic tangent
+         --
+         --     S(Y) = ((1 - Y²), 2Y)/(1 + Y²),
+         --
+         --  the two endpoint-cone determinants factor as
+         --
+         --     (Y - Yₛ)·(1 + Yₛ·Y),   (Yꜰ - Y)·(1 + Yꜰ·Y).
+         --
+         --  Every Bernstein chart has the exact endpoint factors Y - Yₛ = V·Qₛ and
+         --  Yꜰ - Y = (1 - V)·Qꜰ. Structurally flat endpoint controls expose fourth-order factors instead.
+         --  Form the strongest available quotient directly in Bernstein form, then certify the remaining
+         --  products with outward-rounded intervals.
+         Orientation :=
+           Interval_Multiply
+             (Interval_Subtract (Interval_Exact (Finish_Value), Interval_Exact (Start_Value)),
+              Interval_Add
+                (Interval_Exact (1.0),
+                 Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value))));
+         if Orientation.Lower > 0.0 then
+            Orientation_Sign := 1.0;
+         elsif Orientation.Upper < 0.0 then
+            Orientation_Sign := -1.0;
+         else
+            return False;
+         end if;
+
+         for J in Start_Quotient'Range loop
+            Start_Quotient (J) :=
+              Interval_Multiply
+                (Interval_Subtract
+                   (Interval_Exact (Coefficients (J + Start_Factor_Order, 1)),
+                    Interval_Exact (Start_Value)),
+                 Positive_Ratio
+                   (Binomial (Fixed_Chart_Degree, J + Start_Factor_Order),
+                    Binomial (Fixed_Chart_Degree - Start_Factor_Order, J)));
+         end loop;
+         for J in Finish_Quotient'Range loop
+            Finish_Quotient (J) :=
+              Interval_Multiply
+                (Interval_Subtract
+                   (Interval_Exact (Finish_Value), Interval_Exact (Coefficients (J, 1))),
+                 Positive_Ratio
+                   (Binomial (Fixed_Chart_Degree, J),
+                    Binomial (Fixed_Chart_Degree - Finish_Factor_Order, J)));
+         end loop;
+         for I in Chart_Coefficient_Index loop
+            Start_Factor (I) :=
+              Interval_Add
+                (Interval_Exact (1.0),
+                 Interval_Multiply
+                   (Interval_Exact (Start_Value), Interval_Exact (Coefficients (I, 1))));
+            Finish_Factor (I) :=
+              Interval_Add
+                (Interval_Exact (1.0),
+                 Interval_Multiply
+                   (Interval_Exact (Finish_Value), Interval_Exact (Coefficients (I, 1))));
+         end loop;
+         Start_Product := Multiply_Bernstein (Start_Quotient, Start_Factor);
+         Finish_Product := Multiply_Bernstein (Finish_Quotient, Finish_Factor);
+         for I in Start_Product'Range loop
+            Start_Product (I) := Interval_Multiply (Interval_Exact (Orientation_Sign), Start_Product (I));
+         end loop;
+         for I in Finish_Product'Range loop
+            Finish_Product (I) := Interval_Multiply (Interval_Exact (Orientation_Sign), Finish_Product (I));
+         end loop;
+         return
+           Strict_Bernstein_Nonnegative (Start_Product, 8)
+           and then Strict_Bernstein_Nonnegative (Finish_Product, 8);
+      exception
+         when Constraint_Error =>
+            Applicable := True;
+            return False;
+      end Certify_Planar_No_Bulge;
+
+      function Certify_Spatial_No_Bulge return Boolean is
+         Start_Value  : constant Dimensionless := Coefficients (0, 1);
+         Finish_Value : constant Dimensionless := Coefficients (Fixed_Chart_Degree, 1);
+
+         function Root_Order (C : Chart_Component_Index; At_Start : Boolean) return Positive;
+         --  Return k such that the endpoint root of Y꜀ - Y꜀(endpoint) has order at least k. Equal leading
+         --  controls expose higher orders, as for structurally flat endpoint jets.
+
+         function Root_Order (C : Chart_Component_Index; At_Start : Boolean) return Positive is
+            Endpoint : constant Chart_Coefficient_Index := (if At_Start then 0 else Fixed_Chart_Degree);
+            Order    : Positive := 1;
+         begin
+            while Order < 4
+              and then
+                Coefficients ((if At_Start then Order else Fixed_Chart_Degree - Order), C)
+                = Coefficients (Endpoint, C)
+            loop
+               Order := Order + 1;
+            end loop;
+            return Order;
+         end Root_Order;
+
+         procedure Quotient
+           (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein);
+         --  Divide out the exact endpoint root in Bernstein form: (Y꜀ - Y꜀(0))/Vᵏ at the start, or
+         --  (Y꜀(1) - Y꜀)/(1 - V)ᵏ at the finish. Result has degree eight minus Order.
+
+         procedure Quotient
+           (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein)
+         is
+         begin
+            for J in Result'Range loop
+               if At_Start then
+                  Result (J) :=
+                    Interval_Multiply
+                      (Interval_Subtract
+                         (Interval_Exact (Coefficients (J + Order, C)),
+                          Interval_Exact (Coefficients (0, C))),
+                       Positive_Ratio
+                         (Binomial (Fixed_Chart_Degree, J + Order),
+                          Binomial (Fixed_Chart_Degree - Order, J)));
+               else
+                  Result (J) :=
+                    Interval_Multiply
+                      (Interval_Subtract
+                         (Interval_Exact (Coefficients (Fixed_Chart_Degree, C)),
+                          Interval_Exact (Coefficients (J, C))),
+                       Positive_Ratio
+                         (Binomial (Fixed_Chart_Degree, J), Binomial (Fixed_Chart_Degree - Order, J)));
+               end if;
+            end loop;
+         end Quotient;
+
+         procedure Raise_Degree
+           (Polynomial : Interval_Bernstein;
+            Power      : Natural;
+            At_Start   : Boolean;
+            Result     : out Interval_Bernstein);
+         --  Multiply by Vᵖ at the start, or by (1 - V)ᵖ at the finish. Result has Power more degrees.
+
+         procedure Raise_Degree
+           (Polynomial : Interval_Bernstein;
+            Power      : Natural;
+            At_Start   : Boolean;
+            Result     : out Interval_Bernstein)
+         is
+            Degree : constant Natural := Polynomial'Length - 1;
+         begin
+            if Power = 0 then
+               Result := Polynomial;
+               return;
+            end if;
+            Result := [others => Interval_Exact (0.0)];
+            --  Vᵖ·Bⱼ,ₙ = C(n,j)/C(n+p,j+p)·Bⱼ₊ₚ,ₙ₊ₚ and (1 - V)ᵖ·Bⱼ,ₙ = C(n,j)/C(n+p,j)·Bⱼ,ₙ₊ₚ.
+            for J in Polynomial'Range loop
+               if At_Start then
+                  Result (J + Power) :=
+                    Interval_Multiply
+                      (Polynomial (J),
+                       Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J + Power)));
+               else
+                  Result (J) :=
+                    Interval_Multiply
+                      (Polynomial (J), Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J)));
+               end if;
+            end loop;
+         end Raise_Degree;
+
+         function Certify_End (At_Start : Boolean; Orientation_Sign : Dimensionless) return Boolean;
+         --  Certify the cone determinant at one end after dividing out its endpoint root.
+
+         function Certify_End (At_Start : Boolean; Orientation_Sign : Dimensionless) return Boolean is
+            Value            : constant Dimensionless := (if At_Start then Start_Value else Finish_Value);
+            Tangent_Order    : constant Positive := Root_Order (1, At_Start);
+            Normal_Order     : constant Positive :=
+              Positive'Min (Root_Order (2, At_Start), Root_Order (3, At_Start));
+            Shared_Order     : constant Positive := Positive'Min (Tangent_Order, 2 * Normal_Order);
+            In_Plane         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Tangent_Order);
+            Normal_2         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Normal_Order);
+            Normal_3         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Normal_Order);
+            Factor           : Interval_Bernstein (Chart_Coefficient_Index);
+            In_Plane_Product : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Tangent_Order);
+            Normal_Square    : Interval_Bernstein (0 .. 2 * (Fixed_Chart_Degree - Normal_Order));
+            Normal_Square_3  : Interval_Bernstein (0 .. 2 * (Fixed_Chart_Degree - Normal_Order));
+            Raised_In_Plane  : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Shared_Order);
+            Raised_Normal    : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Shared_Order);
+         begin
+            Quotient (1, Tangent_Order, At_Start, In_Plane);
+            Quotient (2, Normal_Order, At_Start, Normal_2);
+            Quotient (3, Normal_Order, At_Start, Normal_3);
+            for I in Chart_Coefficient_Index loop
+               Factor (I) :=
+                 Interval_Add
+                   (Interval_Exact (1.0),
+                    Interval_Multiply (Interval_Exact (Value), Interval_Exact (Coefficients (I, 1))));
+            end loop;
+            In_Plane_Product := Multiply_Bernstein (In_Plane, Factor);
+            Normal_Square := Multiply_Bernstein (Normal_2, Normal_2);
+            Normal_Square_3 := Multiply_Bernstein (Normal_3, Normal_3);
+            for K in Normal_Square'Range loop
+               Normal_Square (K) :=
+                 Interval_Multiply
+                   (Interval_Exact (if At_Start then Value else -Value),
+                    Interval_Add (Normal_Square (K), Normal_Square_3 (K)));
+            end loop;
+            Raise_Degree (In_Plane_Product, Tangent_Order - Shared_Order, At_Start, Raised_In_Plane);
+            Raise_Degree (Normal_Square, 2 * Normal_Order - Shared_Order, At_Start, Raised_Normal);
+            for K in Raised_In_Plane'Range loop
+               Raised_In_Plane (K) :=
+                 Interval_Multiply
+                   (Interval_Exact (Orientation_Sign), Interval_Add (Raised_In_Plane (K), Raised_Normal (K)));
+            end loop;
+            return Strict_Bernstein_Nonnegative (Raised_In_Plane, 8);
+         end Certify_End;
+
+         Orientation : Interval;
+      begin
+         --  The frame-plane projection of the tangent numerator is (1 - |Y|², 2·Y₁). With both endpoint
+         --  tangents in that plane (Y₂ = Y₃ = 0 at both ends) and W = Y₂² + Y₃², the cone determinants are
+         --
+         --     (Y₁ - Yₛ)·(1 + Yₛ·Y₁) + Yₛ·W,   (Yꜰ - Y₁)·(1 + Yꜰ·Y₁) - Yꜰ·W.
+         --
+         --  They reduce to the planar factors when W = 0. Every term has an exact endpoint root:
+         --  Y₁ - Yₛ = Vᵏ·Q and Y₂, Y₃ = Vᵐ·P at the start, and likewise in 1 - V at the finish. Divide out
+         --  the common power so that a curve which leaves an endpoint along the cone boundary still
+         --  certifies.
+         for C in 2 .. 3 loop
+            if Coefficients (0, C) /= 0.0 or else Coefficients (Fixed_Chart_Degree, C) /= 0.0 then
+               --  This frame plane does not contain both endpoint tangents.
+               return False;
+            end if;
+         end loop;
+         Orientation :=
+           Interval_Multiply
+             (Interval_Subtract (Interval_Exact (Finish_Value), Interval_Exact (Start_Value)),
+              Interval_Add
+                (Interval_Exact (1.0),
+                 Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value))));
+         if Orientation.Lower > 0.0 then
+            return Certify_End (True, 1.0) and then Certify_End (False, 1.0);
+         elsif Orientation.Upper < 0.0 then
+            return Certify_End (True, -1.0) and then Certify_End (False, -1.0);
+         else
+            return False;
+         end if;
+      exception
+         when Constraint_Error =>
+            return False;
+      end Certify_Spatial_No_Bulge;
+
+      function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean is
+         Numerator : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
+         R2        : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
+         Ones      : constant Interval_Bernstein (Chart_Coefficient_Index) :=
+           [others => Interval_Exact (1.0)];
+
+         function Dot_Interval (Left, Right : Position_Scale) return Interval;
+         --  Enclose the dot product of two exact vectors.
+
+         function Dot_Interval (Left, Right : Position_Scale) return Interval is
+            Result : Interval := Interval_Exact (0.0);
+         begin
+            for Axis in Axis_Name loop
+               Result :=
+                 Interval_Add
+                   (Result, Interval_Multiply (Interval_Exact (Left (Axis)), Interval_Exact (Right (Axis))));
+            end loop;
+            return Result;
+         end Dot_Interval;
+
+      begin
+         --  Form the inverse-stereographic tangent numerator
+         --
+         --     Frame₀·(1 - Y·Y) + 2·Σ꜀Frame꜀·Y꜀
+         --
+         --  directly from the authoritative degree-eight Bernstein chart. In particular, do not prove this
+         --  property using the ordinary-rounded power-basis evaluator copy: that would certify a nearby
+         --  polynomial rather than the ideal curve. Multiplication by the degree-eight constant-one
+         --  polynomial both elevates Y to degree sixteen and keeps every conversion outward-rounded.
+         for C in Chart_Component_Index loop
+            declare
+               Y       : constant Interval_Bernstein (Chart_Coefficient_Index) :=
+                 [for I in Chart_Coefficient_Index => Interval_Exact (Coefficients (I, C))];
+               Squared : Interval_Bernstein (Tangent_Numerator_Index);
+            begin
+               Squared := Multiply_Bernstein (Y, Y);
+               for K in Tangent_Numerator_Index loop
+                  R2 (K) := Interval_Add (R2 (K), Squared (K));
+               end loop;
+            end;
+         end loop;
+         declare
+            Frame_0_Projection : constant Interval := Dot_Interval (Frame (0), Direction);
+         begin
+            for K in Tangent_Numerator_Index loop
+               Numerator (K) :=
+                 Interval_Subtract (Frame_0_Projection, Interval_Multiply (Frame_0_Projection, R2 (K)));
+            end loop;
+         end;
+         for C in Chart_Component_Index loop
+            declare
+               Frame_Projection : constant Interval := Dot_Interval (Frame (C), Direction);
+               Y                : constant Interval_Bernstein (Chart_Coefficient_Index) :=
+                 [for I in Chart_Coefficient_Index => Interval_Exact (Coefficients (I, C))];
+               Elevated         : Interval_Bernstein (Tangent_Numerator_Index);
+            begin
+               Elevated := Multiply_Bernstein (Y, Ones);
+               for K in Tangent_Numerator_Index loop
+                  Numerator (K) :=
+                    Interval_Add
+                      (Numerator (K),
+                       Interval_Multiply
+                         (Interval_Exact (2.0), Interval_Multiply (Frame_Projection, Elevated (K))));
+               end loop;
+            end;
+         end loop;
+         return Strict_Bernstein_Nonnegative (Numerator, 8);
+      end Certify_Nonnegative_Projection;
+
+      function Certify_No_Bulge return Boolean;
+      --  Certify that the tangent's projection onto the endpoint-tangent plane stays inside the endpoint
+      --  cone.
+
+      function Certify_No_Bulge return Boolean is
+         Planar_Applicable : Boolean;
+         Planar_Certified  : Boolean := Certify_Planar_Control_Hull (Planar_Applicable);
+      begin
+         if Planar_Applicable and then not Planar_Certified then
+            declare
+               Slow_Applicable : Boolean;
+            begin
+               Planar_Certified := Certify_Planar_No_Bulge (Slow_Applicable);
+               pragma Assert (Slow_Applicable);
+            end;
+         end if;
+         if Planar_Applicable then
+            return Planar_Certified;
+         end if;
+         return Certify_Spatial_No_Bulge;
+      end Certify_No_Bulge;
+   begin
+      --  Allowing bulge is a relaxation of the default geometry, not a switch to a disjoint acceptance rule.
+      --  Retain a certified no-bulge candidate first; only a candidate which leaves the endpoint tangent
+      --  cone needs the chord-monotonicity proof. This matters for obtuse asymmetric line corners, whose
+      --  fixed endpoint tangent can point backwards along the chord even though the complete curve stays
+      --  inside its tangent cone.
+      return Certify_No_Bulge or else (Bulge_Allowed and then Certify_Nonnegative_Projection (Chord_Direction));
+   end Ideal_Geometry_Is_Certified;
+
+   function Build_Candidate
+     (Request                             : Blend_Request;
+      Chord_Length                        : Length;
+      Chord_Direction                     : Position_Scale;
+      Frame                               : Frame_Vector_Array;
+      Start_Chart_Jets, Finish_Chart_Jets : Chart_Jet_Array;
+      Warp_Factor                         : Dimensionless;
+      Initial_Closure                     : Closure_Seed) return Candidate_Result
+   is
+      Ideal : constant Ideal_Candidate :=
+        Build_Ideal_Candidate
+          (Request,
+           Chord_Length,
+           Chord_Direction,
+           Frame,
+           Start_Chart_Jets,
+           Finish_Chart_Jets,
+           Warp_Factor,
+           Initial_Closure);
+   begin
+      if Ideal.Status = Candidate_Numerically_Unsafe then
+         return (Status => Candidate_Numerically_Unsafe);
+      elsif Ideal.Status /= Candidate_Success then
+         return (Status => Candidate_Closure_Failed);
+      end if;
+
+      declare
+         Coefficients : Bernstein_Chart renames Ideal.Coefficients;
+         Effective_C0 : Raw_Vector_3 renames Ideal.Effective_C0;
+         Length_Value : Length renames Ideal.Length_Value;
+      begin
          declare
             Rational_Power_Coefficients : Power_Chart := Power_Basis (Coefficients);
             Frame_Speed_Upper           : constant Dimensionless := Frame_Speed_Upper_Bound (Frame);
@@ -5712,491 +6239,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                end;
             end loop;
 
-            declare
-               subtype Interval_Bernstein is Interval_Polynomial;
-
-               function Strict_Bernstein_Nonnegative
-                 (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean;
-               function Certify_Planar_Control_Hull (Applicable : out Boolean) return Boolean;
-               function Certify_Planar_No_Bulge (Applicable : out Boolean) return Boolean;
-               function Certify_Spatial_No_Bulge return Boolean;
-               function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean;
-
-               function Strict_Bernstein_Nonnegative
-                 (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean
-               is
-                  All_Nonnegative : Boolean := True;
-                  All_Negative    : Boolean := True;
-               begin
-                  --  A nonnegative lower bound on every control certifies p(U) ≥ 0 by the Bernstein convex-hull
-                  --  property. If the full hull straddles zero, bisect with de Casteljau and retry each half.
-                  for Coefficient of Coefficients loop
-                     if not Coefficient.Valid then
-                        return False;
-                     end if;
-                     All_Nonnegative := All_Nonnegative and then Coefficient.Lower >= 0.0;
-                     All_Negative := All_Negative and then Coefficient.Upper < 0.0;
-                  end loop;
-                  if All_Nonnegative then
-                     return True;
-                  elsif All_Negative or else Depth = 0 or else Coefficients'Length = 1 then
-                     return False;
-                  end if;
-
-                  declare
-                     Degree : constant Natural := Coefficients'Length - 1;
-                     Work   : Interval_Bernstein (0 .. Degree) := Coefficients;
-                     Left   : Interval_Bernstein (0 .. Degree) := [others => Interval_Exact (0.0)];
-                     Right  : Interval_Bernstein (0 .. Degree) := [others => Interval_Exact (0.0)];
-                  begin
-                     Left (0) := Work (0);
-                     Right (Degree) := Work (Degree);
-                     for Level in 1 .. Degree loop
-                        for I in 0 .. Degree - Level loop
-                           Work (I) := Interval_Multiply (Interval_Exact (0.5), Interval_Add (Work (I), Work (I + 1)));
-                        end loop;
-                        Left (Level) := Work (0);
-                        Right (Degree - Level) := Work (Degree - Level);
-                     end loop;
-                     return
-                       Strict_Bernstein_Nonnegative (Left, Depth - 1)
-                       and then Strict_Bernstein_Nonnegative (Right, Depth - 1);
-                  end;
-               end Strict_Bernstein_Nonnegative;
-
-               function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval;
-               --  Enclose a ratio whose numerator is nonnegative and denominator is positive.
-
-               function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval is
-                  Value : Dimensionless;
-               begin
-                  if Numerator < 0.0 or else Denominator <= 0.0 then
-                     return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-                  end if;
-                  Value := Numerator / Denominator;
-                  return Checked_Interval (Down (Value), Up (Value));
-               exception
-                  when Constraint_Error =>
-                     return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
-               end Positive_Ratio;
-
-               function Certify_Planar_Control_Hull (Applicable : out Boolean) return Boolean is
-                  Start_Value  : constant Dimensionless := Curve.Coefficients (0, 1);
-                  Finish_Value : constant Dimensionless := Curve.Coefficients (Fixed_Chart_Degree, 1);
-                  Lower_Value  : constant Dimensionless := Dimensionless'Min (Start_Value, Finish_Value);
-                  Upper_Value  : constant Dimensionless := Dimensionless'Max (Start_Value, Finish_Value);
-                  Cross_Factor : constant Interval :=
-                    Interval_Add
-                      (Interval_Exact (1.0),
-                       Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value)));
-               begin
-                  Applicable := False;
-                  for C in 2 .. 3 loop
-                     for I in Chart_Coefficient_Index loop
-                        if Curve.Coefficients (I, C) /= 0.0 then
-                           return False;
-                        end if;
-                     end loop;
-                  end loop;
-                  Applicable := True;
-
-                  --  A scalar Bernstein polynomial lies in the convex hull of its controls. Keeping every control
-                  --  between the two endpoint chart values therefore keeps the entire ideal tangent in their cone;
-                  --  monotonicity in the parameter is unnecessary. The positive cross factor selects the minor
-                  --  inverse-stereographic arc in one open hemisphere.
-                  if Cross_Factor.Lower <= 0.0 then
-                     return False;
-                  end if;
-                  for I in Chart_Coefficient_Index loop
-                     if Curve.Coefficients (I, 1) < Lower_Value or else Curve.Coefficients (I, 1) > Upper_Value then
-                        return False;
-                     end if;
-                  end loop;
-                  return True;
-               end Certify_Planar_Control_Hull;
-
-               function Certify_Planar_No_Bulge (Applicable : out Boolean) return Boolean is
-                  Start_Factor_Order          : constant Positive :=
-                    (if (for all I in 1 .. 3 => Curve.Coefficients (I, 1) = Curve.Coefficients (0, 1)) then 4 else 1);
-                  Finish_Factor_Order         : constant Positive :=
-                    (if (for all I in 5 .. Fixed_Chart_Degree - 1 =>
-                           Curve.Coefficients (I, 1) = Curve.Coefficients (Fixed_Chart_Degree, 1))
-                     then 4
-                     else 1);
-                  Start_Quotient              : Interval_Bernstein (0 .. Fixed_Chart_Degree - Start_Factor_Order) :=
-                    [others => Interval_Exact (0.0)];
-                  Finish_Quotient             : Interval_Bernstein (0 .. Fixed_Chart_Degree - Finish_Factor_Order) :=
-                    [others => Interval_Exact (0.0)];
-                  Start_Factor, Finish_Factor : Interval_Bernstein (Chart_Coefficient_Index) :=
-                    [others => Interval_Exact (0.0)];
-                  Start_Product               :
-                    Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Start_Factor_Order) :=
-                      [others => Interval_Exact (0.0)];
-                  Finish_Product              :
-                    Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Finish_Factor_Order) :=
-                      [others => Interval_Exact (0.0)];
-                  Start_Value                 : constant Dimensionless := Curve.Coefficients (0, 1);
-                  Finish_Value                : constant Dimensionless := Curve.Coefficients (Fixed_Chart_Degree, 1);
-
-                  Orientation      : Interval;
-                  Orientation_Sign : Dimensionless;
-               begin
-                  Applicable := False;
-                  for C in 2 .. 3 loop
-                     for I in Chart_Coefficient_Index loop
-                        if Curve.Coefficients (I, C) /= 0.0 then
-                           return False;
-                        end if;
-                     end loop;
-                  end loop;
-                  Applicable := True;
-
-                  --  For the planar inverse-stereographic tangent
-                  --
-                  --     S(Y) = ((1 - Y²), 2Y)/(1 + Y²),
-                  --
-                  --  the two endpoint-cone determinants factor as
-                  --
-                  --     (Y - Yₛ)·(1 + Yₛ·Y),   (Yꜰ - Y)·(1 + Yꜰ·Y).
-                  --
-                  --  Every Bernstein chart has the exact endpoint factors Y - Yₛ = V·Qₛ and
-                  --  Yꜰ - Y = (1 - V)·Qꜰ. Structurally flat endpoint controls expose fourth-order factors instead.
-                  --  Form the strongest available quotient directly in Bernstein form, then certify the remaining
-                  --  products with outward-rounded intervals.
-                  Orientation :=
-                    Interval_Multiply
-                      (Interval_Subtract (Interval_Exact (Finish_Value), Interval_Exact (Start_Value)),
-                       Interval_Add
-                         (Interval_Exact (1.0),
-                          Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value))));
-                  if Orientation.Lower > 0.0 then
-                     Orientation_Sign := 1.0;
-                  elsif Orientation.Upper < 0.0 then
-                     Orientation_Sign := -1.0;
-                  else
-                     return False;
-                  end if;
-
-                  for J in Start_Quotient'Range loop
-                     Start_Quotient (J) :=
-                       Interval_Multiply
-                         (Interval_Subtract
-                            (Interval_Exact (Curve.Coefficients (J + Start_Factor_Order, 1)),
-                             Interval_Exact (Start_Value)),
-                          Positive_Ratio
-                            (Binomial (Fixed_Chart_Degree, J + Start_Factor_Order),
-                             Binomial (Fixed_Chart_Degree - Start_Factor_Order, J)));
-                  end loop;
-                  for J in Finish_Quotient'Range loop
-                     Finish_Quotient (J) :=
-                       Interval_Multiply
-                         (Interval_Subtract
-                            (Interval_Exact (Finish_Value), Interval_Exact (Curve.Coefficients (J, 1))),
-                          Positive_Ratio
-                            (Binomial (Fixed_Chart_Degree, J),
-                             Binomial (Fixed_Chart_Degree - Finish_Factor_Order, J)));
-                  end loop;
-                  for I in Chart_Coefficient_Index loop
-                     Start_Factor (I) :=
-                       Interval_Add
-                         (Interval_Exact (1.0),
-                          Interval_Multiply
-                            (Interval_Exact (Start_Value), Interval_Exact (Curve.Coefficients (I, 1))));
-                     Finish_Factor (I) :=
-                       Interval_Add
-                         (Interval_Exact (1.0),
-                          Interval_Multiply
-                            (Interval_Exact (Finish_Value), Interval_Exact (Curve.Coefficients (I, 1))));
-                  end loop;
-                  Start_Product := Multiply_Bernstein (Start_Quotient, Start_Factor);
-                  Finish_Product := Multiply_Bernstein (Finish_Quotient, Finish_Factor);
-                  for I in Start_Product'Range loop
-                     Start_Product (I) := Interval_Multiply (Interval_Exact (Orientation_Sign), Start_Product (I));
-                  end loop;
-                  for I in Finish_Product'Range loop
-                     Finish_Product (I) := Interval_Multiply (Interval_Exact (Orientation_Sign), Finish_Product (I));
-                  end loop;
-                  return
-                    Strict_Bernstein_Nonnegative (Start_Product, 8)
-                    and then Strict_Bernstein_Nonnegative (Finish_Product, 8);
-               exception
-                  when Constraint_Error =>
-                     Applicable := True;
-                     return False;
-               end Certify_Planar_No_Bulge;
-
-               function Certify_Spatial_No_Bulge return Boolean is
-                  Start_Value  : constant Dimensionless := Curve.Coefficients (0, 1);
-                  Finish_Value : constant Dimensionless := Curve.Coefficients (Fixed_Chart_Degree, 1);
-
-                  function Root_Order (C : Chart_Component_Index; At_Start : Boolean) return Positive;
-                  --  Return k such that the endpoint root of Y꜀ - Y꜀(endpoint) has order at least k. Equal leading
-                  --  controls expose higher orders, as for structurally flat endpoint jets.
-
-                  function Root_Order (C : Chart_Component_Index; At_Start : Boolean) return Positive is
-                     Endpoint : constant Chart_Coefficient_Index := (if At_Start then 0 else Fixed_Chart_Degree);
-                     Order    : Positive := 1;
-                  begin
-                     while Order < 4
-                       and then
-                         Curve.Coefficients ((if At_Start then Order else Fixed_Chart_Degree - Order), C)
-                         = Curve.Coefficients (Endpoint, C)
-                     loop
-                        Order := Order + 1;
-                     end loop;
-                     return Order;
-                  end Root_Order;
-
-                  procedure Quotient
-                    (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein);
-                  --  Divide out the exact endpoint root in Bernstein form: (Y꜀ - Y꜀(0))/Vᵏ at the start, or
-                  --  (Y꜀(1) - Y꜀)/(1 - V)ᵏ at the finish. Result has degree eight minus Order.
-
-                  procedure Quotient
-                    (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein)
-                  is
-                  begin
-                     for J in Result'Range loop
-                        if At_Start then
-                           Result (J) :=
-                             Interval_Multiply
-                               (Interval_Subtract
-                                  (Interval_Exact (Curve.Coefficients (J + Order, C)),
-                                   Interval_Exact (Curve.Coefficients (0, C))),
-                                Positive_Ratio
-                                  (Binomial (Fixed_Chart_Degree, J + Order),
-                                   Binomial (Fixed_Chart_Degree - Order, J)));
-                        else
-                           Result (J) :=
-                             Interval_Multiply
-                               (Interval_Subtract
-                                  (Interval_Exact (Curve.Coefficients (Fixed_Chart_Degree, C)),
-                                   Interval_Exact (Curve.Coefficients (J, C))),
-                                Positive_Ratio
-                                  (Binomial (Fixed_Chart_Degree, J), Binomial (Fixed_Chart_Degree - Order, J)));
-                        end if;
-                     end loop;
-                  end Quotient;
-
-                  procedure Raise_Degree
-                    (Polynomial : Interval_Bernstein;
-                     Power      : Natural;
-                     At_Start   : Boolean;
-                     Result     : out Interval_Bernstein);
-                  --  Multiply by Vᵖ at the start, or by (1 - V)ᵖ at the finish. Result has Power more degrees.
-
-                  procedure Raise_Degree
-                    (Polynomial : Interval_Bernstein;
-                     Power      : Natural;
-                     At_Start   : Boolean;
-                     Result     : out Interval_Bernstein)
-                  is
-                     Degree : constant Natural := Polynomial'Length - 1;
-                  begin
-                     if Power = 0 then
-                        Result := Polynomial;
-                        return;
-                     end if;
-                     Result := [others => Interval_Exact (0.0)];
-                     --  Vᵖ·Bⱼ,ₙ = C(n,j)/C(n+p,j+p)·Bⱼ₊ₚ,ₙ₊ₚ and (1 - V)ᵖ·Bⱼ,ₙ = C(n,j)/C(n+p,j)·Bⱼ,ₙ₊ₚ.
-                     for J in Polynomial'Range loop
-                        if At_Start then
-                           Result (J + Power) :=
-                             Interval_Multiply
-                               (Polynomial (J),
-                                Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J + Power)));
-                        else
-                           Result (J) :=
-                             Interval_Multiply
-                               (Polynomial (J), Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J)));
-                        end if;
-                     end loop;
-                  end Raise_Degree;
-
-                  function Certify_End (At_Start : Boolean; Orientation_Sign : Dimensionless) return Boolean;
-                  --  Certify the cone determinant at one end after dividing out its endpoint root.
-
-                  function Certify_End (At_Start : Boolean; Orientation_Sign : Dimensionless) return Boolean is
-                     Value            : constant Dimensionless := (if At_Start then Start_Value else Finish_Value);
-                     Tangent_Order    : constant Positive := Root_Order (1, At_Start);
-                     Normal_Order     : constant Positive :=
-                       Positive'Min (Root_Order (2, At_Start), Root_Order (3, At_Start));
-                     Shared_Order     : constant Positive := Positive'Min (Tangent_Order, 2 * Normal_Order);
-                     In_Plane         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Tangent_Order);
-                     Normal_2         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Normal_Order);
-                     Normal_3         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Normal_Order);
-                     Factor           : Interval_Bernstein (Chart_Coefficient_Index);
-                     In_Plane_Product : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Tangent_Order);
-                     Normal_Square    : Interval_Bernstein (0 .. 2 * (Fixed_Chart_Degree - Normal_Order));
-                     Normal_Square_3  : Interval_Bernstein (0 .. 2 * (Fixed_Chart_Degree - Normal_Order));
-                     Raised_In_Plane  : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Shared_Order);
-                     Raised_Normal    : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Shared_Order);
-                  begin
-                     Quotient (1, Tangent_Order, At_Start, In_Plane);
-                     Quotient (2, Normal_Order, At_Start, Normal_2);
-                     Quotient (3, Normal_Order, At_Start, Normal_3);
-                     for I in Chart_Coefficient_Index loop
-                        Factor (I) :=
-                          Interval_Add
-                            (Interval_Exact (1.0),
-                             Interval_Multiply (Interval_Exact (Value), Interval_Exact (Curve.Coefficients (I, 1))));
-                     end loop;
-                     In_Plane_Product := Multiply_Bernstein (In_Plane, Factor);
-                     Normal_Square := Multiply_Bernstein (Normal_2, Normal_2);
-                     Normal_Square_3 := Multiply_Bernstein (Normal_3, Normal_3);
-                     for K in Normal_Square'Range loop
-                        Normal_Square (K) :=
-                          Interval_Multiply
-                            (Interval_Exact (if At_Start then Value else -Value),
-                             Interval_Add (Normal_Square (K), Normal_Square_3 (K)));
-                     end loop;
-                     Raise_Degree (In_Plane_Product, Tangent_Order - Shared_Order, At_Start, Raised_In_Plane);
-                     Raise_Degree (Normal_Square, 2 * Normal_Order - Shared_Order, At_Start, Raised_Normal);
-                     for K in Raised_In_Plane'Range loop
-                        Raised_In_Plane (K) :=
-                          Interval_Multiply
-                            (Interval_Exact (Orientation_Sign), Interval_Add (Raised_In_Plane (K), Raised_Normal (K)));
-                     end loop;
-                     return Strict_Bernstein_Nonnegative (Raised_In_Plane, 8);
-                  end Certify_End;
-
-                  Orientation : Interval;
-               begin
-                  --  The frame-plane projection of the tangent numerator is (1 - |Y|², 2·Y₁). With both endpoint
-                  --  tangents in that plane (Y₂ = Y₃ = 0 at both ends) and W = Y₂² + Y₃², the cone determinants are
-                  --
-                  --     (Y₁ - Yₛ)·(1 + Yₛ·Y₁) + Yₛ·W,   (Yꜰ - Y₁)·(1 + Yꜰ·Y₁) - Yꜰ·W.
-                  --
-                  --  They reduce to the planar factors when W = 0. Every term has an exact endpoint root:
-                  --  Y₁ - Yₛ = Vᵏ·Q and Y₂, Y₃ = Vᵐ·P at the start, and likewise in 1 - V at the finish. Divide out
-                  --  the common power so that a curve which leaves an endpoint along the cone boundary still
-                  --  certifies.
-                  for C in 2 .. 3 loop
-                     if Curve.Coefficients (0, C) /= 0.0 or else Curve.Coefficients (Fixed_Chart_Degree, C) /= 0.0 then
-                        --  This frame plane does not contain both endpoint tangents.
-                        return False;
-                     end if;
-                  end loop;
-                  Orientation :=
-                    Interval_Multiply
-                      (Interval_Subtract (Interval_Exact (Finish_Value), Interval_Exact (Start_Value)),
-                       Interval_Add
-                         (Interval_Exact (1.0),
-                          Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value))));
-                  if Orientation.Lower > 0.0 then
-                     return Certify_End (True, 1.0) and then Certify_End (False, 1.0);
-                  elsif Orientation.Upper < 0.0 then
-                     return Certify_End (True, -1.0) and then Certify_End (False, -1.0);
-                  else
-                     return False;
-                  end if;
-               exception
-                  when Constraint_Error =>
-                     return False;
-               end Certify_Spatial_No_Bulge;
-
-               function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean is
-                  Numerator : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
-                  R2        : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
-                  Ones      : constant Interval_Bernstein (Chart_Coefficient_Index) :=
-                    [others => Interval_Exact (1.0)];
-
-                  function Dot_Interval (Left, Right : Position_Scale) return Interval;
-                  --  Enclose the dot product of two exact vectors.
-
-                  function Dot_Interval (Left, Right : Position_Scale) return Interval is
-                     Result : Interval := Interval_Exact (0.0);
-                  begin
-                     for Axis in Axis_Name loop
-                        Result :=
-                          Interval_Add
-                            (Result, Interval_Multiply (Interval_Exact (Left (Axis)), Interval_Exact (Right (Axis))));
-                     end loop;
-                     return Result;
-                  end Dot_Interval;
-
-               begin
-                  --  Form the inverse-stereographic tangent numerator
-                  --
-                  --     Frame₀·(1 - Y·Y) + 2·Σ꜀Frame꜀·Y꜀
-                  --
-                  --  directly from the authoritative degree-eight Bernstein chart. In particular, do not prove this
-                  --  property using the ordinary-rounded power-basis evaluator copy: that would certify a nearby
-                  --  polynomial rather than the ideal curve. Multiplication by the degree-eight constant-one
-                  --  polynomial both elevates Y to degree sixteen and keeps every conversion outward-rounded.
-                  for C in Chart_Component_Index loop
-                     declare
-                        Y       : constant Interval_Bernstein (Chart_Coefficient_Index) :=
-                          [for I in Chart_Coefficient_Index => Interval_Exact (Curve.Coefficients (I, C))];
-                        Squared : Interval_Bernstein (Tangent_Numerator_Index);
-                     begin
-                        Squared := Multiply_Bernstein (Y, Y);
-                        for K in Tangent_Numerator_Index loop
-                           R2 (K) := Interval_Add (R2 (K), Squared (K));
-                        end loop;
-                     end;
-                  end loop;
-                  declare
-                     Frame_0_Projection : constant Interval := Dot_Interval (Curve.Frame (0), Direction);
-                  begin
-                     for K in Tangent_Numerator_Index loop
-                        Numerator (K) :=
-                          Interval_Subtract (Frame_0_Projection, Interval_Multiply (Frame_0_Projection, R2 (K)));
-                     end loop;
-                  end;
-                  for C in Chart_Component_Index loop
-                     declare
-                        Frame_Projection : constant Interval := Dot_Interval (Curve.Frame (C), Direction);
-                        Y                : constant Interval_Bernstein (Chart_Coefficient_Index) :=
-                          [for I in Chart_Coefficient_Index => Interval_Exact (Curve.Coefficients (I, C))];
-                        Elevated         : Interval_Bernstein (Tangent_Numerator_Index);
-                     begin
-                        Elevated := Multiply_Bernstein (Y, Ones);
-                        for K in Tangent_Numerator_Index loop
-                           Numerator (K) :=
-                             Interval_Add
-                               (Numerator (K),
-                                Interval_Multiply
-                                  (Interval_Exact (2.0), Interval_Multiply (Frame_Projection, Elevated (K))));
-                        end loop;
-                     end;
-                  end loop;
-                  return Strict_Bernstein_Nonnegative (Numerator, 8);
-               end Certify_Nonnegative_Projection;
-
-               function Certify_No_Bulge return Boolean;
-               --  Certify that the tangent's projection onto the endpoint-tangent plane stays inside the endpoint
-               --  cone.
-
-               function Certify_No_Bulge return Boolean is
-                  Planar_Applicable : Boolean;
-                  Planar_Certified  : Boolean := Certify_Planar_Control_Hull (Planar_Applicable);
-               begin
-                  if Planar_Applicable and then not Planar_Certified then
-                     declare
-                        Slow_Applicable : Boolean;
-                     begin
-                        Planar_Certified := Certify_Planar_No_Bulge (Slow_Applicable);
-                        pragma Assert (Slow_Applicable);
-                     end;
-                  end if;
-                  if Planar_Applicable then
-                     return Planar_Certified;
-                  end if;
-                  return Certify_Spatial_No_Bulge;
-               end Certify_No_Bulge;
-            begin
-               --  Allowing bulge is a relaxation of the default geometry, not a switch to a disjoint acceptance rule.
-               --  Retain a certified no-bulge candidate first; only a candidate which leaves the endpoint tangent
-               --  cone needs the chord-monotonicity proof. This matters for obtuse asymmetric line corners, whose
-               --  fixed endpoint tangent can point backwards along the chord even though the complete curve stays
-               --  inside its tangent cone.
-               if not Certify_No_Bulge
-                 and then (not Bulge_Allowed or else not Certify_Nonnegative_Projection (Chord_Direction))
-               then
-                  return (Status => Candidate_Closure_Failed);
-               end if;
-            end;
+            --  Allowing bulge is a relaxation of the default geometry, not a switch to a disjoint acceptance rule.
+            --  Retain a certified no-bulge candidate first; only a candidate which leaves the endpoint tangent
+            --  cone needs the chord-monotonicity proof. This matters for obtuse asymmetric line corners, whose
+            --  fixed endpoint tangent can point backwards along the chord even though the complete curve stays
+            --  inside its tangent cone.
+            if not Ideal_Geometry_Is_Certified (Frame, Coefficients, Ideal.Bulge_Allowed, Chord_Direction) then
+               return (Status => Candidate_Closure_Failed);
+            end if;
             --  Only after ideal closure and geometry are certified is the compact rational evaluator compiled and
             --  compared against the authoritative chart.
             case Build_Rational_Representation
@@ -6625,15 +6675,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end;
    end Select_Distance_Warp;
 
-   function Create_Blend (Request : Blend_Request) return Blend_Result is
-      Chord                             : Position_Offset;
-      Chord_Length                      : Length;
-      Norm_OK                           : Boolean;
-      Coordinate_Scale                  : Dimensionless := 1.0;
-      Start_Canonical, Finish_Canonical : Scaled_Tangent_Jet;
+   function Prepare_Blend (Request : Blend_Request) return Blend_Preparation is
+      Result           : Blend_Preparation;
+      Chord            : Position_Offset;
+      Norm_OK          : Boolean;
+      Coordinate_Scale : Dimensionless := 1.0;
 
       function Safe_Point_Component (Value : Length) return Boolean;
       function Safe_Length_Magnitude (Value : Length) return Boolean;
+      function Failed (Kind : Blend_Result_Kind) return Blend_Preparation;
 
       function Safe_Point_Component (Value : Length) return Boolean is
          Raw : constant Dimensionless := Dimensionless (Value / mm);
@@ -6649,21 +6699,26 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return Is_Finite (Raw) and then abs Raw <= Dimensionless_Math.Sqrt (Dimensionless'Last) / 16.0;
       end Safe_Length_Magnitude;
 
+      function Failed (Kind : Blend_Result_Kind) return Blend_Preparation is
+      begin
+         return (Status => Kind, others => <>);
+      end Failed;
+
    begin
       for A in Axis_Name loop
          if not Safe_Point_Component (Request.Start.Point (A)) then
-            return (Kind => Blend_Invalid_Start_Point);
+            return Failed (Blend_Invalid_Start_Point);
          end if;
       end loop;
 
       for A in Axis_Name loop
          if not Safe_Point_Component (Request.Finish.Point (A)) then
-            return (Kind => Blend_Invalid_Finish_Point);
+            return Failed (Blend_Invalid_Finish_Point);
          end if;
       end loop;
 
       Chord := Request.Finish.Point - Request.Start.Point;
-      Chord_Length := Safe_Norm (Chord, Norm_OK);
+      Result.Chord_Length := Safe_Norm (Chord, Norm_OK);
 
       --  Judge endpoint separation relative to the absolute coordinate scale. This rejects a chord that disappeared in
       --  subtraction even when its computed norm is nonzero.
@@ -6676,66 +6731,63 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end loop;
 
       if not Norm_OK
-        or else Dimensionless (Chord_Length / mm) <= 256.0 * Dimensionless'Model_Epsilon * Coordinate_Scale
+        or else Dimensionless (Result.Chord_Length / mm) <= 256.0 * Dimensionless'Model_Epsilon * Coordinate_Scale
       then
-         return (Kind => Blend_Endpoints_Too_Close);
+         return Failed (Blend_Endpoints_Too_Close);
       end if;
 
-      if not Canonicalize_And_Validate_Jet (Request.Start.Jet, Chord_Length, Start_Canonical) then
-         return (Kind => Blend_Invalid_Start_Jets);
-      elsif not Canonicalize_And_Validate_Jet (Request.Finish.Jet, Chord_Length, Finish_Canonical) then
-         return (Kind => Blend_Invalid_Finish_Jets);
+      if not Canonicalize_And_Validate_Jet (Request.Start.Jet, Result.Chord_Length, Result.Start_Canonical) then
+         return Failed (Blend_Invalid_Start_Jets);
+      elsif not Canonicalize_And_Validate_Jet (Request.Finish.Jet, Result.Chord_Length, Result.Finish_Canonical) then
+         return Failed (Blend_Invalid_Finish_Jets);
       elsif not Safe_Length_Magnitude (Request.Maximum_Position_Error)
         or else Request.Maximum_Position_Error <= 0.0 * mm
       then
-         return (Kind => Blend_Invalid_Position_Error);
-      elsif not Safe_Length_Magnitude (Request.Maximum_Arc_Length) or else Request.Maximum_Arc_Length < Chord_Length
+         return Failed (Blend_Invalid_Position_Error);
+      elsif not Safe_Length_Magnitude (Request.Maximum_Arc_Length)
+        or else Request.Maximum_Arc_Length < Result.Chord_Length
       then
-         return (Kind => Blend_Invalid_Arc_Length_Limit);
+         return Failed (Blend_Invalid_Arc_Length_Limit);
       end if;
 
-      if Request.Bulge = Never and then not No_Bulge_Is_Possible (Request, Chord / Chord_Length) then
-         return (Kind => Blend_Closure_Failed);
+      if Request.Bulge = Never and then not No_Bulge_Is_Possible (Request, Chord / Result.Chord_Length) then
+         return Failed (Blend_Closure_Failed);
+      end if;
+
+      Result.Chord_Direction := Chord / Result.Chord_Length;
+      Result.Selection :=
+        Select_Distance_Warp
+          (Request,
+           Result.Chord_Direction,
+           Result.Start_Canonical (0),
+           Result.Finish_Canonical (0),
+           Dimensionless (Request.Maximum_Arc_Length / Result.Chord_Length));
+      case Result.Selection.Status is
+         when Warp_Trim_Asymmetry_Is_Unsupported | Warp_Closure_Failed =>
+            return Failed (Blend_Closure_Failed);
+
+         when Warp_Selection_Is_Numerically_Unsafe                     =>
+            return Failed (Blend_Numerically_Unsafe);
+
+         when Warp_Was_Selected                                        =>
+            null;
+      end case;
+      if Result.Selection.Factor <= 0.0 or else not Is_Finite (Result.Selection.Factor) then
+         return Failed (Blend_Numerically_Unsafe);
       end if;
 
       declare
-         Chord_Direction            : constant Position_Scale := Chord / Chord_Length;
-         Selection                  : constant Warp_Selection :=
-           Select_Distance_Warp
-             (Request,
-              Chord_Direction,
-              Start_Canonical (0),
-              Finish_Canonical (0),
-              Dimensionless (Request.Maximum_Arc_Length / Chord_Length));
-         Warp_Factor                : constant Dimensionless := Selection.Factor;
          --  Try the angle bisector first, then chord-biased and endpoint-biased frame directions. The distance warp is
          --  geometry-wide and remains fixed while only the stereographic projection pole changes.
-         Candidates                 : constant Frame_Candidate_Array :=
-           [Start_Canonical (0) + Finish_Canonical (0),
-            Chord_Direction + Start_Canonical (0) + Finish_Canonical (0),
-            Chord_Direction,
-            Start_Canonical (0) + Chord_Direction,
-            Finish_Canonical (0) + Chord_Direction,
-            Start_Canonical (0),
-            Finish_Canonical (0)];
-         Tried_Directions           : Frame_Candidate_Array (Candidates'Range) := [others => [others => 0.0]];
-         Tried_Count                : Natural := 0;
-         Saw_Representation_Failure : Boolean := False;
-         Saw_Numerical_Failure      : Boolean := False;
+         Candidates : constant Frame_Candidate_Array (Blend_Frame_Index) :=
+           [Result.Start_Canonical (0) + Result.Finish_Canonical (0),
+            Result.Chord_Direction + Result.Start_Canonical (0) + Result.Finish_Canonical (0),
+            Result.Chord_Direction,
+            Result.Start_Canonical (0) + Result.Chord_Direction,
+            Result.Finish_Canonical (0) + Result.Chord_Direction,
+            Result.Start_Canonical (0),
+            Result.Finish_Canonical (0)];
       begin
-         case Selection.Status is
-            when Warp_Trim_Asymmetry_Is_Unsupported | Warp_Closure_Failed =>
-               return (Kind => Blend_Closure_Failed);
-
-            when Warp_Selection_Is_Numerically_Unsafe                     =>
-               return (Kind => Blend_Numerically_Unsafe);
-
-            when Warp_Was_Selected                                        =>
-               null;
-         end case;
-         if Warp_Factor <= 0.0 or else not Is_Finite (Warp_Factor) then
-            return (Kind => Blend_Numerically_Unsafe);
-         end if;
          for Candidate of Candidates loop
             declare
                Candidate_Norm : constant Dimensionless := Safe_Norm (Candidate, Norm_OK);
@@ -6746,81 +6798,109 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   Direction := Candidate / Candidate_Norm;
                   --  Nearly identical first frame vectors produce the same basis after Gram-Schmidt, so avoid
                   --  repeating an equivalent closure and compilation attempt.
-                  for I in 1 .. Tried_Count loop
-                     if 1.0 - Dot (Direction, Tried_Directions (I)) <= 512.0 * Dimensionless'Model_Epsilon then
+                  for I in 1 .. Result.Direction_Count loop
+                     if 1.0 - Dot (Direction, Result.Directions (I)) <= 512.0 * Dimensionless'Model_Epsilon then
                         Duplicate := True;
                      end if;
                   end loop;
 
                   if not Duplicate then
-                     Tried_Count := Tried_Count + 1;
-                     Tried_Directions (Tried_Count) := Direction;
-                     declare
-                        Frame : Frame_Vector_Array;
-                     begin
-                        --  Inverse stereographic projection divides by 1 + T₀. Reject frames which place either
-                        --  endpoint tangent too close to the projection pole T₀ = -1.
-                        if Complete_Frame
-                             (Direction, Start_Canonical (0), Finish_Canonical (0), Chord_Direction, Frame)
-                          and then
-                            1.0 + Frame_Coordinate (Frame, 0, Start_Canonical (0))
-                            > Minimum_Safe_Reciprocal_Denominator
-                          and then
-                            1.0 + Frame_Coordinate (Frame, 0, Finish_Canonical (0))
-                            > Minimum_Safe_Reciprocal_Denominator
-                        then
-                           declare
-                              Start_Chart, Finish_Chart : Chart_Jet_Array;
-                           begin
-                              if Chart_From_Canonical_Jet (Frame, Start_Canonical, Start_Chart)
-                                and then Chart_From_Canonical_Jet (Frame, Finish_Canonical, Finish_Chart)
-                              then
-                                 declare
-                                    Built : constant Candidate_Result :=
-                                      Build_Candidate
-                                        (Request,
-                                         Chord_Length,
-                                         Chord_Direction,
-                                         Frame,
-                                         Start_Chart,
-                                         Finish_Chart,
-                                         Warp_Factor,
-                                         (if Candidate = Candidates (Candidates'First)
-                                          then Selection.Seed
-                                          else (others => <>)));
-                                 begin
-                                    case Built.Status is
-                                       when Candidate_Success               =>
-                                          return (Kind => Blend_Success, Curve => Built.Curve);
-
-                                       when Candidate_Closure_Failed        =>
-                                          null;
-
-                                       when Candidate_Representation_Failed =>
-                                          Saw_Representation_Failure := True;
-
-                                       when Candidate_Numerically_Unsafe    =>
-                                          Saw_Numerical_Failure := True;
-                                    end case;
-                                 end;
-                              end if;
-                           end;
-                        end if;
-                     end;
+                     Result.Direction_Count := Result.Direction_Count + 1;
+                     Result.Directions (Result.Direction_Count) := Direction;
+                     if Candidate = Candidates (Candidates'First) then
+                        Result.Seeded_Direction := Result.Direction_Count;
+                     end if;
                   end if;
                end if;
             end;
          end loop;
-
-         --  Report the most informative failure class seen across all supported frames.
-         if Saw_Representation_Failure then
-            return (Kind => Blend_Representation_Failed);
-         elsif Saw_Numerical_Failure then
-            return (Kind => Blend_Numerically_Unsafe);
-         else
-            return (Kind => Blend_Closure_Failed);
-         end if;
       end;
+
+      Result.Status := Blend_Success;
+      return Result;
+   end Prepare_Blend;
+
+   function Frame_Candidate
+     (Preparation               : Blend_Preparation;
+      Index                     : Blend_Frame_Index;
+      Frame                     : out Frame_Vector_Array;
+      Start_Chart, Finish_Chart : out Chart_Jet_Array) return Boolean is
+   begin
+      Start_Chart := [others => [others => 0.0]];
+      Finish_Chart := [others => [others => 0.0]];
+      --  Inverse stereographic projection divides by 1 + T₀. Reject frames which place either endpoint tangent too
+      --  close to the projection pole T₀ = -1.
+      return
+        Complete_Frame
+          (Preparation.Directions (Index),
+           Preparation.Start_Canonical (0),
+           Preparation.Finish_Canonical (0),
+           Preparation.Chord_Direction,
+           Frame)
+        and then
+          1.0 + Frame_Coordinate (Frame, 0, Preparation.Start_Canonical (0)) > Minimum_Safe_Reciprocal_Denominator
+        and then
+          1.0 + Frame_Coordinate (Frame, 0, Preparation.Finish_Canonical (0)) > Minimum_Safe_Reciprocal_Denominator
+        and then Chart_From_Canonical_Jet (Frame, Preparation.Start_Canonical, Start_Chart)
+        and then Chart_From_Canonical_Jet (Frame, Preparation.Finish_Canonical, Finish_Chart);
+   end Frame_Candidate;
+
+   function Frame_Seed (Preparation : Blend_Preparation; Index : Blend_Frame_Index) return Closure_Seed
+   is (if Index = Preparation.Seeded_Direction then Preparation.Selection.Seed else (others => <>));
+
+   function Create_Blend (Request : Blend_Request) return Blend_Result is
+      Preparation                : constant Blend_Preparation := Prepare_Blend (Request);
+      Saw_Representation_Failure : Boolean := False;
+      Saw_Numerical_Failure      : Boolean := False;
+   begin
+      if Preparation.Status /= Blend_Success then
+         return Failure : Blend_Result (Preparation.Status);
+      end if;
+
+      for Index in 1 .. Preparation.Direction_Count loop
+         declare
+            Frame                     : Frame_Vector_Array;
+            Start_Chart, Finish_Chart : Chart_Jet_Array;
+         begin
+            if Frame_Candidate (Preparation, Index, Frame, Start_Chart, Finish_Chart) then
+               declare
+                  Built : constant Candidate_Result :=
+                    Build_Candidate
+                      (Request,
+                       Preparation.Chord_Length,
+                       Preparation.Chord_Direction,
+                       Frame,
+                       Start_Chart,
+                       Finish_Chart,
+                       Preparation.Selection.Factor,
+                       Frame_Seed (Preparation, Index));
+               begin
+                  case Built.Status is
+                     when Candidate_Success               =>
+                        return (Kind => Blend_Success, Curve => Built.Curve);
+
+                     when Candidate_Closure_Failed        =>
+                        null;
+
+                     when Candidate_Representation_Failed =>
+                        Saw_Representation_Failure := True;
+
+                     when Candidate_Numerically_Unsafe    =>
+                        Saw_Numerical_Failure := True;
+                  end case;
+               end;
+            end if;
+         end;
+      end loop;
+
+      --  Report the most informative failure class seen across all supported frames.
+      if Saw_Representation_Failure then
+         return (Kind => Blend_Representation_Failed);
+      elsif Saw_Numerical_Failure then
+         return (Kind => Blend_Numerically_Unsafe);
+      else
+         return (Kind => Blend_Closure_Failed);
+      end if;
    end Create_Blend;
 
    function Derivative_Bounds (Curve : Stereographic_Curve) return Unit_Speed_Axial_Derivative_Bounds is

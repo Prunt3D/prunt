@@ -21,6 +21,7 @@ pragma Extensions_Allowed (On);
 
 with Ada.Command_Line;
 with Ada.Environment_Variables;
+with Ada.Exceptions;
 with Ada.Numerics.Long_Elementary_Functions;
 with Ada.Real_Time;
 with Ada.Strings.Fixed;
@@ -93,6 +94,7 @@ procedure Benchy_Planner_Time is
         Allow_Blended_Entry               => Block_Allows_Blended_Entry);
 
    use type Planner.Corners_Index;
+   Move_Limit : constant Natural := Natural'Value (Ada.Environment_Variables.Value ("PRUNT_BENCH_MOVE_LIMIT", "0"));
 
    Params : Kinematic_Parameters :=
      (Bounds                   =>
@@ -324,10 +326,13 @@ begin
             end;
          end if;
       end;
+      exit when Move_Limit > 0 and then Moving_Count >= Move_Limit;
    end loop;
 
    Ada.Text_IO.Close (File);
-   if Selected_Case = Rounding_Stress then
+   if Move_Limit > 0 then
+      null;
+   elsif Selected_Case = Rounding_Stress then
       if G1_Count /= 50_000 or else Moving_Count /= 50_000 then
          raise Program_Error with "rounding stress fixture must contain exactly 50000 moving segments";
       end if;
@@ -398,7 +403,10 @@ begin
    if Final_Pos /= Current_Pos then
       raise Program_Error with "terminal planner position differs from the parsed Benchy position";
    end if;
-   if Selected_Case = Rounding_Stress and then (Block_Count /= 1 or else Segment_Count /= 50_000) then
+   if Move_Limit = 0
+     and then Selected_Case = Rounding_Stress
+     and then (Block_Count /= 1 or else Segment_Count /= 50_000)
+   then
       raise Program_Error with "rounding stress fixture was not handled as one complete 50000-segment block";
    end if;
    Ada.Text_IO.Put_Line
@@ -417,4 +425,10 @@ begin
    Planner.Release (Block);
    Ada.Text_IO.Flush;
    GNAT.OS_Lib.OS_Exit (0);
+exception
+   when E : others =>
+      --  The planner task never terminates, so leaving the main subprogram with an exception would wait forever.
+      Ada.Text_IO.Put_Line (Ada.Text_IO.Standard_Error, Ada.Exceptions.Exception_Information (E));
+      Ada.Text_IO.Flush (Ada.Text_IO.Standard_Error);
+      GNAT.OS_Lib.OS_Exit (1);
 end Benchy_Planner_Time;

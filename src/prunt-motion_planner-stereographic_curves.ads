@@ -1040,6 +1040,104 @@ private
    --  Numerically unsafe arithmetic is reported separately so Create_Blend can retain the most informative failure
    --  seen while trying alternative frames.
 
+   type Ideal_Candidate is record
+      Status : Candidate_Status := Candidate_Closure_Failed;
+      --  Candidate_Success, Candidate_Closure_Failed or Candidate_Numerically_Unsafe. The fields below are meaningful
+      --  only on success.
+
+      Coefficients : Bernstein_Chart := [others => [others => 0.0]];
+      --  Authoritative Bernstein chart after closure and structural canonicalization.
+
+      Effective_C0 : Raw_Vector_3 := [others => 0.0];
+      --  Closure adjustment matching Coefficients.
+
+      Length_Value : Length := 0.0 * mm;
+      --  Curve length, clamped to the chord and the requested maximum.
+
+      Bulge_Allowed : Boolean := False;
+      --  Whether Request.Bulge admits leaving the endpoint tangent cone for this geometry.
+   end record;
+   --  The ideal tangent curve of one frame candidate, before any realtime representation is compiled.
+
+   function Build_Ideal_Candidate
+     (Request           : Blend_Request;
+      Chord_Length      : Length;
+      Chord_Direction   : Position_Scale;
+      Frame             : Frame_Vector_Array;
+      Start_Chart_Jets  : Chart_Jet_Array;
+      Finish_Chart_Jets : Chart_Jet_Array;
+      Warp_Factor       : Dimensionless;
+      Initial_Closure   : Closure_Seed) return Ideal_Candidate
+   with
+     Pre =>
+       Chord_Length > 0.0 * mm
+       and then Is_Finite (Dimensionless (Chord_Length / mm))
+       and then Request.Maximum_Position_Error > 0.0 * mm
+       and then Is_Finite (Dimensionless (Request.Maximum_Position_Error / mm))
+       and then Request.Maximum_Arc_Length >= Chord_Length
+       and then Is_Finite (Dimensionless (Request.Maximum_Arc_Length / mm))
+       and then Warp_Factor >= Minimum_Distance_Warp_Factor
+       and then Warp_Factor <= Maximum_Distance_Warp_Factor
+       and then (for all Axis in Axis_Name => Is_Finite (Chord_Direction (Axis)))
+       and then
+         (for all Component in Frame_Component_Index =>
+            (for all Axis in Axis_Name => Is_Finite (Frame (Component) (Axis))))
+       and then
+         (for all Order in Start_Chart_Jets'Range =>
+            (for all Component in Chart_Component_Index =>
+               Is_Finite (Start_Chart_Jets (Order) (Component))
+               and then Is_Finite (Finish_Chart_Jets (Order) (Component))))
+       and then
+         (not Initial_Closure.Valid
+          or else Initial_Closure.Lambda <= Dimensionless (Request.Maximum_Arc_Length / Chord_Length));
+   --  The closure solve, length clamp, chart construction and normal-mode canonicalization of Build_Candidate, which
+   --  then compiles the realtime representation of this ideal curve.
+
+   function Ideal_Geometry_Is_Certified
+     (Frame           : Frame_Vector_Array;
+      Coefficients    : Bernstein_Chart;
+      Bulge_Allowed   : Boolean;
+      Chord_Direction : Position_Scale) return Boolean;
+   --  Certify that the ideal tangent stays inside the endpoint tangent cone or, where Bulge_Allowed, that its
+   --  projection onto the chord is nonnegative. Build_Candidate rejects a frame which fails this before compiling it.
+
+   subtype Blend_Frame_Index is Positive range 1 .. 7;
+   --  Create_Blend tries at most seven distinct stereographic projection poles.
+
+   type Blend_Preparation is record
+      Status : Blend_Result_Kind := Blend_Not_Attempted;
+      --  Blend_Success once every request check and the warp selection have passed; otherwise the failure that
+      --  Create_Blend reports.
+
+      Chord_Length                      : Length := 0.0 * mm;
+      Chord_Direction                   : Position_Scale := [others => 0.0];
+      Start_Canonical, Finish_Canonical : Scaled_Tangent_Jet := [others => [others => 0.0]];
+      Selection                         : Warp_Selection;
+
+      Directions      : Frame_Candidate_Array (Blend_Frame_Index) := [others => [others => 0.0]];
+      Direction_Count : Natural range 0 .. Blend_Frame_Index'Last := 0;
+      --  Distinct unit first-frame directions, in the order Create_Blend tries them.
+
+      Seeded_Direction : Natural range 0 .. Blend_Frame_Index'Last := 0;
+      --  The direction which receives Selection.Seed, or zero if none does.
+   end record;
+   --  Everything Create_Blend establishes before trying frames.
+
+   function Prepare_Blend (Request : Blend_Request) return Blend_Preparation;
+   --  Validate Request, canonicalize its endpoint jets, select the distance warp and list the frame directions.
+
+   function Frame_Candidate
+     (Preparation               : Blend_Preparation;
+      Index                     : Blend_Frame_Index;
+      Frame                     : out Frame_Vector_Array;
+      Start_Chart, Finish_Chart : out Chart_Jet_Array) return Boolean
+   with Pre => Preparation.Status = Blend_Success and then Index <= Preparation.Direction_Count;
+   --  Build the frame for one prepared direction and project both endpoint jets into its chart. False if the frame
+   --  is degenerate or puts either endpoint tangent too close to the projection pole.
+
+   function Frame_Seed (Preparation : Blend_Preparation; Index : Blend_Frame_Index) return Closure_Seed;
+   --  The closure seed for one prepared direction: the warp selection's proposal for the first frame only.
+
    function Build_Rational_Representation
      (Curve                  : in out Stereographic_Curve;
       Power_Coefficients     : Power_Chart;

@@ -121,11 +121,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   Check_Bounds (Comm.Pos, Current_Params);
                end if;
 
-               if Comm.Dwell_After < 0.0 * s then
+               --  Written as negated comparisons so NaN fails as well.
+               if not (Comm.Dwell_After >= 0.0 * s) then
                   raise Constraint_Error with "Negative dwell times are not allowed.";
                end if;
 
-               if Comm.Feedrate <= 0.0 * mm / s then
+               if not (Comm.Feedrate > 0.0 * mm / s) then
                   raise Constraint_Error with "Feedrate must be positive.";
                end if;
 
@@ -137,11 +138,12 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                   Check_Helix_Bounds (Queued_Position, Comm.Pos, Comm.Center, Comm.Clockwise, Current_Params);
                end if;
 
-               if Comm.Dwell_After < 0.0 * s then
+               --  Written as negated comparisons so NaN fails as well.
+               if not (Comm.Dwell_After >= 0.0 * s) then
                   raise Constraint_Error with "Negative dwell times are not allowed.";
                end if;
 
-               if Comm.Feedrate <= 0.0 * mm / s then
+               if not (Comm.Feedrate > 0.0 * mm / s) then
                   raise Constraint_Error with "Feedrate must be positive.";
                end if;
 
