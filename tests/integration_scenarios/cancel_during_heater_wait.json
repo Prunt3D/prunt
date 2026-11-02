@@ -1,0 +1,72 @@
+{
+  "description": "Pause and then cancel a G-code file while M109 waits for a heater that never reaches its target. The dummy thermistor stays at 25 C, so cancellation must interrupt the wait instead of blocking forever, and the controller must accept new G-code afterwards.",
+  "config": {
+    "Thermistors": {
+      "Thermistors": {
+        "DUMMY_THERMISTOR": {
+          "Sensor_Model": {
+            "Kind": { "Selected": "Generic_3950" }
+          }
+        }
+      }
+    },
+    "Heaters": {
+      "Heaters": {
+        "DUMMY_HEATER": {
+          "Kind": {
+            "Selected": "Enabled",
+            "Children": {
+              "Enabled": { "Thermistor": "DUMMY_THERMISTOR" }
+            }
+          }
+        }
+      },
+      "Gcode_Defaults": {
+        "Hotend": {
+          "Kind": {
+            "Selected": "Enabled",
+            "Children": {
+              "Enabled": { "Heater": "DUMMY_HEATER" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    {
+      "kind": "submit_gcode_file",
+      "commands": [
+        "G28",
+        "M109 S123",
+        "G1 X10 F600"
+      ]
+    },
+    {
+      "kind": "wait_for_event",
+      "event": { "kind": "heater", "label": "set_temperature", "target": "DUMMY_HEATER", "value": "1.23000000000000E+02" },
+      "timeout_s": 20.0
+    },
+    { "kind": "pause", "wait_until_paused": false },
+    { "kind": "cancel_at_s", "time_s": 0.0 },
+    { "kind": "submit_gcode", "command": "G1 Y5 F600" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 0.0, "Y": 5.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "max_sample_position": { "X": 0.01 },
+    "events": [
+      { "kind": "heater", "label": "set_temperature", "target": "DUMMY_HEATER", "value": "1.23000000000000E+02" },
+      { "kind": "cancel", "label": "cancel_requested" },
+      { "kind": "cancel", "label": "cancel_completed" }
+    ],
+    "event_order": [
+      { "kind": "heater", "label": "set_temperature", "target": "DUMMY_HEATER", "value": "1.23000000000000E+02" },
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "cancel", "label": "cancel_requested" },
+      { "kind": "cancel", "label": "cancel_completed" },
+      { "kind": "gcode", "label": "submit_gcode", "value": "G1 Y5 F600" }
+    ]
+  }
+}

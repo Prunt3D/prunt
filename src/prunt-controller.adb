@@ -557,6 +557,13 @@ package body Prunt.Controller is
    end Log_If_Interactive;
 
    overriding
+   function Cancellation_Is_Active (This : Planner_Block_End_Context) return Boolean is
+      pragma Unreferenced (This);
+   begin
+      return Gcode_Cancellation_Barrier.Is_Cancellation_Active;
+   end Cancellation_Is_Active;
+
+   overriding
    procedure Mark_Axis_Unhomed (This : Planner_Wrapper; Axis : Axis_Name) is
       Generation : Homing_Update_Generation;
    begin

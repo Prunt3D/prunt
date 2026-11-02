@@ -115,6 +115,9 @@ package body Prunt.Default_Modules.Smart_Plugs.Test is
    procedure Log (This : Mock_Context; Message : Virtual_String);
    overriding
    procedure Log_If_Interactive (This : Mock_Context; Message : Virtual_String) is null;
+   overriding
+   function Cancellation_Is_Active (This : Mock_Context) return Boolean
+   is (False);
 
    overriding
    procedure Wait_For_Idle (This : Mock_Context) is

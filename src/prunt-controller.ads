@@ -1072,6 +1072,10 @@ private
    --  Route output only when This belongs to an interactive command.
 
    overriding
+   function Cancellation_Is_Active (This : Planner_Block_End_Context) return Boolean;
+   --  Report whether the G-code cancellation barrier is active, which covers both cancellation and shutdown.
+
+   overriding
    procedure Validate_Extrusion (This : Planner_Wrapper; E_Delta : Length);
    --  Check queued heater setpoints before accepting user extrusion commands.
 

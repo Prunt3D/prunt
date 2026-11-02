@@ -224,6 +224,11 @@ package Prunt.Module_Types is
    procedure Log_If_Interactive (This : Block_End_Context; Message : Virtual_String) is abstract;
    --  Emit Message only when this block belongs to an interactively submitted command.
 
+   function Cancellation_Is_Active (This : Block_End_Context) return Boolean is abstract;
+   --  Return whether G-code cancellation or shutdown is discarding queued work. Pausing and cancellation can not take
+   --  effect until Process_After_Block returns, so any handler that may wait indefinitely must poll this and return
+   --  early once it is True.
+
    procedure Process_After_Block (This : Extra_Block_Resetting_Data; Context : Block_End_Context'Class) is null;
    --  Process resetting data after motion has stopped at the end of a planner block.
 

@@ -35,6 +35,8 @@ package body Prunt.Integration_Test_Catalog is
        To_Unbounded_String ("integration_scenarios/simple_linear_move.json")),
       (To_Unbounded_String ("integration.cancel_mid_move"),
        To_Unbounded_String ("integration_scenarios/cancel_mid_move.json")),
+      (To_Unbounded_String ("integration.cancel_during_heater_wait"),
+       To_Unbounded_String ("integration_scenarios/cancel_during_heater_wait.json")),
       (To_Unbounded_String ("integration.heater_event"),
        To_Unbounded_String ("integration_scenarios/heater_event.json")),
       (To_Unbounded_String ("integration.fans"), To_Unbounded_String ("integration_scenarios/fans.json")),

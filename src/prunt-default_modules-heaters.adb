@@ -186,6 +186,8 @@ package body Prunt.Default_Modules.Heaters is
                   exit when Ratio >= 1.0;
                end;
 
+               --  Cancelling mid-ramp leaves the partially ramped target instead of jumping to the final one.
+               exit when Context.Cancellation_Is_Active;
                delay Wait_Period;
             end loop;
          end;
@@ -205,6 +207,14 @@ package body Prunt.Default_Modules.Heaters is
               abs (Thermistors_Module_Instance.Get_Temperature (This.Assigned_Thermistor, Requires_Fresh => True)
                    - This.Target)
               <= This.Check_Hysteresis;
+         end if;
+
+         --  The step generator can not pause or reset until this returns, so cancellation and shutdown would
+         --  otherwise wait forever on a heater that never reaches its target.
+         if Context.Cancellation_Is_Active then
+            Context.Log_If_Interactive
+              ("Stopped waiting for heater " & (+This.Heater'Image) & " because G-code was cancelled.");
+            exit;
          end if;
 
          delay Wait_Period;

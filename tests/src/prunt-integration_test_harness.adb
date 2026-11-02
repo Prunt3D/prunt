@@ -208,6 +208,7 @@ package body Prunt.Integration_Test_Harness is
    procedure Run_Cancel_At (Time_S : Long_Float; Cancel : access procedure (Succeeded : out Boolean));
    procedure Run_Expectations (Expect : JSON_Value);
    function To_Axis_Position (Pos : Motor_Position) return Axis_Position;
+   procedure Wait_For_Event (Expected_Event : JSON_Value; Timeout_S : Long_Float);
    procedure Wait_For_Gcode_Ready;
    procedure Wait_For_Motion (Minimum_New_Samples : Natural; Timeout_S : Long_Float);
    procedure Wait_Until_Idle (Last_Command_Index : Command_Index);
@@ -1050,6 +1051,24 @@ package body Prunt.Integration_Test_Harness is
       end loop;
    end Wait_For_Motion;
 
+   procedure Wait_For_Event (Expected_Event : JSON_Value; Timeout_S : Long_Float) is
+      Deadline : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (Timeout_S));
+   begin
+      while Event_Match_Count
+              (Expected_Event_Field (Expected_Event, "kind"),
+               Expected_Event_Field (Expected_Event, "label"),
+               Expected_Event_Field (Expected_Event, "target"),
+               Expected_Event_Field (Expected_Event, "value"))
+        = 0
+      loop
+         Advance_By (0.002);
+         delay 0.001;
+         Assert
+           (Ada.Calendar.Clock < Deadline,
+            "Timed out waiting for event " & Expected_Event_Tuple_Image (Expected_Event) & ".");
+      end loop;
+   end Wait_For_Event;
+
    procedure Run_Cancel_At (Time_S : Long_Float; Cancel : access procedure (Succeeded : out Boolean)) is
    begin
       Advance_To (Time_S, Cancel_Empty_Wait_Limit);
@@ -1200,22 +1219,39 @@ package body Prunt.Integration_Test_Harness is
 
             Wait_For_Motion (Sample_Count, Timeout);
          end;
+      elsif Kind = "wait_for_event" then
+         declare
+            Timeout : Long_Float := 10.0;
+         begin
+            if Action.Has_Field ("timeout_s") then
+               Timeout := Action.Get ("timeout_s").Get;
+            end if;
+
+            Wait_For_Event (Action.Get ("event"), Timeout);
+         end;
       elsif Kind = "cancel_at_s" then
          Run_Cancel_At (Long_Float'(Action.Get ("time_s").Get), Cancel);
       elsif Kind = "pause" then
          declare
-            Deadline : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (20.0));
+            Deadline          : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (20.0));
+            Wait_Until_Paused : Boolean := True;
          begin
+            if Action.Has_Field ("wait_until_paused") then
+               Wait_Until_Paused := Action.Get ("wait_until_paused").Get;
+            end if;
+
             Log_Event ("pause", "pause_requested");
             Controller_Instance.Pause_Stepgen;
 
-            while not Controller_Instance.Stepgen_Paused loop
-               Advance_By (0.01, Long_Empty_Wait_Limit);
-               delay 0.001;
-               Assert (Ada.Calendar.Clock < Deadline, "Timed out waiting for pause.");
-            end loop;
+            if Wait_Until_Paused then
+               while not Controller_Instance.Stepgen_Paused loop
+                  Advance_By (0.01, Long_Empty_Wait_Limit);
+                  delay 0.001;
+                  Assert (Ada.Calendar.Clock < Deadline, "Timed out waiting for pause.");
+               end loop;
 
-            Log_Event ("pause", "paused");
+               Log_Event ("pause", "paused");
+            end if;
          end;
       elsif Kind = "pause_until_controller_stops" then
          declare
