@@ -93,6 +93,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
    --  Reconstruct the Bernstein certificate, which construction no longer needs, and require its derivative bounds
    --  to succeed directly. Both those and the public pole-based bounds are compared with dense samples of the
    --  executed curve, so neither path can hide a failure of the other.
+   function Certified_From_Samples (Curve : Stereographic_Curve) return Boolean;
+   --  Whether construction certified Curve's tangent from samples alone. It then keeps a Bernstein certificate
+   --  exactly when the whole-curve pole bounds needed the Bernstein fallback.
+
    procedure Assert_Bernstein_Derivative_Bounds
      (Curve          : Stereographic_Curve;
       Start_U, End_U : Dimensionless;
@@ -489,6 +493,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       end loop;
    end Assert_Executed_Derivative_Bounds;
 
+   function Certified_From_Samples (Curve : Stereographic_Curve) return Boolean is
+      Sharp : Boolean;
+      Whole : constant Axis_Majorants := Pole_Taylor_Tangent_Range_Majorants (Curve, 0.0, 1.0, Sharp);
+      pragma Unreferenced (Whole);
+   begin
+      return Curve.Retained_Tangent_Certificate.Valid = not Sharp;
+   end Certified_From_Samples;
+
    procedure Assert_Bernstein_Derivative_Bounds
      (Curve          : Stereographic_Curve;
       Start_U, End_U : Dimensionless;
@@ -505,8 +517,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Bernstein   : Unit_Speed_Axial_Derivative_Bounds;
    begin
       T.Assert
-        (not Curve.Retained_Tangent_Certificate.Valid,
-         Name & " was certified from samples, without the Bernstein reconstruction");
+        (Certified_From_Samples (Curve), Name & " was certified from samples, without the Bernstein reconstruction");
       T.Assert
         (Retained
          and then Certificate.Valid
@@ -2411,9 +2422,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
               Sampled_Realtime_Tangent_Error (Curve, Cache, Start_Denominator (Curve));
             Reference   : Stereographic_Curve := Curve;
          begin
-            T.Assert
-              (not Curve.Retained_Tangent_Certificate.Valid,
-               Name & " construction used the sampled certificate alone");
+            T.Assert (Certified_From_Samples (Curve), Name & " construction used the sampled certificate alone");
             T.Assert (Certificate.Status = Tangent_Was_Certified, Name & " is certified from samples");
             if Certificate.Status /= Tangent_Was_Certified then
                return;
@@ -2577,6 +2586,185 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Assert_Corner (120.0, 0.05, 0.0, Edge_Ranges => False);
       Assert_Corner (5.0, 8.0, 0.0, Edge_Ranges => False);
    end Test_Pole_Derivative_Bounds;
+
+   procedure Test_Conjugate_Root_Iteration (T : in out Trendy_Test.Operation'Class) is
+      type Pair is record
+         Real_Part, Imaginary_Part : Dimensionless;
+      end record;
+      type Pair_Array is array (Positive range <>) of Pair;
+
+      function From_Pairs (Pairs : Pair_Array; Scale : Dimensionless := 1.0) return Root_Polynomial;
+      --  Scale times the product of (z - π)(z - π̄) over Pairs.
+
+      procedure Assert_Recovers (Pairs : Pair_Array; Name : String);
+
+      function From_Pairs (Pairs : Pair_Array; Scale : Dimensionless := 1.0) return Root_Polynomial is
+         Result : Root_Polynomial := [0 => Scale, others => 0.0];
+         Degree : Natural := 0;
+      begin
+         for P of Pairs loop
+            declare
+               Linear        : constant Dimensionless := -2.0 * P.Real_Part;
+               Constant_Term : constant Dimensionless := P.Real_Part**2 + P.Imaginary_Part**2;
+               Previous      : constant Root_Polynomial := Result;
+            begin
+               Result := [others => 0.0];
+               for Index in 0 .. Degree loop
+                  Result (Index) := Result (Index) + Constant_Term * Previous (Index);
+                  Result (Index + 1) := Result (Index + 1) + Linear * Previous (Index);
+                  Result (Index + 2) := Result (Index + 2) + Previous (Index);
+               end loop;
+               Degree := Degree + 2;
+            end;
+         end loop;
+         return Result;
+      end From_Pairs;
+
+      procedure Assert_Recovers (Pairs : Pair_Array; Name : String) is
+         Real_Parts, Imaginary_Parts : Conjugate_Root_Parts;
+         Found                       : constant Boolean :=
+           Iterate_Conjugate_Roots (From_Pairs (Pairs, 0.75), 2 * Pairs'Length, Real_Parts, Imaginary_Parts);
+         Used                        : array (Pairs'Range) of Boolean := [others => False];
+      begin
+         T.Assert (Found, Name & " settles");
+         if not Found then
+            return;
+         end if;
+         for K in 1 .. Pairs'Length loop
+            declare
+               Best          : Natural := 0;
+               Best_Distance : Dimensionless := Dimensionless'Last;
+            begin
+               T.Assert (Imaginary_Parts (K) > 0.0, Name & " returns upper half-plane roots");
+               for J in Pairs'Range loop
+                  declare
+                     Distance : constant Dimensionless :=
+                       abs (Real_Parts (K) - Pairs (J).Real_Part)
+                       + abs (Imaginary_Parts (K) - Pairs (J).Imaginary_Part);
+                  begin
+                     if not Used (J) and then Distance < Best_Distance then
+                        Best := J;
+                        Best_Distance := Distance;
+                     end if;
+                  end;
+               end loop;
+               T.Assert
+                 (Best /= 0 and then Best_Distance <= 1.0E-10,
+                  Name & " finds each root once:" & K'Image & Best_Distance'Image);
+               if Best /= 0 then
+                  Used (Best) := True;
+               end if;
+            end;
+         end loop;
+      end Assert_Recovers;
+
+      Real_Parts, Imaginary_Parts : Conjugate_Root_Parts;
+   begin
+      T.Register;
+
+      Assert_Recovers ([(0.3, 0.7)], "One pair");
+      Assert_Recovers ([(0.3, 0.7), (-1.2, 0.4), (2.5, 1.1), (0.9, 2.0)], "Four pairs");
+      Assert_Recovers
+        ([(0.5, 0.02), (0.5, 0.05), (-0.3, 0.6), (1.4, 0.3), (0.1, 3.0), (-2.0, 1.5), (3.0, 0.8), (0.7, 1.2)],
+         "Eight pairs, two near the axis");
+
+      --  A realistic denominator 1 + Y·Y of a degree-eight chart, with every pole a root of it.
+      declare
+         Y      : constant array (1 .. 3, 0 .. 8) of Dimensionless :=
+           [[0.1, -0.4, 0.9, 0.2, -1.3, 0.6, 0.05, -0.2, 0.3],
+            [-0.7, 0.3, 0.1, 0.8, 0.2, -0.5, 0.9, 0.4, -0.1],
+            [0.2, 0.2, -0.6, 0.0, 0.5, 0.3, -0.8, 0.1, 0.6]];
+         Square : Root_Polynomial := [0 => 1.0, others => 0.0];
+      begin
+         for C in 1 .. 3 loop
+            for Left in 0 .. 8 loop
+               for Right in 0 .. 8 loop
+                  Square (Left + Right) := Square (Left + Right) + Y (C, Left) * Y (C, Right);
+               end loop;
+            end loop;
+         end loop;
+         T.Assert
+           (Iterate_Conjugate_Roots (Square, 16, Real_Parts, Imaginary_Parts),
+            "A chart denominator settles by iteration");
+         for K in Conjugate_Root_Index loop
+            declare
+               Z_Re : constant Dimensionless := Real_Parts (K);
+               Z_Im : constant Dimensionless := Imaginary_Parts (K);
+               P_Re : Dimensionless := Square (16);
+               P_Im : Dimensionless := 0.0;
+               Size : Dimensionless := abs Square (16);
+               Next : Dimensionless;
+            begin
+               for Index in reverse 0 .. 15 loop
+                  Next := P_Re * Z_Re - P_Im * Z_Im + Square (Index);
+                  P_Im := P_Re * Z_Im + P_Im * Z_Re;
+                  P_Re := Next;
+                  Size := Size * Dimensionless_Math.Sqrt (Z_Re**2 + Z_Im**2) + abs Square (Index);
+               end loop;
+               T.Assert
+                 (abs P_Re + abs P_Im <= 1.0E-12 * Size,
+                  "Each iterated chart root is a root:" & K'Image);
+            end;
+         end loop;
+      end;
+
+      T.Assert
+        (not Iterate_Conjugate_Roots ([0 => -6.0, 1 => 11.0, 2 => -6.0, 3 => 1.0, others => 0.0], 3, Real_Parts,
+                                      Imaginary_Parts),
+         "An odd degree is left to the eigenvalue solve");
+      T.Assert
+        (not Iterate_Conjugate_Roots
+               ([0 => 24.0, 1 => -50.0, 2 => 35.0, 3 => -10.0, 4 => 1.0, others => 0.0], 4, Real_Parts,
+                Imaginary_Parts),
+         "Real roots are left to the eigenvalue solve");
+      T.Assert
+        (not Iterate_Conjugate_Roots (From_Pairs ([(0.3, 1.0E-12)]), 2, Real_Parts, Imaginary_Parts),
+         "A pair on the real axis is left to the eigenvalue solve");
+      T.Assert
+        (not Iterate_Conjugate_Roots (From_Pairs ([(0.3, 0.7)], 1.0E101), 2, Real_Parts, Imaginary_Parts),
+         "Coefficients beyond the overflow limit are left to the eigenvalue solve");
+      T.Assert
+        (not Iterate_Conjugate_Roots ([0 => 1.0, 1 => 2.0, others => 0.0], 2, Real_Parts, Imaginary_Parts),
+         "A vanishing leading coefficient is left to the eigenvalue solve");
+   end Test_Conjugate_Root_Iteration;
+
+   procedure Test_Pair_Primitive_Fast_Paths (T : in out Trendy_Test.Operation'Class) is
+      --  Both primitives are invariant under scaling the pole and the distance together. Scaling by 2⁴⁵⁰ is exact and
+      --  takes every input out of the moderate range, so the scaled formulas evaluate the same value.
+      Scale     : constant Dimensionless := 2.0**450;
+      Tolerance : constant Dimensionless := 256.0 * Dimensionless'Model_Epsilon;
+      Checked   : Natural := 0;
+   begin
+      T.Register;
+
+      for A of Dimensionless_Axis_Vector'[-3.0, -0.2, 0.5, 1.7] loop
+         for B of Dimensionless_Axis_Vector'[1.0E-3, 0.3, 2.0, 50.0] loop
+            for U of Dimensionless_Axis_Vector'[0.01, 0.37, 0.5, 1.0] loop
+               declare
+                  Fast_Log     : constant Dimensionless := Stable_Complex_Log_Ratio (A, B, U);
+                  Scaled_Log   : constant Dimensionless := Stable_Complex_Log_Ratio (A * Scale, B * Scale, U * Scale);
+                  Fast_Angle   : constant Dimensionless := Stable_Complex_Angle_Delta (A, B, U);
+                  Scaled_Angle : constant Dimensionless :=
+                    Stable_Complex_Angle_Delta (A * Scale, B * Scale, U * Scale);
+                  Change       : constant Dimensionless := U * (U - 2.0 * A) / (A * A + B * B);
+               begin
+                  --  Where the scaled path forms the ratio of the sums of squares beside one, it is the less accurate
+                  --  of the two, so only compare where both use the same branch.
+                  if U <= Dimensionless'Max (abs A, B) or else abs Change > 0.2 then
+                     Checked := Checked + 1;
+                     T.Assert
+                       (abs (Fast_Log - Scaled_Log) <= Tolerance * abs Scaled_Log,
+                        "Log ratio fast path:" & A'Image & B'Image & U'Image & Fast_Log'Image & Scaled_Log'Image);
+                  end if;
+                  T.Assert
+                    (abs (Fast_Angle - Scaled_Angle) <= Tolerance * abs Scaled_Angle,
+                     "Angle fast path:" & A'Image & B'Image & U'Image & Fast_Angle'Image & Scaled_Angle'Image);
+               end;
+            end loop;
+         end loop;
+      end loop;
+      T.Assert (Checked >= 32, "The log ratio comparison covers most inputs:" & Checked'Image);
+   end Test_Pair_Primitive_Fast_Paths;
 
    procedure Test_Geometry_Zero_And_Degenerate_References (T : in out Trendy_Test.Operation'Class) is
       Curve_Point                   : constant Position := Make_Point (2.0 * mm, 2.0 * mm, 0.0 * mm, 0.0 * mm);
@@ -3024,6 +3212,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          Test_Supported_Asymmetric_Corners'Access,
          Test_Sampled_Tangent_Certificate'Access,
          Test_Pole_Derivative_Bounds'Access,
+         Test_Conjugate_Root_Iteration'Access,
+         Test_Pair_Primitive_Fast_Paths'Access,
          Test_Geometry_Zero_And_Degenerate_References'Access,
          Test_Geometry_Straight_And_Quarter_Turn'Access,
          Test_Geometry_Asymmetric_Mobius_Warps'Access,

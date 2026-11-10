@@ -214,7 +214,8 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          function Hard_Anchor (I : Corners_Index) return Boolean;
          function Is_Passthrough_Corner (I : Corners_Index) return Boolean;
          function Multiply_Length_Upper (Value : Length; Factor : Dimensionless) return Length;
-         function Point_Distance_Upper (Left, Right : Position) return Length;
+         function Point_Distance_Upper (Left, Right : Position) return Length
+         renames Prunt.Motion_Planner.Stereographic_Curves.Geometry.Point_To_Point_Distance_Upper;
          function Predicted_Shrink (Limit, Achieved : Length; Fallback, Safety : Dimensionless) return Dimensionless;
          function Round_Down (Value : Dimensionless) return Dimensionless
          renames Prunt.Motion_Planner.Stereographic_Curves.Geometry.Round_Scalar_Down;
@@ -344,14 +345,6 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             when Constraint_Error =>
                return Length'Last;
          end Multiply_Length_Upper;
-
-         function Point_Distance_Upper (Left, Right : Position) return Length is
-         begin
-            return Point_To_Point_Distance_Upper (Left, Right);
-         exception
-            when Constraint_Error =>
-               return Length'Last;
-         end Point_Distance_Upper;
 
          function Transition_Position_Error return Length is
             Result             : Length := Corner_Transition_Max_Computational_Error;

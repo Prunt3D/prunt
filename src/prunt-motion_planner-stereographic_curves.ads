@@ -645,8 +645,9 @@ private
       --  Certified positive lower bound for Denominator over the complete chart interval.
    end record;
    --  Construction-only common-denominator form of the retained tangent in chart coordinate V. The realtime
-   --  evaluator remains the compact pole/residue cache; this certificate is retained only so derivative bounds can
-   --  reuse the interval-Bernstein reconstruction already performed by the tangent-error proof.
+   --  evaluator remains the compact pole/residue cache. This form exists only when the Bernstein reconstruction ran:
+   --  as the tangent-error fallback when the sampled proof is not tight enough, or for the Bernstein derivative
+   --  fallback when the pole-based bounds are not sharp.
 
    type Chart_Majorants is array (Chart_Component_Index) of Scalar_Majorants;
    --  Derivative majorants for each coordinate of a stereographic chart.
@@ -786,8 +787,9 @@ private
 
       Retained_Tangent_Certificate : Retained_Tangent_Bernstein_Certificate := (others => <>);
       --  Rational Bernstein data for the Bernstein derivative certificate. It is valid only when the Bernstein
-      --  reconstruction ran: construction normally certifies the tangent from samples instead, and
-      --  Retain_Bernstein_Tangent_Certificate fills it in on demand. The compact evaluator never carries it.
+      --  reconstruction ran: construction normally certifies the tangent from samples instead, and keeps the data
+      --  only when its whole-curve derivative bounds needed the Bernstein fallback. Range queries on other curves
+      --  reconstruct it on demand with Retain_Bernstein_Tangent_Certificate. The compact evaluator never carries it.
    end record
    with
      Dynamic_Predicate =>
@@ -905,6 +907,24 @@ private
    --  Final_Cache over the complete curve, from their values at the sample nodes alone. Denominator_Scale is the
    --  ideal denominator at the start of the chart. The result is as rigorous as the Bernstein reconstruction of
    --  the same difference; a failure only means that this cheaper proof did not apply.
+
+   subtype Conjugate_Root_Index is Positive range 1 .. Maximum_Rational_Degree / 2;
+   type Root_Polynomial is array (Natural range 0 .. Maximum_Rational_Degree) of Dimensionless;
+   --  Power-basis coefficients of a real polynomial, lowest degree first.
+   type Conjugate_Root_Parts is array (Conjugate_Root_Index) of Dimensionless;
+
+   function Iterate_Conjugate_Roots
+     (Coefficients                : Root_Polynomial;
+      Degree                      : Natural;
+      Real_Parts, Imaginary_Parts : out Conjugate_Root_Parts) return Boolean
+   with Pre => Degree <= Maximum_Rational_Degree;
+   --  Find all roots of a real polynomial without real roots by Aberth-Ehrlich iteration. The roots form conjugate
+   --  pairs, so only the member of each pair in the upper half-plane is iterated, and its conjugate is implied:
+   --  entries 1 .. Degree / 2 of the results hold those members, each with a positive imaginary part. False if the
+   --  iteration is not applicable or does not settle, in which case an eigenvalue solve must be used instead.
+   --
+   --  Nothing here needs to be rigorous: every root is validated against the polynomial afterwards, and the
+   --  compiled evaluator is certified against the ideal tangent as a whole.
 
    type Closure_Seed is record
       Valid : Boolean := False;
@@ -1468,15 +1488,16 @@ private
    --  the primary path for every range, including a point-sized one.
    --
    --  The result is always a valid bound. Sharp is False when it is saturated because a pole lies too close to the
-   --  range for the fixed work allowed, or when cancellation between the partial fractions makes the rounding
-   --  allowance a visible part of some bound; Bernstein_Tangent_Range_Majorants may then prove a smaller one.
+   --  range, when the work limits stop refinement while some bound is still more than two percent above a value
+   --  known to be attained, or when cancellation between the partial fractions makes the rounding allowance a
+   --  visible part of some bound; Bernstein_Tangent_Range_Majorants may then prove a smaller one.
 
    function Retain_Bernstein_Tangent_Certificate (Curve : in out Stereographic_Curve) return Boolean
    with Pre => Curve.Evaluator_Data.Kind = Positive_Curve_Kind;
    --  Reconstruct the retained tangent in common-denominator Bernstein form and store it in Curve. Construction
    --  normally certifies the tangent from samples and skips this far costlier reconstruction, so it is run on
-   --  demand by the Bernstein derivative fallback. False, with Curve unchanged, if the reconstruction cannot be
-   --  certified.
+   --  demand by the Bernstein derivative fallback. False, with Curve unchanged, if the reconstruction cannot prove
+   --  a positive denominator. Whether it also bounds the tangent error within budget does not matter here.
 
    function Bernstein_Tangent_Range_Majorants
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Success : out Boolean) return Axis_Majorants

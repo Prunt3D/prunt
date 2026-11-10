@@ -2047,8 +2047,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --  The allowance for rounding is proportional to the sum of absolute partial-fraction terms and does not
       --  shrink with the cell. Where those terms cancel to more than eleven digits, as on a range where the curve
       --  is almost straight, it becomes a visible part of the bound. Sharp reports whether every bound is free of
-      --  that effect; otherwise the Bernstein form, whose controls are small wherever the function is small, may
-      --  do better.
+      --  that effect, and of any slack which the work limits left unresolved; otherwise the Bernstein form, whose
+      --  controls are small wherever the function is small, may do better.
       Model_Order       : constant := 6;
       Maximum_Jet_Order : constant := Maximum_Majorant_Order + Model_Order - 1;
       Maximum_Sum_Order : constant := Maximum_Majorant_Order + Model_Order;
@@ -2073,6 +2073,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Noise_Floor       : constant Dimensionless := 1.0E-9;
       --  A bound is sharp while its rounding allowance is at most this fraction of it, or is below a magnitude
       --  which the Bernstein form cannot resolve either.
+      Loose_Fraction    : constant Dimensionless := 0.02;
+      --  A bound is also sharp while no cell which the work limits left loose exceeds a magnitude known to be
+      --  attained by more than this fraction, the Bernstein form's own tolerance, or by Noise_Floor.
       Magnitude_Limit   : constant Dimensionless := 1.0E60;
       Minimum_Distance  : constant Dimensionless := 1.0E-12;
       Underflow_Padding : constant Dimensionless := 2.0**(-500);
@@ -2134,8 +2137,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Rational    : Order_Bounds := [others => [others => 0.0]];
       Noise       : Order_Bounds := [others => [others => 0.0]];
       --  The rounding allowance included in the corresponding entry of Rational.
+      Unresolved  : Order_Bounds := [others => [others => 0.0]];
+      --  The largest bound, less twice its rounding allowance, of any cell accepted while still loose because the
+      --  depth, evaluation or queue limit stopped its refinement.
       Pad         : constant Dimensionless := (if Start_U = End_U then 0.0 else Cell_Pad);
       Result      : Axis_Majorants := [others => [others => 0.0]];
+
+      Correction_Bounds       : array (Majorant_Order) of Dimensionless := [others => 0.0];
+      Correction_Bounds_Known : Boolean := False;
+      --  Correction_Bound for every order, formed on first use. It depends on the range but not on the axis.
 
       function Correction_Coefficient (Order : Majorant_Order; U : Dimensionless) return Interval;
       --  Enclose the factorial-scaled smootherstep derivative H⁽ᴼʳᵈᵉʳ⁺¹⁾(U)/Order!.
@@ -2604,6 +2614,13 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                            Rational (Index, Order) := Bounds (Index, Order);
                            Noise (Index, Order) := Allowances (Index, Order);
                         end if;
+                        --  A limit stopped this cell while some bound was still loose. Whether that matters is only
+                        --  known once Lower is final.
+                        if Refine
+                          and then Bounds (Index, Order) - 2.0 * Allowances (Index, Order) > Unresolved (Index, Order)
+                        then
+                           Unresolved (Index, Order) := Bounds (Index, Order) - 2.0 * Allowances (Index, Order);
+                        end if;
                      end loop;
                   end loop;
                end if;
@@ -2623,13 +2640,16 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          begin
             if not Ratio.Valid then
                return Saturated;
+            elsif not Correction_Bounds_Known and then not (Ratio.Lower = 0.0 and then Ratio.Upper = 0.0) then
+               Correction_Bounds := [for Order in Majorant_Order => Correction_Bound (Order)];
+               Correction_Bounds_Known := True;
             end if;
             for Order in Majorant_Order loop
                declare
                   Correction_Part : constant Dimensionless :=
                     (if Ratio.Lower = 0.0 and then Ratio.Upper = 0.0
                      then 0.0
-                     else Up (Interval_Abs_Max (Ratio) * Correction_Bound (Order)));
+                     else Up (Interval_Abs_Max (Ratio) * Correction_Bounds (Order)));
                   Combined        : Dimensionless :=
                     (if Correction_Part = 0.0
                      then Rational (Index, Order)
@@ -2666,7 +2686,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Sharp :=
         (for all Index in 1 .. Active_Count =>
            (for all Order in Majorant_Order =>
-              Noise (Index, Order) <= Noise_Fraction * Rational (Index, Order) + Noise_Floor));
+              Noise (Index, Order) <= Noise_Fraction * Rational (Index, Order) + Noise_Floor
+              and then Unresolved (Index, Order) <= (1.0 + Loose_Fraction) * Lower (Index, Order) + Noise_Floor));
       return Result;
    exception
       when Constraint_Error =>
@@ -3523,6 +3544,32 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return [others => [others => 0.0]];
    end Bernstein_Tangent_Range_Majorants;
 
+   procedure Merge_Bernstein_Tangent_Range_Majorants
+     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Result : in out Axis_Majorants)
+   with
+     Pre =>
+       Curve.Retained_Tangent_Certificate.Valid
+       and then Start_U >= 0.0
+       and then Start_U <= End_U
+       and then End_U <= 1.0;
+   --  Lower each entry of Result to the Bernstein bound where Curve's retained certificate proves a smaller one.
+
+   procedure Merge_Bernstein_Tangent_Range_Majorants
+     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Result : in out Axis_Majorants)
+   is
+      Success : Boolean;
+      Other   : constant Axis_Majorants := Bernstein_Tangent_Range_Majorants (Curve, Start_U, End_U, Success);
+   begin
+      --  Both are valid bounds, so the smaller of each pair is.
+      if Success then
+         for Axis in Axis_Name loop
+            for Order in Majorant_Order loop
+               Result (Axis) (Order) := Dimensionless'Min (Result (Axis) (Order), Other (Axis) (Order));
+            end loop;
+         end loop;
+      end if;
+   end Merge_Bernstein_Tangent_Range_Majorants;
+
    function Realtime_Tangent_Range_Majorants
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless) return Axis_Majorants;
    --  Compute the majorants used by the real-time tangent evaluator over a range.
@@ -3535,36 +3582,24 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    begin
       --  The pole-based enclosure is the cheapest path and normally the sharpest. It is not sharp when a pole lies
       --  too close to the range for its fixed work, or when the partial fractions cancel so far that its rounding
-      --  allowance shows. The Bernstein form, reconstructed here if construction did not need it, is then
-      --  consulted as well; both are valid bounds, so the smaller of each pair is.
+      --  allowance shows. The Bernstein form is then consulted as well. Construction keeps the certificate when
+      --  the whole curve needed it; otherwise it is reconstructed here, on a copy because Curve is constant.
       if Sharp
         or else Curve.Evaluator_Data.Kind /= Positive_Curve_Kind
         or else not (Start_U >= 0.0 and then Start_U <= End_U and then End_U <= 1.0)
       then
          return Result;
+      elsif Curve.Retained_Tangent_Certificate.Valid then
+         Merge_Bernstein_Tangent_Range_Majorants (Curve, Start_U, End_U, Result);
+         return Result;
       end if;
       declare
          Certified : Stereographic_Curve := Curve;
-         Success   : Boolean := Certified.Retained_Tangent_Certificate.Valid;
       begin
-         if not Success then
-            Success := Retain_Bernstein_Tangent_Certificate (Certified);
+         if Retain_Bernstein_Tangent_Certificate (Certified) then
+            Merge_Bernstein_Tangent_Range_Majorants (Certified, Start_U, End_U, Result);
          end if;
-         if not Success then
-            return Result;
-         end if;
-         declare
-            Other : constant Axis_Majorants := Bernstein_Tangent_Range_Majorants (Certified, Start_U, End_U, Success);
-         begin
-            if Success then
-               for Axis in Axis_Name loop
-                  for Order in Majorant_Order loop
-                     Result (Axis) (Order) := Dimensionless'Min (Result (Axis) (Order), Other (Axis) (Order));
-                  end loop;
-               end loop;
-            end if;
-            return Result;
-         end;
+         return Result;
       end;
    end Realtime_Tangent_Range_Majorants;
 
@@ -5482,8 +5517,12 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
               Start_Square + 1.0,
               Length'Max (Curve.Certified_Position_Error, Length'Model_Small),
               Certificate);
+         pragma Unreferenced (Result);
+         --  Only the reconstruction is wanted. It becomes valid once its denominator is proven positive, which is
+         --  all the derivative bounds rely on, so a failure of the tangent error bound computed afterwards does not
+         --  discard it.
       begin
-         if Result.Status = Tangent_Was_Certified and then Certificate.Valid then
+         if Certificate.Valid then
             Curve.Retained_Tangent_Certificate := Certificate;
             return True;
          else
@@ -5495,6 +5534,161 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return False;
    end Retain_Bernstein_Tangent_Certificate;
 
+   function Iterate_Conjugate_Roots
+     (Coefficients                : Root_Polynomial;
+      Degree                      : Natural;
+      Real_Parts, Imaginary_Parts : out Conjugate_Root_Parts) return Boolean
+   is
+      pragma Suppress (Overflow_Check);
+      --  The limits below keep every Horner intermediate finite: |z|¹⁶·|coefficient| < 10⁹⁶·10¹⁰⁰.
+      Coefficient_Limit  : constant Dimensionless := 1.0E100;
+      Root_Limit         : constant Dimensionless := 1.0E6;
+      Maximum_Iterations : constant := 40;
+      Half               : constant Natural := Degree / 2;
+      Settled            : array (Conjugate_Root_Index) of Boolean := [others => False];
+      Leading            : constant Dimensionless := Coefficients (Degree);
+      Centre, Radius     : Dimensionless;
+      Value              : Dimensionless;
+   begin
+      Real_Parts := [others => 0.0];
+      Imaginary_Parts := [others => 0.0];
+      if Degree = 0 or else Degree mod 2 /= 0 or else Leading = 0.0 then
+         return False;
+      end if;
+      for Index in 0 .. Degree loop
+         if not (abs Coefficients (Index) <= Coefficient_Limit) then
+            return False;
+         end if;
+      end loop;
+
+      --  Start on a circle about the roots' centroid whose radius is the geometric mean of their distances
+      --  from it, |D(c)/aₙ|^(1/n). The phase offset keeps the start away from any symmetry of the roots.
+      Centre := -Coefficients (Degree - 1) / (Dimensionless (Degree) * Leading);
+      if not (abs Centre <= Root_Limit) then
+         return False;
+      end if;
+      Value := Leading;
+      for Index in reverse 0 .. Degree - 1 loop
+         Value := Value * Centre + Coefficients (Index);
+      end loop;
+      Value := abs (Value / Leading);
+      if not (Value > 0.0 and then Value <= Dimensionless'Last) then
+         return False;
+      end if;
+      Radius := Dimensionless_Math.Exp (Dimensionless_Math.Log (Value) / Dimensionless (Degree));
+      if not (Radius > 0.0 and then Radius <= Root_Limit) then
+         return False;
+      end if;
+      for K in 1 .. Half loop
+         declare
+            Angle : constant Dimensionless :=
+              Dimensionless (Ada.Numerics.Pi) * (Dimensionless (K) - 0.63) / Dimensionless (Half);
+         begin
+            Real_Parts (K) := Centre + Radius * Dimensionless_Math.Cos (Angle);
+            Imaginary_Parts (K) := Radius * Dimensionless_Math.Sin (Angle);
+         end;
+      end loop;
+
+      for Iteration in 1 .. Maximum_Iterations loop
+         for K in 1 .. Half loop
+            if not Settled (K) then
+               declare
+                  X       : constant Dimensionless := Real_Parts (K);
+                  Y       : constant Dimensionless := Imaginary_Parts (K);
+                  Modulus : constant Dimensionless := Dimensionless_Math.Sqrt (X * X + Y * Y);
+                  --  Horner evaluation of D, D′ and of the magnitude bound Σ |aᵢ|·|z|ⁱ.
+                  P_Re    : Dimensionless := Leading;
+                  P_Im    : Dimensionless := 0.0;
+                  D_Re    : Dimensionless := 0.0;
+                  D_Im    : Dimensionless := 0.0;
+                  Size    : Dimensionless := abs Leading;
+                  Next    : Dimensionless;
+               begin
+                  for Index in reverse 0 .. Degree - 1 loop
+                     Next := D_Re * X - D_Im * Y + P_Re;
+                     D_Im := D_Re * Y + D_Im * X + P_Im;
+                     D_Re := Next;
+                     Next := P_Re * X - P_Im * Y + Coefficients (Index);
+                     P_Im := P_Re * Y + P_Im * X;
+                     P_Re := Next;
+                     Size := Size * Modulus + abs Coefficients (Index);
+                  end loop;
+                  if abs P_Re + abs P_Im <= 8.0 * Dimensionless'Model_Epsilon * Size then
+                     --  The residual is within the rounding error of its own evaluation.
+                     Settled (K) := True;
+                  else
+                     declare
+                        D_Square : constant Dimensionless := D_Re * D_Re + D_Im * D_Im;
+                        --  Newton's correction N = D/D′.
+                        N_Re     : constant Dimensionless := (P_Re * D_Re + P_Im * D_Im) / D_Square;
+                        N_Im     : constant Dimensionless := (P_Im * D_Re - P_Re * D_Im) / D_Square;
+                        --  S = Σ 1/(z - zⱼ) over every other root, starting with this root's own conjugate.
+                        S_Re     : Dimensionless := 0.0;
+                        S_Im     : Dimensionless := -0.5 / Y;
+                        Q_Re     : Dimensionless;
+                        Q_Im     : Dimensionless;
+                        Q_Square : Dimensionless;
+                        W_Re     : Dimensionless;
+                        W_Im     : Dimensionless;
+                     begin
+                        for J in 1 .. Half loop
+                           if J /= K then
+                              declare
+                                 DX      : constant Dimensionless := X - Real_Parts (J);
+                                 Upper_Y : constant Dimensionless := Y - Imaginary_Parts (J);
+                                 Lower_Y : constant Dimensionless := Y + Imaginary_Parts (J);
+                                 Upper   : constant Dimensionless := DX * DX + Upper_Y * Upper_Y;
+                                 Lower   : constant Dimensionless := DX * DX + Lower_Y * Lower_Y;
+                              begin
+                                 S_Re := S_Re + DX / Upper + DX / Lower;
+                                 S_Im := S_Im - Upper_Y / Upper - Lower_Y / Lower;
+                              end;
+                           end if;
+                        end loop;
+                        --  Aberth's correction W = N/(1 - N·S).
+                        Q_Re := 1.0 - (N_Re * S_Re - N_Im * S_Im);
+                        Q_Im := -(N_Re * S_Im + N_Im * S_Re);
+                        Q_Square := Q_Re * Q_Re + Q_Im * Q_Im;
+                        W_Re := (N_Re * Q_Re + N_Im * Q_Im) / Q_Square;
+                        W_Im := (N_Im * Q_Re - N_Re * Q_Im) / Q_Square;
+                        Real_Parts (K) := X - W_Re;
+                        --  The root set is symmetric about the real axis, so a root which crosses it is replaced
+                        --  by its conjugate.
+                        Imaginary_Parts (K) := abs (Y - W_Im);
+                        --  Coincident iterates, a vanishing derivative or a root on the real axis leave an
+                        --  infinity or a NaN here.
+                        if not (abs Real_Parts (K) <= Root_Limit
+                                and then Imaginary_Parts (K) > 0.0
+                                and then Imaginary_Parts (K) <= Root_Limit)
+                        then
+                           return False;
+                        end if;
+                        if abs W_Re + abs W_Im <= 1.0E-14 * Dimensionless'Max (1.0, Modulus) then
+                           Settled (K) := True;
+                        end if;
+                     end;
+                  end if;
+               end;
+            end if;
+         end loop;
+         exit when (for all K in 1 .. Half => Settled (K));
+      end loop;
+
+      for K in 1 .. Half loop
+         --  A pair this close to the real axis would later be classified as two real poles; leave such a
+         --  polynomial to the eigenvalue solve.
+         if not Settled (K)
+           or else Imaginary_Parts (K) <= 1.0E-9 * Dimensionless'Max (1.0, abs Real_Parts (K) + Imaginary_Parts (K))
+         then
+            return False;
+         end if;
+      end loop;
+      return True;
+   exception
+      when Constraint_Error =>
+         return False;
+   end Iterate_Conjugate_Roots;
+
    function Build_Rational_Representation
      (Curve                  : in out Stereographic_Curve;
       Power_Coefficients     : Power_Chart;
@@ -5502,7 +5696,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Start_Jet, Finish_Jet  : Endpoint_Tangent_Jet) return Realtime_Compilation_Status
    is
       subtype Polynomial_Index is Natural range 0 .. Maximum_Rational_Degree;
-      type Real_Polynomial is array (Polynomial_Index) of Dimensionless;
+      subtype Real_Polynomial is Root_Polynomial;
 
       package Complex_Types is new Ada.Numerics.Generic_Complex_Types (Dimensionless);
       use Complex_Types;
@@ -5524,7 +5718,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Chart_Degree           : Natural range 0 .. Fixed_Chart_Degree := 0;
       Denominator_Degree     : Natural range 0 .. Maximum_Rational_Degree := 0;
       Cache                  : Rational_Antiderivative := (others => <>);
-      Iterated               : Boolean := False;
 
       function Evaluate_Polynomial (Coefficients : Real_Polynomial; Degree : Natural; Value : Complex) return Complex;
       --  Evaluate a real-coefficient polynomial at a complex value using Horner's method.
@@ -5662,171 +5855,22 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       function Find_Roots_By_Iteration
         (Coefficients : Real_Polynomial; Degree : Natural; Result : out Complex_Root_Array) return Boolean;
-      --  Find all roots of a real polynomial without real roots by Aberth-Ehrlich iteration. The roots form
-      --  conjugate pairs, so only the member of each pair in the upper half-plane is iterated and its conjugate is
-      --  implied. Each pair is returned as two adjacent exact conjugates, the upper one first. False if the
-      --  iteration is not applicable or does not settle, in which case Find_Roots must be used instead.
-      --
-      --  Nothing here needs to be rigorous: every root is validated against the polynomial afterwards, and the
-      --  compiled evaluator is certified against the ideal tangent as a whole.
+      --  Iterate_Conjugate_Roots with each pair returned as two adjacent exact conjugates, the upper one first.
 
       function Find_Roots_By_Iteration
         (Coefficients : Real_Polynomial; Degree : Natural; Result : out Complex_Root_Array) return Boolean
       is
-         pragma Suppress (Overflow_Check);
-         --  The limits below keep every Horner intermediate finite: |z|¹⁶·|coefficient| < 10⁹⁶·10¹⁰⁰.
-         Coefficient_Limit  : constant Dimensionless := 1.0E100;
-         Root_Limit         : constant Dimensionless := 1.0E6;
-         Maximum_Iterations : constant := 40;
-         Half               : constant Natural := Degree / 2;
-         subtype Pair_Slot is Positive range 1 .. Maximum_Rational_Degree / 2;
-         Real_Parts         : array (Pair_Slot) of Dimensionless := [others => 0.0];
-         Imaginary_Parts    : array (Pair_Slot) of Dimensionless := [others => 0.0];
-         Settled            : array (Pair_Slot) of Boolean := [others => False];
-         Leading            : constant Dimensionless := Coefficients (Degree);
-         Centre, Radius     : Dimensionless;
-         Value              : Dimensionless;
+         Real_Parts, Imaginary_Parts : Conjugate_Root_Parts;
       begin
          Result := [others => Compose_From_Cartesian (0.0, 0.0)];
-         if Degree = 0 or else Degree mod 2 /= 0 or else Leading = 0.0 then
+         if not Iterate_Conjugate_Roots (Coefficients, Degree, Real_Parts, Imaginary_Parts) then
             return False;
          end if;
-         for Index in 0 .. Degree loop
-            if not (abs Coefficients (Index) <= Coefficient_Limit) then
-               return False;
-            end if;
-         end loop;
-
-         --  Start on a circle about the roots' centroid whose radius is the geometric mean of their distances
-         --  from it, |D(c)/aₙ|^(1/n). The phase offset keeps the start away from any symmetry of the roots.
-         Centre := -Coefficients (Degree - 1) / (Dimensionless (Degree) * Leading);
-         if not (abs Centre <= Root_Limit) then
-            return False;
-         end if;
-         Value := Leading;
-         for Index in reverse 0 .. Degree - 1 loop
-            Value := Value * Centre + Coefficients (Index);
-         end loop;
-         Value := abs (Value / Leading);
-         if not (Value > 0.0 and then Value <= Dimensionless'Last) then
-            return False;
-         end if;
-         Radius := Dimensionless_Math.Exp (Dimensionless_Math.Log (Value) / Dimensionless (Degree));
-         if not (Radius > 0.0 and then Radius <= Root_Limit) then
-            return False;
-         end if;
-         for K in 1 .. Half loop
-            declare
-               Angle : constant Dimensionless :=
-                 Dimensionless (Ada.Numerics.Pi) * (Dimensionless (K) - 0.63) / Dimensionless (Half);
-            begin
-               Real_Parts (K) := Centre + Radius * Dimensionless_Math.Cos (Angle);
-               Imaginary_Parts (K) := Radius * Dimensionless_Math.Sin (Angle);
-            end;
-         end loop;
-
-         for Iteration in 1 .. Maximum_Iterations loop
-            for K in 1 .. Half loop
-               if not Settled (K) then
-                  declare
-                     X       : constant Dimensionless := Real_Parts (K);
-                     Y       : constant Dimensionless := Imaginary_Parts (K);
-                     Modulus : constant Dimensionless := Dimensionless_Math.Sqrt (X * X + Y * Y);
-                     --  Horner evaluation of D, D′ and of the magnitude bound Σ |aᵢ|·|z|ⁱ.
-                     P_Re    : Dimensionless := Leading;
-                     P_Im    : Dimensionless := 0.0;
-                     D_Re    : Dimensionless := 0.0;
-                     D_Im    : Dimensionless := 0.0;
-                     Size    : Dimensionless := abs Leading;
-                     Next    : Dimensionless;
-                  begin
-                     for Index in reverse 0 .. Degree - 1 loop
-                        Next := D_Re * X - D_Im * Y + P_Re;
-                        D_Im := D_Re * Y + D_Im * X + P_Im;
-                        D_Re := Next;
-                        Next := P_Re * X - P_Im * Y + Coefficients (Index);
-                        P_Im := P_Re * Y + P_Im * X;
-                        P_Re := Next;
-                        Size := Size * Modulus + abs Coefficients (Index);
-                     end loop;
-                     if abs P_Re + abs P_Im <= 8.0 * Dimensionless'Model_Epsilon * Size then
-                        --  The residual is within the rounding error of its own evaluation.
-                        Settled (K) := True;
-                     else
-                        declare
-                           D_Square : constant Dimensionless := D_Re * D_Re + D_Im * D_Im;
-                           --  Newton's correction N = D/D′.
-                           N_Re     : constant Dimensionless := (P_Re * D_Re + P_Im * D_Im) / D_Square;
-                           N_Im     : constant Dimensionless := (P_Im * D_Re - P_Re * D_Im) / D_Square;
-                           --  S = Σ 1/(z - zⱼ) over every other root, starting with this root's own conjugate.
-                           S_Re     : Dimensionless := 0.0;
-                           S_Im     : Dimensionless := -0.5 / Y;
-                           Q_Re     : Dimensionless;
-                           Q_Im     : Dimensionless;
-                           Q_Square : Dimensionless;
-                           W_Re     : Dimensionless;
-                           W_Im     : Dimensionless;
-                        begin
-                           for J in 1 .. Half loop
-                              if J /= K then
-                                 declare
-                                    DX      : constant Dimensionless := X - Real_Parts (J);
-                                    Upper_Y : constant Dimensionless := Y - Imaginary_Parts (J);
-                                    Lower_Y : constant Dimensionless := Y + Imaginary_Parts (J);
-                                    Upper   : constant Dimensionless := DX * DX + Upper_Y * Upper_Y;
-                                    Lower   : constant Dimensionless := DX * DX + Lower_Y * Lower_Y;
-                                 begin
-                                    S_Re := S_Re + DX / Upper + DX / Lower;
-                                    S_Im := S_Im - Upper_Y / Upper - Lower_Y / Lower;
-                                 end;
-                              end if;
-                           end loop;
-                           --  Aberth's correction W = N/(1 - N·S).
-                           Q_Re := 1.0 - (N_Re * S_Re - N_Im * S_Im);
-                           Q_Im := -(N_Re * S_Im + N_Im * S_Re);
-                           Q_Square := Q_Re * Q_Re + Q_Im * Q_Im;
-                           W_Re := (N_Re * Q_Re + N_Im * Q_Im) / Q_Square;
-                           W_Im := (N_Im * Q_Re - N_Re * Q_Im) / Q_Square;
-                           Real_Parts (K) := X - W_Re;
-                           --  The root set is symmetric about the real axis, so a root which crosses it is replaced
-                           --  by its conjugate.
-                           Imaginary_Parts (K) := abs (Y - W_Im);
-                           --  Coincident iterates, a vanishing derivative or a root on the real axis leave an
-                           --  infinity or a NaN here.
-                           if not (abs Real_Parts (K) <= Root_Limit
-                                   and then Imaginary_Parts (K) > 0.0
-                                   and then Imaginary_Parts (K) <= Root_Limit)
-                           then
-                              return False;
-                           end if;
-                           if abs W_Re + abs W_Im <= 1.0E-14 * Dimensionless'Max (1.0, Modulus) then
-                              Settled (K) := True;
-                           end if;
-                        end;
-                     end if;
-                  end;
-               end if;
-            end loop;
-            exit when (for all K in 1 .. Half => Settled (K));
-         end loop;
-
-         for K in 1 .. Half loop
-            --  A pair this close to the real axis would later be classified as two real poles; leave such a
-            --  polynomial to the eigenvalue solve.
-            if not Settled (K)
-              or else Imaginary_Parts (K) <= 1.0E-9 * Dimensionless'Max (1.0, abs Real_Parts (K) + Imaginary_Parts (K))
-            then
-               Result := [others => Compose_From_Cartesian (0.0, 0.0)];
-               return False;
-            end if;
+         for K in 1 .. Degree / 2 loop
             Result (2 * K - 1) := Compose_From_Cartesian (Real_Parts (K), Imaginary_Parts (K));
             Result (2 * K) := Compose_From_Cartesian (Real_Parts (K), -Imaginary_Parts (K));
          end loop;
          return True;
-      exception
-         when Constraint_Error =>
-            Result := [others => Compose_From_Cartesian (0.0, 0.0)];
-            return False;
       end Find_Roots_By_Iteration;
 
       function Ideal_Axis_Is_Structurally_Zero (Axis : Axis_Name) return Boolean;
@@ -5915,12 +5959,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          end loop;
       end loop;
 
-      --  The simultaneous iteration is several times cheaper than the eigenvalue solve and settles each root to
-      --  the rounding error of the polynomial itself, so its roots need no refinement.
-      Iterated := Find_Roots_By_Iteration (Denominator, Denominator_Degree, Roots);
-      if not Iterated and then not Find_Roots (Denominator, Denominator_Degree, Roots) then
-         return Realtime_Representation_Insufficient;
-      end if;
       if Denominator_Degree > 0 then
          for Degree in 1 .. Denominator_Degree loop
             Denominator_Derivative (Degree - 1) := Dimensionless (Degree) * Denominator (Degree);
@@ -5928,74 +5966,116 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end if;
 
       declare
-         Conjugate_Next : Boolean := False;
-      begin
-         for Index in 1 .. (if Iterated then 0 else Denominator_Degree) loop
-            if Conjugate_Next then
-               Roots (Index) := Conjugate (Roots (Index - 1));
-               Conjugate_Next := False;
-            else
-               --  A real polynomial has conjugate roots. DGEEV returns conjugate pairs together; only share a
-               --  refinement when the supplied pair is exactly conjugate. Both roots are still validated below.
-               Conjugate_Next :=
-                 Index < Denominator_Degree
-                 and then Im (Roots (Index)) > 0.0
-                 and then Roots (Index + 1) = Conjugate (Roots (Index));
-               --  Up to three Newton steps reduce the companion eigenvalue's polynomial residual, accepting
-               --  only a step which improves |D(p)|.
-               for Pass in 1 .. 3 loop
-                  exit when not Complex_Is_Finite (Roots (Index)) or else abs Roots (Index) > 1.0E6;
-                  declare
-                     Value      : constant Complex :=
-                       Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index));
-                     Derivative : constant Complex :=
-                       Evaluate_Polynomial (Denominator_Derivative, Denominator_Degree - 1, Roots (Index));
-                  begin
-                     exit when
-                       not Complex_Is_Finite (Value)
-                       or else not Complex_Is_Finite (Derivative)
-                       or else abs Derivative <= 64.0 * Dimensionless'Model_Epsilon;
-                     declare
-                        Trial : constant Complex := Roots (Index) - Value / Derivative;
-                     begin
-                        if Complex_Is_Finite (Trial)
-                          and then abs Evaluate_Polynomial (Denominator, Denominator_Degree, Trial) < abs Value
-                        then
-                           Roots (Index) := Trial;
-                        else
-                           --  Retrying an unchanged root would repeat the same rejected step.
-                           exit;
-                        end if;
-                     end;
-                  end;
-               end loop;
-            end if;
-         end loop;
-      end;
+         type Root_Validation is (Roots_Are_Valid, Roots_Are_Inaccurate, Roots_Are_Unusable);
+         --  Inaccurate roots fail a test which depends on how they were found: the residual, or the separation of
+         --  two roots. Unusable roots are not finite or lie too close to the evaluation interval, which no other
+         --  method could change.
 
-      for Index in 1 .. Denominator_Degree loop
-         declare
-            Root_Is_Finite    : constant Boolean := Complex_Is_Finite (Roots (Index));
-            Interval_Distance : constant Dimensionless := Distance_From_Unit_Interval (Roots (Index));
-            Residual          : constant Dimensionless :=
-              Dimensionless (abs Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index)));
-            Residual_Scale    : constant Dimensionless :=
-              Polynomial_Scale_At (Denominator, Denominator_Degree, Roots (Index));
+         procedure Refine_Roots;
+         --  Polish the eigenvalue solve's roots with Newton's method.
+
+         function Validate_Roots return Root_Validation;
+         --  Check every root before the partial fractions divide by D′ at it.
+
+         procedure Refine_Roots is
+            Conjugate_Next : Boolean := False;
          begin
-            --  Every pole must be finite, separated from the evaluation interval, and an accurate root of D.
-            if not Root_Is_Finite or else Interval_Distance < 2.0E-9 or else Residual > 2.0E-8 * Residual_Scale then
+            for Index in 1 .. Denominator_Degree loop
+               if Conjugate_Next then
+                  Roots (Index) := Conjugate (Roots (Index - 1));
+                  Conjugate_Next := False;
+               else
+                  --  A real polynomial has conjugate roots. DGEEV returns conjugate pairs together; only share a
+                  --  refinement when the supplied pair is exactly conjugate. Both roots are still validated below.
+                  Conjugate_Next :=
+                    Index < Denominator_Degree
+                    and then Im (Roots (Index)) > 0.0
+                    and then Roots (Index + 1) = Conjugate (Roots (Index));
+                  --  Up to three Newton steps reduce the companion eigenvalue's polynomial residual, accepting
+                  --  only a step which improves |D(p)|.
+                  for Pass in 1 .. 3 loop
+                     exit when not Complex_Is_Finite (Roots (Index)) or else abs Roots (Index) > 1.0E6;
+                     declare
+                        Value      : constant Complex :=
+                          Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index));
+                        Derivative : constant Complex :=
+                          Evaluate_Polynomial (Denominator_Derivative, Denominator_Degree - 1, Roots (Index));
+                     begin
+                        exit when
+                          not Complex_Is_Finite (Value)
+                          or else not Complex_Is_Finite (Derivative)
+                          or else abs Derivative <= 64.0 * Dimensionless'Model_Epsilon;
+                        declare
+                           Trial : constant Complex := Roots (Index) - Value / Derivative;
+                        begin
+                           if Complex_Is_Finite (Trial)
+                             and then abs Evaluate_Polynomial (Denominator, Denominator_Degree, Trial) < abs Value
+                           then
+                              Roots (Index) := Trial;
+                           else
+                              --  Retrying an unchanged root would repeat the same rejected step.
+                              exit;
+                           end if;
+                        end;
+                     end;
+                  end loop;
+               end if;
+            end loop;
+         end Refine_Roots;
+
+         function Validate_Roots return Root_Validation is
+            Result : Root_Validation := Roots_Are_Valid;
+         begin
+            for Index in 1 .. Denominator_Degree loop
+               declare
+                  Root_Is_Finite    : constant Boolean := Complex_Is_Finite (Roots (Index));
+                  Interval_Distance : constant Dimensionless := Distance_From_Unit_Interval (Roots (Index));
+                  Residual          : constant Dimensionless :=
+                    Dimensionless (abs Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index)));
+                  Residual_Scale    : constant Dimensionless :=
+                    Polynomial_Scale_At (Denominator, Denominator_Degree, Roots (Index));
+               begin
+                  --  Every pole must be finite, separated from the evaluation interval, and an accurate root of D.
+                  if not Root_Is_Finite or else Interval_Distance < 2.0E-9 then
+                     return Roots_Are_Unusable;
+                  elsif Residual > 2.0E-8 * Residual_Scale then
+                     Result := Roots_Are_Inaccurate;
+                  end if;
+               end;
+               for Other in Index + 1 .. Denominator_Degree loop
+                  --  The residue formula divides by D′(p), so repeated or numerically merged roots are unsupported.
+                  if Dimensionless (abs (Roots (Index) - Roots (Other)))
+                    < 2.0E-13 * Dimensionless'Max (Root_Scale (Roots (Index)), Root_Scale (Roots (Other)))
+                  then
+                     Result := Roots_Are_Inaccurate;
+                  end if;
+               end loop;
+            end loop;
+            return Result;
+         end Validate_Roots;
+
+         Validation : Root_Validation;
+      begin
+         --  The simultaneous iteration is several times cheaper than the eigenvalue solve and settles each root to
+         --  the rounding error of the polynomial itself, so its roots need no refinement. It has no error estimate
+         --  of its own, so roots which fail validation for a reason the eigenvalue solve could avoid, such as two
+         --  iterates which settled on one root, are found again by that solve.
+         if Find_Roots_By_Iteration (Denominator, Denominator_Degree, Roots) then
+            Validation := Validate_Roots;
+         else
+            Validation := Roots_Are_Inaccurate;
+         end if;
+         if Validation = Roots_Are_Inaccurate then
+            if not Find_Roots (Denominator, Denominator_Degree, Roots) then
                return Realtime_Representation_Insufficient;
             end if;
-         end;
-         for Other in Index + 1 .. Denominator_Degree loop
-            --  The residue formula divides by D′(p), so repeated or numerically merged roots are unsupported.
-            if Dimensionless (abs (Roots (Index) - Roots (Other)))
-              < 2.0E-13 * Dimensionless'Max (Root_Scale (Roots (Index)), Root_Scale (Roots (Other)))
-            then
-               return Realtime_Representation_Insufficient;
-            end if;
-         end loop;
-      end loop;
+            Refine_Roots;
+            Validation := Validate_Roots;
+         end if;
+         if Validation /= Roots_Are_Valid then
+            return Realtime_Representation_Insufficient;
+         end if;
+      end;
 
       declare
          Used : array (Rational_Degree_Slot) of Boolean := [others => False];
@@ -6254,9 +6334,23 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                 not (Sampled.Error_Bound
                      <= Dimensionless (Maximum_Position_Error / Curve.Evaluator_Data.Length_Value) / 16.0)
             then
-               Certificate :=
-                 Certified_Realtime_Tangent_Error
-                   (Curve, Cache, Denominator (0), Maximum_Position_Error, Retained_Certificate);
+               declare
+                  Reconstructed : constant Tangent_Certificate_Result :=
+                    Certified_Realtime_Tangent_Error
+                      (Curve, Cache, Denominator (0), Maximum_Position_Error, Retained_Certificate);
+               begin
+                  --  Both proofs are rigorous, so the smaller certified error stands, and a sampled certificate
+                  --  stands on its own when the reconstruction fails.
+                  if Reconstructed.Status = Tangent_Was_Certified then
+                     if Sampled.Status /= Tangent_Was_Certified
+                       or else Reconstructed.Error_Bound < Sampled.Error_Bound
+                     then
+                        Certificate := Reconstructed;
+                     end if;
+                  elsif Sampled.Status /= Tangent_Was_Certified then
+                     Certificate := Reconstructed;
+                  end if;
+               end;
             end if;
             --  Do not install the realtime cache until interval arithmetic proves its tangent field close enough to
             --  the authoritative Bernstein chart over the complete curve.
@@ -6300,9 +6394,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                      Curve.Requested_Finish_Jet := Finish_Jet;
                      Curve.Certified_Position_Error := Physical_Error;
                      Curve.Certified_Tangent_Error := Certificate.Error_Bound;
-                     --  Keep the construction-only common-denominator proof beside the installed cache. Later range
-                     --  queries use it for direct derivative bounds; To_Evaluator intentionally discards it because
-                     --  realtime point evaluation needs only the compact pole/residue representation.
+                     --  Keep the common-denominator form if the Bernstein fallback built it, so the derivative
+                     --  fallback need not rebuild it; it is invalid after the sampled proof alone. To_Evaluator
+                     --  discards it because realtime point evaluation needs only the pole/residue representation.
                      Curve.Retained_Tangent_Certificate := Retained_Certificate;
                      return Realtime_Compilation_Succeeded;
                   end;
@@ -7323,7 +7417,20 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                end if;
                Curve.Certified_Position_Error := Total_Error;
             end;
-            Curve.Whole_Curve_Majorants := Realtime_Tangent_Range_Majorants (Curve, 0.0, 1.0);
+            declare
+               Sharp : Boolean;
+               Whole : Axis_Majorants := Pole_Taylor_Tangent_Range_Majorants (Curve, 0.0, 1.0, Sharp);
+            begin
+               --  As Realtime_Tangent_Range_Majorants, except that a certificate reconstructed for the Bernstein
+               --  fallback is kept, so later range queries on this curve need not reconstruct it again.
+               if not Sharp
+                 and then
+                   (Curve.Retained_Tangent_Certificate.Valid or else Retain_Bernstein_Tangent_Certificate (Curve))
+               then
+                  Merge_Bernstein_Tangent_Range_Majorants (Curve, 0.0, 1.0, Whole);
+               end if;
+               Curve.Whole_Curve_Majorants := Whole;
+            end;
             for Axis in Axis_Name loop
                for Order in Majorant_Order loop
                   if Curve.Whole_Curve_Majorants (Axis) (Order) >= Dimensionless'Last
