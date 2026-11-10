@@ -1197,8 +1197,10 @@ package body Prunt.Motion_Planner.Planner is
    function Primitive_Direction_At_Distance
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index; Distance : Length)
       return Position_Scale
-   is
-      Primitive : constant Derived_Path_Primitive := Spatial_Primitive (Block, Finishing_Corner);
+   is (Derived_Primitive_Direction_At_Distance (Spatial_Primitive (Block, Finishing_Corner), Distance));
+
+   function Derived_Primitive_Direction_At_Distance
+     (Primitive : Derived_Path_Primitive; Distance : Length) return Position_Scale is
    begin
       case Primitive.Kind is
          when Line_Primitive_Kind  =>
@@ -1219,14 +1221,17 @@ package body Prunt.Motion_Planner.Planner is
                  + (Primitive.Axial_Per_Phase / Primitive.Length_Per_Radian) * Sign;
             end;
       end case;
-   end Primitive_Direction_At_Distance;
+   end Derived_Primitive_Direction_At_Distance;
 
    function Primitive_Derivative_Jets_At_Distance
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index; Distance : Length)
       return Endpoint_Tangent_Jet
+   is (Derived_Primitive_Derivative_Jets_At_Distance (Spatial_Primitive (Block, Finishing_Corner), Distance));
+
+   function Derived_Primitive_Derivative_Jets_At_Distance
+     (Primitive : Derived_Path_Primitive; Distance : Length) return Endpoint_Tangent_Jet
    is
-      Primitive : constant Derived_Path_Primitive := Spatial_Primitive (Block, Finishing_Corner);
-      Result    : Endpoint_Tangent_Jet :=
+      Result : Endpoint_Tangent_Jet :=
         (Tangent              => [others => 0.0],
          Tangent_Derivative_1 => [others => 0.0 / mm],
          Tangent_Derivative_2 => [others => 0.0 / mm**2],
@@ -1247,7 +1252,7 @@ package body Prunt.Motion_Planner.Planner is
                R_Over_L3 : constant Curvature_To_2 := R_Over_L2 / Primitive.Length_Per_Radian;
                R_Over_L4 : constant Curvature_To_3 := R_Over_L3 / Primitive.Length_Per_Radian;
             begin
-               Result.Tangent := Primitive_Direction_At_Distance (Block, Finishing_Corner, Distance);
+               Result.Tangent := Derived_Primitive_Direction_At_Distance (Primitive, Distance);
 
                Result.Tangent_Derivative_1 (X_Axis) := -C * R_Over_L2;
                Result.Tangent_Derivative_1 (Y_Axis) := -S_Phase * R_Over_L2;
@@ -1261,7 +1266,7 @@ package body Prunt.Motion_Planner.Planner is
       end case;
 
       return Result;
-   end Primitive_Derivative_Jets_At_Distance;
+   end Derived_Primitive_Derivative_Jets_At_Distance;
 
    function Primitive_Derivative_Bounds
      (Block            : not null access constant Execution_Block;

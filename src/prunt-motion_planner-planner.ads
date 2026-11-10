@@ -823,6 +823,13 @@ private
    --  Primitive_Point_At_Distance for a Primitive already returned by Spatial_Primitive (Block, Finishing_Corner), so
    --  that callers sampling one primitive many times derive its helix once.
 
+   function Derived_Primitive_Direction_At_Distance
+     (Primitive : Derived_Path_Primitive; Distance : Length) return Position_Scale;
+   function Derived_Primitive_Derivative_Jets_At_Distance
+     (Primitive : Derived_Path_Primitive; Distance : Length) return Endpoint_Tangent_Jet;
+   --  Primitive_Direction_At_Distance and Primitive_Derivative_Jets_At_Distance for a Primitive already returned by
+   --  Spatial_Primitive.
+
    function Point_At_Segment_Distance
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index; Distance : Length)
       return Position;

@@ -1460,6 +1460,63 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    --  the three closure-mode amplitudes and the curve length together.
    ----------------------------------------------------------------------------------------------------------------
 
+   type Chart_Lambda_Terms is array (Raw_Taylor'Range) of Power_Chart;
+   --  Element K holds the power coefficients which multiply λᴷ in the chart without its closure mode.
+
+   Closure_Envelope_Power : constant array (Natural range 4 .. 8) of Dimensionless := [1.0, -4.0, 6.0, -4.0, 1.0];
+   --  V⁴·(1 - V)⁴ in the power basis.
+
+   function Build_Chart_Lambda_Terms
+     (Start_Jets, Finish_Jets : Chart_Jet_Array; Warp_Factor : Dimensionless) return Chart_Lambda_Terms;
+   --  Scaling the normalized distance by λ scales the kth endpoint derivative by λᵏ, and Build_Chart is linear in
+   --  those scaled derivatives. The chart of any λ is therefore a cubic in λ whose four coefficient charts depend
+   --  only on the endpoint jets and the warp, so the closure solve forms them once rather than rebuilding the
+   --  chart at every residual evaluation.
+
+   function Build_Chart_Lambda_Terms
+     (Start_Jets, Finish_Jets : Chart_Jet_Array; Warp_Factor : Dimensionless) return Chart_Lambda_Terms
+   is
+      Result : Chart_Lambda_Terms;
+   begin
+      for Order in Raw_Taylor'Range loop
+         declare
+            Start_Term, Finish_Term : Chart_Jet_Array := [others => [others => 0.0]];
+            Chart                   : Bernstein_Chart;
+         begin
+            Start_Term (Order) := Start_Jets (Order);
+            Finish_Term (Order) := Finish_Jets (Order);
+            Build_Chart (Start_Term, Finish_Term, 1.0, [others => 0.0], Warp_Factor, Chart);
+            Result (Order) := Power_Basis (Chart);
+            for C in Chart_Component_Index loop
+               declare
+                  Correction : constant Dimensionless := -Result (Order) (Fixed_Chart_Degree, C);
+               begin
+                  --  The Hermite part has degree seven. Remove the rounding residue in its V⁸ coefficient as a
+                  --  multiple of the whole closure envelope, which leaves both endpoint jets untouched.
+                  for Degree in Closure_Envelope_Power'Range loop
+                     Result (Order) (Degree, C) :=
+                       Result (Order) (Degree, C) + Correction * Closure_Envelope_Power (Degree);
+                  end loop;
+               end;
+            end loop;
+         end;
+      end loop;
+      return Result;
+   end Build_Chart_Lambda_Terms;
+
+   procedure Closure_Residual_From_Terms
+     (Terms                : Chart_Lambda_Terms;
+      Frame, Closure_Frame : Frame_Vector_Array;
+      Chord_Direction      : Position_Scale;
+      Lambda               : Dimensionless;
+      C0                   : Raw_Vector_3;
+      Warp_Factor          : Dimensionless;
+      Residual             : out Raw_Vector_4;
+      Jacobian_C           : out Raw_Matrix_4_3;
+      D_Residual_D_Lambda  : out Raw_Vector_4;
+      Panel_Count          : Positive);
+   --  Closure_Residual for the chart whose λ-dependence Terms describes.
+
    procedure Closure_Residual
      (Frame, Closure_Frame    : Frame_Vector_Array;
       Start_Jets, Finish_Jets : Chart_Jet_Array;
@@ -1470,7 +1527,33 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Residual                : out Raw_Vector_4;
       Jacobian_C              : out Raw_Matrix_4_3;
       D_Residual_D_Lambda     : out Raw_Vector_4;
-      Panel_Count             : Positive := 8)
+      Panel_Count             : Positive := 8) is
+   begin
+      Closure_Residual_From_Terms
+        (Build_Chart_Lambda_Terms (Start_Jets, Finish_Jets, Warp_Factor),
+         Frame,
+         Closure_Frame,
+         Chord_Direction,
+         Lambda,
+         C0,
+         Warp_Factor,
+         Residual,
+         Jacobian_C,
+         D_Residual_D_Lambda,
+         Panel_Count);
+   end Closure_Residual;
+
+   procedure Closure_Residual_From_Terms
+     (Terms                : Chart_Lambda_Terms;
+      Frame, Closure_Frame : Frame_Vector_Array;
+      Chord_Direction      : Position_Scale;
+      Lambda               : Dimensionless;
+      C0                   : Raw_Vector_3;
+      Warp_Factor          : Dimensionless;
+      Residual             : out Raw_Vector_4;
+      Jacobian_C           : out Raw_Matrix_4_3;
+      D_Residual_D_Lambda  : out Raw_Vector_4;
+      Panel_Count          : Positive)
    is
       Power_Coefficients, D_Power_Coefficients : Power_Chart;
       Integral                                 : Raw_Vector_4 := [others => 0.0];
@@ -1481,26 +1564,24 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       procedure Build_Power_Charts;
 
       procedure Build_Power_Charts is
-         Chart, D_Chart : Bernstein_Chart;
       begin
-         Build_Chart (Start_Jets, Finish_Jets, Lambda, C0, Warp_Factor, Chart, D_Chart);
-         Power_Coefficients := Power_Basis (Chart);
-         D_Power_Coefficients := Power_Basis (D_Chart);
+         for Degree in Chart_Coefficient_Index loop
+            for C in Chart_Component_Index loop
+               Power_Coefficients (Degree, C) :=
+                 Terms (0) (Degree, C)
+                 + Lambda
+                   * (Terms (1) (Degree, C) + Lambda * (Terms (2) (Degree, C) + Lambda * Terms (3) (Degree, C)));
+               D_Power_Coefficients (Degree, C) :=
+                 Terms (1) (Degree, C) + Lambda * (2.0 * Terms (2) (Degree, C) + 3.0 * Lambda * Terms (3) (Degree, C));
+            end loop;
+         end loop;
+         --  Add C₀·256·V⁴·(1 - V)⁴ as a whole. Its fourfold zeros leave every endpoint jet through order three
+         --  unchanged, which changing only the V⁸ coefficient, as V3 did, would not.
          for C in Chart_Component_Index loop
-            declare
-               Correction     : constant Dimensionless := Dimensionless (256.0 * C0 (C)) - Power_Coefficients (8, C);
-               D_Correction   : constant Dimensionless := -D_Power_Coefficients (8, C);
-               Envelope_Power : constant array (Natural range 4 .. 8) of Dimensionless := [1.0, -4.0, 6.0, -4.0, 1.0];
-            begin
-               --  Correct with V⁴·(1 - V)⁴ as a whole. Changing only the V⁸ coefficient, as V3 did, perturbs the
-               --  finish jet.
-               for Degree in Envelope_Power'Range loop
-                  Power_Coefficients (Degree, C) :=
-                    Power_Coefficients (Degree, C) + Correction * Envelope_Power (Degree);
-                  D_Power_Coefficients (Degree, C) :=
-                    D_Power_Coefficients (Degree, C) + D_Correction * Envelope_Power (Degree);
-               end loop;
-            end;
+            for Degree in Closure_Envelope_Power'Range loop
+               Power_Coefficients (Degree, C) :=
+                 Power_Coefficients (Degree, C) + (256.0 * C0 (C)) * Closure_Envelope_Power (Degree);
+            end loop;
          end loop;
       end Build_Power_Charts;
 
@@ -1611,7 +1692,17 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             end loop;
          end loop;
       end;
-   end Closure_Residual;
+   end Closure_Residual_From_Terms;
+
+   function Solve_Closure_From_Terms
+     (Terms                     : Chart_Lambda_Terms;
+      Frame                     : Frame_Vector_Array;
+      Chord_Direction           : Position_Scale;
+      Maximum_Lambda, Tolerance : Dimensionless;
+      Warp_Factor               : Dimensionless;
+      Initial                   : Closure_Solution;
+      Panel_Count               : Positive) return Closure_Solution;
+   --  Solve_Closure_Fixed for the chart whose λ-dependence Terms describes.
 
    function Solve_Closure_Fixed
      (Frame                     : Frame_Vector_Array;
@@ -1620,8 +1711,37 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Maximum_Lambda, Tolerance : Dimensionless;
       Warp_Factor               : Dimensionless;
       Initial                   : Closure_Solution;
-      Panel_Count               : Positive := 1) return Closure_Solution
+      Panel_Count               : Positive := 1) return Closure_Solution is
+   begin
+      return
+        Solve_Closure_From_Terms
+          (Build_Chart_Lambda_Terms (Start_Jets, Finish_Jets, Warp_Factor),
+           Frame,
+           Chord_Direction,
+           Maximum_Lambda,
+           Tolerance,
+           Warp_Factor,
+           Initial,
+           Panel_Count);
+   exception
+      when Constraint_Error =>
+         return (Success => False, Numerically_Unsafe => True, others => <>);
+   end Solve_Closure_Fixed;
+
+   function Solve_Closure_From_Terms
+     (Terms                     : Chart_Lambda_Terms;
+      Frame                     : Frame_Vector_Array;
+      Chord_Direction           : Position_Scale;
+      Maximum_Lambda, Tolerance : Dimensionless;
+      Warp_Factor               : Dimensionless;
+      Initial                   : Closure_Solution;
+      Panel_Count               : Positive) return Closure_Solution
    is
+      Stalled_Slope_Fraction : constant Dimensionless := 1.0E-3;
+      --  A full Newton step lowers ‖R‖² at the rate -2·‖R‖². Once λ rests on a bound which the step would cross,
+      --  only C₀ can move; a rate below this fraction of the full one means that the bounded problem has reached
+      --  its own minimum with the residual still above tolerance.
+
       Closure_Frame : Frame_Vector_Array;
       Frame_OK      : constant Boolean :=
         Complete_Frame (Chord_Direction, Frame (1), Frame (2), Frame (3), Closure_Frame);
@@ -1707,11 +1827,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Residual, D_Lambda : Raw_Vector_4;
          Jacobian_C         : Raw_Matrix_4_3;
       begin
-         Closure_Residual
-           (Frame,
+         Closure_Residual_From_Terms
+           (Terms,
+            Frame,
             Closure_Frame,
-            Start_Jets,
-            Finish_Jets,
             Chord_Direction,
             Lambda,
             C0,
@@ -1739,6 +1858,31 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                end loop;
                Solved := Solve_Linear (Jacobian, Right, Newton_Step);
                exit Iteration_Loop when not Solved;
+               if (Lambda >= Maximum_Lambda and then Newton_Step (0) > 0.0)
+                 or else (Lambda <= 1.0 and then Newton_Step (0) < 0.0)
+               then
+                  --  The clamp below holds λ on its bound, so the trial steps move C₀ alone, and ‖R‖² changes
+                  --  along them at the rate 2·R·(J꜀·ΔC₀). This is the usual way for a blend to fail: the closed
+                  --  curve would be longer than the path it replaces. Recognise it here rather than after eight
+                  --  backtracking evaluations which cannot make progress.
+                  declare
+                     Slope       : Dimensionless := 0.0;
+                     Norm_Square : Dimensionless := 0.0;
+                  begin
+                     for Row in Frame_Component_Index loop
+                        declare
+                           Change : Dimensionless := 0.0;
+                        begin
+                           for Column in Chart_Component_Index loop
+                              Change := Change + Jacobian_C (Row, Column) * Newton_Step (Column);
+                           end loop;
+                           Slope := Slope + Residual (Row) * Change;
+                           Norm_Square := Norm_Square + Residual (Row) * Residual (Row);
+                        end;
+                     end loop;
+                     exit Iteration_Loop when Slope >= -Stalled_Slope_Fraction * Norm_Square;
+                  end;
+               end if;
                declare
                   Scale        : Dimensionless := 1.0;
                   Accepted     : Boolean := False;
@@ -1758,11 +1902,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                         for Column in Chart_Component_Index loop
                            Trial_C0 (Column) := Trial_C0 (Column) + Scale * Newton_Step (Column);
                         end loop;
-                        Closure_Residual
-                          (Frame,
+                        Closure_Residual_From_Terms
+                          (Terms,
+                           Frame,
                            Closure_Frame,
-                           Start_Jets,
-                           Finish_Jets,
                            Chord_Direction,
                            Trial_Lambda,
                            Trial_C0,
@@ -1792,7 +1935,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    exception
       when Constraint_Error =>
          return (Success => False, Numerically_Unsafe => True, others => <>);
-   end Solve_Closure_Fixed;
+   end Solve_Closure_From_Terms;
 
    ----------------------------------------------------------------------------------------------------------------
    --  Outward-rounded bounds for the retained realtime tangent
@@ -2029,8 +2172,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --    * Every centre m and pole component is an exact stored number, so x = m - A has relative error at most
       --      u = 2⁻⁵³. The denominator x² + B² adds positive terms, so it is correct to 4u and the reciprocal
       --      w = (x + iB)/(x² + B²) to 6u. A rounded complex product errs by at most 2u·(|ac| + |bd|) ≤ 2u·|P|·|w|
-      --      in each part, 2.83u in modulus, and multiplies by the rounded w again; hence wⁿ is correct to
-      --      6u + 8.83u·(n - 1), which is 86u for the largest power n = 10. Forming Re(r·wⁿ) adds 2u, so one
+      --      in each part, 2.83u in modulus, and multiplies by the rounded w again; hence wⁿ formed one factor at
+      --      a time is correct to 6u + 8.83u·(n - 1), which is 86u for the largest power n = 10. The powers are
+      --      formed two factors at a time instead: w² is correct to 14.83u and each product by it adds 17.66u,
+      --      which gives 6u + 17.66u·m for w²ᵐ⁺¹ and 14.83u + 17.66u·m for w²ᵐ⁺², never more than the single-factor
+      --      bound and again 86u for n = 10. Forming Re(r·wⁿ) adds 2u, so one
       --      term of A_n differs from its exact value by at most 88u·(|R| + |I|)·|w|ⁿ⁺¹. Seventeen terms accumulate
       --      at most 16u more, relative to the sum of their magnitudes. Round_Off = 2⁻⁴⁵ = 256u is more than twice
       --      that total of 104u, and the sum of magnitudes at the centre is no larger than the cell sum
@@ -2320,16 +2466,21 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                      Square          : constant Dimensionless := X * X + Term.Imaginary_Part * Term.Imaginary_Part;
                      Reciprocal_Real : constant Dimensionless := X / Square;
                      Reciprocal_Imag : constant Dimensionless := Term.Imaginary_Part / Square;
-                     Real            : Dimensionless := Reciprocal_Real;
-                     Imag            : Dimensionless := Reciprocal_Imag;
-                     Next            : Dimensionless;
+                     --  w², by which each of two interleaved chains advances: the powers of even and of odd order
+                     --  then do not wait for one another.
+                     Square_Real     : constant Dimensionless :=
+                       Reciprocal_Real * Reciprocal_Real - Reciprocal_Imag * Reciprocal_Imag;
+                     Square_Imag     : constant Dimensionless := 2.0 * (Reciprocal_Real * Reciprocal_Imag);
                   begin
-                     for Order in Jet_Order loop
-                        Power_Real (Order) := Real;
-                        Power_Imag (Order) := Imag;
-                        Next := -(Real * Reciprocal_Real - Imag * Reciprocal_Imag);
-                        Imag := -(Real * Reciprocal_Imag + Imag * Reciprocal_Real);
-                        Real := Next;
+                     Power_Real (0) := Reciprocal_Real;
+                     Power_Imag (0) := Reciprocal_Imag;
+                     Power_Real (1) := -Square_Real;
+                     Power_Imag (1) := -Square_Imag;
+                     for Order in 2 .. Jet_Order'Last loop
+                        Power_Real (Order) :=
+                          Power_Real (Order - 2) * Square_Real - Power_Imag (Order - 2) * Square_Imag;
+                        Power_Imag (Order) :=
+                          Power_Real (Order - 2) * Square_Imag + Power_Imag (Order - 2) * Square_Real;
                      end loop;
                   end;
                   for Index in 1 .. Active_Count loop
@@ -2430,6 +2581,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Powers : array (0 .. Model_Order) of Dimensionless;
       begin
          Refine := False;
+         --  Only the active axes are bounded below. The remaining entries are never read, but an out parameter is
+         --  left wholly defined.
+         Bounds := [others => [others => 0.0]];
+         Allowances := [others => [others => 0.0]];
          Powers (0) := 1.0;
          for Exponent in 1 .. Model_Order loop
             Powers (Exponent) := Powers (Exponent - 1) * Radius;
@@ -5535,9 +5690,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    end Retain_Bernstein_Tangent_Certificate;
 
    function Iterate_Conjugate_Roots
-     (Coefficients                : Root_Polynomial;
-      Degree                      : Natural;
-      Real_Parts, Imaginary_Parts : out Conjugate_Root_Parts) return Boolean
+     (Coefficients : Root_Polynomial; Degree : Natural; Real_Parts, Imaginary_Parts : out Conjugate_Root_Parts)
+      return Boolean
    is
       pragma Suppress (Overflow_Check);
       --  The limits below keep every Horner intermediate finite: |z|¹⁶·|coefficient| < 10⁹⁶·10¹⁰⁰.
@@ -5637,11 +5791,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                                  DX      : constant Dimensionless := X - Real_Parts (J);
                                  Upper_Y : constant Dimensionless := Y - Imaginary_Parts (J);
                                  Lower_Y : constant Dimensionless := Y + Imaginary_Parts (J);
-                                 Upper   : constant Dimensionless := DX * DX + Upper_Y * Upper_Y;
-                                 Lower   : constant Dimensionless := DX * DX + Lower_Y * Lower_Y;
+                                 Upper   : constant Dimensionless := 1.0 / (DX * DX + Upper_Y * Upper_Y);
+                                 Lower   : constant Dimensionless := 1.0 / (DX * DX + Lower_Y * Lower_Y);
                               begin
-                                 S_Re := S_Re + DX / Upper + DX / Lower;
-                                 S_Im := S_Im - Upper_Y / Upper - Lower_Y / Lower;
+                                 S_Re := S_Re + DX * (Upper + Lower);
+                                 S_Im := S_Im - (Upper_Y * Upper + Lower_Y * Lower);
                               end;
                            end if;
                         end loop;
@@ -6024,30 +6178,64 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          end Refine_Roots;
 
          function Validate_Roots return Root_Validation is
+            type Pair_Role is (Unpaired, Upper_Member, Conjugate_Member);
+            --  The two members of a pair of roots which are exact conjugates of one another, stored together with
+            --  the member in the upper half-plane first, as the simultaneous iteration returns every pair.
+
             Result : Root_Validation := Roots_Are_Valid;
+            Roles  : array (Rational_Degree_Slot) of Pair_Role := [others => Unpaired];
+            Scales : array (Rational_Degree_Slot) of Dimensionless := [others => 1.0];
          begin
+            for Index in 2 .. Denominator_Degree loop
+               if Roles (Index - 1) = Unpaired
+                 and then Im (Roots (Index - 1)) > 0.0
+                 and then Roots (Index) = Conjugate (Roots (Index - 1))
+               then
+                  Roles (Index - 1) := Upper_Member;
+                  Roles (Index) := Conjugate_Member;
+               end if;
+            end loop;
+
             for Index in 1 .. Denominator_Degree loop
-               declare
-                  Root_Is_Finite    : constant Boolean := Complex_Is_Finite (Roots (Index));
-                  Interval_Distance : constant Dimensionless := Distance_From_Unit_Interval (Roots (Index));
-                  Residual          : constant Dimensionless :=
-                    Dimensionless (abs Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index)));
-                  Residual_Scale    : constant Dimensionless :=
-                    Polynomial_Scale_At (Denominator, Denominator_Degree, Roots (Index));
-               begin
-                  --  Every pole must be finite, separated from the evaluation interval, and an accurate root of D.
-                  if not Root_Is_Finite or else Interval_Distance < 2.0E-9 then
-                     return Roots_Are_Unusable;
-                  elsif Residual > 2.0E-8 * Residual_Scale then
-                     Result := Roots_Are_Inaccurate;
-                  end if;
-               end;
+               --  Arithmetic on a conjugate gives the conjugate of the result exactly, so every quantity tested
+               --  here is the same for both members of a pair and is formed for the first one only.
+               if Roles (Index) = Conjugate_Member then
+                  Scales (Index) := Scales (Index - 1);
+               else
+                  declare
+                     Root_Is_Finite    : constant Boolean := Complex_Is_Finite (Roots (Index));
+                     Interval_Distance : constant Dimensionless := Distance_From_Unit_Interval (Roots (Index));
+                     Residual          : constant Dimensionless :=
+                       Dimensionless (abs Evaluate_Polynomial (Denominator, Denominator_Degree, Roots (Index)));
+                     Residual_Scale    : constant Dimensionless :=
+                       Polynomial_Scale_At (Denominator, Denominator_Degree, Roots (Index));
+                  begin
+                     --  Every pole must be finite, separated from the evaluation interval, and an accurate root
+                     --  of D.
+                     if not Root_Is_Finite or else Interval_Distance < 2.0E-9 then
+                        return Roots_Are_Unusable;
+                     elsif Residual > 2.0E-8 * Residual_Scale then
+                        Result := Roots_Are_Inaccurate;
+                     end if;
+                     Scales (Index) := Root_Scale (Roots (Index));
+                  end;
+               end if;
+            end loop;
+
+            for Index in 1 .. Denominator_Degree loop
                for Other in Index + 1 .. Denominator_Degree loop
                   --  The residue formula divides by D′(p), so repeated or numerically merged roots are unsupported.
-                  if Dimensionless (abs (Roots (Index) - Roots (Other)))
-                    < 2.0E-13 * Dimensionless'Max (Root_Scale (Roots (Index)), Root_Scale (Roots (Other)))
+                  --  Between two exact pairs only their upper members need comparing: the two conjugates are the
+                  --  same distance apart, and an upper member is at least as far from the other pair's conjugate.
+                  if (Roles (Index) = Unpaired or else Roles (Other) = Unpaired)
+                    or else
+                      (Roles (Index) = Upper_Member and then (Roles (Other) = Upper_Member or else Other = Index + 1))
                   then
-                     Result := Roots_Are_Inaccurate;
+                     if Dimensionless (abs (Roots (Index) - Roots (Other)))
+                       < 2.0E-13 * Dimensionless'Max (Scales (Index), Scales (Other))
+                     then
+                        Result := Roots_Are_Inaccurate;
+                     end if;
                   end if;
                end loop;
             end loop;
@@ -6342,8 +6530,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   --  Both proofs are rigorous, so the smaller certified error stands, and a sampled certificate
                   --  stands on its own when the reconstruction fails.
                   if Reconstructed.Status = Tangent_Was_Certified then
-                     if Sampled.Status /= Tangent_Was_Certified
-                       or else Reconstructed.Error_Bound < Sampled.Error_Bound
+                     if Sampled.Status /= Tangent_Was_Certified or else Reconstructed.Error_Bound < Sampled.Error_Bound
                      then
                         Certificate := Reconstructed;
                      end if;
@@ -6689,44 +6876,53 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       --  Closure is solved in chord-normalized coordinates. Tie both Newton tolerances to the available normalized
       --  position budget ε = Maximum_Position_Error/Chord_Length, while retaining an arithmetic noise floor.
-      Coarse_Solution : constant Closure_Solution :=
-        (if Initial_Closure.Valid
-         then
-           --  Select_Distance_Warp integrates the endpoint-flat chart in its natural coordinate, where even a strong
-           --  Möbius map remains well resolved. Re-solving that proposal with a coarse grid in U can move a good
-           --  asymmetric solution away from closure.
-           (Success => True, Numerically_Unsafe => False, Lambda => Initial_Closure.Lambda, C0 => Initial_Closure.C0)
-         else
-           Solve_Closure_Fixed
-             (Frame,
-              Start_Chart_Jets,
-              Finish_Chart_Jets,
+      function Solve return Closure_Solution;
+      --  Solve closure on a coarse grid and refine the result on a finer one.
+
+      function Solve return Closure_Solution is
+         Terms    : Chart_Lambda_Terms;
+         Solution : Closure_Solution;
+      begin
+         --  Keep the chart arithmetic inside the handler below, as Solve_Closure_Fixed does.
+         Terms := Build_Chart_Lambda_Terms (Start_Chart_Jets, Finish_Chart_Jets, Warp_Factor);
+         Solution :=
+           Solve_Closure_From_Terms
+             (Terms,
+              Frame,
               Chord_Direction,
               Maximum_Lambda,
               Coarse_Tolerance,
               Warp_Factor,
               Initial     => (others => <>),
-              Panel_Count => 1));
+              Panel_Count => 1);
+         if Solution.Success then
+            Solution :=
+              Solve_Closure_From_Terms
+                (Terms,
+                 Frame,
+                 Chord_Direction,
+                 Maximum_Lambda,
+                 Fine_Tolerance,
+                 Warp_Factor,
+                 Initial     => Solution,
+                 Panel_Count => 2);
+         end if;
+         return Solution;
+      exception
+         when Constraint_Error =>
+            return (Success => False, Numerically_Unsafe => True, others => <>);
+      end Solve;
 
       Solution : constant Closure_Solution :=
         (if Initial_Closure.Valid
          then
-           --  The final global tangent certificate and continuous endpoint correction still verify the proposal. If
-           --  either fails, the candidate fails; there is no unwarped or unseeded fallback.
-           Coarse_Solution
-         elsif Coarse_Solution.Success
-         then
-           Solve_Closure_Fixed
-             (Frame,
-              Start_Chart_Jets,
-              Finish_Chart_Jets,
-              Chord_Direction,
-              Maximum_Lambda,
-              Fine_Tolerance,
-              Warp_Factor,
-              Initial     => Coarse_Solution,
-              Panel_Count => 2)
-         else Coarse_Solution);
+           --  Select_Distance_Warp integrates the endpoint-flat chart in its natural coordinate, where even a strong
+           --  Möbius map remains well resolved. Re-solving that proposal with a coarse grid in U can move a good
+           --  asymmetric solution away from closure. The final global tangent certificate and continuous endpoint
+           --  correction still verify the proposal. If either fails, the candidate fails; there is no unwarped or
+           --  unseeded fallback.
+           (Success => True, Numerically_Unsafe => False, Lambda => Initial_Closure.Lambda, C0 => Initial_Closure.C0)
+         else Solve);
 
    begin
       if not Solution.Success then
@@ -6824,42 +7020,91 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean;
 
       function Strict_Bernstein_Nonnegative (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean is
-         All_Nonnegative : Boolean := True;
-         All_Negative    : Boolean := True;
-      begin
-         --  A nonnegative lower bound on every control certifies p(U) ≥ 0 by the Bernstein convex-hull
-         --  property. If the full hull straddles zero, bisect with de Casteljau and retry each half.
-         for Coefficient of Coefficients loop
-            if not Coefficient.Valid then
+         --  A nonnegative lower bound on every control certifies p(U) ≥ 0 by the Bernstein convex-hull property. If
+         --  the full hull straddles zero, bisect with de Casteljau and retry each half.
+         --
+         --  Bisection only averages neighbouring controls, and an average increases with each of its two terms.
+         --  The lower bounds of the controls of a half are therefore the averages of lower bounds, and likewise
+         --  for the upper bounds, so the two sets are carried as plain arrays rather than as intervals. One
+         --  rounded sum is correct to half a unit in its last place and halving it is exact, or errs by less than
+         --  Model_Small for a subnormal; Inflate_Finite moves each result outward by more than either.
+         Degree          : constant Natural := Coefficients'Length - 1;
+         Magnitude_Limit : constant Dimensionless := Dimensionless'Last / 8.0;
+         --  Averages never exceed the larger of their terms, and the outward padding compounds by less than a
+         --  factor of two over every level, so no value below this limit can leave Inflate_Finite's range.
+
+         type Control_Bounds is array (0 .. Degree) of Dimensionless;
+
+         function Decide (Lower, Upper : Control_Bounds; Remaining : Natural) return Boolean;
+
+         function Decide (Lower, Upper : Control_Bounds; Remaining : Natural) return Boolean is
+            pragma Suppress (Overflow_Check);
+            All_Nonnegative : Boolean := True;
+            All_Negative    : Boolean := True;
+         begin
+            for Index in Control_Bounds'Range loop
+               All_Nonnegative := All_Nonnegative and then Lower (Index) >= 0.0;
+               All_Negative := All_Negative and then Upper (Index) < 0.0;
+            end loop;
+            if All_Nonnegative then
+               return True;
+            elsif Upper (0) < 0.0 or else Upper (Degree) < 0.0 then
+               --  The end controls are the values of the polynomial at the ends of this piece, so it is negative
+               --  there and no further bisection can certify it.
+               return False;
+            elsif All_Negative or else Remaining = 0 or else Degree = 0 then
                return False;
             end if;
-            All_Nonnegative := All_Nonnegative and then Coefficient.Lower >= 0.0;
-            All_Negative := All_Negative and then Coefficient.Upper < 0.0;
-         end loop;
-         if All_Nonnegative then
-            return True;
-         elsif All_Negative or else Depth = 0 or else Coefficients'Length = 1 then
-            return False;
-         end if;
 
-         declare
-            Degree : constant Natural := Coefficients'Length - 1;
-            Work   : Interval_Bernstein (0 .. Degree) := Coefficients;
-            Left   : Interval_Bernstein (0 .. Degree) := [others => Interval_Exact (0.0)];
-            Right  : Interval_Bernstein (0 .. Degree) := [others => Interval_Exact (0.0)];
-         begin
-            Left (0) := Work (0);
-            Right (Degree) := Work (Degree);
-            for Level in 1 .. Degree loop
-               for I in 0 .. Degree - Level loop
-                  Work (I) := Interval_Multiply (Interval_Exact (0.5), Interval_Add (Work (I), Work (I + 1)));
+            declare
+               Work_Lower  : Control_Bounds := Lower;
+               Work_Upper  : Control_Bounds := Upper;
+               Left_Lower  : Control_Bounds;
+               Left_Upper  : Control_Bounds;
+               Right_Lower : Control_Bounds;
+               Right_Upper : Control_Bounds;
+            begin
+               Left_Lower (0) := Work_Lower (0);
+               Left_Upper (0) := Work_Upper (0);
+               Right_Lower (Degree) := Work_Lower (Degree);
+               Right_Upper (Degree) := Work_Upper (Degree);
+               for Level in 1 .. Degree loop
+                  for Index in 0 .. Degree - Level loop
+                     Work_Lower (Index) :=
+                       Inflate_Finite (0.5 * (Work_Lower (Index) + Work_Lower (Index + 1)), Upward => False);
+                     Work_Upper (Index) :=
+                       Inflate_Finite (0.5 * (Work_Upper (Index) + Work_Upper (Index + 1)), Upward => True);
+                  end loop;
+                  Left_Lower (Level) := Work_Lower (0);
+                  Left_Upper (Level) := Work_Upper (0);
+                  Right_Lower (Degree - Level) := Work_Lower (Degree - Level);
+                  Right_Upper (Degree - Level) := Work_Upper (Degree - Level);
                end loop;
-               Left (Level) := Work (0);
-               Right (Degree - Level) := Work (Degree - Level);
-            end loop;
-            return
-              Strict_Bernstein_Nonnegative (Left, Depth - 1) and then Strict_Bernstein_Nonnegative (Right, Depth - 1);
-         end;
+               return
+                 Decide (Left_Lower, Left_Upper, Remaining - 1)
+                 and then Decide (Right_Lower, Right_Upper, Remaining - 1);
+            end;
+         end Decide;
+
+         Lower, Upper : Control_Bounds;
+      begin
+         for Index in Control_Bounds'Range loop
+            declare
+               Coefficient : Interval renames Coefficients (Coefficients'First + Index);
+            begin
+               --  The comparisons fail for a NaN as well.
+               if not Coefficient.Valid
+                 or else not (abs Coefficient.Lower <= Magnitude_Limit)
+                 or else not (abs Coefficient.Upper <= Magnitude_Limit)
+                 or else not (Coefficient.Lower <= Coefficient.Upper)
+               then
+                  return False;
+               end if;
+               Lower (Index) := Coefficient.Lower;
+               Upper (Index) := Coefficient.Upper;
+            end;
+         end loop;
+         return Decide (Lower, Upper, Depth);
       end Strict_Bernstein_Nonnegative;
 
       function Positive_Ratio (Numerator, Denominator : Dimensionless) return Interval;

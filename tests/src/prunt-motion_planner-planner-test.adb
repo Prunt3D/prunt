@@ -1225,121 +1225,447 @@ package body Prunt.Motion_Planner.Planner.Test is
          "A later blend should not reuse stale hard-anchor workspace state");
    end Test_Per_Axis_Deviation_Corridor;
 
+   procedure Test_Retained_Blends_Respect_Limits (T : in out Trendy_Test.Operation'Class) is
+      --  The blender proves its limits from a few samples of each curve and certified derivative bounds. Check what
+      --  it retains against a dense sampling which assumes neither: every dense point of a retained blend has to
+      --  lie within the limits of the path which the blend replaces.
+      type Workspace_Access is access Planning_Workspace;
+
+      Dense_Samples   : constant := 256;
+      Section_Samples : constant := 96;
+      Cases           : constant := 360;
+
+      Workspace : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
+      Block     : aliased Execution_Block (3);
+      Motor_Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      State     : Long_Long_Integer := 20_261_111;
+      Blended   : Natural := 0;
+      Curved    : Natural := 0;
+
+      type Section_Points is array (0 .. Section_Samples) of Position;
+
+      function Random return Long_Float;
+      --  A deterministic value in [0, 1).
+
+      function Random return Long_Float is
+      begin
+         State := (State * 1_103_515_245 + 12_345) mod 2_147_483_648;
+         return Long_Float (State) / 2_147_483_648.0;
+      end Random;
+
+      function Between (Low, High : Long_Float) return Long_Float
+      is (Low + (High - Low) * Random);
+
+      function Planar (X, Y, Z : Long_Float) return Position
+      is ([X_Axis => Dimensionless (X) * mm,
+           Y_Axis => Dimensionless (Y) * mm,
+           Z_Axis => Dimensionless (Z) * mm,
+           E_Axis => 0.0 * mm]);
+
+      procedure Place_Primitive
+        (Finishing_Corner             : Finishing_Corners_Index;
+         Corner_X, Corner_Y, Corner_Z : Long_Float;
+         Heading                      : Long_Float;
+         Leaving                      : Boolean;
+         Is_Arc                       : Boolean;
+         Rise                         : Long_Float);
+      --  Set the far corner and the primitive of one side of the middle corner, which the primitive meets with
+      --  the given heading.
+
+      procedure Place_Primitive
+        (Finishing_Corner             : Finishing_Corners_Index;
+         Corner_X, Corner_Y, Corner_Z : Long_Float;
+         Heading                      : Long_Float;
+         Leaving                      : Boolean;
+         Is_Arc                       : Boolean;
+         Rise                         : Long_Float)
+      is
+         Far       : constant Corners_Index := (if Leaving then Finishing_Corner else Finishing_Corner - 1);
+         Direction : constant Long_Float := (if Leaving then 1.0 else -1.0);
+      begin
+         if Is_Arc then
+            declare
+               Radius   : constant Long_Float := Between (0.8, 30.0);
+               Side     : constant Long_Float := (if Random < 0.5 then 1.0 else -1.0);
+               Sweep    : constant Long_Float := Between (0.2, 1.4);
+               Centre_X : constant Long_Float := Corner_X - Side * Radius * Sin (Heading);
+               Centre_Y : constant Long_Float := Corner_Y + Side * Radius * Cos (Heading);
+               Turn     : constant Long_Float := Direction * Side * Sweep;
+               Offset_X : constant Long_Float := Corner_X - Centre_X;
+               Offset_Y : constant Long_Float := Corner_Y - Centre_Y;
+            begin
+               Block.Corners (Far) :=
+                 Planar
+                   (Centre_X + Offset_X * Cos (Turn) - Offset_Y * Sin (Turn),
+                    Centre_Y + Offset_X * Sin (Turn) + Offset_Y * Cos (Turn),
+                    Corner_Z + Direction * Rise);
+               Block.Primitives (Finishing_Corner) :=
+                 Make_Helix_Primitive
+                   (Block.Corners (Finishing_Corner - 1),
+                    Block.Corners (Finishing_Corner),
+                    Planar (Centre_X, Centre_Y, 0.0),
+                    Clockwise => Side < 0.0);
+            end;
+         else
+            declare
+               Run : constant Long_Float := Direction * Between (0.3, 15.0);
+            begin
+               Block.Corners (Far) :=
+                 Planar (Corner_X + Run * Cos (Heading), Corner_Y + Run * Sin (Heading), Corner_Z + Direction * Rise);
+               Block.Primitives (Finishing_Corner) := Make_Line_Primitive;
+            end;
+         end if;
+      end Place_Primitive;
+
+      function Sample_Section (Finishing_Corner : Finishing_Corners_Index; First, Last : Length) return Section_Points
+      is ([for Index in Section_Points'Range =>
+             Primitive_Point_At_Distance
+               (Block'Access,
+                Finishing_Corner,
+                First + (Last - First) * (Dimensionless (Index) / Dimensionless (Section_Samples)))]);
+
+      function Nearest
+        (Point : Position; Section : Section_Points; Finishing_Corner : Finishing_Corners_Index; First, Last : Length)
+         return Length;
+      --  The distance from Point to the part of a primitive which Section samples: the nearest sample, refined
+      --  between its neighbours, where the distance has a single minimum.
+
+      function Nearest
+        (Point : Position; Section : Section_Points; Finishing_Corner : Finishing_Corners_Index; First, Last : Length)
+         return Length
+      is
+         Spacing : constant Length := (Last - First) / Dimensionless (Section_Samples);
+         Best    : Natural := 0;
+         Result  : Length := Length'Last;
+         Low     : Length;
+         High    : Length;
+      begin
+         for Index in Section'Range loop
+            if Point_Distance (Point, Section (Index)) < Result then
+               Result := Point_Distance (Point, Section (Index));
+               Best := Index;
+            end if;
+         end loop;
+         Low := First + Spacing * Dimensionless (Natural'Max (Best, 1) - 1);
+         High := First + Spacing * Dimensionless (Natural'Min (Best + 1, Section_Samples));
+         for Iteration in 1 .. 40 loop
+            declare
+               Left        : constant Length := Low + (High - Low) / 3.0;
+               Right       : constant Length := High - (High - Low) / 3.0;
+               Left_Value  : constant Length :=
+                 Point_Distance (Point, Primitive_Point_At_Distance (Block'Access, Finishing_Corner, Left));
+               Right_Value : constant Length :=
+                 Point_Distance (Point, Primitive_Point_At_Distance (Block'Access, Finishing_Corner, Right));
+            begin
+               Result := Length'Min (Result, Length'Min (Left_Value, Right_Value));
+               if Left_Value <= Right_Value then
+                  High := Right;
+               else
+                  Low := Left;
+               end if;
+            end;
+         end loop;
+         return Result;
+      end Nearest;
+
+      function Within_Line (Point, First, Last : Position; Limits : Axial_Deviation_Limits) return Boolean;
+      --  Whether some point of the segment is within Limits of Point on every axis, less a rounding allowance.
+
+      function Within_Line (Point, First, Last : Position; Limits : Axial_Deviation_Limits) return Boolean is
+         Slack   : constant Length := 1.0E-9 * mm;
+         Q_Lower : Dimensionless := 0.0;
+         Q_Upper : Dimensionless := 1.0;
+      begin
+         for Axis in Axis_Name when Axis /= E_Axis loop
+            declare
+               Offset : constant Length := Point (Axis) - First (Axis);
+               Run    : constant Length := Last (Axis) - First (Axis);
+               Budget : constant Length := Limits (Axis) + Slack;
+            begin
+               if Run = 0.0 * mm then
+                  if abs Offset > Budget then
+                     return False;
+                  end if;
+               else
+                  Q_Lower :=
+                    Dimensionless'Max (Q_Lower, Dimensionless'Min ((Offset - Budget) / Run, (Offset + Budget) / Run));
+                  Q_Upper :=
+                    Dimensionless'Min (Q_Upper, Dimensionless'Max ((Offset - Budget) / Run, (Offset + Budget) / Run));
+               end if;
+            end;
+         end loop;
+         return Q_Lower <= Q_Upper + 1.0E-12;
+      end Within_Line;
+   begin
+      T.Register;
+
+      for Case_Number in 1 .. Cases loop
+         declare
+            Incoming_Arc : constant Boolean := Case_Number mod 3 = 0;
+            Outgoing_Arc : constant Boolean := Case_Number mod 4 >= 2 and then Case_Number mod 3 /= 1;
+            Rising       : constant Boolean := Case_Number mod 5 = 0;
+            Uniform      : constant Length := Dimensionless (Between (0.01, 0.2)) * mm;
+            Limits       : constant Axial_Deviation_Limits :=
+              (if Incoming_Arc or else Outgoing_Arc or else Case_Number mod 2 = 0
+               then [E_Axis => 0.0 * mm, others => Uniform]
+               else
+                 [X_Axis => Dimensionless (Between (0.01, 0.2)) * mm,
+                  Y_Axis => Dimensionless (Between (0.01, 0.2)) * mm,
+                  Z_Axis => Dimensionless (Between (0.01, 0.2)) * mm,
+                  E_Axis => 0.0 * mm]);
+            Miss         : constant Length := Dimensionless (Between (0.01, 0.3)) * mm;
+            Corner_X     : constant Long_Float := Between (-40.0, 40.0);
+            Corner_Y     : constant Long_Float := Between (-40.0, 40.0);
+            Corner_Z     : constant Long_Float := Between (0.0, 10.0);
+            Heading      : constant Long_Float := Between (0.0, 2.0 * Ada.Numerics.Pi);
+            Turn         : constant Long_Float := (if Random < 0.5 then 1.0 else -1.0) * Between (0.04, 2.9);
+            Name         : constant String := "Case" & Case_Number'Image;
+         begin
+            Reset_Early_Limiter_Block (Block);
+            Block.Params.Bounds := Rectangular_Bounds ([others => -1.0E3 * mm], [others => 1.0E3 * mm]);
+            Block.Params.Cornering :=
+              (Kind                 => Stereographic,
+               Stereographic_Params =>
+                 (Axial_Deviation_Maxes    => Limits,
+                  Corner_Miss_Distance_Max => Miss,
+                  Shape_Bias               => Dimensionless (Long_Float (Case_Number mod 7 - 3) / 3.0),
+                  Circularity              => Dimensionless (Long_Float (Case_Number mod 3) / 2.0)));
+            Block.Corners (2) := Planar (Corner_X, Corner_Y, Corner_Z);
+            Place_Primitive
+              (2,
+               Corner_X,
+               Corner_Y,
+               Corner_Z,
+               Heading,
+               False,
+               Incoming_Arc,
+               (if Rising then Between (0.05, 3.0) else 0.0));
+            Place_Primitive
+              (3,
+               Corner_X,
+               Corner_Y,
+               Corner_Z,
+               Heading + Turn,
+               True,
+               Outgoing_Arc,
+               (if Rising then Between (0.05, 3.0) else 0.0));
+
+            Normalize_And_Blend (Block, Motor_Map, Workspace);
+
+            if Transition_Kind (Block.Corner_Transitions (2)) = Stereographic_Transition then
+               declare
+                  Curve_Length   : constant Length := Arc_Length (Block.Corner_Transitions (2));
+                  Incoming_Start : constant Length :=
+                    Block.Primitive_Start_Distances (2) + Block.Primitive_Distances (2);
+                  Incoming_End   : constant Length := Primitive_Length (Block'Access, 2);
+                  Outgoing_End   : constant Length := Block.Primitive_Start_Distances (3);
+                  Line_Line      : constant Boolean :=
+                    Block.Primitives (2).Kind = Line_Primitive_Kind
+                    and then Block.Primitives (3).Kind = Line_Primitive_Kind;
+                  Incoming       : constant Section_Points := Sample_Section (2, Incoming_Start, Incoming_End);
+                  Outgoing       : constant Section_Points := Sample_Section (3, 0.0 * mm, Outgoing_End);
+                  Slack          : constant Length := 1.0E-7 * mm;
+                  Tightest       : constant Length :=
+                    Length'Min (Limits (X_Axis), Length'Min (Limits (Y_Axis), Limits (Z_Axis)));
+                  Worst          : Length := 0.0 * mm;
+                  Closest        : Length := Length'Last;
+                  All_Within     : Boolean := True;
+               begin
+                  Blended := Blended + 1;
+                  if not Line_Line then
+                     Curved := Curved + 1;
+                  end if;
+                  T.Assert
+                    (Point_Distance (Point_At_Distance (Block.Corner_Transitions (2), 0.0 * mm), Incoming (0))
+                     < 1.0E-9 * mm
+                     and then
+                       Point_Distance
+                         (Point_At_Distance (Block.Corner_Transitions (2), Curve_Length), Outgoing (Section_Samples))
+                       < 1.0E-9 * mm,
+                     Name & " joins both trimmed primitives");
+                  for Index in 0 .. Dense_Samples loop
+                     declare
+                        Point : constant Position :=
+                          Point_At_Distance
+                            (Block.Corner_Transitions (2),
+                             Curve_Length * (Dimensionless (Index) / Dimensionless (Dense_Samples)));
+                     begin
+                        Closest := Length'Min (Closest, Point_Distance (Point, Block.Corners (2)));
+                        if Line_Line then
+                           All_Within :=
+                             All_Within
+                             and then
+                               (Within_Line (Point, Incoming (0), Block.Corners (2), Limits)
+                                or else Within_Line (Point, Block.Corners (2), Outgoing (Section_Samples), Limits));
+                        else
+                           Worst :=
+                             Length'Max
+                               (Worst,
+                                Length'Min
+                                  (Nearest (Point, Incoming, 2, Incoming_Start, Incoming_End),
+                                   Nearest (Point, Outgoing, 3, 0.0 * mm, Outgoing_End)));
+                        end if;
+                     end;
+                  end loop;
+                  T.Assert (All_Within, Name & " stays within the axial limits of its two lines");
+                  T.Assert
+                    (Worst <= Tightest + Slack,
+                     Name & " stays within" & Tightest'Image & " of its primitives:" & Worst'Image);
+                  T.Assert (Closest <= Miss + 1.0E-9 * mm, Name & " passes within the miss distance of its corner");
+               end;
+            end if;
+         end;
+      end loop;
+
+      T.Assert (Blended > Cases / 2, "Most corners retain a blend:" & Blended'Image);
+      T.Assert (Curved > Cases / 6, "Many corners with a helix retain a blend:" & Curved'Image);
+   end Test_Retained_Blends_Respect_Limits;
+
    procedure Test_Accepted_Corner_Survives_Growth (T : in out Trendy_Test.Operation'Class) is
       type Workspace_Access is access Planning_Workspace;
       Workspace     : constant Workspace_Access := new Planning_Workspace (Corners_Index'Last);
-      Block         : aliased Execution_Block (14);
+      Block         : aliased Execution_Block (13);
       Motor_Map     : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
-      Accepted_Trim : constant Length := 0.75596655525933243 * mm;
+      Accepted_Trim : constant Length := 0.161555328320239 * mm;
    begin
       T.Register;
       Reset_Early_Limiter_Block (Block);
       Block.Params.Ignore_E_In_XYZE := True;
       Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.02 * mm];
       Block.Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.02 * mm;
-      --  A short prefix of the deterministic helix benchmark. Corner 10 first accepts a small allocation;
-      --  a neighbour's repair enlarges it beyond what construction can certify.
+      --  A short stretch of the deterministic helix benchmark. Corner 7 first accepts a small allocation on the
+      --  short arc which it shares with corner 8. Corner 8 cannot be constructed at its own first allocation and
+      --  is repaired to a smaller one, which enlarges corner 7's beyond what construction can certify.
       Block.Corners :=
-        [[X_Axis => 0.0 * mm, Y_Axis => 0.0 * mm, Z_Axis => 0.0 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 150.0 * mm, Y_Axis => 150.0 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 151.7689067924221 * mm, Y_Axis => 152.04625784907958 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 148.1423305556512 * mm, Y_Axis => 153.4064504011324 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 147.8299422910298 * mm, Y_Axis => 152.49869650645897 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 149.69367571512498 * mm,
-          Y_Axis => 151.23178268600722 * mm,
-          Z_Axis => 0.3 * mm,
+        [[X_Axis => 90.75109123994166 * mm,
+          Y_Axis => 152.76632871437857 * mm,
+          Z_Axis => 26.10000000000004 * mm,
           E_Axis => 0.0 * mm],
-         [X_Axis => 149.7786032118826 * mm, Y_Axis => 150.6464231385447 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 149.62905257455276 * mm,
-          Y_Axis => 114.24428673903903 * mm,
-          Z_Axis => 0.3 * mm,
+         [X_Axis => 91.3671047694392 * mm,
+          Y_Axis => 157.5930408028284 * mm,
+          Z_Axis => 26.10000000000004 * mm,
           E_Axis => 0.0 * mm],
-         [X_Axis => 149.22079669569533 * mm, Y_Axis => 112.922871222737 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 149.00032900938973 * mm, Y_Axis => 111.7126424059704 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 155.29126572392974 * mm,
-          Y_Axis => 100.55467106864326 * mm,
-          Z_Axis => 0.3 * mm,
+         [X_Axis => 101.74914437878007 * mm,
+          Y_Axis => 172.00017262942018 * mm,
+          Z_Axis => 26.10000000000004 * mm,
           E_Axis => 0.0 * mm],
-         [X_Axis => 147.1647603765454 * mm, Y_Axis => 122.33090394883033 * mm, Z_Axis => 0.3 * mm, E_Axis => 0.0 * mm],
-         [X_Axis => 131.16923577434093 * mm,
-          Y_Axis => 135.36398844439722 * mm,
-          Z_Axis => 0.3 * mm,
+         [X_Axis => 97.8947332559961 * mm,
+          Y_Axis => 181.7611802328107 * mm,
+          Z_Axis => 26.10000000000004 * mm,
           E_Axis => 0.0 * mm],
-         [X_Axis => 117.83208917333783 * mm,
-          Y_Axis => 128.77945845718062 * mm,
-          Z_Axis => 0.3 * mm,
+         [X_Axis => 111.9625078380535 * mm,
+          Y_Axis => 176.982169894851 * mm,
+          Z_Axis => 26.10000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 127.4843828823143 * mm,
+          Y_Axis => 191.76429872531133 * mm,
+          Z_Axis => 26.10000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 144.70002777715357 * mm,
+          Y_Axis => 204.87686067242726 * mm,
+          Z_Axis => 26.10000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 144.8698666480126 * mm,
+          Y_Axis => 205.150937138466 * mm,
+          Z_Axis => 26.10000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 143.73812867363398 * mm,
+          Y_Axis => 227.9615582103588 * mm,
+          Z_Axis => 26.40000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 148.07730009964277 * mm,
+          Y_Axis => 220.88220999213166 * mm,
+          Z_Axis => 26.40000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 148.60406010270003 * mm,
+          Y_Axis => 215.7571832793062 * mm,
+          Z_Axis => 26.40000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 148.4387867560857 * mm,
+          Y_Axis => 215.18331522659088 * mm,
+          Z_Axis => 26.40000000000004 * mm,
+          E_Axis => 0.0 * mm],
+         [X_Axis => 147.68902113753043 * mm,
+          Y_Axis => 214.03513126984723 * mm,
+          Z_Axis => 26.40000000000004 * mm,
           E_Axis => 0.0 * mm]];
+      Block.Primitives (3) :=
+        Make_Helix_Primitive
+          (Block.Corners (2),
+           Block.Corners (3),
+           [X_Axis => 110.81125660269159 * mm, Y_Axis => 154.5255421448418 * mm, others => 0.0 * mm],
+           True);
       Block.Primitives (4) :=
         Make_Helix_Primitive
           (Block.Corners (3),
            Block.Corners (4),
-           [X_Axis => 147.9665343403133 * mm, Y_Axis => 147.42301235431944 * mm, others => 0.0 * mm],
+           [X_Axis => 67.04767279700714 * mm, Y_Axis => 163.93882650917112 * mm, others => 0.0 * mm],
            False);
       Block.Primitives (5) :=
         Make_Helix_Primitive
           (Block.Corners (4),
            Block.Corners (5),
-           [X_Axis => 148.47628593163282 * mm, Y_Axis => 152.78389672853024 * mm, others => 0.0 * mm],
+           [X_Axis => 115.61740712696698 * mm, Y_Axis => 210.83581293521786 * mm, others => 0.0 * mm],
            False);
       Block.Primitives (6) :=
         Make_Helix_Primitive
           (Block.Corners (5),
            Block.Corners (6),
-           [X_Axis => 147.16004992514678 * mm, Y_Axis => 149.508921524162 * mm, others => 0.0 * mm],
+           [X_Axis => 132.96472852558364 * mm, Y_Axis => 170.4693139021159 * mm, others => 0.0 * mm],
            True);
       Block.Primitives (7) :=
         Make_Helix_Primitive
           (Block.Corners (6),
            Block.Corners (7),
-           [X_Axis => 150.20375755135146 * mm, Y_Axis => 151.00694776730847 * mm, others => 0.0 * mm],
+           [X_Axis => 121.65112090706731 * mm, Y_Axis => 217.28045819703766 * mm, others => 0.0 * mm],
            False);
       Block.Primitives (8) :=
         Make_Helix_Primitive
           (Block.Corners (7),
            Block.Corners (8),
-           [X_Axis => 129.1506969821704 * mm, Y_Axis => 132.52979321991737 * mm, others => 0.0 * mm],
+           [X_Axis => 145.9577830834799 * mm, Y_Axis => 204.28711954020216 * mm, others => 0.0 * mm],
            True);
       Block.Primitives (9) :=
         Make_Helix_Primitive
           (Block.Corners (8),
            Block.Corners (9),
-           [X_Axis => 150.25035827878713 * mm, Y_Axis => 113.32855841129819 * mm, others => 0.0 * mm],
+           [X_Axis => 131.8283293585569 * mm, Y_Axis => 215.93727340234295 * mm, others => 0.0 * mm],
+           False);
+      Block.Primitives (10) :=
+        Make_Helix_Primitive
+          (Block.Corners (9),
+           Block.Corners (10),
+           [X_Axis => 152.88075092103156 * mm, Y_Axis => 228.69589350858746 * mm, others => 0.0 * mm],
            False);
       Block.Primitives (11) :=
         Make_Helix_Primitive
           (Block.Corners (10),
            Block.Corners (11),
-           [X_Axis => 159.2350509670333 * mm, Y_Axis => 110.13062396414308 * mm, others => 0.0 * mm],
+           [X_Axis => 182.30542148428455 * mm, Y_Axis => 221.81065742037876 * mm, others => 0.0 * mm],
            False);
       Block.Primitives (12) :=
         Make_Helix_Primitive
           (Block.Corners (11),
            Block.Corners (12),
-           [X_Axis => 135.90445276157476 * mm, Y_Axis => 105.72430556046167 * mm, others => 0.0 * mm],
-           False);
+           [X_Axis => 147.59919079024516 * mm, Y_Axis => 215.73585120431645 * mm, others => 0.0 * mm],
+           True);
       Block.Primitives (13) :=
         Make_Helix_Primitive
           (Block.Corners (12),
            Block.Corners (13),
-           [X_Axis => 154.63867031956724 * mm, Y_Axis => 147.8358532849211 * mm, others => 0.0 * mm],
+           [X_Axis => 147.22911393802448 * mm, Y_Axis => 215.154342210754 * mm, others => 0.0 * mm],
            True);
-      Block.Primitives (14) :=
-        Make_Helix_Primitive
-          (Block.Corners (13),
-           Block.Corners (14),
-           [X_Axis => 138.0316421865766 * mm, Y_Axis => 104.66435186400378 * mm, others => 0.0 * mm],
-           False);
       Normalize_And_Blend (Block, Motor_Map, Workspace);
       T.Assert
-        (Transition_Kind (Block.Corner_Transitions (10)) = Stereographic_Transition,
+        (Transition_Kind (Block.Corner_Transitions (7)) = Stereographic_Transition,
          "An accepted corner survives a failed enlargement after neighbour repairs");
       T.Assert
-        (abs (Block.Primitive_Start_Distances (11) - Accepted_Trim) < 1.0E-8 * mm,
+        (abs (Block.Primitive_Start_Distances (8) - Accepted_Trim) < 1.0E-8 * mm,
          "A failed enlargement retains the previously accepted outgoing trim");
       T.Assert
-        (abs (Primitive_Length (Block'Access, 10)
-              - Block.Primitive_Start_Distances (10)
-              - Block.Primitive_Distances (10)
+        (abs (Primitive_Length (Block'Access, 7)
+              - Block.Primitive_Start_Distances (7)
+              - Block.Primitive_Distances (7)
               - Accepted_Trim)
          < 1.0E-8 * mm,
          "A failed enlargement retains the previously accepted incoming trim");
@@ -5408,10 +5734,12 @@ package body Prunt.Motion_Planner.Planner.Test is
                begin
                   Exact :=
                     Exact
-                    and then Timing_Distance_At_Time (Block'Access, Run_First, Run_Time, Timing)
-                             = Timing_Distance_At_Time (Block'Access, Run_First, Run_Time)
-                    and then Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time, Timing)
-                             = Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time);
+                    and then
+                      Timing_Distance_At_Time (Block'Access, Run_First, Run_Time, Timing)
+                      = Timing_Distance_At_Time (Block'Access, Run_First, Run_Time)
+                    and then
+                      Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time, Timing)
+                      = Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time);
                end Compare;
             begin
                T.Assert
@@ -6044,6 +6372,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Line_Primitive_Tangent_Jet_Identities'Unrestricted_Access,
          Test_Per_Axis_Deviation_Corridor'Unrestricted_Access,
          Test_Stereographic_Curved_Corners'Unrestricted_Access,
+         Test_Retained_Blends_Respect_Limits'Unrestricted_Access,
          Test_Accepted_Corner_Survives_Growth'Unrestricted_Access,
          Test_Homing_Boundary_Uses_Resolved_Position'Unrestricted_Access,
          Test_Homing_Unavoidable_Tail_Includes_Complete_Tail'Unrestricted_Access];
