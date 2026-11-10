@@ -90,8 +90,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Name                         : String;
       T                            : in out Trendy_Test.Operation'Class);
 
-   --  Require the V7 retained Bernstein certificate to succeed directly, then compare its public derivative bounds
-   --  with dense samples of the executed curve. This prevents the pole/Taylor fallback from hiding a broken new path.
+   --  Reconstruct the Bernstein certificate, which construction no longer needs, and require its derivative bounds
+   --  to succeed directly. Both those and the public pole-based bounds are compared with dense samples of the
+   --  executed curve, so neither path can hide a failure of the other.
    procedure Assert_Bernstein_Derivative_Bounds
      (Curve          : Stereographic_Curve;
       Start_U, End_U : Dimensionless;
@@ -494,17 +495,27 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Name           : String;
       T              : in out Trendy_Test.Operation'Class)
    is
+      Certified   : Stereographic_Curve := Curve;
+      Retained    : constant Boolean := Retain_Bernstein_Tangent_Certificate (Certified);
       Success     : Boolean;
-      Majorants   : constant Axis_Majorants := Bernstein_Tangent_Range_Majorants (Curve, Start_U, End_U, Success);
+      Majorants   : constant Axis_Majorants := Bernstein_Tangent_Range_Majorants (Certified, Start_U, End_U, Success);
       Bounds      : constant Unit_Speed_Axial_Derivative_Bounds := Bounds_On_Parameter_Range (Curve, Start_U, End_U);
       Total       : constant Length := Arc_Length (Curve);
-      Certificate : Retained_Tangent_Bernstein_Certificate renames Curve.Retained_Tangent_Certificate;
+      Certificate : Retained_Tangent_Bernstein_Certificate renames Certified.Retained_Tangent_Certificate;
+      Bernstein   : Unit_Speed_Axial_Derivative_Bounds;
    begin
       T.Assert
-        (Certificate.Valid
+        (not Curve.Retained_Tangent_Certificate.Valid,
+         Name & " was certified from samples, without the Bernstein reconstruction");
+      T.Assert
+        (Retained
+         and then Certificate.Valid
          and then Certificate.Minimum_Denominator > 0.0
          and then Is_Finite (Certificate.Minimum_Denominator),
-         Name & " retains a valid positive-denominator Bernstein certificate");
+         Name & " reconstructs a valid positive-denominator Bernstein certificate");
+      if not Retained then
+         return;
+      end if;
       for Index in 0 .. Certificate.Degree loop
          T.Assert (Certificate.Denominator (Index).Valid, Name & " has valid denominator controls");
          for Axis in Axis_Name loop
@@ -523,8 +534,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
                and then Is_Finite (Majorants (Axis) (Order)),
                Name & " returns finite nonnegative Bernstein majorants");
          end loop;
+         --  Majorants are factorial-scaled derivatives in normalized distance.
+         Bernstein.Velocity (Axis) := Majorants (Axis) (0);
+         Bernstein.Acceleration (Axis) := Majorants (Axis) (1) / Total;
+         Bernstein.Jerk (Axis) := 2.0 * Majorants (Axis) (2) / Total**2;
+         Bernstein.Snap (Axis) := 6.0 * Majorants (Axis) (3) / Total**3;
+         Bernstein.Crackle (Axis) := 24.0 * Majorants (Axis) (4) / Total**4;
       end loop;
-      Assert_Executed_Derivative_Bounds (Curve, Bounds, Start_U * Total, End_U * Total, Name, T);
+      Assert_Executed_Derivative_Bounds (Curve, Bernstein, Start_U * Total, End_U * Total, Name & " (Bernstein)", T);
+      Assert_Executed_Derivative_Bounds (Curve, Bounds, Start_U * Total, End_U * Total, Name & " (pole)", T);
    end Assert_Bernstein_Derivative_Bounds;
 
    procedure Assert_Certificate_Covers_Dense_Samples
@@ -1640,11 +1658,17 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          T.Assert
            (not Axis_Is_Structurally_Constant (Curve, E_Axis) and then Bounds.Velocity (E_Axis) > 0.0,
             "The adjacent E correction is retained in the executed derivative bounds");
-         T.Assert
-           ((for all Index in 0 .. Curve.Retained_Tangent_Certificate.Degree =>
-               Curve.Retained_Tangent_Certificate.Axis_Numerators (E_Axis) (Index).Lower = 0.0
-               and then Curve.Retained_Tangent_Certificate.Axis_Numerators (E_Axis) (Index).Upper = 0.0),
-            "The retained rational E tangent is zero before endpoint correction");
+         declare
+            Certified : Stereographic_Curve := Curve;
+         begin
+            T.Assert
+              (Retain_Bernstein_Tangent_Certificate (Certified)
+               and then
+                 (for all Index in 0 .. Certified.Retained_Tangent_Certificate.Degree =>
+                    Certified.Retained_Tangent_Certificate.Axis_Numerators (E_Axis) (Index).Lower = 0.0
+                    and then Certified.Retained_Tangent_Certificate.Axis_Numerators (E_Axis) (Index).Upper = 0.0),
+               "The retained rational E tangent is zero before endpoint correction");
+         end;
          Assert_Bernstein_Derivative_Bounds (Curve, 0.20, 0.80, "Endpoint-correction-only Bernstein range", T);
          T.Assert
            (Axis_Is_Structurally_Constant (Curve, Z_Axis)
@@ -2045,8 +2069,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          declare
             Fallback_Curve : Stereographic_Curve := Curve;
          begin
-            --  Disable both retained certificates so this range query must exercise the older pole/Taylor fallback.
-            Fallback_Curve.Retained_Tangent_Certificate.Valid := False;
+            --  Without the stored whole-curve majorants this range query must recompute them from the poles.
             Fallback_Curve.Has_Whole_Curve_Majorants := False;
             declare
                Start_U         : constant Dimensionless := 0.19;
@@ -2055,12 +2078,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
                  Bounds_On_Parameter_Range (Fallback_Curve, Start_U, End_U);
             begin
                Assert_Executed_Derivative_Bounds
-                 (Fallback_Curve,
-                  Fallback_Bounds,
-                  Start_U * Total,
-                  End_U * Total,
-                  "Invalid-certificate pole/Taylor fallback",
-                  T);
+                 (Fallback_Curve, Fallback_Bounds, Start_U * Total, End_U * Total, "Recomputed pole/Taylor range", T);
             end;
          end;
       end;
@@ -2283,6 +2301,282 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Assert_Extreme_Corner (175.0, 20.0, "175 degree 20:1 corner");
       Assert_Extreme_Corner (175.0, 0.05, "175 degree 1:20 corner");
    end Test_Supported_Asymmetric_Corners;
+
+   function Line_Corner_Request
+     (Angle_Degrees, Outgoing_Over_Incoming, Heading_Degrees : Dimensionless) return Blend_Request;
+   --  A planar line corner turning by Angle_Degrees whose incoming leg points along Heading_Degrees from +X.
+   --  The incoming trim is one millimetre.
+
+   function Line_Corner_Request
+     (Angle_Degrees, Outgoing_Over_Incoming, Heading_Degrees : Dimensionless) return Blend_Request
+   is
+      Radians        : constant Dimensionless := Dimensionless (Ada.Numerics.Pi) / 180.0;
+      Heading        : constant Dimensionless := Heading_Degrees * Radians;
+      Turn           : constant Dimensionless := (Heading_Degrees + Angle_Degrees) * Radians;
+      Start_Tangent  : constant Position_Scale :=
+        [X_Axis => Dimensionless_Math.Cos (Heading), Y_Axis => Dimensionless_Math.Sin (Heading), others => 0.0];
+      Finish_Tangent : constant Position_Scale :=
+        [X_Axis => Dimensionless_Math.Cos (Turn), Y_Axis => Dimensionless_Math.Sin (Turn), others => 0.0];
+   begin
+      return
+        Make_Request
+          (Start                  =>
+             Make_Point (-Start_Tangent (X_Axis) * mm, -Start_Tangent (Y_Axis) * mm, 0.0 * mm, 0.0 * mm),
+           Finish                 =>
+             Make_Point
+               (Outgoing_Over_Incoming * Finish_Tangent (X_Axis) * mm,
+                Outgoing_Over_Incoming * Finish_Tangent (Y_Axis) * mm,
+                0.0 * mm,
+                0.0 * mm),
+           Start_Tangent          => Start_Tangent,
+           Finish_Tangent         => Finish_Tangent,
+           Maximum_Position_Error => 1.0E-4 * mm,
+           Maximum_Arc_Length     => (1.0 + Outgoing_Over_Incoming) * mm);
+   end Line_Corner_Request;
+
+   procedure Test_Sampled_Tangent_Certificate (T : in out Trendy_Test.Operation'Class) is
+      function Start_Denominator (Curve : Stereographic_Curve) return Dimensionless;
+
+      function Observed_Tangent_Error
+        (Curve : Stereographic_Curve; Cache : Rational_Antiderivative) return Dimensionless;
+      --  The largest sampled Euclidean distance between the ideal tangent and Cache's rational tangent.
+
+      procedure Assert_Sound (Curve : Stereographic_Curve; Cache : Rational_Antiderivative; Name : String);
+      --  Whenever the sampled proof certifies Cache, its bound must cover every observed difference.
+
+      procedure Assert_Curve (Request : Blend_Request; Name : String);
+
+      function Start_Denominator (Curve : Stereographic_Curve) return Dimensionless is
+         Result : Dimensionless := 1.0;
+      begin
+         for Component in Chart_Component_Index loop
+            Result := Result + Curve.Coefficients (0, Component)**2;
+         end loop;
+         return Result;
+      end Start_Denominator;
+
+      function Observed_Tangent_Error
+        (Curve : Stereographic_Curve; Cache : Rational_Antiderivative) return Dimensionless
+      is
+         Result : Dimensionless := 0.0;
+      begin
+         for Sample in 0 .. 4_096 loop
+            declare
+               U : constant Dimensionless := Dimensionless (Sample) / 4_096.0;
+            begin
+               Result :=
+                 Dimensionless'Max
+                   (Result,
+                    Vector_Distance
+                      (Tangent_At (Curve.Frame, Curve.Coefficients, Curve.Warp_Factor, U), Cached_Tangent (Cache, U)));
+            end;
+         end loop;
+         return Result;
+      end Observed_Tangent_Error;
+
+      procedure Assert_Sound (Curve : Stereographic_Curve; Cache : Rational_Antiderivative; Name : String) is
+         Certificate : constant Tangent_Certificate_Result :=
+           Sampled_Realtime_Tangent_Error (Curve, Cache, Start_Denominator (Curve));
+         Observed    : constant Dimensionless := Observed_Tangent_Error (Curve, Cache);
+      begin
+         if Certificate.Status = Tangent_Was_Certified then
+            T.Assert
+              (Certificate.Error_Bound + 1.0E-13 >= Observed,
+               Name
+               & " sampled bound covers the observed tangent error: bound "
+               & Certificate.Error_Bound'Image
+               & ", observed "
+               & Observed'Image);
+            T.Assert
+              (Certificate.Error_Bound <= 64.0 * Observed + 1.0E-9,
+               Name
+               & " sampled bound is not needlessly loose: bound "
+               & Certificate.Error_Bound'Image
+               & ", observed "
+               & Observed'Image);
+         end if;
+      end Assert_Sound;
+
+      procedure Assert_Curve (Request : Blend_Request; Name : String) is
+         Result : constant Blend_Result := Create_Blend (Request);
+      begin
+         T.Assert (Result.Kind = Blend_Success, Name & " constructs: " & Result.Kind'Image);
+         if Result.Kind /= Blend_Success then
+            return;
+         end if;
+         declare
+            Curve       : Stereographic_Curve renames Result.Curve;
+            Cache       : Rational_Antiderivative renames Curve.Evaluator_Data.Antiderivative_Cache;
+            Certificate : constant Tangent_Certificate_Result :=
+              Sampled_Realtime_Tangent_Error (Curve, Cache, Start_Denominator (Curve));
+            Reference   : Stereographic_Curve := Curve;
+         begin
+            T.Assert
+              (not Curve.Retained_Tangent_Certificate.Valid,
+               Name & " construction used the sampled certificate alone");
+            T.Assert (Certificate.Status = Tangent_Was_Certified, Name & " is certified from samples");
+            if Certificate.Status /= Tangent_Was_Certified then
+               return;
+            end if;
+            T.Assert
+              (Certificate.Error_Bound <= 1.0E-9,
+               Name & " sampled tangent error is near roundoff: " & Certificate.Error_Bound'Image);
+            T.Assert
+              (Curve.Certified_Tangent_Error > 0.0 and then Curve.Certified_Tangent_Error <= 1.0E-9,
+               Name & " stores a sampled tangent error bound: " & Curve.Certified_Tangent_Error'Image);
+            T.Assert
+              (Retain_Bernstein_Tangent_Certificate (Reference),
+               Name & " is also certified by the Bernstein reconstruction");
+            Assert_Sound (Curve, Cache, Name);
+
+            if Cache.Pair_Count > 0 then
+               --  Corrupt the cache in each way a wrong evaluator could differ from the ideal tangent. The proof
+               --  must either fail or report a bound which still covers the now much larger difference.
+               declare
+                  Real_Slot      : constant Rational_Degree_Slot := Complex_Pair_Real_Slot (Cache, 1);
+                  Imaginary_Slot : constant Rational_Degree_Slot := Complex_Pair_Imaginary_Slot (Cache, 1);
+                  Wrong_Residue  : Rational_Antiderivative := Cache;
+                  Wrong_Pole     : Rational_Antiderivative := Cache;
+                  Wrong_Height   : Rational_Antiderivative := Cache;
+                  Wrong_Constant : Rational_Antiderivative := Cache;
+               begin
+                  Wrong_Residue.Pole_Slots (Real_Slot).Residue_Component (X_Axis) :=
+                    @ + 1.0E-6 * (1.0 + abs Cache.Pole_Slots (Real_Slot).Residue_Component (X_Axis));
+                  Wrong_Pole.Pole_Slots (Real_Slot).Pole_Component := @ + 1.0E-7;
+                  Wrong_Height.Pole_Slots (Imaginary_Slot).Pole_Component := @ * (1.0 + 1.0E-6);
+                  Wrong_Constant.Constant_Tangent (Y_Axis) := @ + 1.0E-5;
+                  Assert_Sound (Curve, Wrong_Residue, Name & " with a wrong residue");
+                  Assert_Sound (Curve, Wrong_Pole, Name & " with a displaced pole");
+                  Assert_Sound (Curve, Wrong_Height, Name & " with a rescaled pole");
+                  Assert_Sound (Curve, Wrong_Constant, Name & " with a wrong constant tangent");
+                  T.Assert
+                    (Observed_Tangent_Error (Curve, Wrong_Constant) >= 0.9E-5,
+                     Name & " corrupted cache really differs from the ideal tangent");
+               end;
+            end if;
+         end;
+      end Assert_Curve;
+
+      Largest_Lebesgue : Dimensionless := 0.0;
+   begin
+      T.Register;
+
+      --  The proof multiplies nodal maxima by an upper bound on the nodes' Lebesgue constant. Check that bound
+      --  against the Lebesgue function of the nodes which are actually used.
+      for Sample in 0 .. 4_000 loop
+         declare
+            X     : constant Dimensionless := Dimensionless (Sample) / 4_000.0;
+            Total : Dimensionless := 0.0;
+         begin
+            for I in Tangent_Sample_Index loop
+               declare
+                  Cardinal : Dimensionless := 1.0;
+               begin
+                  for J in Tangent_Sample_Index loop
+                     if J /= I then
+                        Cardinal :=
+                          Cardinal
+                          * (X - Tangent_Sample_Node (J))
+                          / (Tangent_Sample_Node (I) - Tangent_Sample_Node (J));
+                     end if;
+                  end loop;
+                  Total := Total + abs Cardinal;
+               end;
+            end loop;
+            Largest_Lebesgue := Dimensionless'Max (Largest_Lebesgue, Total);
+         end;
+      end loop;
+      T.Assert
+        (Largest_Lebesgue > 3.18 and then Largest_Lebesgue < 3.20,
+         "Sample nodes have the Chebyshev Lebesgue constant: " & Largest_Lebesgue'Image);
+      T.Assert
+        (Largest_Lebesgue * 1.05 <= Tangent_Sample_Lebesgue_Bound,
+         "The Lebesgue bound used by the proof has margin over the sampled maximum");
+      for I in Tangent_Sample_Index loop
+         T.Assert
+           (Tangent_Sample_Node (I) > 0.0
+            and then Tangent_Sample_Node (I) < 1.0
+            and then (I = Tangent_Sample_Index'First or else Tangent_Sample_Node (I) > Tangent_Sample_Node (I - 1)),
+            "Sample nodes are distinct interior points");
+      end loop;
+
+      Assert_Curve (Quarter_Turn_Request, "Quarter turn");
+      Assert_Curve (Circular_Quarter_Turn_Request, "Circular quarter turn");
+      Assert_Curve (Line_Corner_Request (2.0, 1.0, 0.0), "Shallow corner");
+      Assert_Curve (Line_Corner_Request (150.0, 1.0, 20.0), "Sharp corner");
+      Assert_Curve (Line_Corner_Request (75.0, 3.0, -35.0), "Asymmetric corner");
+      Assert_Curve (Line_Corner_Request (120.0, 20.0, 0.0), "Strongly warped corner");
+      Assert_Curve (Line_Corner_Request (120.0, 0.05, 0.0), "Reciprocally warped corner");
+   end Test_Sampled_Tangent_Certificate;
+
+   procedure Test_Pole_Derivative_Bounds (T : in out Trendy_Test.Operation'Class) is
+      procedure Assert_Corner (Angle_Degrees, Ratio, Heading_Degrees : Dimensionless; Edge_Ranges : Boolean := True);
+      --  Edge_Ranges is False for a strongly warped corner. Its long leg is straight to within roundoff over a
+      --  range at its end, where no method can resolve derivatives which are zero to a relative tolerance.
+
+      procedure Assert_Corner (Angle_Degrees, Ratio, Heading_Degrees : Dimensionless; Edge_Ranges : Boolean := True) is
+         Name   : constant String := "Corner" & Angle_Degrees'Image & Ratio'Image & Heading_Degrees'Image;
+         Result : constant Blend_Result := Create_Blend (Line_Corner_Request (Angle_Degrees, Ratio, Heading_Degrees));
+      begin
+         T.Assert (Result.Kind = Blend_Success, Name & " constructs: " & Result.Kind'Image);
+         if Result.Kind /= Blend_Success then
+            return;
+         end if;
+         declare
+            Curve : Stereographic_Curve renames Result.Curve;
+            Total : constant Length := Arc_Length (Curve);
+            Sharp : Boolean;
+            Whole : constant Axis_Majorants := Pole_Taylor_Tangent_Range_Majorants (Curve, 0.0, 1.0, Sharp);
+         begin
+            T.Assert (Curve.Has_Whole_Curve_Majorants, Name & " stores whole-curve majorants");
+            T.Assert (Sharp, Name & " whole-curve pole bounds need no Bernstein refinement");
+            for Axis in Axis_Name loop
+               for Order in Majorant_Order loop
+                  T.Assert
+                    (Whole (Axis) (Order) = Curve.Whole_Curve_Majorants (Axis) (Order),
+                     Name & " stores exactly the pole-based majorants");
+               end loop;
+               T.Assert
+                 (Whole (Axis) (0) <= 1.0 + 1.0E-9,
+                  Name & " tangent component bound does not exceed a unit tangent: " & Whole (Axis) (0)'Image);
+            end loop;
+            Assert_Executed_Derivative_Bounds (Curve, Derivative_Bounds (Curve), 0.0 * mm, Total, Name, T);
+            Assert_Executed_Derivative_Bounds
+              (Curve, Bounds_On_Parameter_Range (Curve, 0.31, 0.62), 0.31 * Total, 0.62 * Total, Name & " middle", T);
+            Assert_Executed_Derivative_Bounds
+              (Curve,
+               Bounds_On_Parameter_Range (Curve, 0.4375, 0.4375),
+               0.4375 * Total,
+               0.4375 * Total,
+               Name & " point",
+               T);
+            if Edge_Ranges then
+               Assert_Executed_Derivative_Bounds
+                 (Curve, Bounds_On_Parameter_Range (Curve, 0.0, 0.07), 0.0 * mm, 0.07 * Total, Name & " start", T);
+               Assert_Executed_Derivative_Bounds
+                 (Curve, Bounds_On_Parameter_Range (Curve, 0.9, 1.0), 0.9 * Total, Total, Name & " finish", T);
+            end if;
+         end;
+      end Assert_Corner;
+   begin
+      T.Register;
+
+      --  Shallow corners make the along-track component nearly constant: its derivatives are far smaller than the
+      --  sum of absolute partial-fraction terms, which is the hardest case for a pole-based remainder. Sharp and
+      --  strongly warped corners instead move poles close to the curve.
+      for Heading of Dimensionless_Axis_Vector'[0.0, 17.0, 45.0, -80.0] loop
+         Assert_Corner (0.5, 1.0, Heading);
+         Assert_Corner (3.0, 1.0, Heading);
+         Assert_Corner (30.0, 1.5, Heading);
+         Assert_Corner (90.0, 1.0, Heading);
+         Assert_Corner (90.0, 0.4, Heading);
+         Assert_Corner (150.0, 1.0, Heading);
+         Assert_Corner (172.0, 2.0, Heading);
+      end loop;
+      Assert_Corner (120.0, 20.0, 0.0, Edge_Ranges => False);
+      Assert_Corner (120.0, 0.05, 0.0, Edge_Ranges => False);
+      Assert_Corner (5.0, 8.0, 0.0, Edge_Ranges => False);
+   end Test_Pole_Derivative_Bounds;
 
    procedure Test_Geometry_Zero_And_Degenerate_References (T : in out Trendy_Test.Operation'Class) is
       Curve_Point                   : constant Position := Make_Point (2.0 * mm, 2.0 * mm, 0.0 * mm, 0.0 * mm);
@@ -2728,6 +3022,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          Test_Saturated_Physical_Bounds'Access,
          Test_Ranged_And_Projected_Bounds'Access,
          Test_Supported_Asymmetric_Corners'Access,
+         Test_Sampled_Tangent_Certificate'Access,
+         Test_Pole_Derivative_Bounds'Access,
          Test_Geometry_Zero_And_Degenerate_References'Access,
          Test_Geometry_Straight_And_Quarter_Turn'Access,
          Test_Geometry_Asymmetric_Mobius_Warps'Access,

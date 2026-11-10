@@ -1478,23 +1478,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       D_Integral_D_C                           : array (Chart_Component_Index) of Raw_Vector_4 :=
         [others => [others => 0.0]];
 
-      function Power_Chart_Value (Value : Power_Chart; U : Dimensionless) return Chart_Vector;
-      --  Evaluate a power-basis chart at U using Horner's method.
-
-      function Power_Chart_Value (Value : Power_Chart; U : Dimensionless) return Chart_Vector is
-         Result : Raw_Vector_3 := [others => 0.0];
-      begin
-         --  Horner evaluation uses one multiply and one add per power coefficient:
-         --
-         --     Y꜀(U) = (…((a₈·U + a₇)·U + a₆)…)·U + a₀.
-         for C in Chart_Component_Index loop
-            for Degree in reverse 0 .. Fixed_Chart_Degree loop
-               Result (C) := Result (C) * U + Value (Degree, C);
-            end loop;
-         end loop;
-         return [for C in Chart_Component_Index => Result (C)];
-      end Power_Chart_Value;
-
       procedure Build_Power_Charts;
 
       procedure Build_Power_Charts is
@@ -1524,14 +1507,48 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       procedure Accumulate (U, Weight : Dimensionless);
 
       procedure Accumulate (U, Weight : Dimensionless) is
-         V                : constant Dimensionless := Warp_Parameter (U, Warp_Factor);
-         Y                : constant Chart_Vector := Power_Chart_Value (Power_Coefficients, V);
-         T_Local          : constant Raw_Vector_4 := Stereographic (Y);
-         Stereo_Jac       : constant Raw_Stereo_Jacobian := Stereographic_Jacobian (Y);
-         D_Y_Lambda       : constant Chart_Vector := Power_Chart_Value (D_Power_Coefficients, V);
-         Envelope         : constant Dimensionless := Closure_Envelope_Value (V);
-         D_T_Lambda_Local : Raw_Vector_4 := [others => 0.0];
+         pragma Suppress (Overflow_Check);
+         --  This is the innermost loop of the closure solve. An overflow leaves an infinity or a NaN in every sum
+         --  it reaches, which the caller checks once after the last node instead of after every operation.
+         V          : constant Dimensionless := Warp_Parameter (U, Warp_Factor);
+         Y          : Chart_Vector := [others => 0.0];
+         D_Y_Lambda : Chart_Vector := [others => 0.0];
+         R2         : Dimensionless := 0.0;
+         Inverse    : Dimensionless;
+         Quartic    : Dimensionless;
+         T_Local    : Raw_Vector_4;
+         Stereo_Jac : Raw_Stereo_Jacobian;
+         Envelope   : Dimensionless;
+         D_T_Lambda : Dimensionless;
       begin
+         --  Horner evaluation uses one multiply and one add per power coefficient:
+         --
+         --     Y꜀(V) = (…((a₈·V + a₇)·V + a₆)…)·V + a₀.
+         for C in Chart_Component_Index loop
+            for Degree in reverse 0 .. Fixed_Chart_Degree loop
+               Y (C) := Y (C) * V + Power_Coefficients (Degree, C);
+               D_Y_Lambda (C) := D_Y_Lambda (C) * V + D_Power_Coefficients (Degree, C);
+            end loop;
+            R2 := R2 + Y (C) * Y (C);
+         end loop;
+
+         --  S(Y) = ((1 - ‖Y‖²), 2Y)/(1 + ‖Y‖²) and its Jacobian, as in Stereographic and Stereographic_Jacobian.
+         Inverse := 1.0 / (1.0 + R2);
+         Quartic := 4.0 * Inverse * Inverse;
+         T_Local (0) := (1.0 - R2) * Inverse;
+         for I in Chart_Component_Index loop
+            T_Local (I) := 2.0 * Y (I) * Inverse;
+            Stereo_Jac (0, I) := -Quartic * Y (I);
+            for J in Chart_Component_Index loop
+               Stereo_Jac (I, J) := (if I = J then 2.0 * Inverse else 0.0) - Quartic * Y (I) * Y (J);
+            end loop;
+         end loop;
+
+         --  256·V⁴·(1 - V)⁴, the endpoint-invisible closure envelope.
+         Envelope := V * (1.0 - V);
+         Envelope := Envelope * Envelope;
+         Envelope := 256.0 * Envelope * Envelope;
+
          --  Accumulate T(U), ∂T/∂λ, and the three ∂T/∂C₀ components. The chain rule is
          --
          --     ∂T/∂x = Jₛ(Y)·∂Y/∂x,
@@ -1539,15 +1556,12 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          --  where Jₛ is the inverse-stereographic Jacobian.
          for I in Frame_Component_Index loop
             Integral (I) := Integral (I) + T_Local (I) * Weight;
+            D_T_Lambda := 0.0;
             for J in Chart_Component_Index loop
-               D_T_Lambda_Local (I) := D_T_Lambda_Local (I) + Stereo_Jac (I, J) * D_Y_Lambda (J);
-            end loop;
-         end loop;
-         for I in Frame_Component_Index loop
-            D_Integral_D_Lambda (I) := D_Integral_D_Lambda (I) + D_T_Lambda_Local (I) * Weight;
-            for J in Chart_Component_Index loop
+               D_T_Lambda := D_T_Lambda + Stereo_Jac (I, J) * D_Y_Lambda (J);
                D_Integral_D_C (J) (I) := D_Integral_D_C (J) (I) + (Stereo_Jac (I, J) * Envelope) * Weight;
             end loop;
+            D_Integral_D_Lambda (I) := D_Integral_D_Lambda (I) + D_T_Lambda * Weight;
          end loop;
       end Accumulate;
    begin
@@ -1564,6 +1578,16 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Accumulate (Middle + Half * GL16_Nodes (I), Half * GL16_Weights (I));
             end loop;
          end;
+      end loop;
+
+      --  Accumulate leaves overflow unchecked; report it here exactly as a checked operation would have.
+      for I in Frame_Component_Index loop
+         if not Is_Finite (Integral (I))
+           or else not Is_Finite (D_Integral_D_Lambda (I))
+           or else (for some J in Chart_Component_Index => not Is_Finite (D_Integral_D_C (J) (I)))
+         then
+            raise Constraint_Error with "closure quadrature overflow";
+         end if;
       end loop;
 
       declare
@@ -1773,9 +1797,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    ----------------------------------------------------------------------------------------------------------------
    --  Outward-rounded bounds for the retained realtime tangent
    --
-   --  V7 prefers a direct rational Bernstein certificate for nontrivial ranges. The earlier pole-based Taylor method
-   --  remains as a fail-closed fallback and is still sharper for a point-sized query, where partial-fraction terms can
-   --  cancel before their absolute values are bounded.
+   --  The pole-based Taylor enclosure is the primary path for every range. The rational Bernstein certificate, the
+   --  earlier primary path, remains as its fallback for a range where a pole lies too close for the enclosure's
+   --  fixed work, or where the partial fractions cancel too far for its rounding allowance.
    ----------------------------------------------------------------------------------------------------------------
 
    --  Enclose division by an interval that excludes zero.
@@ -1976,125 +2000,147 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
      [for Order in Correction_Order => Correction_Hull_Bound (Correction_Derivatives (Order), 10 - Order, 4)];
 
    function Pole_Taylor_Tangent_Range_Majorants
-     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless) return Axis_Majorants
+     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Sharp : out Boolean) return Axis_Majorants
    is
-      --  The public bounds require A_0 through A_4, where
+      --  The retained evaluator's tangent is, in normalized distance U,
       --
-      --     A_n (U) = T^(n) (U) / n!.
+      --     T(U) = c + Σ r/(U - p) + Σ 2·Re(ρ/(U - π)) + (C/L)·H′(U),
       --
-      --  Two additional coefficients support a second-order Taylor enclosure on each cell.
-      Maximum_Internal_Order : constant := Maximum_Majorant_Order + 2;
-      subtype Internal_Order is Natural range 0 .. Maximum_Internal_Order;
-      type Internal_Scalar_Intervals is array (Internal_Order) of Interval;
-      type Internal_Axis_Intervals is array (Axis_Name) of Internal_Scalar_Intervals;
+      --  with real poles p, conjugate pairs π, the endpoint correction displacement C and the smootherstep H. The
+      --  public bounds need A_0 through A_4 for the rational part, where A_n(U) = T⁽ⁿ⁾(U)/n!:
+      --
+      --     A_n(U) = [n = 0]·c + (-1)ⁿ·(Σ r·(U - p)⁻⁽ⁿ⁺¹⁾ + Σ 2·Re(ρ·(U - π)⁻⁽ⁿ⁺¹⁾)).
+      --
+      --  On a cell |U - m| ≤ h the Taylor expansion of every pole term about m gives, for any N ≥ 1,
+      --
+      --     A_k(m + t) = Σ_{j<N} C(k+j, j)·A_{k+j}(m)·tʲ + R,   |R| ≤ C(k+N, N)·hᴺ·Σ |r|/dᵏ⁺ᴺ⁺¹,
+      --
+      --  where d is each pole's distance from the cell: the integral form of the remainder of (z + t)⁻⁽ᵏ⁺¹⁾ is
+      --  bounded by |t|ᴺ times the largest magnitude of its Nth Taylor coefficient C(k+N, N)·(z + τ)⁻⁽ᵏ⁺ᴺ⁺¹⁾ on the
+      --  cell. The first three terms are maximized exactly as a quadratic, the next three by their absolute values,
+      --  and only the sixth-order remainder falls back to the sum of absolute residues. That sum can exceed the
+      --  true derivative by orders of magnitude when partial fractions cancel, which the factor h⁶ absorbs. The
+      --  same expansion bounds the cell's maximum from below, by the quadratic's maximum less everything added to
+      --  it. Cells whose upper bound is not yet close to the largest such lower bound are trisected, so the work
+      --  concentrates on the few cells which contain an extremum.
+      --
+      --  All of this is ordinary rounded arithmetic with explicit allowances rather than interval arithmetic:
+      --
+      --    * Every centre m and pole component is an exact stored number, so x = m - A has relative error at most
+      --      u = 2⁻⁵³. The denominator x² + B² adds positive terms, so it is correct to 4u and the reciprocal
+      --      w = (x + iB)/(x² + B²) to 6u. A rounded complex product errs by at most 2u·(|ac| + |bd|) ≤ 2u·|P|·|w|
+      --      in each part, 2.83u in modulus, and multiplies by the rounded w again; hence wⁿ is correct to
+      --      6u + 8.83u·(n - 1), which is 86u for the largest power n = 10. Forming Re(r·wⁿ) adds 2u, so one
+      --      term of A_n differs from its exact value by at most 88u·(|R| + |I|)·|w|ⁿ⁺¹. Seventeen terms accumulate
+      --      at most 16u more, relative to the sum of their magnitudes. Round_Off = 2⁻⁴⁵ = 256u is more than twice
+      --      that total of 104u, and the sum of magnitudes at the centre is no larger than the cell sum
+      --      Σ |r|/dⁿ⁺¹ computed for the remainder. A fused multiply-add only reduces these errors.
+      --    * Distances are rounded toward zero and the sums of positive terms are inflated by Round_Off, far more
+      --      than their few-ulp error.
+      --    * Rounded centres and radii can leave gaps between neighbouring cells. The base partition errs by at
+      --      most 4u and each trisection by 2u more, 16u in all; every radius is padded by Cell_Pad = 64u. A
+      --      range consisting of one exact point needs no padding.
+      --    * The preflight bounds every stored magnitude by Magnitude_Limit and the distance of every pole from
+      --      [0, 1] below by twice Minimum_Distance, so no product can overflow: |w|¹⁰·|r| and |r|/d¹¹ stay below
+      --      10¹²⁰·10⁶¹ and 10¹³²·10⁶¹. Overflow checks are therefore suppressed in the kernels.
+      --
+      --  The allowance for rounding is proportional to the sum of absolute partial-fraction terms and does not
+      --  shrink with the cell. Where those terms cancel to more than eleven digits, as on a range where the curve
+      --  is almost straight, it becomes a visible part of the bound. Sharp reports whether every bound is free of
+      --  that effect; otherwise the Bernstein form, whose controls are small wherever the function is small, may
+      --  do better.
+      Model_Order       : constant := 6;
+      Maximum_Jet_Order : constant := Maximum_Majorant_Order + Model_Order - 1;
+      Maximum_Sum_Order : constant := Maximum_Majorant_Order + Model_Order;
+      subtype Jet_Order is Natural range 0 .. Maximum_Jet_Order;
+      subtype Sum_Order is Natural range 0 .. Maximum_Sum_Order;
 
-      Cell_Count : constant Positive := 64;
-      Result     : Axis_Majorants := [others => [others => 0.0]];
+      Base_Cells          : constant := 8;
+      Maximum_Depth       : constant := 6;
+      Maximum_Evaluations : constant := 128;
+      --  Trisection keeps the parent's centre, so each refinement costs two evaluations. Typical curves need about
+      --  twenty-five and strongly warped ones under a hundred. The cap bounds the work, and the size of the cell
+      --  queue on the stack, when cancellation is extreme; cells left unrefined keep their valid but looser bound.
+
+      Tightness_Factor : constant Dimensionless := 1.005;
+      Tightness_Floor  : constant Dimensionless := 1.0E-12;
+      --  A cell is accepted once its bound is within half a percent of a magnitude which the function is known to
+      --  attain: at an evaluated centre, or anywhere in a cell according to that cell's own model less its slack.
+
+      Round_Off         : constant Dimensionless := 2.0**(-45);
+      Cell_Pad          : constant Dimensionless := 2.0**(-47);
+      Noise_Fraction    : constant Dimensionless := 0.02;
+      Noise_Floor       : constant Dimensionless := 1.0E-9;
+      --  A bound is sharp while its rounding allowance is at most this fraction of it, or is below a magnitude
+      --  which the Bernstein form cannot resolve either.
+      Magnitude_Limit   : constant Dimensionless := 1.0E60;
+      Minimum_Distance  : constant Dimensionless := 1.0E-12;
+      Underflow_Padding : constant Dimensionless := 2.0**(-500);
+      --  The relative allowances above assume no underflow. An underflowing operation errs by less than 2⁻¹⁰⁷⁵
+      --  instead, which at most nine later multiplications by |w| < 2⁴⁰ and one by |r| < 2²⁰¹ amplify to less than
+      --  2⁻⁵¹⁴. Fewer than 2¹⁰ operations feed one sum, so this padding covers them all. An axis without any residue
+      --  receives none: its sums are exact zeros, which keeps an algebraically constant tangent's bounds at zero.
+
+      subtype Active_Index is Positive range 1 .. Axis_Name'Pos (Axis_Name'Last) - Axis_Name'Pos (Axis_Name'First) + 1;
+      type Active_Values is array (Active_Index) of Dimensionless;
+      type Jet_Array is array (Active_Index, Jet_Order) of Dimensionless;
+      type Sum_Array is array (Active_Index, Sum_Order) of Dimensionless;
+      type Order_Bounds is array (Active_Index, Majorant_Order) of Dimensionless;
+
+      type Pole_Term is record
+         Real_Part                       : Dimensionless := 0.0;
+         Imaginary_Part                  : Dimensionless := 0.0;
+         --  Zero for a real pole.
+         Residue_Real, Residue_Imaginary : Active_Values := [others => 0.0];
+         --  A pair's residue is stored doubled, which is exact.
+         Magnitude                       : Active_Values := [others => 0.0];
+         --  Upper bound on the modulus of the stored residue.
+      end record;
+
+      type Cell is record
+         Centre, Radius : Dimensionless;
+         Depth          : Natural;
+         Jets           : Jet_Array;
+      end record;
+
+      Queue_Capacity : constant := Base_Cells + 3 * ((Maximum_Evaluations - Base_Cells) / 2);
+
       Cache      : Rational_Antiderivative renames Curve.Evaluator_Data.Antiderivative_Cache;
       Length_Raw : constant Dimensionless := Dimensionless (Curve.Evaluator_Data.Length_Value / mm);
+      Saturated  : constant Axis_Majorants := [others => [others => Dimensionless'Last]];
 
-      function Unbounded_Interval return Interval
-      is ((Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False));
+      Active_Axes  : array (Active_Index) of Axis_Name := [others => Axis_Name'First];
+      Active_Count : Natural := 0;
+      Constants    : Active_Values := [others => 0.0];
+      Padding      : Active_Values := [others => 0.0];
+      Terms        : array (Rational_Degree_Slot) of Pole_Term;
+      Term_Count   : Natural := 0;
 
-      function Safe_Add (Left, Right : Dimensionless) return Dimensionless;
-      --  Add nonnegative bounds with upward rounding and saturation.
+      type Weight_Table is array (Majorant_Order, 0 .. Model_Order) of Dimensionless;
+      Taylor_Weights : constant Weight_Table :=
+        [for Order in Majorant_Order => [for Term in 0 .. Model_Order => Binomial (Order + Term, Term)]];
+      --  C(k+j, j), the coefficient of A_{k+j}·tʲ in the expansion of A_k.
 
-      function Safe_Add (Left, Right : Dimensionless) return Dimensionless is
-      begin
-         if Left >= Dimensionless'Last or else Right >= Dimensionless'Last or else Left < 0.0 or else Right < 0.0 then
-            return Dimensionless'Last;
-         elsif Left = 0.0 then
-            return Right;
-         elsif Right = 0.0 then
-            return Left;
-         end if;
-         declare
-            Value : constant Dimensionless := Up (Left + Right);
-         begin
-            return (if Is_Finite (Value) then Value else Dimensionless'Last);
-         end;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Safe_Add;
+      Range_Sums : Sum_Array;
+      --  The sums for the complete padded range. They are valid, if larger than necessary, for every cell.
 
-      function Safe_Multiply (Left, Right : Dimensionless) return Dimensionless;
-      --  Multiply nonnegative bounds with upward rounding and saturation.
+      Queue       : array (1 .. Queue_Capacity) of Cell;
+      Head        : Positive := 1;
+      Tail        : Natural := 0;
+      Evaluations : Natural := 0;
+      Lower       : Order_Bounds := [others => [others => 0.0]];
+      --  Magnitudes known to be attained somewhere in the range. They only steer refinement, so they need not be
+      --  rigorous.
+      Rational    : Order_Bounds := [others => [others => 0.0]];
+      Noise       : Order_Bounds := [others => [others => 0.0]];
+      --  The rounding allowance included in the corresponding entry of Rational.
+      Pad         : constant Dimensionless := (if Start_U = End_U then 0.0 else Cell_Pad);
+      Result      : Axis_Majorants := [others => [others => 0.0]];
 
-      function Safe_Multiply (Left, Right : Dimensionless) return Dimensionless is
-      begin
-         if Left >= Dimensionless'Last or else Right >= Dimensionless'Last or else Left < 0.0 or else Right < 0.0 then
-            return Dimensionless'Last;
-         elsif Left = 0.0 or else Right = 0.0 then
-            return 0.0;
-         elsif Left = 1.0 then
-            return Right;
-         elsif Right = 1.0 then
-            return Left;
-         end if;
-         declare
-            Value : constant Dimensionless := Up (Left * Right);
-         begin
-            return (if Is_Finite (Value) then Value else Dimensionless'Last);
-         end;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Safe_Multiply;
+      function Correction_Coefficient (Order : Majorant_Order; U : Dimensionless) return Interval;
+      --  Enclose the factorial-scaled smootherstep derivative H⁽ᴼʳᵈᵉʳ⁺¹⁾(U)/Order!.
 
-      function Safe_Quotient (Numerator, Denominator : Dimensionless) return Dimensionless;
-      --  Divide nonnegative bounds with upward rounding and saturation.
-
-      function Safe_Quotient (Numerator, Denominator : Dimensionless) return Dimensionless is
-      begin
-         if Numerator >= Dimensionless'Last or else Numerator < 0.0 or else Denominator <= 0.0 then
-            return Dimensionless'Last;
-         elsif Numerator = 0.0 then
-            return 0.0;
-         end if;
-         declare
-            Value : constant Dimensionless := Up (Numerator / Denominator);
-         begin
-            return (if Is_Finite (Value) then Value else Dimensionless'Last);
-         end;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Safe_Quotient;
-
-      function Upper_Hypot (X, Y : Dimensionless) return Dimensionless;
-      --  Return an upward-rounded bound for the Euclidean norm of (X, Y).
-
-      function Upper_Hypot (X, Y : Dimensionless) return Dimensionless is
-         AX    : constant Dimensionless := abs X;
-         AY    : constant Dimensionless := abs Y;
-         Scale : constant Dimensionless := Dimensionless'Max (AX, AY);
-      begin
-         if not Is_Finite (X) or else not Is_Finite (Y) or else Scale >= Dimensionless'Last then
-            return Dimensionless'Last;
-         elsif Scale = 0.0 then
-            return 0.0;
-         end if;
-         declare
-            RX  : constant Dimensionless := Up (AX / Scale);
-            RY  : constant Dimensionless := Up (AY / Scale);
-            Sum : constant Dimensionless := Safe_Add (Safe_Multiply (RX, RX), Safe_Multiply (RY, RY));
-         begin
-            if Sum >= Dimensionless'Last then
-               return Dimensionless'Last;
-            else
-               return Safe_Multiply (Scale, Up (Dimensionless_Math.Sqrt (Sum)));
-            end if;
-         end;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Upper_Hypot;
-
-      function Correction_Coefficient (Order : Internal_Order; U : Dimensionless) return Interval;
-      --  Enclose one correction-series coefficient at U.
-
-      function Correction_Coefficient (Order : Internal_Order; U : Dimensionless) return Interval is
+      function Correction_Coefficient (Order : Majorant_Order; U : Dimensionless) return Interval is
          Work        : Correction_Controls := Correction_Derivatives (Order);
          Degree      : constant Natural := 10 - Order;
          T           : constant Interval := Interval_Exact (U);
@@ -2109,285 +2155,523 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return Work (0);
       exception
          when Constraint_Error =>
-            return Unbounded_Interval;
+            return (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
       end Correction_Coefficient;
 
-      function Correction_Coefficient_Bound (Order : Internal_Order) return Dimensionless;
-      --  Bound one correction coefficient over the full parameter interval.
+      function Correction_Bound (Order : Majorant_Order) return Dimensionless;
+      --  Bound the same coefficient over the requested range.
 
-      function Correction_Coefficient_Bound (Order : Internal_Order) return Dimensionless is
-         Work   : Correction_Controls renames Correction_Derivatives (Order);
-         Degree : constant Natural := 10 - Order;
-         Bound  : Dimensionless := 0.0;
+      function Correction_Bound (Order : Majorant_Order) return Dimensionless is
       begin
-         for Index in 0 .. Degree loop
-            Bound := Dimensionless'Max (Bound, Interval_Abs_Max (Work (Index)));
-         end loop;
-         return Bound;
+         if Start_U <= 0.0 and then End_U >= 1.0 then
+            return Full_Correction_Bounds (Order);
+         end if;
+         --  The derivative of the coefficient of order n is (n + 1) times the coefficient of order n + 1, so the
+         --  mean value theorem bounds the range by the midpoint value plus the radius times that slope.
+         declare
+            Middle : constant Dimensionless := 0.5 * Start_U + 0.5 * End_U;
+            Radius : constant Dimensionless := Up (Dimensionless'Max (abs (Middle - Start_U), abs (End_U - Middle)));
+            Value  : constant Interval := Correction_Coefficient (Order, Middle);
+            Slope  : constant Dimensionless := Up (Dimensionless (Order + 1) * Full_Correction_Bounds (Order + 1));
+         begin
+            if not Value.Valid then
+               return Full_Correction_Bounds (Order);
+            end if;
+            return
+              Dimensionless'Min (Full_Correction_Bounds (Order), Up (Interval_Abs_Max (Value) + Up (Radius * Slope)));
+         end;
       exception
          when Constraint_Error =>
             return Dimensionless'Last;
-      end Correction_Coefficient_Bound;
+      end Correction_Bound;
 
-      function Midpoint_Coefficients (U : Dimensionless) return Internal_Axis_Intervals;
-      --  Evaluate interval correction coefficients at the midpoint parameter U.
+      function Gather_Terms return Boolean;
+      --  Copy the active axes' poles and residues into Terms. False if a magnitude or a pole distance is outside
+      --  the range for which the kernels below cannot overflow.
 
-      function Midpoint_Coefficients (U : Dimensionless) return Internal_Axis_Intervals is
-         Values : Internal_Axis_Intervals := [others => [others => Interval_Exact (0.0)]];
+      function Gather_Terms return Boolean is
+         function Usable (Value : Dimensionless) return Boolean
+         is (abs Value <= Magnitude_Limit);
+         --  False for NaN as well.
 
-         procedure Accumulate_Pole
-           (Pole_Real, Pole_Imaginary       : Dimensionless;
-            Real_Residue, Imaginary_Residue : Dimensionless_Axis_Vector;
-            Pair                            : Boolean);
-         --  Accumulate one real pole or conjugate-pole pair into the midpoint coefficients.
+         procedure Append (Real_Slot, Imaginary_Slot : Natural; Usable_Term : out Boolean);
 
-         procedure Accumulate_Pole
-           (Pole_Real, Pole_Imaginary       : Dimensionless;
-            Real_Residue, Imaginary_Residue : Dimensionless_Axis_Vector;
-            Pair                            : Boolean)
-         is
-            Reciprocal : constant Interval_Complex := Complex_Reciprocal (U, Pole_Real, Pole_Imaginary);
-            Power      : Interval_Complex := Reciprocal;
+         procedure Append (Real_Slot, Imaginary_Slot : Natural; Usable_Term : out Boolean) is
+            Term   : Pole_Term;
+            Factor : constant Dimensionless := (if Imaginary_Slot = 0 then 1.0 else 2.0);
          begin
-            for Order in Internal_Order loop
-               for Axis in Axis_Name loop
+            Term.Real_Part := Cache.Pole_Slots (Real_Slot).Pole_Component;
+            Term.Imaginary_Part :=
+              (if Imaginary_Slot = 0 then 0.0 else Cache.Pole_Slots (Imaginary_Slot).Pole_Component);
+            Usable_Term := Usable (Term.Real_Part) and then Usable (Term.Imaginary_Part);
+            if not Usable_Term then
+               return;
+            end if;
+            declare
+               --  Every evaluation point lies in [0, 1], up to the cell padding.
+               Horizontal : constant Dimensionless :=
+                 (if Term.Real_Part < 0.0
+                  then -Term.Real_Part
+                  elsif Term.Real_Part > 1.0
+                  then Term.Real_Part - 1.0
+                  else 0.0);
+            begin
+               if Imaginary_Slot = 0 then
+                  Usable_Term := Horizontal >= 2.0 * Minimum_Distance;
+               else
+                  Usable_Term :=
+                    Term.Imaginary_Part > 0.0
+                    and then Dimensionless'Max (Horizontal, Term.Imaginary_Part) >= 2.0 * Minimum_Distance;
+               end if;
+            end;
+            for Index in 1 .. Active_Count loop
+               declare
+                  Real_Residue      : constant Dimensionless :=
+                    Cache.Pole_Slots (Real_Slot).Residue_Component (Active_Axes (Index));
+                  Imaginary_Residue : constant Dimensionless :=
+                    (if Imaginary_Slot = 0
+                     then 0.0
+                     else Cache.Pole_Slots (Imaginary_Slot).Residue_Component (Active_Axes (Index)));
+               begin
+                  Usable_Term := Usable_Term and then Usable (Real_Residue) and then Usable (Imaginary_Residue);
+                  exit when not Usable_Term;
+                  Term.Residue_Real (Index) := Factor * Real_Residue;
+                  Term.Residue_Imaginary (Index) := Factor * Imaginary_Residue;
+                  --  |R + iI| ≤ |R| + |I|; the sum is rounded upward.
+                  Term.Magnitude (Index) := Up (abs Term.Residue_Real (Index) + abs Term.Residue_Imaginary (Index));
+                  if Term.Magnitude (Index) > 0.0 then
+                     Padding (Index) := Underflow_Padding;
+                  end if;
+               end;
+            end loop;
+            if Usable_Term then
+               Term_Count := Term_Count + 1;
+               Terms (Term_Count) := Term;
+            end if;
+         end Append;
+
+         Good : Boolean;
+      begin
+         for Index in 1 .. Active_Count loop
+            Constants (Index) := Cache.Constant_Tangent (Active_Axes (Index));
+            if not Usable (Constants (Index)) then
+               return False;
+            end if;
+         end loop;
+         for Index in 1 .. Cache.Real_Pole_Count loop
+            Append (Index, 0, Good);
+            if not Good then
+               return False;
+            end if;
+         end loop;
+         for Pair in 1 .. Cache.Pair_Count loop
+            Append
+              (Complex_Pair_Real_Slot (Cache, Rational_Pair_Index (Pair)),
+               Complex_Pair_Imaginary_Slot (Cache, Rational_Pair_Index (Pair)),
+               Good);
+            if not Good then
+               return False;
+            end if;
+         end loop;
+         return True;
+      end Gather_Terms;
+
+      procedure Evaluate_Jets (Centre : Dimensionless; Jets : out Jet_Array);
+      --  Compute A_0 through A_9 of the rational part at Centre for every active axis, and raise Lower.
+
+      procedure Evaluate_Jets (Centre : Dimensionless; Jets : out Jet_Array) is
+         pragma Suppress (Overflow_Check);
+         Power_Real, Power_Imag : array (Jet_Order) of Dimensionless;
+      begin
+         Jets := [others => [others => 0.0]];
+         for Term of Terms (1 .. Term_Count) loop
+            declare
+               X : constant Dimensionless := Centre - Term.Real_Part;
+            begin
+               --  Form the powers of 1/(z - p) first, signed by order, so that each axis then accumulates them in
+               --  one straight pass.
+               if Term.Imaginary_Part = 0.0 then
                   declare
-                     Term : Interval :=
-                       Interval_Subtract
-                         (Interval_Multiply (Interval_Exact (Real_Residue (Axis)), Power.Real_Part),
-                          Interval_Multiply (Interval_Exact (Imaginary_Residue (Axis)), Power.Imaginary_Part));
+                     Reciprocal : constant Dimensionless := 1.0 / X;
+                     Power      : Dimensionless := Reciprocal;
                   begin
-                     if Pair then
-                        Term := Interval_Multiply (Interval_Exact (2.0), Term);
-                     end if;
-                     if Order mod 2 = 1 then
-                        Term := Interval_Negate (Term);
-                     end if;
-                     Values (Axis) (Order) := Interval_Add (Values (Axis) (Order), Term);
+                     for Order in Jet_Order loop
+                        Power_Real (Order) := Power;
+                        Power := -(Power * Reciprocal);
+                     end loop;
                   end;
-               end loop;
-               if Order < Internal_Order'Last then
-                  Power := Complex_Multiply (Power, Reciprocal);
+                  for Index in 1 .. Active_Count loop
+                     for Order in Jet_Order loop
+                        Jets (Index, Order) := Jets (Index, Order) + Term.Residue_Real (Index) * Power_Real (Order);
+                     end loop;
+                  end loop;
+               else
+                  declare
+                     Square          : constant Dimensionless := X * X + Term.Imaginary_Part * Term.Imaginary_Part;
+                     Reciprocal_Real : constant Dimensionless := X / Square;
+                     Reciprocal_Imag : constant Dimensionless := Term.Imaginary_Part / Square;
+                     Real            : Dimensionless := Reciprocal_Real;
+                     Imag            : Dimensionless := Reciprocal_Imag;
+                     Next            : Dimensionless;
+                  begin
+                     for Order in Jet_Order loop
+                        Power_Real (Order) := Real;
+                        Power_Imag (Order) := Imag;
+                        Next := -(Real * Reciprocal_Real - Imag * Reciprocal_Imag);
+                        Imag := -(Real * Reciprocal_Imag + Imag * Reciprocal_Real);
+                        Real := Next;
+                     end loop;
+                  end;
+                  for Index in 1 .. Active_Count loop
+                     for Order in Jet_Order loop
+                        Jets (Index, Order) :=
+                          Jets (Index, Order)
+                          + (Term.Residue_Real (Index) * Power_Real (Order)
+                             - Term.Residue_Imaginary (Index) * Power_Imag (Order));
+                     end loop;
+                  end loop;
+               end if;
+            end;
+         end loop;
+         for Index in 1 .. Active_Count loop
+            Jets (Index, 0) := Jets (Index, 0) + Constants (Index);
+            for Order in Majorant_Order loop
+               if abs Jets (Index, Order) > Lower (Index, Order) then
+                  Lower (Index, Order) := abs Jets (Index, Order);
                end if;
             end loop;
-         end Accumulate_Pole;
+         end loop;
+         Evaluations := Evaluations + 1;
+      end Evaluate_Jets;
+
+      procedure Evaluate_Sums (Centre, Radius : Dimensionless; Sums : out Sum_Array; Bounded : out Boolean);
+      --  Compute upper bounds on Σ |r|/dⁿ⁺¹ for n = 0 .. 10, where d is each pole's distance from the cell of
+      --  the given padded Radius. Bounded is False if a pole is too close to the cell for a finite bound.
+
+      procedure Evaluate_Sums (Centre, Radius : Dimensionless; Sums : out Sum_Array; Bounded : out Boolean) is
+         pragma Suppress (Overflow_Check);
+         Powers : array (Sum_Order) of Dimensionless;
       begin
-         for Axis in Axis_Name loop
-            Values (Axis) (0) := Interval_Exact (Cache.Constant_Tangent (Axis));
-         end loop;
-         for Index in 1 .. Cache.Real_Pole_Count loop
-            Accumulate_Pole
-              (Cache.Pole_Slots (Index).Pole_Component,
-               0.0,
-               Cache.Pole_Slots (Index).Residue_Component,
-               [others => 0.0],
-               False);
-         end loop;
-         for Pair in 1 .. Cache.Pair_Count loop
+         Sums := [others => [others => 0.0]];
+         Bounded := True;
+         for Term of Terms (1 .. Term_Count) loop
             declare
-               Real_Slot      : Rational_Pole_Slot renames
-                 Cache.Pole_Slots (Complex_Pair_Real_Slot (Cache, Rational_Pair_Index (Pair)));
-               Imaginary_Slot : Rational_Pole_Slot renames
-                 Cache.Pole_Slots (Complex_Pair_Imaginary_Slot (Cache, Rational_Pair_Index (Pair)));
+               Offset     : constant Dimensionless := abs (Centre - Term.Real_Part);
+               --  The subtraction of two exact numbers and the following difference each err by at most one unit
+               --  in the last place of Offset; 2⁻⁴⁹·Offset covers both.
+               Horizontal : constant Dimensionless := (Offset - Radius) - 2.0**(-49) * Offset;
+               Distance   : Dimensionless;
             begin
-               Accumulate_Pole
-                 (Real_Slot.Pole_Component,
-                  Imaginary_Slot.Pole_Component,
-                  Real_Slot.Residue_Component,
-                  Imaginary_Slot.Residue_Component,
-                  True);
-            end;
-         end loop;
-         for Axis in Axis_Name loop
-            declare
-               Correction : constant Interval := Finish_Correction_Interval (Curve.Evaluator_Data, Axis);
-            begin
-               if Correction.Lower /= 0.0 or else Correction.Upper /= 0.0 then
-                  declare
-                     Ratio : constant Interval := Divide_By_Positive (Correction, Interval_Exact (Length_Raw));
-                  begin
-                     for Order in Internal_Order loop
-                        Values (Axis) (Order) :=
-                          Interval_Add
-                            (Values (Axis) (Order), Interval_Multiply (Ratio, Correction_Coefficient (Order, U)));
-                     end loop;
-                  end;
+               if Term.Imaginary_Part = 0.0 then
+                  Distance := Horizontal;
+               elsif Horizontal <= 0.0 then
+                  Distance := Term.Imaginary_Part;
+               else
+                  Distance :=
+                    Dimensionless_Math.Sqrt (Horizontal * Horizontal + Term.Imaginary_Part * Term.Imaginary_Part)
+                    * (1.0 - 2.0**(-50));
                end if;
-            end;
-         end loop;
-         return Values;
-      exception
-         when Constraint_Error =>
-            return [others => [others => Unbounded_Interval]];
-      end Midpoint_Coefficients;
-
-      function Real_Distance_Lower (Pole, Cell_Left, Cell_Right : Dimensionless) return Dimensionless;
-      --  Return a lower bound on the distance from a real pole to a parameter cell.
-
-      function Real_Distance_Lower (Pole, Cell_Left, Cell_Right : Dimensionless) return Dimensionless is
-         Distance : Dimensionless;
-      begin
-         if Pole < Cell_Left then
-            Distance := Cell_Left - Pole;
-         elsif Pole > Cell_Right then
-            Distance := Pole - Cell_Right;
-         else
-            return 0.0;
-         end if;
-         return Dimensionless'Max (0.0, Down (Distance));
-      exception
-         when Constraint_Error =>
-            return 0.0;
-      end Real_Distance_Lower;
-
-      function Complex_Distance_Lower
-        (Pole_Real, Pole_Imaginary, Cell_Left, Cell_Right : Dimensionless) return Dimensionless;
-      --  Return a lower bound on the distance from a complex pole to a parameter cell.
-
-      function Complex_Distance_Lower
-        (Pole_Real, Pole_Imaginary, Cell_Left, Cell_Right : Dimensionless) return Dimensionless
-      is
-         Horizontal : Dimensionless := 0.0;
-      begin
-         if Pole_Real < Cell_Left then
-            Horizontal := Dimensionless'Max (0.0, Down (Cell_Left - Pole_Real));
-         elsif Pole_Real > Cell_Right then
-            Horizontal := Dimensionless'Max (0.0, Down (Pole_Real - Cell_Right));
-         end if;
-         declare
-            Horizontal_Square : constant Dimensionless := Down (Horizontal * Horizontal);
-            Imaginary_Square  : constant Dimensionless := Down (abs Pole_Imaginary * abs Pole_Imaginary);
-            Square            : constant Dimensionless := Down (Horizontal_Square + Imaginary_Square);
-         begin
-            if Square <= 0.0 or else not Is_Finite (Square) then
-               return 0.0;
-            else
-               return Dimensionless'Max (0.0, Down (Dimensionless_Math.Sqrt (Square)));
-            end if;
-         end;
-      exception
-         when Constraint_Error =>
-            return 0.0;
-      end Complex_Distance_Lower;
-
-      function Remainder_Bound
-        (Axis : Axis_Name; Order : Internal_Order; Cell_Left, Cell_Right : Dimensionless) return Dimensionless;
-      --  Bound the truncated correction-series remainder for one axis and cell.
-
-      function Remainder_Bound
-        (Axis : Axis_Name; Order : Internal_Order; Cell_Left, Cell_Right : Dimensionless) return Dimensionless
-      is
-         Bound : Dimensionless := 0.0;
-      begin
-         for Index in 1 .. Cache.Real_Pole_Count loop
-            declare
-               Distance : constant Dimensionless :=
-                 Real_Distance_Lower (Cache.Pole_Slots (Index).Pole_Component, Cell_Left, Cell_Right);
-               Power    : constant Dimensionless := Lower_Power (Distance, Order + 1);
-               Term     : constant Dimensionless :=
-                 Safe_Quotient (abs Cache.Pole_Slots (Index).Residue_Component (Axis), Power);
-            begin
-               Bound := Safe_Add (Bound, Term);
-            end;
-         end loop;
-         for Pair in 1 .. Cache.Pair_Count loop
-            declare
-               Real_Slot      : Rational_Pole_Slot renames
-                 Cache.Pole_Slots (Complex_Pair_Real_Slot (Cache, Rational_Pair_Index (Pair)));
-               Imaginary_Slot : Rational_Pole_Slot renames
-                 Cache.Pole_Slots (Complex_Pair_Imaginary_Slot (Cache, Rational_Pair_Index (Pair)));
-               Distance       : constant Dimensionless :=
-                 Complex_Distance_Lower
-                   (Real_Slot.Pole_Component, Imaginary_Slot.Pole_Component, Cell_Left, Cell_Right);
-               Power          : constant Dimensionless := Lower_Power (Distance, Order + 1);
-               Residue_Norm   : constant Dimensionless :=
-                 Upper_Hypot (Real_Slot.Residue_Component (Axis), Imaginary_Slot.Residue_Component (Axis));
-               Term           : constant Dimensionless := Safe_Quotient (Safe_Multiply (2.0, Residue_Norm), Power);
-            begin
-               Bound := Safe_Add (Bound, Term);
-            end;
-         end loop;
-         declare
-            Correction : constant Interval := Finish_Correction_Interval (Curve.Evaluator_Data, Axis);
-         begin
-            if Correction.Lower /= 0.0 or else Correction.Upper /= 0.0 then
+               if not (Distance >= Minimum_Distance) then
+                  Bounded := False;
+                  return;
+               end if;
                declare
-                  Ratio : constant Dimensionless := Safe_Quotient (Interval_Abs_Max (Correction), Length_Raw);
+                  Reciprocal : constant Dimensionless := (1.0 / Distance) * (1.0 + 2.0**(-50));
+                  Power      : Dimensionless := Reciprocal;
                begin
-                  Bound := Safe_Add (Bound, Safe_Multiply (Ratio, Correction_Coefficient_Bound (Order)));
+                  for Order in Sum_Order loop
+                     Powers (Order) := Power;
+                     Power := Power * Reciprocal;
+                  end loop;
                end;
-            end if;
-         end;
-         return Bound;
-      exception
-         when Constraint_Error =>
-            return Dimensionless'Last;
-      end Remainder_Bound;
-   begin
-      if Curve.Evaluator_Data.Kind = Zero_Curve_Kind then
-         return Result;
-      elsif Length_Raw <= 0.0 or else not Is_Finite (Length_Raw) then
-         return [others => [others => Dimensionless'Last]];
-      end if;
-
-      declare
-         Point_Sized_Range : constant Boolean :=
-           End_U - Start_U <= 8.0 * Dimensionless'Model_Epsilon * (1.0 + Dimensionless'Max (abs Start_U, abs End_U));
-         Cells             : constant Positive := (if Point_Sized_Range then 1 else Cell_Count);
-         Previous_Right    : Dimensionless := Start_U;
-      begin
-         for Cell in 0 .. Cells - 1 loop
-            declare
-               Cell_Left  : constant Dimensionless := (if Cell = 0 then Start_U else Previous_Right);
-               Cell_Right : constant Dimensionless :=
-                 (if Cell = Cells - 1
-                  then End_U
-                  else Start_U + (End_U - Start_U) * Dimensionless (Cell + 1) / Dimensionless (Cells));
-               Midpoint   : constant Dimensionless :=
-                 (if Cell_Left = Cell_Right then Cell_Left else 0.5 * Cell_Left + 0.5 * Cell_Right);
-               Radius     : constant Dimensionless :=
-                 (if Cell_Left = Cell_Right
-                  then 0.0
-                  else Up (Dimensionless'Max (abs (Midpoint - Cell_Left), abs (Cell_Right - Midpoint))));
-               Middle     : constant Internal_Axis_Intervals := Midpoint_Coefficients (Midpoint);
-            begin
-               Previous_Right := Cell_Right;
-               for Axis in Axis_Name loop
-                  if not (Curve.Structurally_Constant_Axes (Axis)
-                          and then
-                            Curve.Evaluator_Data.Finish_Point (Axis)
-                            = Curve.Evaluator_Data.Uncorrected_Finish_Point (Axis))
-                  then
-                     for Order in Majorant_Order loop
-                        declare
-                           First_Term            : constant Dimensionless := Interval_Abs_Max (Middle (Axis) (Order));
-                           Linear_Term           : constant Dimensionless :=
-                             Safe_Multiply
-                               (Dimensionless (Order + 1),
-                                Safe_Multiply (Radius, Interval_Abs_Max (Middle (Axis) (Order + 1))));
-                           Quadratic_Coefficient : constant Dimensionless :=
-                             Dimensionless ((Order + 1) * (Order + 2)) / 2.0;
-                           Quadratic_Term        : constant Dimensionless :=
-                             Safe_Multiply
-                               (Quadratic_Coefficient,
-                                Safe_Multiply
-                                  (Safe_Multiply (Radius, Radius),
-                                   Remainder_Bound (Axis, Order + 2, Cell_Left, Cell_Right)));
-                           Cell_Bound            : constant Dimensionless :=
-                             Safe_Add (First_Term, Safe_Add (Linear_Term, Quadratic_Term));
-                        begin
-                           Result (Axis) (Order) := Dimensionless'Max (Result (Axis) (Order), Cell_Bound);
-                        end;
-                     end loop;
-                  end if;
+               for Index in 1 .. Active_Count loop
+                  for Order in Sum_Order loop
+                     Sums (Index, Order) := Sums (Index, Order) + Term.Magnitude (Index) * Powers (Order);
+                  end loop;
                end loop;
             end;
          end loop;
-      end;
+         for Index in 1 .. Active_Count loop
+            Sums (Index, 0) := Sums (Index, 0) + abs Constants (Index);
+            for Order in Sum_Order loop
+               Sums (Index, Order) := Sums (Index, Order) * (1.0 + Round_Off) + Padding (Index);
+            end loop;
+         end loop;
+      end Evaluate_Sums;
+
+      procedure Bound_Cell
+        (Item               : Cell;
+         Radius             : Dimensionless;
+         Sums               : Sum_Array;
+         Bounds, Allowances : out Order_Bounds;
+         Refine             : out Boolean);
+      --  Bound every active axis and order on one cell of the given padded Radius, using sums which are valid for
+      --  a set containing that cell, and report the rounding allowance within each bound. Refine reports whether
+      --  some bound is still loose.
+
+      procedure Bound_Cell
+        (Item               : Cell;
+         Radius             : Dimensionless;
+         Sums               : Sum_Array;
+         Bounds, Allowances : out Order_Bounds;
+         Refine             : out Boolean)
+      is
+         pragma Suppress (Overflow_Check);
+         Powers : array (0 .. Model_Order) of Dimensionless;
+      begin
+         Refine := False;
+         Powers (0) := 1.0;
+         for Exponent in 1 .. Model_Order loop
+            Powers (Exponent) := Powers (Exponent - 1) * Radius;
+         end loop;
+         for Index in 1 .. Active_Count loop
+            for Order in Majorant_Order loop
+               declare
+                  A0        : constant Dimensionless := Item.Jets (Index, Order);
+                  A1        : constant Dimensionless :=
+                    Taylor_Weights (Order, 1) * Powers (1) * Item.Jets (Index, Order + 1);
+                  A2        : constant Dimensionless :=
+                    Taylor_Weights (Order, 2) * Powers (2) * Item.Jets (Index, Order + 2);
+                  --  max over |t| ≤ 1 of |A0 + A1·t + A2·t²|: an endpoint, or the vertex when it is interior.
+                  Quadratic : Dimensionless := abs (A0 + A2) + abs A1;
+                  Rounding  : Dimensionless :=
+                    Sums (Index, Order) + Taylor_Weights (Order, 1) * Powers (1) * Sums (Index, Order + 1)
+                    + Taylor_Weights (Order, 2) * Powers (2) * Sums (Index, Order + 2);
+                  Tail      : Dimensionless := 0.0;
+                  Bound     : Dimensionless;
+               begin
+                  if A2 /= 0.0 and then abs A1 < 2.0 * abs A2 then
+                     Quadratic := Dimensionless'Max (Quadratic, abs (A0 - A1 * A1 / (4.0 * A2)));
+                  end if;
+                  for Term in 3 .. Model_Order - 1 loop
+                     declare
+                        Scale : constant Dimensionless := Taylor_Weights (Order, Term) * Powers (Term);
+                     begin
+                        Tail := Tail + Scale * abs Item.Jets (Index, Order + Term);
+                        Rounding := Rounding + Scale * Sums (Index, Order + Term);
+                     end;
+                  end loop;
+                  --  Rounding is the allowance for the computed jets; the last term is the Taylor remainder. The
+                  --  final factor covers the rounding of this expression, whose terms are all nonnegative and
+                  --  whose quadratic part errs by at most 16u of its value.
+                  Tail :=
+                    Tail + Round_Off * Rounding
+                    + Taylor_Weights (Order, Model_Order) * Powers (Model_Order) * Sums (Index, Order + Model_Order);
+                  Bound := (Quadratic + Tail) * (1.0 + Round_Off) + Padding (Index);
+                  Bounds (Index, Order) := Bound;
+                  Allowances (Index, Order) := Round_Off * Rounding;
+                  --  The function comes within Tail of the quadratic's maximum somewhere in this cell.
+                  if Quadratic - Tail > Lower (Index, Order) then
+                     Lower (Index, Order) := Quadratic - Tail;
+                  end if;
+                  --  The rounding allowance does not shrink with the cell, so it is excluded from the decision.
+                  if Bound
+                    > Tightness_Factor * Lower (Index, Order) + Tightness_Floor + 2.0 * Allowances (Index, Order)
+                  then
+                     Refine := True;
+                  end if;
+               end;
+            end loop;
+         end loop;
+      end Bound_Cell;
+
+      procedure Push (Centre, Radius : Dimensionless; Depth : Natural);
+      --  Evaluate a new centre and queue its cell.
+
+      procedure Push (Centre, Radius : Dimensionless; Depth : Natural) is
+      begin
+         Tail := Tail + 1;
+         Queue (Tail).Centre := Centre;
+         Queue (Tail).Radius := Radius;
+         Queue (Tail).Depth := Depth;
+         Evaluate_Jets (Centre, Queue (Tail).Jets);
+      end Push;
+   begin
+      Sharp := False;
+      if Curve.Evaluator_Data.Kind = Zero_Curve_Kind then
+         Sharp := True;
+         return Result;
+      elsif Length_Raw <= 0.0
+        or else not Is_Finite (Length_Raw)
+        or else not (Start_U >= 0.0 and then Start_U <= End_U and then End_U <= 1.0)
+      then
+         return Saturated;
+      end if;
+
+      for Axis in Axis_Name loop
+         --  An algebraically constant axis without endpoint correction has no tangent at all.
+         if not (Curve.Structurally_Constant_Axes (Axis)
+                 and then
+                   Curve.Evaluator_Data.Finish_Point (Axis) = Curve.Evaluator_Data.Uncorrected_Finish_Point (Axis))
+         then
+            Active_Count := Active_Count + 1;
+            Active_Axes (Active_Count) := Axis;
+         end if;
+      end loop;
+      if Active_Count = 0 then
+         Sharp := True;
+         return Result;
+      elsif not Gather_Terms then
+         return Saturated;
+      end if;
+
+      if Term_Count = 0 then
+         --  A pole-free evaluator has a constant rational tangent.
+         for Index in 1 .. Active_Count loop
+            Rational (Index, 0) := abs Constants (Index);
+         end loop;
+      else
+         declare
+            Middle  : constant Dimensionless := 0.5 * Start_U + 0.5 * End_U;
+            Bounded : Boolean;
+         begin
+            --  A padded cell can reach past the range by its padding and by the rounding of its centre, which
+            --  the padding exceeds.
+            Evaluate_Sums
+              (Middle,
+               Dimensionless'Max (Middle - Start_U, End_U - Middle) * (1.0 + 2.0**(-50)) + 2.0 * Pad,
+               Range_Sums,
+               Bounded);
+            if not Bounded then
+               return Saturated;
+            end if;
+         end;
+
+         declare
+            Span  : constant Dimensionless := End_U - Start_U;
+            Cells : constant Positive :=
+              (if Span <= 8.0 * Dimensionless'Model_Epsilon * (1.0 + End_U)
+               then 1
+               elsif Span <= 0.125
+               then 2
+               elsif Span <= 0.5
+               then 4
+               else Base_Cells);
+            Width : constant Dimensionless := Span / Dimensionless (Cells);
+         begin
+            --  Rounded centres and radii can leave gaps of a few units in the last place between neighbouring
+            --  cells; Bound_Cell's padding of every radius closes them.
+            for Index in 1 .. Cells loop
+               Push
+                 ((if Cells = 1 then 0.5 * Start_U + 0.5 * End_U else Start_U + (Dimensionless (Index) - 0.5) * Width),
+                  0.5 * Width,
+                  0);
+            end loop;
+         end;
+
+         while Head <= Tail loop
+            declare
+               Item       : Cell renames Queue (Head);
+               Radius     : constant Dimensionless := Item.Radius + Pad;
+               Bounds     : Order_Bounds;
+               Allowances : Order_Bounds;
+               Bounded    : Boolean := True;
+               Refine     : Boolean;
+            begin
+               --  Most cells are already resolved by the sums for the whole range, which need no pass over the
+               --  poles. Only a cell which those leave loose is given its own, smaller sums.
+               Bound_Cell (Item, Radius, Range_Sums, Bounds, Allowances, Refine);
+               if Refine then
+                  declare
+                     Sums : Sum_Array;
+                  begin
+                     Evaluate_Sums (Item.Centre, Radius, Sums, Bounded);
+                     if Bounded then
+                        Bound_Cell (Item, Radius, Sums, Bounds, Allowances, Refine);
+                     end if;
+                  end;
+               end if;
+               if Refine
+                 and then Item.Depth < Maximum_Depth
+                 and then Evaluations + 2 <= Maximum_Evaluations
+                 and then Tail + 3 <= Queue_Capacity
+                 and then Item.Radius > 256.0 * Cell_Pad
+               then
+                  declare
+                     Third : constant Dimensionless := Item.Radius / 3.0;
+                  begin
+                     Push (Item.Centre - 2.0 * Third, Third, Item.Depth + 1);
+                     Push (Item.Centre + 2.0 * Third, Third, Item.Depth + 1);
+                     Tail := Tail + 1;
+                     Queue (Tail) :=
+                       (Centre => Item.Centre, Radius => Third, Depth => Item.Depth + 1, Jets => Item.Jets);
+                  end;
+               else
+                  --  Bounds are those of the range sums if the cell's own could not be formed.
+                  for Index in 1 .. Active_Count loop
+                     for Order in Majorant_Order loop
+                        if Bounds (Index, Order) > Rational (Index, Order) then
+                           Rational (Index, Order) := Bounds (Index, Order);
+                           Noise (Index, Order) := Allowances (Index, Order);
+                        end if;
+                     end loop;
+                  end loop;
+               end if;
+            end;
+            Head := Head + 1;
+         end loop;
+      end if;
+
+      for Index in 1 .. Active_Count loop
+         declare
+            Axis       : constant Axis_Name := Active_Axes (Index);
+            Correction : constant Interval := Finish_Correction_Interval (Curve.Evaluator_Data, Axis);
+            Ratio      : constant Interval :=
+              (if Correction.Lower = 0.0 and then Correction.Upper = 0.0
+               then Correction
+               else Interval_Divide (Correction, Interval_Exact (Length_Raw)));
+         begin
+            if not Ratio.Valid then
+               return Saturated;
+            end if;
+            for Order in Majorant_Order loop
+               declare
+                  Correction_Part : constant Dimensionless :=
+                    (if Ratio.Lower = 0.0 and then Ratio.Upper = 0.0
+                     then 0.0
+                     else Up (Interval_Abs_Max (Ratio) * Correction_Bound (Order)));
+                  Combined        : Dimensionless :=
+                    (if Correction_Part = 0.0
+                     then Rational (Index, Order)
+                     else Up (Rational (Index, Order) + Correction_Part));
+               begin
+                  if not Is_Finite (Combined) or else Combined >= Dimensionless'Last then
+                     return Saturated;
+                  end if;
+                  if Order = 0 then
+                     --  The ideal tangent is a unit vector S in frame coordinates, so its component on this axis is
+                     --  at most the Euclidean norm of the frame's coefficients for the axis. The retained tangent
+                     --  is within the certified tangent error of the ideal one. This is exactly one for an
+                     --  orthonormal frame and does not depend on how finely the range was resolved.
+                     declare
+                        Square_Sum : Dimensionless := 0.0;
+                        Cap        : Dimensionless;
+                     begin
+                        for Component in Frame_Component_Index loop
+                           Square_Sum :=
+                             Up (Square_Sum + Up (Curve.Frame (Component) (Axis) * Curve.Frame (Component) (Axis)));
+                        end loop;
+                        Cap := Certified_Upper_Square_Root (Square_Sum);
+                        if Cap < Dimensionless'Last then
+                           Cap := Up (Cap + Up (Curve.Certified_Tangent_Error + Correction_Part));
+                           Combined := Dimensionless'Min (Combined, Cap);
+                        end if;
+                     end;
+                  end if;
+                  Result (Axis) (Order) := Combined;
+               end;
+            end loop;
+         end;
+      end loop;
+      Sharp :=
+        (for all Index in 1 .. Active_Count =>
+           (for all Order in Majorant_Order =>
+              Noise (Index, Order) <= Noise_Fraction * Rational (Index, Order) + Noise_Floor));
       return Result;
    exception
       when Constraint_Error =>
-         return [others => [others => Dimensionless'Last]];
+         Sharp := False;
+         return Saturated;
    end Pole_Taylor_Tangent_Range_Majorants;
 
    function Bernstein_Tangent_Range_Majorants
@@ -3246,17 +3530,41 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    function Realtime_Tangent_Range_Majorants
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless) return Axis_Majorants
    is
-      Success : Boolean;
+      Sharp  : Boolean;
+      Result : Axis_Majorants := Pole_Taylor_Tangent_Range_Majorants (Curve, Start_U, End_U, Sharp);
    begin
-      --  At a point, the partial-fraction evaluator gives substantially sharper cancellation than repeatedly
-      --  differentiating interval Bernstein controls. Its point path uses one cell, not the old fixed 64-cell pass.
-      if End_U - Start_U <= 8.0 * Dimensionless'Model_Epsilon * (1.0 + Dimensionless'Max (abs Start_U, abs End_U)) then
-         return Pole_Taylor_Tangent_Range_Majorants (Curve, Start_U, End_U);
+      --  The pole-based enclosure is the cheapest path and normally the sharpest. It is not sharp when a pole lies
+      --  too close to the range for its fixed work, or when the partial fractions cancel so far that its rounding
+      --  allowance shows. The Bernstein form, reconstructed here if construction did not need it, is then
+      --  consulted as well; both are valid bounds, so the smaller of each pair is.
+      if Sharp
+        or else Curve.Evaluator_Data.Kind /= Positive_Curve_Kind
+        or else not (Start_U >= 0.0 and then Start_U <= End_U and then End_U <= 1.0)
+      then
+         return Result;
       end if;
       declare
-         Result : constant Axis_Majorants := Bernstein_Tangent_Range_Majorants (Curve, Start_U, End_U, Success);
+         Certified : Stereographic_Curve := Curve;
+         Success   : Boolean := Certified.Retained_Tangent_Certificate.Valid;
       begin
-         return (if Success then Result else Pole_Taylor_Tangent_Range_Majorants (Curve, Start_U, End_U));
+         if not Success then
+            Success := Retain_Bernstein_Tangent_Certificate (Certified);
+         end if;
+         if not Success then
+            return Result;
+         end if;
+         declare
+            Other : constant Axis_Majorants := Bernstein_Tangent_Range_Majorants (Certified, Start_U, End_U, Success);
+         begin
+            if Success then
+               for Axis in Axis_Name loop
+                  for Order in Majorant_Order loop
+                     Result (Axis) (Order) := Dimensionless'Min (Result (Axis) (Order), Other (Axis) (Order));
+                  end loop;
+               end loop;
+            end if;
+            return Result;
+         end;
       end;
    end Realtime_Tangent_Range_Majorants;
 
@@ -3629,7 +3937,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    end Rational_Antiderivative_Is_Canonical_Zero;
 
    function Stable_Log_One_Plus (Value : Dimensionless) return Dimensionless is
-      Reduced, Reduced_Square, Term, Sum : Dimensionless;
+      Odd_Reciprocals              : constant array (Natural range 0 .. 9) of Dimensionless :=
+        [1.0, 1.0 / 3.0, 1.0 / 5.0, 1.0 / 7.0, 1.0 / 9.0, 1.0 / 11.0, 1.0 / 13.0, 1.0 / 15.0, 1.0 / 17.0, 1.0 / 19.0];
+      Reduced, Reduced_Square, Sum : Dimensionless;
    begin
       if abs Value > 0.125 then
          return Dimensionless_Math.Log (1.0 + Value);
@@ -3639,16 +3949,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       --
       --     log(1 + x) = 2·Σₖ₌₀⁹ z²ᵏ⁺¹/(2k + 1),   z = x/(2 + x),
       --
-      --  avoids losing the small displacement when a pole is far from the curve.
+      --  avoids losing the small displacement when a pole is far from the curve. It is summed by Horner's rule in
+      --  z², whose terms all have the same sign.
       Reduced := Value / (2.0 + Value);
       Reduced_Square := Reduced * Reduced;
-      Term := Reduced;
-      Sum := Reduced;
-      for Order in 1 .. 9 loop
-         Term := Term * Reduced_Square;
-         Sum := Sum + Term / Dimensionless (2 * Order + 1);
+      Sum := Odd_Reciprocals (9);
+      for Order in reverse 0 .. 8 loop
+         Sum := Sum * Reduced_Square + Odd_Reciprocals (Order);
       end loop;
-      return 2.0 * Sum;
+      return 2.0 * (Reduced * Sum);
    end Stable_Log_One_Plus;
 
    function Stable_Real_Log_Ratio (Pole, Normalized_Distance : Dimensionless) return Dimensionless is
@@ -3665,6 +3974,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       return Dimensionless_Math.Log (abs (Pole - Normalized_Distance)) - Dimensionless_Math.Log (abs Pole);
    end Stable_Real_Log_Ratio;
 
+   Moderate_Lower : constant Dimensionless := 2.0**(-400);
+   Moderate_Upper : constant Dimensionless := 2.0**400;
+   --  Magnitudes in this range can be squared and their squares added without overflow or underflow, so the pair
+   --  primitives need no scaling for them. Every pole of a practical curve is far inside it.
+
    function Stable_Complex_Log_Ratio
      (Pole_Real, Pole_Imaginary, Normalized_Distance : Dimensionless) return Dimensionless
    is
@@ -3672,70 +3986,105 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Point_Absolute_Real : constant Dimensionless := abs (Normalized_Distance - Pole_Real);
       Base_Scale          : constant Dimensionless := Dimensionless'Max (Base_Absolute_Real, Pole_Imaginary);
       Point_Scale         : constant Dimensionless := Dimensionless'Max (Point_Absolute_Real, Pole_Imaginary);
-      Base_Minor_Ratio    : constant Dimensionless :=
-        Dimensionless'Min (Base_Absolute_Real, Pole_Imaginary) / Base_Scale;
-      Point_Minor_Ratio   : constant Dimensionless :=
-        Dimensionless'Min (Point_Absolute_Real, Pole_Imaginary) / Point_Scale;
-      Base_Minor_Square   : constant Dimensionless := Base_Minor_Ratio * Base_Minor_Ratio;
-      Point_Minor_Square  : constant Dimensionless := Point_Minor_Ratio * Point_Minor_Ratio;
-      Base_Shape          : constant Dimensionless := 1.0 + Base_Minor_Square;
-      Point_Shape         : constant Dimensionless := 1.0 + Point_Minor_Square;
    begin
-      --  Preserve small changes for distant poles. Scaling by max(|A|, B) avoids overflow in both square sums.
-      if Normalized_Distance <= Base_Scale then
+      if Base_Scale >= Moderate_Lower
+        and then Base_Scale <= Moderate_Upper
+        and then abs Normalized_Distance <= Moderate_Upper
+        and then Point_Scale >= Moderate_Lower
+      then
+         --  The same two branches as below, without scaling: the relative change U·(U - 2A)/(A² + B²) while it is
+         --  small, and otherwise the quotient of the two sums of squares, neither of which can cancel.
          declare
-            Scaled_U        : constant Dimensionless := Normalized_Distance / Base_Scale;
-            Scaled_A        : constant Dimensionless := Pole_Real / Base_Scale;
-            Relative_Change : constant Dimensionless := Scaled_U * (Scaled_U - 2.0 * Scaled_A) / Base_Shape;
+            Base   : constant Dimensionless := Pole_Real * Pole_Real + Pole_Imaginary * Pole_Imaginary;
+            Change : constant Dimensionless := Normalized_Distance * (Normalized_Distance - 2.0 * Pole_Real) / Base;
          begin
-            if abs Relative_Change <= 0.125 then
-               return Stable_Log_One_Plus (Relative_Change);
+            if abs Change <= 0.125 then
+               return Stable_Log_One_Plus (Change);
+            else
+               return
+                 Dimensionless_Math.Log
+                   ((Point_Absolute_Real * Point_Absolute_Real + Pole_Imaginary * Pole_Imaginary) / Base);
             end if;
          end;
       end if;
 
-      --  Away from one, form the strictly positive ratio from independently scaled distances. In particular, at
-      --  U = A this retains B^2 instead of subtracting A^2 from A^2 + B^2. Use the reciprocal branch to prevent
-      --  overflow; if the squared scale ratio underflows, logarithm differences remain well defined.
-      if Point_Scale <= Base_Scale then
-         declare
-            Scale_Ratio : constant Dimensionless := Point_Scale / Base_Scale;
-            Ratio       : constant Dimensionless := (Scale_Ratio * Scale_Ratio) * (Point_Shape / Base_Shape);
-         begin
-            if Ratio > 0.0 then
-               return Dimensionless_Math.Log (Ratio);
-            end if;
-         end;
-      else
-         declare
-            Scale_Ratio   : constant Dimensionless := Base_Scale / Point_Scale;
-            Inverse_Ratio : constant Dimensionless := (Scale_Ratio * Scale_Ratio) * (Base_Shape / Point_Shape);
-         begin
-            if Inverse_Ratio > 0.0 then
-               return -Dimensionless_Math.Log (Inverse_Ratio);
-            end if;
-         end;
-      end if;
+      declare
+         Base_Minor_Ratio   : constant Dimensionless :=
+           Dimensionless'Min (Base_Absolute_Real, Pole_Imaginary) / Base_Scale;
+         Point_Minor_Ratio  : constant Dimensionless :=
+           Dimensionless'Min (Point_Absolute_Real, Pole_Imaginary) / Point_Scale;
+         Base_Minor_Square  : constant Dimensionless := Base_Minor_Ratio * Base_Minor_Ratio;
+         Point_Minor_Square : constant Dimensionless := Point_Minor_Ratio * Point_Minor_Ratio;
+         Base_Shape         : constant Dimensionless := 1.0 + Base_Minor_Square;
+         Point_Shape        : constant Dimensionless := 1.0 + Point_Minor_Square;
+      begin
+         --  Preserve small changes for distant poles. Scaling by max(|A|, B) avoids overflow in both square sums.
+         if Normalized_Distance <= Base_Scale then
+            declare
+               Scaled_U        : constant Dimensionless := Normalized_Distance / Base_Scale;
+               Scaled_A        : constant Dimensionless := Pole_Real / Base_Scale;
+               Relative_Change : constant Dimensionless := Scaled_U * (Scaled_U - 2.0 * Scaled_A) / Base_Shape;
+            begin
+               if abs Relative_Change <= 0.125 then
+                  return Stable_Log_One_Plus (Relative_Change);
+               end if;
+            end;
+         end if;
 
-      return
-        2.0
-        * (Dimensionless_Math.Log (Point_Scale) - Dimensionless_Math.Log (Base_Scale))
-        + Stable_Log_One_Plus (Point_Minor_Square)
-        - Stable_Log_One_Plus (Base_Minor_Square);
+         --  Away from one, form the strictly positive ratio from independently scaled distances. In particular, at
+         --  U = A this retains B^2 instead of subtracting A^2 from A^2 + B^2. Use the reciprocal branch to prevent
+         --  overflow; if the squared scale ratio underflows, logarithm differences remain well defined.
+         if Point_Scale <= Base_Scale then
+            declare
+               Scale_Ratio : constant Dimensionless := Point_Scale / Base_Scale;
+               Ratio       : constant Dimensionless := (Scale_Ratio * Scale_Ratio) * (Point_Shape / Base_Shape);
+            begin
+               if Ratio > 0.0 then
+                  return Dimensionless_Math.Log (Ratio);
+               end if;
+            end;
+         else
+            declare
+               Scale_Ratio   : constant Dimensionless := Base_Scale / Point_Scale;
+               Inverse_Ratio : constant Dimensionless := (Scale_Ratio * Scale_Ratio) * (Base_Shape / Point_Shape);
+            begin
+               if Inverse_Ratio > 0.0 then
+                  return -Dimensionless_Math.Log (Inverse_Ratio);
+               end if;
+            end;
+         end if;
+
+         return
+           2.0
+           * (Dimensionless_Math.Log (Point_Scale) - Dimensionless_Math.Log (Base_Scale))
+           + Stable_Log_One_Plus (Point_Minor_Square)
+           - Stable_Log_One_Plus (Base_Minor_Square);
+      end;
    end Stable_Complex_Log_Ratio;
 
    function Stable_Complex_Angle_Delta
      (Pole_Real, Pole_Imaginary, Normalized_Distance : Dimensionless) return Dimensionless
    is
-      Scale    : constant Dimensionless :=
+      Scale : constant Dimensionless :=
         Dimensionless'Max (abs Normalized_Distance, Dimensionless'Max (abs Pole_Real, Pole_Imaginary));
-      Scaled_U : constant Dimensionless := Normalized_Distance / Scale;
-      Scaled_A : constant Dimensionless := Pole_Real / Scale;
-      Scaled_B : constant Dimensionless := Pole_Imaginary / Scale;
    begin
-      --  These are the cross and dot products between (-A,-B) and (U-A,-B), both divided by Scale**2.
-      --  Scaling before multiplication avoids overflow for large finite poles without changing the returned angle.
-      return Dimensionless_Math.Arctan (Scaled_B * Scaled_U, Scaled_B * Scaled_B + Scaled_A * (Scaled_A - Scaled_U));
+      --  These are the cross and dot products between (-A,-B) and (U-A,-B). Dividing both by Scale**2 before
+      --  multiplying avoids overflow for large finite poles without changing the returned angle; moderate
+      --  magnitudes need no scaling.
+      if Scale >= Moderate_Lower and then Scale <= Moderate_Upper then
+         return
+           Dimensionless_Math.Arctan
+             (Pole_Imaginary * Normalized_Distance,
+              Pole_Imaginary * Pole_Imaginary + Pole_Real * (Pole_Real - Normalized_Distance));
+      end if;
+      declare
+         Scaled_U : constant Dimensionless := Normalized_Distance / Scale;
+         Scaled_A : constant Dimensionless := Pole_Real / Scale;
+         Scaled_B : constant Dimensionless := Pole_Imaginary / Scale;
+      begin
+         return
+           Dimensionless_Math.Arctan (Scaled_B * Scaled_U, Scaled_B * Scaled_B + Scaled_A * (Scaled_A - Scaled_U));
+      end;
    end Stable_Complex_Angle_Delta;
 
    function Evaluate_Rational_Displacement
@@ -3802,7 +4151,12 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       elsif Normalized_Distance >= 1.0 then
          return 1.0;
       end if;
-      Lower_Half := U**6 * (462.0 + U * (-1_980.0 + U * (3_465.0 + U * (-3_080.0 + U * (1_386.0 - 252.0 * U)))));
+      declare
+         U2 : constant Dimensionless := U * U;
+         U6 : constant Dimensionless := U2 * (U2 * U2);
+      begin
+         Lower_Half := U6 * (462.0 + U * (-1_980.0 + U * (3_465.0 + U * (-3_080.0 + U * (1_386.0 - 252.0 * U)))));
+      end;
       return (if Normalized_Distance <= 0.5 then Lower_Half else 1.0 - Lower_Half);
    end Endpoint_Smootherstep;
 
@@ -4019,6 +4373,480 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Error_Bounds := [others => Dimensionless'Last];
          return False;
    end Measure_Evaluator_Endpoint_Jet_Error;
+
+   ----------------------------------------------------------------------------------------------------------------
+   --  Sampled tangent certificate
+   --
+   --  Let V be the chart coordinate, U = V/h(V) with h(V) = W·(1 - V) + V the normalized distance, P/D the ideal
+   --  tangent with D = 1 + Y·Y ≥ 1, and R(U) = c + Σ r/(U - p) the retained one. Define
+   --
+   --     Q(V) = s·Π (V - p·h(V))/(-p·W),
+   --
+   --  one linear factor per real pole and one conjugate product per pair, each equal to one at V = 0. Every
+   --  V - p·h(V) = h(V)·(U - p) is linear in V, so Q has degree at most sixteen, and so has Q·R(U(V)): multiplying
+   --  r/(U - p) = r·h(V)/(V - p·h(V)) by Q replaces that pole's factor with r·h(V)/(-p·W). Consequently
+   --
+   --     g(V) = Q(V)·D(V)·(P(V)/D(V) - R(U(V))),     e(V) = Q(V) - D(V)
+   --
+   --  are polynomials of degree at most thirty-two and sixteen. A polynomial of degree below N is its own
+   --  interpolant at any N nodes, so on [0, 1] it is bounded by Λ times its largest nodal magnitude, where Λ is
+   --  the Lebesgue constant of the nodes. Thirty-three Chebyshev nodes have Λ = 3.1885, below the classical
+   --  (2/π)·ln(33) + 1 = 3.226. Therefore, with E and G the largest nodal magnitudes of e and g,
+   --
+   --     Q ≥ D - |e| ≥ 1 - Λ·E > 0,     |P/D - R| = |g|/(Q·D) ≤ Λ·G/(1 - Λ·E)
+   --
+   --  over the complete curve. Only sixty-six point evaluations are needed, instead of reconstructing and
+   --  multiplying the polynomials themselves.
+   --
+   --  The nodal values are computed in ordinary rounded arithmetic. With u = 2⁻⁵³, each allowance below exceeds the
+   --  accumulated error it covers:
+   --
+   --    * Basis values B(X) = C(8,k)·Xᵏ·(1 - X)⁸⁻ᵏ take at most seventeen rounded operations, counting the rounded
+   --      1 - X in every factor: relative error below 20u. The nine-term chart sum adds 9u of the sum of
+   --      magnitudes, and the basis values sum to one, so |Ŷ - Y| ≤ 2⁻⁴⁶·max|b| per component.
+   --    * D and the local numerators inherit that through ε_S = Σ δ·(2·|Ŷ| + δ), plus 5u·D for their own
+   --      operations. The frame combination adds 8u of its sum of magnitudes, and the quotient by D ≥ 1 adds
+   --      |T|·ε_D and 2u·|T|.
+   --    * h, a sum of nonnegative terms, and Û = X/h err by at most 6u·U ≤ 6u. The retained tangent is evaluated at
+   --      the stored number Û, where Û - p is correct to u; each term then errs by at most 16u of its magnitude,
+   --      and seventeen terms accumulate at most 17u more. Moving from Û to U changes it by at most 6u times the
+   --      largest derivative on [0, 1], which Σ |r|/d² bounds with d the pole's distance from [0, 1].
+   --    * A factor |Û - π|²/|π|² of Q errs by at most 8u in its own operations and, through Û, by
+   --      12u·(|Û - A| + 6u)/|Û - π|² ≤ 13u·max(1, 1/|Û - π|²). The power of h/W adds at most 100u.
+   --
+   --  The node loop leaves overflow unchecked, because checking every operation would cost more than the
+   --  operations. The magnitude limits keep the ideal side finite. On the retained side an infinity or a NaN can
+   --  only arise from a pole within rounding of a node; it then reaches the denominator, the amplification or the
+   --  nodal bounds, each of which is compared against a finite limit in a form which fails for a NaN.
+   ----------------------------------------------------------------------------------------------------------------
+
+   type Tangent_Sample is record
+      Node : Dimensionless;
+      --  A Chebyshev node of [0, 1] in the chart coordinate.
+
+      Complement : Dimensionless;
+      --  1 - Node, rounded.
+
+      Basis : Raw_Bernstein;
+      --  The degree-eight Bernstein basis at Node.
+   end record;
+
+   type Tangent_Sample_Array is array (Tangent_Sample_Index) of Tangent_Sample;
+
+   function Build_Tangent_Samples return Tangent_Sample_Array;
+
+   function Build_Tangent_Samples return Tangent_Sample_Array is
+      Result : Tangent_Sample_Array;
+   begin
+      for Index in Tangent_Sample_Index loop
+         declare
+            Angle      : constant Dimensionless :=
+              Dimensionless (2 * Index - 1) * Ada.Numerics.Pi / Dimensionless (2 * Tangent_Sample_Count);
+            Node       : constant Dimensionless := 0.5 * (1.0 - Dimensionless_Math.Cos (Angle));
+            Complement : constant Dimensionless := 1.0 - Node;
+         begin
+            Result (Index).Node := Node;
+            Result (Index).Complement := Complement;
+            for K in Chart_Coefficient_Index loop
+               declare
+                  Value : Dimensionless := Binomial (Fixed_Chart_Degree, K);
+               begin
+                  for Factor in 1 .. K loop
+                     Value := Value * Node;
+                  end loop;
+                  for Factor in 1 .. Fixed_Chart_Degree - K loop
+                     Value := Value * Complement;
+                  end loop;
+                  Result (Index).Basis (K) := Value;
+               end;
+            end loop;
+         end;
+      end loop;
+      return Result;
+   end Build_Tangent_Samples;
+
+   Tangent_Samples : constant Tangent_Sample_Array := Build_Tangent_Samples;
+
+   function Tangent_Sample_Node (Index : Tangent_Sample_Index) return Dimensionless
+   is (Tangent_Samples (Index).Node);
+
+   function Sampled_Realtime_Tangent_Error
+     (Curve : Stereographic_Curve; Final_Cache : Rational_Antiderivative; Denominator_Scale : Dimensionless)
+      return Tangent_Certificate_Result
+   is
+      type Axis_Values is array (Axis_Name) of Dimensionless;
+      type Pole_Term is record
+         Real_Part, Imaginary_Part : Dimensionless := 0.0;
+         --  Imaginary_Part is zero for a real pole.
+
+         Reciprocal_Norm : Dimensionless := 0.0;
+         --  1/p for a real pole and 1/|π|² for a pair.
+
+         Residue_Real, Residue_Imaginary : Axis_Values := [others => 0.0];
+         --  A pair's residue is stored doubled, which is exact.
+      end record;
+
+      Chart_Allowance  : constant Dimensionless := 2.0**(-46);
+      Term_Allowance   : constant Dimensionless := 2.0**(-47);
+      Small_Allowance  : constant Dimensionless := 2.0**(-50);
+      Factor_Allowance : constant Dimensionless := 2.0**(-45);
+      Rounding_Factor  : constant Dimensionless := 1.0 + 2.0**(-40);
+      --  Covers the rounding of the allowance arithmetic itself, which sums a few dozen nonnegative terms.
+
+      Underflow_Padding : constant Dimensionless := 2.0**(-500);
+      --  An underflowing operation errs by less than 2⁻¹⁰⁷⁵ rather than relatively. The magnitude limits below
+      --  keep every later amplification of such an error far below this padding.
+
+      Magnitude_Limit : constant Dimensionless := 1.0E60;
+
+      Warp      : constant Dimensionless := Curve.Warp_Factor;
+      Terms     : array (Rational_Degree_Slot) of Pole_Term;
+      Count     : Natural := 0;
+      Active    : array (Axis_Name) of Boolean := [others => False];
+      Slope     : Axis_Values := [others => 0.0];
+      Delta_Y   : array (Chart_Component_Index) of Dimensionless := [others => 0.0];
+      Vanishes  : array (Chart_Component_Index) of Boolean := [others => True];
+      --  Whether every coefficient of the chart component is exactly zero.
+      Largest_E : Dimensionless := 0.0;
+      Largest_G : Axis_Values := [others => 0.0];
+
+      function Usable (Value : Dimensionless) return Boolean
+      is (abs Value <= Magnitude_Limit);
+      --  False for NaN as well.
+
+      function Failed (Status : Tangent_Certificate_Status) return Tangent_Certificate_Result;
+
+      function Failed (Status : Tangent_Certificate_Status) return Tangent_Certificate_Result is
+      begin
+         case Status is
+            when Tangent_Certificate_Is_Numerically_Unsafe =>
+               return (Status => Tangent_Certificate_Is_Numerically_Unsafe);
+
+            when others                                    =>
+               return (Status => Tangent_Could_Not_Be_Certified);
+         end case;
+      end Failed;
+
+      procedure Append (Real_Slot, Imaginary_Slot : Natural; Good : out Boolean);
+      --  Record one pole and add its share of the retained tangent's largest derivative to Slope.
+
+      procedure Append (Real_Slot, Imaginary_Slot : Natural; Good : out Boolean) is
+         Term       : Pole_Term;
+         Factor     : constant Dimensionless := (if Imaginary_Slot = 0 then 1.0 else 2.0);
+         Horizontal : Dimensionless;
+         Square     : Dimensionless;
+      begin
+         Term.Real_Part := Final_Cache.Pole_Slots (Real_Slot).Pole_Component;
+         Term.Imaginary_Part :=
+           (if Imaginary_Slot = 0 then 0.0 else Final_Cache.Pole_Slots (Imaginary_Slot).Pole_Component);
+         Good := Usable (Term.Real_Part) and then Usable (Term.Imaginary_Part);
+         if not Good then
+            return;
+         end if;
+         Horizontal :=
+           (if Term.Real_Part < 0.0
+            then -Term.Real_Part
+            elsif Term.Real_Part > 1.0
+            then Term.Real_Part - 1.0
+            else 0.0);
+         --  The squared distance from [0, 1], rounded toward zero.
+         Square := Down (Down (Horizontal * Horizontal) + Down (Term.Imaginary_Part * Term.Imaginary_Part));
+         if Imaginary_Slot = 0 then
+            Good := Term.Real_Part /= 0.0;
+            if Good then
+               Term.Reciprocal_Norm := 1.0 / Term.Real_Part;
+            end if;
+         else
+            declare
+               Norm : constant Dimensionless :=
+                 Term.Real_Part * Term.Real_Part + Term.Imaginary_Part * Term.Imaginary_Part;
+            begin
+               Good := Term.Imaginary_Part > 0.0 and then Norm > 0.0;
+               if Good then
+                  Term.Reciprocal_Norm := 1.0 / Norm;
+               end if;
+            end;
+         end if;
+         Good := Good and then Square > 0.0 and then Usable (Term.Reciprocal_Norm) and then Usable (1.0 / Square);
+         if not Good then
+            return;
+         end if;
+         for Axis in Axis_Name loop
+            declare
+               Real_Residue      : constant Dimensionless :=
+                 Factor * Final_Cache.Pole_Slots (Real_Slot).Residue_Component (Axis);
+               Imaginary_Residue : constant Dimensionless :=
+                 (if Imaginary_Slot = 0
+                  then 0.0
+                  else Factor * Final_Cache.Pole_Slots (Imaginary_Slot).Residue_Component (Axis));
+            begin
+               Good := Good and then Usable (Real_Residue) and then Usable (Imaginary_Residue);
+               exit when not Good;
+               Term.Residue_Real (Axis) := Real_Residue;
+               Term.Residue_Imaginary (Axis) := Imaginary_Residue;
+               if Real_Residue /= 0.0 or else Imaginary_Residue /= 0.0 then
+                  Active (Axis) := True;
+                  --  |d/dU r/(U - p)| ≤ |r|/d².
+                  Slope (Axis) := Up (Slope (Axis) + Up (Up (abs Real_Residue + abs Imaginary_Residue) / Square));
+               end if;
+            end;
+         end loop;
+         if Good then
+            Count := Count + 1;
+            Terms (Count) := Term;
+         end if;
+      end Append;
+   begin
+      if not Rational_Antiderivative_Primitives_Are_Safe (Final_Cache)
+        or else not (Denominator_Scale > 0.0 and then Denominator_Scale <= Magnitude_Limit)
+        or else Curve.Evaluator_Data.Length_Value <= 0.0 * mm
+      then
+         return Failed (Tangent_Certificate_Is_Numerically_Unsafe);
+      end if;
+
+      for Component in Chart_Component_Index loop
+         declare
+            Largest : Dimensionless := 0.0;
+         begin
+            for K in Chart_Coefficient_Index loop
+               Largest := Dimensionless'Max (Largest, abs Curve.Coefficients (K, Component));
+            end loop;
+            if not Usable (Largest) then
+               return Failed (Tangent_Could_Not_Be_Certified);
+            end if;
+            Delta_Y (Component) := Chart_Allowance * Largest;
+            Vanishes (Component) := Largest = 0.0;
+         end;
+      end loop;
+
+      --  An axis takes part unless both tangents vanish on it identically: no cached constant or residue, and no
+      --  frame column which multiplies a nonzero local numerator. Such an axis contributes exactly zero error.
+      for Axis in Axis_Name loop
+         if not Usable (Final_Cache.Constant_Tangent (Axis)) then
+            return Failed (Tangent_Could_Not_Be_Certified);
+         end if;
+         Active (Axis) := Final_Cache.Constant_Tangent (Axis) /= 0.0 or else Curve.Frame (0) (Axis) /= 0.0;
+         for Component in Chart_Component_Index loop
+            if Curve.Frame (Component) (Axis) /= 0.0 and then not Vanishes (Component) then
+               Active (Axis) := True;
+            end if;
+         end loop;
+      end loop;
+      for Index in 1 .. Final_Cache.Real_Pole_Count loop
+         declare
+            Good : Boolean;
+         begin
+            Append (Index, 0, Good);
+            if not Good then
+               return Failed (Tangent_Could_Not_Be_Certified);
+            end if;
+         end;
+      end loop;
+      for Pair in 1 .. Final_Cache.Pair_Count loop
+         declare
+            Good : Boolean;
+         begin
+            Append
+              (Complex_Pair_Real_Slot (Final_Cache, Rational_Pair_Index (Pair)),
+               Complex_Pair_Imaginary_Slot (Final_Cache, Rational_Pair_Index (Pair)),
+               Good);
+            if not Good then
+               return Failed (Tangent_Could_Not_Be_Certified);
+            end if;
+         end;
+      end loop;
+
+      for Component in Frame_Component_Index loop
+         for Axis in Axis_Name loop
+            if not Usable (Curve.Frame (Component) (Axis)) then
+               return Failed (Tangent_Could_Not_Be_Certified);
+            end if;
+         end loop;
+      end loop;
+
+      for Sample of Tangent_Samples loop
+         declare
+            pragma Suppress (Overflow_Check);
+            Y                : array (Chart_Component_Index) of Dimensionless := [others => 0.0];
+            Square_Sum       : Dimensionless := 0.0;
+            Square_Allowance : Dimensionless := 0.0;
+            Ideal_Q          : Dimensionless;
+            Ideal_Allowance  : Dimensionless;
+            Local_0          : Dimensionless;
+            H                : constant Dimensionless := Warp * Sample.Complement + Sample.Node;
+            U                : constant Dimensionless := Dimensionless'Min (1.0, Sample.Node / H);
+            Ratio            : constant Dimensionless := H / Warp;
+            Cached_Q         : Dimensionless := Denominator_Scale;
+            Amplification    : Dimensionless := 16.0;
+            Retained         : Axis_Values := [others => 0.0];
+            Retained_Size    : Axis_Values := [others => 0.0];
+         begin
+            --  The ideal tangent at this node.
+            for Component in Chart_Component_Index loop
+               for K in Chart_Coefficient_Index loop
+                  Y (Component) := Y (Component) + Curve.Coefficients (K, Component) * Sample.Basis (K);
+               end loop;
+               Square_Sum := Square_Sum + Y (Component) * Y (Component);
+               Square_Allowance :=
+                 Square_Allowance + Delta_Y (Component) * (2.0 * abs Y (Component) + Delta_Y (Component));
+            end loop;
+            Ideal_Q := 1.0 + Square_Sum;
+            Local_0 := 1.0 - Square_Sum;
+            Ideal_Allowance := Square_Allowance + Small_Allowance * Ideal_Q;
+
+            --  The retained tangent and the cached denominator at the corresponding distance.
+            for Term of Terms (1 .. Count) loop
+               declare
+                  X : constant Dimensionless := U - Term.Real_Part;
+               begin
+                  if Term.Imaginary_Part = 0.0 then
+                     declare
+                        Reciprocal : constant Dimensionless := 1.0 / X;
+                     begin
+                        for Axis in Axis_Name loop
+                           if Active (Axis) then
+                              Retained (Axis) := Retained (Axis) + Term.Residue_Real (Axis) * Reciprocal;
+                              Retained_Size (Axis) :=
+                                Retained_Size (Axis) + abs Term.Residue_Real (Axis) * abs Reciprocal;
+                           end if;
+                        end loop;
+                        --  (h/W)·(p - U)/p, which is positive because p lies outside [0, 1].
+                        Cached_Q := Cached_Q * (Ratio * (-X * Term.Reciprocal_Norm));
+                        Amplification := Amplification + Dimensionless'Max (1.0, abs Reciprocal);
+                     end;
+                  else
+                     declare
+                        Square  : constant Dimensionless := X * X + Term.Imaginary_Part * Term.Imaginary_Part;
+                        Inverse : constant Dimensionless := 1.0 / Square;
+                        W_Real  : constant Dimensionless := X * Inverse;
+                        W_Imag  : constant Dimensionless := Term.Imaginary_Part * Inverse;
+                     begin
+                        for Axis in Axis_Name loop
+                           if Active (Axis) then
+                              Retained (Axis) :=
+                                Retained (Axis)
+                                + (Term.Residue_Real (Axis) * W_Real - Term.Residue_Imaginary (Axis) * W_Imag);
+                              Retained_Size (Axis) :=
+                                Retained_Size (Axis)
+                                + (abs Term.Residue_Real (Axis) * abs W_Real
+                                   + abs Term.Residue_Imaginary (Axis) * W_Imag);
+                           end if;
+                        end loop;
+                        Cached_Q := Cached_Q * ((Ratio * Ratio) * (Square * Term.Reciprocal_Norm));
+                        Amplification := Amplification + Dimensionless'Max (1.0, Inverse);
+                     end;
+                  end if;
+               end;
+            end loop;
+
+            declare
+               Factor_Error : constant Dimensionless := Factor_Allowance * Amplification;
+               Scale        : Dimensionless;
+            begin
+               --  A relative error of ε per factor compounds to at most twice their sum while that sum is small;
+               --  Factor_Allowance is sixteen times the derived 13u, which includes that doubling.
+               if not (Factor_Error <= 2.0**(-10))
+                 or else not (Cached_Q > 0.0 and then Cached_Q <= 1.0E30)
+                 or else not (Ideal_Q <= 1.0E30)
+               then
+                  return Failed (Tangent_Could_Not_Be_Certified);
+               end if;
+               declare
+                  Nodal_E : constant Dimensionless :=
+                    (abs (Cached_Q - Ideal_Q) + Cached_Q * Factor_Error + Ideal_Allowance
+                     + Small_Allowance * (Cached_Q + Ideal_Q))
+                    * Rounding_Factor
+                    + Underflow_Padding;
+               begin
+                  --  A larger value could not prove a positive denominator; a NaN fails this comparison too.
+                  if not (Nodal_E <= 1.0) then
+                     return Failed (Tangent_Could_Not_Be_Certified);
+                  end if;
+                  Largest_E := Dimensionless'Max (Largest_E, Nodal_E);
+               end;
+               Scale := (Cached_Q * (1.0 + Factor_Error)) * (Ideal_Q + Ideal_Allowance);
+
+               for Axis in Axis_Name loop
+                  if Active (Axis) then
+                     declare
+                        Numerator      : Dimensionless := Curve.Frame (0) (Axis) * Local_0;
+                        Numerator_Size : Dimensionless := abs Numerator;
+                        Numerator_Slip : Dimensionless := abs Curve.Frame (0) (Axis) * Ideal_Allowance;
+                        Ideal          : Dimensionless;
+                        Cached         : constant Dimensionless :=
+                          Retained (Axis) + Final_Cache.Constant_Tangent (Axis);
+                        Cached_Size    : constant Dimensionless :=
+                          Retained_Size (Axis) + abs Final_Cache.Constant_Tangent (Axis);
+                     begin
+                        for Component in Chart_Component_Index loop
+                           declare
+                              Product : constant Dimensionless :=
+                                Curve.Frame (Component) (Axis) * (2.0 * Y (Component));
+                           begin
+                              Numerator := Numerator + Product;
+                              Numerator_Size := Numerator_Size + abs Product;
+                              Numerator_Slip :=
+                                Numerator_Slip + abs Curve.Frame (Component) (Axis) * (2.0 * Delta_Y (Component));
+                           end;
+                        end loop;
+                        Ideal := Numerator / Ideal_Q;
+                        declare
+                           Nodal_G : constant Dimensionless :=
+                             Scale
+                             * (abs (Ideal - Cached) + Numerator_Slip + Small_Allowance * Numerator_Size
+                                + abs Ideal * (Ideal_Allowance + Small_Allowance)
+                                + Term_Allowance * Cached_Size
+                                + Small_Allowance * Slope (Axis)
+                                + Small_Allowance * (abs Ideal + abs Cached))
+                             * Rounding_Factor
+                             + Underflow_Padding;
+                        begin
+                           --  An unchecked overflow on the retained side arrives here as an infinity or a NaN.
+                           if not (Nodal_G <= Magnitude_Limit) then
+                              return Failed (Tangent_Could_Not_Be_Certified);
+                           end if;
+                           Largest_G (Axis) := Dimensionless'Max (Largest_G (Axis), Nodal_G);
+                        end;
+                     end;
+                  end if;
+               end loop;
+            end;
+         end;
+      end loop;
+
+      declare
+         Denominator_Slack : constant Dimensionless := Up (Tangent_Sample_Lebesgue_Bound * Largest_E);
+         Minimum_Q         : Dimensionless;
+         Squared_Error_Sum : Dimensionless := 0.0;
+      begin
+         if not (Denominator_Slack <= 0.5) then
+            return Failed (Tangent_Could_Not_Be_Certified);
+         end if;
+         Minimum_Q := Down (1.0 - Denominator_Slack);
+         for Axis in Axis_Name loop
+            if Active (Axis) then
+               declare
+                  Axis_Error : constant Dimensionless :=
+                    Up (Up (Tangent_Sample_Lebesgue_Bound * Largest_G (Axis)) / Minimum_Q);
+               begin
+                  Squared_Error_Sum := Up (Squared_Error_Sum + Up (Axis_Error * Axis_Error));
+               end;
+            end if;
+         end loop;
+         declare
+            Error_Bound : constant Dimensionless := Certified_Upper_Square_Root (Squared_Error_Sum);
+         begin
+            if Error_Bound = Dimensionless'Last or else not Is_Finite (Error_Bound) then
+               return Failed (Tangent_Certificate_Is_Numerically_Unsafe);
+            else
+               return (Status => Tangent_Was_Certified, Error_Bound => Error_Bound);
+            end if;
+         end;
+      end;
+   exception
+      when Constraint_Error =>
+         return (Status => Tangent_Certificate_Is_Numerically_Unsafe);
+   end Sampled_Realtime_Tangent_Error;
 
    --  The final representation certificate compares two rational tangent fields in Bernstein form. Degree sixteen
    --  is enough for either numerator or denominator; cross multiplication therefore needs degree thirty-two.
@@ -4638,6 +5466,35 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          return (Status => Tangent_Certificate_Is_Numerically_Unsafe);
    end Certified_Realtime_Tangent_Error;
 
+   function Retain_Bernstein_Tangent_Certificate (Curve : in out Stereographic_Curve) return Boolean is
+      Start_Square : Dimensionless := 0.0;
+      Certificate  : Retained_Tangent_Bernstein_Certificate;
+   begin
+      --  The first Bernstein control is the chart's value at the start, where the ideal denominator is 1 + Y·Y.
+      for Component in Chart_Component_Index loop
+         Start_Square := Start_Square + Curve.Coefficients (0, Component) * Curve.Coefficients (0, Component);
+      end loop;
+      declare
+         Result : constant Tangent_Certificate_Result :=
+           Certified_Realtime_Tangent_Error
+             (Curve,
+              Curve.Evaluator_Data.Antiderivative_Cache,
+              Start_Square + 1.0,
+              Length'Max (Curve.Certified_Position_Error, Length'Model_Small),
+              Certificate);
+      begin
+         if Result.Status = Tangent_Was_Certified and then Certificate.Valid then
+            Curve.Retained_Tangent_Certificate := Certificate;
+            return True;
+         else
+            return False;
+         end if;
+      end;
+   exception
+      when Constraint_Error =>
+         return False;
+   end Retain_Bernstein_Tangent_Certificate;
+
    function Build_Rational_Representation
      (Curve                  : in out Stereographic_Curve;
       Power_Coefficients     : Power_Chart;
@@ -4667,6 +5524,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       Chart_Degree           : Natural range 0 .. Fixed_Chart_Degree := 0;
       Denominator_Degree     : Natural range 0 .. Maximum_Rational_Degree := 0;
       Cache                  : Rational_Antiderivative := (others => <>);
+      Iterated               : Boolean := False;
 
       function Evaluate_Polynomial (Coefficients : Real_Polynomial; Degree : Natural; Value : Complex) return Complex;
       --  Evaluate a real-coefficient polynomial at a complex value using Horner's method.
@@ -4802,6 +5660,175 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             return False;
       end Find_Roots;
 
+      function Find_Roots_By_Iteration
+        (Coefficients : Real_Polynomial; Degree : Natural; Result : out Complex_Root_Array) return Boolean;
+      --  Find all roots of a real polynomial without real roots by Aberth-Ehrlich iteration. The roots form
+      --  conjugate pairs, so only the member of each pair in the upper half-plane is iterated and its conjugate is
+      --  implied. Each pair is returned as two adjacent exact conjugates, the upper one first. False if the
+      --  iteration is not applicable or does not settle, in which case Find_Roots must be used instead.
+      --
+      --  Nothing here needs to be rigorous: every root is validated against the polynomial afterwards, and the
+      --  compiled evaluator is certified against the ideal tangent as a whole.
+
+      function Find_Roots_By_Iteration
+        (Coefficients : Real_Polynomial; Degree : Natural; Result : out Complex_Root_Array) return Boolean
+      is
+         pragma Suppress (Overflow_Check);
+         --  The limits below keep every Horner intermediate finite: |z|¹⁶·|coefficient| < 10⁹⁶·10¹⁰⁰.
+         Coefficient_Limit  : constant Dimensionless := 1.0E100;
+         Root_Limit         : constant Dimensionless := 1.0E6;
+         Maximum_Iterations : constant := 40;
+         Half               : constant Natural := Degree / 2;
+         subtype Pair_Slot is Positive range 1 .. Maximum_Rational_Degree / 2;
+         Real_Parts         : array (Pair_Slot) of Dimensionless := [others => 0.0];
+         Imaginary_Parts    : array (Pair_Slot) of Dimensionless := [others => 0.0];
+         Settled            : array (Pair_Slot) of Boolean := [others => False];
+         Leading            : constant Dimensionless := Coefficients (Degree);
+         Centre, Radius     : Dimensionless;
+         Value              : Dimensionless;
+      begin
+         Result := [others => Compose_From_Cartesian (0.0, 0.0)];
+         if Degree = 0 or else Degree mod 2 /= 0 or else Leading = 0.0 then
+            return False;
+         end if;
+         for Index in 0 .. Degree loop
+            if not (abs Coefficients (Index) <= Coefficient_Limit) then
+               return False;
+            end if;
+         end loop;
+
+         --  Start on a circle about the roots' centroid whose radius is the geometric mean of their distances
+         --  from it, |D(c)/aₙ|^(1/n). The phase offset keeps the start away from any symmetry of the roots.
+         Centre := -Coefficients (Degree - 1) / (Dimensionless (Degree) * Leading);
+         if not (abs Centre <= Root_Limit) then
+            return False;
+         end if;
+         Value := Leading;
+         for Index in reverse 0 .. Degree - 1 loop
+            Value := Value * Centre + Coefficients (Index);
+         end loop;
+         Value := abs (Value / Leading);
+         if not (Value > 0.0 and then Value <= Dimensionless'Last) then
+            return False;
+         end if;
+         Radius := Dimensionless_Math.Exp (Dimensionless_Math.Log (Value) / Dimensionless (Degree));
+         if not (Radius > 0.0 and then Radius <= Root_Limit) then
+            return False;
+         end if;
+         for K in 1 .. Half loop
+            declare
+               Angle : constant Dimensionless :=
+                 Dimensionless (Ada.Numerics.Pi) * (Dimensionless (K) - 0.63) / Dimensionless (Half);
+            begin
+               Real_Parts (K) := Centre + Radius * Dimensionless_Math.Cos (Angle);
+               Imaginary_Parts (K) := Radius * Dimensionless_Math.Sin (Angle);
+            end;
+         end loop;
+
+         for Iteration in 1 .. Maximum_Iterations loop
+            for K in 1 .. Half loop
+               if not Settled (K) then
+                  declare
+                     X       : constant Dimensionless := Real_Parts (K);
+                     Y       : constant Dimensionless := Imaginary_Parts (K);
+                     Modulus : constant Dimensionless := Dimensionless_Math.Sqrt (X * X + Y * Y);
+                     --  Horner evaluation of D, D′ and of the magnitude bound Σ |aᵢ|·|z|ⁱ.
+                     P_Re    : Dimensionless := Leading;
+                     P_Im    : Dimensionless := 0.0;
+                     D_Re    : Dimensionless := 0.0;
+                     D_Im    : Dimensionless := 0.0;
+                     Size    : Dimensionless := abs Leading;
+                     Next    : Dimensionless;
+                  begin
+                     for Index in reverse 0 .. Degree - 1 loop
+                        Next := D_Re * X - D_Im * Y + P_Re;
+                        D_Im := D_Re * Y + D_Im * X + P_Im;
+                        D_Re := Next;
+                        Next := P_Re * X - P_Im * Y + Coefficients (Index);
+                        P_Im := P_Re * Y + P_Im * X;
+                        P_Re := Next;
+                        Size := Size * Modulus + abs Coefficients (Index);
+                     end loop;
+                     if abs P_Re + abs P_Im <= 8.0 * Dimensionless'Model_Epsilon * Size then
+                        --  The residual is within the rounding error of its own evaluation.
+                        Settled (K) := True;
+                     else
+                        declare
+                           D_Square : constant Dimensionless := D_Re * D_Re + D_Im * D_Im;
+                           --  Newton's correction N = D/D′.
+                           N_Re     : constant Dimensionless := (P_Re * D_Re + P_Im * D_Im) / D_Square;
+                           N_Im     : constant Dimensionless := (P_Im * D_Re - P_Re * D_Im) / D_Square;
+                           --  S = Σ 1/(z - zⱼ) over every other root, starting with this root's own conjugate.
+                           S_Re     : Dimensionless := 0.0;
+                           S_Im     : Dimensionless := -0.5 / Y;
+                           Q_Re     : Dimensionless;
+                           Q_Im     : Dimensionless;
+                           Q_Square : Dimensionless;
+                           W_Re     : Dimensionless;
+                           W_Im     : Dimensionless;
+                        begin
+                           for J in 1 .. Half loop
+                              if J /= K then
+                                 declare
+                                    DX      : constant Dimensionless := X - Real_Parts (J);
+                                    Upper_Y : constant Dimensionless := Y - Imaginary_Parts (J);
+                                    Lower_Y : constant Dimensionless := Y + Imaginary_Parts (J);
+                                    Upper   : constant Dimensionless := DX * DX + Upper_Y * Upper_Y;
+                                    Lower   : constant Dimensionless := DX * DX + Lower_Y * Lower_Y;
+                                 begin
+                                    S_Re := S_Re + DX / Upper + DX / Lower;
+                                    S_Im := S_Im - Upper_Y / Upper - Lower_Y / Lower;
+                                 end;
+                              end if;
+                           end loop;
+                           --  Aberth's correction W = N/(1 - N·S).
+                           Q_Re := 1.0 - (N_Re * S_Re - N_Im * S_Im);
+                           Q_Im := -(N_Re * S_Im + N_Im * S_Re);
+                           Q_Square := Q_Re * Q_Re + Q_Im * Q_Im;
+                           W_Re := (N_Re * Q_Re + N_Im * Q_Im) / Q_Square;
+                           W_Im := (N_Im * Q_Re - N_Re * Q_Im) / Q_Square;
+                           Real_Parts (K) := X - W_Re;
+                           --  The root set is symmetric about the real axis, so a root which crosses it is replaced
+                           --  by its conjugate.
+                           Imaginary_Parts (K) := abs (Y - W_Im);
+                           --  Coincident iterates, a vanishing derivative or a root on the real axis leave an
+                           --  infinity or a NaN here.
+                           if not (abs Real_Parts (K) <= Root_Limit
+                                   and then Imaginary_Parts (K) > 0.0
+                                   and then Imaginary_Parts (K) <= Root_Limit)
+                           then
+                              return False;
+                           end if;
+                           if abs W_Re + abs W_Im <= 1.0E-14 * Dimensionless'Max (1.0, Modulus) then
+                              Settled (K) := True;
+                           end if;
+                        end;
+                     end if;
+                  end;
+               end if;
+            end loop;
+            exit when (for all K in 1 .. Half => Settled (K));
+         end loop;
+
+         for K in 1 .. Half loop
+            --  A pair this close to the real axis would later be classified as two real poles; leave such a
+            --  polynomial to the eigenvalue solve.
+            if not Settled (K)
+              or else Imaginary_Parts (K) <= 1.0E-9 * Dimensionless'Max (1.0, abs Real_Parts (K) + Imaginary_Parts (K))
+            then
+               Result := [others => Compose_From_Cartesian (0.0, 0.0)];
+               return False;
+            end if;
+            Result (2 * K - 1) := Compose_From_Cartesian (Real_Parts (K), Imaginary_Parts (K));
+            Result (2 * K) := Compose_From_Cartesian (Real_Parts (K), -Imaginary_Parts (K));
+         end loop;
+         return True;
+      exception
+         when Constraint_Error =>
+            Result := [others => Compose_From_Cartesian (0.0, 0.0)];
+            return False;
+      end Find_Roots_By_Iteration;
+
       function Ideal_Axis_Is_Structurally_Zero (Axis : Axis_Name) return Boolean;
       --  Test whether the ideal tangent numerator is identically zero for an axis.
 
@@ -4888,7 +5915,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          end loop;
       end loop;
 
-      if not Find_Roots (Denominator, Denominator_Degree, Roots) then
+      --  The simultaneous iteration is several times cheaper than the eigenvalue solve and settles each root to
+      --  the rounding error of the polynomial itself, so its roots need no refinement.
+      Iterated := Find_Roots_By_Iteration (Denominator, Denominator_Degree, Roots);
+      if not Iterated and then not Find_Roots (Denominator, Denominator_Degree, Roots) then
          return Realtime_Representation_Insufficient;
       end if;
       if Denominator_Degree > 0 then
@@ -4900,7 +5930,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       declare
          Conjugate_Next : Boolean := False;
       begin
-         for Index in 1 .. Denominator_Degree loop
+         for Index in 1 .. (if Iterated then 0 else Denominator_Degree) loop
             if Conjugate_Next then
                Roots (Index) := Conjugate (Roots (Index - 1));
                Conjugate_Next := False;
@@ -5212,10 +6242,22 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          end if;
          declare
             Retained_Certificate : Retained_Tangent_Bernstein_Certificate;
-            Certificate          : constant Tangent_Certificate_Result :=
-              Certified_Realtime_Tangent_Error
-                (Curve, Cache, Denominator (0), Maximum_Position_Error, Retained_Certificate);
+            Sampled              : constant Tangent_Certificate_Result :=
+              Sampled_Realtime_Tangent_Error (Curve, Cache, Denominator (0));
+            Certificate          : Tangent_Certificate_Result := Sampled;
          begin
+            --  The sampled proof is far cheaper and normally certifies an error near roundoff. Fall back to the
+            --  Bernstein reconstruction only when it leaves less than a sixteenth of the budget unproved; that
+            --  reconstruction also retains the common-denominator form for the Bernstein derivative bounds.
+            if Sampled.Status /= Tangent_Was_Certified
+              or else
+                not (Sampled.Error_Bound
+                     <= Dimensionless (Maximum_Position_Error / Curve.Evaluator_Data.Length_Value) / 16.0)
+            then
+               Certificate :=
+                 Certified_Realtime_Tangent_Error
+                   (Curve, Cache, Denominator (0), Maximum_Position_Error, Retained_Certificate);
+            end if;
             --  Do not install the realtime cache until interval arithmetic proves its tangent field close enough to
             --  the authoritative Bernstein chart over the complete curve.
             case Certificate.Status is
@@ -5681,16 +6723,13 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    is
       subtype Interval_Bernstein is Interval_Polynomial;
 
-      function Strict_Bernstein_Nonnegative
-        (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean;
+      function Strict_Bernstein_Nonnegative (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean;
       function Certify_Planar_Control_Hull (Applicable : out Boolean) return Boolean;
       function Certify_Planar_No_Bulge (Applicable : out Boolean) return Boolean;
       function Certify_Spatial_No_Bulge return Boolean;
       function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean;
 
-      function Strict_Bernstein_Nonnegative
-        (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean
-      is
+      function Strict_Bernstein_Nonnegative (Coefficients : Interval_Bernstein; Depth : Natural) return Boolean is
          All_Nonnegative : Boolean := True;
          All_Negative    : Boolean := True;
       begin
@@ -5725,8 +6764,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Right (Degree - Level) := Work (Degree - Level);
             end loop;
             return
-              Strict_Bernstein_Nonnegative (Left, Depth - 1)
-              and then Strict_Bernstein_Nonnegative (Right, Depth - 1);
+              Strict_Bernstein_Nonnegative (Left, Depth - 1) and then Strict_Bernstein_Nonnegative (Right, Depth - 1);
          end;
       end Strict_Bernstein_Nonnegative;
 
@@ -5753,8 +6791,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Upper_Value  : constant Dimensionless := Dimensionless'Max (Start_Value, Finish_Value);
          Cross_Factor : constant Interval :=
            Interval_Add
-             (Interval_Exact (1.0),
-              Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value)));
+             (Interval_Exact (1.0), Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Finish_Value)));
       begin
          Applicable := False;
          for C in 2 .. 3 loop
@@ -5785,8 +6822,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          Start_Factor_Order          : constant Positive :=
            (if (for all I in 1 .. 3 => Coefficients (I, 1) = Coefficients (0, 1)) then 4 else 1);
          Finish_Factor_Order         : constant Positive :=
-           (if (for all I in 5 .. Fixed_Chart_Degree - 1 =>
-                  Coefficients (I, 1) = Coefficients (Fixed_Chart_Degree, 1))
+           (if (for all I in 5 .. Fixed_Chart_Degree - 1 => Coefficients (I, 1) = Coefficients (Fixed_Chart_Degree, 1))
             then 4
             else 1);
          Start_Quotient              : Interval_Bernstein (0 .. Fixed_Chart_Degree - Start_Factor_Order) :=
@@ -5795,12 +6831,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
            [others => Interval_Exact (0.0)];
          Start_Factor, Finish_Factor : Interval_Bernstein (Chart_Coefficient_Index) :=
            [others => Interval_Exact (0.0)];
-         Start_Product               :
-           Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Start_Factor_Order) :=
-             [others => Interval_Exact (0.0)];
-         Finish_Product              :
-           Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Finish_Factor_Order) :=
-             [others => Interval_Exact (0.0)];
+         Start_Product               : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Start_Factor_Order) :=
+           [others => Interval_Exact (0.0)];
+         Finish_Product              : Interval_Bernstein (0 .. 2 * Fixed_Chart_Degree - Finish_Factor_Order) :=
+           [others => Interval_Exact (0.0)];
          Start_Value                 : constant Dimensionless := Coefficients (0, 1);
          Finish_Value                : constant Dimensionless := Coefficients (Fixed_Chart_Degree, 1);
 
@@ -5847,8 +6881,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Start_Quotient (J) :=
               Interval_Multiply
                 (Interval_Subtract
-                   (Interval_Exact (Coefficients (J + Start_Factor_Order, 1)),
-                    Interval_Exact (Start_Value)),
+                   (Interval_Exact (Coefficients (J + Start_Factor_Order, 1)), Interval_Exact (Start_Value)),
                  Positive_Ratio
                    (Binomial (Fixed_Chart_Degree, J + Start_Factor_Order),
                     Binomial (Fixed_Chart_Degree - Start_Factor_Order, J)));
@@ -5856,23 +6889,19 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          for J in Finish_Quotient'Range loop
             Finish_Quotient (J) :=
               Interval_Multiply
-                (Interval_Subtract
-                   (Interval_Exact (Finish_Value), Interval_Exact (Coefficients (J, 1))),
+                (Interval_Subtract (Interval_Exact (Finish_Value), Interval_Exact (Coefficients (J, 1))),
                  Positive_Ratio
-                   (Binomial (Fixed_Chart_Degree, J),
-                    Binomial (Fixed_Chart_Degree - Finish_Factor_Order, J)));
+                   (Binomial (Fixed_Chart_Degree, J), Binomial (Fixed_Chart_Degree - Finish_Factor_Order, J)));
          end loop;
          for I in Chart_Coefficient_Index loop
             Start_Factor (I) :=
               Interval_Add
                 (Interval_Exact (1.0),
-                 Interval_Multiply
-                   (Interval_Exact (Start_Value), Interval_Exact (Coefficients (I, 1))));
+                 Interval_Multiply (Interval_Exact (Start_Value), Interval_Exact (Coefficients (I, 1))));
             Finish_Factor (I) :=
               Interval_Add
                 (Interval_Exact (1.0),
-                 Interval_Multiply
-                   (Interval_Exact (Finish_Value), Interval_Exact (Coefficients (I, 1))));
+                 Interval_Multiply (Interval_Exact (Finish_Value), Interval_Exact (Coefficients (I, 1))));
          end loop;
          Start_Product := Multiply_Bernstein (Start_Quotient, Start_Factor);
          Finish_Product := Multiply_Bernstein (Finish_Quotient, Finish_Factor);
@@ -5883,8 +6912,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Finish_Product (I) := Interval_Multiply (Interval_Exact (Orientation_Sign), Finish_Product (I));
          end loop;
          return
-           Strict_Bernstein_Nonnegative (Start_Product, 8)
-           and then Strict_Bernstein_Nonnegative (Finish_Product, 8);
+           Strict_Bernstein_Nonnegative (Start_Product, 8) and then Strict_Bernstein_Nonnegative (Finish_Product, 8);
       exception
          when Constraint_Error =>
             Applicable := True;
@@ -5905,8 +6933,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          begin
             while Order < 4
               and then
-                Coefficients ((if At_Start then Order else Fixed_Chart_Degree - Order), C)
-                = Coefficients (Endpoint, C)
+                Coefficients ((if At_Start then Order else Fixed_Chart_Degree - Order), C) = Coefficients (Endpoint, C)
             loop
                Order := Order + 1;
             end loop;
@@ -5919,43 +6946,32 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          --  (Y꜀(1) - Y꜀)/(1 - V)ᵏ at the finish. Result has degree eight minus Order.
 
          procedure Quotient
-           (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein)
-         is
+           (C : Chart_Component_Index; Order : Positive; At_Start : Boolean; Result : out Interval_Bernstein) is
          begin
             for J in Result'Range loop
                if At_Start then
                   Result (J) :=
                     Interval_Multiply
                       (Interval_Subtract
-                         (Interval_Exact (Coefficients (J + Order, C)),
-                          Interval_Exact (Coefficients (0, C))),
+                         (Interval_Exact (Coefficients (J + Order, C)), Interval_Exact (Coefficients (0, C))),
                        Positive_Ratio
-                         (Binomial (Fixed_Chart_Degree, J + Order),
-                          Binomial (Fixed_Chart_Degree - Order, J)));
+                         (Binomial (Fixed_Chart_Degree, J + Order), Binomial (Fixed_Chart_Degree - Order, J)));
                else
                   Result (J) :=
                     Interval_Multiply
                       (Interval_Subtract
-                         (Interval_Exact (Coefficients (Fixed_Chart_Degree, C)),
-                          Interval_Exact (Coefficients (J, C))),
-                       Positive_Ratio
-                         (Binomial (Fixed_Chart_Degree, J), Binomial (Fixed_Chart_Degree - Order, J)));
+                         (Interval_Exact (Coefficients (Fixed_Chart_Degree, C)), Interval_Exact (Coefficients (J, C))),
+                       Positive_Ratio (Binomial (Fixed_Chart_Degree, J), Binomial (Fixed_Chart_Degree - Order, J)));
                end if;
             end loop;
          end Quotient;
 
          procedure Raise_Degree
-           (Polynomial : Interval_Bernstein;
-            Power      : Natural;
-            At_Start   : Boolean;
-            Result     : out Interval_Bernstein);
+           (Polynomial : Interval_Bernstein; Power : Natural; At_Start : Boolean; Result : out Interval_Bernstein);
          --  Multiply by Vᵖ at the start, or by (1 - V)ᵖ at the finish. Result has Power more degrees.
 
          procedure Raise_Degree
-           (Polynomial : Interval_Bernstein;
-            Power      : Natural;
-            At_Start   : Boolean;
-            Result     : out Interval_Bernstein)
+           (Polynomial : Interval_Bernstein; Power : Natural; At_Start : Boolean; Result : out Interval_Bernstein)
          is
             Degree : constant Natural := Polynomial'Length - 1;
          begin
@@ -5969,8 +6985,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                if At_Start then
                   Result (J + Power) :=
                     Interval_Multiply
-                      (Polynomial (J),
-                       Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J + Power)));
+                      (Polynomial (J), Positive_Ratio (Binomial (Degree, J), Binomial (Degree + Power, J + Power)));
                else
                   Result (J) :=
                     Interval_Multiply
@@ -5985,8 +7000,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          function Certify_End (At_Start : Boolean; Orientation_Sign : Dimensionless) return Boolean is
             Value            : constant Dimensionless := (if At_Start then Start_Value else Finish_Value);
             Tangent_Order    : constant Positive := Root_Order (1, At_Start);
-            Normal_Order     : constant Positive :=
-              Positive'Min (Root_Order (2, At_Start), Root_Order (3, At_Start));
+            Normal_Order     : constant Positive := Positive'Min (Root_Order (2, At_Start), Root_Order (3, At_Start));
             Shared_Order     : constant Positive := Positive'Min (Tangent_Order, 2 * Normal_Order);
             In_Plane         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Tangent_Order);
             Normal_2         : Interval_Bernstein (0 .. Fixed_Chart_Degree - Normal_Order);
@@ -6064,8 +7078,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       function Certify_Nonnegative_Projection (Direction : Position_Scale) return Boolean is
          Numerator : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
          R2        : Interval_Bernstein (Tangent_Numerator_Index) := [others => Interval_Exact (0.0)];
-         Ones      : constant Interval_Bernstein (Chart_Coefficient_Index) :=
-           [others => Interval_Exact (1.0)];
+         Ones      : constant Interval_Bernstein (Chart_Coefficient_Index) := [others => Interval_Exact (1.0)];
 
          function Dot_Interval (Left, Right : Position_Scale) return Interval;
          --  Enclose the dot product of two exact vectors.
@@ -6106,8 +7119,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Frame_0_Projection : constant Interval := Dot_Interval (Frame (0), Direction);
          begin
             for K in Tangent_Numerator_Index loop
-               Numerator (K) :=
-                 Interval_Subtract (Frame_0_Projection, Interval_Multiply (Frame_0_Projection, R2 (K)));
+               Numerator (K) := Interval_Subtract (Frame_0_Projection, Interval_Multiply (Frame_0_Projection, R2 (K)));
             end loop;
          end;
          for C in Chart_Component_Index loop
@@ -6122,8 +7134,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   Numerator (K) :=
                     Interval_Add
                       (Numerator (K),
-                       Interval_Multiply
-                         (Interval_Exact (2.0), Interval_Multiply (Frame_Projection, Elevated (K))));
+                       Interval_Multiply (Interval_Exact (2.0), Interval_Multiply (Frame_Projection, Elevated (K))));
                end loop;
             end;
          end loop;
@@ -6479,10 +7490,16 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                procedure Accumulate (V, Weight : Dimensionless);
 
                procedure Accumulate (V, Weight : Dimensionless) is
+                  pragma Suppress (Overflow_Check);
+                  --  Every quantity here is bounded: W lies in its supported range, the warp denominator between
+                  --  one and W, and the tangent decomposition by the conditioning limit above. Integrate checks
+                  --  the four sums once instead of every operation.
+
                   --  D_Warp_Jacobian is ∂(dU/dV)/∂log(W), which supplies the derivative needed by the safeguarded
                   --  Newton solve.
                   Warp_Denominator   : constant Dimensionless := Candidate_Warp - (Candidate_Warp - 1.0) * V;
-                  Warp_Jacobian      : constant Dimensionless := Candidate_Warp / Warp_Denominator**2;
+                  Warp_Jacobian      : constant Dimensionless :=
+                    Candidate_Warp / (Warp_Denominator * Warp_Denominator);
                   D_Warp_Jacobian    : constant Dimensionless :=
                     Warp_Jacobian * (1.0 - 2.0 * Candidate_Warp * (1.0 - V) / Warp_Denominator);
                   --  H is the degree-7 smoothstep
@@ -6491,7 +7508,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                   --
                   --  Its first three derivatives vanish at V = 0 and V = 1. Z moves from -Q to +Q; inverse
                   --  stereographic projection then traces the unit tangent from s to f.
-                  H                  : constant Dimensionless := V**4 * (35.0 + V * (-84.0 + V * (70.0 - 20.0 * V)));
+                  V2                 : constant Dimensionless := V * V;
+                  H                  : constant Dimensionless :=
+                    (V2 * V2) * (35.0 + V * (-84.0 + V * (70.0 - 20.0 * V)));
                   Z                  : constant Dimensionless := Q * (2.0 * H - 1.0);
                   Z2                 : constant Dimensionless := Z * Z;
                   Stereo_Denominator : constant Dimensionless := 1.0 + Z2;
@@ -6526,6 +7545,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                      end loop;
                   end;
                end loop;
+               if not Is_Finite (A) or else not Is_Finite (B) or else not Is_Finite (D_A) or else not Is_Finite (D_B)
+               then
+                  raise Constraint_Error with "warp quadrature overflow";
+               end if;
             end Integrate;
          begin
             --  Equal trim coordinates give R = 1 and, by symmetry, W = 1. Avoid all scalar-warp work on this

@@ -785,9 +785,9 @@ private
       --  Retain the requests for on-demand endpoint diagnostics; construction does not measure this test-only report.
 
       Retained_Tangent_Certificate : Retained_Tangent_Bernstein_Certificate := (others => <>);
-      --  Construction-only rational Bernstein data used by V7's direct retained-tangent derivative certificate. The
-      --  compact evaluator does not carry this data because realtime point evaluation still uses the pole/residue
-      --  form.
+      --  Rational Bernstein data for the Bernstein derivative certificate. It is valid only when the Bernstein
+      --  reconstruction ran: construction normally certifies the tangent from samples instead, and
+      --  Retain_Bernstein_Tangent_Certificate fills it in on demand. The compact evaluator never carries it.
    end record
    with
      Dynamic_Predicate =>
@@ -804,9 +804,8 @@ private
              and then Stereographic_Curve.Certified_Tangent_Error = 0.0)),
      Predicate_Failure => "a stereographic curve must contain nonnegative numerical certificates";
    --  Full construction result: the compact evaluator, ideal geometry, requested endpoint jets, and the
-   --  certificates used by construction and diagnostic range queries. The retained Bernstein form bounds compiled
-   --  derivatives directly before falling
-   --  back to the pole-based Taylor enclosure.
+   --  certificates used by construction and diagnostic range queries. Compiled derivatives are bounded from the
+   --  pole-based Taylor enclosure, with the Bernstein form as its fallback.
 
    ---------------------------------------------------------------------------
    --  Construction results used between the private stages
@@ -885,6 +884,27 @@ private
          (Tangent_Certificate_Result.Error_Bound >= 0.0 and then Is_Finite (Tangent_Certificate_Result.Error_Bound)),
      Predicate_Failure => "a successful tangent certificate must contain a finite nonnegative bound";
    --  Tangent-certification outcome with a uniform error bound only when the proof succeeded.
+
+   Tangent_Sample_Count : constant := 2 * Maximum_Rational_Degree + 1;
+   --  A polynomial of degree at most 2 * Maximum_Rational_Degree is determined by this many values.
+
+   subtype Tangent_Sample_Index is Positive range 1 .. Tangent_Sample_Count;
+
+   Tangent_Sample_Lebesgue_Bound : constant Dimensionless := 3.5;
+   --  Upper bound on the Lebesgue constant of the sample nodes, which is 3.1885 for thirty-three Chebyshev nodes
+   --  of the first kind. A polynomial of degree below Tangent_Sample_Count is bounded on [0, 1] by this factor
+   --  times its largest magnitude at the nodes.
+
+   function Tangent_Sample_Node (Index : Tangent_Sample_Index) return Dimensionless;
+   --  Return one sample node in the chart coordinate, exposed so tests can check the Lebesgue bound.
+
+   function Sampled_Realtime_Tangent_Error
+     (Curve : Stereographic_Curve; Final_Cache : Rational_Antiderivative; Denominator_Scale : Dimensionless)
+      return Tangent_Certificate_Result;
+   --  Bound the Euclidean difference between the ideal tangent of Curve's chart and the rational tangent of
+   --  Final_Cache over the complete curve, from their values at the sample nodes alone. Denominator_Scale is the
+   --  ideal denominator at the start of the chart. The result is as rigorous as the Bernstein reconstruction of
+   --  the same difference; a failure only means that this cheaper proof did not apply.
 
    type Closure_Seed is record
       Valid : Boolean := False;
@@ -1155,8 +1175,8 @@ private
          (for all Degree in Chart_Coefficient_Index =>
             (for all Component in Chart_Component_Index => Is_Finite (Power_Coefficients (Degree, Component))));
    --  Convert the ideal rational tangent into the fixed-capacity partial-fraction evaluator, certify its tangent and
-   --  position errors, and populate Curve's realtime and bound data. V7 also retains the outward-rounded common-
-   --  denominator Bernstein form produced by the tangent proof so later derivative queries can reuse it directly.
+   --  position errors, and populate Curve's realtime and bound data. The tangent is certified from samples; only
+   --  when that proof does not apply is the common-denominator Bernstein form reconstructed, and then retained.
    --  The status explains whether failure was an accuracy limitation or unsafe arithmetic.
 
    procedure Build_Chart
@@ -1441,20 +1461,32 @@ private
    --  that at least one finite enclosure was unavailable; Error_Bounds is then saturated.
 
    function Pole_Taylor_Tangent_Range_Majorants
-     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless) return Axis_Majorants;
-   --  Bound the retained tangent and its first four derivatives directly from the pole/residue evaluator. Each of
-   --  64 cells uses a second-order Taylor enclosure with two extra derivative orders. This is the robust fallback when
-   --  the retained Bernstein certificate is unavailable, and the preferred path for a point-sized parameter interval
-   --  where partial-fraction cancellation is sharper.
+     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Sharp : out Boolean) return Axis_Majorants;
+   --  Bound the retained tangent and its first four derivatives directly from the pole/residue evaluator. Each cell
+   --  of an adaptive partition uses a fifth-order Taylor expansion about its centre with a rigorous sixth-order
+   --  remainder, and cells are trisected until their bound is within half a percent of an attained value. This is
+   --  the primary path for every range, including a point-sized one.
+   --
+   --  The result is always a valid bound. Sharp is False when it is saturated because a pole lies too close to the
+   --  range for the fixed work allowed, or when cancellation between the partial fractions makes the rounding
+   --  allowance a visible part of some bound; Bernstein_Tangent_Range_Majorants may then prove a smaller one.
+
+   function Retain_Bernstein_Tangent_Certificate (Curve : in out Stereographic_Curve) return Boolean
+   with Pre => Curve.Evaluator_Data.Kind = Positive_Curve_Kind;
+   --  Reconstruct the retained tangent in common-denominator Bernstein form and store it in Curve. Construction
+   --  normally certifies the tangent from samples and skips this far costlier reconstruction, so it is run on
+   --  demand by the Bernstein derivative fallback. False, with Curve unchanged, if the reconstruction cannot be
+   --  certified.
 
    function Bernstein_Tangent_Range_Majorants
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Success : out Boolean) return Axis_Majorants
    with Pre => Start_U >= 0.0 and then Start_U <= End_U and then End_U <= 1.0;
    --  Reconstruct factorial-scaled retained-tangent derivatives from the stored common-denominator Bernstein form.
    --  Exact binomial ratios and outward-rounded interval operations keep coefficient conversions enclosing, while
-   --  bounded De Casteljau subdivision tightens the range hull. Success is False when the retained certificate cannot
-   --  prove a finite bound, allowing the caller to use Pole_Taylor_Tangent_Range_Majorants instead.
+   --  bounded De Casteljau subdivision tightens the range hull. Success is False when the curve retains no
+   --  Bernstein certificate or that certificate cannot prove a finite bound.
    --
-   --  This direct path is exposed privately so child-package tests can prove that a fallback did not hide a failure.
+   --  This is the fallback for a range on which Pole_Taylor_Tangent_Range_Majorants saturates. It is exposed
+   --  privately so child-package tests can exercise it directly.
 
 end Prunt.Motion_Planner.Stereographic_Curves;

@@ -74,6 +74,11 @@ package Prunt.Motion_Planner.Stereographic_Curves.Geometry is
    function Point_To_Point_Distance (Left, Right : Position) return Distance_Interval;
    --  Certify the Euclidean distance between two represented machine positions.
 
+   function Point_To_Point_Distance_Upper (Left, Right : Position) return Length;
+   --  Return only a proven upper bound on the Euclidean distance between two points, in ordinary rounded
+   --  arithmetic. It is not the upper end of Point_To_Point_Distance, but it is as valid: Length'Last is returned
+   --  when no finite bound can be established, and zero only for identical points.
+
    function Round_Scalar_Down (Value : Dimensionless) return Dimensionless;
    function Round_Scalar_Up (Value : Dimensionless) return Dimensionless;
    --  Shared directed rounding for finite dimensionless values.

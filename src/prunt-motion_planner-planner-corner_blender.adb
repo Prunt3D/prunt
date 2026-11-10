@@ -347,7 +347,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
 
          function Point_Distance_Upper (Left, Right : Position) return Length is
          begin
-            return Point_To_Point_Distance (Left, Right).Upper;
+            return Point_To_Point_Distance_Upper (Left, Right);
          exception
             when Constraint_Error =>
                return Length'Last;

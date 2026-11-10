@@ -289,6 +289,37 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       return Is_Finite (Raw) and then Value >= 0.0 * mm and then Value < Length'Last;
    end Valid_Error;
 
+   function Point_To_Point_Distance_Upper (Left, Right : Position) return Length is
+      Maximum_Raw : constant Dimensionless := Dimensionless (Length'Last / mm);
+      Square_Sum  : Dimensionless := 0.0;
+      Result      : Dimensionless;
+   begin
+      if Left = Right then
+         return 0.0 * mm;
+      end if;
+      --  The coordinates are exact, so each difference is correct to u = 2⁻⁵³ and its square to 3u. The sum of
+      --  four nonnegative squares adds 3u and the square root halves the total and adds u: the computed norm is
+      --  below the true one by less than 4u, which the factor 1 + 2⁻⁴⁹ = 1 + 16u repays. A square which
+      --  underflows errs by less than 2⁻¹⁰⁷⁴ instead, which moves the norm by less than 2⁻⁵³⁵; the padding covers
+      --  all four. Overflow raises, because this unit keeps overflow checks.
+      for Axis in Axis_Name loop
+         declare
+            Difference : constant Dimensionless :=
+              Dimensionless (Left (Axis) / mm) - Dimensionless (Right (Axis) / mm);
+         begin
+            Square_Sum := Square_Sum + Difference * Difference;
+         end;
+      end loop;
+      Result := Dimensionless_Math.Sqrt (Square_Sum) * (1.0 + 2.0**(-49)) + 2.0**(-530);
+      if not (Result < Maximum_Raw) then
+         return Length'Last;
+      end if;
+      return Result * mm;
+   exception
+      when Constraint_Error =>
+         return Length'Last;
+   end Point_To_Point_Distance_Upper;
+
    function Point_To_Point_Distance (Left, Right : Position) return Distance_Interval is
       Difference : Interval_Position_Scale;
    begin
