@@ -3188,10 +3188,229 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       end;
    end Test_Numeric_Check_Recovery;
 
+   procedure Test_Chart_Lambda_Terms (T : in out Trendy_Test.Operation'Class) is
+      --  The closure solve evaluates the chart as a cubic in λ. Compare it, and its λ-derivative, with Build_Chart's
+      --  chart and analytic derivative at the same λ and C₀, in the power basis with the V⁸ residue removed as the
+      --  solve did before it formed the cubic.
+      Envelope_Power : constant array (Natural range 4 .. Fixed_Chart_Degree) of Dimensionless :=
+        [1.0, -4.0, 6.0, -4.0, 1.0];
+
+      Curved_Start  : constant Chart_Jet_Array :=
+        [[0.2, -0.1, 0.05], [0.3, 0.1, -0.2], [-0.4, 0.25, 0.1], [0.5, -0.3, 0.2]];
+      Curved_Finish : constant Chart_Jet_Array :=
+        [[-0.15, 0.2, -0.05], [0.1, -0.35, 0.15], [0.2, 0.3, -0.45], [-0.6, 0.1, 0.25]];
+      Flat_Start    : constant Chart_Jet_Array := [[0.3, -0.2, 0.0], others => [others => 0.0]];
+      Flat_Finish   : constant Chart_Jet_Array := [[-0.3, 0.2, 0.0], others => [others => 0.0]];
+
+      procedure Check
+        (Start_Jets, Finish_Jets : Chart_Jet_Array; Warp_Factor, Lambda : Dimensionless; C0 : Raw_Vector_3);
+
+      procedure Check
+        (Start_Jets, Finish_Jets : Chart_Jet_Array; Warp_Factor, Lambda : Dimensionless; C0 : Raw_Vector_3)
+      is
+         Name                                   : constant String :=
+           "Warp" & Warp_Factor'Image & ", lambda" & Lambda'Image;
+         Terms                                  : constant Chart_Lambda_Terms :=
+           Build_Chart_Lambda_Terms (Start_Jets, Finish_Jets, Warp_Factor);
+         Chart, D_Chart                         : Bernstein_Chart;
+         Expected, D_Expected, Actual, D_Actual : Power_Chart;
+      begin
+         Build_Chart (Start_Jets, Finish_Jets, Lambda, C0, Warp_Factor, Chart, D_Chart);
+         Expected := Power_Basis (Chart);
+         D_Expected := Power_Basis (D_Chart);
+         for C in Chart_Component_Index loop
+            declare
+               Correction   : constant Dimensionless := 256.0 * C0 (C) - Expected (Fixed_Chart_Degree, C);
+               D_Correction : constant Dimensionless := -D_Expected (Fixed_Chart_Degree, C);
+            begin
+               for Degree in Envelope_Power'Range loop
+                  Expected (Degree, C) := Expected (Degree, C) + Correction * Envelope_Power (Degree);
+                  D_Expected (Degree, C) := D_Expected (Degree, C) + D_Correction * Envelope_Power (Degree);
+               end loop;
+            end;
+         end loop;
+         Chart_At_Lambda (Terms, Lambda, C0, Actual, D_Actual);
+         for C in Chart_Component_Index loop
+            declare
+               Scale   : Dimensionless := 1.0;
+               D_Scale : Dimensionless := 1.0;
+               Worst   : Dimensionless := 0.0;
+               D_Worst : Dimensionless := 0.0;
+            begin
+               for Degree in Chart_Coefficient_Index loop
+                  Scale := Dimensionless'Max (Scale, abs Expected (Degree, C));
+                  D_Scale := Dimensionless'Max (D_Scale, abs D_Expected (Degree, C));
+                  Worst := Dimensionless'Max (Worst, abs (Actual (Degree, C) - Expected (Degree, C)));
+                  D_Worst := Dimensionless'Max (D_Worst, abs (D_Actual (Degree, C) - D_Expected (Degree, C)));
+               end loop;
+               T.Assert (Worst <= 1.0E-12 * Scale, Name & " chart component" & C'Image & " differs by" & Worst'Image);
+               T.Assert
+                 (D_Worst <= 1.0E-12 * D_Scale,
+                  Name & " lambda derivative component" & C'Image & " differs by" & D_Worst'Image);
+            end;
+         end loop;
+      end Check;
+      type Scalars is array (Positive range <>) of Dimensionless;
+      Warps   : constant Scalars := [1.0, 0.6, 1.7];
+      Lambdas : constant Scalars := [1.0, 1.37, 3.5];
+   begin
+      T.Register;
+      for Warp_Factor of Warps loop
+         for Lambda of Lambdas loop
+            Check (Curved_Start, Curved_Finish, Warp_Factor, Lambda, [0.03, -0.02, 0.01]);
+            Check (Curved_Start, Curved_Finish, Warp_Factor, Lambda, [others => 0.0]);
+            Check (Flat_Start, Flat_Finish, Warp_Factor, Lambda, [0.03, -0.02, 0.01]);
+         end loop;
+      end loop;
+   end Test_Chart_Lambda_Terms;
+
+   procedure Test_Closure_On_Length_Cap (T : in out Trendy_Test.Operation'Class) is
+      --  A closed curve which would be longer than Maximum_Lambda allows pins λ on its cap. The solve then has to
+      --  fail as ordinary nonconvergence, while a cap which the closed curve fits under, even with λ starting on the
+      --  cap, has to be reached.
+      procedure Check (Request : Blend_Request; Name : String);
+
+      procedure Check (Request : Blend_Request; Name : String) is
+         Preparation  : constant Blend_Preparation := Prepare_Blend (Request);
+         Frame        : Frame_Vector_Array;
+         Start_Chart  : Chart_Jet_Array;
+         Finish_Chart : Chart_Jet_Array;
+      begin
+         T.Assert (Preparation.Status = Blend_Success, Name & " prepares: " & Preparation.Status'Image);
+         if Preparation.Status /= Blend_Success
+           or else not Frame_Candidate (Preparation, 1, Frame, Start_Chart, Finish_Chart)
+         then
+            T.Fail (Name & " has a first frame");
+            return;
+         end if;
+         declare
+            Warp    : constant Dimensionless := Preparation.Selection.Factor;
+            Terms   : constant Chart_Lambda_Terms := Build_Chart_Lambda_Terms (Start_Chart, Finish_Chart, Warp);
+            Free    : constant Closure_Solution :=
+              Solve_Closure_From_Terms
+                (Terms, Frame, Preparation.Chord_Direction, 4.0, 1.0E-11, Warp, (others => <>), Panel_Count => 2);
+            Closed  : constant Dimensionless := Free.Lambda;
+         begin
+            T.Assert (Free.Success and then Closed > 1.0, Name & " closes under a generous cap");
+            if not Free.Success then
+               return;
+            end if;
+            declare
+               Short        : constant Dimensionless := 1.0 + 0.95 * (Closed - 1.0);
+               Long         : constant Dimensionless := 1.0 + 1.02 * (Closed - 1.0);
+               Too_Short    : constant Closure_Solution :=
+                 Solve_Closure_From_Terms
+                   (Terms, Frame, Preparation.Chord_Direction, Short, 1.0E-11, Warp, (others => <>), Panel_Count => 2);
+               Pinned_Short : constant Closure_Solution :=
+                 Solve_Closure_From_Terms
+                   (Terms,
+                    Frame,
+                    Preparation.Chord_Direction,
+                    Short,
+                    1.0E-11,
+                    Warp,
+                    (Success => True, Numerically_Unsafe => False, Lambda => Short, C0 => Free.C0),
+                    Panel_Count => 2);
+               Pinned_Long  : constant Closure_Solution :=
+                 Solve_Closure_From_Terms
+                   (Terms,
+                    Frame,
+                    Preparation.Chord_Direction,
+                    Long,
+                    1.0E-11,
+                    Warp,
+                    (Success => True, Numerically_Unsafe => False, Lambda => Long, C0 => Free.C0),
+                    Panel_Count => 2);
+            begin
+               T.Assert
+                 (not Too_Short.Success and then not Too_Short.Numerically_Unsafe,
+                  Name & " fails as nonconvergence under a short cap");
+               T.Assert
+                 (not Pinned_Short.Success and then not Pinned_Short.Numerically_Unsafe,
+                  Name & " fails as nonconvergence when it starts on a short cap");
+               T.Assert
+                 (Pinned_Long.Success and then abs (Pinned_Long.Lambda - Closed) <= 1.0E-9 * Closed,
+                  Name & " leaves a cap above its length:" & Pinned_Long.Lambda'Image & " for" & Closed'Image);
+            end;
+         end;
+      end Check;
+   begin
+      T.Register;
+      Check (Line_Corner_Request (90.0, 1.0, 20.0), "Flat line corner");
+      Check (Line_Corner_Request (40.0, 1.6, -35.0), "Asymmetric line corner");
+      Check (Circular_Quarter_Turn_Request, "Circular quarter turn");
+   end Test_Closure_On_Length_Cap;
+
+   procedure Test_Flat_Line_Blend_Miss_Ratio (T : in out Trendy_Test.Operation'Class) is
+      --  The blender sizes first trims from this model, so it should describe the blend that Create_Blend builds.
+      type Scalars is array (Positive range <>) of Dimensionless;
+      Angles  : constant Scalars := [10.0, 30.0, 60.0, 90.0, 120.0, 150.0, 170.0];
+      Radians : constant Dimensionless := Dimensionless (Ada.Numerics.Pi) / 180.0;
+      Last    : Dimensionless := 0.0;
+   begin
+      T.Register;
+      T.Assert (Flat_Line_Blend_Miss_Ratio (1.0) = 0.0, "A straight path is not missed");
+      T.Assert (abs (Flat_Line_Blend_Miss_Ratio (0.0) - 1.0) <= 1.0E-12, "A reversal misses by its whole trim");
+      for Angle of Angles loop
+         declare
+            Name   : constant String := "Turn of" & Angle'Image & " degrees";
+            Ratio  : constant Dimensionless :=
+              Flat_Line_Blend_Miss_Ratio (Dimensionless_Math.Cos (0.5 * Angle * Radians));
+            Result : constant Blend_Result := Create_Blend (Line_Corner_Request (Angle, 1.0, 25.0));
+         begin
+            T.Assert (Ratio > Last, Name & " misses by more than a gentler turn");
+            Last := Ratio;
+            T.Assert (Result.Kind = Blend_Success, Name & " constructs: " & Result.Kind'Image);
+            if Result.Kind = Blend_Success then
+               declare
+                  Measured : constant Length := Sample_Minimum_Distance (Result.Curve, Origin);
+               begin
+                  --  The trim is one millimetre, and the request allows 1.0E-4 mm of representation error.
+                  T.Assert
+                    (abs (Measured - Ratio * mm) <= 1.0E-4 * mm,
+                     Name & " misses by" & Measured'Image & ", predicted" & Ratio'Image);
+               end;
+            end if;
+         end;
+      end loop;
+   end Test_Flat_Line_Blend_Miss_Ratio;
+
+   procedure Test_Strict_Bernstein_Nonnegative (T : in out Trendy_Test.Operation'Class) is
+      type Controls is array (Natural range <>) of Dimensionless;
+      function Exact (Values : Controls) return Interval_Polynomial
+      is ([for I in Values'Range => Interval_Exact (Values (I))]);
+   begin
+      T.Register;
+      T.Assert (Strict_Bernstein_Nonnegative (Exact ([1.0, 0.0, 2.0]), 0), "Nonnegative controls need no bisection");
+      --  1 - 3U + 3U², whose minimum 1/4 at U = 1/2 only bisection exposes.
+      T.Assert (Strict_Bernstein_Nonnegative (Exact ([1.0, -0.5, 1.0]), 8), "Bisection certifies a positive dip");
+      T.Assert (not Strict_Bernstein_Nonnegative (Exact ([1.0, -0.5, 1.0]), 0), "Without bisection it is unproved");
+      --  1 - 8U + 8U², which is -1 at U = 1/2.
+      T.Assert (not Strict_Bernstein_Nonnegative (Exact ([1.0, -3.0, 1.0]), 8), "A negative dip is not certified");
+      T.Assert (not Strict_Bernstein_Nonnegative (Exact ([-0.1, 1.0, 1.0]), 8), "A negative start is not certified");
+      T.Assert
+        (not Strict_Bernstein_Nonnegative (Exact ([1.0, 1.0, -1.0E-300]), 8), "A negative end is not certified");
+      T.Assert (Strict_Bernstein_Nonnegative (Exact ([0.0, 0.0, 0.0]), 0), "Zero is nonnegative");
+      T.Assert (Strict_Bernstein_Nonnegative (Exact ([3.0]), 0), "A positive constant is nonnegative");
+      T.Assert
+        (not Strict_Bernstein_Nonnegative ([Interval_Exact (1.0), (Lower => 0.0, Upper => 1.0, Valid => False)], 8),
+         "An invalid control proves nothing");
+      T.Assert
+        (not Strict_Bernstein_Nonnegative ([Interval_Exact (1.0), (Lower => 1.0, Upper => 0.0, Valid => True)], 8),
+         "An inverted enclosure proves nothing");
+      T.Assert
+        (not Strict_Bernstein_Nonnegative ([Interval_Exact (1.0), Interval_Exact (Dimensionless'Last)], 8),
+         "A control beyond the safe magnitude proves nothing");
+   end Test_Strict_Bernstein_Nonnegative;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Numeric_Check_Recovery'Access,
+        [Test_Chart_Lambda_Terms'Access,
+         Test_Closure_On_Length_Cap'Access,
+         Test_Flat_Line_Blend_Miss_Ratio'Access,
+         Test_Strict_Bernstein_Nonnegative'Access,
+         Test_Numeric_Check_Recovery'Access,
          Test_Bernstein_Cancellation'Access,
          Test_Bernstein_Product_Enclosures'Access,
          Test_Bernstein_Products'Access,

@@ -2858,16 +2858,25 @@ package body Prunt.Motion_Planner.Planner is
          if Lowest < Lower then
             return Best;
          end if;
-         Best.Profile :=
-           Optimal_Full_Profile
-             (Start_Vel,
-              Lowest,
-              End_Vel,
-              Eval.Window.Distance,
-              Eval.Limits.Acceleration_Max,
-              Eval.Limits.Jerk_Max,
-              Eval.Limits.Snap_Max,
-              Eval.Limits.Crackle_Max);
+         declare
+            Full : constant Full_Profile_Result :=
+              Try_Optimal_Full_Profile
+                (Start_Vel,
+                 Lowest,
+                 End_Vel,
+                 Eval.Window.Distance,
+                 Eval.Limits.Acceleration_Max,
+                 Eval.Limits.Jerk_Max,
+                 Eval.Limits.Snap_Max,
+                 Eval.Limits.Crackle_Max);
+         begin
+            --  The handler below would return Best for an unreachable speed change as well, at the cost of an
+            --  exception.
+            if not Full.Reachable then
+               return Best;
+            end if;
+            Best.Profile := Full.Profile;
+         end;
          Best.Max_Crackle := Eval.Limits.Crackle_Max;
          Best.Decel_Crackle := Eval.Limits.Crackle_Max;
          Best.Valid := True;
@@ -3326,9 +3335,10 @@ package body Prunt.Motion_Planner.Planner is
             return 0.0 * s;
          end if;
          begin
-            return
-              Total_Time
-                (Optimal_Full_Profile
+            --  The handler below must also cover the declaration, so the profile is formed inside this block.
+            declare
+               Full : constant Full_Profile_Result :=
+                 Try_Optimal_Full_Profile
                    (Start_Vel,
                     Eval.Max_Vel,
                     End_Vel,
@@ -3336,10 +3346,14 @@ package body Prunt.Motion_Planner.Planner is
                     Eval.Limits.Acceleration_Max,
                     Eval.Limits.Jerk_Max,
                     Eval.Limits.Snap_Max,
-                    Eval.Limits.Crackle_Max));
+                    Eval.Limits.Crackle_Max);
+            begin
+               --  An unreachable speed change is an ordinary outcome here, so it must not cost an exception.
+               return (if Full.Reachable then Total_Time (Full.Profile) else 1.0E100 * s);
+            end;
          exception
             when Constraint_Error =>
-               --  The speed change does not fit even under these limits.
+               --  Any other error of the profile, which no certified profile can avoid either.
                return 1.0E100 * s;
          end;
       exception

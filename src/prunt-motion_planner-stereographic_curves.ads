@@ -289,6 +289,12 @@ package Prunt.Motion_Planner.Stereographic_Curves is
    --  Return True when the representation proves algebraically that the selected coordinate never changes. This is an
    --  exact structural property, not a tolerance-based comparison of sampled positions.
 
+   function Flat_Line_Blend_Miss_Ratio (Cos_Half_Theta : Dimensionless) return Dimensionless
+   with Post => Flat_Line_Blend_Miss_Ratio'Result >= 0.0;
+   --  The distance from the corner to the nearest point of the blend which Create_Blend builds between two lines
+   --  turning by θ, from points the same trim either side of the corner with flat endpoint jets, divided by that trim.
+   --  Cos_Half_Theta is cos (θ/2) and is clamped to [0, 1]. This is a model for choosing trims, not a certificate.
+
 private
 
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
@@ -1398,35 +1404,40 @@ private
      Post => Warp_Parameter'Result >= 0.0 and then Warp_Parameter'Result <= 1.0;
    --  Apply the monotone endpoint-preserving map from normalized physical distance U to polynomial chart coordinate V.
 
-   procedure Closure_Residual
-     (Frame, Closure_Frame : Frame_Vector_Array;
-      Start_Jets           : Chart_Jet_Array;
-      Finish_Jets          : Chart_Jet_Array;
-      Chord_Direction      : Position_Scale;
-      Lambda               : Dimensionless;
-      C0                   : Raw_Vector_3;
-      Warp_Factor          : Dimensionless;
-      Residual             : out Raw_Vector_4;
-      Jacobian_C           : out Raw_Matrix_4_3;
-      D_Residual_D_Lambda  : out Raw_Vector_4;
-      Panel_Count          : Positive := 8)
+   function Strict_Bernstein_Nonnegative (Coefficients : Interval_Polynomial; Depth : Natural) return Boolean;
+   --  Whether the polynomial whose Bernstein controls Coefficients encloses is proved nonnegative on [0, 1], from
+   --  the controls' lower bounds and up to Depth levels of bisection. False is not a proof of a negative value, except
+   --  that an end control whose upper bound is negative is one.
+
+   type Chart_Lambda_Terms is array (Raw_Taylor'Range) of Power_Chart;
+   --  Element K holds the power coefficients which multiply λᴷ in the chart without its closure mode.
+
+   function Build_Chart_Lambda_Terms
+     (Start_Jets, Finish_Jets : Chart_Jet_Array; Warp_Factor : Dimensionless) return Chart_Lambda_Terms
    with
      Pre =>
-       Lambda >= 1.0
-       and then Is_Finite (Lambda)
-       and then Warp_Factor >= Minimum_Distance_Warp_Factor
+       Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
-       and then (for all Component in Chart_Component_Index => Is_Finite (C0 (Component)))
        and then
          (for all Order in Start_Jets'Range =>
             (for all Component in Chart_Component_Index =>
                Is_Finite (Start_Jets (Order) (Component)) and then Is_Finite (Finish_Jets (Order) (Component))));
-   --  Evaluate the four-component position-closure residual and its derivatives with respect to the three closure
-   --  coefficients and Lambda. Panel_Count controls composite quadrature resolution for the nonlinear solve.
+   --  Scaling the normalized distance by λ scales the kth endpoint derivative by λᵏ, and Build_Chart is linear in
+   --  those scaled derivatives. The chart of any λ is therefore a cubic in λ whose four coefficient charts depend
+   --  only on the endpoint jets and the warp, so the closure solve forms them once rather than rebuilding the
+   --  chart at every residual evaluation.
 
-   function Solve_Closure_Fixed
-     (Frame                     : Frame_Vector_Array;
-      Start_Jets, Finish_Jets   : Chart_Jet_Array;
+   procedure Chart_At_Lambda
+     (Terms                               : Chart_Lambda_Terms;
+      Lambda                              : Dimensionless;
+      C0                                  : Raw_Vector_3;
+      Coefficients, D_Lambda_Coefficients : out Power_Chart);
+   --  The power-basis form of the chart which Build_Chart builds for Lambda and C0, with the rounding residue of its
+   --  degree-seven Hermite part removed from V⁸, and the exact derivative of that chart with respect to Lambda.
+
+   function Solve_Closure_From_Terms
+     (Terms                     : Chart_Lambda_Terms;
+      Frame                     : Frame_Vector_Array;
       Chord_Direction           : Position_Scale;
       Maximum_Lambda, Tolerance : Dimensionless;
       Warp_Factor               : Dimensionless;
@@ -1441,8 +1452,9 @@ private
        and then Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
        and then (not Initial.Success or else Initial.Lambda <= Maximum_Lambda);
-   --  Solve the fixed-frame closure equations within the length-ratio and residual limits. Initial supplies the
-   --  starting point, while Panel_Count selects the quadrature resolution used for each residual evaluation.
+   --  Solve the fixed-frame closure equations for the chart whose λ-dependence Terms describes, within the
+   --  length-ratio and residual limits. Initial supplies the starting point, while Panel_Count selects the quadrature
+   --  resolution used for each residual evaluation.
 
    function Projected_Bound_On_Parameter_Range
      (Curve        : Stereographic_Curve;
