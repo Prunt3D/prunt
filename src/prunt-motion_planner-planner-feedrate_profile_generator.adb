@@ -141,16 +141,25 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          if not Eval.Valid or else Eval.Max_Vel < Velocity'Max (First, Last) then
             return Result;
          end if;
-         Result.Profile :=
-           Optimal_Full_Profile
-             (First,
-              Eval.Max_Vel,
-              Last,
-              Eval.Window.Distance,
-              Eval.Limits.Acceleration_Max,
-              Eval.Limits.Jerk_Max,
-              Eval.Limits.Snap_Max,
-              Eval.Limits.Crackle_Max);
+         declare
+            Full : constant Full_Profile_Result :=
+              Try_Optimal_Full_Profile
+                (First,
+                 Eval.Max_Vel,
+                 Last,
+                 Eval.Window.Distance,
+                 Eval.Limits.Acceleration_Max,
+                 Eval.Limits.Jerk_Max,
+                 Eval.Limits.Snap_Max,
+                 Eval.Limits.Crackle_Max);
+         begin
+            if not Full.Reachable then
+               --  The gentler limits often leave the window too short for its speed change, as for a whole run from
+               --  rest to a blended corner, so this outcome must not cost an exception.
+               return Result;
+            end if;
+            Result.Profile := Full.Profile;
+         end;
          Result.Max_Crackle := Eval.Limits.Crackle_Max;
          Result.Decel_Crackle := Eval.Limits.Crackle_Max;
          Result.Valid := True;

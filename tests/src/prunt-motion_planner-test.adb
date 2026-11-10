@@ -779,6 +779,45 @@ package body Prunt.Motion_Planner.Test is
          null;
    end Test_Optimal_Full_Profile_Impossible;
 
+   procedure Test_Try_Optimal_Full_Profile (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Cm : constant Crackle := 1000.0 * mm / s**5;
+      Sm : constant Snap := 10.0 * mm / s**4;
+      Jm : constant Jerk := 1.0 * mm / s**3;
+      Am : constant Acceleration := 10.0 * mm / s**2;
+      Vm : constant Velocity := 100.0 * mm / s;
+      Vs : constant Velocity := 10.0 * mm / s;
+      Ve : constant Velocity := 20.0 * mm / s;
+
+      Too_Short : constant Full_Profile_Result := Try_Optimal_Full_Profile (Vs, Vm, Ve, 0.001 * mm, Am, Jm, Sm, Cm);
+      Feasible  : constant Full_Profile_Result := Try_Optimal_Full_Profile (Vs, Vm, Ve, 1000.0 * mm, Am, Jm, Sm, Cm);
+      Empty     : constant Full_Profile_Result := Try_Optimal_Full_Profile (Vs, Vm, Vs, 0.0 * mm, Am, Jm, Sm, Cm);
+
+      T.Assert (not Too_Short.Reachable, "A distance too short for the speed change must be reported, not raised");
+      T.Assert (Total_Time (Too_Short.Profile) = 0.0 * s, "An unreachable result must hold an empty profile");
+      T.Assert (Feasible.Reachable, "A long enough distance must be reachable");
+      T.Assert
+        (Feasible.Profile = Optimal_Full_Profile (Vs, Vm, Ve, 1000.0 * mm, Am, Jm, Sm, Cm),
+         "A reachable result must hold the profile that Optimal_Full_Profile returns");
+      T.Assert (Empty.Reachable, "A zero-distance profile that keeps its velocity is reachable");
+      T.Assert (Total_Time (Empty.Profile) = 0.0 * s, "A zero-distance profile must be empty");
+
+      begin
+         declare
+            Invalid : constant Full_Profile_Result :=
+              Try_Optimal_Full_Profile (Vs, Vs, Ve, 1000.0 * mm, Am, Jm, Sm, Cm)
+            with Unreferenced;
+         begin
+            T.Fail ("Errors other than an unreachable End_Vel must still raise Constraint_Error");
+         end;
+      exception
+         when Constraint_Error =>
+            null;
+      end;
+   end Test_Try_Optimal_Full_Profile;
+
    procedure Check_Full_Profile
      (Start_Vel : Velocity;
       Max_Vel   : Velocity;
@@ -2740,6 +2779,7 @@ package body Prunt.Motion_Planner.Test is
          Test_Optimal_Full_Profile_Constraint_Errors'Access,
          Test_Optimal_Full_Profile_Errors'Access,
          Test_Optimal_Full_Profile_Impossible'Access,
+         Test_Try_Optimal_Full_Profile'Access,
          Test_Optimal_Full_Profile_Reach_Max_Vel'Access,
          Test_Optimal_Full_Profile_Start_End_Constraints'Access,
          Test_Optimal_Full_Profile_Triangle'Access,

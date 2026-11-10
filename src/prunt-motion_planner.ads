@@ -465,6 +465,25 @@ package Prunt.Motion_Planner is
    --  regarding End_Vel being reachable. Also raises Constraint_Error if Start_Vel or End_Vel are higher than
    --  Max_Vel.
 
+   type Full_Profile_Result is record
+      Reachable : Boolean := False;
+      Profile   : Feedrate_Profile := (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
+   end record;
+
+   function Try_Optimal_Full_Profile
+     (Start_Vel        : Velocity;
+      Max_Vel          : Velocity;
+      End_Vel          : Velocity;
+      Distance         : Length;
+      Acceleration_Max : Acceleration;
+      Jerk_Max         : Jerk;
+      Snap_Max         : Snap;
+      Crackle_Max      : Crackle) return Full_Profile_Result;
+   --  As Optimal_Full_Profile, except that when Distance is too short to reach End_Vel from Start_Vel the result has
+   --  Reachable set to False and an empty profile instead of Constraint_Error being raised. That outcome is ordinary
+   --  for a caller trying candidate limits, and propagating an exception costs far more than returning. Every other
+   --  error still raises Constraint_Error.
+
 private
 
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);

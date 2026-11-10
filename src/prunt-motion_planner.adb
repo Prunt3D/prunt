@@ -2470,7 +2470,7 @@ package body Prunt.Motion_Planner is
       return Optimal_Profile_For_Delta_V_Internal (Delta_V, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max).Profile;
    end Optimal_Profile_For_Delta_V;
 
-   function Optimal_Full_Profile
+   function Try_Optimal_Full_Profile
      (Start_Vel        : Velocity;
       Max_Vel          : Velocity;
       End_Vel          : Velocity;
@@ -2478,7 +2478,7 @@ package body Prunt.Motion_Planner is
       Acceleration_Max : Acceleration;
       Jerk_Max         : Jerk;
       Snap_Max         : Snap;
-      Crackle_Max      : Crackle) return Feedrate_Profile
+      Crackle_Max      : Crackle) return Full_Profile_Result
    is
       Profile : Feedrate_Profile;
    begin
@@ -2506,7 +2506,7 @@ package body Prunt.Motion_Planner is
          if Start_Vel /= End_Vel then
             raise Constraint_Error with "A zero-distance profile cannot change velocity.";
          end if;
-         return (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => [others => 0.0 * s]);
+         return (Reachable => True, Profile => <>);
       end if;
 
       if Acceleration_Max = 0.0 * mm / s**2
@@ -2521,7 +2521,7 @@ package body Prunt.Motion_Planner is
          if not Profile_Is_Valid (Profile, Distance, Start_Vel, End_Vel, Crackle_Max) then
             raise Constraint_Error with "Unrepresentable constant-speed profile.";
          end if;
-         return Profile;
+         return (Reachable => True, Profile => Profile);
       end if;
 
       if Max_Vel = 0.0 * mm / s then
@@ -2540,7 +2540,7 @@ package body Prunt.Motion_Planner is
               Start_Vel);
       begin
          if Distance < Profile_Distance then
-            raise Constraint_Error with "End_Vel is not reachable under given constraints.";
+            return (Reachable => False, Profile => <>);
          end if;
       end;
 
@@ -2621,7 +2621,27 @@ package body Prunt.Motion_Planner is
       if not Profile_Is_Valid (Profile, Distance, Start_Vel, End_Vel, Crackle_Max) then
          raise Constraint_Error with "The generated profile cannot represent the requested motion.";
       end if;
-      return Profile;
+      return (Reachable => True, Profile => Profile);
+   end Try_Optimal_Full_Profile;
+
+   function Optimal_Full_Profile
+     (Start_Vel        : Velocity;
+      Max_Vel          : Velocity;
+      End_Vel          : Velocity;
+      Distance         : Length;
+      Acceleration_Max : Acceleration;
+      Jerk_Max         : Jerk;
+      Snap_Max         : Snap;
+      Crackle_Max      : Crackle) return Feedrate_Profile
+   is
+      Result : constant Full_Profile_Result :=
+        Try_Optimal_Full_Profile
+          (Start_Vel, Max_Vel, End_Vel, Distance, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
+   begin
+      if not Result.Reachable then
+         raise Constraint_Error with "End_Vel is not reachable under given constraints.";
+      end if;
+      return Result.Profile;
    end Optimal_Full_Profile;
 
 end Prunt.Motion_Planner;
