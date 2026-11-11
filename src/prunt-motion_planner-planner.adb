@@ -2254,50 +2254,90 @@ package body Prunt.Motion_Planner.Planner is
    function Reachable_Velocity
      (Start_Vel : Velocity; Max_Vel : Velocity; Distance : Length; Limits : Scalar_Derivative_Limits) return Velocity
    is
-      Lower : Velocity := Velocity'Min (Start_Vel, Max_Vel);
-      Upper : Velocity := Max_Vel;
-      Mid   : Velocity;
+      Lower  : constant Velocity := Velocity'Min (Start_Vel, Max_Vel);
+      Solver : Delta_V_Solver;
+
+      function Ramp_Distance (End_Vel : Velocity) return Length;
+      --  Endpoint_Delta_V_Distance from Start_Vel under Limits, with the limit-only work prepared once.
+
+      function Ramp_Distance (End_Vel : Velocity) return Length is
+      begin
+         return
+           Fast_Distance_At_Max_Time
+             (Optimal_Profile_For_Delta_V (Solver, End_Vel - Start_Vel),
+              (if Start_Vel < End_Vel then Limits.Crackle_Max else -Limits.Crackle_Max),
+              Start_Vel);
+      exception
+         when Constraint_Error =>
+            return Length'Last;
+      end Ramp_Distance;
+
+      function Excess (End_Vel : Dimensionless) return Dimensionless
+      is ((Ramp_Distance (End_Vel * (mm / s)) - Distance) / mm);
+
+      function Highest_End is new Largest_Nonpositive (Excess);
+
+      Upper_Distance : Length;
+      Gain           : Velocity;
    begin
       if Distance <= 0.0 * mm or else Max_Vel <= Start_Vel then
          return Lower;
       end if;
 
-      if Endpoint_Delta_V_Distance (Start_Vel, Upper, Limits) <= Distance then
-         return Upper;
+      Solver := Prepare_Delta_V (Limits.Acceleration_Max, Limits.Jerk_Max, Limits.Snap_Max, Limits.Crackle_Max);
+      Upper_Distance := Ramp_Distance (Max_Vel);
+      if Upper_Distance <= Distance then
+         return Max_Vel;
       end if;
 
-      loop
-         --  This form avoids overflowing Lower + Upper. Continue until the midpoint rounds to an endpoint so the
-         --  search remains effective even when Max_Vel and the reachable velocity differ by hundreds of decades.
-         Mid := Lower + 0.5 * (Upper - Lower);
-         exit when Mid = Lower or else Mid = Upper;
-
-         if Endpoint_Delta_V_Distance (Start_Vel, Mid, Limits) <= Distance then
-            Lower := Mid;
-         else
-            Upper := Mid;
-         end if;
-      end loop;
-
-      return Velocity'Max (Start_Vel, 0.999 * Lower);
+      --  The ramp's distance grows with the speed it reaches, so the search finds the highest speed whose ramp
+      --  fits, to the last machine number. A ramp to Start_Vel is empty. The speed gained by the optimal ramp over
+      --  Distance is that speed up to rounding, so the search normally only has to settle the last few machine
+      --  numbers around it.
+      Gain := Delta_V_Over_Distance (Solver, Start_Vel, Distance);
+      return
+        Velocity'Max
+          (Start_Vel,
+           0.999
+           * (Highest_End
+                (Lower          => Start_Vel / (mm / s),
+                 Upper          => Max_Vel / (mm / s),
+                 Lower_Residual => -Distance / mm,
+                 Upper_Residual => (Upper_Distance - Distance) / mm,
+                 Guess          => (if Gain >= 0.0 * mm / s then (Start_Vel + Gain) / (mm / s) else -1.0),
+                 Use_Model      => Gain < 0.0 * mm / s)
+              * (mm / s)));
    end Reachable_Velocity;
 
    function Profile_At_Peak
      (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel, End_Vel, Peak : Velocity)
       return Window_Profile_Result
    is
-      Cache : Mixed_Derivative_Cache;
+      Cache : Window_Search_Cache;
    begin
       return Profile_At_Peak (Params, Eval, Start_Vel, End_Vel, Peak, Cache);
    end Profile_At_Peak;
 
-   function Profile_At_Peak
+   procedure Certify_Profile_At_Peak
      (Params                   : Kinematic_Parameters;
       Eval                     : Profile_Window_Evaluation;
       Start_Vel, End_Vel, Peak : Velocity;
-      Cache                    : in out Mixed_Derivative_Cache) return Window_Profile_Result
+      Cache                    : in out Window_Search_Cache;
+      Result                   : out Window_Profile_Result;
+      Overrun                  : out Length);
+   --  Profile_At_Peak, also reporting how far the certified ramps overrun the window. Overrun is nonpositive
+   --  exactly when Result is valid, and then the coast covers its magnitude. For a candidate rejected only because
+   --  its ramps are too long it is that positive excess, which a search over peak speeds can interpolate; for one
+   --  rejected for any other reason it is Length'Last.
+
+   procedure Certify_Profile_At_Peak
+     (Params                   : Kinematic_Parameters;
+      Eval                     : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity;
+      Cache                    : in out Window_Search_Cache;
+      Result                   : out Window_Profile_Result;
+      Overrun                  : out Length)
    is
-      Result                         : Window_Profile_Result;
       Peaks                          : Scalar_Derivative_Limits :=
         (0.0 * mm / s**2, 0.0 * mm / s**3, 0.0 * mm / s**4, 0.0 * mm / s**5);
       Scale                          : Dimensionless := 1.0;
@@ -2306,33 +2346,32 @@ package body Prunt.Motion_Planner.Planner is
       Actual_Peak                    : Velocity;
       type Ramps is array (1 .. 2) of Feedrate_Profile_Times;
    begin
+      Result := (others => <>);
+      Overrun := Length'Last;
       if not Eval.Valid or else Peak < Velocity'Max (Start_Vel, End_Vel) or else Peak > Eval.Max_Vel then
-         return Result;
+         return;
       elsif Eval.Window.Distance <= 0.0 * mm then
          Result.Valid := Eval.Window.Distance = 0.0 * mm and then Start_Vel = End_Vel;
-         return Result;
+         if Result.Valid then
+            Overrun := 0.0 * mm;
+         end if;
+         return;
       elsif Peak <= 0.0 * mm / s then
-         return Result;
+         return;
       end if;
       Result.Max_Crackle := Eval.Limits.Crackle_Max;
-      Result.Profile.Accel :=
-        Optimal_Profile_For_Delta_V
-          (Peak - Start_Vel,
-           Eval.Limits.Acceleration_Max,
-           Eval.Limits.Jerk_Max,
-           Eval.Limits.Snap_Max,
-           Eval.Limits.Crackle_Max);
+      if not Cache.Ramp_Solver_Filled then
+         Cache.Ramp_Solver :=
+           Prepare_Delta_V
+             (Eval.Limits.Acceleration_Max, Eval.Limits.Jerk_Max, Eval.Limits.Snap_Max, Eval.Limits.Crackle_Max);
+         Cache.Ramp_Solver_Filled := True;
+      end if;
+      Result.Profile.Accel := Optimal_Profile_For_Delta_V (Cache.Ramp_Solver, Peak - Start_Vel);
       --  Equal endpoint velocities request exactly the same ramp, before any curvature time scaling.
       Result.Profile.Decel :=
         (if Start_Vel = End_Vel
          then Result.Profile.Accel
-         else
-           Optimal_Profile_For_Delta_V
-             (Peak - End_Vel,
-              Eval.Limits.Acceleration_Max,
-              Eval.Limits.Jerk_Max,
-              Eval.Limits.Snap_Max,
-              Eval.Limits.Crackle_Max));
+         else Optimal_Profile_For_Delta_V (Cache.Ramp_Solver, Peak - End_Vel));
       if Eval.Curved then
          for Times of Ramps'[Result.Profile.Accel, Result.Profile.Decel] loop
             Peaks.Acceleration_Max :=
@@ -2345,9 +2384,9 @@ package body Prunt.Motion_Planner.Planner is
                Peaks.Crackle_Max := Result.Max_Crackle;
             end if;
          end loop;
-         Scale := Mixed_Derivative_Time_Scale (Params, Eval.Bounds, Peak, Peaks, Cache);
+         Scale := Mixed_Derivative_Time_Scale (Params, Eval.Bounds, Peak, Peaks, Cache.Mixed);
          if Scale <= 0.0 then
-            return Result;
+            return;
          end if;
          for I in Feedrate_Profile_Times_Index loop
             Result.Profile.Accel (I) := @ / Scale;
@@ -2362,7 +2401,7 @@ package body Prunt.Motion_Planner.Planner is
       then
          --  Underflow or subnormal rounding would invalidate both the preserved velocity change and its
          --  derivative certificate. Do not turn an unrepresentable ramp into an apparently feasible coast.
-         return Result;
+         return;
       end if;
       Result.Decel_Crackle := Result.Max_Crackle;
       Actual_Peak := Fast_Velocity_At_Max_Time (Result.Profile.Accel, Result.Max_Crackle, Start_Vel);
@@ -2381,41 +2420,78 @@ package body Prunt.Motion_Planner.Planner is
               Actual_Peak,
               Accel_Distance,
               Decel_Distance);
+         if Result.Valid then
+            Overrun := Distance - Eval.Window.Distance;
+         end if;
+      elsif Distance > Eval.Window.Distance then
+         Overrun := Distance - Eval.Window.Distance;
       end if;
-      return Result;
    exception
       when Constraint_Error =>
-         return (others => <>);
+         Result := (others => <>);
+         Overrun := Length'Last;
+   end Certify_Profile_At_Peak;
+
+   function Profile_At_Peak
+     (Params                   : Kinematic_Parameters;
+      Eval                     : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity;
+      Cache                    : in out Window_Search_Cache) return Window_Profile_Result
+   is
+      Result  : Window_Profile_Result;
+      Overrun : Length;
+   begin
+      Certify_Profile_At_Peak (Params, Eval, Start_Vel, End_Vel, Peak, Cache, Result, Overrun);
+      return Result;
    end Profile_At_Peak;
 
    function Reachable_Window_Velocity
      (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel : Velocity) return Velocity
    is
-      Lower : Velocity := Velocity'Min (Start_Vel, Eval.Max_Vel);
+      Lower : constant Velocity := Velocity'Min (Start_Vel, Eval.Max_Vel);
       Upper : Velocity;
-      Cache : Mixed_Derivative_Cache;
+      Cache : Window_Search_Cache;
+
+      function Overrun (End_Vel : Velocity) return Length;
+      --  How far the certified ramp from Start_Vel to End_Vel overruns the window.
+
+      function Overrun (End_Vel : Velocity) return Length is
+         Candidate : Window_Profile_Result;
+         Result    : Length;
+      begin
+         Certify_Profile_At_Peak (Params, Eval, Start_Vel, End_Vel, End_Vel, Cache, Candidate, Result);
+         return Result;
+      end Overrun;
+
+      function Raw_Overrun (End_Vel : Dimensionless) return Dimensionless
+      is (Overrun (End_Vel * (mm / s)) / mm);
+
+      function Highest_End is new Largest_Nonpositive (Raw_Overrun);
+
+      Upper_Overrun : Length;
    begin
       if not Eval.Curved or else Eval.Window.Distance <= 0.0 * mm or else Eval.Max_Vel <= Start_Vel then
          return Reachable_Velocity (Start_Vel, Eval.Max_Vel, Eval.Window.Distance, Eval.Limits);
       end if;
       --  The tangent-only solve is a cheap upper bound and avoids searching an unnecessarily large speed range.
       Upper := Reachable_Velocity (Start_Vel, Eval.Max_Vel, Eval.Window.Distance, Eval.Limits);
-      if Profile_At_Peak (Params, Eval, Start_Vel, Upper, Upper, Cache).Valid then
+      Upper_Overrun := Overrun (Upper);
+      if Upper_Overrun <= 0.0 * mm then
          return Upper;
       end if;
-      loop
-         declare
-            Mid : constant Velocity := Lower + 0.5 * (Upper - Lower);
-         begin
-            exit when Mid = Lower or else Mid = Upper or else Upper - Lower <= 1.0E-5 * Lower;
-            if Profile_At_Peak (Params, Eval, Start_Vel, Mid, Mid, Cache).Valid then
-               Lower := Mid;
-            else
-               Upper := Mid;
-            end if;
-         end;
-      end loop;
-      return Velocity'Max (Start_Vel, 0.999 * Lower);
+      --  The certified ramp grows with the speed it reaches, more steeply than the tangent-only one as curvature
+      --  takes more of the derivative budgets. A ramp to Start_Vel itself is empty, leaving the whole window.
+      return
+        Velocity'Max
+          (Start_Vel,
+           0.999
+           * (Highest_End
+                (Lower              => Lower / (mm / s),
+                 Upper              => Upper / (mm / s),
+                 Lower_Residual     => -Eval.Window.Distance / mm,
+                 Upper_Residual     => Upper_Overrun / mm,
+                 Relative_Tolerance => 1.0E-5)
+              * (mm / s)));
    end Reachable_Window_Velocity;
 
    type Ramp_Stage_Index is range 0 .. 15;
@@ -2713,6 +2789,27 @@ package body Prunt.Motion_Planner.Planner is
       Cells                    : Path_Cells;
       Caches                   : in out Path_Cell_Caches;
       Eval                     : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity) return Window_Profile_Result is
+   begin
+      return
+        Cellular_Profile_At_Peak
+          (Params,
+           Cells,
+           Caches,
+           Prepare_Delta_V
+             (Eval.Limits.Acceleration_Max, Eval.Limits.Jerk_Max, Eval.Limits.Snap_Max, Eval.Limits.Crackle_Max),
+           Eval,
+           Start_Vel,
+           End_Vel,
+           Peak);
+   end Cellular_Profile_At_Peak;
+
+   function Cellular_Profile_At_Peak
+     (Params                   : Kinematic_Parameters;
+      Cells                    : Path_Cells;
+      Caches                   : in out Path_Cell_Caches;
+      Ramp_Solver              : Delta_V_Solver;
+      Eval                     : Profile_Window_Evaluation;
       Start_Vel, End_Vel, Peak : Velocity) return Window_Profile_Result
    is
       Window_Start                   : constant Length := Eval.Window.Start_Distance;
@@ -2733,20 +2830,8 @@ package body Prunt.Motion_Planner.Planner is
       end if;
       Result.Max_Crackle := Eval.Limits.Crackle_Max;
       Result.Decel_Crackle := Eval.Limits.Crackle_Max;
-      Result.Profile.Accel :=
-        Optimal_Profile_For_Delta_V
-          (Peak - Start_Vel,
-           Eval.Limits.Acceleration_Max,
-           Eval.Limits.Jerk_Max,
-           Eval.Limits.Snap_Max,
-           Eval.Limits.Crackle_Max);
-      Result.Profile.Decel :=
-        Optimal_Profile_For_Delta_V
-          (Peak - End_Vel,
-           Eval.Limits.Acceleration_Max,
-           Eval.Limits.Jerk_Max,
-           Eval.Limits.Snap_Max,
-           Eval.Limits.Crackle_Max);
+      Result.Profile.Accel := Optimal_Profile_For_Delta_V (Ramp_Solver, Peak - Start_Vel);
+      Result.Profile.Decel := Optimal_Profile_For_Delta_V (Ramp_Solver, Peak - End_Vel);
       Certify_Cellular_Ramp
         (Params, Cells, Caches, Result.Profile.Accel, Result.Max_Crackle, Start_Vel, Window_Start, True, Accel_Valid);
       if not Accel_Valid then
@@ -2813,6 +2898,9 @@ package body Prunt.Motion_Planner.Planner is
       Best_Time  : Time := 1.0E100 * s;
       Straight   : Boolean := True;
       Caches     : Path_Cell_Caches (Cells'Range);
+      Solver     : constant Delta_V_Solver :=
+        Prepare_Delta_V
+          (Eval.Limits.Acceleration_Max, Eval.Limits.Jerk_Max, Eval.Limits.Snap_Max, Eval.Limits.Crackle_Max);
 
       Last_Peak       : Velocity := 0.0 * mm / s;
       Last_Duration   : Time := 1.0E100 * s;
@@ -2828,7 +2916,7 @@ package body Prunt.Motion_Planner.Planner is
 
          declare
             Candidate      : constant Window_Profile_Result :=
-              Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Start_Vel, End_Vel, Peak);
+              Cellular_Profile_At_Peak (Params, Cells, Caches, Solver, Eval, Start_Vel, End_Vel, Peak);
             Candidate_Time : constant Time :=
               (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
          begin
@@ -2888,7 +2976,7 @@ package body Prunt.Motion_Planner.Planner is
       if Upper < Lower then
          return Best;
       elsif Eval.Window.Distance <= 0.0 * mm then
-         return Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Start_Vel, End_Vel, Lower);
+         return Cellular_Profile_At_Peak (Params, Cells, Caches, Solver, Eval, Start_Vel, End_Vel, Lower);
       end if;
 
       if Lower > 0.0 * mm / s and then Consider (Lower) = 1.0E100 * s then
@@ -2954,11 +3042,14 @@ package body Prunt.Motion_Planner.Planner is
       Upper      : Velocity;
       Cap        : Velocity;
       Caches     : Path_Cell_Caches (Cells'Range);
+      Solver     : constant Delta_V_Solver :=
+        Prepare_Delta_V
+          (Eval.Limits.Acceleration_Max, Eval.Limits.Jerk_Max, Eval.Limits.Snap_Max, Eval.Limits.Crackle_Max);
 
       function Feasible (Free : Velocity) return Boolean
       is (if Forward
-          then Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Fixed_Vel, Free, Free).Valid
-          else Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Free, Fixed_Vel, Free).Valid);
+          then Cellular_Profile_At_Peak (Params, Cells, Caches, Solver, Eval, Fixed_Vel, Free, Free).Valid
+          else Cellular_Profile_At_Peak (Params, Cells, Caches, Solver, Eval, Free, Fixed_Vel, Free).Valid);
    begin
       for Cell of Cells loop
          if Cell_Overlaps (Cell, Eval.Window.Start_Distance, Window_End) then
@@ -3098,13 +3189,23 @@ package body Prunt.Motion_Planner.Planner is
       Lower     : Velocity := Velocity'Max (Start_Vel, End_Vel);
       Upper     : Velocity := Eval.Max_Vel;
       Best_Time : Time := 1.0E100 * s;
-      Cache     : Mixed_Derivative_Cache;
+      Cache     : Window_Search_Cache;
 
       Last_Peak       : Velocity := 0.0 * mm / s;
       Last_Duration   : Time := 1.0E100 * s;
+      Last_Overrun    : Length := Length'Last;
       Last_Considered : Boolean := False;
       --  A collapsed feasible interval makes the search repeat one peak. Its certificate is deterministic and
-      --  cannot improve Best a second time, so only its duration is needed.
+      --  cannot improve Best a second time, so only its duration and ramp overrun are needed.
+
+      Lower_Overrun : Length := -Eval.Window.Distance;
+      --  The overrun at the minimum peak. With both ends at rest that peak has no ramps and is never considered.
+
+      Top_Known    : Boolean := False;
+      Top_Peak     : Velocity := 0.0 * mm / s;
+      Top_Duration : Time := 1.0E100 * s;
+      --  The highest valid peak considered so far and its duration. The feasibility search ends on it, usually
+      --  after its last evaluation was of a peak just above.
 
       function Consider (Peak : Velocity) return Time;
 
@@ -3115,14 +3216,19 @@ package body Prunt.Motion_Planner.Planner is
          end if;
 
          declare
-            Candidate          : constant Window_Profile_Result :=
-              Profile_At_Peak (Params, Eval, Start_Vel, End_Vel, Peak, Cache);
-            Candidate_Duration : constant Time :=
-              (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
+            Candidate          : Window_Profile_Result;
+            Candidate_Duration : Time;
          begin
+            Certify_Profile_At_Peak (Params, Eval, Start_Vel, End_Vel, Peak, Cache, Candidate, Last_Overrun);
+            Candidate_Duration := (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
             if Candidate.Valid and then (not Best.Valid or else Candidate_Duration < Best_Time) then
                Best := Candidate;
                Best_Time := Candidate_Duration;
+            end if;
+            if Candidate.Valid and then (not Top_Known or else Peak >= Top_Peak) then
+               Top_Known := True;
+               Top_Peak := Peak;
+               Top_Duration := Candidate_Duration;
             end if;
             Last_Peak := Peak;
             Last_Duration := Candidate_Duration;
@@ -3130,6 +3236,20 @@ package body Prunt.Motion_Planner.Planner is
             return Candidate_Duration;
          end;
       end Consider;
+
+      function Raw_Overrun (Peak : Dimensionless) return Dimensionless;
+      --  The ramp overrun of the candidate at Peak, which Consider also offers to Best.
+
+      function Raw_Overrun (Peak : Dimensionless) return Dimensionless is
+         Unused : constant Time := Consider (Peak * (mm / s));
+      begin
+         return Last_Overrun / mm;
+      end Raw_Overrun;
+
+      function Highest_Peak is new Largest_Nonpositive (Raw_Overrun);
+
+      Top_Time : Time;
+      --  The duration of the candidate at Upper.
    begin
       if not Eval.Valid or else Upper < Lower then
          return Best;
@@ -3153,29 +3273,43 @@ package body Prunt.Motion_Planner.Planner is
       end if;
 
       --  At the minimum peak there is only one velocity transition, exactly the one certified by lookahead.
-      if Lower > 0.0 * mm / s and then Consider (Lower) = 1.0E100 * s then
-         return Best;
+      if Lower > 0.0 * mm / s then
+         if Consider (Lower) = 1.0E100 * s then
+            return Best;
+         end if;
+         Lower_Overrun := Last_Overrun;
       end if;
-      if Consider (Upper) = 1.0E100 * s then
-         --  Locate the feasible peak-speed interval. Every accepted candidate remains available even when
-         --  a later trial is infeasible. The relative stop also works for very small representable speeds.
-         loop
-            declare
-               Mid : constant Velocity := Lower + 0.5 * (Upper - Lower);
-            begin
-               exit when Mid = Lower or else Mid = Upper or else Upper - Lower <= 1.0E-5 * Lower;
-               if Consider (Mid) < 1.0E100 * s then
-                  Lower := Mid;
-               else
-                  Upper := Mid;
-               end if;
-            end;
-         end loop;
-         Upper := Lower;
+      Top_Time := Consider (Upper);
+      if Top_Time = 1.0E100 * s then
+         --  Locate the feasible peak-speed interval: the ramps lengthen with the peak, and its highest feasible
+         --  value is where they fill the window. Every accepted candidate remains available even when a later
+         --  trial is infeasible. The relative stop also works for very small representable speeds.
+         Upper :=
+           Highest_Peak
+             (Lower              => Lower / (mm / s),
+              Upper              => Upper / (mm / s),
+              Lower_Residual     => Lower_Overrun / mm,
+              Upper_Residual     => Last_Overrun / mm,
+              Relative_Tolerance => 1.0E-5)
+           * (mm / s);
+         Top_Time := (if Top_Known and then Identical (Top_Peak, Upper) then Top_Duration else Consider (Upper));
       end if;
-      Lower := Velocity'Max (Start_Vel, End_Vel);
       --  A feasible maximum peak need not minimize time: a slightly lower peak can free substantial ramp
       --  budget. Search the complete feasible interval; never impose a fixed reduction on coasting speed.
+      declare
+         Ratio    : constant Dimensionless := 0.618033988749895;
+         Near_Top : constant Velocity := Upper - Ratio**12 * (Upper - Lower);
+      begin
+         --  The search below narrows the interval to this fraction of its width around a minimum that it takes
+         --  to be the only one. On that same assumption, a candidate that far below the maximum peak which is no
+         --  faster than the maximum itself puts the minimum within that distance of the maximum, which has
+         --  already been considered. That is the usual case, and it saves the whole search.
+         if Top_Time < 1.0E100 * s and then Near_Top > Lower and then Near_Top < Upper then
+            if Consider (Near_Top) >= Top_Time then
+               return Best;
+            end if;
+         end if;
+      end;
       declare
          Ratio      : constant Dimensionless := 0.618033988749895;
          Left       : Velocity := Upper - Ratio * (Upper - Lower);
@@ -3573,6 +3707,75 @@ package body Prunt.Motion_Planner.Planner is
             Restore;
       end Try_Stops;
 
+      function Stop_Cannot_Pay (Corner : Finishing_Corners_Index) return Boolean;
+      --  Whether tangent-only bounds already show that the sweep's comparisons at Corner would change nothing:
+      --  stopping at Corner alone would be rejected, and the pair with the next corner would not be tried. A stop
+      --  restores both adjoining primitives to their commanded ends, so each replanned segment is bounded below as
+      --  in Straight_Bound. This costs two cheap profiles for the common corner whose blend is clearly faster than
+      --  a stop, instead of the full replan of both segments.
+
+      function Stop_Cannot_Pay (Corner : Finishing_Corners_Index) return Boolean is
+         Old_Time     : Time;
+         First_Bound  : Time;
+         Second_Bound : Time;
+      begin
+         if Timing_Run_First (Block'Access, Corner) /= Corner
+           or else Timing_Run_Last (Block'Access, Corner + 1) /= Corner + 1
+         then
+            --  The bounds are for single segments. A run of several is replanned as before.
+            return False;
+         end if;
+         --  Try_Stops sums the old and new times in this order and keeps a stop only if the new sum is smaller.
+         Old_Time := 0.0 * s + Segment_Time (Block'Access, Corner) + Segment_Time (Block'Access, Corner + 1);
+         First_Bound :=
+           Straight_Bound
+             (Corner,
+              Block.Corner_Velocity_Limits (Corner - 1),
+              0.0 * mm / s,
+              Segment_Start_Transition_Distance (Block'Access, Corner)
+              + (Primitive_Length (Block'Access, Corner) - Block.Primitive_Start_Distances (Corner)));
+         if First_Bound < Old_Time then
+            Second_Bound :=
+              Straight_Bound
+                (Corner + 1,
+                 0.0 * mm / s,
+                 Block.Corner_Velocity_Limits (Corner + 1),
+                 Block.Primitive_Start_Distances (Corner + 1)
+                 + Block.Primitive_Distances (Corner + 1)
+                 + Segment_End_Transition_Distance (Block'Access, Corner + 1));
+            if First_Bound + Second_Bound < Old_Time then
+               return False;
+            end if;
+            --  The stop alone loses, but its first segment may still be certified in less than the old time of
+            --  both. The sweep then tries the pair with the next corner when the pair's own bound allows it. The
+            --  first segment's bound is no later than its replanned time, so a pair bound that fails with it
+            --  fails with that time too.
+            if Corner + 1 < Block.N_Corners
+              and then Transition_Kind (Block.Corner_Transitions (Corner + 1)) = Stereographic_Transition
+            then
+               Materialize (Timing_Run_Last (Block'Access, Corner + 2));
+               if First_Bound
+                 + Straight_Bound (Corner + 1, 0.0 * mm / s, 0.0 * mm / s, Primitive_Length (Block'Access, Corner + 1))
+                 + Straight_Bound
+                     (Corner + 2,
+                      0.0 * mm / s,
+                      Block.Corner_Velocity_Limits (Corner + 2),
+                      Block.Primitive_Start_Distances (Corner + 2)
+                      + Block.Primitive_Distances (Corner + 2)
+                      + Segment_End_Transition_Distance (Block'Access, Corner + 2))
+                 < Run_Time_Through (Corner)
+                   + Segment_Time (Block'Access, Corner + 1)
+                   + Segment_Time (Block'Access, Corner + 2)
+               then
+                  return False;
+               end if;
+            end if;
+         end if;
+         --  Try_Stops counts every corner it compares.
+         Workspace.Local_Comparison_Corners := @ + 1;
+         return True;
+      end Stop_Cannot_Pay;
+
       procedure Try_Merge (Corner : Finishing_Corners_Index);
       --  Join the timing runs ending and starting at Corner and replan the joined run, with whole-window profiles
       --  only, with its outer junction speeds fixed. Keep it only if it is certified and faster. Geometry and E
@@ -3718,7 +3921,8 @@ package body Prunt.Motion_Planner.Planner is
          --  Apply the cumulative translation to each untouched reference just once, keeping the sweep linear in
          --  the number of corners. A replanning window ends with the timing run after its last stopped corner.
          Materialize (Timing_Run_Last (Block'Access, I + 1));
-         if Transition_Kind (Block.Corner_Transitions (I)) = Stereographic_Transition then
+         if Transition_Kind (Block.Corner_Transitions (I)) = Stereographic_Transition and then not Stop_Cannot_Pay (I)
+         then
             declare
                Outcome, Next_Outcome               : Stop_Outcome;
                Gain, Next_Gain, First_Time, Unused : Time;

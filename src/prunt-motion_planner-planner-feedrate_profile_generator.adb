@@ -186,6 +186,31 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          Decels        : array (Split_Windows'Range) of Crackle;
          Speeds        : array (Natural range 0 .. 3) of Velocity;
          Split_Time    : Time := 0.0 * s;
+
+         type Reach_Memo is record
+            Valid            : Boolean := False;
+            Fixed, Reachable : Velocity := 0.0 * mm / s;
+         end record;
+         Reach_Memos : array (Split_Windows'Range, Boolean) of Reach_Memo;
+         --  The latest reachability across each portion, by whether its fixed speed is at its start. The outer
+         --  speeds never change and the inner ones often settle at once, so later sweeps mostly repeat a solve.
+
+         function Reach (I : Positive; Fixed : Velocity; Forward : Boolean) return Velocity;
+
+         function Reach (I : Positive; Fixed : Velocity; Forward : Boolean) return Velocity is
+            Memo : Reach_Memo renames Reach_Memos (I, Forward);
+         begin
+            if not (Memo.Valid and then Identical (Memo.Fixed, Fixed)) then
+               Memo :=
+                 (Valid     => True,
+                  Fixed     => Fixed,
+                  Reachable =>
+                    (if Conservative
+                     then Reachable_Velocity (Fixed, Evals (I).Max_Vel, Split_Windows (I).Distance, Evals (I).Limits)
+                     else Reachable (Evals (I), Fixed, Forward)));
+            end if;
+            return Memo.Reachable;
+         end Reach;
       begin
          Accepted := False;
          if Split_Windows (1).Distance = 0.0 * mm and then Split_Windows (3).Distance = 0.0 * mm then
@@ -231,24 +256,10 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                Previous : constant array (1 .. 2) of Velocity := [Speeds (1), Speeds (2)];
             begin
                for I in 1 .. 2 loop
-                  Speeds (I) :=
-                    Velocity'Min
-                      (Speeds (I),
-                       (if Conservative
-                        then
-                          Reachable_Velocity
-                            (Speeds (I - 1), Evals (I).Max_Vel, Split_Windows (I).Distance, Evals (I).Limits)
-                        else Reachable (Evals (I), Speeds (I - 1), Forward => True)));
+                  Speeds (I) := Velocity'Min (Speeds (I), Reach (I, Speeds (I - 1), Forward => True));
                end loop;
                for I in reverse 2 .. 3 loop
-                  Speeds (I - 1) :=
-                    Velocity'Min
-                      (Speeds (I - 1),
-                       (if Conservative
-                        then
-                          Reachable_Velocity
-                            (Speeds (I), Evals (I).Max_Vel, Split_Windows (I).Distance, Evals (I).Limits)
-                        else Reachable (Evals (I), Speeds (I), Forward => False)));
+                  Speeds (I - 1) := Velocity'Min (Speeds (I - 1), Reach (I, Speeds (I), Forward => False));
                end loop;
                --  A sweep depends only on Speeds, so once one leaves them unchanged every later sweep would too.
                exit when Identical (Speeds (1), Previous (1)) and then Identical (Speeds (2), Previous (2));

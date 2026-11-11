@@ -1099,17 +1099,26 @@ private
       return Window_Profile_Result;
    --  Construct and certify a fixed-peak profile using a common time stretch of its velocity transitions.
 
+   type Window_Search_Cache is record
+      Mixed              : Mixed_Derivative_Cache;
+      Ramp_Solver        : Delta_V_Solver;
+      Ramp_Solver_Filled : Boolean := False;
+   end record;
+   --  What a search over the peak speeds of one window can reuse: the decomposed bounds for its mixed-derivative
+   --  certificates, and the ramp solver prepared for its tangent-only limits.
+
    function Profile_At_Peak
      (Params                   : Kinematic_Parameters;
       Eval                     : Profile_Window_Evaluation;
       Start_Vel, End_Vel, Peak : Velocity;
-      Cache                    : in out Mixed_Derivative_Cache) return Window_Profile_Result;
+      Cache                    : in out Window_Search_Cache) return Window_Profile_Result;
    --  Identical to the uncached form. Cache must only be shared between calls with the same Params and Eval.
 
    function Generate_Window_Profile
      (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel, End_Vel : Velocity)
       return Window_Profile_Result;
-   --  Search feasible peak speeds for a fast certified profile, retaining the maximum-speed coast candidate.
+   --  Search feasible peak speeds for a fast certified profile, retaining the maximum-speed coast candidate. The
+   --  search for a faster lower peak is skipped when a peak just below the maximum is no faster than the maximum.
 
    function Reachable_Window_Velocity
      (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel : Velocity) return Velocity;
@@ -1125,6 +1134,16 @@ private
    --  Profile_At_Peak for a cellular window. Each ramp is certified separately, in every cell it crosses, at the
    --  highest speed it reaches there; a ramp that fails is stretched in time and certified again. The coast must stay
    --  below every cell ceiling it crosses. Caches must only be reused with the same Params and Cells.
+
+   function Cellular_Profile_At_Peak
+     (Params                   : Kinematic_Parameters;
+      Cells                    : Path_Cells;
+      Caches                   : in out Path_Cell_Caches;
+      Ramp_Solver              : Delta_V_Solver;
+      Eval                     : Profile_Window_Evaluation;
+      Start_Vel, End_Vel, Peak : Velocity) return Window_Profile_Result
+   with Pre => Caches'First = Cells'First and then Caches'Last = Cells'Last;
+   --  Identical, with the ramp solver already prepared for Eval's limits.
 
    function Generate_Cellular_Profile
      (Params             : Kinematic_Parameters;
@@ -1211,7 +1230,8 @@ private
 
    function Reachable_Velocity
      (Start_Vel : Velocity; Max_Vel : Velocity; Distance : Length; Limits : Scalar_Derivative_Limits) return Velocity;
-   --  Return the greatest velocity reachable from Start_Vel across Distance without exceeding Limits or Max_Vel.
+   --  Return the greatest velocity reachable from Start_Vel across Distance without exceeding Limits or Max_Vel, less
+   --  a 0.1% margin. The search continues to the last machine number whose ramp is evaluated to fit.
 
    function Endpoint_Delta_V_Distance
      (Start_Vel : Velocity; End_Vel : Velocity; Limits : Scalar_Derivative_Limits) return Length;

@@ -514,6 +514,34 @@ private
    type Mixed_Derivative_Axis_Coefficient_Array is array (Axis_Name) of Mixed_Derivative_Axis_Coefficients;
    type Mixed_Derivative_Axis_Flags is array (Axis_Name) of Boolean;
 
+   subtype Time_Squared is Dimensioned_Float with Dimension => (Symbol => "s²", Second => 2, others => 0);
+
+   type Delta_V_Solver is record
+      Limits_Valid      : Boolean := False;
+      Zero_Limit        : Boolean := False;
+      Unclassifiable    : Boolean := False;
+      Threshold_Raises  : Boolean := False;
+      Region            : Constraint_Region := Region_5;
+      Am                : Acceleration := 0.0 * mm / s**2;
+      Jm                : Jerk := 0.0 * mm / s**3;
+      Cm                : Crackle := 0.0 * mm / s**5;
+      T1, T2, T3        : Time := 0.0 * s;
+      Accel_Over_Jerk   : Time := 0.0 * s;
+      Jerk_Over_Snap    : Time := 0.0 * s;
+      Snap_Over_Crackle : Time := 0.0 * s;
+      Snap_Root         : Time := 0.0 * s;
+      Jerk_Over_Crackle : Time_Squared := 0.0 * s**2;
+      Snap_Only_Above   : Velocity := 0.0 * mm / s;
+   end record;
+   --  Everything in Optimal_Profile_For_Delta_V that depends only on the derivative limits: the constraint region,
+   --  the phase times of its fully saturated case (T1 to T3) and the quotients and roots that the partially
+   --  saturated cases combine with the velocity change. A search over velocity changes under fixed limits prepares
+   --  this once. Every value is formed by the same operations, in the same order, as a direct solve, so a prepared
+   --  solve returns identical profiles.
+   --
+   --  Unclassifiable records that selecting the region raised Constraint_Error, and Threshold_Raises that the
+   --  snap-only velocity threshold did. A solve raises the same error at the point where it would need the value.
+
    type Mixed_Derivative_Cache is record
       Axes               : Mixed_Derivative_Axis_Coefficient_Array;
       Axes_Filled        : Mixed_Derivative_Axis_Flags := [others => False];
@@ -564,5 +592,47 @@ private
      (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
       return Internal_Profile_Result;
    --  Solve the minimum-time derivative-limited transition for Delta_V and retain its active constraint region.
+
+   function Prepare_Delta_V
+     (Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle) return Delta_V_Solver;
+   --  Never raises: invalid limits and arithmetic failures are recorded for the solves that use the result.
+
+   function Optimal_Profile_For_Delta_V (Solver : Delta_V_Solver; Delta_V : Velocity) return Feedrate_Profile_Times;
+   --  Identical to Optimal_Profile_For_Delta_V for the limits that Solver was prepared with.
+
+   function Optimal_Profile_For_Delta_V_Internal
+     (Solver : Delta_V_Solver; Delta_V : Velocity) return Internal_Profile_Result;
+
+   function Delta_V_Over_Distance (Solver : Delta_V_Solver; Start_Vel : Velocity; Distance : Length) return Velocity;
+   --  An estimate of the velocity change whose optimal ramp from Start_Vel, under Solver's limits, covers exactly
+   --  Distance: the speed gained by Optimal_Profile_For_Distance. It is accurate to rounding but carries no
+   --  certificate, so a caller confirms it against the ramps it actually builds. Negative when there is no
+   --  estimate to offer.
+
+   generic
+      with function Residual (X : Dimensionless) return Dimensionless;
+   function Largest_Nonpositive
+     (Lower, Upper                   : Dimensionless;
+      Lower_Residual, Upper_Residual : Dimensionless;
+      Relative_Tolerance             : Dimensionless := 0.0;
+      Guess                          : Dimensionless := -1.0;
+      Use_Model                      : Boolean := True) return Dimensionless;
+   --  The search behind every monotone velocity and time solve. Residual is treated as nondecreasing over
+   --  0 <= Lower < Upper, with Residual (Lower) <= 0 < Residual (Upper); neither end is evaluated. With a zero
+   --  tolerance the result X is Lower or a point where Residual was evaluated and found nonpositive, and the next
+   --  machine number above X is Upper or a point where Residual was evaluated and found positive. For a Residual
+   --  that is monotone in machine arithmetic that is exactly the result of bisecting until the bracket's ends are
+   --  adjacent, at a fraction of the evaluations; where rounding makes it locally nonmonotone both results still
+   --  carry the same certificate, an evaluated nonpositive Residual.
+   --
+   --  The search first models Residual - Lower_Residual as a power of X - Lower, which fits ramp distances from a
+   --  quarter power near a crackle-limited start through to a square when acceleration-limited, refitting the
+   --  exponent to the latest two evaluations. Lower_Residual and Upper_Residual seed that model and need not be
+   --  exact. Once the model's estimate stops moving, the bracket is closed around it in steps of machine numbers.
+   --  Guess, when inside the bracket, replaces the model with a caller's estimate of the result. Without Use_Model
+   --  and a Guess the residual ends are not used; an Upper_Residual that is not positive and finite only costs the
+   --  model its first point. A positive Relative_Tolerance also stops at a bracket no wider than that fraction of
+   --  its lower end, and then the model stops refining an estimate that moves by less than a quarter of it and the
+   --  bracket is closed in steps of half of it.
 
 end Prunt.Motion_Planner;

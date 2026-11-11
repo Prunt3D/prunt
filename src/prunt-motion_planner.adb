@@ -423,6 +423,10 @@ package body Prunt.Motion_Planner is
       type Scaled_Nonnegative_Array is array (Positive range <>) of Scaled_Nonnegative;
       type Dimensionless_Array is array (Positive range <>) of Dimensionless;
 
+      Root_Settling_Attempts : constant Positive := 12;
+      --  How many steps below a closed-form root may be tried before bisecting instead. The steps quadruple from
+      --  one part in 2**52, so together they reach far beyond any rounding of the root.
+
       Zero : constant Scaled_Nonnegative := (Fraction => 0.0, Exponent => 0);
       One  : constant Scaled_Nonnegative :=
         (Fraction => Dimensionless'Fraction (1.0), Exponent => Dimensionless'Exponent (1.0));
@@ -459,7 +463,10 @@ package body Prunt.Motion_Planner is
       procedure Apply_Linear_Constraint (Maximum, Fixed, Linear : Scaled_Nonnegative);
       procedure Apply_Quadratic_Constraint (Maximum, Fixed, Linear, Quadratic : Scaled_Nonnegative);
       procedure Apply_Time_Constraint (Maximum, Fixed : Scaled_Nonnegative; Terms : Scaled_Nonnegative_Array);
-      procedure Apply_Bounded_Time_Constraint (Maximum, Fixed : Dimensionless; Terms : Dimensionless_Array);
+      procedure Apply_Bounded_Time_Constraint (Maximum, Fixed : Dimensionless; Terms : Dimensionless_Array)
+      with Inline_Always;
+      procedure Tighten_Bounded_Time_Constraint (Maximum, Fixed : Dimensionless; Terms : Dimensionless_Array)
+      with No_Inline;
 
       function To_Scaled (Value : Dimensionless) return Scaled_Nonnegative is
       begin
@@ -743,6 +750,41 @@ package body Prunt.Motion_Planner is
             return;
          end if;
 
+         --  The budget is a polynomial in the scale with nonnegative coefficients, so it is increasing and its
+         --  root below Upper is the largest scale that fits. Most binding budgets are the linear acceleration
+         --  budget or the quadratic jerk budget, whose roots have closed forms. Such a root is the limit to
+         --  within rounding, on either side of it, and only a scale at which the budget is evaluated to fit is
+         --  accepted, so step below the root until one does. That evaluation is the certificate, exactly as for
+         --  a bisected scale; every later budget only lowers the scale, and the evaluation is monotone in it.
+         declare
+            Degree   : Natural := 0;
+            Estimate : Dimensionless;
+            Step     : Dimensionless := Dimensionless'Model_Epsilon;
+         begin
+            for I in Terms'Range loop
+               if Terms (I).Fraction > 0.0 then
+                  Degree := I;
+               end if;
+            end loop;
+            if Degree in 1 .. 2 then
+               Estimate :=
+                 Dimensionless'Min
+                   (Upper,
+                    (if Degree = 1
+                     then Scaled_Ratio (Remainder, Terms (1))
+                     else Positive_Quadratic_Scale (Remainder, Terms (1), Terms (2))));
+               for Attempt in 1 .. Root_Settling_Attempts loop
+                  if Fits (Estimate) then
+                     Limit_Scale := Estimate;
+                     return;
+                  end if;
+                  Estimate := Estimate * (1.0 - Step);
+                  Step := 4.0 * Step;
+               end loop;
+            end if;
+         end;
+
+         --  The cubic snap and quartic crackle budgets, and any root that would not settle, are bisected.
          --  Each positive monomial bounds the root from above. Establish its magnitude before bisection,
          --  including when the feasible scale is hundreds of decades below one.
          for I in Terms'Range loop
@@ -784,12 +826,48 @@ package body Prunt.Motion_Planner is
 
       procedure Apply_Bounded_Time_Constraint (Maximum, Fixed : Dimensionless; Terms : Dimensionless_Array) is
          pragma Suppress (Overflow_Check);
-         Remainder : Dimensionless;
-         Lower     : Dimensionless := 0.0;
-         Upper     : Dimensionless := Limit_Scale;
+         Sum : Dimensionless := 0.0;
+      begin
+         --  The caller bounds every nonzero input factor to [2**-64, 2**64]. Each coefficient contains
+         --  at most five such factors and a constant <= 15, with at most two monomials per coefficient.
+         --  Nonzero coefficients are therefore >= 2**-320 and <= 2**325. The fixed term has at most six
+         --  factors and is <= 2**384. All products and sums are normal and preserve the scaled evaluation
+         --  order. A positive Maximum - Fixed is >= 2**-117 with at most 53 mantissa bits.
+         --
+         --  Only search with Upper >= 2**-128: sixteen bisections then keep every positive trial >= 2**-144.
+         --  Four Horner steps stay in [2**-896, 2**327] when nonzero. Thus no overflow or underflow can alter
+         --  a budget comparison. Smaller scales use the original solver, retaining the exact coefficients.
+         --
+         --  Nearly every budget already fits at the scale that the earlier ones left, so that one evaluation is
+         --  inlined at each of the sixteen calls, where the number of terms is known, and only a budget that
+         --  binds calls the search.
+         if Fixed > Maximum then
+            Result.Valid := False;
+            return;
+         elsif Limit_Scale = 0.0 then
+            return;
+         elsif Limit_Scale >= 2.0**(-128) then
+            for I in reverse Terms'Range loop
+               Sum := (Sum + Terms (I)) * Limit_Scale;
+            end loop;
+            if Sum <= Maximum - Fixed then
+               return;
+            end if;
+         end if;
+         Tighten_Bounded_Time_Constraint (Maximum, Fixed, Terms);
+      end Apply_Bounded_Time_Constraint;
+
+      procedure Tighten_Bounded_Time_Constraint (Maximum, Fixed : Dimensionless; Terms : Dimensionless_Array) is
+         pragma Suppress (Overflow_Check);
+         Remainder : constant Dimensionless := Maximum - Fixed;
+         Degree    : Natural := 0;
+         Estimate  : Dimensionless;
+         Step      : Dimensionless := Dimensionless'Model_Epsilon;
 
          function Fits (Scale : Dimensionless) return Boolean;
          procedure Fallback;
+         procedure Bisect;
+         --  Bound the scale by each monomial and bisect below that, as Apply_Time_Constraint does.
 
          function Fits (Scale : Dimensionless) return Boolean is
             Sum : Dimensionless := 0.0;
@@ -808,27 +886,45 @@ package body Prunt.Motion_Planner is
             end loop;
             Apply_Time_Constraint (To_Scaled (Maximum), To_Scaled (Fixed), Scaled_Terms);
          end Fallback;
+
+         procedure Bisect is
+            Lower : Dimensionless := 0.0;
+            Upper : Dimensionless := Limit_Scale;
+         begin
+            for I in Terms'Range loop
+               if Terms (I) > 0.0 then
+                  Upper := Dimensionless'Min (Upper, Nth_Root_Ratio (Remainder, Terms (I), I));
+               end if;
+            end loop;
+            if Upper < 2.0**(-128) then
+               Fallback;
+               return;
+            elsif Fits (Upper) then
+               Limit_Scale := Upper;
+               return;
+            end if;
+            for Iteration in 1 .. 16 loop
+               declare
+                  Mid : constant Dimensionless := Lower + 0.5 * (Upper - Lower);
+               begin
+                  if Fits (Mid) then
+                     Lower := Mid;
+                  else
+                     Upper := Mid;
+                  end if;
+               end;
+            end loop;
+            Limit_Scale := Lower;
+         end Bisect;
       begin
-         --  The caller bounds every nonzero input factor to [2**-64, 2**64]. Each coefficient contains
-         --  at most five such factors and a constant <= 15, with at most two monomials per coefficient.
-         --  Nonzero coefficients are therefore >= 2**-320 and <= 2**325. The fixed term has at most six
-         --  factors and is <= 2**384. All products and sums are normal and preserve the scaled evaluation
-         --  order. A positive Maximum - Fixed is >= 2**-117 with at most 53 mantissa bits.
+         --  Apply_Bounded_Time_Constraint has found that the budget holds a positive Limit_Scale and does not fit
+         --  at it, or that the scale is too small to evaluate in plain arithmetic.
          --
-         --  Only search with Upper >= 2**-128: sixteen bisections then keep every positive trial >= 2**-144.
-         --  Four Horner steps stay in [2**-896, 2**327] when nonzero. Thus no overflow or underflow can alter
-         --  a budget comparison. Smaller scales use the original solver, retaining the exact coefficients.
-         if Fixed > Maximum then
-            Result.Valid := False;
-            return;
-         elsif Upper = 0.0 then
-            return;
-         elsif Upper < 2.0**(-128) then
+         --  This follows Apply_Time_Constraint step for step, in plain arithmetic: the ranges that the caller
+         --  guarantees keep every sum, product, quotient and root here normal, so each rounds as its scaled
+         --  counterpart does and both procedures reach the same scale.
+         if Limit_Scale < 2.0**(-128) then
             Fallback;
-            return;
-         end if;
-         Remainder := Maximum - Fixed;
-         if Fits (Upper) then
             return;
          elsif Remainder = 0.0 then
             Limit_Scale := 0.0;
@@ -837,29 +933,44 @@ package body Prunt.Motion_Planner is
 
          for I in Terms'Range loop
             if Terms (I) > 0.0 then
-               Upper := Dimensionless'Min (Upper, Nth_Root_Ratio (Remainder, Terms (I), I));
+               Degree := I;
             end if;
          end loop;
-         if Upper < 2.0**(-128) then
-            Fallback;
-            return;
-         elsif Fits (Upper) then
-            Limit_Scale := Upper;
-            return;
-         end if;
-         for Iteration in 1 .. 16 loop
-            declare
-               Mid : constant Dimensionless := Lower + 0.5 * (Upper - Lower);
-            begin
-               if Fits (Mid) then
-                  Lower := Mid;
+         case Degree is
+            when 1      =>
+               Estimate := (if Remainder > Terms (1) then 1.0 else Remainder / Terms (1));
+
+            when 2      =>
+               if Terms (1) + Terms (2) <= Remainder then
+                  Estimate := 1.0;
                else
-                  Upper := Mid;
+                  declare
+                     Denominator : constant Dimensionless :=
+                       Terms (1) + Dimensionless_Math.Sqrt (Terms (1) * Terms (1) + 4.0 * (Terms (2) * Remainder));
+                  begin
+                     Estimate := (if 2.0 * Remainder > Denominator then 1.0 else 2.0 * Remainder / Denominator);
+                  end;
                end if;
-            end;
+
+            when others =>
+               Bisect;
+               return;
+         end case;
+
+         Estimate := Dimensionless'Min (Estimate, Limit_Scale);
+         for Attempt in 1 .. Root_Settling_Attempts loop
+            if not (Estimate >= 2.0**(-128)) then
+               Fallback;
+               return;
+            elsif Fits (Estimate) then
+               Limit_Scale := Estimate;
+               return;
+            end if;
+            Estimate := Estimate * (1.0 - Step);
+            Step := 4.0 * Step;
          end loop;
-         Limit_Scale := Lower;
-      end Apply_Bounded_Time_Constraint;
+         Bisect;
+      end Tighten_Bounded_Time_Constraint;
 
       Base_Acceleration_Raw                                         : Dimensionless := 1.0E100;
       Base_Jerk_Raw                                                 : Dimensionless := 1.0E100;
@@ -961,6 +1072,77 @@ package body Prunt.Motion_Planner is
              Dimensionless_Array'
                [Base_Acceleration_Raw, Base_Jerk_Raw, Base_Snap_Raw, Base_Crackle_Raw, Result.Max_Vel / (mm / s)] =>
              Value = 0.0 or else Value in 2.0**(-64) .. 2.0**64);
+
+      if not Time_Scaling
+        and then Dimensionless'Machine_Radix = 2
+        and then Dimensionless'Machine_Mantissa <= 53
+        and then Dimensionless'Model_Emin <= -1021
+        and then Dimensionless'Machine_Emax >= 1024
+        and then Result.Max_Vel <= Velocity'Last
+        and then
+          (for all Value of
+             Dimensionless_Array'[Base_Acceleration_Raw, Base_Jerk_Raw, Base_Snap_Raw, Base_Crackle_Raw] =>
+             Value = 0.0 or else Value in 2.0**(-300) .. 2.0**350)
+        and then
+          (for all A in Axis_Name =>
+             (Bounds.Velocity (A) <= 0.0 or else Bounds.Velocity (A) in 2.0**(-64) .. 2.0**64)
+             and then Bounds.Acceleration (A) <= 0.0 / mm
+             and then Bounds.Jerk (A) <= 0.0 / mm**2
+             and then Bounds.Snap (A) <= 0.0 / mm**3
+             and then Bounds.Crackle (A) <= 0.0 / mm**4
+             and then
+               (for all Value of
+                  Dimensionless_Array'
+                    [Params.Axial_Acceleration_Maxes (A) / (mm / s**2),
+                     Params.Axial_Jerk_Maxes (A) / (mm / s**3),
+                     Params.Axial_Snap_Maxes (A) / (mm / s**4),
+                     Params.Axial_Crackle_Maxes (A) / (mm / s**5)] =>
+                  Value = 0.0 or else Value in 2.0**(-300) .. 2.0**300))
+      then
+         --  Tangent-only bounds, as for every window's limits, leave each chain-rule budget with the single term
+         --  X1 * base. The scaled solve below then reduces to capping the scale at maximum / (X1 * base) for each
+         --  axis and derivative. With every nonzero operand within the ranges checked above, those products are
+         --  normal and at most 2**414, and each quotient below one is normal and at least 2**-714. Plain arithmetic
+         --  therefore rounds exactly as the scaled operations do and returns the same limits, without decomposing
+         --  thirty-six coefficients per window. Anything outside these ranges, including a nonfinite value that
+         --  the scaled solve rejects, takes that solve.
+         declare
+            pragma Suppress (Overflow_Check);
+
+            procedure Apply_Plain (Maximum, Linear : Dimensionless);
+
+            procedure Apply_Plain (Maximum, Linear : Dimensionless) is
+            begin
+               if Linear = 0.0 then
+                  null;
+               elsif Maximum = 0.0 then
+                  Limit_Scale := 0.0;
+               elsif Maximum < Linear then
+                  Limit_Scale := Dimensionless'Min (Limit_Scale, Maximum / Linear);
+               end if;
+            end Apply_Plain;
+         begin
+            for A in Axis_Name loop
+               declare
+                  X1 : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Velocity (A));
+               begin
+                  if X1 > 0.0 then
+                     Apply_Plain (Params.Axial_Acceleration_Maxes (A) / (mm / s**2), X1 * Base_Acceleration_Raw);
+                     Apply_Plain (Params.Axial_Jerk_Maxes (A) / (mm / s**3), X1 * Base_Jerk_Raw);
+                     Apply_Plain (Params.Axial_Snap_Maxes (A) / (mm / s**4), X1 * Base_Snap_Raw);
+                     Apply_Plain (Params.Axial_Crackle_Maxes (A) / (mm / s**5), X1 * Base_Crackle_Raw);
+                  end if;
+               end;
+            end loop;
+         end;
+         Limit_Scale := Safety * Dimensionless'Min (1.0, Limit_Scale);
+         Result.Limits :=
+           (Acceleration_Max => Limit_Scale * Base.Acceleration_Max,
+            Jerk_Max         => Limit_Scale * Base.Jerk_Max,
+            Snap_Max         => Limit_Scale * Base.Snap_Max,
+            Crackle_Max      => Limit_Scale * Base.Crackle_Max);
+         return;
+      end if;
 
       for A in Axis_Name loop
          if not Cache.Axes_Filled (A) then
@@ -2270,76 +2452,312 @@ package body Prunt.Motion_Planner is
           .Profile;
    end Optimal_Profile_For_Distance;
 
-   function Optimal_Profile_For_Delta_V_Internal
-     (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
-      return Internal_Profile_Result
+   function Largest_Nonpositive
+     (Lower, Upper                   : Dimensionless;
+      Lower_Residual, Upper_Residual : Dimensionless;
+      Relative_Tolerance             : Dimensionless := 0.0;
+      Guess                          : Dimensionless := -1.0;
+      Use_Model                      : Boolean := True) return Dimensionless
    is
-      Vd     : constant Velocity := abs Delta_V;
+      type Bits is mod 2**64;
+      function To_Bits is new Ada.Unchecked_Conversion (Dimensionless, Bits);
+      function To_Real is new Ada.Unchecked_Conversion (Bits, Dimensionless);
+      --  Nonnegative machine numbers are ordered like their bit patterns, so pattern differences count the machine
+      --  numbers between two bracket ends. This relies on IEEE 754 doubles, as the checks below confirm.
+
+      Settled_Gap         : constant Bits := 4;
+      --  A model estimate within this many machine numbers of a bracket end has converged onto that end.
+      Maximum_Model_Steps : constant Positive := 48;
+      First_Closing_Step  : constant Bits := 2;
+      Closing_Growth      : constant Bits := 8;
+
+      Lo      : Dimensionless := (if Lower = 0.0 then 0.0 else Lower);
+      Hi      : Dimensionless := Upper;
+      Near_Lo : Boolean := True;
+      --  Whether the latest estimate of the result is the lower end of the bracket rather than the upper one.
+
+      function Closed return Boolean
+      is (To_Bits (Hi) - To_Bits (Lo) <= 1
+          or else (Relative_Tolerance > 0.0 and then Hi - Lo <= Relative_Tolerance * Lo));
+
+      procedure Evaluate (X : Dimensionless; Value : out Dimensionless);
+      --  Evaluate Residual at X, strictly inside the bracket, and move the matching end there.
+
+      procedure Evaluate (X : Dimensionless; Value : out Dimensionless) is
+      begin
+         Value := Residual (X);
+         if Value <= 0.0 then
+            Lo := X;
+            Near_Lo := True;
+         else
+            Hi := X;
+            Near_Lo := False;
+         end if;
+      end Evaluate;
+
+      Unused : Dimensionless;
+   begin
+      pragma Assert (Dimensionless'Size = 64);
+      pragma Assert (To_Bits (86_400.0) = 4_680_673_776_000_565_248);
+      pragma Assert (To_Bits (0.123_45) = 4_593_559_930_647_147_132);
+
+      if not (Lo >= 0.0 and then Lo < Hi and then Hi <= Dimensionless'Last) then
+         return Lower;
+      end if;
+
+      if Guess > Lo and then Guess < Hi then
+         Evaluate (Guess, Unused);
+      elsif Guess >= Hi then
+         --  The caller's estimate is at or beyond the upper end, so the result is just below that end.
+         Near_Lo := False;
+      elsif Use_Model and then Lower_Residual < 0.0 then
+         declare
+            Target           : constant Dimensionless := -Lower_Residual;
+            --  The model is anchored at the original lower end: the excess over Lower_Residual is zero there and
+            --  must reach Target at the result.
+            Anchor           : constant Dimensionless := Lo;
+            Previous_Offset  : Dimensionless := 0.0;
+            Previous_Excess  : Dimensionless := 0.0;
+            Latest_Offset    : Dimensionless := Hi - Lo;
+            Latest_Excess    : Dimensionless :=
+              (if Upper_Residual > 0.0 and then Upper_Residual <= Dimensionless'Last - Target
+               then Upper_Residual + Target
+               else 0.0);
+            --  Zero leaves the model without a point to fit, as for an upper residual of unknown size.
+            Last_Magnitude   : Dimensionless := Dimensionless'Last;
+            Exponent         : Dimensionless := 1.0;
+            Poor_Steps       : Natural := 0;
+            --  Consecutive model steps that failed to halve the residual; two of them force a bisection step.
+            Estimate, Value  : Dimensionless;
+            Have_Estimate    : Boolean;
+            Within_Tolerance : Boolean;
+         begin
+            Near_Lo := False;
+            for Step in 1 .. Maximum_Model_Steps loop
+               exit when Closed or else To_Bits (Hi) - To_Bits (Lo) <= 2 * Settled_Gap;
+               Have_Estimate := False;
+               if Poor_Steps < 2 and then Latest_Excess > 0.0 and then Latest_Offset > 0.0 then
+                  begin
+                     if Previous_Excess > 0.0
+                       and then Previous_Offset > 0.0
+                       and then Previous_Excess /= Latest_Excess
+                       and then Previous_Offset /= Latest_Offset
+                     then
+                        declare
+                           Fitted : constant Dimensionless :=
+                             Dimensionless_Math.Log (Latest_Excess / Previous_Excess)
+                             / Dimensionless_Math.Log (Latest_Offset / Previous_Offset);
+                        begin
+                           if Fitted >= 0.05 and then Fitted <= 8.0 then
+                              Exponent := Fitted;
+                           end if;
+                        end;
+                     end if;
+                     declare
+                        Log_Step : constant Dimensionless :=
+                          Dimensionless_Math.Log (Target / Latest_Excess) / Exponent;
+                     begin
+                        if abs Log_Step <= 80.0 then
+                           Estimate := Anchor + Latest_Offset * Dimensionless_Math.Exp (Log_Step);
+                           Have_Estimate := True;
+                        end if;
+                     end;
+                  exception
+                     when Constraint_Error | Ada.Numerics.Argument_Error =>
+                        Have_Estimate := False;
+                  end;
+               end if;
+               Within_Tolerance := False;
+               if Have_Estimate and then Estimate > Lo and then Estimate < Hi then
+                  if To_Bits (Estimate) - To_Bits (Lo) <= Settled_Gap then
+                     Near_Lo := True;
+                     exit;
+                  elsif To_Bits (Hi) - To_Bits (Estimate) <= Settled_Gap then
+                     Near_Lo := False;
+                     exit;
+                  end if;
+                  --  An estimate that has stopped moving by more than a fraction of the tolerance only needs the
+                  --  bracket closed around it.
+                  Within_Tolerance :=
+                    Relative_Tolerance > 0.0
+                    and then abs (Estimate - (Anchor + Latest_Offset)) <= 0.25 * Relative_Tolerance * Estimate;
+                  Evaluate (Estimate, Value);
+                  Poor_Steps := (if abs Value > 0.5 * Last_Magnitude then Poor_Steps + 1 else 0);
+               elsif Have_Estimate and then Estimate <= Lo then
+                  Near_Lo := True;
+                  exit;
+               elsif Have_Estimate and then Estimate >= Hi then
+                  Near_Lo := False;
+                  exit;
+               else
+                  --  Without a usable model, halve the bracket. Its ends may be many orders of magnitude apart
+                  --  only when one is zero, and the closing search below handles that by machine numbers.
+                  Estimate := Lo + 0.5 * (Hi - Lo);
+                  if not (Estimate > Lo and then Estimate < Hi) then
+                     Estimate := To_Real (To_Bits (Lo) + (To_Bits (Hi) - To_Bits (Lo)) / 2);
+                  end if;
+                  Evaluate (Estimate, Value);
+                  Poor_Steps := 0;
+               end if;
+               Last_Magnitude := abs Value;
+               Previous_Offset := Latest_Offset;
+               Previous_Excess := Latest_Excess;
+               Latest_Offset := Estimate - Anchor;
+               --  Target is finite, so only a residual already at the top of the range could overflow here, and the
+               --  model then simply stops proposing estimates.
+               Latest_Excess := (if Value <= Dimensionless'Last - Target then Value + Target else 0.0);
+               exit when Within_Tolerance;
+            end loop;
+         end;
+      end if;
+
+      --  Close the bracket around the estimate: step away from it by a growing count of machine numbers until the
+      --  residual changes sign, then bisect the machine numbers in between.
+      declare
+         Step : Bits := First_Closing_Step;
+         Gap  : Bits;
+      begin
+         if Relative_Tolerance > 0.0 and then not Closed then
+            --  A first step of half the tolerance closes the bracket at once when the estimate is that good.
+            declare
+               Probe : constant Dimensionless :=
+                 (if Near_Lo then Lo + 0.5 * Relative_Tolerance * Lo else Hi - 0.5 * Relative_Tolerance * Hi);
+            begin
+               if Probe > Lo and then Probe < Hi then
+                  Step :=
+                    Bits'Max
+                      (First_Closing_Step,
+                       (if Near_Lo then To_Bits (Probe) - To_Bits (Lo) else To_Bits (Hi) - To_Bits (Probe)));
+               end if;
+            end;
+         end if;
+         loop
+            exit when Closed;
+            Gap := To_Bits (Hi) - To_Bits (Lo);
+            exit when Step >= Gap;
+            if Near_Lo then
+               Evaluate (To_Real (To_Bits (Lo) + Step), Unused);
+               exit when not Near_Lo;
+            else
+               Evaluate (To_Real (To_Bits (Hi) - Step), Unused);
+               exit when Near_Lo;
+            end if;
+            Step := (if Step > Bits'Last / Closing_Growth then Bits'Last else Step * Closing_Growth);
+         end loop;
+         loop
+            exit when Closed;
+            Evaluate (To_Real (To_Bits (Lo) + (To_Bits (Hi) - To_Bits (Lo)) / 2), Unused);
+         end loop;
+      end;
+      return Lo;
+   end Largest_Nonpositive;
+
+   function Prepare_Delta_V
+     (Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle) return Delta_V_Solver
+   is
       Am     : constant Acceleration := Acceleration_Max;
       Jm     : constant Jerk := Jerk_Max;
       Sm     : constant Snap := Snap_Max;
       Cm     : constant Crackle := Crackle_Max;
-      Region : Constraint_Region;
+      Solver : Delta_V_Solver;
       T2, T3 : Time;
-      T4     : Time;
-
-      function Solve_Velocity_At_Time
-        (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index; Target : Velocity)
-         return Internal_Profile_Result;
-      --  Solve one profile time variable so the profile reaches Target velocity.
-
-      function Solve_Velocity_At_Time
-        (Profile : Feedrate_Profile_Times; Variable : Feedrate_Profile_Times_Index; Target : Velocity)
-         return Internal_Profile_Result
-      is
-         Result : Feedrate_Profile_Times := Profile;
-
-         Lower : Time := 0.0 * s;
-         Upper : Time := 86_400.0 * s;
-         --  A maximum of 24 hours should be more than enough.
-
-         type Casted_Time is mod 2**64;
-         function Cast_Time is new Ada.Unchecked_Conversion (Time, Casted_Time);
-         function Cast_Time is new Ada.Unchecked_Conversion (Casted_Time, Time);
-      begin
-         --  This probably breaks when not using IEEE 754 floats or on other weird systems, so try to check for
-         --  that.
-         pragma Assert (Time'Size = 64);
-         pragma Assert (Casted_Time'Size = 64);
-         pragma Assert (Cast_Time (86_400.0 * s) = 4_680_673_776_000_565_248);
-         pragma Assert (Cast_Time (0.123_45 * s) = 4_593_559_930_647_147_132);
-
-         loop
-            Result (Variable) := Cast_Time (Cast_Time (Lower) + (Cast_Time (Upper) - Cast_Time (Lower)) / 2);
-            pragma
-              Annotate (Xcov, Exempt_On, "Binary search convergence depends on floating-point rounding direction.");
-            exit when Lower = Result (Variable) or else Upper = Result (Variable);
-            pragma Annotate (Xcov, Exempt_Off);
-            if Fast_Velocity_At_Max_Time (Result, Cm, 0.0 * mm / s) <= Target then
-               Lower := Result (Variable);
-            else
-               Upper := Result (Variable);
-            end if;
-         end loop;
-
-         return (Result, Region, Integer (Variable));
-      end Solve_Velocity_At_Time;
    begin
-      if not (Vd <= Velocity'Last) or else not Derivative_Limits_Are_Valid (Am, Jm, Sm, Cm) then
-         raise Constraint_Error with "Invalid velocity-profile inputs.";
-      elsif Am = 0.0 * mm / s**2 or else Jm = 0.0 * mm / s**3 or else Sm = 0.0 * mm / s**4 or else Cm = 0.0 * mm / s**5
-      then
-         if Vd = 0.0 * mm / s then
-            return ([others => 0.0 * s], Region_5, 1);
-         end if;
-         raise Constraint_Error with "A velocity change requires positive derivative limits.";
+      Solver.Limits_Valid := Derivative_Limits_Are_Valid (Am, Jm, Sm, Cm);
+      if not Solver.Limits_Valid then
+         return Solver;
       end if;
-      --  This function is called a lot more than Optimal_Profile_For_Distance, so we use simple analytical solutions
-      --  where they exist. In the one case where we resort to Solve_Velocity_At_Time, the analytical solution that
-      --  Mathematica outputs involves a Cm**18, which is far outside the range of Dimensioned_Float for reasonable
-      --  values of Cm.
+      Solver.Am := Am;
+      Solver.Jm := Jm;
+      Solver.Cm := Cm;
+      Solver.Zero_Limit :=
+        Am = 0.0 * mm / s**2 or else Jm = 0.0 * mm / s**3 or else Sm = 0.0 * mm / s**4 or else Cm = 0.0 * mm / s**5;
+      if Solver.Zero_Limit then
+         return Solver;
+      end if;
+
+      --  Each case is selected by testing the sign of the computed phase time it would use, with the equivalent
+      --  algebraic condition noted beside each test. A rearranged test rounds differently and can select a region
+      --  whose phase time is negative.
+      begin
+         Solver.Jerk_Over_Snap := Jm / Sm;
+         Solver.Snap_Over_Crackle := Sm / Cm;
+         T2 := Solver.Jerk_Over_Snap - Solver.Snap_Over_Crackle;
+         if T2 > 0.0 * s then
+            --  Sm ** 2 < Jm * Cm
+            Solver.Accel_Over_Jerk := Am / Jm;
+            T3 := Solver.Accel_Over_Jerk - Solver.Jerk_Over_Snap - Solver.Snap_Over_Crackle;
+            if T3 >= 0.0 * s then
+               --  Am >= Jm * (Jm / Sm + Sm / Cm)
+               Solver.Region := Region_1;
+               Solver.T1 := Solver.Snap_Over_Crackle;
+               Solver.T2 := T2;
+               Solver.T3 := T3;
+            else
+               Solver.Snap_Root := Dimensionless_Math.Sqrt (0.25 * Sm**2 / Cm**2 + Am / Sm);
+               T2 := Solver.Snap_Root - 1.5 * Sm / Cm;
+               if T2 >= 0.0 * s then
+                  --  Am >= 2.0 * Sm ** 3 / Cm ** 2
+                  Solver.Region := Region_2;
+                  Solver.T1 := Solver.Snap_Over_Crackle;
+                  Solver.T2 := T2;
+               else
+                  Solver.Region := Region_3;
+                  Solver.T1 := (0.5 * Am / Cm)**(1 / 3);
+               end if;
+            end if;
+         else
+            Solver.Accel_Over_Jerk := Am / Jm;
+            Solver.Jerk_Over_Crackle := Jm / Cm;
+            Solver.T1 := Dimensionless_Math.Sqrt (Solver.Jerk_Over_Crackle);
+            T3 := Solver.Accel_Over_Jerk - 2.0 * Solver.T1;
+            if T3 > 0.0 * s then
+               --  Am > 2.0 * Jm * Dimensionless_Math.Sqrt (Jm / Cm)
+               Solver.Region := Region_4;
+               Solver.T3 := T3;
+            else
+               Solver.Region := Region_5;
+               Solver.T1 := (0.5 * Am / Cm)**(1 / 3);
+            end if;
+         end if;
+      exception
+         when Constraint_Error =>
+            Solver.Unclassifiable := True;
+            return Solver;
+      end;
+
+      if Solver.Region in Region_1 | Region_2 then
+         begin
+            Solver.Snap_Only_Above := 8.0 * Sm**4 / Cm**3;
+         exception
+            when Constraint_Error =>
+               Solver.Threshold_Raises := True;
+         end;
+      end if;
+      return Solver;
+   end Prepare_Delta_V;
+
+   function Optimal_Profile_For_Delta_V_Internal
+     (Solver : Delta_V_Solver; Delta_V : Velocity) return Internal_Profile_Result
+   is
+      Vd     : constant Velocity := abs Delta_V;
+      Am     : Acceleration renames Solver.Am;
+      Jm     : Jerk renames Solver.Jm;
+      Cm     : Crackle renames Solver.Cm;
+      T1     : Time renames Solver.T1;
+      Region : Constraint_Region renames Solver.Region;
+      T3, T4 : Time;
+
+      function Crackle_Limited return Internal_Profile_Result
+      is ([Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (0.125 * Vd / Cm)), 0.0 * s, 0.0 * s, 0.0 * s], Region, 1);
+      --  No limit other than crackle is reached.
+
+      function Snap_Limited return Internal_Profile_Result;
+      --  Snap is the only derivative limit reached, so the second phase time solves
       --
-      --  For reference:
+      --     Vd = Cm*T1*(T1 + T2)*(2*T1 + T2)*(4*T1 + 2*T2)
+      --
+      --  with T1 = Sm/Cm. The analytical solution that Mathematica outputs involves a Cm**18, which is far outside
+      --  the range of Dimensioned_Float for reasonable values of Cm. For reference:
       --  ToRadicals[
       --    Solve[
       --      With[
@@ -2351,111 +2769,284 @@ package body Prunt.Motion_Planner is
       --    ]
       --  ]
       --
+      --  The result is the largest time below 24 hours whose profile, as Fast_Velocity_At_Max_Time evaluates it,
+      --  does not exceed Vd. That evaluation is a product of sums of nonnegative terms, so it is monotone in machine
+      --  arithmetic and the search returns what bisecting every machine number would.
+
+      function Snap_Limited return Internal_Profile_Result is
+         function Excess (T2_Seconds : Dimensionless) return Dimensionless
+         is ((Fast_Velocity_At_Max_Time ([T1, T2_Seconds * s, 0.0 * s, 0.0 * s], Cm, 0.0 * mm / s) - Vd) / (mm / s));
+
+         function Solve is new Largest_Nonpositive (Excess);
+
+         Guess : Dimensionless := -1.0;
+      begin
+         --  With U = T2/T1 the equation is 2*(1 + U)*(2 + U)**2 = Vd/(Cm*T1**4), whose left side is convex and
+         --  increasing, so Newton's method from above the root decreases onto it.
+         declare
+            Scaled      : constant Dimensionless := Vd / (Cm * T1**4);
+            U           : Dimensionless := (Scaled - 8.0) / 16.0;
+            --  The tangent at zero lies below the curve, so this is at or above the root.
+            Next, Value : Dimensionless;
+         begin
+            if U > 4.0 then
+               --  The cubic term alone bounds the root more tightly once it dominates.
+               U := Dimensionless'Min (U, Dimensionless_Math."**" (0.5 * Scaled, 1.0 / 3.0));
+            end if;
+            if U > 0.0 then
+               for Iteration in 1 .. 64 loop
+                  Value := 2.0 * (1.0 + U) * (2.0 + U)**2 - Scaled;
+                  Next := U - Value / ((2.0 + U) * (8.0 + 6.0 * U));
+                  exit when not (Next < U) or else Next <= 0.0;
+                  U := Next;
+               end loop;
+               Guess := U * T1 / s;
+            end if;
+         exception
+            when Constraint_Error | Ada.Numerics.Argument_Error =>
+               Guess := -1.0;
+         end;
+         return
+           ([T1,
+             Solve
+               (Lower          => 0.0,
+                Upper          => 86_400.0,
+                --  A maximum of 24 hours should be more than enough.
+                Lower_Residual => 0.0,
+                Upper_Residual => 0.0,
+                Guess          => Guess,
+                Use_Model      => False)
+             * s,
+             0.0 * s,
+             0.0 * s],
+            Region,
+            2);
+      end Snap_Limited;
+   begin
+      if not (Vd <= Velocity'Last) or else not Solver.Limits_Valid then
+         raise Constraint_Error with "Invalid velocity-profile inputs.";
+      elsif Solver.Zero_Limit then
+         if Vd = 0.0 * mm / s then
+            return ([others => 0.0 * s], Region_5, 1);
+         end if;
+         raise Constraint_Error with "A velocity change requires positive derivative limits.";
+      elsif Solver.Unclassifiable then
+         raise Constraint_Error with "Unrepresentable phase times for these derivative limits.";
+      end if;
+      --  This function is called a lot more than Optimal_Profile_For_Distance, so we use simple analytical solutions
+      --  where they exist, and the limit-only parts of those come prepared in Solver.
+      --
       --  As in Optimal_Profile_For_Distance_Internal, each case is selected by testing the sign of the computed phase
       --  time it would use, with the equivalent algebraic condition noted beside each test.
-      T2 := Jm / Sm - Sm / Cm;
-      if T2 > 0.0 * s then
-         --  Sm ** 2 < Jm * Cm
-         T3 := Am / Jm - Jm / Sm - Sm / Cm;
-         if T3 >= 0.0 * s then
-            --  Am >= Jm * (Jm / Sm + Sm / Cm)
-            Region := Region_1;
-            T4 := Vd / Am - Am / Jm - Jm / Sm - Sm / Cm;
+      case Region is
+         when Region_1            =>
+            T4 := Vd / Am - Solver.Accel_Over_Jerk - Solver.Jerk_Over_Snap - Solver.Snap_Over_Crackle;
             if T4 > 0.0 * s then
                --  Vd > Am * (Am / Jm + Jm / Sm + Sm / Cm)
                --  Reachable: Sm, Jm, Am (Test Case V1.4)
-               return ([Sm / Cm, T2, T3, T4], Region, 4);
+               return ([T1, Solver.T2, Solver.T3, T4], Region, 4);
             end if;
-            T3 := 0.5 * Dimensionless_Math.Sqrt ((Jm / Sm + Sm / Cm)**2 + 4.0 * Vd / Jm) - 1.5 * (Jm / Sm + Sm / Cm);
+            T3 :=
+              0.5 * Dimensionless_Math.Sqrt ((Solver.Jerk_Over_Snap + Solver.Snap_Over_Crackle)**2 + 4.0 * Vd / Jm)
+              - 1.5 * (Solver.Jerk_Over_Snap + Solver.Snap_Over_Crackle);
             if T3 > 0.0 * s then
                --  Vd > 2.0 * Jm * (Jm / Sm + Sm / Cm) ** 2
                --  Reachable: Sm, Jm (Test Case V1.3)
-               return ([Sm / Cm, T2, T3, 0.0 * s], Region, 3);
-            elsif Vd > 8.0 * Sm**4 / Cm**3 then
+               return ([T1, Solver.T2, T3, 0.0 * s], Region, 3);
+            elsif Solver.Threshold_Raises then
+               raise Constraint_Error with "Unrepresentable snap-limited velocity threshold.";
+            elsif Vd > Solver.Snap_Only_Above then
+               --  Vd > 8.0 * Sm ** 4 / Cm ** 3
                --  Reachable: Sm (Test Case V1.2)
-               return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
+               return Snap_Limited;
             else
                --  Reachable: None (Test Case V1.1)
-               return
-                 ([Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (0.125 * Vd / Cm)), 0.0 * s, 0.0 * s, 0.0 * s],
-                  Region,
-                  1);
+               return Crackle_Limited;
             end if;
-         end if;
-         T2 := Dimensionless_Math.Sqrt (0.25 * Sm**2 / Cm**2 + Am / Sm) - 1.5 * Sm / Cm;
-         if T2 >= 0.0 * s then
-            --  Am >= 2.0 * Sm ** 3 / Cm ** 2
-            Region := Region_2;
-            T4 := Vd / Am - Sm / Cm - 2.0 * Dimensionless_Math.Sqrt (0.25 * Sm**2 / Cm**2 + Am / Sm);
+
+         when Region_2            =>
+            T4 := Vd / Am - Solver.Snap_Over_Crackle - 2.0 * Solver.Snap_Root;
             if T4 > 0.0 * s then
                --  Vd > Am * (2.0 * Dimensionless_Math.Sqrt (0.25 * Sm ** 2 / Cm ** 2 + Am / Sm) + Sm / Cm)
                --  Reachable: Sm, Am (Test Case V2.4)
-               return ([Sm / Cm, T2, 0.0 * s, T4], Region, 4);
-            elsif Vd > 8.0 * Sm**4 / Cm**3 then
+               return ([T1, Solver.T2, 0.0 * s, T4], Region, 4);
+            elsif Solver.Threshold_Raises then
+               raise Constraint_Error with "Unrepresentable snap-limited velocity threshold.";
+            elsif Vd > Solver.Snap_Only_Above then
+               --  Vd > 8.0 * Sm ** 4 / Cm ** 3
                --  Reachable: Sm (Test Case V2.2)
-               return Solve_Velocity_At_Time ([Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s], 2, Vd);
+               return Snap_Limited;
             else
                --  Reachable: None (Test Case V2.1)
-               return
-                 ([Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (0.125 * Vd / Cm)), 0.0 * s, 0.0 * s, 0.0 * s],
-                  Region,
-                  1);
+               return Crackle_Limited;
             end if;
-         else
-            Region := Region_3;
-            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm)**(1 / 3);
+
+         when Region_3 | Region_5 =>
+            T4 := Vd / Am - 4.0 * T1;
             if T4 > 0.0 * s then
                --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3)
-               --  Reachable: Am (Test Case V3.4)
-               return ([(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
+               --  Reachable: Am (Test Cases V3.4 and V5.4)
+               return ([T1, 0.0 * s, 0.0 * s, T4], Region, 4);
             else
-               --  Reachable: None (Test Case V3.1)
-               return
-                 ([Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (0.125 * Vd / Cm)), 0.0 * s, 0.0 * s, 0.0 * s],
-                  Region,
-                  1);
+               --  Reachable: None (Test Cases V3.1 and V5.1)
+               return Crackle_Limited;
             end if;
-         end if;
-      else
-         T3 := Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm);
-         if T3 > 0.0 * s then
-            --  Am > 2.0 * Jm * Dimensionless_Math.Sqrt (Jm / Cm)
-            Region := Region_4;
-            T4 := Vd / Am - Am / Jm - 2.0 * Dimensionless_Math.Sqrt (Jm / Cm);
+
+         when Region_4            =>
+            T4 := Vd / Am - Solver.Accel_Over_Jerk - 2.0 * T1;
             if T4 > 0.0 * s then
                --  Vd > Am * (Am / Jm + 2.0 * Dimensionless_Math.Sqrt (Jm / Cm))
                --  Reachable: Jm, Am (Test Case V4.4)
-               return ([Dimensionless_Math.Sqrt (Jm / Cm), 0.0 * s, T3, T4], Region, 4);
+               return ([T1, 0.0 * s, Solver.T3, T4], Region, 4);
             end if;
-            T3 := Dimensionless_Math.Sqrt (Jm / Cm + Vd / Jm) - 3.0 * Dimensionless_Math.Sqrt (Jm / Cm);
+            T3 := Dimensionless_Math.Sqrt (Solver.Jerk_Over_Crackle + Vd / Jm) - 3.0 * T1;
             if T3 > 0.0 * s then
                --  Vd > 8.0 * Jm ** 2 / Cm
                --  Reachable: Jm (Test Case V4.3)
-               return ([Dimensionless_Math.Sqrt (Jm / Cm), 0.0 * s, T3, 0.0 * s], Region, 3);
+               return ([T1, 0.0 * s, T3, 0.0 * s], Region, 3);
             else
                --  Reachable: None (Test Case V4.1)
-               return
-                 ([Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (0.125 * Vd / Cm)), 0.0 * s, 0.0 * s, 0.0 * s],
-                  Region,
-                  1);
+               return Crackle_Limited;
             end if;
-         else
-            Region := Region_5;
-            T4 := Vd / Am - 4.0 * (0.5 * Am / Cm)**(1 / 3);
-            if T4 > 0.0 * s then
-               --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3)
-               --  Reachable: Am (Test Case V5.4)
-               return ([(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, T4], Region, 4);
-            else
-               --  Reachable: None (Test Case V5.1)
-               return
-                 ([Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (0.125 * Vd / Cm)), 0.0 * s, 0.0 * s, 0.0 * s],
-                  Region,
-                  1);
-            end if;
-         end if;
-      end if;
+      end case;
    end Optimal_Profile_For_Delta_V_Internal;
+
+   function Optimal_Profile_For_Delta_V_Internal
+     (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
+      return Internal_Profile_Result is
+   begin
+      return
+        Optimal_Profile_For_Delta_V_Internal
+          (Prepare_Delta_V (Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max), Delta_V);
+   end Optimal_Profile_For_Delta_V_Internal;
+
+   function Delta_V_Over_Distance (Solver : Delta_V_Solver; Start_Vel : Velocity; Distance : Length) return Velocity is
+      pragma Suppress (Overflow_Check);
+      --  This is plain arithmetic on raw values: a nonfinite or implausible outcome is rejected at the end.
+
+      type Phase_Times is array (1 .. 4) of Dimensionless;
+
+      Vs : constant Dimensionless := Start_Vel / (mm / s);
+      D  : constant Dimensionless := Distance / mm;
+      Cm : constant Dimensionless := Solver.Cm / (mm / s**5);
+
+      function Gain (T : Phase_Times) return Dimensionless
+      is (Cm * T (1) * (T (1) + T (2)) * (2.0 * T (1) + T (2) + T (3)) * (4.0 * T (1) + 2.0 * T (2) + T (3) + T (4)));
+      --  The velocity change, as in Fast_Velocity_At_Max_Time.
+
+      function Travel (T : Phase_Times) return Dimensionless
+      is ((Vs + Gain (T) / 2.0) * (8.0 * T (1) + 4.0 * T (2) + 2.0 * T (3) + T (4)));
+      --  The distance, as in Fast_Distance_At_Max_Time.
+
+      function Travel_Slope (T : Phase_Times; Variable : Positive) return Dimensionless;
+      --  The derivative of Travel with respect to one phase time.
+
+      function Travel_Slope (T : Phase_Times; Variable : Positive) return Dimensionless is
+         A          : constant Dimensionless := T (1);
+         B          : constant Dimensionless := T (1) + T (2);
+         C          : constant Dimensionless := 2.0 * T (1) + T (2) + T (3);
+         E          : constant Dimensionless := 4.0 * T (1) + 2.0 * T (2) + T (3) + T (4);
+         Total      : constant Dimensionless := 8.0 * T (1) + 4.0 * T (2) + 2.0 * T (3) + T (4);
+         Gain_Slope : constant Dimensionless :=
+           (case Variable is
+              when 1      => Cm * (B * C * E + A * C * E + 2.0 * A * B * E + 4.0 * A * B * C),
+              when 2      => Cm * A * (C * E + B * E + 2.0 * B * C),
+              when 3      => Cm * A * B * (E + C),
+              when others => Cm * A * B * C);
+         Time_Slope : constant Dimensionless :=
+           (case Variable is
+              when 1      => 8.0,
+              when 2      => 4.0,
+              when 3      => 2.0,
+              when others => 1.0);
+      begin
+         return Gain_Slope / 2.0 * Total + (Vs + Cm * A * B * C * E / 2.0) * Time_Slope;
+      end Travel_Slope;
+
+      Full     : constant Phase_Times := [Solver.T1 / s, Solver.T2 / s, Solver.T3 / s, 0.0];
+      --  Every limit below velocity saturated, as in the fastest case of each constraint region.
+      T        : Phase_Times := Full;
+      Variable : Positive;
+      Result   : Dimensionless;
+   begin
+      if not Solver.Limits_Valid
+        or else Solver.Zero_Limit
+        or else Solver.Unclassifiable
+        or else not (Vs >= 0.0 and then D > 0.0)
+      then
+         return -1.0 * mm / s;
+      end if;
+
+      --  As in Optimal_Profile_For_Distance, saturate phases in order until the distance is exceeded, then solve
+      --  the one phase time that is left free. Distance is convex and increasing in each phase time.
+      if D > Travel (Full) then
+         --  The constant-acceleration phase is free, and the distance is a quadratic in it, solved in the
+         --  cancellation-free form.
+         declare
+            Peak_Accel : constant Dimensionless := Cm * T (1) * (T (1) + T (2)) * (2.0 * T (1) + T (2) + T (3));
+            Ramp_Gain  : constant Dimensionless := 4.0 * T (1) + 2.0 * T (2) + T (3);
+            Ramp_Time  : constant Dimensionless := 8.0 * T (1) + 4.0 * T (2) + 2.0 * T (3);
+            Linear     : constant Dimensionless := Vs + Peak_Accel * (Ramp_Gain + Ramp_Time) / 2.0;
+            Short      : constant Dimensionless := D - (Vs + Peak_Accel * Ramp_Gain / 2.0) * Ramp_Time;
+         begin
+            T (4) := 2.0 * Short / (Linear + Dimensionless_Math.Sqrt (Linear**2 + 2.0 * Peak_Accel * Short));
+         end;
+      else
+         if Full (3) > 0.0 and then D > Travel ([Full (1), Full (2), 0.0, 0.0]) then
+            Variable := 3;
+         elsif Full (2) > 0.0 and then D > Travel ([Full (1), 0.0, 0.0, 0.0]) then
+            Variable := 2;
+         else
+            Variable := 1;
+         end if;
+         for I in Variable .. 3 loop
+            T (I) := 0.0;
+         end loop;
+         --  Newton's method from above the root decreases onto it. The saturated time is above it by the case
+         --  selection, and so is the tangent at zero, which lies below the curve.
+         declare
+            Base  : constant Dimensionless := Travel (T);
+            Slope : constant Dimensionless := Travel_Slope (T, Variable);
+            X     : Dimensionless := Full (Variable);
+            Next  : Dimensionless;
+         begin
+            if Slope > 0.0 then
+               X := Dimensionless'Min (X, (D - Base) / Slope);
+            end if;
+            if Variable = 1 and then 32.0 * Cm * X**5 > D then
+               --  From rest, or nearly, the fifth-power term decides the scale.
+               X := Dimensionless'Min (X, Dimensionless_Math."**" (D / (32.0 * Cm), 0.2));
+            end if;
+            for Iteration in 1 .. 48 loop
+               exit when not (X > 0.0);
+               T (Variable) := X;
+               Next := X - (Travel (T) - D) / Travel_Slope (T, Variable);
+               exit when not (Next < X);
+               X := Next;
+            end loop;
+            T (Variable) := Dimensionless'Max (0.0, X);
+         end;
+      end if;
+
+      Result := Gain (T);
+      if Result >= 0.0 and then Result <= Dimensionless'Last then
+         return Result * (mm / s);
+      else
+         return -1.0 * mm / s;
+      end if;
+   exception
+      when Constraint_Error | Ada.Numerics.Argument_Error =>
+         return -1.0 * mm / s;
+   end Delta_V_Over_Distance;
+
+   function Optimal_Profile_For_Delta_V (Solver : Delta_V_Solver; Delta_V : Velocity) return Feedrate_Profile_Times is
+   begin
+      if Delta_V = 0.0 * mm / s and then Solver.Limits_Valid then
+         --  Reachability certificates put the peak at one endpoint, so one ramp is usually empty.
+         return [others => 0.0 * s];
+      end if;
+      return Optimal_Profile_For_Delta_V_Internal (Solver, Delta_V).Profile;
+   end Optimal_Profile_For_Delta_V;
 
    function Optimal_Profile_For_Delta_V
      (Delta_V : Velocity; Acceleration_Max : Acceleration; Jerk_Max : Jerk; Snap_Max : Snap; Crackle_Max : Crackle)
@@ -2480,7 +3071,23 @@ package body Prunt.Motion_Planner is
       Snap_Max         : Snap;
       Crackle_Max      : Crackle) return Full_Profile_Result
    is
-      Profile : Feedrate_Profile;
+      Profile                        : Feedrate_Profile;
+      Solver                         : Delta_V_Solver;
+      Direct_Distance                : Length;
+      --  The distance of the ramp straight from Start_Vel to End_Vel.
+      Accel_Distance, Decel_Distance : Length;
+
+      procedure Set_Peak (Peak : Velocity);
+      --  Form both ramps for a profile that peaks at Peak, and their distances.
+
+      procedure Set_Peak (Peak : Velocity) is
+      begin
+         Profile.Accel := Optimal_Profile_For_Delta_V (Solver, Start_Vel - Peak);
+         Profile.Decel :=
+           (if Start_Vel = End_Vel then Profile.Accel else Optimal_Profile_For_Delta_V (Solver, End_Vel - Peak));
+         Accel_Distance := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
+         Decel_Distance := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Peak);
+      end Set_Peak;
    begin
       if not (Distance >= 0.0 * mm
               and then Distance <= Length'Last
@@ -2528,95 +3135,68 @@ package body Prunt.Motion_Planner is
          raise Constraint_Error with "Positive distance requires positive velocity.";
       end if;
 
-      declare
-         Profile : constant Feedrate_Profile_Times :=
-           Optimal_Profile_For_Delta_V (Start_Vel - End_Vel, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
+      Solver := Prepare_Delta_V (Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
 
-         Profile_Distance : constant Length :=
+      declare
+         Profile : constant Feedrate_Profile_Times := Optimal_Profile_For_Delta_V (Solver, Start_Vel - End_Vel);
+      begin
+         Direct_Distance :=
            Fast_Distance_At_Max_Time
              (Profile,
               (if Start_Vel < End_Vel then Crackle_Max / (mm / s**5) else -Crackle_Max / (mm / s**5))
               * (mm / s**5), --  Temporarily drop the dimension otherwise gnatcov breaks it.
               Start_Vel);
-      begin
-         if Distance < Profile_Distance then
+         if Distance < Direct_Distance then
             return (Reachable => False, Profile => <>);
          end if;
       end;
 
-      Profile.Accel :=
-        Optimal_Profile_For_Delta_V (Start_Vel - Max_Vel, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
-      Profile.Decel :=
-        (if Start_Vel = End_Vel
-         then Profile.Accel
-         else Optimal_Profile_For_Delta_V (End_Vel - Max_Vel, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max));
+      Set_Peak (Max_Vel);
 
-      declare
-         Accel_Distance : Length := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
-         Decel_Distance : Length := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Max_Vel);
-      begin
-         if Accel_Distance + Decel_Distance <= Distance then
-            Profile.Coast := (Distance - Accel_Distance - Decel_Distance) / Max_Vel;
-         else
-            Profile.Coast := 0.0 * s;
-            declare
-               type Casted_Vel is mod 2**64;
-               function Cast_Vel is new Ada.Unchecked_Conversion (Velocity, Casted_Vel);
-               function Cast_Vel is new Ada.Unchecked_Conversion (Casted_Vel, Velocity);
-               Upper : Velocity := Max_Vel;
-               Lower : Velocity := Velocity'Max (Start_Vel, End_Vel);
-               Mid   : Velocity;
+      if Accel_Distance + Decel_Distance <= Distance then
+         Profile.Coast := (Distance - Accel_Distance - Decel_Distance) / Max_Vel;
+      else
+         Profile.Coast := 0.0 * s;
+         declare
+            function Excess (Peak : Dimensionless) return Dimensionless;
+            --  How far the ramps to and from Peak overrun Distance.
+
+            function Excess (Peak : Dimensionless) return Dimensionless is
             begin
-               --  This probably breaks when not using IEEE 754 floats or on other weird systems, so try to check
-               --  for that.
-               pragma Assert (Velocity'Size = 64);
-               pragma Assert (Casted_Vel'Size = 64);
-               pragma Assert (Cast_Vel (86_400.0 * mm / s) = 4_680_673_776_000_565_248);
-               pragma Assert (Cast_Vel (0.123_45 * mm / s) = 4_593_559_930_647_147_132);
+               Set_Peak (Peak * (mm / s));
+               return (Accel_Distance + Decel_Distance - Distance) / mm;
+            end Excess;
 
-               loop
-                  Mid := Cast_Vel (Cast_Vel (Lower) + (Cast_Vel (Upper) - Cast_Vel (Lower)) / 2);
-                  pragma
-                    Annotate
-                      (Xcov, Exempt_On, "Binary search convergence depends on floating-point rounding direction.");
-                  exit when Lower = Mid or else Upper = Mid;
-                  pragma Annotate (Xcov, Exempt_Off);
+            function Highest_Peak is new Largest_Nonpositive (Excess);
 
-                  Profile.Accel :=
-                    Optimal_Profile_For_Delta_V (Start_Vel - Mid, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
-                  Profile.Decel :=
-                    (if Start_Vel = End_Vel
-                     then Profile.Accel
-                     else
-                       Optimal_Profile_For_Delta_V (End_Vel - Mid, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max));
+            --  The ramp distances grow with the peak, so the fastest profile has the highest peak whose ramps fit
+            --  in Distance. Whatever distance the last machine number of peak speed leaves over is coasted. The
+            --  ramps for the lowest peak are the direct ramp checked above, which fits.
+            --
+            --  Between equal speeds the two ramps mirror each other, so each covers half of Distance and the
+            --  peak is the speed that one ramp gains over that half. That estimate only steers the search.
+            Symmetric_Gain : constant Velocity :=
+              (if Start_Vel = End_Vel
+               then Delta_V_Over_Distance (Solver, Start_Vel, Distance / 2.0)
+               else -1.0 * mm / s);
+            Lower          : constant Velocity :=
+              Highest_Peak
+                (Lower          => Velocity'Max (Start_Vel, End_Vel) / (mm / s),
+                 Upper          => Max_Vel / (mm / s),
+                 Lower_Residual => (Direct_Distance - Distance) / mm,
+                 Upper_Residual => (Accel_Distance + Decel_Distance - Distance) / mm,
+                 Guess          =>
+                   (if Symmetric_Gain >= 0.0 * mm / s then (Start_Vel + Symmetric_Gain) / (mm / s) else -1.0),
+                 Use_Model      => Symmetric_Gain < 0.0 * mm / s)
+              * (mm / s);
+         begin
+            Set_Peak (Lower);
 
-                  Accel_Distance := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
-                  Decel_Distance := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Mid);
-
-                  if Accel_Distance + Decel_Distance <= Distance then
-                     Lower := Mid;
-                  else
-                     Upper := Mid;
-                  end if;
-               end loop;
-
-               Profile.Accel :=
-                 Optimal_Profile_For_Delta_V (Start_Vel - Lower, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max);
-               Profile.Decel :=
-                 (if Start_Vel = End_Vel
-                  then Profile.Accel
-                  else
-                    Optimal_Profile_For_Delta_V (End_Vel - Lower, Acceleration_Max, Jerk_Max, Snap_Max, Crackle_Max));
-
-               Accel_Distance := Fast_Distance_At_Max_Time (Profile.Accel, Crackle_Max, Start_Vel);
-               Decel_Distance := Fast_Distance_At_Max_Time (Profile.Decel, -Crackle_Max, Lower);
-
-               if Lower > 0.0 * mm / s and then Accel_Distance + Decel_Distance < Distance then
-                  Profile.Coast := (Distance - Accel_Distance - Decel_Distance) / Lower;
-               end if;
-            end;
-         end if;
-      end;
+            if Lower > 0.0 * mm / s and then Accel_Distance + Decel_Distance < Distance then
+               Profile.Coast := (Distance - Accel_Distance - Decel_Distance) / Lower;
+            end if;
+         end;
+      end if;
 
       if not Profile_Is_Valid (Profile, Distance, Start_Vel, End_Vel, Crackle_Max) then
          raise Constraint_Error with "The generated profile cannot represent the requested motion.";
