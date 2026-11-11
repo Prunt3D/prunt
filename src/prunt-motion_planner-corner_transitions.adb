@@ -655,51 +655,99 @@ package body Prunt.Motion_Planner.Corner_Transitions is
       end if;
       Chord_Length := abs V;
       Chord_Direction := V / Chord_Length;
-      --  Search every one of 32 log-space intervals.  Each interval receives a fixed 32-step golden refinement;
-      --  infeasible samples simply compare worse than feasible ones.  This bounds construction time independently of
-      --  geometry and catches every feasible sampled local-minimum bracket.
-      for Interval_Index in 0 .. 31 loop
-         declare
-            Log_Lower : constant Dimensionless :=
-              Math.Log (1.0 / 20.0) + Dimensionless (Interval_Index) * Math.Log (400.0) / 32.0;
-            Log_Upper : constant Dimensionless :=
-              Math.Log (1.0 / 20.0) + Dimensionless (Interval_Index + 1) * Math.Log (400.0) / 32.0;
-            Left      : Dimensionless := Log_Lower;
-            Right     : Dimensionless := Log_Upper;
-            Phi       : constant Dimensionless := 0.5 * (Math.Sqrt (5.0) - 1.0);
-            X1, X2    : Dimensionless;
-            C1, C2    : Candidate;
-         begin
-            X1 := Right - Phi * (Right - Left);
-            X2 := Left + Phi * (Right - Left);
-            C1 := Evaluate (Math.Exp (X1));
-            C2 := Evaluate (Math.Exp (X2));
-            for Iteration in 1 .. 32 loop
-               if Better (C1, Best) then
-                  Best := C1;
+      --  Search 32 log-space intervals. Every interval is sampled at the two points that open a golden-section
+      --  refinement, and those samples then choose where the refinement is worth its other 31 evaluations: an
+      --  interval whose better sample no neighbour's better sample beats, and the intervals on either side of it,
+      --  since the minimum that its samples point at may lie just across an edge. The refinement inside a chosen
+      --  interval, and the order in which candidates meet Best, are those of refining every interval, so the result
+      --  only differs if a minimum hides between the samples of an interval that neither it nor a neighbour
+      --  flagged. Infeasible samples simply compare worse than feasible ones. This bounds construction time
+      --  independently of geometry at a fraction of the evaluations of refining everywhere.
+      declare
+         Phi : constant Dimensionless := 0.5 * (Math.Sqrt (5.0) - 1.0);
+
+         subtype Interval is Integer range 0 .. 31;
+
+         type Opening is record
+            X1, X2 : Dimensionless;
+            C1, C2 : Candidate;
+         end record;
+
+         function Log_Edge (Index : Integer) return Dimensionless
+         is (Math.Log (1.0 / 20.0) + Dimensionless (Index) * Math.Log (400.0) / 32.0);
+
+         function Sample (Opened : Opening) return Candidate
+         is (if Better (Opened.C2, Opened.C1) then Opened.C2 else Opened.C1);
+
+         Openings   : array (Interval) of Opening;
+         Refine     : array (Interval) of Boolean := [others => False];
+         Any_Chosen : Boolean := False;
+      begin
+         for Index in Interval loop
+            declare
+               Left  : constant Dimensionless := Log_Edge (Index);
+               Right : constant Dimensionless := Log_Edge (Index + 1);
+               X1    : constant Dimensionless := Right - Phi * (Right - Left);
+               X2    : constant Dimensionless := Left + Phi * (Right - Left);
+            begin
+               Openings (Index) := (X1, X2, Evaluate (Math.Exp (X1)), Evaluate (Math.Exp (X2)));
+            end;
+         end loop;
+         for Index in Interval loop
+            declare
+               Here : constant Candidate := Sample (Openings (Index));
+            begin
+               if Here.Valid
+                 and then (Index = Interval'First or else not Better (Sample (Openings (Index - 1)), Here))
+                 and then (Index = Interval'Last or else not Better (Sample (Openings (Index + 1)), Here))
+               then
+                  Any_Chosen := True;
+                  for Near in Integer'Max (Interval'First, Index - 1) .. Integer'Min (Interval'Last, Index + 1) loop
+                     Refine (Near) := True;
+                  end loop;
                end if;
-               if Better (C2, Best) then
-                  Best := C2;
-               end if;
-               exit when Iteration = 32;
-               --  Golden-section refinement retains one interior point. Reuse its fully checked candidate;
-               --  reconstructing both arcs at both points doubles the dominant construction work.
-               if Better (C1, C2) then
-                  Right := X2;
-                  X2 := X1;
-                  C2 := C1;
-                  X1 := Right - Phi * (Right - Left);
-                  C1 := Evaluate (Math.Exp (X1));
-               else
-                  Left := X1;
-                  X1 := X2;
-                  C1 := C2;
-                  X2 := Left + Phi * (Right - Left);
-                  C2 := Evaluate (Math.Exp (X2));
-               end if;
-            end loop;
-         end;
-      end loop;
+            end;
+         end loop;
+         if not Any_Chosen then
+            --  No sample is feasible. A refinement can still walk into a feasible region, so try them all.
+            Refine := [others => True];
+         end if;
+         for Index in Interval loop
+            declare
+               Left  : Dimensionless := Log_Edge (Index);
+               Right : Dimensionless := Log_Edge (Index + 1);
+               X1    : Dimensionless := Openings (Index).X1;
+               X2    : Dimensionless := Openings (Index).X2;
+               C1    : Candidate := Openings (Index).C1;
+               C2    : Candidate := Openings (Index).C2;
+            begin
+               for Iteration in 1 .. 32 loop
+                  if Better (C1, Best) then
+                     Best := C1;
+                  end if;
+                  if Better (C2, Best) then
+                     Best := C2;
+                  end if;
+                  exit when Iteration = 32 or else not Refine (Index);
+                  --  Golden-section refinement retains one interior point. Reuse its fully checked candidate;
+                  --  reconstructing both arcs at both points doubles the dominant construction work.
+                  if Better (C1, C2) then
+                     Right := X2;
+                     X2 := X1;
+                     C2 := C1;
+                     X1 := Right - Phi * (Right - Left);
+                     C1 := Evaluate (Math.Exp (X1));
+                  else
+                     Left := X1;
+                     X1 := X2;
+                     C1 := C2;
+                     X2 := Left + Phi * (Right - Left);
+                     C2 := Evaluate (Math.Exp (X2));
+                  end if;
+               end loop;
+            end;
+         end loop;
+      end;
       if not Best.Valid then
          return (Status => Unsupported_Geometry, Transition => <>);
       end if;
