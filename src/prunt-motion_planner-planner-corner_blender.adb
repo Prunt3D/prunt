@@ -272,13 +272,15 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          --  The coarse interval examined at Step. Deviation peaks near the middle of a transition, so starting there
          --  settles the largest bound early, and a curve which cannot pass is recognised before its outer intervals.
          function Is_Passthrough_Corner (I : Corners_Index) return Boolean;
-         function Modelled_Base_Width
-           (I                                  : Corners_Index;
-            Incoming_Tangent, Outgoing_Tangent : Position_Scale;
-            Cos_Half_Theta, Trim_Balance       : Dimensionless) return Length;
-         --  The base width at which the blend between two lines with these tangents is predicted to reach the first
-         --  of its deviation and miss limits, less a safety margin. Trim_Balance is the geometric mean of the two
-         --  trim multipliers. This only chooses the first attempt: Validate_Transition decides what is retained.
+         function Modelled_Base_Width (I : Corners_Index; Cos_Half_Theta, Trim_Balance : Dimensionless) return Length
+         with
+           Pre =>
+             Block.Primitives (I).Kind /= Line_Primitive_Kind
+             or else Block.Primitives (I + 1).Kind /= Line_Primitive_Kind;
+         --  The base width at which the blend at corner I, which has a helix on at least one side, is predicted to
+         --  reach the first of its deviation and miss limits, less a safety margin. The blend is modelled as one
+         --  between two lines. Trim_Balance is the geometric mean of the two trim multipliers. This only chooses the
+         --  first attempt: Validate_Transition decides what is retained.
          function Multiply_Length_Upper (Value : Length; Factor : Dimensionless) return Length;
          function Point_Distance_Upper (Left, Right : Position) return Length
          renames Prunt.Motion_Planner.Stereographic_Curves.Geometry.Point_To_Point_Distance_Upper;
@@ -545,41 +547,27 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
          function Middle_Out_Interval (Step : Natural) return Natural
          is (if Step mod 2 = 0 then Coarse_Intervals / 2 + Step / 2 else Coarse_Intervals / 2 - 1 - Step / 2);
 
-         function Modelled_Base_Width
-           (I                                  : Corners_Index;
-            Incoming_Tangent, Outgoing_Tangent : Position_Scale;
-            Cos_Half_Theta, Trim_Balance       : Dimensionless) return Length
+         function Modelled_Base_Width (I : Corners_Index; Cos_Half_Theta, Trim_Balance : Dimensionless) return Length
          is
-            Reserve   : constant Length := Multiply_Length_Upper (Position_Error_Limit, 2.0);
-            Line_Line : constant Boolean :=
-              Block.Primitives (I).Kind = Line_Primitive_Kind
-              and then Block.Primitives (I + 1).Kind = Line_Primitive_Kind;
-            Ratio     : constant Dimensionless :=
+            Reserve : constant Length := Multiply_Length_Upper (Position_Error_Limit, 2.0);
+            Ratio   : constant Dimensionless :=
               Prunt.Motion_Planner.Stereographic_Curves.Flat_Line_Blend_Miss_Ratio (Cos_Half_Theta) * Trim_Balance;
-            Offset    : Length;
+            Offset  : Length;
             --  The largest admissible distance from the corner to the nearest point of the curve.
          begin
-            if Line_Line then
-               --  That point is offset from the corner along the turn direction and has to stay within the axial
-               --  limits of the corner itself, which is conservative: a point further along either line can be
-               --  nearer on the limiting axis. Validation reserves at least Reserve from every limit of an axis
-               --  which the curve moves on, so a limit below it cannot be met at any width.
-               Offset := Effective_Axial_Deviation (Incoming_Tangent, Outgoing_Tangent, Reserve);
-            else
-               --  A corner with a helix is held to the tightest axial limit as a Euclidean distance from the
-               --  primitives, which the nearest point exceeds first, at Offset · cos (θ/2). A blend between two
-               --  primitives which keep an axis fixed is expected to keep it fixed too. Validation adds at least
-               --  Reserve to the distance, so a limit below it cannot be met at any width.
-               declare
-                  Tightest : constant Length := Helix_Deviation_Limit (I, [others => True]);
-               begin
-                  if Cos_Half_Theta > 0.0 and then Tightest < Length'Last then
-                     Offset := Length'Max (0.0 * mm, Tightest - Reserve) / Cos_Half_Theta;
-                  else
-                     Offset := Length'Last;
-                  end if;
-               end;
-            end if;
+            --  The corner is held to the tightest axial limit as a Euclidean distance from the primitives, which the
+            --  nearest point exceeds first, at Offset · cos (θ/2). A blend between two primitives which keep an axis
+            --  fixed is expected to keep it fixed too. Validation adds at least Reserve to the distance, so a limit
+            --  below it cannot be met at any width.
+            declare
+               Tightest : constant Length := Helix_Deviation_Limit (I, [others => True]);
+            begin
+               if Cos_Half_Theta > 0.0 and then Tightest < Length'Last then
+                  Offset := Length'Max (0.0 * mm, Tightest - Reserve) / Cos_Half_Theta;
+               else
+                  Offset := Length'Last;
+               end if;
+            end;
             --  The corner check adds the curve's own evaluator error to each sampled distance, and construction keeps
             --  that error within Position_Error_Limit. Reserve it where the limit leaves room. A curve whose error
             --  is smaller can still meet a smaller limit, so the reserve must not size such a corner to nothing.
@@ -1373,20 +1361,27 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                                     end if;
                                  end;
                               else
-                                 --  The first expression is the long-standing width policy. It overshoots the
-                                 --  limits at shallow corners, where the model of the actual blend takes over so
-                                 --  that the first attempt is usually the one retained.
+                                 --  The long-standing width policy overshoots the limits at shallow corners. With a
+                                 --  helix, the model of the actual blend takes over there so that the first attempt
+                                 --  is usually the one retained, which saves most of the repairs. Between two lines
+                                 --  repairs are cheap, and the model would have to keep the curve's nearest point
+                                 --  within the axial limits of the corner itself, which is conservative: a point
+                                 --  further along either line can be nearer on the limiting axis. A corner which
+                                 --  passes is never grown, so the model would leave gentle line corners with
+                                 --  tighter, slower blends than repair from the policy finds.
                                  Base_Width :=
-                                   Length'Min
-                                     ((1.35 - 0.49 * Settings.Circularity)
-                                      * Length'Min (Effective_Deviation, Settings.Miss * Cos_Half_Theta)
-                                      / Bend_Factor,
-                                      Modelled_Base_Width
-                                        (I,
-                                         Incoming_Tangent,
-                                         Outgoing_Tangent,
-                                         Cos_Half_Theta,
-                                         Dimensionless_Math.Sqrt (In_Mult * Out_Mult)));
+                                   (1.35 - 0.49 * Settings.Circularity)
+                                   * Length'Min (Effective_Deviation, Settings.Miss * Cos_Half_Theta)
+                                   / Bend_Factor;
+                                 if Block.Primitives (I).Kind /= Line_Primitive_Kind
+                                   or else Block.Primitives (I + 1).Kind /= Line_Primitive_Kind
+                                 then
+                                    Base_Width :=
+                                      Length'Min
+                                        (Base_Width,
+                                         Modelled_Base_Width
+                                           (I, Cos_Half_Theta, Dimensionless_Math.Sqrt (In_Mult * Out_Mult)));
+                                 end if;
                               end if;
                               Target_Incoming_Trims (I) := Base_Width * In_Mult;
                               Target_Outgoing_Trims (I) := Base_Width * Out_Mult;
@@ -1665,8 +1660,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                   end if;
                else
                   Primitive_Limit :=
-                    Helix_Deviation_Limit
-                      (I, [for Axis in Axis_Name => Axis_Is_Structurally_Constant (Curve, Axis)]);
+                    Helix_Deviation_Limit (I, [for Axis in Axis_Name => Axis_Is_Structurally_Constant (Curve, Axis)]);
                   Primitive_Deviation :=
                     Primitive_Deviation_Upper_Bound
                       (Curve, Sampler, Incoming_Section, Outgoing_Section, Position_Error, Primitive_Limit);
