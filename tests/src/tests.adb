@@ -60,6 +60,7 @@ with Prunt.Motion_Planner.Planner_Primitive_Jet_Test;
 with Prunt.Moving_Averages.Test;
 with Prunt.Step_Generator_Restart_Test;
 with Prunt.Step_Generator_Shaping_Test;
+with Prunt.Step_Generator_Timing_Test;
 with Prunt.Thermistors.Test;
 with Trendy_Test.Reports;
 
@@ -285,6 +286,7 @@ begin
    Trendy_Test.Register (Prunt.Motion_Planner.Block_Ring_Test.All_Tests);
    Trendy_Test.Register (Prunt.Step_Generator_Restart_Test.All_Tests);
    Trendy_Test.Register (Prunt.Step_Generator_Shaping_Test.All_Tests);
+   Trendy_Test.Register (Prunt.Step_Generator_Timing_Test.All_Tests);
    Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
 
    if Is_Xcov_Dump then

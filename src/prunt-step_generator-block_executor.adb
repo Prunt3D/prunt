@@ -208,11 +208,25 @@ package body Prunt.Step_Generator.Block_Executor is
          Publish_Block_Corner_ID (Active_Planner.Corners_Index'First);
 
          for I in 2 .. N_Corners loop
+            Active_Planner.Prepare_Segment (Block, I);
             declare
+               --  Prepare_Segment fixes the segment's trajectory and whether the block continues into a successor.
                Finishing_Corner : constant Active_Planner.Finishing_Corners_Index := I;
+               Segment_Time     : constant Time := Active_Planner.Segment_Time (Block, Finishing_Corner);
+               Ends_At_Stop     : constant Boolean :=
+                 Finishing_Corner = N_Corners and then not Active_Planner.Has_Next_Block (Block);
             begin
-               Active_Planner.Prepare_Segment (Block, Finishing_Corner);
                loop
+                  --  Current_Time is the time of the next command, measured from this segment's start. Each pass past
+                  --  this check queues the commands for Current_Time, so a segment which that time has already passed
+                  --  is left before the clock or the pause slew moves.
+                  if Current_Time > Segment_Time then
+                     exit when not Ends_At_Stop;
+                     --  Enqueue the exact stopped endpoint. Shortening this interpolation period is fine because the
+                     --  final part of a stopped block has very low velocity.
+                     Current_Time := Segment_Time;
+                  end if;
+
                   case Pausing_State is
                      when Running_Kind  =>
                         if not Active_Planner.Is_Homing_Move (Block) then
@@ -244,109 +258,92 @@ package body Prunt.Step_Generator.Block_Executor is
                   end case;
 
                   declare
-                     Segment_Time               : constant Time :=
-                       Active_Planner.Segment_Time (Block, Finishing_Corner);
                      Current_Interpolation_Time : constant Time :=
                        (if Pausing_State = Running_Kind
                         then Interpolation_Time
                         else Pause_Slew_Interpolation_Time (Pause_Slew_Cursor));
                      Pause_Stopped              : constant Boolean := Pausing_State = Paused_Kind;
+                     Unshaped_Pos               : constant Position :=
+                       Active_Planner.Segment_Pos_At_Time (Block, Finishing_Corner, Current_Time);
+                     Shaped_Pos                 : Position := Unshaped_Pos;
+                     Vel_Ratio                  : constant Dimensionless :=
+                       Active_Planner.Segment_Vel_Ratio_At_Time (Block, Finishing_Corner, Current_Time);
+                     At_Stop                    : constant Boolean :=
+                       Pause_Stopped or else (Ends_At_Stop and then Current_Time >= Segment_Time);
                   begin
-                     if Current_Time <= Segment_Time then
-                        declare
-                           Unshaped_Pos : constant Position :=
-                             Active_Planner.Segment_Pos_At_Time (Block, Finishing_Corner, Current_Time);
-                           Shaped_Pos   : Position := Unshaped_Pos;
-                           Vel_Ratio    : constant Dimensionless :=
-                             Active_Planner.Segment_Vel_Ratio_At_Time (Block, Finishing_Corner, Current_Time);
-                           At_Stop      : constant Boolean :=
-                             Pause_Stopped
-                             or else
-                               (Finishing_Corner = N_Corners
-                                and then not Active_Planner.Has_Next_Block (Block)
-                                and then Current_Time >= Segment_Time);
-                        begin
-                           if Use_Input_Shapers then
-                              Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
-                           end if;
-
-                           if Use_Input_Shapers and then At_Stop then
-                              declare
-                                 Extra_Loops_Required : constant Input_Shapers.Cycle_Count :=
-                                   Input_Shapers.Cycle_Count'Max
-                                     (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Shapers));
-                              begin
-                                 for J in 0 .. Extra_Loops_Required loop
-                                    if J > 0 then
-                                       Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
-                                    end if;
-
-                                    if J = Extra_Loops_Required then
-                                       --  Filters can leave a rounding residual. Finish at the exact input position
-                                       --  for the pause/return resume check. Complete pressure-advance catch-up before
-                                       --  marking the command safe to stop after.
-                                       Shaped_Pos := Unshaped_Pos;
-                                    end if;
-
-                                    Queue_Block_Command
-                                      (Pos             => Shaped_Pos,
-                                       Safe_Stop_After => J = Extra_Loops_Required,
-                                       Vel_Ratio       => Vel_Ratio,
-                                       Catch_Up_Axes   => Catch_Up_Axes);
-                                 end loop;
-                              end;
-                           else
-                              if Active_Planner.Is_Homing_Move (Block)
-                                and then not Has_Loop_Move
-                                and then Current_Time >= Active_Planner.Loop_Move_Minimum_Time (Block)
-                              then
-                                 Has_Loop_Move := True;
-                                 Queue_Loop_Command
-                                   (Pos => Shaped_Pos, Safe_Stop_After => At_Stop, Vel_Ratio => Vel_Ratio);
-                              else
-                                 Queue_Block_Command
-                                   (Pos             => Shaped_Pos,
-                                    Safe_Stop_After => At_Stop,
-                                    Vel_Ratio       => Vel_Ratio,
-                                    Catch_Up_Axes   => Catch_Up_Axes);
-                              end if;
-                           end if;
-
-                           if Pause_Stopped then
-                              Reset_Requested := Reset_Pending;
-                              if not Reset_Requested then
-                                 Handle_Pause (Commands.Last_Queued_Position, Reset_Requested);
-                              end if;
-                              if Reset_Requested then
-                                 return;
-                              end if;
-
-                              Pausing_State := Resuming_Kind;
-                           end if;
-                        end;
+                     if Use_Input_Shapers then
+                        Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
                      end if;
 
-                     if Current_Time /= Segment_Time and then not Pause_Stopped then
+                     if Use_Input_Shapers and then At_Stop then
+                        declare
+                           Extra_Loops_Required : constant Input_Shapers.Cycle_Count :=
+                             Input_Shapers.Cycle_Count'Max
+                               (0, Input_Shapers.Shapers.Extra_End_Steps_Required (Shapers));
+                        begin
+                           for J in 0 .. Extra_Loops_Required loop
+                              if J > 0 then
+                                 Shaped_Pos := Input_Shapers.Shapers.Do_Step (Shapers, Unshaped_Pos);
+                              end if;
+
+                              if J = Extra_Loops_Required then
+                                 --  Filters can leave a rounding residual. Finish at the exact input position for the
+                                 --  pause/return resume check. Complete pressure-advance catch-up before marking the
+                                 --  command safe to stop after.
+                                 Shaped_Pos := Unshaped_Pos;
+                              end if;
+
+                              Queue_Block_Command
+                                (Pos             => Shaped_Pos,
+                                 Safe_Stop_After => J = Extra_Loops_Required,
+                                 Vel_Ratio       => Vel_Ratio,
+                                 Catch_Up_Axes   => Catch_Up_Axes);
+                           end loop;
+                        end;
+                     else
+                        if Active_Planner.Is_Homing_Move (Block)
+                          and then not Has_Loop_Move
+                          and then Current_Time >= Active_Planner.Loop_Move_Minimum_Time (Block)
+                        then
+                           Has_Loop_Move := True;
+                           Queue_Loop_Command (Pos => Shaped_Pos, Safe_Stop_After => At_Stop, Vel_Ratio => Vel_Ratio);
+                        else
+                           Queue_Block_Command
+                             (Pos             => Shaped_Pos,
+                              Safe_Stop_After => At_Stop,
+                              Vel_Ratio       => Vel_Ratio,
+                              Catch_Up_Axes   => Catch_Up_Axes);
+                        end if;
+                     end if;
+
+                     if Pause_Stopped then
+                        Reset_Requested := Reset_Pending;
+                        if not Reset_Requested then
+                           Handle_Pause (Commands.Last_Queued_Position, Reset_Requested);
+                        end if;
+                        if Reset_Requested then
+                           return;
+                        end if;
+
+                        Pausing_State := Resuming_Kind;
+                     end if;
+
+                     --  The stopped endpoint ends the block. Elsewhere a command at the segment's end time advances
+                     --  the clock like any other, so the next segment does not repeat it at its own start.
+                     exit when Ends_At_Stop and then Current_Time = Segment_Time;
+
+                     if not Pause_Stopped then
                         Current_Time := Current_Time + Current_Interpolation_Time;
                      end if;
 
-                     if Finishing_Corner = N_Corners
-                       and then not Active_Planner.Has_Next_Block (Block)
-                       and then Current_Time > Segment_Time
-                     then
-                        --  Enqueue the exact stopped endpoint at least once. Shortening this interpolation period
-                        --  is fine because the final part of a stopped block has very low velocity.
-                        Current_Time := Segment_Time;
-                     else
-                        exit when Current_Time >= Segment_Time;
-                     end if;
+                     exit when not Ends_At_Stop and then Current_Time >= Segment_Time;
                   end;
                end loop;
 
                Active_Planner.Corner_Extra_Data (Block, I, Process_Corner_Extra_Data'Access);
                Publish_Block_Corner_ID (I);
 
-               Current_Time := Current_Time - Active_Planner.Segment_Time (Block, Finishing_Corner);
+               Current_Time := Current_Time - Segment_Time;
             end;
          end loop;
 
