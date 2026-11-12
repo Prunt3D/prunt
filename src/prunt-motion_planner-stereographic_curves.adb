@@ -1844,8 +1844,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                            end loop;
                            --  Without a held step the full one is backtracked as before.
                            if Solve_Linear (Normal, Gradient, Held_Step) then
-                              exit Iteration_Loop when
-                                C0_Slope (Held_Step) >= -Stalled_Slope_Fraction * Norm_Square;
+                              exit Iteration_Loop when C0_Slope (Held_Step) >= -Stalled_Slope_Fraction * Norm_Square;
                               Newton_Step := Held_Step;
                            end if;
                         end;
@@ -2548,6 +2547,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       is
          pragma Suppress (Overflow_Check);
          Powers : array (0 .. Model_Order) of Dimensionless;
+         Scales : array (Majorant_Order, 1 .. Model_Order) of Dimensionless;
+         --  C(k+j, j)·hʲ, the same for every axis.
       begin
          Refine := False;
          --  Only the active axes are bounded below. The remaining entries are never read, but an out parameter is
@@ -2558,19 +2559,22 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          for Exponent in 1 .. Model_Order loop
             Powers (Exponent) := Powers (Exponent - 1) * Radius;
          end loop;
+         for Order in Majorant_Order loop
+            for Term in 1 .. Model_Order loop
+               Scales (Order, Term) := Taylor_Weights (Order, Term) * Powers (Term);
+            end loop;
+         end loop;
          for Index in 1 .. Active_Count loop
             for Order in Majorant_Order loop
                declare
                   A0        : constant Dimensionless := Item.Jets (Index, Order);
-                  A1        : constant Dimensionless :=
-                    Taylor_Weights (Order, 1) * Powers (1) * Item.Jets (Index, Order + 1);
-                  A2        : constant Dimensionless :=
-                    Taylor_Weights (Order, 2) * Powers (2) * Item.Jets (Index, Order + 2);
+                  A1        : constant Dimensionless := Scales (Order, 1) * Item.Jets (Index, Order + 1);
+                  A2        : constant Dimensionless := Scales (Order, 2) * Item.Jets (Index, Order + 2);
                   --  max over |t| ≤ 1 of |A0 + A1·t + A2·t²|: an endpoint, or the vertex when it is interior.
                   Quadratic : Dimensionless := abs (A0 + A2) + abs A1;
                   Rounding  : Dimensionless :=
-                    Sums (Index, Order) + Taylor_Weights (Order, 1) * Powers (1) * Sums (Index, Order + 1)
-                    + Taylor_Weights (Order, 2) * Powers (2) * Sums (Index, Order + 2);
+                    Sums (Index, Order) + Scales (Order, 1) * Sums (Index, Order + 1)
+                    + Scales (Order, 2) * Sums (Index, Order + 2);
                   Tail      : Dimensionless := 0.0;
                   Bound     : Dimensionless;
                begin
@@ -2578,19 +2582,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                      Quadratic := Dimensionless'Max (Quadratic, abs (A0 - A1 * A1 / (4.0 * A2)));
                   end if;
                   for Term in 3 .. Model_Order - 1 loop
-                     declare
-                        Scale : constant Dimensionless := Taylor_Weights (Order, Term) * Powers (Term);
-                     begin
-                        Tail := Tail + Scale * abs Item.Jets (Index, Order + Term);
-                        Rounding := Rounding + Scale * Sums (Index, Order + Term);
-                     end;
+                     Tail := Tail + Scales (Order, Term) * abs Item.Jets (Index, Order + Term);
+                     Rounding := Rounding + Scales (Order, Term) * Sums (Index, Order + Term);
                   end loop;
                   --  Rounding is the allowance for the computed jets; the last term is the Taylor remainder. The
                   --  final factor covers the rounding of this expression, whose terms are all nonnegative and
                   --  whose quadratic part errs by at most 16u of its value.
                   Tail :=
-                    Tail + Round_Off * Rounding
-                    + Taylor_Weights (Order, Model_Order) * Powers (Model_Order) * Sums (Index, Order + Model_Order);
+                    Tail + Round_Off * Rounding + Scales (Order, Model_Order) * Sums (Index, Order + Model_Order);
                   Bound := (Quadratic + Tail) * (1.0 + Round_Off) + Padding (Index);
                   Bounds (Index, Order) := Bound;
                   Allowances (Index, Order) := Round_Off * Rounding;
@@ -5849,11 +5848,35 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       is
          Result : Complex := Compose_From_Cartesian (Coefficients (Degree), 0.0);
       begin
-         if Degree > 0 then
-            for Index in reverse 0 .. Degree - 1 loop
-               Result := Result * Value + Compose_From_Cartesian (Coefficients (Index), 0.0);
-            end loop;
+         if Degree = 0 then
+            return Result;
          end if;
+
+         --  The complex product and sum written out, as the same real operations in the same order. An overflow
+         --  leaves an infinity or a NaN in every later step, so a finite result is the one which the complex
+         --  operators give, without a call and an overflow test for each of them.
+         declare
+            pragma Suppress (Overflow_Check);
+            X    : constant Dimensionless := Value.Re;
+            Y    : constant Dimensionless := Value.Im;
+            P_Re : Dimensionless := Coefficients (Degree);
+            P_Im : Dimensionless := 0.0;
+            Next : Dimensionless;
+         begin
+            for Index in reverse 0 .. Degree - 1 loop
+               Next := (P_Re * X - P_Im * Y) + Coefficients (Index);
+               P_Im := (P_Re * Y + P_Im * X) + 0.0;
+               P_Re := Next;
+            end loop;
+            if abs P_Re <= Dimensionless'Last and then abs P_Im <= Dimensionless'Last then
+               return Compose_From_Cartesian (P_Re, P_Im);
+            end if;
+         end;
+
+         --  The complex product rescales a component which overflows, so leave such a value to it.
+         for Index in reverse 0 .. Degree - 1 loop
+            Result := Result * Value + Compose_From_Cartesian (Coefficients (Index), 0.0);
+         end loop;
          return Result;
       end Evaluate_Polynomial;
 
@@ -7036,8 +7059,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Right_Upper (Degree - Level) := Work_Upper (Degree - Level);
             end loop;
             return
-              Decide (Left_Lower, Left_Upper, Remaining - 1)
-              and then Decide (Right_Lower, Right_Upper, Remaining - 1);
+              Decide (Left_Lower, Left_Upper, Remaining - 1) and then Decide (Right_Lower, Right_Upper, Remaining - 1);
          end;
       end Decide;
 
@@ -7826,6 +7848,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             Integral_A : Dimensionless := 0.0;
             Integral_B : Dimensionless := 0.0;
 
+            Warp_Is_Evaluated : Boolean := False;
+            --  Whether Integral_A and Integral_B were integrated at the final Log_Warp.
+
             procedure Integrate (Candidate_Log_Warp : Dimensionless; A, B, D_A, D_B : out Dimensionless);
 
             --  For W = exp(Candidate_Log_Warp), integrate the ideal tangent transition as
@@ -7954,69 +7979,117 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
             --  A and B vary monotonically with log(W), so the root is unique. Safeguarded Newton retains fixed
             --  bounded construction cost, and the wide log bracket covers the complete advertised 20:1 trim domain
             --  near reversals.
+            --  The residual increases with log(W), so the bracket's ends only matter to a solve which reaches them.
+            --  Run the Newton iteration first with that direction taken for granted. While every proposal stays
+            --  strictly inside the bracket it contracts, the iterates are exactly those of the safeguarded solve
+            --  below, which is left to settle every other case, with the ends evaluated, from the start.
             declare
-               Low_A, Low_B, Low_D_A, Low_D_B     : Dimensionless;
-               High_A, High_B, High_D_A, High_D_B : Dimensionless;
-               Low_Residual, High_Residual        : Dimensionless;
-               Residual_Increases                 : Boolean := False;
+               Trial      : Dimensionless := Log_Warp;
+               Trial_Low  : Dimensionless := Log_Low;
+               Trial_High : Dimensionless := Log_High;
             begin
-               Integrate (Log_Low, Low_A, Low_B, Low_D_A, Low_D_B);
-               Integrate (Log_High, High_A, High_B, High_D_A, High_D_B);
-               Low_Residual := Low_B - Ratio * Low_A;
-               High_Residual := High_B - Ratio * High_A;
-               --  The endpoint residuals must be finite and must bracket zero. Equal signs mean no supported W
-               --  reproduces R.
-               if not Is_Finite (Low_Residual) or else not Is_Finite (High_Residual) then
-                  return (Status => Warp_Selection_Is_Numerically_Unsafe, others => <>);
-               elsif Low_Residual = 0.0 then
-                  Log_Warp := Log_Low;
-               elsif High_Residual = 0.0 then
-                  Log_Warp := Log_High;
-               elsif (Low_Residual < 0.0) = (High_Residual < 0.0) then
-                  return (Status => Warp_Closure_Failed, others => <>);
-               else
-                  Residual_Increases := Low_Residual < High_Residual;
-               end if;
-
-               if Low_Residual /= 0.0 and then High_Residual /= 0.0 then
-                  --  Each iteration first contracts the proven bracket, then takes
-                  --
-                  --     log(W) ← log(W) - F/F′.
-                  --
-                  --  A nonfinite or out-of-bracket Newton proposal is replaced by the bisection midpoint.
-                  for Iteration in 1 .. 56 loop
-                     declare
-                        D_A, D_B             : Dimensionless;
-                        Residual, D_Residual : Dimensionless;
-                        Proposed             : Dimensionless;
-                        Residual_Scale       : Dimensionless;
-                     begin
-                        Integrate (Log_Warp, Integral_A, Integral_B, D_A, D_B);
-                        Residual := Integral_B - Ratio * Integral_A;
-                        D_Residual := D_B - Ratio * D_A;
-                        Residual_Scale := Dimensionless'Max (1.0, abs Integral_B + abs (Ratio * Integral_A));
-                        if abs Residual <= 2_048.0 * Dimensionless'Model_Epsilon * Residual_Scale
-                          or else Log_High - Log_Low <= 2.0E-13
-                        then
-                           exit;
-                        elsif (Residual < 0.0) = Residual_Increases then
-                           Log_Low := Log_Warp;
-                        else
-                           Log_High := Log_Warp;
-                        end if;
-
-                        Proposed :=
-                          (if D_Residual /= 0.0 and then Is_Finite (D_Residual)
-                           then Log_Warp - Residual / D_Residual
-                           else 0.5 * (Log_Low + Log_High));
-                        if not Is_Finite (Proposed) or else Proposed <= Log_Low or else Proposed >= Log_High then
-                           Proposed := 0.5 * (Log_Low + Log_High);
-                        end if;
-                        Log_Warp := Proposed;
-                     end;
-                  end loop;
-               end if;
+               for Iteration in 1 .. 56 loop
+                  declare
+                     D_A, D_B             : Dimensionless;
+                     Residual, D_Residual : Dimensionless;
+                     Proposed             : Dimensionless;
+                     Residual_Scale       : Dimensionless;
+                  begin
+                     exit when not (Trial > Trial_Low and then Trial < Trial_High);
+                     Integrate (Trial, Integral_A, Integral_B, D_A, D_B);
+                     Residual := Integral_B - Ratio * Integral_A;
+                     D_Residual := D_B - Ratio * D_A;
+                     Residual_Scale := Dimensionless'Max (1.0, abs Integral_B + abs (Ratio * Integral_A));
+                     exit when not Is_Finite (Residual);
+                     if abs Residual <= 2_048.0 * Dimensionless'Model_Epsilon * Residual_Scale then
+                        Log_Warp := Trial;
+                        Warp_Is_Evaluated := True;
+                        exit;
+                     end if;
+                     exit when Trial_High - Trial_Low <= 2.0E-13;
+                     if Residual < 0.0 then
+                        Trial_Low := Trial;
+                     else
+                        Trial_High := Trial;
+                     end if;
+                     exit when D_Residual = 0.0 or else not Is_Finite (D_Residual);
+                     Proposed := Trial - Residual / D_Residual;
+                     exit when not Is_Finite (Proposed);
+                     Trial := Proposed;
+                  end;
+               end loop;
+            exception
+               when Constraint_Error =>
+                  Warp_Is_Evaluated := False;
             end;
+
+            if not Warp_Is_Evaluated then
+               declare
+                  Low_A, Low_B, Low_D_A, Low_D_B     : Dimensionless;
+                  High_A, High_B, High_D_A, High_D_B : Dimensionless;
+                  Low_Residual, High_Residual        : Dimensionless;
+                  Residual_Increases                 : Boolean := False;
+               begin
+                  Integrate (Log_Low, Low_A, Low_B, Low_D_A, Low_D_B);
+                  Integrate (Log_High, High_A, High_B, High_D_A, High_D_B);
+                  Low_Residual := Low_B - Ratio * Low_A;
+                  High_Residual := High_B - Ratio * High_A;
+                  --  The endpoint residuals must be finite and must bracket zero. Equal signs mean no supported W
+                  --  reproduces R.
+                  if not Is_Finite (Low_Residual) or else not Is_Finite (High_Residual) then
+                     return (Status => Warp_Selection_Is_Numerically_Unsafe, others => <>);
+                  elsif Low_Residual = 0.0 then
+                     Log_Warp := Log_Low;
+                  elsif High_Residual = 0.0 then
+                     Log_Warp := Log_High;
+                  elsif (Low_Residual < 0.0) = (High_Residual < 0.0) then
+                     return (Status => Warp_Closure_Failed, others => <>);
+                  else
+                     Residual_Increases := Low_Residual < High_Residual;
+                  end if;
+
+                  if Low_Residual /= 0.0 and then High_Residual /= 0.0 then
+                     --  Each iteration first contracts the proven bracket, then takes
+                     --
+                     --     log(W) ← log(W) - F/F′.
+                     --
+                     --  A nonfinite or out-of-bracket Newton proposal is replaced by the bisection midpoint.
+                     for Iteration in 1 .. 56 loop
+                        declare
+                           D_A, D_B             : Dimensionless;
+                           Residual, D_Residual : Dimensionless;
+                           Proposed             : Dimensionless;
+                           Residual_Scale       : Dimensionless;
+                        begin
+                           Integrate (Log_Warp, Integral_A, Integral_B, D_A, D_B);
+                           Residual := Integral_B - Ratio * Integral_A;
+                           D_Residual := D_B - Ratio * D_A;
+                           Residual_Scale := Dimensionless'Max (1.0, abs Integral_B + abs (Ratio * Integral_A));
+                           if abs Residual <= 2_048.0 * Dimensionless'Model_Epsilon * Residual_Scale
+                             or else Log_High - Log_Low <= 2.0E-13
+                           then
+                              --  The integrals above are those of the selected W.
+                              Warp_Is_Evaluated := True;
+                              exit;
+                           elsif (Residual < 0.0) = Residual_Increases then
+                              Log_Low := Log_Warp;
+                           else
+                              Log_High := Log_Warp;
+                           end if;
+
+                           Proposed :=
+                             (if D_Residual /= 0.0 and then Is_Finite (D_Residual)
+                              then Log_Warp - Residual / D_Residual
+                              else 0.5 * (Log_Low + Log_High));
+                           if not Is_Finite (Proposed) or else Proposed <= Log_Low or else Proposed >= Log_High then
+                              Proposed := 0.5 * (Log_Low + Log_High);
+                           end if;
+                           Log_Warp := Proposed;
+                        end;
+                     end loop;
+                  end if;
+               end;
+            end if;
 
             declare
                D_A, D_B       : Dimensionless;
@@ -8025,9 +8098,12 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                Final_Residual : Dimensionless;
                Final_Scale    : Dimensionless;
             begin
-               --  Re-evaluate the selected W independently. A valid result needs positive finite A and B and must
-               --  reproduce B/A = R within the final scaled roundoff allowance.
-               Integrate (Log_Warp, Integral_A, Integral_B, D_A, D_B);
+               --  Evaluate the selected W, unless the solve stopped on it and its integrals are already those of
+               --  this W. A valid result needs positive finite A and B and must reproduce B/A = R within the final
+               --  scaled roundoff allowance.
+               if not Warp_Is_Evaluated then
+                  Integrate (Log_Warp, Integral_A, Integral_B, D_A, D_B);
+               end if;
                Final_Residual := Integral_B - Ratio * Integral_A;
                Final_Scale := Dimensionless'Max (1.0, abs Integral_B + abs (Ratio * Integral_A));
                if not Is_Finite (Factor)

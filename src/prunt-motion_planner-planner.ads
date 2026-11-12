@@ -649,12 +649,18 @@ private
 
    type Reachable_Velocity_Memo is record
       Fixed_Vel : Velocity := 0.0 * mm / s;
+      Cap       : Velocity := 0.0 * mm / s;
       Reachable : Velocity := 0.0 * mm / s;
       Valid     : Boolean := False;
    end record;
+   --  Reachable is the reach from Fixed_Vel as far as it was needed: the whole reach when below Cap, and otherwise
+   --  standing for any reach from Cap upwards.
    type Reachable_Velocity_Memo_Pair is array (Boolean) of Reachable_Velocity_Memo;
    --  Indexed by whether the fixed velocity is at the start of the segment.
    type Reachable_Velocity_Memo_Cache is array (Finishing_Corners_Index range <>) of Reachable_Velocity_Memo_Pair;
+
+   function Memo_Answers (Memo : Reachable_Velocity_Memo; Fixed_Vel, Cap : Velocity) return Boolean;
+   --  Whether Memo holds the reach from Fixed_Vel for a caller which only uses speeds up to Cap.
 
    type Planning_Workspace (Last_Corner : Corners_Index) is record
       Check_Extrusion_Position : Boolean := True;
@@ -1120,9 +1126,32 @@ private
    --  Search feasible peak speeds for a fast certified profile, retaining the maximum-speed coast candidate. The
    --  search for a faster lower peak is skipped when a peak just below the maximum is no faster than the maximum.
 
+   Reach_Search_Tolerance : constant Dimensionless := 2.0**(-30);
+   --  How closely a tangent-only reach search brackets the reachable speed, as a fraction of it, before the margin
+   --  below is taken. That margin is a million times wider, so the last machine number settles nothing.
+
+   Reach_Margin : constant Dimensionless := 0.999;
+   --  Every searched reachable speed is reduced by this factor, so that lookahead keeps a little room for the
+   --  profile which is generated afterwards.
+
+   function Raised_Reach_Cap (Cap : Velocity) return Velocity
+   is (if Cap <= 0.5 * Velocity'Last then Cap / Reach_Margin else Velocity'Last);
+   --  The lowest speed whose searched reach, after Reach_Margin, is still at least Cap. A reach search for a caller
+   --  which only uses speeds up to Cap need not look above it.
+
    function Reachable_Window_Velocity
-     (Params : Kinematic_Parameters; Eval : Profile_Window_Evaluation; Start_Vel : Velocity) return Velocity;
+     (Params    : Kinematic_Parameters;
+      Eval      : Profile_Window_Evaluation;
+      Start_Vel : Velocity;
+      Floor     : Velocity := 0.0 * mm / s;
+      Cap       : Velocity := Velocity'Last) return Velocity;
    --  Search velocity changes using the same trajectory certificate as final profile generation.
+   --
+   --  Floor and Cap describe what the caller does with the result R: it uses Velocity'Min (Cap, Velocity'Max (Floor,
+   --  R)). The search is then cut short wherever that value is already decided. A result at or above Cap stands for
+   --  any reachable speed from Cap upwards, and one at or below Floor for any reachable speed up to Floor, so only
+   --  that combination is meaningful when either is given. A speed returned between them is found from the same
+   --  certified ramps, with the same margin, as without them.
 
    function Cellular_Profile_At_Peak
      (Params                   : Kinematic_Parameters;
@@ -1157,10 +1186,12 @@ private
       Cells     : Path_Cells;
       Eval      : Profile_Window_Evaluation;
       Fixed_Vel : Velocity;
-      Forward   : Boolean) return Velocity;
+      Forward   : Boolean;
+      Floor     : Velocity := 0.0 * mm / s;
+      Cap       : Velocity := Velocity'Last) return Velocity;
    --  Reachable_Window_Velocity with the cellular certificate. A cellular window is not symmetric, so Forward selects
    --  whether Fixed_Vel is at the start (reach the end) or at the end (reach the start). The result never exceeds
-   --  the reached end's ceiling.
+   --  the reached end's ceiling. Floor and Cap are as for Reachable_Window_Velocity.
 
    function Profile_Distance_At_Time
      (Profile : Feedrate_Profile; T : Time; Accel_Crackle, Decel_Crackle : Crackle; Start_Vel : Velocity)
@@ -1229,9 +1260,15 @@ private
    --  Limit Max_Vel so the primitive respects every motor's per-command delta over the requested interval.
 
    function Reachable_Velocity
-     (Start_Vel : Velocity; Max_Vel : Velocity; Distance : Length; Limits : Scalar_Derivative_Limits) return Velocity;
+     (Start_Vel          : Velocity;
+      Max_Vel            : Velocity;
+      Distance           : Length;
+      Limits             : Scalar_Derivative_Limits;
+      Relative_Tolerance : Dimensionless) return Velocity;
    --  Return the greatest velocity reachable from Start_Vel across Distance without exceeding Limits or Max_Vel, less
-   --  a 0.1% margin. The search continues to the last machine number whose ramp is evaluated to fit.
+   --  a 0.1% margin. The search stops once its bracket is within Relative_Tolerance of the reachable speed; zero
+   --  continues to the last machine number whose ramp is evaluated to fit. Either way the margin is taken from a
+   --  speed whose ramp was evaluated to fit.
 
    function Endpoint_Delta_V_Distance
      (Start_Vel : Velocity; End_Vel : Velocity; Limits : Scalar_Derivative_Limits) return Length;

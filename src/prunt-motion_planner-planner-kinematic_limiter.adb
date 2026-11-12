@@ -46,7 +46,11 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       procedure Forward_Pass (Monotone : Boolean; Changed : in out Boolean);
       procedure Fill_Static_Caches;
       function Reachable_Cached_Profile_Window_Velocity
-        (Finishing_Corner : Finishing_Corners_Index; Fixed_Vel : Velocity; Forward : Boolean) return Velocity;
+        (Finishing_Corner : Finishing_Corners_Index; Fixed_Vel : Velocity; Forward : Boolean; Cap : Velocity)
+         return Velocity;
+      --  The speed reachable across the run of Finishing_Corner from Fixed_Vel at its start (Forward) or its end,
+      --  by its best window, or Cap if that is lower. Every caller clamps a junction to the result, so a reach
+      --  above the junction's present limit is never needed in full.
       procedure Reverse_Pass (Changed : in out Boolean);
       function Static_Corner_Limit (Corner : Corners_Index) return Velocity;
 
@@ -131,10 +135,12 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                   Run_First : constant Finishing_Corners_Index := Timing_Run_First (Block'Access, I);
                   Limit     : constant Velocity := Static_Corner_Limits (I);
                   Reachable : constant Velocity :=
-                    Velocity'Min
-                      (Limit,
-                       Reachable_Cached_Profile_Window_Velocity
-                         (Run_First, Block.Corner_Velocity_Limits (Run_First - 1), Forward => True));
+                    Reachable_Cached_Profile_Window_Velocity
+                      (Run_First,
+                       Block.Corner_Velocity_Limits (Run_First - 1),
+                       Forward => True,
+                       Cap     =>
+                         (if Monotone then Velocity'Min (Limit, Block.Corner_Velocity_Limits (I)) else Limit));
                begin
                   if Monotone then
                      Clamp_Corner (I, Reachable, Changed);
@@ -166,50 +172,74 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
       end Fill_Static_Caches;
 
       function Reachable_Cached_Profile_Window_Velocity
-        (Finishing_Corner : Finishing_Corners_Index; Fixed_Vel : Velocity; Forward : Boolean) return Velocity
+        (Finishing_Corner : Finishing_Corners_Index; Fixed_Vel : Velocity; Forward : Boolean; Cap : Velocity)
+         return Velocity
       is
          Memo  : Reachable_Velocity_Memo renames Reachable_Memos (Finishing_Corner) (Forward);
+         Evals : Profile_Window_Evaluation_Set renames Window_Evaluations (Finishing_Corner);
          Best  : Velocity := 0.0 * mm / s;
          Total : constant Length := Timing_Total_Distance (Block'Access, Finishing_Corner);
+
+         function Admits (Eval : Profile_Window_Evaluation) return Boolean;
+         --  Whether a profile in this window can have Fixed_Vel at its fixed end.
+
+         function Admits (Eval : Profile_Window_Evaluation) return Boolean is
+            Constant_Distance : constant Length :=
+              (if Forward
+               then Eval.Window.Start_Distance
+               else Total - Eval.Window.Start_Distance - Eval.Window.Distance);
+         begin
+            return
+              Eval.Valid
+              and then (if Forward then Eval.Start_Max_Vel else Eval.End_Max_Vel) >= Fixed_Vel
+              and then (Constant_Distance <= 0.0 * mm or else Fixed_Vel > 0.0 * mm / s);
+         end Admits;
       begin
-         --  The cached evaluations are fixed for this run, so the result depends only on Fixed_Vel.
-         if Memo.Valid and then Identical (Memo.Fixed_Vel, Fixed_Vel) then
-            return Memo.Reachable;
+         --  The cached evaluations are fixed for this run, so the result depends only on Fixed_Vel and, where the
+         --  reach is higher, on Cap.
+         if Memo_Answers (Memo, Fixed_Vel, Cap) then
+            return Velocity'Min (Cap, Memo.Reachable);
          end if;
 
-         declare
-            Cells : constant Path_Cells :=
-              (if Is_Cellular_Run (Block'Access, Finishing_Corner)
-               then
-                 Timing_Run_Cells
-                   (Block'Access, Motor_Map, Finishing_Corner, Timing_Feedrate (Block'Access, Finishing_Corner))
-               else [1 .. 0 => <>]);
-         begin
-            for W in Profile_Window_Candidate_Index loop
+         if Fixed_Vel >= Cap and then (for some Eval of Evals => Admits (Eval) and then not Eval.Cellular) then
+            --  Such a window reaches at least the speed at its fixed end, which already exceeds what is asked for.
+            --  That is every segment which the profile crosses without gaining speed in this direction.
+            Best := Cap;
+         else
+            --  A window without curvature needs no certificate search, and whatever it reaches is a floor which
+            --  the curved windows only have to be searched above.
+            for Costly in Boolean loop
+               exit when Best >= Cap;
                declare
-                  Eval              : Profile_Window_Evaluation renames Window_Evaluations (Finishing_Corner) (W);
-                  Constant_Distance : constant Length :=
-                    (if Forward
-                     then Eval.Window.Start_Distance
-                     else Total - Eval.Window.Start_Distance - Eval.Window.Distance);
-                  Reachable         : Velocity;
+                  Cells : constant Path_Cells :=
+                    (if Costly
+                       and then (for some Eval of Evals => Eval.Cellular and then Admits (Eval))
+                       and then Is_Cellular_Run (Block'Access, Finishing_Corner)
+                     then
+                       Timing_Run_Cells
+                         (Block'Access, Motor_Map, Finishing_Corner, Timing_Feedrate (Block'Access, Finishing_Corner))
+                     else [1 .. 0 => <>]);
                begin
-                  if Eval.Valid
-                    and then (if Forward then Eval.Start_Max_Vel else Eval.End_Max_Vel) >= Fixed_Vel
-                    and then (Constant_Distance <= 0.0 * mm or else Fixed_Vel > 0.0 * mm / s)
-                  then
-                     Reachable :=
-                       (if Eval.Cellular
-                        then Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Fixed_Vel, Forward)
-                        else Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel));
-                     Best := Velocity'Max (Best, Reachable);
-                  end if;
+                  for Eval of Evals loop
+                     exit when Best >= Cap;
+                     if (Eval.Curved or else Eval.Cellular) = Costly and then Admits (Eval) then
+                        Best :=
+                          Velocity'Max
+                            (Best,
+                             (if Eval.Cellular
+                              then
+                                Reachable_Cellular_Velocity
+                                  (Block.Params, Cells, Eval, Fixed_Vel, Forward, Floor => Best, Cap => Cap)
+                              else
+                                Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel, Floor => Best, Cap => Cap)));
+                     end if;
+                  end loop;
                end;
             end loop;
-         end;
+         end if;
 
-         Memo := (Fixed_Vel => Fixed_Vel, Reachable => Best, Valid => True);
-         return Best;
+         Memo := (Fixed_Vel => Fixed_Vel, Cap => Cap, Reachable => Best, Valid => True);
+         return Velocity'Min (Cap, Best);
       end Reachable_Cached_Profile_Window_Velocity;
 
       procedure Reverse_Pass (Changed : in out Boolean) is
@@ -219,7 +249,10 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                Clamp_Corner
                  (I,
                   Reachable_Cached_Profile_Window_Velocity
-                    (I + 1, Block.Corner_Velocity_Limits (Timing_Run_Last (Block'Access, I + 1)), Forward => False),
+                    (I + 1,
+                     Block.Corner_Velocity_Limits (Timing_Run_Last (Block'Access, I + 1)),
+                     Forward => False,
+                     Cap     => Block.Corner_Velocity_Limits (I)),
                   Changed);
             end if;
          end loop;

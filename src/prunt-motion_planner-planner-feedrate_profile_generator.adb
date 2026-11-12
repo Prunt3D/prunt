@@ -99,8 +99,10 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       function Conservative_Profile
         (Eval : Profile_Window_Evaluation; First, Last : Velocity) return Window_Profile_Result;
       function Generate (Eval : Profile_Window_Evaluation; First, Last : Velocity) return Window_Profile_Result;
-      function Reachable (Eval : Profile_Window_Evaluation; Fixed_Vel : Velocity; Forward : Boolean) return Velocity;
-      --  The window or cellular certificate, whichever Eval needs.
+      function Reachable
+        (Eval : Profile_Window_Evaluation; Fixed_Vel : Velocity; Forward : Boolean; Cap : Velocity) return Velocity;
+      --  The window or cellular certificate, whichever Eval needs, for a caller which clamps a speed of at most Cap
+      --  to the result.
       procedure Consider_Split_Profile (Conservative : Boolean; Accepted : out Boolean);
       procedure Try_Conservative_Candidate (I : Profile_Window_Candidate_Index);
 
@@ -174,10 +176,11 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
           then Generate_Cellular_Profile (Block.Params, Cells, Eval, First, Last)
           else Generate_Window_Profile (Block.Params, Eval, First, Last));
 
-      function Reachable (Eval : Profile_Window_Evaluation; Fixed_Vel : Velocity; Forward : Boolean) return Velocity
+      function Reachable
+        (Eval : Profile_Window_Evaluation; Fixed_Vel : Velocity; Forward : Boolean; Cap : Velocity) return Velocity
       is (if Eval.Cellular
-          then Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Fixed_Vel, Forward)
-          else Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel));
+          then Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Fixed_Vel, Forward, Cap => Cap)
+          else Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel, Cap => Cap));
 
       procedure Consider_Split_Profile (Conservative : Boolean; Accepted : out Boolean) is
          Split_Windows : constant Split_Profile_Windows := Timing_Split_Windows (Block, Finishing_Corner);
@@ -187,29 +190,34 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
          Speeds        : array (Natural range 0 .. 3) of Velocity;
          Split_Time    : Time := 0.0 * s;
 
-         type Reach_Memo is record
-            Valid            : Boolean := False;
-            Fixed, Reachable : Velocity := 0.0 * mm / s;
-         end record;
-         Reach_Memos : array (Split_Windows'Range, Boolean) of Reach_Memo;
+         Reach_Memos : array (Split_Windows'Range, Boolean) of Reachable_Velocity_Memo;
          --  The latest reachability across each portion, by whether its fixed speed is at its start. The outer
          --  speeds never change and the inner ones often settle at once, so later sweeps mostly repeat a solve.
 
-         function Reach (I : Positive; Fixed : Velocity; Forward : Boolean) return Velocity;
+         function Reach (I : Positive; Fixed : Velocity; Forward : Boolean; Cap : Velocity) return Velocity;
+         --  The speed reachable across portion I from Fixed, or Cap if that is lower: the speed being clamped is
+         --  already at most Cap, so a higher reach is never needed in full.
 
-         function Reach (I : Positive; Fixed : Velocity; Forward : Boolean) return Velocity is
-            Memo : Reach_Memo renames Reach_Memos (I, Forward);
+         function Reach (I : Positive; Fixed : Velocity; Forward : Boolean; Cap : Velocity) return Velocity is
+            Memo : Reachable_Velocity_Memo renames Reach_Memos (I, Forward);
          begin
-            if not (Memo.Valid and then Identical (Memo.Fixed, Fixed)) then
+            if not Memo_Answers (Memo, Fixed, Cap) then
                Memo :=
                  (Valid     => True,
-                  Fixed     => Fixed,
+                  Fixed_Vel => Fixed,
+                  Cap       => Cap,
                   Reachable =>
                     (if Conservative
-                     then Reachable_Velocity (Fixed, Evals (I).Max_Vel, Split_Windows (I).Distance, Evals (I).Limits)
-                     else Reachable (Evals (I), Fixed, Forward)));
+                     then
+                       Reachable_Velocity
+                         (Fixed,
+                          Velocity'Min (Evals (I).Max_Vel, Raised_Reach_Cap (Cap)),
+                          Split_Windows (I).Distance,
+                          Evals (I).Limits,
+                          Reach_Search_Tolerance)
+                     else Reachable (Evals (I), Fixed, Forward, Cap)));
             end if;
-            return Memo.Reachable;
+            return Velocity'Min (Cap, Memo.Reachable);
          end Reach;
       begin
          Accepted := False;
@@ -256,10 +264,10 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
                Previous : constant array (1 .. 2) of Velocity := [Speeds (1), Speeds (2)];
             begin
                for I in 1 .. 2 loop
-                  Speeds (I) := Velocity'Min (Speeds (I), Reach (I, Speeds (I - 1), Forward => True));
+                  Speeds (I) := Reach (I, Speeds (I - 1), Forward => True, Cap => Speeds (I));
                end loop;
                for I in reverse 2 .. 3 loop
-                  Speeds (I - 1) := Velocity'Min (Speeds (I - 1), Reach (I, Speeds (I), Forward => False));
+                  Speeds (I - 1) := Reach (I, Speeds (I), Forward => False, Cap => Speeds (I - 1));
                end loop;
                --  A sweep depends only on Speeds, so once one leaves them unchanged every later sweep would too.
                exit when Identical (Speeds (1), Previous (1)) and then Identical (Speeds (2), Previous (2));

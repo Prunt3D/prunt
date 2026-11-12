@@ -346,6 +346,34 @@ package body Prunt.Motion_Planner is
             return;
          end if;
 
+         if Degree > 1
+           and then Dimensionless'Machine_Radix = 2
+           and then Dimensionless'Machine_Mantissa <= 53
+           and then Dimensionless'Machine_Emax >= 1024
+           and then Safety in 2.0**(-8) .. 2.0**8
+           and then Numerator in 2.0**(-300) .. 2.0**300
+           and then Denominator in 2.0**(-300) .. 2.0**300
+           and then Result in 2.0**(-100) * mm / s .. 2.0**100 * mm / s
+         then
+            --  The ceiling Safety * (Numerator / Denominator)**(1 / Degree) leaves Result alone exactly when
+            --  Numerator >= Denominator * (Result / Safety)**Degree. The ranges above keep that power and product
+            --  normal, so they are correct to a dozen units in the last place, and the root below to a few. A
+            --  numerator beyond the product by 2**-40 therefore has a computed ceiling above Result, which taking
+            --  the minimum would discard. Most ceilings are that far from binding and need no root at all.
+            declare
+               pragma Suppress (Overflow_Check);
+               Speed : constant Dimensionless := (Result / (mm / s)) / Safety;
+               Power : Dimensionless := Speed;
+            begin
+               for Factor in 2 .. Degree loop
+                  Power := Power * Speed;
+               end loop;
+               if Numerator > Denominator * Power * (1.0 + 2.0**(-40)) then
+                  return;
+               end if;
+            end;
+         end if;
+
          Root := Nth_Root_Ratio (Numerator, Denominator, Degree);
          if Safety <= 1.0 or else Root <= Dimensionless'Last / Safety then
             Candidate := Safety * Root;
@@ -424,8 +452,12 @@ package body Prunt.Motion_Planner is
       type Dimensionless_Array is array (Positive range <>) of Dimensionless;
 
       Root_Settling_Attempts : constant Positive := 12;
-      --  How many steps below a closed-form root may be tried before bisecting instead. The steps quadruple from
+      --  How many steps below a computed root may be tried before bisecting instead. The steps quadruple from
       --  one part in 2**52, so together they reach far beyond any rounding of the root.
+
+      Maximum_Newton_Steps : constant Positive := 64;
+      --  Each step from far above the root of a quartic still removes a quarter of the distance to zero, and the
+      --  starting bounds below leave little of that, so this is only a guard.
 
       Zero : constant Scaled_Nonnegative := (Fraction => 0.0, Exponent => 0);
       One  : constant Scaled_Nonnegative :=
@@ -459,6 +491,21 @@ package body Prunt.Motion_Planner is
       function Scaled_Square_Root (Value : Scaled_Nonnegative) return Scaled_Nonnegative;
       function Scaled_Ratio (Numerator, Denominator : Scaled_Nonnegative) return Dimensionless;
       function Positive_Quadratic_Scale (Remainder, Linear, Quadratic : Scaled_Nonnegative) return Dimensionless;
+
+      procedure Newton_Root (C1, C2, C3, C4, Remainder, Start, Floor : Dimensionless; Estimate : out Dimensionless);
+      --  Estimate the largest scale at which the budget polynomial C1 * s + C2 * s**2 + C3 * s**3 + C4 * s**4 still
+      --  fits a positive Remainder, given that it does not fit at Start. The coefficients are nonnegative, so the
+      --  polynomial is increasing and convex, and Newton's method from above its root decreases onto the root.
+      --  Each positive monomial alone also bounds the root from above, which gives a start near it.
+      --
+      --  The estimate carries no certificate: the caller accepts only a scale at which it evaluates the budget to
+      --  fit. Iteration stops at the first scale which fits by the same Horner evaluation as the callers use, at a
+      --  step which no longer decreases, or below Floor, where the caller's plain evaluation is not valid.
+      --
+      --  Only sums, products, quotients, comparisons and square roots of quotients of the inputs are formed.
+      --  While every one of them stays normal, multiplying all coefficients and Remainder by one power of two
+      --  therefore changes nothing: the two callers, one with plain coefficients and one with the same
+      --  coefficients normalized to a common exponent, obtain the same estimate bit for bit.
 
       procedure Apply_Linear_Constraint (Maximum, Fixed, Linear : Scaled_Nonnegative);
       procedure Apply_Quadratic_Constraint (Maximum, Fixed, Linear, Quadratic : Scaled_Nonnegative);
@@ -658,6 +705,35 @@ package body Prunt.Motion_Planner is
          end;
       end Positive_Quadratic_Scale;
 
+      procedure Newton_Root (C1, C2, C3, C4, Remainder, Start, Floor : Dimensionless; Estimate : out Dimensionless) is
+         pragma Suppress (Overflow_Check);
+         --  Both callers bound every operand so that no finite intermediate can overflow; see them for the ranges.
+         S                    : Dimensionless := Start;
+         Value, Slope, Next_S : Dimensionless;
+      begin
+         if C1 > 0.0 and then C1 * S > Remainder then
+            S := Remainder / C1;
+         end if;
+         if C2 > 0.0 and then C2 * S * S > Remainder then
+            S := Dimensionless_Math.Sqrt (Remainder / C2);
+         end if;
+         if C4 > 0.0 and then C4 * S * S * S * S > Remainder then
+            S := Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (Remainder / C4));
+         end if;
+         for Step in 1 .. Maximum_Newton_Steps loop
+            exit when not (S >= Floor);
+            --  The same operations as the callers' evaluation, whose first step adds C4 to an exact zero.
+            Value := (((C4 * S + C3) * S + C2) * S + C1) * S;
+            exit when Value <= Remainder;
+            Slope := ((4.0 * C4 * S + 3.0 * C3) * S + 2.0 * C2) * S + C1;
+            --  Every term of S * Slope is at least the matching term of Value, so this step is at most S.
+            Next_S := S - (Value - Remainder) / Slope;
+            exit when not (Next_S < S);
+            S := Next_S;
+         end loop;
+         Estimate := S;
+      end Newton_Root;
+
       procedure Apply_Linear_Constraint (Maximum, Fixed, Linear : Scaled_Nonnegative) is
       begin
          if Scaled_Less_Than (Maximum, Fixed) then
@@ -692,7 +768,11 @@ package body Prunt.Motion_Planner is
          procedure Normalize_Coefficients is
             Common_Exponent : Integer := Remainder.Exponent;
          begin
-            if Terms'Length > 4 or else Dimensionless'Machine_Radix /= 2 or else Dimensionless'Model_Emin > -704 then
+            if Terms'First /= 1
+              or else Terms'Length > 4
+              or else Dimensionless'Machine_Radix /= 2
+              or else Dimensionless'Model_Emin > -704
+            then
                return;
             end if;
             for Term of Terms loop
@@ -784,9 +864,36 @@ package body Prunt.Motion_Planner is
             end if;
          end;
 
-         --  The cubic snap and quartic crackle budgets, and any root that would not settle, are bisected.
-         --  Each positive monomial bounds the root from above. Establish its magnitude before bisection,
-         --  including when the feasible scale is hundreds of decades below one.
+         --  The cubic snap and quartic crackle budgets, and any root that would not settle, are found by Newton's
+         --  method where the coefficients can share one exponent. Normalized, they and every intermediate of
+         --  Newton_Root are normal for scales from 2**-144, as for the evaluation in Fits. The estimate is then
+         --  settled like a closed-form root: the first evaluated fit at or just below it is the certificate.
+         Normalize_Coefficients;
+         if Use_Normalized then
+            declare
+               Padded   : array (1 .. 4) of Dimensionless := [others => 0.0];
+               Estimate : Dimensionless;
+               Step     : Dimensionless := Dimensionless'Model_Epsilon;
+            begin
+               for I in Terms'Range loop
+                  Padded (I) := Normalized_Terms (I);
+               end loop;
+               Newton_Root
+                 (Padded (1), Padded (2), Padded (3), Padded (4), Normalized_Remainder, Upper, 2.0**(-144), Estimate);
+               for Attempt in 1 .. Root_Settling_Attempts loop
+                  exit when not (Estimate >= 2.0**(-144));
+                  if Fits (Estimate) then
+                     Limit_Scale := Estimate;
+                     return;
+                  end if;
+                  Estimate := Estimate * (1.0 - Step);
+                  Step := 4.0 * Step;
+               end loop;
+            end;
+         end if;
+
+         --  Otherwise bisect. Each positive monomial bounds the root from above. Establish its magnitude before
+         --  bisection, including when the feasible scale is hundreds of decades below one.
          for I in Terms'Range loop
             if Terms (I).Fraction > 0.0 then
                declare
@@ -808,8 +915,7 @@ package body Prunt.Motion_Planner is
             Limit_Scale := Upper;
             return;
          end if;
-         --  Only repeated bisection needs this cache. Extreme exponent spreads retain scaled arithmetic.
-         Normalize_Coefficients;
+         --  Extreme exponent spreads retain scaled arithmetic here.
          for Iteration in 1 .. 16 loop
             declare
                Mid : constant Dimensionless := Lower + 0.5 * (Upper - Lower);
@@ -865,9 +971,13 @@ package body Prunt.Motion_Planner is
          Step      : Dimensionless := Dimensionless'Model_Epsilon;
 
          function Fits (Scale : Dimensionless) return Boolean;
+         function Shares_Exponent return Boolean;
+         --  Whether Apply_Time_Constraint would normalize these coefficients: the binary exponents of the remainder
+         --  and of the positive terms span at most 128.
          procedure Fallback;
-         procedure Bisect;
-         --  Bound the scale by each monomial and bisect below that, as Apply_Time_Constraint does.
+         procedure Search;
+         --  Find the root by Newton's method, or else bound the scale by each monomial and bisect below that,
+         --  each exactly as Apply_Time_Constraint does.
 
          function Fits (Scale : Dimensionless) return Boolean is
             Sum : Dimensionless := 0.0;
@@ -887,10 +997,70 @@ package body Prunt.Motion_Planner is
             Apply_Time_Constraint (To_Scaled (Maximum), To_Scaled (Fixed), Scaled_Terms);
          end Fallback;
 
-         procedure Bisect is
+         function Shares_Exponent return Boolean is
+            type Bits is mod 2**64;
+            function To_Bits is new Ada.Unchecked_Conversion (Dimensionless, Bits);
+            --  Every value here is positive and normal, so the exponent field orders like 'Exponent and differs
+            --  from it by a constant.
+            Use_Fields : constant Boolean := Dimensionless'Size = 64 and then Dimensionless'Machine_Mantissa = 53;
+
+            function Binary_Exponent (Value : Dimensionless) return Integer
+            is (if Use_Fields then Integer (To_Bits (Value) / 2**52) else Dimensionless'Exponent (Value));
+
+            Low  : Integer := Binary_Exponent (Remainder);
+            High : Integer := Low;
+         begin
+            if Terms'Length > 4 or else Dimensionless'Model_Emin > -704 then
+               return False;
+            end if;
+            for Term of Terms loop
+               if Term > 0.0 then
+                  Low := Integer'Min (Low, Binary_Exponent (Term));
+                  High := Integer'Max (High, Binary_Exponent (Term));
+               end if;
+            end loop;
+            return High - Low <= 128;
+         end Shares_Exponent;
+
+         procedure Search is
             Lower : Dimensionless := 0.0;
             Upper : Dimensionless := Limit_Scale;
          begin
+            if Shares_Exponent then
+               --  Positive terms are in [2**-320, 2**325] and a positive remainder in [2**-117, 2**64], and the
+               --  search stays at scales from 2**-128. Every Horner step of the value and of its slope is then
+               --  normal, the quotients of the remainder by a term are within [2**-442, 2**384], and the Newton
+               --  step is a normal number no greater than the scale or an exact zero.
+               declare
+                  Padded        : array (1 .. 4) of Dimensionless := [others => 0.0];
+                  Root_Estimate : Dimensionless;
+                  Settling_Step : Dimensionless := Dimensionless'Model_Epsilon;
+               begin
+                  for I in Terms'Range loop
+                     Padded (I) := Terms (I);
+                  end loop;
+                  Newton_Root
+                    (Padded (1),
+                     Padded (2),
+                     Padded (3),
+                     Padded (4),
+                     Remainder,
+                     Limit_Scale,
+                     2.0**(-128),
+                     Root_Estimate);
+                  for Attempt in 1 .. Root_Settling_Attempts loop
+                     if not (Root_Estimate >= 2.0**(-128)) then
+                        Fallback;
+                        return;
+                     elsif Fits (Root_Estimate) then
+                        Limit_Scale := Root_Estimate;
+                        return;
+                     end if;
+                     Root_Estimate := Root_Estimate * (1.0 - Settling_Step);
+                     Settling_Step := 4.0 * Settling_Step;
+                  end loop;
+               end;
+            end if;
             for I in Terms'Range loop
                if Terms (I) > 0.0 then
                   Upper := Dimensionless'Min (Upper, Nth_Root_Ratio (Remainder, Terms (I), I));
@@ -915,7 +1085,7 @@ package body Prunt.Motion_Planner is
                end;
             end loop;
             Limit_Scale := Lower;
-         end Bisect;
+         end Search;
       begin
          --  Apply_Bounded_Time_Constraint has found that the budget holds a positive Limit_Scale and does not fit
          --  at it, or that the scale is too small to evaluate in plain arithmetic.
@@ -953,7 +1123,7 @@ package body Prunt.Motion_Planner is
                end if;
 
             when others =>
-               Bisect;
+               Search;
                return;
          end case;
 
@@ -969,7 +1139,7 @@ package body Prunt.Motion_Planner is
             Estimate := Estimate * (1.0 - Step);
             Step := 4.0 * Step;
          end loop;
-         Bisect;
+         Search;
       end Tighten_Bounded_Time_Constraint;
 
       Base_Acceleration_Raw                                         : Dimensionless := 1.0E100;
@@ -979,6 +1149,7 @@ package body Prunt.Motion_Planner is
       Scaled_Acceleration, Scaled_Jerk, Scaled_Snap, Scaled_Crackle : Scaled_Nonnegative;
       V                                                             : Scaled_Nonnegative;
       Dimensionless_Inputs                                          : Boolean;
+      Plain_Limit_Inputs                                            : Boolean;
       Scaled_Inputs_Filled                                          : Boolean := False;
       Positive_Finite_Max_Vel                                       : constant Boolean :=
         Max_Vel > 0.0 * mm / s and then Max_Vel <= Velocity'Last;
@@ -1072,6 +1243,17 @@ package body Prunt.Motion_Planner is
              Dimensionless_Array'
                [Base_Acceleration_Raw, Base_Jerk_Raw, Base_Snap_Raw, Base_Crackle_Raw, Result.Max_Vel / (mm / s)] =>
              Value = 0.0 or else Value in 2.0**(-64) .. 2.0**64);
+      Plain_Limit_Inputs :=
+        not Time_Scaling
+        and then Dimensionless'Machine_Radix = 2
+        and then Dimensionless'Machine_Mantissa <= 53
+        and then Dimensionless'Model_Emin <= -1021
+        and then Dimensionless'Machine_Emax >= 1024
+        and then
+          (for all Value of
+             Dimensionless_Array'
+               [Base_Acceleration_Raw, Base_Jerk_Raw, Base_Snap_Raw, Base_Crackle_Raw, Result.Max_Vel / (mm / s)] =>
+             Value = 0.0 or else Value in 2.0**(-64) .. 2.0**64);
 
       if not Time_Scaling
         and then Dimensionless'Machine_Radix = 2
@@ -1146,49 +1328,99 @@ package body Prunt.Motion_Planner is
 
       for A in Axis_Name loop
          if not Cache.Axes_Filled (A) then
-            --  Decompose on first use, so a nonfinite bound or limit is still only rejected once a solve reaches
-            --  its axis.
-            Cache.Axes (A) :=
-              (X1                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Velocity (A))),
-               X2                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Acceleration (A) / (1.0 / mm))),
-               X3                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm**2))),
-               X4                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm**3))),
-               X5                   => To_Scaled (Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm**4))),
-               Acceleration_Maximum => To_Scaled (Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s**2))),
-               Jerk_Maximum         => To_Scaled (Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s**3))),
-               Snap_Maximum         => To_Scaled (Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s**4))),
-               Crackle_Maximum      => To_Scaled (Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s**5))));
-            Cache.Axes_Filled (A) := True;
+            --  Check on first use, so a nonfinite bound or limit is still only rejected once a solve reaches its
+            --  axis.
             declare
-               Coefficients : Mixed_Derivative_Axis_Coefficients renames Cache.Axes (A);
+               Plain  : constant Mixed_Derivative_Plain_Coefficients :=
+                 (X1                   => Dimensionless'Max (0.0, Bounds.Velocity (A)),
+                  X2                   => Dimensionless'Max (0.0, Bounds.Acceleration (A) / (1.0 / mm)),
+                  X3                   => Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm**2)),
+                  X4                   => Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm**3)),
+                  X5                   => Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm**4)),
+                  Acceleration_Maximum =>
+                    Dimensionless'Max (0.0, Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s**2))),
+                  Jerk_Maximum         =>
+                    Dimensionless'Max (0.0, Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s**3))),
+                  Snap_Maximum         =>
+                    Dimensionless'Max (0.0, Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s**4))),
+                  Crackle_Maximum      =>
+                    Dimensionless'Max (0.0, Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s**5))));
+               Values : constant Dimensionless_Array :=
+                 [Plain.X1,
+                  Plain.X2,
+                  Plain.X3,
+                  Plain.X4,
+                  Plain.X5,
+                  Plain.Acceleration_Maximum,
+                  Plain.Jerk_Maximum,
+                  Plain.Snap_Maximum,
+                  Plain.Crackle_Maximum];
             begin
+               --  Exactly the values which To_Scaled rejects, without decomposing any of them. The limits are
+               --  tested as given, since a maximum need not propagate a NaN.
+               if (for some Value of
+                     Dimensionless_Array'
+                       [Plain.X1,
+                        Plain.X2,
+                        Plain.X3,
+                        Plain.X4,
+                        Plain.X5,
+                        Dimensionless (Params.Axial_Acceleration_Maxes (A) / (mm / s**2)),
+                        Dimensionless (Params.Axial_Jerk_Maxes (A) / (mm / s**3)),
+                        Dimensionless (Params.Axial_Snap_Maxes (A) / (mm / s**4)),
+                        Dimensionless (Params.Axial_Crackle_Maxes (A) / (mm / s**5))] =>
+                     not (Value <= 0.0) and then not (Value <= Dimensionless'Last))
+               then
+                  raise Constraint_Error with "Nonfinite derivative-limit coefficient.";
+               end if;
+               Cache.Plain_Axes (A) := Plain;
                Cache.Dimensionless_Axes (A) :=
                  Time_Scaling
                  and then Dimensionless'Machine_Radix = 2
                  and then
-                   (for all Value of
-                      Scaled_Nonnegative_Array'
-                        [Coefficients.X1,
-                         Coefficients.X2,
-                         Coefficients.X3,
-                         Coefficients.X4,
-                         Coefficients.X5,
-                         Coefficients.Acceleration_Maximum,
-                         Coefficients.Jerk_Maximum,
-                         Coefficients.Snap_Maximum,
-                         Coefficients.Crackle_Maximum] =>
-                      Value.Fraction = 0.0 or else Value.Exponent in -63 .. 64);
+                   (for all Value of Values => Value = 0.0 or else (Value >= 2.0**(-64) and then Value < 2.0**64));
+               Cache.Plain_Limit_Axes (A) :=
+                 not Time_Scaling
+                 and then Dimensionless'Machine_Radix = 2
+                 and then
+                   (for all Value of Values => Value = 0.0 or else (Value >= 2.0**(-64) and then Value < 2.0**64));
+               Cache.Still_Axes (A) :=
+                 Plain.X1 = 0.0
+                 and then Plain.X2 = 0.0
+                 and then Plain.X3 = 0.0
+                 and then Plain.X4 = 0.0
+                 and then Plain.X5 = 0.0;
+               Cache.Tangent_Only_Axes (A) :=
+                 Plain.X2 = 0.0 and then Plain.X3 = 0.0 and then Plain.X4 = 0.0 and then Plain.X5 = 0.0;
+               Cache.Axes_Filled (A) := True;
             end;
          end if;
 
-         if Dimensionless_Inputs and then Cache.Dimensionless_Axes (A) then
+         if Cache.Still_Axes (A) then
+            --  Every budget of this axis has a zero fixed term and zero coefficients against a nonnegative limit,
+            --  so each fits at any scale and neither solve below would change anything.
+            null;
+         elsif Dimensionless_Inputs and then Cache.Dimensionless_Axes (A) and then Cache.Tangent_Only_Axes (A) then
             declare
                pragma Suppress (Overflow_Check);
-               X1           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Velocity (A));
-               X2           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Acceleration (A) / (1.0 / mm));
-               X3           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Jerk (A) / (1.0 / mm**2));
-               X4           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Snap (A) / (1.0 / mm**3));
-               X5           : constant Dimensionless := Dimensionless'Max (0.0, Bounds.Crackle (A) / (1.0 / mm**4));
+               Plain : Mixed_Derivative_Plain_Coefficients renames Cache.Plain_Axes (A);
+            begin
+               --  The general budgets below with their zero products written as the exact zeros they are.
+               Apply_Bounded_Time_Constraint (Plain.Acceleration_Maximum, 0.0, [Plain.X1 * Base_Acceleration_Raw]);
+               Apply_Bounded_Time_Constraint (Plain.Jerk_Maximum, 0.0, [0.0, Plain.X1 * Base_Jerk_Raw]);
+               Apply_Bounded_Time_Constraint (Plain.Snap_Maximum, 0.0, [0.0, 0.0, Plain.X1 * Base_Snap_Raw]);
+               Apply_Bounded_Time_Constraint
+                 (Plain.Crackle_Maximum, 0.0, [0.0, 0.0, 0.0, Plain.X1 * Base_Crackle_Raw]);
+            end;
+         elsif Dimensionless_Inputs and then Cache.Dimensionless_Axes (A) then
+            declare
+               pragma Suppress (Overflow_Check);
+               Plain        : Mixed_Derivative_Plain_Coefficients renames Cache.Plain_Axes (A);
+               X1           : constant Dimensionless := Plain.X1;
+               X2           : constant Dimensionless := Plain.X2;
+               X3           : constant Dimensionless := Plain.X3;
+               X4           : constant Dimensionless := Plain.X4;
+               X5           : constant Dimensionless := Plain.X5;
                Speed        : constant Dimensionless := Result.Max_Vel / (mm / s);
                Accel        : constant Dimensionless := Base_Acceleration_Raw;
                Jerk_Peak    : constant Dimensionless := Base_Jerk_Raw;
@@ -1196,29 +1428,124 @@ package body Prunt.Motion_Planner is
                Crackle_Peak : constant Dimensionless := Base_Crackle_Raw;
             begin
                --  Keep the same left-to-right multiplication and summation order as the scaled monomials.
+               Apply_Bounded_Time_Constraint (Plain.Acceleration_Maximum, X2 * Speed * Speed, [X1 * Accel]);
                Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Acceleration_Maxes (A) / (mm / s**2)),
-                  X2 * Speed * Speed,
-                  [X1 * Accel]);
+                 (Plain.Jerk_Maximum, X3 * Speed * Speed * Speed, [3.0 * X2 * Speed * Accel, X1 * Jerk_Peak]);
                Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Jerk_Maxes (A) / (mm / s**3)),
-                  X3 * Speed * Speed * Speed,
-                  [3.0 * X2 * Speed * Accel, X1 * Jerk_Peak]);
-               Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Snap_Maxes (A) / (mm / s**4)),
+                 (Plain.Snap_Maximum,
                   X4 * Speed * Speed * Speed * Speed,
                   [6.0 * X3 * Speed * Speed * Accel,
                    4.0 * X2 * Speed * Jerk_Peak + 3.0 * X2 * Accel * Accel,
                    X1 * Snap_Peak]);
                Apply_Bounded_Time_Constraint
-                 (Dimensionless'Max (0.0, Params.Axial_Crackle_Maxes (A) / (mm / s**5)),
+                 (Plain.Crackle_Maximum,
                   X5 * Speed * Speed * Speed * Speed * Speed,
                   [10.0 * X4 * Speed * Speed * Speed * Accel,
                    10.0 * X3 * Speed * Speed * Jerk_Peak + 15.0 * X3 * Speed * Accel * Accel,
                    5.0 * X2 * Speed * Snap_Peak + 10.0 * X2 * Accel * Jerk_Peak,
                    X1 * Crackle_Peak]);
             end;
+         elsif Plain_Limit_Inputs and then Cache.Plain_Limit_Axes (A) then
+            --  Every nonzero factor is in [2**-64, 2**64]. A budget term is a product of at most six of them and a
+            --  constant no greater than fifteen, and a budget sums at most four terms, so each nonzero fixed,
+            --  linear or quadratic coefficient is a normal number within [2**-384, 2**391]. A positive remainder of
+            --  a limit is at least 2**-116. The square of the linear coefficient and four times the product of the
+            --  quadratic one with the remainder are then normal and below 2**783, and every quotient taken is of
+            --  a smaller normal number by a larger one. Nothing can overflow or underflow, so the budgets are
+            --  evaluated in plain arithmetic, by the same operations in the same order as the scaled solve below.
+            declare
+               pragma Suppress (Overflow_Check);
+               Plain        : Mixed_Derivative_Plain_Coefficients renames Cache.Plain_Axes (A);
+               X1           : constant Dimensionless := Plain.X1;
+               X2           : constant Dimensionless := Plain.X2;
+               X3           : constant Dimensionless := Plain.X3;
+               X4           : constant Dimensionless := Plain.X4;
+               X5           : constant Dimensionless := Plain.X5;
+               Speed        : constant Dimensionless := Result.Max_Vel / (mm / s);
+               Accel        : constant Dimensionless := Base_Acceleration_Raw;
+               Jerk_Peak    : constant Dimensionless := Base_Jerk_Raw;
+               Snap_Peak    : constant Dimensionless := Base_Snap_Raw;
+               Crackle_Peak : constant Dimensionless := Base_Crackle_Raw;
+
+               function Ratio (Numerator, Denominator : Dimensionless) return Dimensionless
+               is (if Numerator = 0.0
+                   then 0.0
+                   elsif Denominator = 0.0 or else Numerator > Denominator
+                   then 1.0
+                   else Numerator / Denominator);
+               --  As Scaled_Ratio.
+
+               procedure Apply_Linear (Maximum, Fixed, Linear : Dimensionless);
+               procedure Apply_Quadratic (Maximum, Fixed, Linear, Quadratic : Dimensionless);
+               --  As Apply_Linear_Constraint and Apply_Quadratic_Constraint.
+
+               procedure Apply_Linear (Maximum, Fixed, Linear : Dimensionless) is
+               begin
+                  if Maximum < Fixed then
+                     Result.Valid := False;
+                  elsif Linear /= 0.0 then
+                     Limit_Scale := Dimensionless'Min (Limit_Scale, Ratio (Maximum - Fixed, Linear));
+                  end if;
+               end Apply_Linear;
+
+               procedure Apply_Quadratic (Maximum, Fixed, Linear, Quadratic : Dimensionless) is
+                  Remainder : constant Dimensionless := Maximum - Fixed;
+               begin
+                  if Maximum < Fixed then
+                     Result.Valid := False;
+                  elsif Remainder = 0.0 then
+                     if Linear /= 0.0 or else Quadratic /= 0.0 then
+                        Limit_Scale := Dimensionless'Min (Limit_Scale, 0.0);
+                     end if;
+                  elsif Linear + Quadratic <= Remainder then
+                     null;
+                  elsif Quadratic = 0.0 then
+                     Limit_Scale := Dimensionless'Min (Limit_Scale, Ratio (Remainder, Linear));
+                  else
+                     --  The cancellation-free conjugate root, as in Positive_Quadratic_Scale.
+                     Limit_Scale :=
+                       Dimensionless'Min
+                         (Limit_Scale,
+                          Ratio
+                            (2.0 * Remainder,
+                             Linear + Dimensionless_Math.Sqrt (Linear * Linear + 4.0 * (Quadratic * Remainder))));
+                  end if;
+               end Apply_Quadratic;
+            begin
+               Apply_Linear (Plain.Acceleration_Maximum, X2 * Speed * Speed, X1 * Accel);
+               Apply_Linear
+                 (Plain.Jerk_Maximum, X3 * Speed * Speed * Speed, 3.0 * X2 * Speed * Accel + X1 * Jerk_Peak);
+               Apply_Quadratic
+                 (Plain.Snap_Maximum,
+                  X4 * Speed * Speed * Speed * Speed,
+                  6.0 * X3 * Speed * Speed * Accel + 4.0 * X2 * Speed * Jerk_Peak + X1 * Snap_Peak,
+                  3.0 * X2 * Accel * Accel);
+               Apply_Quadratic
+                 (Plain.Crackle_Maximum,
+                  X5 * Speed * Speed * Speed * Speed * Speed,
+                  10.0 * X4 * Speed * Speed * Speed * Accel + 10.0 * X3 * Speed * Speed * Jerk_Peak
+                  + 5.0 * X2 * Speed * Snap_Peak
+                  + X1 * Crackle_Peak,
+                  15.0 * X3 * Speed * Accel * Accel + 10.0 * X2 * Accel * Jerk_Peak);
+            end;
          else
+            if not Cache.Axes_Decomposed (A) then
+               declare
+                  Plain : Mixed_Derivative_Plain_Coefficients renames Cache.Plain_Axes (A);
+               begin
+                  Cache.Axes (A) :=
+                    (X1                   => To_Scaled (Plain.X1),
+                     X2                   => To_Scaled (Plain.X2),
+                     X3                   => To_Scaled (Plain.X3),
+                     X4                   => To_Scaled (Plain.X4),
+                     X5                   => To_Scaled (Plain.X5),
+                     Acceleration_Maximum => To_Scaled (Plain.Acceleration_Maximum),
+                     Jerk_Maximum         => To_Scaled (Plain.Jerk_Maximum),
+                     Snap_Maximum         => To_Scaled (Plain.Snap_Maximum),
+                     Crackle_Maximum      => To_Scaled (Plain.Crackle_Maximum));
+                  Cache.Axes_Decomposed (A) := True;
+               end;
+            end if;
             if not Scaled_Inputs_Filled then
                --  Decompose the changing inputs only if an axis needs the full exponent range.
                Scaled_Acceleration := To_Scaled (Base_Acceleration_Raw);
@@ -1319,7 +1646,19 @@ package body Prunt.Motion_Planner is
       Safety       : Dimensionless := 0.999;
       Scalar_Maxes : Scalar_Derivative_Limits := (others => <>)) return Mixed_Derivative_Limit_Result
    is
-      Cache  : Mixed_Derivative_Cache;
+      Cache : Mixed_Derivative_Cache;
+   begin
+      return Mixed_Derivative_Limits (Params, Bounds, Max_Vel, Safety, Scalar_Maxes, Cache);
+   end Mixed_Derivative_Limits;
+
+   function Mixed_Derivative_Limits
+     (Params       : Kinematic_Parameters;
+      Bounds       : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel      : Velocity;
+      Safety       : Dimensionless;
+      Scalar_Maxes : Scalar_Derivative_Limits;
+      Cache        : in out Mixed_Derivative_Cache) return Mixed_Derivative_Limit_Result
+   is
       Result : Mixed_Derivative_Limit_Result;
       Scale  : Dimensionless;
    begin
@@ -1361,11 +1700,20 @@ package body Prunt.Motion_Planner is
       T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
       Vs : constant Velocity := Start_Vel;
-   begin
-      return
+
+      pragma Suppress (Overflow_Check);
+      --  Every operation below reaches the result through sums and products only, so one which overflows, or meets
+      --  a NaN, leaves the result an infinity or a NaN. Testing the result once therefore raises for exactly the
+      --  inputs for which a check on each operation would. Every ramp certificate evaluates this.
+      Result : constant Length :=
         (Vs + Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3 + T4) / 2.0)
         * (8.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4);
-      --  Symbolically equivalent to: return Distance_At_Time (Profile, Total_Time(Profile), Max_Crackle, Start_Vel);
+      --  Symbolically equivalent to: Distance_At_Time (Profile, Total_Time(Profile), Max_Crackle, Start_Vel);
+   begin
+      if not (abs Result <= Length'Last) then
+         raise Constraint_Error with "Unrepresentable ramp distance.";
+      end if;
+      return Result;
    end Fast_Distance_At_Max_Time;
 
    function Fast_Velocity_At_Max_Time
@@ -1377,9 +1725,16 @@ package body Prunt.Motion_Planner is
       T4 : constant Time := Profile (4);
       Cm : constant Crackle := Max_Crackle;
       Vs : constant Velocity := Start_Vel;
+
+      pragma Suppress (Overflow_Check);
+      --  As in Fast_Distance_At_Max_Time.
+      Result : constant Velocity := Vs + Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3 + T4);
+      --  Symbolically equivalent to: Velocity_At_Time (Profile, Total_Time(Profile), Max_Crackle, Start_Vel);
    begin
-      return Vs + Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3 + T4);
-      --  Symbolically equivalent to: return Velocity_At_Time (Profile, Total_Time(Profile), Max_Crackle, Start_Vel);
+      if not (abs Result <= Velocity'Last) then
+         raise Constraint_Error with "Unrepresentable ramp velocity.";
+      end if;
+      return Result;
    end Fast_Velocity_At_Max_Time;
 
    function Total_Time (Times : Feedrate_Profile_Times) return Time is
@@ -3169,9 +3524,15 @@ package body Prunt.Motion_Planner is
 
             function Highest_Peak is new Largest_Nonpositive (Excess);
 
+            Peak_Tolerance : constant Dimensionless := 2.0**(-40);
+            --  How closely the search brackets the highest peak, as a fraction of it. Lowering the peak trades ramp
+            --  time for coast time at that same speed, so the duration is stationary there and a peak this close
+            --  gives the same duration to well beyond the last digit. Settling the last machine number as well
+            --  took most of the evaluations of the search.
+
             --  The ramp distances grow with the peak, so the fastest profile has the highest peak whose ramps fit
-            --  in Distance. Whatever distance the last machine number of peak speed leaves over is coasted. The
-            --  ramps for the lowest peak are the direct ramp checked above, which fits.
+            --  in Distance. Whatever distance the peak found leaves over is coasted. The ramps for the lowest peak
+            --  are the direct ramp checked above, which fits.
             --
             --  Between equal speeds the two ramps mirror each other, so each covers half of Distance and the
             --  peak is the speed that one ramp gains over that half. That estimate only steers the search.
@@ -3181,13 +3542,14 @@ package body Prunt.Motion_Planner is
                else -1.0 * mm / s);
             Lower          : constant Velocity :=
               Highest_Peak
-                (Lower          => Velocity'Max (Start_Vel, End_Vel) / (mm / s),
-                 Upper          => Max_Vel / (mm / s),
-                 Lower_Residual => (Direct_Distance - Distance) / mm,
-                 Upper_Residual => (Accel_Distance + Decel_Distance - Distance) / mm,
-                 Guess          =>
+                (Lower              => Velocity'Max (Start_Vel, End_Vel) / (mm / s),
+                 Upper              => Max_Vel / (mm / s),
+                 Lower_Residual     => (Direct_Distance - Distance) / mm,
+                 Upper_Residual     => (Accel_Distance + Decel_Distance - Distance) / mm,
+                 Relative_Tolerance => Peak_Tolerance,
+                 Guess              =>
                    (if Symmetric_Gain >= 0.0 * mm / s then (Start_Vel + Symmetric_Gain) / (mm / s) else -1.0),
-                 Use_Model      => Symmetric_Gain < 0.0 * mm / s)
+                 Use_Model          => Symmetric_Gain < 0.0 * mm / s)
               * (mm / s);
          begin
             Set_Peak (Lower);

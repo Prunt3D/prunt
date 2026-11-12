@@ -2490,6 +2490,93 @@ package body Prunt.Motion_Planner.Test is
       Compare (2.0**64 * mm / s);
    end Test_Mixed_Derivative_Dimensionless_Path;
 
+   procedure Test_Mixed_Derivative_Plain_Limits (T : in out Trendy_Test.Operation'Class) is
+      Params          : Kinematic_Parameters;
+      Bounds          : Unit_Speed_Axial_Derivative_Bounds;
+      type Sample_State is mod 2**32;
+      State           : Sample_State := 29;
+      Reduced_Results : Natural := 0;
+
+      function Sample (Wide : Boolean) return Dimensionless;
+      procedure Compare (Speed : Velocity);
+
+      function Sample (Wide : Boolean) return Dimensionless is
+         type Exponent_Array is array (Natural range 0 .. 6) of Integer;
+         Edges    : constant Exponent_Array := [-65, -64, -63, 0, 63, 64, 65];
+         Exponent : Integer;
+      begin
+         State := State * 1_664_525 + 1_013_904_223;
+         if State mod 11 = 0 then
+            return 0.0;
+         end if;
+         Exponent := (if Wide then Edges (Natural (State mod 7)) else Integer (State mod 17) - 8);
+         return Dimensionless'Scaling (0.5 + Dimensionless ((State / 256) mod 1024) / 2048.0, Exponent);
+      end Sample;
+
+      procedure Compare (Speed : Velocity) is
+         Fast_Cache, Scaled_Cache : Mixed_Derivative_Cache;
+         Actual, Expected         : Mixed_Derivative_Limit_Result;
+      begin
+         --  At rest no fixed term can exceed its limit, so every axis is reached and fills its cache entry.
+         Actual := Mixed_Derivative_Limits (Params, Bounds, 0.0 * mm / s, 0.999, (others => <>), Fast_Cache);
+         T.Assert (Actual.Valid, "A path at rest has valid limits");
+         Scaled_Cache := Fast_Cache;
+         --  Exercise the scaled solve as an independent reference.
+         Scaled_Cache.Plain_Limit_Axes := [others => False];
+         for Iteration in 1 .. 3 loop
+            Actual :=
+              Mixed_Derivative_Limits
+                (Params, Bounds, Speed / Dimensionless (Iteration), 0.999, (others => <>), Fast_Cache);
+            Expected :=
+              Mixed_Derivative_Limits
+                (Params, Bounds, Speed / Dimensionless (Iteration), 0.999, (others => <>), Scaled_Cache);
+            T.Assert (Actual = Expected, "Plain and scaled limit solves must agree exactly");
+            if Actual.Valid
+              and then Actual.Limits.Acceleration_Max > 0.0 * mm / s**2
+              and then Actual.Limits.Acceleration_Max < 1.0E99 * mm / s**2
+            then
+               Reduced_Results := @ + 1;
+            end if;
+         end loop;
+      end Compare;
+   begin
+      T.Register;
+      Params.Axial_Velocity_Maxes := [others => 2.0**64 * mm / s];
+      for Case_Index in 1 .. 1000 loop
+         declare
+            Wide : constant Boolean := Case_Index mod 4 = 0;
+         begin
+            Params.Axial_Acceleration_Maxes := [others => Dimensionless'Max (2.0**(-64), Sample (Wide)) * mm / s**2];
+            Params.Axial_Jerk_Maxes := [others => Dimensionless'Max (2.0**(-64), Sample (Wide)) * mm / s**3];
+            Params.Axial_Snap_Maxes := [others => Dimensionless'Max (2.0**(-64), Sample (Wide)) * mm / s**4];
+            Params.Axial_Crackle_Maxes := [others => Dimensionless'Max (2.0**(-64), Sample (Wide)) * mm / s**5];
+            Bounds.Velocity := [for Axis in Axis_Name => Sample (Wide)];
+            Bounds.Acceleration := [for Axis in Axis_Name => Sample (Wide) / mm];
+            Bounds.Jerk := [for Axis in Axis_Name => Sample (Wide) / mm**2];
+            Bounds.Snap := [for Axis in Axis_Name => Sample (Wide) / mm**3];
+            Bounds.Crackle := [for Axis in Axis_Name => Sample (Wide) / mm**4];
+            Compare (Constant_Speed_Axial_Ceiling (Params, Bounds, 1.0 * mm / s, Safety => 0.25));
+            Compare (Constant_Speed_Axial_Ceiling (Params, Bounds, 1.0 * mm / s, Safety => 1.0));
+         end;
+      end loop;
+      T.Assert (Reduced_Results > 1000, "The comparison exercises limiting budgets, not just rejected speeds");
+
+      --  A remainder which cancels to nothing, and limits which are exactly exhausted.
+      Params.Axial_Acceleration_Maxes := [others => 1.0 * mm / s**2];
+      Params.Axial_Jerk_Maxes := [others => 1.0 * mm / s**3];
+      Params.Axial_Snap_Maxes := [others => 1.0 * mm / s**4];
+      Params.Axial_Crackle_Maxes := [others => 1.0 * mm / s**5];
+      Bounds :=
+        (Velocity     => [X_Axis => 1.0, others => 0.0],
+         Acceleration => [X_Axis => 1.0 / mm, others => 0.0 / mm],
+         Jerk         => [X_Axis => 1.0 / mm**2, others => 0.0 / mm**2],
+         Snap         => [X_Axis => 1.0 / mm**3, others => 0.0 / mm**3],
+         Crackle      => [X_Axis => 1.0 / mm**4, others => 0.0 / mm**4]);
+      Compare (Dimensionless'Adjacent (1.0, 0.0) * mm / s);
+      Compare (1.0 * mm / s);
+      Compare (0.5 * mm / s);
+   end Test_Mixed_Derivative_Plain_Limits;
+
    procedure Test_Mixed_Derivative_Normalization (T : in out Trendy_Test.Operation'Class) is
       function Limit_For (Factor : Dimensionless) return Dimensionless;
 
@@ -2760,6 +2847,7 @@ package body Prunt.Motion_Planner.Test is
          Test_Mixed_Derivative_Time_Scale'Access,
          Test_Mixed_Derivative_Time_Scale_Exponent_Range'Access,
          Test_Mixed_Derivative_Dimensionless_Path'Access,
+         Test_Mixed_Derivative_Plain_Limits'Access,
          Test_Mixed_Derivative_Normalization'Access,
          Test_Constant_Speed_Axial_Ceiling'Access,
          Test_Constant_Speed_Axial_Ceiling_Extreme_Ratios'Access,

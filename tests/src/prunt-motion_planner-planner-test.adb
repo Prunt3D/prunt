@@ -536,7 +536,7 @@ package body Prunt.Motion_Planner.Planner.Test is
         (Bound >= 4.0E-13 / mm,
          "Offset-sine bounds include error scaled to operands before catastrophic cancellation");
       T.Assert
-        (Reachable_Velocity (0.0 * mm / s, 299_792_458_000.0 * mm / s, 1.0 * mm, Limits) > 0.0 * mm / s,
+        (Reachable_Velocity (0.0 * mm / s, 299_792_458_000.0 * mm / s, 1.0 * mm, Limits, 0.0) > 0.0 * mm / s,
          "Reachability search finds a positive feasible speed across a very large absolute range");
    end Test_Projection_Cancellation_And_Reachability;
 

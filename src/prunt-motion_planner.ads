@@ -514,6 +514,17 @@ private
    type Mixed_Derivative_Axis_Coefficient_Array is array (Axis_Name) of Mixed_Derivative_Axis_Coefficients;
    type Mixed_Derivative_Axis_Flags is array (Axis_Name) of Boolean;
 
+   type Mixed_Derivative_Plain_Coefficients is record
+      X1, X2, X3, X4, X5   : Dimensionless := 0.0;
+      Acceleration_Maximum : Dimensionless := 0.0;
+      Jerk_Maximum         : Dimensionless := 0.0;
+      Snap_Maximum         : Dimensionless := 0.0;
+      Crackle_Maximum      : Dimensionless := 0.0;
+   end record;
+   --  The same bounds and limits for one axis as plain numbers, with negative values replaced by zero.
+
+   type Mixed_Derivative_Plain_Coefficient_Array is array (Axis_Name) of Mixed_Derivative_Plain_Coefficients;
+
    subtype Time_Squared is Dimensioned_Float with Dimension => (Symbol => "s²", Second => 2, others => 0);
 
    type Delta_V_Solver is record
@@ -544,15 +555,26 @@ private
 
    type Mixed_Derivative_Cache is record
       Axes               : Mixed_Derivative_Axis_Coefficient_Array;
+      Plain_Axes         : Mixed_Derivative_Plain_Coefficient_Array;
       Axes_Filled        : Mixed_Derivative_Axis_Flags := [others => False];
+      Axes_Decomposed    : Mixed_Derivative_Axis_Flags := [others => False];
       Dimensionless_Axes : Mixed_Derivative_Axis_Flags := [others => False];
+      Plain_Limit_Axes   : Mixed_Derivative_Axis_Flags := [others => False];
+      Still_Axes         : Mixed_Derivative_Axis_Flags := [others => False];
+      Tangent_Only_Axes  : Mixed_Derivative_Axis_Flags := [others => False];
       Velocity_Ceiling   : Velocity := 0.0 * mm / s;
       Ceiling_Filled     : Boolean := False;
       Ceiling_Usable     : Boolean := False;
    end record;
    --  Values that depend only on the kinematic parameters and path bounds, filled as a solve first needs them.
    --  A cache must only be reused with identical parameters and bounds, such as across a search over one window.
-   --  Dimensionless_Axes marks coefficients whose nonzero values are in [2**-64, 2**64).
+   --
+   --  Plain_Axes and the flags are valid for an axis once it is Axes_Filled, which also records that its values
+   --  were checked to be finite. Axes holds the same values decomposed for the extended-exponent arithmetic, and
+   --  is valid once Axes_Decomposed: only a solve which needs that arithmetic for the axis pays for it.
+   --  Dimensionless_Axes marks coefficients whose nonzero values are in [2**-64, 2**64), for a time-scaling solve,
+   --  and Plain_Limit_Axes the same for a limit solve. A still axis has no nonzero path bound, so none of its
+   --  budgets can bind, and a tangent-only axis has only the velocity bound.
 
    function Mixed_Derivative_Time_Scale
      (Params  : Kinematic_Parameters;
@@ -561,6 +583,16 @@ private
       Peaks   : Scalar_Derivative_Limits;
       Cache   : in out Mixed_Derivative_Cache) return Dimensionless;
    --  Identical to the uncached form, but reuses decompositions across calls for the same Params and Bounds.
+
+   function Mixed_Derivative_Limits
+     (Params       : Kinematic_Parameters;
+      Bounds       : Unit_Speed_Axial_Derivative_Bounds;
+      Max_Vel      : Velocity;
+      Safety       : Dimensionless;
+      Scalar_Maxes : Scalar_Derivative_Limits;
+      Cache        : in out Mixed_Derivative_Cache) return Mixed_Derivative_Limit_Result;
+   --  Identical to the uncached form, with the same cache rules. A cache serves either this solve or the time
+   --  scale, not both.
 
    function Profile_Is_Valid
      (Profile : Feedrate_Profile; Distance : Length; Start_Vel, End_Vel : Velocity; Max_Crackle : Crackle)
