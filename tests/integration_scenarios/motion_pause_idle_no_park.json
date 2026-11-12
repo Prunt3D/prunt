@@ -1,0 +1,32 @@
+{
+  "description": "Pause and resume a machine which has finished its motion, with the default no-park setting, so neither the pause plan nor the resume plan queues a command. The pause and resume actions must notice the step generator's state change within their timeouts, which are shorter than the harness's long empty-queue wait.",
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "submit_gcode", "command": "G21" },
+    { "kind": "submit_gcode", "command": "G90" },
+    { "kind": "submit_gcode", "command": "G1 X20 F600" },
+    { "kind": "wait_for_motion", "timeout_s": 60.0 },
+    { "kind": "wait_idle", "timeout_s": 20.0 },
+    { "kind": "pause", "timeout_s": 8.0 },
+    { "kind": "resume", "timeout_s": 8.0 },
+    { "kind": "wait_idle", "timeout_s": 20.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 20.0, "Y": 0.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1,
+    "event_counts": { "pause": 4 },
+    "events": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ],
+    "event_order": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" }
+    ]
+  }
+}

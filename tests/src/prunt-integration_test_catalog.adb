@@ -81,6 +81,8 @@ package body Prunt.Integration_Test_Catalog is
        To_Unbounded_String ("integration_scenarios/motion_bad_direct_commands.json")),
       (To_Unbounded_String ("integration.motion_pause_no_park"),
        To_Unbounded_String ("integration_scenarios/motion_pause_no_park.json")),
+      (To_Unbounded_String ("integration.motion_pause_idle_no_park"),
+       To_Unbounded_String ("integration_scenarios/motion_pause_idle_no_park.json")),
       (To_Unbounded_String ("integration.motion_pause_relative_park"),
        To_Unbounded_String ("integration_scenarios/motion_pause_relative_park.json")),
       (To_Unbounded_String ("integration.motion_pause_relative_lower_error"),

@@ -1265,22 +1265,32 @@ package body Prunt.Integration_Test_Harness is
          Run_Cancel_At (Long_Float'(Action.Get ("time_s").Get), Cancel);
       elsif Kind = "pause" then
          declare
-            Deadline          : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (20.0));
+            Timeout           : Long_Float := 20.0;
             Wait_Until_Paused : Boolean := True;
          begin
             if Action.Has_Field ("wait_until_paused") then
                Wait_Until_Paused := Action.Get ("wait_until_paused").Get;
+            end if;
+            if Action.Has_Field ("timeout_s") then
+               Timeout := Action.Get ("timeout_s").Get;
             end if;
 
             Log_Event ("pause", "pause_requested");
             Controller_Instance.Pause_Stepgen;
 
             if Wait_Until_Paused then
-               while not Controller_Instance.Stepgen_Paused loop
-                  Advance_By (0.01, Long_Empty_Wait_Limit);
-                  delay 0.001;
-                  Assert (Ada.Calendar.Clock < Deadline, "Timed out waiting for pause.");
-               end loop;
+               declare
+                  Deadline : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (Timeout));
+               begin
+                  --  Keep the short empty-queue limit so the state is checked again whenever the queue stays empty.
+                  --  The step generator can pause with nothing left to run, for example when idle with no park move,
+                  --  and Long_Empty_Wait_Limit would spend at least 10 s waiting for commands that never come.
+                  while not Controller_Instance.Stepgen_Paused loop
+                     Advance_By (0.01);
+                     delay 0.001;
+                     Assert (Ada.Calendar.Clock < Deadline, "Timed out waiting for pause.");
+                  end loop;
+               end;
 
                Log_Event ("pause", "paused");
             end if;
@@ -1309,16 +1319,27 @@ package body Prunt.Integration_Test_Harness is
          end;
       elsif Kind = "resume" then
          declare
-            Deadline : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (20.0));
+            Timeout : Long_Float := 20.0;
          begin
+            if Action.Has_Field ("timeout_s") then
+               Timeout := Action.Get ("timeout_s").Get;
+            end if;
+
             Log_Event ("pause", "resume_requested");
             Controller_Instance.Resume_Stepgen;
 
-            while Controller_Instance.Stepgen_Paused loop
-               Advance_By (0.01, Long_Empty_Wait_Limit);
-               delay 0.001;
-               Assert (Ada.Calendar.Clock < Deadline, "Timed out waiting for resume.");
-            end loop;
+            declare
+               Deadline : constant Ada.Calendar.Time := Ada.Calendar."+" (Ada.Calendar.Clock, Duration (Timeout));
+            begin
+               --  As for pause. The step generator clears its paused state only after queueing the resume plan's last
+               --  command. When no motion follows the resume, a step can run out of commands before it reaches its
+               --  target time, and waiting for more would outlast the deadline.
+               while Controller_Instance.Stepgen_Paused loop
+                  Advance_By (0.01);
+                  delay 0.001;
+                  Assert (Ada.Calendar.Clock < Deadline, "Timed out waiting for resume.");
+               end loop;
+            end;
 
             Log_Event ("pause", "resumed");
          end;
