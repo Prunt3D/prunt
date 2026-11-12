@@ -1,0 +1,38 @@
+{
+  "description": "Pause and resume a G-code file while the G-code processor is waiting for space in the planner's full input queue, then cancel it. The file and real-time delay are as in cancel_with_full_planner_queue, so the processor is waiting to enqueue a G1 move while the step generator runs the motion module's pause and resume handlers during the first move. The pause cycle must finish, motion must continue after resuming (the pause slew stops at about X15, so reaching X20 needs the resumed motion), and the cancellation must finish within the first move. The cancellation waits until the resume slew has finished, because the step generator does not start a pause slew while resuming.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "wait_idle", "timeout_s": 5.0 },
+    {
+      "kind": "submit_gcode_file",
+      "commands": [
+        "G1 X100 F600", "M400", "G1 X0 F600", "M400",
+        "G1 X100 F600", "M400", "G1 X0 F600", "M400",
+        "G1 X100 F600", "M400", "G1 X0 F600", "M400"
+      ],
+      "repeated_commands": ["G1 X1 F600", "G1 X0.5 F600"],
+      "repeat_count": 1000
+    },
+    { "kind": "real_time_delay", "duration_s": 2.0 },
+    { "kind": "pause" },
+    { "kind": "advance_by_s", "duration_s": 0.5 },
+    { "kind": "resume" },
+    { "kind": "advance_by_s", "duration_s": 3.0 },
+    { "kind": "cancel_at_s", "time_s": 0.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 }
+  ],
+  "expect": {
+    "sample_position_reaches": { "X": 20.0 },
+    "max_sample_position": { "X": 90.0 },
+    "event_counts": { "pause": 4, "cancel": 2 },
+    "event_order": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" },
+      { "kind": "cancel", "label": "cancel_requested" },
+      { "kind": "cancel", "label": "cancel_completed" }
+    ]
+  }
+}

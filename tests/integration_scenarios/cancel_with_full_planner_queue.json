@@ -1,0 +1,33 @@
+{
+  "description": "Cancel a G-code file while the G-code processor is waiting for space in the planner's full input queue. The file starts with six stopped blocks, which fill the planner's block ring, followed by plain moves that fill the input queue. The real-time delay lets the processor fill both queues while the machine is stalled on its hardware queue, so the processor is waiting to enqueue a G1 move when the cancellation pauses the step generator during the first move. Cancellation must finish within the first move and the controller must accept new G-code afterwards.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "wait_idle", "timeout_s": 5.0 },
+    {
+      "kind": "submit_gcode_file",
+      "commands": [
+        "G1 X100 F600", "M400", "G1 X0 F600", "M400",
+        "G1 X100 F600", "M400", "G1 X0 F600", "M400",
+        "G1 X100 F600", "M400", "G1 X0 F600", "M400"
+      ],
+      "repeated_commands": ["G1 X1 F600", "G1 X0.5 F600"],
+      "repeat_count": 1000
+    },
+    { "kind": "real_time_delay", "duration_s": 2.0 },
+    { "kind": "cancel_at_s", "time_s": 0.0 },
+    { "kind": "submit_gcode", "command": "G1 Y5 F600" },
+    { "kind": "wait_idle", "timeout_s": 10.0 }
+  ],
+  "expect": {
+    "final_position": { "Y": 5.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "max_sample_position": { "X": 90.0 },
+    "event_counts": { "cancel": 2 },
+    "event_order": [
+      { "kind": "cancel", "label": "cancel_requested" },
+      { "kind": "cancel", "label": "cancel_completed" },
+      { "kind": "gcode", "label": "submit_gcode", "value": "G1 Y5 F600" }
+    ]
+  }
+}

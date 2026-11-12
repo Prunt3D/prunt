@@ -360,6 +360,16 @@ package body Prunt.Motion_Planner.Planner is
       Runner.Reset_Do_Not_Call_From_Other_Packages;
    end Reset;
 
+   procedure Wait_For_Input_Space is
+   begin
+      My_Preprocessor.Wait_For_Input_Space;
+   end Wait_For_Input_Space;
+
+   procedure Discard_Input is
+   begin
+      My_Preprocessor.Discard_Input;
+   end Discard_Input;
+
    procedure Enqueue_Move
      (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False) is
    begin

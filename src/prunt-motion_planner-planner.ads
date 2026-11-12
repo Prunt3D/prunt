@@ -192,6 +192,9 @@ generic
    with function Allow_Blended_Entry (Data : Flush_Resetting_Data_Type) return Boolean;
    --  Planner-side policy for data which also changes execution of the block itself (for example pinning individual
    --  motors). False preserves its stopped entry. Ordinary end-only callbacks need no restriction.
+
+   Input_Queue_Wait_Threshold : Ada.Containers.Count_Type := 1;
+   --  Number of free input queue entries required by Wait_For_Input_Space. Must not exceed Input_Queue_Length.
 package Prunt.Motion_Planner.Planner is
 
    pragma Unsuppress (Overflow_Check);
@@ -199,6 +202,8 @@ package Prunt.Motion_Planner.Planner is
    pragma Unsuppress (Division_Check);
    --  These local pragmas survive instantiation; configuration pragmas above the generic do not.
    --  The instantiating compilation unit must also enable floating-point checking with -gnateF.
+
+   use type Ada.Containers.Count_Type;
 
    type Corners_Index is new Max_Corners_Type'Base range 1 .. Max_Corners_Type'Max (Max_Corners, 3);
    --  Three indices are needed for the seam workspace even when input blocks are limited to two corners.
@@ -341,9 +346,22 @@ package Prunt.Motion_Planner.Planner is
      (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters);
    --  End the current input block and make New_Params apply to subsequently queued motion.
 
+   procedure Wait_For_Input_Space
+   with Pre => Input_Queue_Wait_Threshold <= Input_Queue_Length;
+   --  Block until Input_Queue_Wait_Threshold commands can be enqueued without waiting for queue space or for a homing
+   --  move to be resolved, or until input is discarded or the planner is reset. The space stays available only while
+   --  the caller is the only task enqueueing. Extra-data storage is not counted. A producer that enqueues while
+   --  holding a lock another task needs can wait here first, without the lock, so that a full queue does not block it.
+
+   procedure Discard_Input;
+   --  Until the next Reset, make every enqueue return without queueing its command, including enqueues already waiting
+   --  for queue space or for a homing move to be resolved, and make Enqueue_Homing_Flush raise
+   --  Homing_Move_Cancelled_Error. Discarded commands are not assigned corner IDs. This lets a producer finish when
+   --  the queue will not drain before the coming Reset, for example while G-code is cancelled with execution paused.
+
    procedure Reset;
    --  Reset preprocessing and discard planner work that has not been dequeued. Borrowed blocks remain valid until
-   --  released and continue to occupy their slots across the next Setup.
+   --  released and continue to occupy their slots across the next Setup. Ends Discard_Input.
 
    procedure Dequeue (Block : in out Block_Handle; Timed_Out : out Boolean)
    with Pre => Is_Empty (Block);

@@ -1380,6 +1380,11 @@ package body Prunt.Controller is
             Initial_Cancellation_Generation := Gcode_Cancellation_Barrier.Cancellation_Generation;
 
             Retry_Line : loop
+               --  Modules such as Motion enqueue planner input from inside their protected operations, and the step
+               --  generator takes those modules' locks to run pause handlers. Wait for planner space here, outside any
+               --  module and before starting the line, so a full queue during a pause cannot block the pause cycle.
+               My_Motion_Planner.Wait_For_Input_Space;
+
                select
                   Gcode_Cancellation_Barrier.Start_Line;
                else
@@ -2162,6 +2167,11 @@ package body Prunt.Controller is
          Succeeded := False;
          return;
       end select;
+
+      --  The G-code processor may be waiting for space in the primary planner's queue, or for a homing move to be
+      --  planned or executed, and neither happens once the step generator is paused. Its current line is being
+      --  cancelled and the planner is reset below, so let it drop the rest of the line's input and finish the line.
+      My_Motion_Planner.Discard_Input;
 
       while not My_Step_Generator.Is_Paused loop
          if Shutdown_In_Progress then

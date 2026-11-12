@@ -43,7 +43,17 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
      (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null);
    --  Add a new command to the processing queue. Commands are processed in FIFO order. If Ignore_Bounds is True,
    --  position bounds checking is bypassed for this command (useful for homing operations). May block if the queue is
-   --  full.
+   --  full or a homing boundary is pending. Returns without queueing anything while input is discarded.
+
+   procedure Wait_For_Input_Space
+   with Pre => Input_Queue_Wait_Threshold <= Input_Queue_Length;
+   --  Block until Input_Queue_Wait_Threshold commands can be enqueued without waiting for queue space or for a pending
+   --  homing boundary, or until input is discarded or reset. The space stays available only while the caller is the
+   --  only task enqueueing. Extra-data storage is not counted.
+
+   procedure Discard_Input;
+   --  Until the next Reset, make Enqueue return without queueing its command, including calls already waiting for
+   --  queue space, and make Wait_For_Homing_Tail_Offset report a reset. Discarded commands get no corner IDs.
 
    function Get_Last_Assigned_Corner_ID return Planner_Corner_ID;
    --  Returns the highest corner ID assigned to accepted input. This value is monotonic and is not reset by Reset.
@@ -104,6 +114,8 @@ private
       entry High_Priority_Enqueue
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
       with Pre => (if Comm.Kind = Corner_Extra_Data_Kind then Extra /= null else Extra = null);
+      entry Wait_For_Input_Space;
+      procedure Discard_Input;
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean);
       procedure Append_Extra_Data (Target : in out Corner_Extra_Data_Vectors.Vector; Reset_Called : out Boolean);
       --  Append the dequeued extra data to Target. Raises the vector's error, leaving the transaction open, if it
@@ -122,8 +134,10 @@ private
    private
       procedure Assign_Corner_ID (Kind : Command_Kind);
       procedure Append_To_Queue (Comm : Command);
+      function Has_Input_Space return Boolean;
 
       Setup_Done               : Boolean := False;
+      Discarding_Input         : Boolean := False;
       In_Dequeue               : Boolean := False;
       Is_Full                  : Boolean := False;
       Next_Read, Next_Write    : Count_Type := Command_Queue_Array_Type'First;

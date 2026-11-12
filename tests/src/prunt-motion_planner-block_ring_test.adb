@@ -1034,6 +1034,194 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
       end;
    end Test_Block_Ring_Termination;
 
+   procedure Test_Discarded_Input_Releases_Blocked_Enqueue (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      declare
+         type Motor_Name is (Motor);
+         type Motor_Map is array (Axis_Name, Motor_Name) of Curvature;
+         type Motor_Limits is array (Motor_Name) of Dimensionless;
+         package Planner is new
+           Motion_Planner.Planner
+             (Motor_Name,
+              Motor_Map,
+              Motor_Limits,
+              [others => 1.0],
+              Integer,
+              0,
+              Integer,
+              0.005 * s,
+              1.0 * s,
+              0.001 * s,
+              Max_Corners                    => 4,
+              Max_Corners_Extra_Data_Count   => 2,
+              Max_Corners_Extra_Data_Storage => 128,
+              Input_Queue_Length             => 4,
+              Allow_Blended_Entry            => Block_Allows_Blended_Entry,
+              Input_Queue_Wait_Threshold     => 4);
+
+         Move_Pairs : constant := 100;
+         --  Far more stopped blocks than the five ring slots and four queue entries hold while nothing is dequeued.
+
+         protected Producer_State is
+            procedure Finish;
+            function Finished return Boolean;
+            entry Wait_Until_Finished;
+         private
+            Done : Boolean := False;
+         end Producer_State;
+
+         protected body Producer_State is
+            procedure Finish is
+            begin
+               Done := True;
+            end Finish;
+
+            function Finished return Boolean is
+            begin
+               return Done;
+            end Finished;
+
+            entry Wait_Until_Finished when Done is
+            begin
+               null;
+            end Wait_Until_Finished;
+         end Producer_State;
+
+         Params           : Kinematic_Parameters := (others => <>);
+         Block            : Planner.Block_Handle;
+         Timed_Out        : Boolean;
+         Space_Returned   : Boolean := False;
+         Producer_Stopped : Boolean := False;
+         Discarded_ID     : Planner_Corner_ID;
+
+         procedure Reset;
+         procedure Setup;
+
+         procedure Reset is
+         begin
+            select
+               delay 5.0;
+               T.Fail ("Reset must not wait for the blocked producer");
+            then abort
+               Planner.Reset;
+            end select;
+         end Reset;
+
+         procedure Setup is
+         begin
+            Planner.Runner.Setup (Params, [others => [Motor => 0.0 / mm]]);
+         end Setup;
+      begin
+         Params.Bounds :=
+           (Kind                                  => Rectangular_Workspace,
+            Lower_X | Lower_Y | Lower_Z | Lower_E => -100.0 * mm,
+            Upper_X | Upper_Y | Upper_Z | Upper_E => 100.0 * mm);
+         Params.Tangential_Velocity_Max := 100.0 * mm / s;
+         Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+         Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s**2];
+         Params.Axial_Jerk_Maxes := [others => 10_000.0 * mm / s**3];
+         Params.Axial_Snap_Maxes := [others => 100_000.0 * mm / s**4];
+         Params.Axial_Crackle_Maxes := [others => 1_000_000.0 * mm / s**5];
+         Setup;
+
+         declare
+            task Producer;
+
+            task body Producer is
+            begin
+               for I in 1 .. Move_Pairs loop
+                  Planner.Enqueue_Move
+                    ([X_Axis => (if I mod 2 = 0 then 0.0 * mm else 1.0 * mm), others => 0.0 * mm], 10.0 * mm / s);
+                  Planner.Enqueue_Flush (I);
+               end loop;
+               Producer_State.Finish;
+            exception
+               when others =>
+                  Producer_State.Finish;
+            end Producer;
+         begin
+            --  Nothing dequeues, so the producer fills the ring and the input queue and then waits for space.
+            delay 0.5;
+            T.Assert (not Producer_State.Finished, "Enqueue waits for space while nothing consumes planned blocks");
+
+            select
+               delay 0.2;
+            then abort
+               Planner.Wait_For_Input_Space;
+               Space_Returned := True;
+            end select;
+            T.Assert (not Space_Returned, "Waiting for input space blocks while the input queue is full");
+
+            Discarded_ID := Planner.Get_Last_Assigned_Corner_ID;
+            Planner.Discard_Input;
+
+            select
+               delay 5.0;
+            then abort
+               Producer_State.Wait_Until_Finished;
+               Producer_Stopped := True;
+            end select;
+            T.Assert (Producer_Stopped, "Discarding input releases an enqueue waiting for queue space");
+            T.Assert
+              (Planner.Get_Last_Assigned_Corner_ID = Discarded_ID, "Discarded commands are not assigned corner IDs");
+
+            Space_Returned := False;
+            select
+               delay 5.0;
+            then abort
+               Planner.Wait_For_Input_Space;
+               Space_Returned := True;
+            end select;
+            T.Assert (Space_Returned, "Waiting for input space returns while input is discarded");
+         exception
+            when others =>
+               --  Leaving this block waits for Producer, which may still be waiting for queue space.
+               Planner.Discard_Input;
+               raise;
+         end;
+
+         Reset;
+         Setup;
+
+         Space_Returned := False;
+         select
+            delay 5.0;
+         then abort
+            Planner.Wait_For_Input_Space;
+            Space_Returned := True;
+         end select;
+         T.Assert (Space_Returned, "A reset planner has its whole input queue free");
+
+         Planner.Enqueue_Move ([X_Axis => 1.0 * mm, others => 0.0 * mm], 10.0 * mm / s);
+         Planner.Enqueue_Flush (-1);
+         Planner.Dequeue (Block, Timed_Out);
+         T.Assert
+           (not Timed_Out and then Planner.Flush_Resetting_Data (Block) = -1,
+            "Reset ends discarding so the planner accepts input again");
+         Planner.Release (Block);
+         Reset;
+         abort Planner.Runner;
+      exception
+         when others =>
+            Planner.Discard_Input;
+            begin
+               select
+                  delay 5.0;
+               then abort
+                  Planner.Reset;
+               end select;
+            exception
+               when Tasking_Error =>
+                  null;
+            end;
+            abort Planner.Runner;
+            Planner.Release (Block);
+            raise;
+      end;
+   end Test_Discarded_Input_Releases_Blocked_Enqueue;
+
    procedure Test_Inter_Block_Chain_Lifetime (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -1608,6 +1796,7 @@ package body Prunt.Motion_Planner.Block_Ring_Test is
         Test_Block_Ring_Cleanup_Exceptions'Access,
         Test_Block_Ring_Lifetime'Access,
         Test_Block_Ring_Reset_During_Dequeue'Access,
-        Test_Block_Ring_Termination'Access]);
+        Test_Block_Ring_Termination'Access,
+        Test_Discarded_Input_Releases_Blocked_Enqueue'Access]);
 
 end Prunt.Motion_Planner.Block_Ring_Test;

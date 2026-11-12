@@ -77,11 +77,37 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
       end Append_To_Queue;
 
+      function Has_Input_Space return Boolean is
+         Used : constant Count_Type :=
+           (if Is_Full
+            then Elements.all'Length
+            elsif Next_Write >= Next_Read
+            then Next_Write - Next_Read
+            else Elements.all'Length - (Next_Read - Next_Write));
+      begin
+         return Homing_State = No_Homing_Boundary and then Elements.all'Length - Used >= Input_Queue_Wait_Threshold;
+      end Has_Input_Space;
+
+      entry Wait_For_Input_Space when Discarding_Input or else not Setup_Done or else Has_Input_Space is
+      begin
+         null;
+      end Wait_For_Input_Space;
+
+      procedure Discard_Input is
+      begin
+         Discarding_Input := True;
+      end Discard_Input;
+
       entry Enqueue
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
-        when not Is_Full and then High_Priority_Enqueue'Count = 0 and then Homing_State = No_Homing_Boundary
+        when Discarding_Input
+        or else (not Is_Full and then High_Priority_Enqueue'Count = 0 and then Homing_State = No_Homing_Boundary)
       is
       begin
+         if Discarding_Input then
+            return;
+         end if;
+
          if High_Priority_Enqueue'Count /= 0 then
             --  This is should never be triggered inside a protected object, but it could catch some errors if this is
             --  converted to a task and High_Priority_Enqueue is called directly for some reason.
@@ -172,10 +198,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
 
       entry High_Priority_Enqueue
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
-        when not Is_Full and then Retry_High_Priority
+        when Discarding_Input or else (not Is_Full and then Retry_High_Priority)
       is
       begin
-         if not Setup_Done then
+         if Discarding_Input or else not Setup_Done then
             return;
          end if;
 
@@ -253,10 +279,11 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       end Publish_Homing_Tail_Offset;
 
       entry Wait_For_Homing_Tail_Offset (Tail_Offset : out Position_Offset; Reset_Called : out Boolean)
-        when Homing_State = Tail_Offset_Available or else not Setup_Done
+        when Homing_State = Tail_Offset_Available or else not Setup_Done or else Discarding_Input
       is
       begin
-         Reset_Called := not Setup_Done;
+         --  A discarded homing flush never gets an offset, and a planned one is about to be reset.
+         Reset_Called := not Setup_Done or else Discarding_Input;
          Tail_Offset := (if Reset_Called then [others => 0.0 * mm] else Homing_Tail_Offset);
       end Wait_For_Homing_Tail_Offset;
 
@@ -325,6 +352,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       procedure Reset is
       begin
          Setup_Done := False;
+         Discarding_Input := False;
          Is_Full := False;
          In_Dequeue := False;
          Next_Read := Command_Queue_Array_Type'First;
@@ -344,6 +372,16 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
    begin
       Command_Queue.Enqueue (Comm, Ignore_Bounds, Extra);
    end Enqueue;
+
+   procedure Wait_For_Input_Space is
+   begin
+      Command_Queue.Wait_For_Input_Space;
+   end Wait_For_Input_Space;
+
+   procedure Discard_Input is
+   begin
+      Command_Queue.Discard_Input;
+   end Discard_Input;
 
    function Get_Last_Assigned_Corner_ID return Planner_Corner_ID is
    begin

@@ -1122,7 +1122,12 @@ package body Prunt.Integration_Test_Harness is
          while not Cancel_Result.Done loop
             Advance_By (0.002);
             delay 0.001;
-            Assert (Ada.Calendar.Clock < Deadline, "Timed out waiting for cancellation to complete.");
+            if Ada.Calendar.Clock >= Deadline then
+               --  Leaving this block waits for Canceller, so a stuck cancellation would otherwise hang the scenario
+               --  instead of failing it.
+               abort Canceller;
+               Assert (False, "Timed out waiting for cancellation to complete.");
+            end if;
          end loop;
 
          Assert (Cancel_Result.Succeeded, "Controller rejected cancellation.");
@@ -1184,6 +1189,29 @@ package body Prunt.Integration_Test_Harness is
                         Prunt.Mockable.Text_IO.Put_Line (File, Line);
                      end;
                   end loop;
+
+                  --  Optional "repeated_commands" are appended "repeat_count" times after "commands", for files long
+                  --  enough to fill the planner's queues. They are logged once rather than per written line.
+                  if Action.Has_Field ("repeated_commands") then
+                     declare
+                        Repeat_Count : constant Natural := Natural'(Action.Get ("repeat_count").Get);
+                     begin
+                        for Command of Action.Get_Array ("repeated_commands") loop
+                           Log_Event
+                             ("gcode",
+                              "write_repeated_gcode_file_line",
+                              Target => Ada.Strings.Fixed.Trim (Repeat_Count'Image, Ada.Strings.Both),
+                              Value  => VSS.Strings.Conversions.To_UTF_8_String (Virtual_String'(Command.Get)));
+                        end loop;
+
+                        for Repeat in 1 .. Repeat_Count loop
+                           for Command of Action.Get_Array ("repeated_commands") loop
+                              Prunt.Mockable.Text_IO.Put_Line
+                                (File, VSS.Strings.Conversions.To_UTF_8_String (Virtual_String'(Command.Get)));
+                           end loop;
+                        end loop;
+                     end;
+                  end if;
                   Prunt.Mockable.Text_IO.Close (File);
                end;
             end if;
@@ -1201,6 +1229,10 @@ package body Prunt.Integration_Test_Harness is
             end;
             Assert (Success, "Controller rejected G-code file: " & VSS.Strings.Conversions.To_UTF_8_String (Path));
          end;
+      elsif Kind = "real_time_delay" then
+         --  Let controller tasks run without advancing the simulated machine. The step generator stops once the
+         --  hardware queue is full, so the planner and G-code processor can fill their queues ahead of motion.
+         delay Duration (Long_Float'(Action.Get ("duration_s").Get));
       elsif Kind = "advance_to_s" then
          Advance_To (Long_Float'(Action.Get ("time_s").Get), Long_Empty_Wait_Limit);
       elsif Kind = "advance_by_s" then

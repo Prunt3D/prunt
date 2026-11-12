@@ -608,6 +608,10 @@ private
        then Block_Allows_Blended_Entry (Gcode_Block_End_Data (Data.Element).Nested_Data)
        else Data.Element not in Motor_Move_Block_End_Data | Motor_Loop_Move_Block_End_Data);
 
+   Gcode_Line_Planner_Input_Reserve : constant Ada.Containers.Count_Type := 64;
+   --  Free primary planner input entries to wait for before each line. A line that enqueues more than this may
+   --  still wait for space from inside a module's lock. Motion lines enqueue a few entries at most.
+
    package My_Motion_Planner is new
      Motion_Planner.Planner
        (Motor_Name                        => Motor_Name,
@@ -622,7 +626,8 @@ private
         Interpolation_Time                => Interpolation_Time,
         Runner_CPU                        => Motion_Planner_CPU,
         Max_Corners                       => Max_Planner_Block_Corners,
-        Allow_Blended_Entry               => Block_Allows_Blended_Entry);
+        Allow_Blended_Entry               => Block_Allows_Blended_Entry,
+        Input_Queue_Wait_Threshold        => Gcode_Line_Planner_Input_Reserve);
 
    package My_Pause_Motion_Planner is new
      Motion_Planner.Planner
