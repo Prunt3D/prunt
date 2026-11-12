@@ -20,7 +20,9 @@
 with Ada.Exceptions;
 with Ada.Streams;
 with Prunt; use Prunt;
+with Prunt.Command_Line_Arguments;
 with Prunt.Controller;
+with Prunt.Motion_Planner;
 with Prunt_Simulator_Config_Overrides;
 with Prunt_Simulator_Extra_Resources;
 with Prunt_Simulator_Hardware;
@@ -37,6 +39,12 @@ package body Prunt_Simulator_Controller is
    Config_Path                : constant String := "prunt_simulator_config.json";
    Interpolation_Time         : constant Time := 0.000_05 * s;
    Executed_Position_Capacity : constant Positive := 65_536;
+
+   Max_Planner_Block_Corners : constant Prunt.Motion_Planner.Max_Corners_Type :=
+     Prunt.Command_Line_Arguments.Max_Planner_Block_Corners (Default => 500);
+   --  The simulator builds Prunt in its development profile (see alire.toml), whose checks and ghost code slow the
+   --  planner by more than an order of magnitude. Nothing moves until the first block is planned, so a smaller block
+   --  gets a file moving sooner.
 
    function Get_Board_Specific_Documentation (Key : VSS.Strings.Virtual_String) return VSS.Strings.Virtual_String;
    function Get_Extra_HTTP_Content
@@ -76,7 +84,8 @@ package body Prunt_Simulator_Controller is
         Config_Overrides                        => Prunt_Simulator_Config_Overrides.Overrides,
         Get_Extra_HTTP_Content                  => Get_Extra_HTTP_Content,
         Get_Board_Specific_Documentation        => Get_Board_Specific_Documentation,
-        Executed_Command_Position_Ring_Capacity => Executed_Position_Capacity);
+        Executed_Command_Position_Ring_Capacity => Executed_Position_Capacity,
+        Max_Planner_Block_Corners               => Max_Planner_Block_Corners);
 
    procedure Report_Executor_Error (Occurrence : Ada.Exceptions.Exception_Occurrence; Is_Fatal : Boolean) is
    begin

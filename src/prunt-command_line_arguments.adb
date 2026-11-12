@@ -54,7 +54,8 @@ package body Prunt.Command_Line_Arguments is
    function Step_Generator_CPU return System.Multiprocessors.CPU_Range
    is (System.Multiprocessors.CPU_Range'Value (Argument_Value ("--prunt-step-generator-cpu=", "0")));
 
-   function Max_Planner_Block_Corners return Motion_Planner.Max_Corners_Type
-   is (Motion_Planner.Max_Corners_Type'Value (Argument_Value ("--prunt-max-planner-block-corners=", "50000")));
+   function Max_Planner_Block_Corners
+     (Default : Motion_Planner.Max_Corners_Type := 5_000) return Motion_Planner.Max_Corners_Type
+   is (Motion_Planner.Max_Corners_Type'Value (Argument_Value ("--prunt-max-planner-block-corners=", Default'Image)));
 
 end Prunt.Command_Line_Arguments;

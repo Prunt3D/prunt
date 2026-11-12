@@ -44,8 +44,9 @@ package Prunt.Command_Line_Arguments is
    --  Returns the argument supplied to --prunt-step-generator-cpu=, or 0 if no argument is provided. If the
    --  argument is provided more than once then Duplicate_Argument_Error is raised.
 
-   function Max_Planner_Block_Corners return Motion_Planner.Max_Corners_Type;
-   --  Returns the argument supplied to --prunt-max-planner-block-corners=, or 50000 if no argument is provided.
+   function Max_Planner_Block_Corners
+     (Default : Motion_Planner.Max_Corners_Type := 5_000) return Motion_Planner.Max_Corners_Type;
+   --  Returns the argument supplied to --prunt-max-planner-block-corners=, or Default if no argument is provided.
    --  If the argument is provided more than once then Duplicate_Argument_Error is raised.
 
 end Prunt.Command_Line_Arguments;
