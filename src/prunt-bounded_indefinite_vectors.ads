@@ -167,7 +167,7 @@ private
       --  The last index within Elements which is populated, or Extended_Index'First if no elements are used.
 
       Subpool : Pooled_Subpool_Handle := null;
-      --  Pointer to a subpool allocated within Subpool_Record_Storage. This allows the subpool to be a limited type.
+      --  Pointer to a subpool allocated at the end of Storage. This allows the subpool to be a limited type.
 
       Elements : Element_Array := [others => null];
       --  Pointers to elements within Storage, allocated when the user calls Append.

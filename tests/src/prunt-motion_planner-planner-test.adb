@@ -173,7 +173,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Flush_Resetting_Data := Flush_Resetting_Data_Type_Default;
       Block.Next_Block_Pos := [others => 0.0 * mm];
       Block.Params := (others => <>);
-      --  Existing fixtures exercise literal commanded densities; rounding has dedicated tests below.
+      --  Fixtures exercise literal commanded densities by default; rounding has dedicated tests below.
       Block.Params.Extrusion_Normalization := No_Normalization;
       Block.Params.Bounds := Rectangular_Bounds ([others => -1.0E100 * mm], [others => 1.0E100 * mm]);
       Block.Corners_Extra_Data_End_Indices := [others => Corner_Extra_Data_Vectors.Extended_Index'First];
@@ -3822,8 +3822,8 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Params.Cornering.Stereographic_Params.Axial_Deviation_Maxes := [others => 0.02 * mm];
       Block.Params.Cornering.Stereographic_Params.Corner_Miss_Distance_Max := 0.02 * mm;
       Block.Original_Segment_Feedrates := [others => 250.0 * mm / s];
-      --  Benchy travel segment 11749 and its neighbours. A 0.0002 mm curved end previously capped the
-      --  entire 34 mm segment at 0.057 mm/s, taking more than ten minutes with zero E deviation.
+      --  Benchy travel segment 11749 and its neighbours. With zero E deviation, the speed ceiling of a 0.0002 mm
+      --  curved end must not cap the entire 34 mm segment.
       Block.Corners :=
         [[117.5 * mm, 103.215 * mm, 9.0 * mm, 0.0 * mm],
          [118.367 * mm, 102.597 * mm, 9.0 * mm, 0.04497 * mm],
@@ -3833,8 +3833,8 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Params.Extrusion_Cornering := Velocity_Jump (1.0 * mm / s);
       Normalize_And_Blend (Block, Motor_Map, Workspace);
       Curves := Block.Corner_Transitions;
-      --  Tighten E after constructing the curves to exercise timing of a retained curve with a mandatory stop.
-      --  The normal pipeline now constructs a sharp corner when the allowance is zero from the outset.
+      --  Tighten E after constructing the curves to exercise timing of a retained curve with a mandatory stop. The
+      --  normal pipeline constructs a sharp corner when the allowance is zero from the outset.
       Block.Params.Extrusion_Cornering := Velocity_Jump (0.0 * mm / s);
       Tested_Early_Kinematic_Limiter.Run (Block, Motor_Map);
       --  This fixture checks profiles on retained curves; duration-based geometry selection is tested separately.

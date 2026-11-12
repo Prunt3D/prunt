@@ -42,7 +42,7 @@ package Prunt.Motion_Planner.Planner.Corner_Blender is
    --  Unsupported, out-of-bounds, or uncertifiable geometry retains the commanded path and inserts a hard stop.
    --  Extrusion_Density_Normalizer must run first. Geometry recovery retains its exact stored densities. Force_Stops
    --  restores the original primitives and normalized E reference, stopping at every boundary. Finally the E density
-   --  transitions are planned on the resulting geometry.
+   --  transitions are cleared; Early_Kinematic_Limiter plans them on the resulting geometry.
 
 private
 

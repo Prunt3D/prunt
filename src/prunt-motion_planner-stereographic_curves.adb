@@ -298,10 +298,10 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    begin
       Canonical := [others => [others => 0.0]];
 
-      --  Validate before changing coordinates. Multiplying the kth identity residual by Chord_Length**k and then
-      --  retaining an unscaled absolute tolerance floor made validity depend on chord length; in particular, a short
-      --  chord could hide a material longitudinal derivative. The physical check has one fixed unit convention and is
-      --  therefore independent of the later construction coordinate.
+      --  Validate before changing coordinates. Scaling the kth identity residual by Chord_Length**k and then testing
+      --  it against an unscaled absolute tolerance floor would make validity depend on chord length; in particular, a
+      --  short chord could hide a material longitudinal derivative. The physical check has one fixed unit convention
+      --  and is therefore independent of the later construction coordinate.
       if Chord_Length <= 0.0 * mm
         or else not Is_Finite (Dimensionless (Chord_Length / mm))
         or else
@@ -1211,7 +1211,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
       end Accumulate_Product;
 
       function Unscaled_Product return Interval_Polynomial;
-      --  Preserve the original weighted convolution when the faster intermediate scaling overflows.
+      --  Convolve with an individual enclosing weight per term. This handles a degree-zero operand and is the fallback
+      --  when the faster intermediate scaling overflows.
 
       function Unscaled_Product return Interval_Polynomial is
          Product : Interval_Polynomial (0 .. Degree) := [others => Interval_Exact (0.0)];
@@ -1509,8 +1510,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
               Terms (1) (Degree, C) + Lambda * (2.0 * Terms (2) (Degree, C) + 3.0 * Lambda * Terms (3) (Degree, C));
          end loop;
       end loop;
-      --  Add C₀·256·V⁴·(1 - V)⁴ as a whole. Its fourfold zeros leave every endpoint jet through order three
-      --  unchanged, which changing only the V⁸ coefficient, as V3 did, would not.
+      --  Add C₀·256·V⁴·(1 - V)⁴ as a whole. Its fourfold zeros leave every endpoint jet through order three unchanged,
+      --  which changing only the V⁸ coefficient would not.
       for C in Chart_Component_Index loop
          for Degree in Closure_Envelope_Power'Range loop
             Coefficients (Degree, C) := Coefficients (Degree, C) + (256.0 * C0 (C)) * Closure_Envelope_Power (Degree);
@@ -1842,7 +1843,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
                                  end loop;
                               end loop;
                            end loop;
-                           --  Without a held step the full one is backtracked as before.
+                           --  Without a held step the full one is backtracked as usual.
                            if Solve_Linear (Normal, Gradient, Held_Step) then
                               exit Iteration_Loop when C0_Slope (Held_Step) >= -Stalled_Slope_Fraction * Norm_Square;
                               Newton_Step := Held_Step;
@@ -1908,9 +1909,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    ----------------------------------------------------------------------------------------------------------------
    --  Outward-rounded bounds for the retained realtime tangent
    --
-   --  The pole-based Taylor enclosure is the primary path for every range. The rational Bernstein certificate, the
-   --  earlier primary path, remains as its fallback for a range where a pole lies too close for the enclosure's
-   --  fixed work, or where the partial fractions cancel too far for its rounding allowance.
+   --  The pole-based Taylor enclosure is the primary path for every range. The rational Bernstein certificate is its
+   --  fallback for a range where a pole lies too close for the enclosure's fixed work, or where the partial fractions
+   --  cancel too far for its rounding allowance.
    ----------------------------------------------------------------------------------------------------------------
 
    --  Enclose division by an interval that excludes zero.
@@ -2821,10 +2822,11 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
    function Bernstein_Tangent_Range_Majorants
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Success : out Boolean) return Axis_Majorants
    is
-      --  This path operates on the common-denominator Bernstein certificate retained while the realtime evaluator is
-      --  compiled. It reconstructs each factorial-scaled derivative as a rational Bernstein polynomial, restricts it
-      --  to the requested range, and bounds it by outward-rounded De Casteljau subdivision. The smooth endpoint
-      --  correction is bounded independently and added only after the rational part has been certified.
+      --  This path operates on the common-denominator Bernstein certificate which construction or
+      --  Retain_Bernstein_Tangent_Certificate stores in Curve. It reconstructs each factorial-scaled derivative as a
+      --  rational Bernstein polynomial, restricts it to the requested range, and bounds it by outward-rounded De
+      --  Casteljau subdivision. The smooth endpoint correction is bounded independently and added only after the
+      --  rational part has been certified.
       subtype Polynomial_Index is Natural range 0 .. Maximum_Derivative_Bernstein_Degree;
       subtype Polynomial is Interval_Polynomial (Polynomial_Index);
       type Axis_Polynomials is array (Axis_Name) of Polynomial;
@@ -2834,7 +2836,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
 
       Maximum_Subdivision_Depth : constant := 2;
       --  Four leaf hulls retain margin below the five-percent dense-oracle tolerance, including the supported 20:1
-      --  warps, while avoiding the old fixed sixty-four-cell cost.
+      --  warps, while keeping the subdivision work small and fixed.
 
       Tightness_Factor : constant Dimensionless := 1.02;
       --  Accept a valid rational hull once it is within two percent of the magnitude already forced by a segment
@@ -6636,7 +6638,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves is
          if not Residual_OK then
             return False;
          elsif Residual_Norm <= Arithmetic_Tolerance then
-            --  Preserve every seed admitted by the original normalized-arithmetic allowance.
+            --  A residual covered by normalized arithmetic error is accepted directly; only a larger one is compared
+            --  with the projected rounding cells of the stored coordinates.
             return True;
          end if;
 

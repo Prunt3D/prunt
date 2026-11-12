@@ -1026,7 +1026,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             Distances       : array (Transition_Flags'Range) of Sample_Distances;
             Measured        : Transition_Flags := [others => False];
             Error_Allowance : constant Length := Multiply_Length_Upper (Position_Error, 2.0);
-            --  The two-sided ideal-to-executed allowance covers both locally built and imported V1 curves.
+            --  The ideal-to-executed allowance is two-sided.
             Target          : constant Length :=
               (if Limit > Error_Allowance and then Limit < Length'Last then Limit - Error_Allowance else 0.0 * mm);
             Speed           : constant Dimensionless := Executed_Speed_Upper (Curve);
@@ -1127,7 +1127,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
             --  interval times its certified velocity, and may use either line.
             Bounds          : constant Unit_Speed_Axial_Derivative_Bounds := Derivative_Bounds (Curve);
             Error_Allowance : constant Length := Multiply_Length_Upper (Position_Error, 2.0);
-            --  The two-sided ideal-to-executed allowance covers both locally built and imported V1 curves.
+            --  The ideal-to-executed allowance is two-sided.
             Arc_Gap         : constant Length :=
               Divide_Length_Upper (Arc_Length (Curve), 2.0 * Dimensionless (Transition_Samples - 1));
             Chord_Margins   : array (1 .. Coarse_Sample_Span) of Axial_Deviation_Limits :=
@@ -1361,13 +1361,11 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                                     end if;
                                  end;
                               else
-                                 --  The long-standing width policy overshoots the limits at shallow corners. With a
-                                 --  helix, the model of the actual blend takes over there so that the first attempt
-                                 --  is usually the one retained, which saves most of the repairs. Between two lines
-                                 --  repairs are cheap, and the model would have to keep the curve's nearest point
-                                 --  within the axial limits of the corner itself, which is conservative: a point
-                                 --  further along either line can be nearer on the limiting axis. A corner which
-                                 --  passes is never grown, so the model would leave gentle line corners with
+                                 --  The width policy overshoots the limits at shallow corners. With a helix, the model
+                                 --  of the actual blend caps it there so that the first attempt is usually the one
+                                 --  retained, which saves most of the repairs. Line corners are sized from the policy
+                                 --  alone: repairs between lines are cheap, and a corner which passes is never grown,
+                                 --  so a cap tighter than the limits require would leave gentle line corners with
                                  --  tighter, slower blends than repair from the policy finds.
                                  Base_Width :=
                                    (1.35 - 0.49 * Settings.Circularity)

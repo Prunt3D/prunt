@@ -4015,7 +4015,7 @@ package body Prunt.Motion_Planner.Planner is
          if Timing_Run_First (Block'Access, Corner) /= Corner
            or else Timing_Run_Last (Block'Access, Corner + 1) /= Corner + 1
          then
-            --  The bounds are for single segments. A run of several is replanned as before.
+            --  The bounds are for single segments. A run of several is always replanned.
             return False;
          end if;
          --  Try_Stops sums the old and new times in this order and keeps a stop only if the new sum is smaller.

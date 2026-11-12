@@ -263,7 +263,6 @@ private
 
    package My_Default_Modules_Children is
       package Idle_Emitter is new My_Default_Modules.Idle_Emitter;
-      --  TODO: Idle emitter needs to be connected to controller idle interface.
       package Basic_Config is new My_Default_Modules.Basic_Config;
       package Blocking_Tracker is new My_Default_Modules.Blocking_Tracker;
       package Config_Saving is new My_Default_Modules.Config_Saving;

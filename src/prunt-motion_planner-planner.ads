@@ -1018,9 +1018,9 @@ private
       Run_First : Finishing_Corners_Index;
       Window    : Profile_Window;
       Max_Vel   : Velocity) return Profile_Window_Evaluation;
-   --  Evaluate_Profile_Window for a window in run distance. A single-segment run is evaluated exactly as before; a
-   --  longer run gives a Cellular evaluation whose Bounds merge every overlapped segment's bounds, and whose
-   --  endpoint ceilings come from the cells containing each end.
+   --  Evaluate_Profile_Window for a window in run distance. A single-segment run is evaluated by
+   --  Evaluate_Profile_Window itself; a longer run gives a Cellular evaluation whose Bounds merge every overlapped
+   --  segment's bounds, and whose endpoint ceilings come from the cells containing each end.
 
    function Timing_Motion_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index) return Time;
@@ -1357,9 +1357,10 @@ private
       --  block's starting E coordinate.
 
       Extrusion_Transitions : Block_Extrusion_Transitions (1 .. N_Corners);
-      --  Smooth_Deviation transitions, planned with the geometry. Later stages retain them: a local stop clears only
-      --  its own corner, and an inter-block blend plans only its new seam corner around the transitions it keeps. The
-      --  transitions at a segment's two corners never overlap, so a segment never sees more than one at a point.
+      --  Smooth_Deviation transitions, which Early_Kinematic_Limiter plans on the blended geometry. Later stages
+      --  retain them: a local stop clears only its own corner, and an inter-block blend plans only its new seam corner
+      --  around the transitions it keeps. The transitions at a segment's two corners never overlap, so a segment never
+      --  sees more than one at a point.
 
       --  Early_Kinematic_Limiter
       Limited_Segment_Feedrates : Block_Segment_Feedrates (2 .. N_Corners);

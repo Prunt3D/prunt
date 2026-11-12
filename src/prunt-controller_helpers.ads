@@ -21,8 +21,8 @@
 --  specification but are difficult to implement with expression functions, and things that those functions rely
 --  on.
 --
---  Specifically, this is currently just Build_Gcode_Dispatch_Map, which we want to call in the specification so
---  we can generate a string to pass to the web server generic.
+--  Specifically, these are Build_Gcode_Dispatch_Map and Build_Gcode_JSON, which we want to call in the specification
+--  so we can build the G-code dispatch map and generate a string to pass to the web server generic.
 
 pragma Extensions_Allowed (On);
 

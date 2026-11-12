@@ -90,9 +90,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Name                         : String;
       T                            : in out Trendy_Test.Operation'Class);
 
-   --  Reconstruct the Bernstein certificate, which construction no longer needs, and require its derivative bounds
-   --  to succeed directly. Both those and the public pole-based bounds are compared with dense samples of the
-   --  executed curve, so neither path can hide a failure of the other.
+   --  Reconstruct the Bernstein certificate, which construction normally skips, and require its derivative bounds to
+   --  succeed directly. Both those and the public pole-based bounds are compared with dense samples of the executed
+   --  curve, so neither path can hide a failure of the other.
    function Certified_From_Samples (Curve : Stereographic_Curve) return Boolean;
    --  Whether construction certified Curve's tangent from samples alone. It then keeps a Bernstein certificate
    --  exactly when the whole-curve pole bounds needed the Bernstein fallback.
@@ -869,8 +869,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          end loop;
       end loop;
 
-      --  The result is representable even when input scaling or the scaled convolution overflows. Both cases must
-      --  retain the original weighted-product path instead of rejecting a finite certificate.
+      --  The result is representable even when input scaling or the scaled convolution overflows. Both cases must fall
+      --  back to the weighted-product path instead of rejecting a finite certificate.
       for Case_Index in 1 .. 2 loop
          declare
             Left_Value  : constant Dimensionless := (if Case_Index = 1 then 1.0E300 else 1.0E160);
@@ -970,8 +970,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       end;
    end Test_Bernstein_Products;
 
-   --  Exercise every pairing of negative, nonpositive, sign-spanning, nonnegative, and positive intervals. V7 selects
-   --  extremal products by sign, so this compares each optimized branch with the full four-corner definition.
+   --  Exercise every pairing of negative, nonpositive, sign-spanning, nonnegative, and positive intervals. The
+   --  production multiplier selects extremal products by sign, so this compares each optimized branch with the full
+   --  four-corner definition.
    procedure Test_Interval_Multiplication_Sign_Cases (T : in out Trendy_Test.Operation'Class) is
       type Interval_Case_Array is array (Positive range <>) of Interval;
 
@@ -1062,8 +1063,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
    begin
       T.Register;
 
-      --  Choose B from the active floating-point model so B^2 is lost when added to A^2. The previous primitive
-      --  consequently formed an increment of exactly -1 and called Log(0), on both binary64 and extended hosts.
+      --  Choose B from the active floating-point model so B^2 is lost when added to A^2. The relative change then
+      --  forms an increment of exactly -1, so a primitive which took its log1p would call Log(0), on both binary64 and
+      --  extended hosts.
       Unstable_Change := (U * U - 2.0 * A * U) / Base_Square;
       T.Assert (Unstable_Change = -1.0, "Complex-pole regression recreates the cancelled log1p argument");
 
@@ -1980,10 +1982,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          Curve.Whole_Curve_Majorants (X_Axis) (4) := Half_Last;
          Large_Finite_Bounds := Bounds_On_Parameter_Range (Curve, 0.0, 1.0);
 
-         --  Compute 4! M / L^4 in the same overflow-safe sequence a
-         --  mathematical caller can use when L > 1. The former
-         --  multiply-before-divide implementation saturated 24*M first and
-         --  then divided that sentinel into a finite underbound.
+         --  Compute 4! M / L^4 in the same overflow-safe sequence a mathematical caller can use when L > 1.
+         --  Multiplying before dividing would saturate 24*M first and then divide that sentinel into a finite
+         --  underbound.
          for Factor in 1 .. 4 loop
             Expected := Expected / Length_Raw;
             Expected := Expected * Dimensionless (Factor);
@@ -3190,8 +3191,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
 
    procedure Test_Chart_Lambda_Terms (T : in out Trendy_Test.Operation'Class) is
       --  The closure solve evaluates the chart as a cubic in λ. Compare it, and its λ-derivative, with Build_Chart's
-      --  chart and analytic derivative at the same λ and C₀, in the power basis with the V⁸ residue removed as the
-      --  solve did before it formed the cubic.
+      --  chart and analytic derivative at the same λ and C₀, in the power basis with the V⁸ residue of the Hermite
+      --  part removed as Build_Chart_Lambda_Terms removes it.
       Envelope_Power : constant array (Natural range 4 .. Fixed_Chart_Degree) of Dimensionless :=
         [1.0, -4.0, 6.0, -4.0, 1.0];
 

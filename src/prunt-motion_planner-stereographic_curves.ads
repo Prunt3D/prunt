@@ -952,9 +952,9 @@ private
           and then Is_Finite (Closure_Seed.Lambda)
           and then (for all Component in Chart_Component_Index => Is_Finite (Closure_Seed.C0 (Component)))),
      Predicate_Failure => "a valid closure seed must contain finite values and lambda >= 1";
-   --  An optional upstream closure solution passed into candidate construction. V7 treats a valid seed as final for
-   --  the closure stage: it is neither replaced nor refined, but the resulting curve still has to pass endpoint,
-   --  representation, and numerical-safety checks.
+   --  An optional upstream closure solution passed into candidate construction. Build_Candidate treats a valid seed as
+   --  final for the closure stage: it is neither replaced nor refined, but the resulting curve still has to pass
+   --  endpoint, representation, and numerical-safety checks.
 
    type Closure_Solution is record
       Success : Boolean := False;
@@ -1038,7 +1038,7 @@ private
 
    function Chord_Is_Numerically_In_Endpoint_Plane
      (Request : Blend_Request; Chord_Direction, Start_Tangent, Finish_Tangent : Position_Scale) return Boolean;
-   --  Check whether the endpoint chord is consistent with the plane spanned by the two endpoint tangents. V7 first
+   --  Check whether the endpoint chord is consistent with the plane spanned by the two endpoint tangents. It first
    --  accepts residuals covered by normalized arithmetic error; otherwise it projects the rounding cells of the stored
    --  endpoint coordinates through the plane's orthogonal complement. This admits cancellation caused by large
    --  accumulated coordinates without allowing uncertainty on an unrelated axis to hide a genuine out-of-plane chord.
@@ -1075,12 +1075,12 @@ private
          (not Initial_Closure.Valid
           or else Initial_Closure.Lambda <= Dimensionless (Request.Maximum_Arc_Length / Chord_Length));
    --  Attempt complete construction for one frame and its endpoint chart jets. Initial_Closure may provide a
-   --  flat-planar solution discovered during warp selection; V7 uses a valid seed without replacing or refining it,
+   --  flat-planar solution discovered during warp selection; a valid seed is used without replacing or refining it,
    --  while an absent seed makes this stage solve closure itself.
    --
-   --  For flat endpoint jets whose chord is planar within stored-coordinate resolution, V7 removes normal chart modes
-   --  proved to be numerical noise before compiling the curve. The ordinary representation and endpoint-correction
-   --  certificates still have to accept the canonicalized result.
+   --  For flat endpoint jets whose chord is planar within stored-coordinate resolution, this stage removes normal
+   --  chart modes proved to be numerical noise before compiling the curve. The ordinary representation and
+   --  endpoint-correction certificates still have to accept the canonicalized result.
    --
    --  The result separates failure to close the geometry from failure to compile an accurate realtime representation.
    --  Numerically unsafe arithmetic is reported separately so Create_Blend can retain the most informative failure

@@ -307,7 +307,7 @@ private
       --  for sensorless homing, where a lower current may be needed to reliably detect a stall. The value has a
       --  resolution of 1/32, but any value may be enetered here as it is automatically rounded.
       --
-      --  TODO: This does not do anything yet.
+      --  This value is only applied while this motor's StallGuard output is the homing detector.
 
       IHOLDDELAY : Time range 0.0 * ms .. 315.0 * ms := 315.0 * ms;
       --  This is the time it takes for the driver to reduce the current from the run level to the hold level after the
@@ -359,8 +359,7 @@ private
       MRES : TMC_Types.TMC2240.Microstep_Resolution_Type := MS_256;
       --  This setting determines the microstep resolution for the driver. Higher microstep resolutions result in
       --  smoother and quieter motor operation, but can limit the maximum achievable speed. 256 microsteps is the
-      --  highest resolution available and is generally recommended as Prunt will slow down and emit a warning when the
-      --  maximum step rate would be exceeded by a G-code command rather than halting.
+      --  highest resolution available.
 
       FAST_STANDSTILL : Boolean := False;
       --  When enabled, the driver will wait for a shorter period of time (2^18 TMC clock cycles, typically 21ms) after

@@ -877,8 +877,8 @@ package body Prunt.Web_Server is
       --  therefore we need to set our own timeout here. The timeout is set to an extremely low value here as the
       --  timeout counter only starts when the syscall is blocked.
       --
-      --  TODO: Move TMC register dump to a HTTP request so in will not generate a large log message which overruns
-      --  the buffer.
+      --  TODO: Implement M122 TMC register reporting as a HTTP request so it will not generate a large log message
+      --  which overruns the buffer.
 
       Server.Register_WebSocket_Receiver (Client);
    end WebSocket_Initialize;

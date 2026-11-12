@@ -1931,7 +1931,7 @@ package body Prunt.Motion_Planner.Test is
          T           => T);
 
       --  The case selection uses a strict > comparison. GNAT 16.2.1005 evaluates the dimensioned cube root in
-      --  Long_Float, so equality no longer crosses the boundary through the old extended-precision rounding.
+      --  Long_Float, so the boundary distance itself stays in D3.1 and only the next distance above it selects D3.4.
       Check_Profile_For_Distance
         (Start_Vel   => Vs,
          Distance    => Length'Adjacent (Dist4, Length'Last),
@@ -2382,7 +2382,7 @@ package body Prunt.Motion_Planner.Test is
               Fast_Cache);
          T.Assert (Actual = 0.999, "A zero-speed coast fills the coefficient cache");
          Scaled_Cache := Fast_Cache;
-         --  Exercise the retained implementation as an independent reference, including its scaled products.
+         --  Exercise the scaled solve as an independent reference, including its scaled products.
          Scaled_Cache.Dimensionless_Axes := [others => False];
          for Iteration in 1 .. 3 loop
             Actual :=

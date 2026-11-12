@@ -31,9 +31,6 @@ generic
    Input_Switch_Hardware : My_Controller_Generic_Types.Input_Switch_Hardware_Parameters_Array_Type;
 package Prunt.Default_Modules.Input_Switches is
 
-   --  TODO: Need to receive homing events and then run the setup for homing/conditional moves. Alternatively homing
-   --  module could check the switch state and do the conditional part?
-
    use My_Controller_Generic_Types;
 
    type Module is new My_Modules.Module with null record;

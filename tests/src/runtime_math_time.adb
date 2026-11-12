@@ -1,6 +1,6 @@
 --  Focused compiler benchmark for the runtime operations used by the planner.
 --  Each kernel consumes changing positive normal inputs, matching the common planner path.
---  The Bits_* kernels preserve the former planner helpers for performance comparisons only.
+--  The Bits_* kernels decode IEEE 754 bit fields in place of the attributes, for performance comparison only.
 
 with Ada.Command_Line;
 with Ada.Numerics.Generic_Elementary_Functions;

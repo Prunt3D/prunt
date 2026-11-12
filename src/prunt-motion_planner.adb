@@ -942,7 +942,7 @@ package body Prunt.Motion_Planner is
          --
          --  Only search with Upper >= 2**-128: sixteen bisections then keep every positive trial >= 2**-144.
          --  Four Horner steps stay in [2**-896, 2**327] when nonzero. Thus no overflow or underflow can alter
-         --  a budget comparison. Smaller scales use the original solver, retaining the exact coefficients.
+         --  a budget comparison. Smaller scales use Apply_Time_Constraint, retaining the exact coefficients.
          --
          --  Nearly every budget already fits at the scale that the earlier ones left, so that one evaluation is
          --  inlined at each of the sixteen calls, where the number of terms is known, and only a budget that
@@ -3525,10 +3525,10 @@ package body Prunt.Motion_Planner is
             function Highest_Peak is new Largest_Nonpositive (Excess);
 
             Peak_Tolerance : constant Dimensionless := 2.0**(-40);
-            --  How closely the search brackets the highest peak, as a fraction of it. Lowering the peak trades ramp
-            --  time for coast time at that same speed, so the duration is stationary there and a peak this close
-            --  gives the same duration to well beyond the last digit. Settling the last machine number as well
-            --  took most of the evaluations of the search.
+            --  How closely the search brackets the highest peak, as a fraction of it. The duration is not stationary
+            --  at that peak: a peak this fraction below it lengthens the profile by at most the same fraction, and
+            --  for a shortfall this small by at most about 3/8 of it, so about 3.4E-13 of the duration. Settling
+            --  the last machine number as well would take most of the evaluations of the search.
 
             --  The ramp distances grow with the peak, so the fastest profile has the highest peak whose ramps fit
             --  in Distance. Whatever distance the peak found leaves over is coasted. The ramps for the lowest peak
