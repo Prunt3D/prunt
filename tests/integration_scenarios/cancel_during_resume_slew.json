@@ -1,0 +1,29 @@
+{
+  "description": "Pause a long move at full speed, resume, and cancel 0.2 s into the resume slew. The resume slew is still barely moving then, so the step generator must turn it around where it is and stop close to the pause point. Finishing the resume slew first and then slewing down from full speed would carry X about 30 mm past the pause point.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "wait_idle", "timeout_s": 5.0 },
+    { "kind": "submit_gcode_file", "commands": ["G1 X150 F600"] },
+    { "kind": "wait_for_motion", "timeout_s": 10.0 },
+    { "kind": "advance_by_s", "duration_s": 1.0 },
+    { "kind": "pause" },
+    { "kind": "resume" },
+    { "kind": "advance_by_s", "duration_s": 0.2 },
+    { "kind": "cancel_at_s", "time_s": 0.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 }
+  ],
+  "expect": {
+    "sample_position_reaches": { "X": 15.0 },
+    "max_sample_position": { "X": 35.0 },
+    "event_counts": { "pause": 4, "cancel": 2 },
+    "event_order": [
+      { "kind": "pause", "label": "pause_requested" },
+      { "kind": "pause", "label": "paused" },
+      { "kind": "pause", "label": "resume_requested" },
+      { "kind": "pause", "label": "resumed" },
+      { "kind": "cancel", "label": "cancel_requested" },
+      { "kind": "cancel", "label": "cancel_completed" }
+    ]
+  }
+}

@@ -250,7 +250,11 @@ package body Prunt.Step_Generator.Block_Executor is
                         null;
 
                      when Resuming_Kind =>
-                        if Pause_Slew_Cursor = Pause_Slew_Index'First then
+                        --  Turn the resume slew around where it is, so the speed reverses without a jump and a pause
+                        --  or reset does not wait for the full ramp-up and then a full slew down.
+                        if Reset_Pending or else Pause_Requested then
+                           Pausing_State := Pausing_Kind;
+                        elsif Pause_Slew_Cursor = Pause_Slew_Index'First then
                            Pausing_State := Running_Kind;
                         else
                            Pause_Slew_Cursor := @ - 1;

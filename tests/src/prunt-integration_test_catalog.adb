@@ -41,6 +41,8 @@ package body Prunt.Integration_Test_Catalog is
        To_Unbounded_String ("integration_scenarios/cancel_with_full_planner_queue.json")),
       (To_Unbounded_String ("integration.pause_resume_with_full_planner_queue"),
        To_Unbounded_String ("integration_scenarios/pause_resume_with_full_planner_queue.json")),
+      (To_Unbounded_String ("integration.cancel_during_resume_slew"),
+       To_Unbounded_String ("integration_scenarios/cancel_during_resume_slew.json")),
       (To_Unbounded_String ("integration.heater_event"),
        To_Unbounded_String ("integration_scenarios/heater_event.json")),
       (To_Unbounded_String ("integration.fans"), To_Unbounded_String ("integration_scenarios/fans.json")),
