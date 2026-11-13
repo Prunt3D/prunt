@@ -3180,6 +3180,10 @@ package body Prunt.Motion_Planner.Planner is
       if Minimum_Peak > 0.0 * mm / s and then not Feasible (Minimum_Peak) then
          return Best;
       end if;
+      --  TODO: Investigate whether this search is worth its cost on real prints. Compared with the earlier near-top
+      --  shortcut and overrun-guided feasibility search, it made Benchy CONTINUOUS planning about 11% slower (4.45 s
+      --  to 4.95 s) and its planned motion 45 ms longer, despite the faster profiles in Test_Cellular_Profile_Search.
+
       --  Keep the intermediate candidates from bisection as well as its feasible endpoint. Cellular stretches change
       --  at cell and ramp-stage boundaries, so fitting a smooth overrun model can skip faster candidates.
       Top_Peak :=
