@@ -2867,13 +2867,14 @@ package body Prunt.Motion_Planner.Planner is
             Span_High : constant Length := (if Forward then Anchor + Ramp else Anchor);
             Scale     : Dimensionless := 1.0;
 
-            function Speed_Scale (Target : Velocity; Far : Length) return Dimensionless;
-            --  The stretch that brings the speed at local distance Far down to Target. The ramp reaches Far further
-            --  from its slow end after stretching, at the speed the unstretched ramp has proportionally closer.
+            function Speed_Scale (Target : Velocity; Boundary : Length) return Dimensionless;
+            --  The stretch that brings the speed at Boundary down to Target. Boundary is a run distance and may lie
+            --  beyond the current ramp. Time stretching scales every distance from the ramp's slow end by the same
+            --  factor while preserving its speeds.
 
-            function Speed_Scale (Target : Velocity; Far : Length) return Dimensionless is
+            function Speed_Scale (Target : Velocity; Boundary : Length) return Dimensionless is
                Slow_End : constant Velocity := (if Forward then Start_Vel else Stages.States (15).V);
-               From_End : constant Length := (if Forward then Far else Ramp - Far);
+               From_End : constant Length := (if Forward then Boundary - Anchor else Anchor - Boundary);
             begin
                if Slow_End >= Target or else From_End <= 0.0 * mm then
                   return 0.0;
@@ -2899,7 +2900,10 @@ package body Prunt.Motion_Planner.Planner is
                      Cell_Scale : Dimensionless;
                   begin
                      if Speed > Cell.Ceiling then
-                        Cell_Scale := Speed_Scale (Cell.Ceiling, Far);
+                        --  Use the full cell boundary, even when only part of the cell overlaps the ramp. Clipping
+                        --  the target to the current ramp repeats the same fractional stretch until it spans the
+                        --  cell, which can exhaust the attempt budget for an otherwise feasible profile.
+                        Cell_Scale := Speed_Scale (Cell.Ceiling, (if Forward then Cell.Stop else Cell.Start));
                      elsif not Cell.Curved then
                         Cell_Scale := 1.0;
                      else
@@ -2919,7 +2923,7 @@ package body Prunt.Motion_Planner.Planner is
                            Cell_Scale := 1.0;
                         elsif Cell_Scale <= 0.0 then
                            --  Curvature uses the whole budget at this speed. A slightly lower speed frees some.
-                           Cell_Scale := Speed_Scale (0.99 * Speed, Far);
+                           Cell_Scale := Speed_Scale (0.99 * Speed, (if Forward then Cell.Stop else Cell.Start));
                         end if;
                      end if;
                      if not (Cell_Scale > 0.0) then

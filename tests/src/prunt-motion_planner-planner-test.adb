@@ -6106,6 +6106,126 @@ package body Prunt.Motion_Planner.Planner.Test is
       end;
    end Test_Cellular_Certificate;
 
+   procedure Test_Cellular_Full_Cell_Stretch (T : in out Trendy_Test.Operation'Class) is
+      Params : Kinematic_Parameters;
+      type Curvatures is array (1 .. 3) of Curvature;
+      type Offsets is array (Positive range <>) of Length;
+      type Peaks is array (Positive range <>) of Velocity;
+      Curve : constant Curvatures := [0.04 / mm, 0.008 / mm, 320.0 / mm];
+
+      procedure Check (Reverse_Path : Boolean; Offset : Length; Peak : Velocity);
+
+      procedure Check (Reverse_Path : Boolean; Offset : Length; Peak : Velocity) is
+         Distance  : constant Length := 164.0 * mm;
+         Start_Vel : constant Velocity := (if Reverse_Path then 1.55 * mm / s else 0.0 * mm / s);
+         End_Vel   : constant Velocity := (if Reverse_Path then 0.0 * mm / s else 1.55 * mm / s);
+         Tight     : constant Positive := (if Reverse_Path then 1 else 3);
+         Cells     : Path_Cells (Curve'Range);
+         Caches    : Path_Cell_Caches (Cells'Range);
+         Eval      : Profile_Window_Evaluation;
+      begin
+         for I in Cells'Range loop
+            declare
+               K      : constant Curvature := Curve (if Reverse_Path then 4 - I else I);
+               Bounds : constant Unit_Speed_Axial_Derivative_Bounds :=
+                 (Velocity     => [X_Axis | Y_Axis => 1.0, others => 0.0],
+                  Acceleration => [X_Axis | Y_Axis => K, others => 0.0 / mm],
+                  Jerk         => [X_Axis | Y_Axis => K**2, others => 0.0 / mm**2],
+                  Snap         => [X_Axis | Y_Axis => K**3, others => 0.0 / mm**3],
+                  Crackle      => [X_Axis | Y_Axis => K**4, others => 0.0 / mm**4]);
+            begin
+               Cells (I) :=
+                 (Start   => Offset + Dimensionless (I - 1) / 3.0 * Distance,
+                  Stop    => Offset + Dimensionless (I) / 3.0 * Distance,
+                  Bounds  => Bounds,
+                  Ceiling => Constant_Speed_Axial_Ceiling (Params, Bounds, 250.0 * mm / s),
+                  Curved  => True);
+            end;
+         end loop;
+         Eval :=
+           (Valid         => True,
+            Window        => (Start_Distance => Offset, Distance => Distance),
+            Limits        =>
+              Mixed_Derivative_Limits
+                (Params, (Velocity => Cells (1).Bounds.Velocity, others => <>), 250.0 * mm / s)
+                .Limits,
+            Max_Vel       => Cells (Tight).Ceiling,
+            Start_Max_Vel => Cells (1).Ceiling,
+            End_Max_Vel   => Cells (3).Ceiling,
+            Bounds        => Cells (Tight).Bounds,
+            Curved        => True,
+            Cellular      => True);
+         declare
+            Result : constant Window_Profile_Result :=
+              Cellular_Profile_At_Peak (Params, Cells, Caches, Eval, Start_Vel, End_Vel, Peak);
+            Total  : constant Time := Total_Time (Result.Profile);
+         begin
+            T.Assert (Result.Valid, "A short ramp stretches across the full cell within the attempt budget");
+            if not Result.Valid then
+               return;
+            end if;
+            T.Assert
+              (abs (Profile_Distance_At_Time
+                      (Result.Profile, Total, Result.Max_Crackle, Result.Decel_Crackle, Start_Vel)
+                    - Distance)
+               < 1.0E-8 * mm
+               and then
+                 abs (Profile_Velocity_At_Time
+                        (Result.Profile, Total, Result.Max_Crackle, Result.Decel_Crackle, Start_Vel)
+                      - End_Vel)
+                 < 1.0E-8 * mm / s,
+               "Stretching preserves distance and endpoint speed in both directions");
+            for I in 0 .. 500 loop
+               declare
+                  At_Time : constant Time := Total * Dimensionless (I) / 500.0;
+                  X       : constant Length :=
+                    Offset
+                    + Profile_Distance_At_Time
+                        (Result.Profile, At_Time, Result.Max_Crackle, Result.Decel_Crackle, Start_Vel);
+                  V       : constant Velocity :=
+                    Profile_Velocity_At_Time
+                      (Result.Profile, At_Time, Result.Max_Crackle, Result.Decel_Crackle, Start_Vel);
+               begin
+                  for Cell of Cells loop
+                     if X >= Cell.Start and then X <= Cell.Stop then
+                        T.Assert (V <= Cell.Ceiling * (1.0 + 1.0E-9), "The stretched ramp respects each cell ceiling");
+                     end if;
+                  end loop;
+               end;
+            end loop;
+         end;
+         declare
+            Inner : constant Profile_Window_Evaluation :=
+              (Eval with delta
+                 Window =>
+                   (Start_Distance => Cells (Tight).Start, Distance => Cells (Tight).Stop - Cells (Tight).Start));
+         begin
+            T.Assert
+              (not Cellular_Profile_At_Peak
+                 (Params, Cells, Caches, Inner, 1.55 * mm / s, 1.55 * mm / s, Peak)
+                 .Valid,
+               "A peak above the ceiling throughout the window remains infeasible");
+         end;
+      end Check;
+   begin
+      T.Register;
+      Params.Tangential_Velocity_Max := 250.0 * mm / s;
+      Params.Axial_Velocity_Maxes := [others => 250.0 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 5_000.0 * mm / s**2];
+      Params.Axial_Jerk_Maxes := [others => 500_000.0 * mm / s**3];
+      Params.Axial_Snap_Maxes := [others => 500_000_000.0 * mm / s**4];
+      Params.Axial_Crackle_Maxes := [others => 500_000_000_000.0 * mm / s**5];
+      --  These peaks used to exhaust all 16 attempts while the short initial ramp remained inside the long cell.
+      --  Reverse the path to exercise acceleration too, and translate it to check the boundary's coordinate system.
+      for Reverse_Path in Boolean loop
+         for Offset of Offsets'[0.0 * mm, 1_000.0 * mm] loop
+            for Peak of Peaks'[1.695 * mm / s, 1.7 * mm / s, 1.738214 * mm / s, 1.79 * mm / s] loop
+               Check (Reverse_Path, Offset, Peak);
+            end loop;
+         end loop;
+      end loop;
+   end Test_Cellular_Full_Cell_Stretch;
+
    procedure Test_Cellular_Profile_Search (T : in out Trendy_Test.Operation'Class) is
       type Cell_Curvatures is array (1 .. 3) of Curvature;
 
@@ -6404,6 +6524,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Continuous_Timing_Blend_Seams'Unrestricted_Access,
          Test_Continuous_Curved_Merges'Unrestricted_Access,
          Test_Cellular_Certificate'Unrestricted_Access,
+         Test_Cellular_Full_Cell_Stretch'Unrestricted_Access,
          Test_Cellular_Profile_Search'Unrestricted_Access,
          Test_Timing_Join_Vetoes'Unrestricted_Access,
          Test_Cellular_Endpoint_Ceilings'Unrestricted_Access,
