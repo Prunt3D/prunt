@@ -3,8 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="color-scheme" content="light dark">
     <title data-i18n="ui.app.title">Prunt User Interface</title>
+    <link rel="icon" href="favicon.ico" sizes="32x32">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
     <!-- Main Styles -->
+    <link rel="stylesheet" href="fonts.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,7 +40,22 @@
                 <span aria-hidden="true">☰</span>
                 <span data-i18n="ui.nav.menu">Menu</span>
             </button>
-            <div class="brand">Prunt</div>
+            <div class="brand">
+                <svg class="brand-logo" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+                    <defs>
+                        <pattern id="brand-logo-hatch" width="36" height="36" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+                            <line class="logo-hatch" x1="0" y1="0" x2="0" y2="36"/>
+                        </pattern>
+                    </defs>
+                    <path class="logo-face" d="M42,150 L195,16 L462,94 L462,357 L308,485 L42,413 Z"/>
+                    <path d="M308,222 L462,94 L462,357 L308,485 Z" fill="url(#brand-logo-hatch)"/>
+                    <path class="logo-line" d="M42,150 L308,222 L462,94 M308,222 V485"/>
+                    <path class="logo-line" d="M42,150 L195,16 L462,94 L462,357 L308,485 L42,413 Z"/>
+                    <path class="logo-p" transform="matrix(1 0.2707 0 1 42 150)" fill-rule="evenodd"
+                        d="M52,38 H134 A58,58 0 0 1 134,154 H104 V232 H52 Z M104,78 H130 A18,18 0 0 1 130,114 H104 Z"/>
+                </svg>
+                <span>Prunt</span>
+            </div>
         </div>
         <div class="global-controls">
             <button id="btn-pause" class="btn btn-warning" data-i18n="ui.global.pause">Pause</button>
@@ -54,7 +76,7 @@
         <div id="navigation-backdrop" class="navigation-backdrop" aria-hidden="true"></div>
         <nav id="primary-navigation" class="sidebar">
             <ul class="nav-links">
-                <li><button type="button" class="nav-item active" data-target="status-view" data-i18n="ui.nav.status" aria-current="page">Status Dashboard</button></li>
+                <li><button type="button" class="nav-item active" data-target="status-view" data-i18n="ui.nav.status" aria-current="page">Status</button></li>
                 <li><button type="button" class="nav-item config-nav-item" data-target="config-view">
                     <span data-i18n="ui.nav.config">Configuration</span>
                     <span class="nav-error-icon" title="Configuration contains errors" data-i18n-title="ui.nav.configErrors"></span>
@@ -84,16 +106,25 @@
         <main class="content-area">
             <section id="status-view" class="view active">
                 <div class="view-header">
-                    <h2 data-i18n="ui.status.title">Status Dashboard</h2>
-                    <div class="header-actions-sm">
-                        <button id="btn-reset-widgets" class="btn btn-secondary btn-sm" data-i18n="ui.status.resetDefaults">Reset Defaults</button>
-                        <button id="btn-add-header" class="btn btn-secondary btn-sm" data-i18n="ui.status.addHeader">+ Add Header</button>
-                        <button id="btn-add-widget" class="btn btn-primary btn-sm" data-i18n="ui.status.addWidget">+ Add Widget</button>
+                    <h2 data-i18n="ui.status.title">Status</h2>
+                    <div class="header-actions-sm status-header-actions">
+                        <span class="st-label" aria-hidden="true" data-i18n="ui.status.history">History</span>
+                        <div id="status-window" class="segmented" role="group"></div>
+                        <button type="button" id="btn-status-edit" class="btn btn-sm" aria-pressed="false" data-i18n="ui.status.editLayout">Edit layout</button>
                     </div>
                 </div>
-                <div id="dashboard-grid" class="dashboard-grid">
-                    <!-- Dashboard widgets will be injected here -->
+                <div id="status-hidden" class="st-hidden" hidden></div>
+                <!-- Overview cells and pinned charts are built by status_view.ts. -->
+                <div id="status-overview" class="st-sheet"></div>
+                <div class="st-details-head">
+                    <h3 data-i18n="ui.status.allValues">All values</h3>
+                    <label class="st-filter">
+                        <span class="sr-only" data-i18n="ui.status.filterLabel">Filter values</span>
+                        <input type="search" id="status-filter" placeholder="Filter values…" data-i18n-placeholder="ui.status.filterPlaceholder" autocomplete="off">
+                    </label>
                 </div>
+                <p id="status-filter-empty" class="st-empty" hidden data-i18n="ui.status.noMatches">No matching values.</p>
+                <div id="status-tables" class="st-tables"></div>
             </section>
 
             <section id="config-view" class="view">
@@ -223,22 +254,6 @@
             </section>
         </main>
     </div>
-
-    <!-- Add Widget Modal -->
-    <dialog id="add-widget-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 data-i18n="ui.status.addWidgetsTitle">Add Widgets</h3>
-                <button id="btn-close-modal" class="btn btn-sm btn-secondary">x</button>
-            </div>
-            <div id="widget-selection-list" class="widget-selection-list">
-                 <!-- Checkboxes injected here -->
-            </div>
-            <div class="modal-footer">
-                <button id="btn-apply-widgets" class="btn btn-primary" data-i18n="ui.status.applyWidgets">Apply</button>
-            </div>
-        </div>
-    </dialog>
 
     <!-- Main Script -->
     <script type="module" src="main.js"></script>

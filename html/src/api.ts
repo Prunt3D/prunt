@@ -85,6 +85,56 @@ export async function runCommand(command: string): Promise<GcodeCommandSubmissio
     return { ID: result.ID };
 }
 
+// Machine control from the status page. These paths are stubs on the server for now: it replies 501 Not Implemented
+// to everything under control/. Bodies are JSON in the units of the status values (mm, mm/s, °C, and scale factors
+// where 1 is 100 %), and axes and heaters are named by their status keys, such as X_AXIS.
+
+export class ControlNotImplementedError extends Error { }
+
+async function postControl(path: string, body: object): Promise<void> {
+    const res = await fetch(`${API_BASE}/control/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+    });
+    if (res.status === 501 || res.status === 404) {
+        throw new ControlNotImplementedError(await res.text());
+    }
+    if (!res.ok) {
+        throw new Error((await res.text()) || `Control request failed (${res.status}).`);
+    }
+}
+
+/** Move one axis by Distance mm from where it is, at Feedrate mm/s, without changing the G-code modal state. */
+export function jogAxis(axis: string, distance: number, feedrate: number): Promise<void> {
+    return postControl("jog", { Axis: axis, Distance: distance, Feedrate: feedrate });
+}
+
+/** Home the given axes, or every axis when the list is empty, as G28 does. */
+export function homeAxes(axes: string[]): Promise<void> {
+    return postControl("home", { Axes: axes });
+}
+
+/** Disable every motor, as M84 does. */
+export function disableMotors(): Promise<void> {
+    return postControl("motors-off", {});
+}
+
+/** Set a heater's target temperature by its configured name. A target of 0 turns the heater off. */
+export function setHeaterTarget(heater: string, target: number): Promise<void> {
+    return postControl("heater-target", { Heater: heater, Target: target });
+}
+
+/** Set the feedrate override, as M220 does. */
+export function setFeedrateScale(scale: number): Promise<void> {
+    return postControl("feedrate-scale", { Scale: scale });
+}
+
+/** Set the flow override, as M221 does. */
+export function setFlowScale(scale: number): Promise<void> {
+    return postControl("flow-scale", { Scale: scale });
+}
+
 export async function restartServer() {
     const res = await fetch(`${API_BASE}/reload-server`, { method: "POST" });
     if (!res.ok) throw new Error("Failed to restart server");

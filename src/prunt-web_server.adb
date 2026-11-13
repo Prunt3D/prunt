@@ -437,6 +437,8 @@ package body Prunt.Web_Server is
                Send_Content_Type (Client, "image/png");
             elsif Ends_With (Status.File, ".svg") then
                Send_Content_Type (Client, "image/svg+xml");
+            elsif Ends_With (Status.File, ".woff2") then
+               Send_Content_Type (Client, "font/woff2");
             elsif Ends_With (Status.File, ".webmanifest") then
                Send_Content_Type (Client, "application/manifest+json");
             elsif Ends_With (Status.File, ".xml") then
@@ -569,6 +571,8 @@ package body Prunt.Web_Server is
                      Send_Content_Type (Client, "image/png");
                   elsif Ends_With (Status.File, ".svg") then
                      Send_Content_Type (Client, "image/svg+xml");
+                  elsif Ends_With (Status.File, ".woff2") then
+                     Send_Content_Type (Client, "font/woff2");
                   elsif Ends_With (Status.File, ".webmanifest") then
                      Send_Content_Type (Client, "application/manifest+json");
                   elsif Ends_With (Status.File, ".xml") then
@@ -739,6 +743,11 @@ package body Prunt.Web_Server is
                   Reply_Text (Client, 204, "No Content", "", True);
                end if;
             end;
+         elsif Starts_With (Status.File, "control/") then
+            --  Machine control from the status page: control/jog, control/home, control/motors-off,
+            --  control/heater-target, control/feedrate-scale and control/flow-scale, each with a JSON body described
+            --  in html/src/api.ts. None are implemented yet; the page shows this reply next to the control used.
+            Reply_Text (Client, 501, "Not Implemented", "Machine control is not implemented yet.", True);
          else
             Reply_Text (Client, 404, "Not Found", "File not found.", True);
          end if;

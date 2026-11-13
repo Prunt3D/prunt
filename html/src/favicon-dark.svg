@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <pattern id="hatch" width="64" height="64" patternUnits="userSpaceOnUse" patternTransform="rotate(-40)">
+      <line x1="0" y1="0" x2="0" y2="64" stroke="#ffffff" stroke-width="16"/>
+    </pattern>
+  </defs>
+  <path d="M42,150 L195,16 L462,94 L462,357 L308,485 L42,413 Z" fill="#000000"/>
+  <path d="M308,222 L462,94 L462,357 L308,485 Z" fill="url(#hatch)"/>
+  <path d="M42,150 L308,222 L462,94 M308,222 V485" fill="none" stroke="#ffffff" stroke-width="26" stroke-linejoin="miter" stroke-linecap="butt"/>
+  <path d="M42,150 L195,16 L462,94 L462,357 L308,485 L42,413 Z" fill="none" stroke="#ffffff" stroke-width="26" stroke-linejoin="miter"/>
+  <path transform="matrix(1 0.2707 0 1 42 150)" fill-rule="evenodd" fill="#5cc23a" stroke="#ffffff" stroke-width="12" stroke-linejoin="miter"
+    d="M52,38 H134 A58,58 0 0 1 134,154 H104 V232 H52 Z M104,78 H130 A18,18 0 0 1 130,114 H104 Z"/>
+</svg>
