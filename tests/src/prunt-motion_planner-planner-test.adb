@@ -6285,6 +6285,9 @@ package body Prunt.Motion_Planner.Planner.Test is
             Total  : constant Time := Total_Time (Result.Profile);
          begin
             T.Assert (Result.Valid, "Different cell curvatures admit a certified profile");
+            if not Result.Valid then
+               return;
+            end if;
             T.Assert (Total <= Maximum_Time, "Cellular search retains faster intermediate peaks");
             T.Assert
               (abs (Profile_Distance_At_Time
@@ -6315,7 +6318,45 @@ package body Prunt.Motion_Planner.Planner.Test is
       --  Changing only the feasibility search to a residual model also skipped a faster intermediate candidate:
       --  96.7853 s rather than 90.2063 s, even with the full lower-peak search enabled.
       Check (164.0 * mm, [0.04 / mm, 0.008 / mm, 320.0 / mm], 0.0 * mm / s, 1.55 * mm / s, 90.3 * s);
+      --  A coarse scan refined only around its fastest sample took 16.2686 ms, 42.4818 ms and 17.3469 ms here rather
+      --  than 15.7886 ms, 40.9274 ms and 16.5507 ms. The first bracket excluded a faster bisection candidate; the
+      --  second held two minima and kept the slower one.
+      Check (0.0147 * mm, [0.0193 / mm, 77.3 / mm, 0.00177 / mm], 0.0 * mm / s, 0.0 * mm / s, 0.01581 * s);
+      Check (0.311 * mm, [4.43 / mm, 6.39 / mm, 0.924 / mm], 0.0 * mm / s, 0.0 * mm / s, 0.04097 * s);
+      Check (0.0184 * mm, [0.657 / mm, 65.4 / mm, 0.688 / mm], 0.0 * mm / s, 0.0 * mm / s, 0.01657 * s);
    end Test_Cellular_Profile_Search;
+
+   procedure Test_Cellular_Bisection_Bound (T : in out Trendy_Test.Operation'Class) is
+      Limit : Velocity := 0.0 * mm / s;
+      Calls : Natural := 0;
+
+      function Feasible (Speed : Velocity) return Boolean;
+
+      function Feasible (Speed : Velocity) return Boolean is
+      begin
+         Calls := Calls + 1;
+         return Speed <= Limit;
+      end Feasible;
+
+      function Highest is new Highest_Feasible_Speed (Feasible);
+
+      Found : Velocity;
+   begin
+      T.Register;
+      --  From rest, the relative stop never applies while nothing is feasible. Halving alone would only stop at the
+      --  bottom of the denormals, more than a thousand certificates below 250 mm/s.
+      Found := Highest (0.0 * mm / s, 250.0 * mm / s);
+      T.Assert
+        (Found = 0.0 * mm / s and then Calls <= Cellular_Search_Bisections,
+         "An infeasible search from rest stops after the bisection limit");
+
+      Limit := 1.7 * mm / s;
+      Calls := 0;
+      Found := Highest (0.0 * mm / s, 250.0 * mm / s);
+      T.Assert
+        (Found <= Limit and then Found >= (1.0 - Cellular_Search_Tolerance) * Limit and then Calls <= 30,
+         "A feasible search from rest still stops on the relative tolerance");
+   end Test_Cellular_Bisection_Bound;
 
    procedure Test_Cellular_Endpoint_Ceilings (T : in out Trendy_Test.Operation'Class) is
       Work  : aliased Planning_Workspace (6);
@@ -6526,6 +6567,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Cellular_Certificate'Unrestricted_Access,
          Test_Cellular_Full_Cell_Stretch'Unrestricted_Access,
          Test_Cellular_Profile_Search'Unrestricted_Access,
+         Test_Cellular_Bisection_Bound'Unrestricted_Access,
          Test_Timing_Join_Vetoes'Unrestricted_Access,
          Test_Cellular_Endpoint_Ceilings'Unrestricted_Access,
          Test_Inter_Block_Blending'Unrestricted_Access,

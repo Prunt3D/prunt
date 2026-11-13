@@ -942,6 +942,19 @@ private
    --  Relative width at which the cellular speed bisections stop. Every step costs a full cellular certificate, and
    --  Reachable_Cellular_Velocity keeps only 0.999 of its result, so a finer search buys almost nothing.
 
+   Cellular_Search_Bisections : constant Positive := 64;
+   --  The most halvings a cellular speed bisection makes. The relative stop above never applies while the bracket's
+   --  lower end is zero, so without this a search from rest in which nothing is feasible would halve its way down
+   --  through the denormals, more than a thousand certificates. Sixty-four halvings leave a bracket far below any
+   --  usable speed; a normal search stops on the tolerance after about ten to twenty.
+
+   generic
+      with function Feasible (Speed : Velocity) return Boolean;
+   function Highest_Feasible_Speed (Lower, Upper : Velocity) return Velocity;
+   --  Bisect between Lower, which is feasible or zero, and Upper, which is not, and return the highest speed found
+   --  feasible, or Lower if none is. Every midpoint is passed to Feasible, so a caller can keep each candidate. Stops
+   --  at a bracket within Cellular_Search_Tolerance of its lower end, or after Cellular_Search_Bisections halvings.
+
    function Timing_Run_First
      (Block : not null access constant Execution_Block; Segment : Finishing_Corners_Index)
       return Finishing_Corners_Index;
