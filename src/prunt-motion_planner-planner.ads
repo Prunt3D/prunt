@@ -1197,7 +1197,8 @@ private
       Cells              : Path_Cells;
       Eval               : Profile_Window_Evaluation;
       Start_Vel, End_Vel : Velocity) return Window_Profile_Result;
-   --  Generate_Window_Profile with the cellular certificate.
+   --  Generate_Window_Profile with the cellular certificate. Retains intermediate feasibility candidates and always
+   --  searches lower peaks: cell-dependent stretches can give the duration multiple local minima.
 
    function Reachable_Cellular_Velocity
      (Params    : Kinematic_Parameters;

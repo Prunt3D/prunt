@@ -3117,16 +3117,7 @@ package body Prunt.Motion_Planner.Planner is
 
       Last_Peak       : Velocity := 0.0 * mm / s;
       Last_Duration   : Time := 1.0E100 * s;
-      Last_Overrun    : Length := Length'Last;
       Last_Considered : Boolean := False;
-
-      Lower_Overrun : Length := -Eval.Window.Distance;
-      --  The overrun at the minimum peak. With both ends at rest that peak has no ramps and is never considered.
-
-      Top_Known    : Boolean := False;
-      Top_Peak     : Velocity := 0.0 * mm / s;
-      Top_Duration : Time := 1.0E100 * s;
-      --  The highest valid peak considered so far and its duration, which the feasibility search ends on.
 
       function Consider (Peak : Velocity) return Time;
 
@@ -3137,20 +3128,14 @@ package body Prunt.Motion_Planner.Planner is
          end if;
 
          declare
-            Candidate      : Window_Profile_Result;
-            Candidate_Time : Time;
+            Candidate      : constant Window_Profile_Result :=
+              Cellular_Profile_At_Peak (Params, Cells, Caches, Solver, Eval, Start_Vel, End_Vel, Peak);
+            Candidate_Time : constant Time :=
+              (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
          begin
-            Certify_Cellular_Profile_At_Peak
-              (Params, Cells, Caches, Solver, Eval, Start_Vel, End_Vel, Peak, Candidate, Last_Overrun);
-            Candidate_Time := (if Candidate.Valid then Total_Time (Candidate.Profile) else 1.0E100 * s);
             if Candidate.Valid and then (not Best.Valid or else Candidate_Time < Best_Time) then
                Best := Candidate;
                Best_Time := Candidate_Time;
-            end if;
-            if Candidate.Valid and then (not Top_Known or else Peak >= Top_Peak) then
-               Top_Known := True;
-               Top_Peak := Peak;
-               Top_Duration := Candidate_Time;
             end if;
             Last_Peak := Peak;
             Last_Duration := Candidate_Time;
@@ -3159,19 +3144,6 @@ package body Prunt.Motion_Planner.Planner is
          end;
       end Consider;
 
-      function Raw_Overrun (Peak : Dimensionless) return Dimensionless;
-      --  The ramp overrun of the candidate at Peak, which Consider also offers to Best.
-
-      function Raw_Overrun (Peak : Dimensionless) return Dimensionless is
-         Unused : constant Time := Consider (Peak * (mm / s));
-      begin
-         return Last_Overrun / mm;
-      end Raw_Overrun;
-
-      function Highest_Peak is new Largest_Nonpositive (Raw_Overrun);
-
-      Top_Time : Time;
-      --  The duration of the candidate at Upper.
    begin
       for Cell of Cells loop
          if Cell_Overlaps (Cell, Eval.Window.Start_Distance, Window_End) then
@@ -3221,40 +3193,29 @@ package body Prunt.Motion_Planner.Planner is
          return Cellular_Profile_At_Peak (Params, Cells, Caches, Solver, Eval, Start_Vel, End_Vel, Lower);
       end if;
 
-      if Lower > 0.0 * mm / s then
-         if Consider (Lower) = 1.0E100 * s then
-            return Best;
-         end if;
-         Lower_Overrun := Last_Overrun;
+      if Lower > 0.0 * mm / s and then Consider (Lower) = 1.0E100 * s then
+         return Best;
       end if;
-      Top_Time := Consider (Upper);
-      if Top_Time = 1.0E100 * s then
-         --  Locate the highest feasible peak as Generate_Window_Profile does: the ramps lengthen with the peak, and
-         --  a candidate rejected for another reason, such as a coast above a cell's ceiling, counts as too long.
-         --  Every accepted candidate remains available even when a later trial is infeasible.
-         Upper :=
-           Highest_Peak
-             (Lower              => Lower / (mm / s),
-              Upper              => Upper / (mm / s),
-              Lower_Residual     => Lower_Overrun / mm,
-              Upper_Residual     => Last_Overrun / mm,
-              Relative_Tolerance => Cellular_Search_Tolerance)
-           * (mm / s);
-         Top_Time := (if Top_Known and then Identical (Top_Peak, Upper) then Top_Duration else Consider (Upper));
+      if Consider (Upper) = 1.0E100 * s then
+         --  Keep the intermediate candidates from bisection as well as its feasible endpoint. Cellular stretches
+         --  change at cell and ramp-stage boundaries, so fitting a smooth overrun model can skip faster candidates.
+         loop
+            declare
+               Mid : constant Velocity := Lower + 0.5 * (Upper - Lower);
+            begin
+               exit when Mid = Lower or else Mid = Upper or else Upper - Lower <= Cellular_Search_Tolerance * Lower;
+               if Consider (Mid) < 1.0E100 * s then
+                  Lower := Mid;
+               else
+                  Upper := Mid;
+               end if;
+            end;
+         end loop;
+         Upper := Lower;
       end if;
-      declare
-         Ratio    : constant Dimensionless := 0.618033988749895;
-         Near_Top : constant Velocity := Upper - Ratio**12 * (Upper - Lower);
-      begin
-         --  As in Generate_Window_Profile: a candidate as far below the highest feasible peak as the search would
-         --  resolve, and no faster than that peak, puts the minimum which the search assumes within that distance
-         --  of it.
-         if Top_Time < 1.0E100 * s and then Near_Top > Lower and then Near_Top < Upper then
-            if Consider (Near_Top) >= Top_Time then
-               return Best;
-            end if;
-         end if;
-      end;
+      --  Always search lower peaks too. A cellular profile can have a local time minimum near the highest feasible
+      --  peak and a faster one below it, so one nearby comparison cannot justify skipping the interval.
+      Lower := Velocity'Max (Start_Vel, End_Vel);
       declare
          Ratio      : constant Dimensionless := 0.618033988749895;
          Left       : Velocity := Upper - Ratio * (Upper - Lower);

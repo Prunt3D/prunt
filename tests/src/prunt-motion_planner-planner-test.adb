@@ -6106,6 +6106,97 @@ package body Prunt.Motion_Planner.Planner.Test is
       end;
    end Test_Cellular_Certificate;
 
+   procedure Test_Cellular_Profile_Search (T : in out Trendy_Test.Operation'Class) is
+      type Cell_Curvatures is array (1 .. 3) of Curvature;
+
+      Params : Kinematic_Parameters;
+
+      function Bounds_For (K : Curvature) return Unit_Speed_Axial_Derivative_Bounds
+      is (Velocity     => [X_Axis | Y_Axis => 1.0, others => 0.0],
+          Acceleration => [X_Axis | Y_Axis => K, others => 0.0 / mm],
+          Jerk         => [X_Axis | Y_Axis => K**2, others => 0.0 / mm**2],
+          Snap         => [X_Axis | Y_Axis => K**3, others => 0.0 / mm**3],
+          Crackle      => [X_Axis | Y_Axis => K**4, others => 0.0 / mm**4]);
+
+      procedure Check
+        (Distance           : Length;
+         Curvatures         : Cell_Curvatures;
+         Start_Vel, End_Vel : Velocity;
+         Maximum_Time       : Time);
+
+      procedure Check
+        (Distance           : Length;
+         Curvatures         : Cell_Curvatures;
+         Start_Vel, End_Vel : Velocity;
+         Maximum_Time       : Time)
+      is
+         Cells : Path_Cells (Curvatures'Range);
+         Eval  : Profile_Window_Evaluation;
+      begin
+         for I in Cells'Range loop
+            declare
+               Bounds : constant Unit_Speed_Axial_Derivative_Bounds := Bounds_For (Curvatures (I));
+            begin
+               Cells (I) :=
+                 (Start   => Dimensionless (I - 1) / 3.0 * Distance,
+                  Stop    => Dimensionless (I) / 3.0 * Distance,
+                  Bounds  => Bounds,
+                  Ceiling => Constant_Speed_Axial_Ceiling (Params, Bounds, 250.0 * mm / s),
+                  Curved  => True);
+            end;
+         end loop;
+         Eval :=
+           (Valid         => True,
+            Window        => (Start_Distance => 0.0 * mm, Distance => Distance),
+            Limits        =>
+              Mixed_Derivative_Limits
+                (Params, (Velocity => Cells (1).Bounds.Velocity, others => <>), 250.0 * mm / s)
+                .Limits,
+            Max_Vel       => Velocity'Min (Cells (1).Ceiling, Cells (3).Ceiling),
+            Start_Max_Vel => Cells (1).Ceiling,
+            End_Max_Vel   => Cells (3).Ceiling,
+            Bounds        =>
+              Bounds_For (Curvature'Max (Curvatures (1), Curvature'Max (Curvatures (2), Curvatures (3)))),
+            Curved        => True,
+            Cellular      => True);
+         declare
+            Result : constant Window_Profile_Result :=
+              Generate_Cellular_Profile (Params, Cells, Eval, Start_Vel, End_Vel);
+            Total  : constant Time := Total_Time (Result.Profile);
+         begin
+            T.Assert (Result.Valid, "Different cell curvatures admit a certified profile");
+            T.Assert (Total <= Maximum_Time, "Cellular search retains faster intermediate peaks");
+            T.Assert
+              (abs (Profile_Distance_At_Time
+                      (Result.Profile, Total, Result.Max_Crackle, Result.Decel_Crackle, Start_Vel)
+                    - Distance)
+               < 1.0E-8 * mm
+               and then
+                 abs (Profile_Velocity_At_Time
+                        (Result.Profile, Total, Result.Max_Crackle, Result.Decel_Crackle, Start_Vel)
+                      - End_Vel)
+                 < 1.0E-8 * mm / s,
+               "The faster profile still closes distance and endpoint velocity");
+         end;
+      end Check;
+   begin
+      T.Register;
+      Params.Tangential_Velocity_Max := 250.0 * mm / s;
+      Params.Axial_Velocity_Maxes := [others => 250.0 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 5_000.0 * mm / s**2];
+      Params.Axial_Jerk_Maxes := [others => 500_000.0 * mm / s**3];
+      Params.Axial_Snap_Maxes := [others => 500_000_000.0 * mm / s**4];
+      Params.Axial_Crackle_Maxes := [others => 500_000_000_000.0 * mm / s**5];
+
+      --  A near-maximum peak can be a local minimum while a much lower peak is faster. The near-top shortcut
+      --  chose 9.5664 s and 0.0394482 s here, despite certified profiles taking 6.3310 s and 0.0381419 s.
+      Check (24.6 * mm, [0.0074 / mm, 1.27 / mm, 86.5 / mm], 0.0 * mm / s, 0.0 * mm / s, 6.34 * s);
+      Check (0.7 * mm, [0.003 / mm, 0.75 / mm, 0.017 / mm], 12.7 * mm / s, 0.0 * mm / s, 0.0382 * s);
+      --  Changing only the feasibility search to a residual model also skipped a faster intermediate candidate:
+      --  96.7853 s rather than 90.2063 s, even with the full lower-peak search enabled.
+      Check (164.0 * mm, [0.04 / mm, 0.008 / mm, 320.0 / mm], 0.0 * mm / s, 1.55 * mm / s, 90.3 * s);
+   end Test_Cellular_Profile_Search;
+
    procedure Test_Cellular_Endpoint_Ceilings (T : in out Trendy_Test.Operation'Class) is
       Work  : aliased Planning_Workspace (6);
       Block : aliased Execution_Block (6);
@@ -6313,6 +6404,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Continuous_Timing_Blend_Seams'Unrestricted_Access,
          Test_Continuous_Curved_Merges'Unrestricted_Access,
          Test_Cellular_Certificate'Unrestricted_Access,
+         Test_Cellular_Profile_Search'Unrestricted_Access,
          Test_Timing_Join_Vetoes'Unrestricted_Access,
          Test_Cellular_Endpoint_Ceilings'Unrestricted_Access,
          Test_Inter_Block_Blending'Unrestricted_Access,
