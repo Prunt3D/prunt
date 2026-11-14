@@ -1139,6 +1139,29 @@ private
       Run_Time  : Time;
       Timing    : Timing_Evaluation) return Length;
 
+   type Central_Ramps is record
+      Ramp_End     : Accel_Ramp_End;
+      Accel, Decel : Prepared_Ramp;
+   end record;
+   --  The two ramps of a run's central profile, prepared, and where the first of them ends. They are too large to be
+   --  part of a Timing_Evaluation, which execution builds at every interpolation step, and pay for themselves only
+   --  where a run is evaluated many times.
+
+   function Central_Ramps_Of
+     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Ramp_End : Accel_Ramp_End)
+      return Central_Ramps;
+   --  For the central profile whose acceleration ramp ends at Ramp_End.
+
+   function Timing_Distance_At_Time
+     (Block     : not null access constant Execution_Block;
+      Run_First : Finishing_Corners_Index;
+      Run_Time  : Time;
+      Timing    : Timing_Evaluation;
+      Ramps     : access constant Central_Ramps) return Length;
+   --  As above, with the central profile evaluated from Ramps when there are any. The distance is the same to the
+   --  last bit either way: Assign_Timing_Members places the members of a run with Ramps, and execution evaluates the
+   --  run without.
+
    function Timing_Velocity_At_Time
      (Block     : not null access constant Execution_Block;
       Run_First : Finishing_Corners_Index;

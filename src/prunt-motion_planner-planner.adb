@@ -3398,6 +3398,14 @@ package body Prunt.Motion_Planner.Planner is
    function Accel_Ramp_End_Of
      (Profile : Feedrate_Profile; Accel_Crackle : Crackle; Start_Vel : Velocity) return Accel_Ramp_End;
 
+   generic
+      with function Decel_Distance (Decel_Time : Time) return Length;
+   function Joined_Distance_After_Accel_Ramp
+     (Profile : Feedrate_Profile; T : Time; Ramp_End : Accel_Ramp_End) return Length;
+   --  Profile_Distance_At_Time for T beyond the acceleration ramp, which ends at Ramp_End, with the distance of the
+   --  deceleration ramp from Decel_Distance. This is the one statement of how the coast and the deceleration join
+   --  on, so that every evaluation of a profile rounds alike.
+
    function Distance_After_Accel_Ramp
      (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Ramp_End : Accel_Ramp_End) return Length;
    --  Profile_Distance_At_Time for T beyond the acceleration ramp, which ends at Ramp_End.
@@ -3405,6 +3413,9 @@ package body Prunt.Motion_Planner.Planner is
    function Distance_After_Accel_Ramp
      (Profile : Feedrate_Profile; T : Time; Decel_Ramp : Prepared_Ramp; Ramp_End : Accel_Ramp_End) return Length;
    --  As above, with the deceleration ramp prepared from the speed at Ramp_End. The result is identical.
+
+   function Profile_Distance_At_Time (Profile : Feedrate_Profile; T : Time; Ramps : Central_Ramps) return Length;
+   --  Profile_Distance_At_Time for the profile whose ramps are Ramps. The result is identical.
 
    function Velocity_After_Accel_Ramp
      (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Accel_Time : Time; Mid_Vel : Velocity)
@@ -3422,8 +3433,8 @@ package body Prunt.Motion_Planner.Planner is
          Accel_Dist => Distance_At_Time (Profile.Accel, Accel_Time, Accel_Crackle, Start_Vel));
    end Accel_Ramp_End_Of;
 
-   function Distance_After_Accel_Ramp
-     (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Ramp_End : Accel_Ramp_End) return Length is
+   function Joined_Distance_After_Accel_Ramp
+     (Profile : Feedrate_Profile; T : Time; Ramp_End : Accel_Ramp_End) return Length is
    begin
       if T < Ramp_End.Accel_Time + Profile.Coast then
          return Ramp_End.Accel_Dist + Ramp_End.Mid_Vel * (T - Ramp_End.Accel_Time);
@@ -3431,24 +3442,29 @@ package body Prunt.Motion_Planner.Planner is
       return
         Ramp_End.Accel_Dist
         + Ramp_End.Mid_Vel * Profile.Coast
-        + Distance_At_Time
-            (Profile.Decel,
-             Time'Min (T - (Ramp_End.Accel_Time + Profile.Coast), Total_Time (Profile.Decel)),
-             -Decel_Crackle,
-             Ramp_End.Mid_Vel);
+        + Decel_Distance (Time'Min (T - (Ramp_End.Accel_Time + Profile.Coast), Total_Time (Profile.Decel)));
+   end Joined_Distance_After_Accel_Ramp;
+
+   function Distance_After_Accel_Ramp
+     (Profile : Feedrate_Profile; T : Time; Decel_Crackle : Crackle; Ramp_End : Accel_Ramp_End) return Length
+   is
+      function Decel_Distance (Decel_Time : Time) return Length
+      is (Distance_At_Time (Profile.Decel, Decel_Time, -Decel_Crackle, Ramp_End.Mid_Vel));
+
+      function Distance is new Joined_Distance_After_Accel_Ramp (Decel_Distance);
+   begin
+      return Distance (Profile, T, Ramp_End);
    end Distance_After_Accel_Ramp;
 
    function Distance_After_Accel_Ramp
-     (Profile : Feedrate_Profile; T : Time; Decel_Ramp : Prepared_Ramp; Ramp_End : Accel_Ramp_End) return Length is
+     (Profile : Feedrate_Profile; T : Time; Decel_Ramp : Prepared_Ramp; Ramp_End : Accel_Ramp_End) return Length
+   is
+      function Decel_Distance (Decel_Time : Time) return Length
+      is (Distance_At_Time (Decel_Ramp, Decel_Time));
+
+      function Distance is new Joined_Distance_After_Accel_Ramp (Decel_Distance);
    begin
-      if T < Ramp_End.Accel_Time + Profile.Coast then
-         return Ramp_End.Accel_Dist + Ramp_End.Mid_Vel * (T - Ramp_End.Accel_Time);
-      end if;
-      return
-        Ramp_End.Accel_Dist
-        + Ramp_End.Mid_Vel * Profile.Coast
-        + Distance_At_Time
-            (Decel_Ramp, Time'Min (T - (Ramp_End.Accel_Time + Profile.Coast), Total_Time (Profile.Decel)));
+      return Distance (Profile, T, Ramp_End);
    end Distance_After_Accel_Ramp;
 
    function Profile_Distance_At_Time
@@ -3461,6 +3477,15 @@ package body Prunt.Motion_Planner.Planner is
       end if;
       return
         Distance_After_Accel_Ramp (Profile, T, Decel_Crackle, Accel_Ramp_End_Of (Profile, Accel_Crackle, Start_Vel));
+   end Profile_Distance_At_Time;
+
+   function Profile_Distance_At_Time (Profile : Feedrate_Profile; T : Time; Ramps : Central_Ramps) return Length is
+   begin
+      --  Ramps.Ramp_End.Accel_Time is Total_Time (Profile.Accel), so the ramps are chosen between as above.
+      if T <= Ramps.Ramp_End.Accel_Time then
+         return Distance_At_Time (Ramps.Accel, T);
+      end if;
+      return Distance_After_Accel_Ramp (Profile, T, Ramps.Decel, Ramps.Ramp_End);
    end Profile_Distance_At_Time;
 
    function Velocity_After_Accel_Ramp
@@ -5115,26 +5140,6 @@ package body Prunt.Motion_Planner.Planner is
       return Length
    is (Timing_Distance_At_Time (Block, Run_First, Run_Time, Prepare_Timing_Evaluation (Block, Run_First)));
 
-   type Central_Ramps is record
-      Accel, Decel : Prepared_Ramp;
-   end record;
-   --  The two ramps of a run's central profile, prepared. They are too large to be part of a Timing_Evaluation, which
-   --  execution builds at every interpolation step, and pay for themselves only where a run is evaluated many times.
-
-   function Central_Ramps_Of
-     (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Ramp_End : Accel_Ramp_End)
-      return Central_Ramps;
-   --  For the central profile whose acceleration ramp ends at Ramp_End.
-
-   function Run_Distance_At_Time
-     (Block     : not null access constant Execution_Block;
-      Run_First : Finishing_Corners_Index;
-      Run_Time  : Time;
-      Timing    : Timing_Evaluation;
-      Ramps     : access constant Central_Ramps) return Length;
-   --  Timing_Distance_At_Time, from Ramps when there are any, which requires Timing to have its ramp end. The result
-   --  is identical either way.
-
    function Central_Ramps_Of
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Ramp_End : Accel_Ramp_End)
       return Central_Ramps
@@ -5142,10 +5147,11 @@ package body Prunt.Motion_Planner.Planner is
       Profile : constant Feedrate_Profile := Block.Feedrate_Profiles (Run_First);
    begin
       return
-        (Accel =>
+        (Ramp_End => Ramp_End,
+         Accel    =>
            Prepare
              (Profile.Accel, Block.Profile_Crackles (Run_First), Central_Profile_Start_Velocity (Block, Run_First)),
-         Decel => Prepare (Profile.Decel, -Block.Profile_Decel_Crackles (Run_First), Ramp_End.Mid_Vel));
+         Decel    => Prepare (Profile.Decel, -Block.Profile_Decel_Crackles (Run_First), Ramp_End.Mid_Vel));
    end Central_Ramps_Of;
 
    function Timing_Distance_At_Time
@@ -5153,9 +5159,9 @@ package body Prunt.Motion_Planner.Planner is
       Run_First : Finishing_Corners_Index;
       Run_Time  : Time;
       Timing    : Timing_Evaluation) return Length
-   is (Run_Distance_At_Time (Block, Run_First, Run_Time, Timing, null));
+   is (Timing_Distance_At_Time (Block, Run_First, Run_Time, Timing, null));
 
-   function Run_Distance_At_Time
+   function Timing_Distance_At_Time
      (Block     : not null access constant Execution_Block;
       Run_First : Finishing_Corners_Index;
       Run_Time  : Time;
@@ -5191,10 +5197,7 @@ package body Prunt.Motion_Planner.Planner is
             return
               Window.Start_Distance
               + (if Ramps /= null
-                 then
-                   (if T <= Timing.Ramp_End.Accel_Time
-                    then Distance_At_Time (Ramps.Accel, T)
-                    else Distance_After_Accel_Ramp (Profile, T, Ramps.Decel, Timing.Ramp_End))
+                 then Profile_Distance_At_Time (Profile, T, Ramps.all)
                  elsif Timing.Has_Ramp_End and then T > Timing.Ramp_End.Accel_Time
                  then Distance_After_Accel_Ramp (Profile, T, Block.Profile_Decel_Crackles (Run_First), Timing.Ramp_End)
                  else
@@ -5221,7 +5224,7 @@ package body Prunt.Motion_Planner.Planner is
                 Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Run_First))
                 * Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time));
       end if;
-   end Run_Distance_At_Time;
+   end Timing_Distance_At_Time;
 
    function Timing_Velocity_At_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
@@ -5287,20 +5290,27 @@ package body Prunt.Motion_Planner.Planner is
    end Timing_Velocity_At_Time;
 
    procedure Assign_Timing_Members (Block : not null access Execution_Block; Run_First : Finishing_Corners_Index) is
-      Run_Last    : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
-      Bisected    : constant Boolean := Run_Last > Run_First;
-      --  Every member boundary but the last is bisected for.
-      Timing      : constant Timing_Evaluation :=
-        Prepare_Timing_Evaluation (Block, Run_First, With_Ramp_End => Bisected);
-      --  Most member boundaries of a long run lie beyond its acceleration ramp, so bisect from its prepared end.
-      Motion_Time : constant Time := Timing.Motion_Time;
+      Run_Last : constant Finishing_Corners_Index := Timing_Run_Last (Block, Run_First);
+   begin
+      if Run_Last = Run_First then
+         --  A run of one member has no boundary to bisect for.
+         Block.Timing_Distance_Offsets (Run_First) := 0.0 * mm;
+         Block.Timing_Time_Offsets (Run_First) := 0.0 * s;
+         Block.Timing_Segment_Times (Run_First) :=
+           Time'Max (0.0 * s, Prepare_Timing_Evaluation (Block, Run_First).Motion_Time)
+           + Block.Corner_Dwell_Times (Run_First);
+         return;
+      end if;
 
-      procedure Assign (Ramps : access constant Central_Ramps);
-      --  Place the members, evaluating the central profile from Ramps when there are any.
-
-      procedure Assign (Ramps : access constant Central_Ramps) is
-         Distance   : Length := 0.0 * mm;
-         Start_Time : Time := 0.0 * s;
+      declare
+         Timing      : constant Timing_Evaluation :=
+           Prepare_Timing_Evaluation (Block, Run_First, With_Ramp_End => True);
+         --  Most member boundaries of a long run lie beyond its acceleration ramp, so evaluate from its prepared end.
+         Ramps       : aliased constant Central_Ramps := Central_Ramps_Of (Block, Run_First, Timing.Ramp_End);
+         --  A bisection evaluates the run about fifty times, so the ramps are prepared once for all of them.
+         Motion_Time : constant Time := Timing.Motion_Time;
+         Distance    : Length := 0.0 * mm;
+         Start_Time  : Time := 0.0 * s;
 
          function Time_At_Distance (Target : Length) return Time;
          --  Run distance never decreases with time, so bisect until the bracket cannot be split any further.
@@ -5313,7 +5323,7 @@ package body Prunt.Motion_Planner.Planner is
             loop
                Mid := Lower + 0.5 * (Upper - Lower);
                exit when Mid = Lower or else Mid = Upper;
-               if Run_Distance_At_Time (Block, Run_First, Mid, Timing, Ramps) < Target then
+               if Timing_Distance_At_Time (Block, Run_First, Mid, Timing, Ramps'Access) < Target then
                   Lower := Mid;
                else
                   Upper := Mid;
@@ -5336,18 +5346,7 @@ package body Prunt.Motion_Planner.Planner is
                Block.Corner_Velocity_Limits (I) := Timing_Velocity_At_Time (Block, Run_First, Start_Time, Timing);
             end if;
          end loop;
-      end Assign;
-   begin
-      if Bisected then
-         declare
-            Ramps : aliased constant Central_Ramps := Central_Ramps_Of (Block, Run_First, Timing.Ramp_End);
-            --  A bisection evaluates the run about fifty times, so the ramps are prepared once for all of them.
-         begin
-            Assign (Ramps'Access);
-         end;
-      else
-         Assign (null);
-      end if;
+      end;
    end Assign_Timing_Members;
 
    function Segment_Time

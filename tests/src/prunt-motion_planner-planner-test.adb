@@ -5744,6 +5744,11 @@ package body Prunt.Motion_Planner.Planner.Test is
                Accel_End : constant Time := Timing.Prefix_Time + Timing.Ramp_End.Accel_Time;
                Coast_End : constant Time := Accel_End + Block.Feedrate_Profiles (Run_First).Coast;
                Exact     : Boolean := True;
+               Ramps     : aliased constant Central_Ramps :=
+                 Central_Ramps_Of (Block'Access, Run_First, Timing.Ramp_End);
+               Bisected  : Boolean := True;
+               --  Whether the run's distance as Assign_Timing_Members bisects it, from prepared ramps, is the
+               --  distance as execution evaluates it. A member would otherwise start before its own offset.
 
                procedure Compare (Run_Time : Time);
 
@@ -5757,6 +5762,12 @@ package body Prunt.Motion_Planner.Planner.Test is
                     and then
                       Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time, Timing)
                       = Timing_Velocity_At_Time (Block'Access, Run_First, Run_Time);
+                  Bisected :=
+                    Bisected
+                    and then
+                      Timing_Distance_At_Time (Block'Access, Run_First, Run_Time, Timing, Ramps'Access)
+                      = Timing_Distance_At_Time
+                          (Block'Access, Run_First, Run_Time, Assigned_Timing_Evaluation (Block'Access, Run_First));
                end Compare;
             begin
                T.Assert
@@ -5777,9 +5788,14 @@ package body Prunt.Motion_Planner.Planner.Test is
                end loop;
                --  Member boundaries are where Assign_Timing_Members' bisections ended.
                for I in Run_First .. Timing_Run_Last (Block'Access, Run_First) loop
+                  if Block.Timing_Time_Offsets (I) > 0.0 * s then
+                     Compare (Time'Adjacent (Block.Timing_Time_Offsets (I), -Time'Last));
+                  end if;
                   Compare (Block.Timing_Time_Offsets (I));
+                  Compare (Time'Adjacent (Block.Timing_Time_Offsets (I), Time'Last));
                end loop;
                T.Assert (Exact, "Prepared timing evaluates run" & Run_First'Image & " exactly as unprepared timing");
+               T.Assert (Bisected, "Prepared ramps evaluate run" & Run_First'Image & " exactly as execution does");
             end;
          end if;
       end loop;
