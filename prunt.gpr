@@ -105,6 +105,9 @@ project Prunt is
         & ("-fdata-sections",
            "-ffunction-sections",
            "-fno-omit-frame-pointer",
+           "-ffp-contract=off", --  Round every product and sum on its own. The planner computes rounding errors
+                                --  exactly and compares results to the last bit, and a target with a fused
+                                --  multiply-add would otherwise fuse them.
            "-gnatW8",    --  UTF-8 encoding
            "-gnatX",     --  GNAT core extensions
            "-gnateE",    --  Extra exception info in messages

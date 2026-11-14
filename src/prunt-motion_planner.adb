@@ -2338,7 +2338,9 @@ package body Prunt.Motion_Planner is
    --
    --  A ramp which slows down to a speed which is not negative is evaluated backwards: as the distance of the whole
    --  ramp less the distance, in the time which is left, of the ramp which speeds up from the final speed. Nothing
-   --  large is then subtracted from Start_Vel * T.
+   --  large is then subtracted from Start_Vel * T. The price is that the error of such a distance is a few units in
+   --  the last place of the whole ramp's distance at every time, the start of the ramp included, where the forward
+   --  evaluation had an error in proportion to the distance.
    --
    --  The distance of a ramp which speeds up is Start_Vel * T plus a gain, and the gain is that of the same ramp
    --  from rest. Within a stage the gain is the gain at the start of the stage plus a polynomial in the time into
@@ -2354,11 +2356,18 @@ package body Prunt.Motion_Planner is
    --  Distance_At_Time derives all of that from the ramp for every time. A Prepared_Ramp holds it for all fifteen
    --  stages. The two must agree to the last bit, because the planner places the members of a run with one and
    --  execution evaluates the run with the other. So every operation which rounds is in a subprogram both of them
-   --  call, and those are not inlined: a compiler which fuses a product and a sum then does so alike for both.
+   --  call, and those are not inlined.
+   --
+   --  All of this requires every product and every sum to be rounded on its own. A compiler which fuses a product
+   --  and a sum into one operation makes the error terms of the polynomial wrong, and the distance then decreases
+   --  between some adjacent times. The project is therefore compiled with -ffp-contract=off, which matters on every
+   --  target with a fused multiply-add.
    --
    --  Those subprograms reach their results through sums, products and quotients by constants only, so an operation
    --  which overflows, or meets a NaN, leaves a result which is not finite. They test their results once in place of
-   --  a check on each operation, as Fast_Distance_At_Max_Time does, and so raise for the same inputs.
+   --  a check on each operation, as Fast_Distance_At_Max_Time does, and raise exactly when one of those checks
+   --  would. The operations include those which split a number into halves, which overflow for magnitudes above
+   --  about 1.0E300 where the polynomial alone would not.
    ------------------------------------------------------------------------------------------------------------------
 
    type Ramp_State is record
@@ -2745,7 +2754,8 @@ package body Prunt.Motion_Planner is
    function Compensated_Local (Stage : Ramp_Stage; X : Time) return Length;
    --  X * (Vel + X * (Acc_2 + X * (Jr_6 + X * (Sn_24 + X * C_120)))) by the Horner scheme, with the rounding error
    --  of every product and sum carried along in a second Horner scheme and added at the end. The error of a product
-   --  is exact from the halves of its factors, with no fused multiply-add, so every target computes the same value.
+   --  is exact from the halves of its factors, so no target needs a fused multiply-add, and every target computes
+   --  the same value provided that it fuses nothing here itself (see -ffp-contract=off above).
 
    function High_Half (A : Dimensionless) return Dimensionless is
       pragma Suppress (Overflow_Check);
@@ -2773,7 +2783,7 @@ package body Prunt.Motion_Planner is
       pragma Suppress (Overflow_Check);
       --  An operation below which overflows, or meets a NaN, leaves a result which is not finite: every later
       --  operation is a sum or a product. Testing the result once therefore raises wherever a check on each
-      --  operation of the plain scheme would.
+      --  operation would, those of the plain scheme among them.
 
       Raw_X  : constant Dimensionless := X / s;
       X_High : constant Dimensionless := High_Half (Raw_X);
