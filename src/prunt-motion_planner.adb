@@ -2712,8 +2712,9 @@ package body Prunt.Motion_Planner is
 
          when 12 .. 15 =>
             Hi := Length'Last;
-            State := Checkpoint_12 (T1, T2, T3, T4, Cm, Checkpoint_12_Distance (T1, T2, T3, T4, Cm));
-            Lo := Length'Max (State.Dist, Checkpoint_8_Distance (T1, T2, T3, Cm));
+            Lo := Checkpoint_12_Distance (T1, T2, T3, T4, Cm);
+            State := Checkpoint_12 (T1, T2, T3, T4, Cm, Lo);
+            Lo := Length'Max (Lo, Checkpoint_8_Distance (T1, T2, T3, Cm));
             if Stage >= 13 then
                State := Advance (State, T3, Zero);
             end if;
@@ -2907,70 +2908,94 @@ package body Prunt.Motion_Planner is
       pragma Assert (T <= Total_Time (Profile));
       pragma Assert (T >= 0.0 * s);
 
-      return
-        Ramp_Distance
-          (Shape,
-           T,
-           Rising_T,
-           Stage_Gain (Rising_Stage (Profile, abs Max_Crackle, Bounds, Stage_At (Bounds, Rising_T)), Rising_T));
+      declare
+         Stage : constant Ramp_Stage := Rising_Stage (Profile, abs Max_Crackle, Bounds, Stage_At (Bounds, Rising_T));
+      begin
+         return Ramp_Distance (Shape, T, Rising_T, Stage_Gain (Stage, Rising_T));
+      end;
    end Distance_At_Time;
 
    function Prepare
      (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Prepared_Ramp
-   is
-      T1 : constant Time := Profile (1);
-      T2 : constant Time := Profile (2);
-      T3 : constant Time := Profile (3);
-      T4 : constant Time := Profile (4);
-      Cm : constant Crackle := abs Max_Crackle;
+   is (declare
+         T1 : constant Time := Profile (1);
+         T2 : constant Time := Profile (2);
+         T3 : constant Time := Profile (3);
+         T4 : constant Time := Profile (4);
+         Cm : constant Crackle := abs Max_Crackle;
 
-      Bounds : constant Ramp_Stage_Bounds := Ramp_Bounds (Profile);
-      D4     : constant Length := Checkpoint_4_Distance (T1, T2, Cm);
-      D8     : constant Length := Checkpoint_8_Distance (T1, T2, T3, Cm);
-      D12    : constant Length := Checkpoint_12_Distance (T1, T2, T3, T4, Cm);
-      Late   : constant Length := Length'Max (D12, D8);
+         Bounds : constant Ramp_Stage_Bounds := Ramp_Bounds (Profile);
+         D4     : constant Length := Checkpoint_4_Distance (T1, T2, Cm);
+         D8     : constant Length := Checkpoint_8_Distance (T1, T2, T3, Cm);
+         D12    : constant Length := Checkpoint_12_Distance (T1, T2, T3, T4, Cm);
+         Late   : constant Length := Length'Max (D12, D8);
 
-      State  : Ramp_State;
-      Stages : Ramp_Stage_Array;
-   begin
-      --  Every stage as Rising_Stage makes it, with each state taken from the stage before in place of a new start
-      --  from the closed form of its group.
-      for Stage in Feedrate_Profile_Stage_Index loop
-         case Stage is
-            when 1      =>
-               null;
-
-            when 4      =>
-               State := Checkpoint_4 (T1, T2, Cm, D4);
-
-            when 8      =>
-               State := Checkpoint_8 (T1, T2, T3, Cm, D8);
-
-            when 12     =>
-               State := Checkpoint_12 (T1, T2, T3, T4, Cm, D12);
-
-            when others =>
-               State := Advance (State, Stage_Length (Stage - 1, Profile), Stage_Crackle (Stage - 1, Cm));
-         end case;
-         Stages (Stage) :=
-           Make_Stage
-             (State,
-              (if Stage = 1 then 0.0 * s else Bounds (Stage - 1)),
-              Stage_Length (Stage, Profile),
-              Stage_Crackle (Stage, Cm),
-              (case Stage is
-                 when 1 .. 3   => 0.0 * mm,
-                 when 4 .. 7   => D4,
-                 when 8 .. 11  => D8,
-                 when 12 .. 15 => Late),
-              (case Stage is
-                 when 1 .. 3   => D4,
-                 when 4 .. 7   => D8,
-                 when 8 .. 11  => Late,
-                 when 12 .. 15 => Length'Last));
-      end loop;
-      return (Shape => Shape_Of (Profile, Max_Crackle, Start_Vel), Bounds => Bounds, Stages => Stages);
-   end Prepare;
+         --  Every stage as Rising_Stage makes it, with each state taken from the stage before in place of a new
+         --  start from the closed form of its group.
+         State_1  : constant Ramp_State := (others => <>);
+         Stage_1  : constant Ramp_Stage :=
+           Make_Stage (State_1, 0.0 * s, Stage_Length (1, Profile), Stage_Crackle (1, Cm), 0.0 * mm, D4);
+         State_2  : constant Ramp_State := Advance (State_1, Stage_Length (1, Profile), Stage_Crackle (1, Cm));
+         Stage_2  : constant Ramp_Stage :=
+           Make_Stage (State_2, Bounds (1), Stage_Length (2, Profile), Stage_Crackle (2, Cm), 0.0 * mm, D4);
+         State_3  : constant Ramp_State := Advance (State_2, Stage_Length (2, Profile), Stage_Crackle (2, Cm));
+         Stage_3  : constant Ramp_Stage :=
+           Make_Stage (State_3, Bounds (2), Stage_Length (3, Profile), Stage_Crackle (3, Cm), 0.0 * mm, D4);
+         State_4  : constant Ramp_State := Checkpoint_4 (T1, T2, Cm, D4);
+         Stage_4  : constant Ramp_Stage :=
+           Make_Stage (State_4, Bounds (3), Stage_Length (4, Profile), Stage_Crackle (4, Cm), D4, D8);
+         State_5  : constant Ramp_State := Advance (State_4, Stage_Length (4, Profile), Stage_Crackle (4, Cm));
+         Stage_5  : constant Ramp_Stage :=
+           Make_Stage (State_5, Bounds (4), Stage_Length (5, Profile), Stage_Crackle (5, Cm), D4, D8);
+         State_6  : constant Ramp_State := Advance (State_5, Stage_Length (5, Profile), Stage_Crackle (5, Cm));
+         Stage_6  : constant Ramp_Stage :=
+           Make_Stage (State_6, Bounds (5), Stage_Length (6, Profile), Stage_Crackle (6, Cm), D4, D8);
+         State_7  : constant Ramp_State := Advance (State_6, Stage_Length (6, Profile), Stage_Crackle (6, Cm));
+         Stage_7  : constant Ramp_Stage :=
+           Make_Stage (State_7, Bounds (6), Stage_Length (7, Profile), Stage_Crackle (7, Cm), D4, D8);
+         State_8  : constant Ramp_State := Checkpoint_8 (T1, T2, T3, Cm, D8);
+         Stage_8  : constant Ramp_Stage :=
+           Make_Stage (State_8, Bounds (7), Stage_Length (8, Profile), Stage_Crackle (8, Cm), D8, Late);
+         State_9  : constant Ramp_State := Advance (State_8, Stage_Length (8, Profile), Stage_Crackle (8, Cm));
+         Stage_9  : constant Ramp_Stage :=
+           Make_Stage (State_9, Bounds (8), Stage_Length (9, Profile), Stage_Crackle (9, Cm), D8, Late);
+         State_10 : constant Ramp_State := Advance (State_9, Stage_Length (9, Profile), Stage_Crackle (9, Cm));
+         Stage_10 : constant Ramp_Stage :=
+           Make_Stage (State_10, Bounds (9), Stage_Length (10, Profile), Stage_Crackle (10, Cm), D8, Late);
+         State_11 : constant Ramp_State := Advance (State_10, Stage_Length (10, Profile), Stage_Crackle (10, Cm));
+         Stage_11 : constant Ramp_Stage :=
+           Make_Stage (State_11, Bounds (10), Stage_Length (11, Profile), Stage_Crackle (11, Cm), D8, Late);
+         State_12 : constant Ramp_State := Checkpoint_12 (T1, T2, T3, T4, Cm, D12);
+         Stage_12 : constant Ramp_Stage :=
+           Make_Stage (State_12, Bounds (11), Stage_Length (12, Profile), Stage_Crackle (12, Cm), Late, Length'Last);
+         State_13 : constant Ramp_State := Advance (State_12, Stage_Length (12, Profile), Stage_Crackle (12, Cm));
+         Stage_13 : constant Ramp_Stage :=
+           Make_Stage (State_13, Bounds (12), Stage_Length (13, Profile), Stage_Crackle (13, Cm), Late, Length'Last);
+         State_14 : constant Ramp_State := Advance (State_13, Stage_Length (13, Profile), Stage_Crackle (13, Cm));
+         Stage_14 : constant Ramp_Stage :=
+           Make_Stage (State_14, Bounds (13), Stage_Length (14, Profile), Stage_Crackle (14, Cm), Late, Length'Last);
+         State_15 : constant Ramp_State := Advance (State_14, Stage_Length (14, Profile), Stage_Crackle (14, Cm));
+         Stage_15 : constant Ramp_Stage :=
+           Make_Stage (State_15, Bounds (14), Stage_Length (15, Profile), Stage_Crackle (15, Cm), Late, Length'Last);
+       begin
+         (Shape  => Shape_Of (Profile, Max_Crackle, Start_Vel),
+          Bounds => Bounds,
+          Stages =>
+            [Stage_1,
+             Stage_2,
+             Stage_3,
+             Stage_4,
+             Stage_5,
+             Stage_6,
+             Stage_7,
+             Stage_8,
+             Stage_9,
+             Stage_10,
+             Stage_11,
+             Stage_12,
+             Stage_13,
+             Stage_14,
+             Stage_15]));
 
    function Distance_At_Time (Ramp : Prepared_Ramp; T : Time) return Length is
       Rising_T : constant Time := Rising_Time (Ramp.Shape, T);
