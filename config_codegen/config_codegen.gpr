@@ -20,6 +20,12 @@ project Config_Codegen is
       for Switches ("Ada") use ("-Es"); --  Symbolic traceback
    end Binder;
 
+   package Linker is
+      --  The prebuilt Libadalang archives carry fat LTO objects. Linking them as plain objects avoids a slow serial LTO
+      --  link of two very large executables, and code generation speed does not matter here.
+      for Switches ("Ada") use ("-fno-lto");
+   end Linker;
+
    package Install is
       for Artifacts (".") use ("share");
    end Install;

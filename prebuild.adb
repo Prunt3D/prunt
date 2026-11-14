@@ -25,12 +25,16 @@ with Ada.Calendar;          use Ada.Calendar;
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Directories;       use Ada.Directories;
 with Ada.Environment_Variables;
+with Ada.Exceptions;        use Ada.Exceptions;
 with Ada.Strings;
 with Ada.Strings.Fixed;     use Ada.Strings.Fixed;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Streams;
+with Ada.Streams.Stream_IO;
 with Ada.Text_IO;           use Ada.Text_IO;
 with GNAT.Expect;
 with GNAT.OS_Lib;           use GNAT.OS_Lib;
+with GNAT.SHA256;
 
 procedure Prebuild is
 
@@ -430,6 +434,183 @@ procedure Prebuild is
       GNATCOLL_Old            : constant String := Getenv ("GNATCOLL_ALIRE_PREFIX").all;
       GNATCOLL_Minimal_Old    : constant String := Getenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX").all;
       GNAT_Native_Old         : constant String := Getenv ("GNAT_NATIVE_ALIRE_PREFIX").all;
+
+      --  Building config_codegen means linking two large executables against Libadalang, which dominates the build of
+      --  a fresh checkout. Its output depends only on its own sources, so built executables are kept in a cache shared
+      --  between checkouts, keyed by a hash of those sources. PRUNT_CONFIG_CODEGEN_CACHE overrides the cache directory,
+      --  or disables the cache when set to "off".
+
+      Cache_Format_Version : constant String := "1";
+      --  Bump this to invalidate existing cache entries, e.g. if the way config_codegen is built changes outside its
+      --  hashed sources.
+
+      Executables : constant String_Vectors.Vector := ["config_codegen", "package_subprogram_audit"];
+
+      Cache_Entries_To_Keep : constant := 4;
+
+      Cache_Entry : Unbounded_String;
+      --  The cache entry for the current sources, or "" if the cache is disabled.
+
+      function Cache_Dir return String;
+      --  The cache directory, or "" if the cache is disabled.
+
+      function Sources_Hash return String;
+      --  A hash of the contents and checkout-relative paths of `Sources`.
+
+      function Restore_From_Cache (Entry_Dir : String) return Boolean;
+      --  Copy cached executables into `config_codegen/bin`. Returns False if the entry is missing or unusable.
+
+      procedure Store_In_Cache (Entry_Dir : String);
+      --  Copy the freshly built executables into a new cache entry and drop the least recently used entries.
+
+      function Cache_Dir return String is
+         package Env renames Ada.Environment_Variables;
+      begin
+         if Env.Exists ("PRUNT_CONFIG_CODEGEN_CACHE") then
+            declare
+               Dir : constant String := Env.Value ("PRUNT_CONFIG_CODEGEN_CACHE");
+            begin
+               return (if Dir = "off" then "" else Dir);
+            end;
+         elsif Env.Exists ("XDG_CACHE_HOME") and then Env.Value ("XDG_CACHE_HOME") /= "" then
+            return Join_Path ([Env.Value ("XDG_CACHE_HOME"), "prunt", "config_codegen"]);
+         elsif Env.Exists ("HOME") and then Env.Value ("HOME") /= "" then
+            return Join_Path ([Env.Value ("HOME"), ".cache", "prunt", "config_codegen"]);
+         else
+            return "";
+         end if;
+      end Cache_Dir;
+
+      function Sources_Hash return String is
+         package Sorting is new String_Vectors.Generic_Sorting;
+
+         Sorted : String_Vectors.Vector := Sources;
+         Ctx    : GNAT.SHA256.Context := GNAT.SHA256.Initial_Context;
+         Buffer : Ada.Streams.Stream_Element_Array (1 .. 65_536);
+         Last   : Ada.Streams.Stream_Element_Offset;
+         File   : Ada.Streams.Stream_IO.File_Type;
+      begin
+         Sorting.Sort (Sorted);
+         GNAT.SHA256.Update (Ctx, "prunt-config-codegen-cache-v" & Cache_Format_Version & ASCII.NUL);
+
+         for S of Sorted loop
+            GNAT.SHA256.Update
+              (Ctx,
+               S (S'First + Working_Dir'Length .. S'Last) & ASCII.NUL & Ada.Directories.Size (S)'Image & ASCII.NUL);
+            Ada.Streams.Stream_IO.Open (File, Ada.Streams.Stream_IO.In_File, S);
+            while not Ada.Streams.Stream_IO.End_Of_File (File) loop
+               Ada.Streams.Stream_IO.Read (File, Buffer, Last);
+               GNAT.SHA256.Update (Ctx, Buffer (Buffer'First .. Last));
+            end loop;
+            Ada.Streams.Stream_IO.Close (File);
+         end loop;
+
+         return GNAT.SHA256.Digest (Ctx);
+      end Sources_Hash;
+
+      function Restore_From_Cache (Entry_Dir : String) return Boolean is
+         Bin_Dir : constant String := Join_Path ([Working_Dir, "config_codegen", "bin"]);
+      begin
+         for E of Executables loop
+            if not Exists (Join_Path ([Entry_Dir, E])) then
+               return False;
+            end if;
+         end loop;
+
+         Create_Path (Bin_Dir);
+         for E of Executables loop
+            declare
+               Dest : constant String := Join_Path ([Bin_Dir, E]);
+               Temp : constant String := Dest & ".tmp";
+            begin
+               --  Not preserving attributes gives the copy a fresh timestamp, so it is newer than its sources. Copying
+               --  under a temporary name first means an interrupted copy cannot leave a truncated executable that
+               --  looks up to date.
+               Copy_File (Join_Path ([Entry_Dir, E]), Temp, "mode=overwrite,preserve=no_attributes");
+               Set_Executable (Temp);
+               if Exists (Dest) then
+                  Delete_File (Dest);
+               end if;
+               Rename (Temp, Dest);
+            end;
+         end loop;
+
+         --  Mark the entry as recently used.
+         Set_File_Last_Modify_Time_Stamp (Entry_Dir, Current_Time);
+         Put_Line ("Restored config_codegen from cache " & Entry_Dir'Image);
+         return True;
+      exception
+         when Ex : others =>
+            Put_Line
+              ("Ignoring unusable config_codegen cache entry " & Entry_Dir'Image & ": " & Exception_Message (Ex));
+            return False;
+      end Restore_From_Cache;
+
+      procedure Store_In_Cache (Entry_Dir : String) is
+         Bin_Dir  : constant String := Join_Path ([Working_Dir, "config_codegen", "bin"]);
+         Temp_Dir : constant String :=
+           Entry_Dir & ".tmp-" & Trim (Integer'Image (Pid_To_Integer (Current_Process_Id)), Ada.Strings.Left);
+
+         procedure Drop_Old_Entries;
+         --  Delete all but the `Cache_Entries_To_Keep` most recently used entries.
+
+         procedure Drop_Old_Entries is
+            Root    : constant String := Containing_Directory (Entry_Dir);
+            Entries : String_Vectors.Vector;
+         begin
+            Collect_Directories (Root, Entries, Recursive => False);
+            for I in reverse Entries.First_Index .. Entries.Last_Index loop
+               if Index (Simple_Name (Entries (I)), ".tmp-") /= 0 then
+                  Entries.Delete (I);
+               end if;
+            end loop;
+
+            while Natural (Entries.Length) > Cache_Entries_To_Keep loop
+               declare
+                  Oldest : Positive := Entries.First_Index;
+               begin
+                  for I in Entries.First_Index .. Entries.Last_Index loop
+                     if Modification_Time (Entries (I)) < Modification_Time (Entries (Oldest)) then
+                        Oldest := I;
+                     end if;
+                  end loop;
+                  Put_Line ("Dropping old config_codegen cache entry " & String'(Entries (Oldest))'Image);
+                  Delete_Tree (Entries (Oldest));
+                  Entries.Delete (Oldest);
+               end;
+            end loop;
+         end Drop_Old_Entries;
+      begin
+         if Exists (Entry_Dir) then
+            return;
+         end if;
+
+         if Exists (Temp_Dir) then
+            Delete_Tree (Temp_Dir);
+         end if;
+         Create_Path (Temp_Dir);
+         for E of Executables loop
+            Copy_File (Join_Path ([Bin_Dir, E]), Join_Path ([Temp_Dir, E]), "mode=overwrite,preserve=no_attributes");
+            Set_Executable (Join_Path ([Temp_Dir, E]));
+         end loop;
+
+         --  Another checkout may have stored the same entry meanwhile, in which case the rename fails and ours goes.
+         begin
+            Rename (Temp_Dir, Entry_Dir);
+            Put_Line ("Stored config_codegen in cache " & Entry_Dir'Image);
+         exception
+            when Ada.Directories.Use_Error =>
+               Delete_Tree (Temp_Dir);
+         end;
+
+         Drop_Old_Entries;
+      exception
+         when Ex : others =>
+            Put_Line ("Not caching config_codegen: " & Exception_Message (Ex));
+            if Exists (Temp_Dir) then
+               Delete_Tree (Temp_Dir);
+            end if;
+      end Store_In_Cache;
    begin
       Collect_Files (Join_Path ([Working_Dir, "config_codegen", "src"]), Src_Files, Recursive => True);
       for F of Src_Files loop
@@ -448,6 +629,17 @@ procedure Prebuild is
          --  Alire will sometimes do a full rebuild without updating the timestamp.
          Delete_File (Target);
       end if;
+
+      declare
+         Root : constant String := Cache_Dir;
+      begin
+         if Root /= "" then
+            Cache_Entry := To_Unbounded_String (Join_Path ([Root, Sources_Hash]));
+            if Restore_From_Cache (To_String (Cache_Entry)) then
+               return;
+            end if;
+         end if;
+      end;
 
       --  The nested Alire workspace may use different paths for dependencies inherited from the caller.
       Setenv ("VSS_EXTRA_ALIRE_PREFIX", "");
@@ -470,6 +662,10 @@ procedure Prebuild is
       Setenv ("GNATCOLL_ALIRE_PREFIX", GNATCOLL_Old);
       Setenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX", GNATCOLL_Minimal_Old);
       Setenv ("GNAT_NATIVE_ALIRE_PREFIX", GNAT_Native_Old);
+
+      if Length (Cache_Entry) > 0 then
+         Store_In_Cache (To_String (Cache_Entry));
+      end if;
    end Build_Config_Codegen;
 
    procedure Run_Config_Codegen is
