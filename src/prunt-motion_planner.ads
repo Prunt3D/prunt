@@ -176,7 +176,17 @@ package Prunt.Motion_Planner is
       --  When True, tangential velocity limits are based only on the XYZ axes. This is usually what other motion
       --  planners do.
 
-      Tangential_Velocity_Max  : Velocity := 0.0 * mm / s;
+      Tangential_Velocity_Max : Velocity := 0.0 * mm / s;
+
+      Tangential_Acceleration_Max : Acceleration := 1.0E100 * mm / s**2;
+      Tangential_Jerk_Max         : Jerk := 1.0E100 * mm / s**3;
+      Tangential_Snap_Max         : Snap := 1.0E100 * mm / s**4;
+      Tangential_Crackle_Max      : Crackle := 1.0E100 * mm / s**5;
+      --  Limits on the derivatives of the speed along the path, measured like Tangential_Velocity_Max: in XYZ when
+      --  Ignore_E_In_XYZE is True, in XYZE otherwise, and in E for E-only moves. They bound how quickly the speed
+      --  changes, not how quickly the path turns, so curvature is limited by the axial limits alone. The defaults
+      --  disable them.
+
       Axial_Velocity_Maxes     : Axial_Velocities := [others => 0.0 * mm / s];
       Axial_Acceleration_Maxes : Axial_Accelerations := [others => 0.0 * mm / s**2];
       Axial_Jerk_Maxes         : Axial_Jerks := [others => 0.0 * mm / s**3];

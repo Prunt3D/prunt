@@ -125,7 +125,8 @@ procedure Benchy_Planner_Time is
       Extrusion_Cornering      => <>,
       Extrusion_Normalization  => <>,
       Axial_Shapers            => [others => (Kind => Prunt.Input_Shapers.No_Shaper)],
-      Continuous_Timing        => False);
+      Continuous_Timing        => False,
+      others                   => <>);
 
    Motor_Map : constant Motor_Position_Map :=
      [X_Axis => [X_Motor => 1.0 / mm, others => 0.0 / mm],

@@ -1148,6 +1148,32 @@ package body Prunt.Motion_Planner.Planner is
       return (1.0 / Scale) / Dimensionless_Math.Sqrt ((1.0 / Scale)**2 + (Density / Scale)**2);
    end XYZE_Spatial_Scale;
 
+   function Is_Extrusion_Only
+     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Boolean
+   is (Block.Primitives (Finishing_Corner).Kind = Line_Primitive_Kind
+       and then Block.Corners (Finishing_Corner - 1) (X_Axis) = Block.Corners (Finishing_Corner) (X_Axis)
+       and then Block.Corners (Finishing_Corner - 1) (Y_Axis) = Block.Corners (Finishing_Corner) (Y_Axis)
+       and then Block.Corners (Finishing_Corner - 1) (Z_Axis) = Block.Corners (Finishing_Corner) (Z_Axis));
+
+   function Tangential_Limits
+     (Block            : not null access constant Execution_Block;
+      Params           : Kinematic_Parameters;
+      Finishing_Corner : Finishing_Corners_Index;
+      E_Density        : Dimensionless) return Scalar_Derivative_Limits
+   is
+      Scale : constant Dimensionless :=
+        (if Params.Ignore_E_In_XYZE or else Is_Extrusion_Only (Block, Finishing_Corner)
+         then 1.0
+         else XYZE_Spatial_Scale (E_Density));
+      --  At a fixed density every derivative of XYZE distance is that of path distance divided by Scale.
+   begin
+      return
+        (Acceleration_Max => Params.Tangential_Acceleration_Max * Scale,
+         Jerk_Max         => Params.Tangential_Jerk_Max * Scale,
+         Snap_Max         => Params.Tangential_Snap_Max * Scale,
+         Crackle_Max      => Params.Tangential_Crackle_Max * Scale);
+   end Tangential_Limits;
+
    function Primitive_Length
      (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Length
    is
@@ -1854,7 +1880,12 @@ package body Prunt.Motion_Planner.Planner is
       --  cells. Each endpoint speed is admitted by the window's cells at that end only, so a low ceiling at one end
       --  does not cap the other; as for one segment, the junction limits admit the coasts outside the window.
       For_Each_Member (Merge_Member'Access);
-      Mixed := Mixed_Derivative_Limits (Block.Params, (Velocity => Bounds.Velocity, others => <>), Max_Vel);
+      Mixed :=
+        Mixed_Derivative_Limits
+          (Block.Params,
+           (Velocity => Bounds.Velocity, others => <>),
+           Max_Vel,
+           Scalar_Maxes => Tangential_Limits (Block, Block.Params, Run_First, Bounds.Velocity (E_Axis)));
       for Cell of Cells loop
          if Cell_Overlaps (Cell, Window.Start_Distance, Window_End) then
             if Cell.Start <= Window.Start_Distance then
@@ -1988,7 +2019,11 @@ package body Prunt.Motion_Planner.Planner is
       Bounds  : constant Unit_Speed_Axial_Derivative_Bounds :=
         Window_Axial_Derivative_Bounds (Block, Finishing_Corner, Window);
       Mixed   : constant Mixed_Derivative_Limit_Result :=
-        Mixed_Derivative_Limits (Block.Params, (Velocity => Bounds.Velocity, others => <>), Max_Vel);
+        Mixed_Derivative_Limits
+          (Block.Params,
+           (Velocity => Bounds.Velocity, others => <>),
+           Max_Vel,
+           Scalar_Maxes => Tangential_Limits (Block, Block.Params, Finishing_Corner, Bounds.Velocity (E_Axis)));
       Ceiling : constant Velocity :=
         Motor_Delta_Ceiling_For_Window
           (Block, Motor_Map, Finishing_Corner, Window, Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Max_Vel));

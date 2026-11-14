@@ -828,6 +828,15 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
              (New_Params.Axial_Crackle_Maxes (Axis), New_Params.Axial_Snap_Maxes (Axis) / Interpolation_Time);
       end loop;
 
+      --  The tangential velocity limit is usually left far above the axial ones, so tangential acceleration is not
+      --  tied to it.
+      New_Params.Tangential_Jerk_Max :=
+        Jerk'Min (New_Params.Tangential_Jerk_Max, New_Params.Tangential_Acceleration_Max / Interpolation_Time);
+      New_Params.Tangential_Snap_Max :=
+        Snap'Min (New_Params.Tangential_Snap_Max, New_Params.Tangential_Jerk_Max / Interpolation_Time);
+      New_Params.Tangential_Crackle_Max :=
+        Crackle'Min (New_Params.Tangential_Crackle_Max, New_Params.Tangential_Snap_Max / Interpolation_Time);
+
       return New_Params;
    end Limit_Higher_Order_Params;
 

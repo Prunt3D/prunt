@@ -837,6 +837,20 @@ private
    --  bounds of any transition Window overlaps. A zero-length window is a point, inside a transition at its edges.
 
    function XYZE_Spatial_Scale (Density : Dimensionless) return Dimensionless;
+
+   function Is_Extrusion_Only
+     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index) return Boolean;
+   --  Whether the segment ending at Finishing_Corner moves only E, so that its path is measured along E.
+
+   function Tangential_Limits
+     (Block            : not null access constant Execution_Block;
+      Params           : Kinematic_Parameters;
+      Finishing_Corner : Finishing_Corners_Index;
+      E_Density        : Dimensionless) return Scalar_Derivative_Limits;
+   --  Params' tangential derivative limits in the planned path distance of the segment ending at Finishing_Corner,
+   --  over a window where E moves at most E_Density per unit of that distance. Without Ignore_E_In_XYZE the limits
+   --  apply to XYZE distance, so they are lowered by the XYZE scale of the densest point, as the segment's feedrate is
+   --  converted at its own density. An E-only move's path is already its E distance.
    --  The ratio of path speed to XYZE speed at the given E density, for converting XYZE feedrates and caps.
 
    function Spatial_Primitive

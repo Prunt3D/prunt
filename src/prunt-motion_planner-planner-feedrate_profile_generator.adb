@@ -108,7 +108,12 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
       function Conservative_Evaluation (Eval : Profile_Window_Evaluation) return Profile_Window_Evaluation is
          Mixed  : constant Mixed_Derivative_Limit_Result :=
-           Mixed_Derivative_Limits (Block.Params, Eval.Bounds, Feedrate);
+           Mixed_Derivative_Limits
+             (Block.Params,
+              Eval.Bounds,
+              Feedrate,
+              Scalar_Maxes =>
+                Tangential_Limits (Block, Block.Params, Finishing_Corner, Eval.Bounds.Velocity (E_Axis)));
          Result : Profile_Window_Evaluation := Eval;
       begin
          --  Eval.Limits contains tangent-only budgets. Reconstruct the full mixed-limit certificate;

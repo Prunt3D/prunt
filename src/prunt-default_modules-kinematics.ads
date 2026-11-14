@@ -434,6 +434,21 @@ private
       --  it's better to set this to a very high value (e.g., `1E100`) and use the per-axis velocity limits below to
       --  control the speed of your machine.
 
+      Maximum_Tangential_Acceleration : Acceleration range 0.000_001 * mm / s**2 .. 1.0E100 * mm / s**2 :=
+        1.0E100 * mm / s**2;
+      --  This is the maximum rate at which the combined speed of all axes may change, measured along the path in the
+      --  same way as the maximum tangential velocity. It limits how quickly the toolhead speeds up and slows down, but
+      --  not how quickly it turns, which only the per-axis limits below control. The default of `1E100` disables it.
+
+      Maximum_Tangential_Jerk : Jerk range 0.000_001 * mm / s**3 .. 1.0E100 * mm / s**3 := 1.0E100 * mm / s**3;
+      --  This is the maximum rate of change of the tangential acceleration. The default of `1E100` disables it.
+
+      Maximum_Tangential_Snap : Snap range 0.000_001 * mm / s**4 .. 1.0E100 * mm / s**4 := 1.0E100 * mm / s**4;
+      --  This is the maximum rate of change of the tangential jerk. The default of `1E100` disables it.
+
+      Maximum_Tangential_Crackle : Crackle range 0.000_001 * mm / s**5 .. 1.0E100 * mm / s**5 := 1.0E100 * mm / s**5;
+      --  This is the maximum rate of change of the tangential snap. The default of `1E100` disables it.
+
       Axial_Velocity_Limits : User_Config_Axial_Velocity_Limits_Array := [others => 10.0 * mm / s];
       --  This sets the maximum speed for each individual axis.
 

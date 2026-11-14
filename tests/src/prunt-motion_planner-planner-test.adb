@@ -6556,10 +6556,136 @@ package body Prunt.Motion_Planner.Planner.Test is
          "A vetoed corner is a junction and only it splits the run");
    end Test_Timing_Join_Vetoes;
 
+   function Peak_Path_Acceleration
+     (Block : aliased Execution_Block; Segment : Finishing_Corners_Index; Include_E : Boolean) return Acceleration;
+   --  The largest acceleration of a straight segment along its XYZ or XYZE path, by second differences of its
+   --  positions. The step is short enough that the truncation error stays far below the limits these fixtures use.
+
+   function Peak_Path_Acceleration
+     (Block : aliased Execution_Block; Segment : Finishing_Corners_Index; Include_E : Boolean) return Acceleration
+   is
+      Step   : constant Time := 0.000_1 * s;
+      Total  : constant Time := Segment_Time (Block'Access, Segment);
+      Peak   : Acceleration := 0.0 * mm / s**2;
+      Sample : Time := Step;
+   begin
+      while Sample + Step <= Total loop
+         declare
+            Before : constant Position := Segment_Pos_At_Time (Block'Access, Segment, Sample - Step);
+            Middle : constant Position := Segment_Pos_At_Time (Block'Access, Segment, Sample);
+            After  : constant Position := Segment_Pos_At_Time (Block'Access, Segment, Sample + Step);
+            Sum    : Area := 0.0 * mm**2;
+         begin
+            for Axis in Before'Range loop
+               if Include_E or else Axis /= E_Axis then
+                  Sum := Sum + (After (Axis) - 2.0 * Middle (Axis) + Before (Axis))**2;
+               end if;
+            end loop;
+            Peak := Acceleration'Max (Peak, Sum**(1 / 2) / Step**2);
+         end;
+         Sample := Sample + Step;
+      end loop;
+      return Peak;
+   end Peak_Path_Acceleration;
+
+   procedure Test_Tangential_Limits (T : in out Trendy_Test.Operation'Class) is
+      Work : aliased Planning_Workspace (Corners_Index'Last);
+      Map  : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Line : aliased Execution_Block (2);
+
+      function Within (Value, Low, High : Acceleration) return Boolean
+      is (Value >= Low and then Value <= High);
+
+      procedure Plan_Line (Finish : Position; Tangential : Acceleration; Ignore_E : Boolean := True);
+      --  Plan one move from the origin to Finish with fast axial limits and the given tangential acceleration.
+
+      procedure Plan_Line (Finish : Position; Tangential : Acceleration; Ignore_E : Boolean := True) is
+      begin
+         Reset_Early_Limiter_Block (Line);
+         Line.Params.Ignore_E_In_XYZE := Ignore_E;
+         Line.Params.Tangential_Velocity_Max := 100.0 * mm / s;
+         Line.Params.Tangential_Acceleration_Max := Tangential;
+         Line.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+         Line.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s**2];
+         Line.Params.Axial_Jerk_Maxes := [others => 100_000.0 * mm / s**3];
+         Line.Params.Axial_Snap_Maxes := [others => 10_000_000.0 * mm / s**4];
+         Line.Params.Axial_Crackle_Maxes := [others => 1_000_000_000.0 * mm / s**5];
+         Line.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+         Line.Corners := [[others => 0.0 * mm], Finish];
+         Normalize_And_Blend (Line, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (Line, Map);
+         Plan_Kinematics (Line, Map, Work'Access);
+      end Plan_Line;
+   begin
+      T.Register;
+
+      Plan_Line ([X_Axis => 20.0 * mm, others => 0.0 * mm], 1.0E100 * mm / s**2);
+      T.Assert
+        (Peak_Path_Acceleration (Line, 2, False) > 900.0 * mm / s**2,
+         "Without a tangential limit a straight move reaches its axial acceleration");
+      Plan_Line ([X_Axis => 20.0 * mm, others => 0.0 * mm], 100.0 * mm / s**2);
+      T.Assert
+        (Within (Peak_Path_Acceleration (Line, 2, False), 90.0 * mm / s**2, 100.1 * mm / s**2),
+         "A tangential limit below the axial ones binds a straight move");
+
+      --  Along a diagonal each axis reaches its own limit at about 1414 mm/s² of path acceleration.
+      Plan_Line ([X_Axis => 20.0 * mm, Y_Axis => 20.0 * mm, others => 0.0 * mm], 1.0E100 * mm / s**2);
+      T.Assert
+        (Peak_Path_Acceleration (Line, 2, False) > 1_300.0 * mm / s**2,
+         "Axial limits alone let a diagonal accelerate faster along its path than along any axis");
+      Plan_Line ([X_Axis => 20.0 * mm, Y_Axis => 20.0 * mm, others => 0.0 * mm], 1_000.0 * mm / s**2);
+      T.Assert
+        (Within (Peak_Path_Acceleration (Line, 2, False), 900.0 * mm / s**2, 1_001.0 * mm / s**2),
+         "A tangential limit bounds the acceleration along the path, not along each axis");
+
+      --  With E moving one unit per unit of X, XYZE distance is Sqrt (2) times the XYZ distance.
+      Plan_Line ([X_Axis => 20.0 * mm, E_Axis => 20.0 * mm, others => 0.0 * mm], 100.0 * mm / s**2);
+      T.Assert
+        (Within (Peak_Path_Acceleration (Line, 2, False), 90.0 * mm / s**2, 100.1 * mm / s**2),
+         "With Ignore_E_In_XYZE the tangential limit measures the XYZ path");
+      Plan_Line ([X_Axis => 20.0 * mm, E_Axis => 20.0 * mm, others => 0.0 * mm], 100.0 * mm / s**2, Ignore_E => False);
+      T.Assert
+        (Within (Peak_Path_Acceleration (Line, 2, True), 90.0 * mm / s**2, 100.1 * mm / s**2),
+         "Without Ignore_E_In_XYZE the tangential limit measures the XYZE path");
+
+      Plan_Line ([E_Axis => 20.0 * mm, others => 0.0 * mm], 100.0 * mm / s**2, Ignore_E => False);
+      T.Assert
+        (Within (Peak_Path_Acceleration (Line, 2, True), 90.0 * mm / s**2, 100.1 * mm / s**2),
+         "An E-only move's tangential limit applies to its E distance");
+
+      declare
+         --  A tangential limit does not bound centripetal acceleration, so a rounded corner keeps its speed.
+         Corner   : aliased Execution_Block (3);
+         Ceilings : array (Boolean) of Velocity;
+      begin
+         for Capped in Boolean loop
+            Reset_Early_Limiter_Block (Corner);
+            Corner.Params := Line.Params;
+            Corner.Params.Ignore_E_In_XYZE := True;
+            Corner.Params.Tangential_Acceleration_Max :=
+              (if Capped then 100.0 * mm / s**2 else 1.0E100 * mm / s**2);
+            Corner.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+            Corner.Corners :=
+              [[others => 0.0 * mm],
+               [X_Axis => 10.0 * mm, others => 0.0 * mm],
+               [X_Axis => 10.0 * mm, Y_Axis => 10.0 * mm, others => 0.0 * mm]];
+            Normalize_And_Blend (Corner, Map, Work'Access);
+            Tested_Early_Kinematic_Limiter.Run (Corner, Map);
+            Ceilings (Capped) :=
+              Corner_Policy_Ceiling
+                (Corner'Access, Map, 2, Derivative_Bounds (Corner.Corner_Transitions (2)), 100.0 * mm / s);
+         end loop;
+         T.Assert
+           (Ceilings (True) = Ceilings (False) and then Ceilings (True) > 0.0 * mm / s,
+            "A tangential limit leaves a rounded corner's constant-speed ceiling unchanged");
+      end;
+   end Test_Tangential_Limits;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
-        [Test_Continuous_Passthrough_Timing'Unrestricted_Access,
+        [Test_Tangential_Limits'Unrestricted_Access,
+         Test_Continuous_Passthrough_Timing'Unrestricted_Access,
          Test_Continuous_Profile_Window_Handoff'Unrestricted_Access,
          Test_Prepared_Timing_Evaluation'Unrestricted_Access,
          Test_Continuous_Timing_Blend_Seams'Unrestricted_Access,

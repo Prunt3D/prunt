@@ -178,22 +178,27 @@ package body Prunt.Default_Modules.Kinematics is
       Result : Motion_Planner_Configuration :=
         (Parameters =>
            Motion_Planner.Kinematic_Parameters'
-             (Bounds                   => Planner_Workspace_Bounds (Config.Kinematics.Workspace_Bounds),
-              Ignore_E_In_XYZE         => Config.Kinematics.Ignore_E_In_XYZE,
-              Tangential_Velocity_Max  => Config.Kinematics.Maximum_Tangential_Velocity,
-              Axial_Velocity_Maxes     => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
-              Axial_Acceleration_Maxes => [for X of Config.Kinematics.Axial_Acceleration_Limits => X],
-              Axial_Jerk_Maxes         => [for X of Config.Kinematics.Axial_Jerk_Limits => X],
-              Axial_Snap_Maxes         => [for X of Config.Kinematics.Axial_Snap_Limits => X],
-              Axial_Crackle_Maxes      => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
-              Cornering                => Build_Cornering_Parameters (Config.Kinematics.Cornering),
-              Extrusion_Cornering      => Build_Extrusion_Cornering_Parameters (Config.Kinematics.Extrusion_Cornering),
-              Extrusion_Normalization  =>
+             (Bounds                      => Planner_Workspace_Bounds (Config.Kinematics.Workspace_Bounds),
+              Ignore_E_In_XYZE            => Config.Kinematics.Ignore_E_In_XYZE,
+              Tangential_Velocity_Max     => Config.Kinematics.Maximum_Tangential_Velocity,
+              Tangential_Acceleration_Max => Config.Kinematics.Maximum_Tangential_Acceleration,
+              Tangential_Jerk_Max         => Config.Kinematics.Maximum_Tangential_Jerk,
+              Tangential_Snap_Max         => Config.Kinematics.Maximum_Tangential_Snap,
+              Tangential_Crackle_Max      => Config.Kinematics.Maximum_Tangential_Crackle,
+              Axial_Velocity_Maxes        => [for X of Config.Kinematics.Axial_Velocity_Limits => X],
+              Axial_Acceleration_Maxes    => [for X of Config.Kinematics.Axial_Acceleration_Limits => X],
+              Axial_Jerk_Maxes            => [for X of Config.Kinematics.Axial_Jerk_Limits => X],
+              Axial_Snap_Maxes            => [for X of Config.Kinematics.Axial_Snap_Limits => X],
+              Axial_Crackle_Maxes         => [for X of Config.Kinematics.Axial_Crackle_Limits => X],
+              Cornering                   => Build_Cornering_Parameters (Config.Kinematics.Cornering),
+              Extrusion_Cornering         =>
+                Build_Extrusion_Cornering_Parameters (Config.Kinematics.Extrusion_Cornering),
+              Extrusion_Normalization     =>
                 (Relative_Adjustment_Max => Config.Kinematics.Extrusion_Normalization.Maximum_Relative_Adjustment,
                  E_Resolution            => Config.Kinematics.Extrusion_Normalization.E_Resolution,
                  XYZ_Resolution          => Config.Kinematics.Extrusion_Normalization.XYZ_Resolution),
-              Axial_Shapers            => <>,
-              Continuous_Timing        => <>),
+              Axial_Shapers               => <>,
+              Continuous_Timing           => <>),
          Transform  => (Kind => Linear_Transform, others => <>));
    begin
       for M in Motor_Name loop
