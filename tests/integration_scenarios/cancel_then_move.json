@@ -1,0 +1,23 @@
+{
+  "description": "Cancel a G-code file partway through a long move, then send a new move. The cancel restarts the planners and the step generator, and they must carry on from where the machine stopped rather than from the origin, which would send the first command after the cancel back to X=0.",
+  "config": {},
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "wait_idle", "timeout_s": 5.0 },
+    { "kind": "submit_gcode_file", "commands": ["G1 X150 F600"] },
+    { "kind": "wait_for_motion", "timeout_s": 10.0 },
+    { "kind": "advance_by_s", "duration_s": 1.0 },
+    { "kind": "cancel_at_s", "time_s": 0.0 },
+    { "kind": "wait_idle", "timeout_s": 10.0 },
+    { "kind": "submit_gcode", "command": "G1 X60 F600" },
+    { "kind": "wait_idle", "timeout_s": 20.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 60.0, "Y": 0.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "sample_position_reaches": { "X": 5.0 },
+    "max_sample_delta": { "X": 0.5, "Y": 0.01, "Z": 0.01, "E": 0.01 },
+    "max_position_offset": { "X": 0.001, "Y": 0.001, "Z": 0.001, "E": 0.001 },
+    "event_counts": { "cancel": 2 }
+  }
+}

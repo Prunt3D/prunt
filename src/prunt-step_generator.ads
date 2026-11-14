@@ -115,10 +115,12 @@ package Prunt.Step_Generator is
        Storage_Size => 32 * 1024 * 1024
        --  Allows for very large shapers and shaper buffers to be allocated.
    is
-      entry Setup (Transform : Kinematic_Transform; Reset_Command_Index : Boolean := False);
+      entry Setup (Transform : Kinematic_Transform; Start_Position : Position; Reset_Command_Index : Boolean := False);
       --  Configure the step generator with the motor transform. This must be called before any steps can be
-      --  generated. Set Reset_Command_Index after a hardware reset so idle waits start from zero. Leave it False
-      --  when cancelling queued work without resetting the hardware, to preserve the command-index stream.
+      --  generated. Start_Position is where the machine is stopped, matching the position the hardware has been
+      --  told. A pause before the first block pauses there. Set Reset_Command_Index after a hardware reset so idle
+      --  waits start from zero. Leave it False when cancelling queued work without resetting the hardware, to
+      --  preserve the command-index stream.
    end Runner;
 
    procedure Reset;

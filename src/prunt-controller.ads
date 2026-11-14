@@ -326,9 +326,11 @@ private
    procedure Setup_Planner_Runners
      (Params              : Motion_Planner.Kinematic_Parameters;
       Transform           : Transforms.Kinematic_Transform;
+      Start_Position      : Position;
       Reset_Command_Index : Boolean);
    --  Configure each planner with its effective parameters and projection map, and the step generator with the exact
-   --  transform. Reset the command index for a fresh hardware run, preserving it when cancelling queued work.
+   --  transform. All three start at Start_Position, which must be where the machine is stopped and the position the
+   --  hardware is told. Reset the command index for a fresh hardware run, preserving it when cancelling queued work.
 
    function Apply_Global_Delta_Velocity_Limit
      (Params : Motion_Planner.Kinematic_Parameters; Transform : Transforms.Kinematic_Transform)

@@ -402,8 +402,6 @@ package body Prunt.Step_Generator is
       Pause_Block : Pause_Planner.Block_Handle;
       --  Each handle releases its slot on task exit, including abort or a failure finalizing the other handle.
 
-      Zero_Length : constant Length := 0.0 * mm;
-
       procedure Run_Pause_Cycle (Pause_Position : Position; Reset_Requested : out Boolean);
 
       function Primary_Pause_Requested return Boolean;
@@ -587,11 +585,14 @@ package body Prunt.Step_Generator is
          Planner.Release (Block);
          Pause_Planner.Release (Pause_Block);
          Reset_Control.Acknowledge;
-         Commands.Last_Queued_Position := [others => Zero_Length];
          Commands.Extrusion_Check_Cycles_Remaining := 0;
 
-         accept Setup (Transform : Kinematic_Transform; Reset_Command_Index : Boolean := False) do
+         accept Setup
+           (Transform : Kinematic_Transform; Start_Position : Position; Reset_Command_Index : Boolean := False)
+         do
             Active_Transform := Transform;
+            --  A pause before the first block pauses here. Cancellation restarts wherever the machine stopped.
+            Commands.Last_Queued_Position := Start_Position;
             if Reset_Command_Index then
                Commands.Current_Command_Index := 0;
             end if;

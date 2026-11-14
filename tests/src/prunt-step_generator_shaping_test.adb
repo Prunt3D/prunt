@@ -422,7 +422,7 @@ package body Prunt.Step_Generator_Shaping_Test is
             Planner.Enqueue_Move (End_Pos, 10.0 * mm / s, Ignore_Bounds => True);
             Planner.Enqueue_Flush (False);
          end if;
-         Stepgen.Runner.Setup (False, True);
+         Stepgen.Runner.Setup (False, [others => 0.0 * mm], True);
          select
             Completion.Wait;
          or

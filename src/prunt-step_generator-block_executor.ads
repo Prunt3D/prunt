@@ -79,8 +79,9 @@ is
       Transform       : Kinematic_Transform;
       Commands        : in out Command_State;
       Reset_Requested : out Boolean);
-   --  Stream through accepted successors until a stopped boundary, leaving Block at the last visited block. A reset
-   --  slews to a standstill like a pause, then returns with Reset_Requested True and without Finish_Block_Callback.
+   --  Stream through accepted successors until a stopped boundary, leaving Block at the last visited block and
+   --  Commands.Last_Queued_Position at the position the next block starts from. A reset slews to a standstill like a
+   --  pause, then returns with Reset_Requested True and without Finish_Block_Callback.
 
 private
 

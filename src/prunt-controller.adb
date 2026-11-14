@@ -957,6 +957,7 @@ package body Prunt.Controller is
    procedure Setup_Planner_Runners
      (Params              : Motion_Planner.Kinematic_Parameters;
       Transform           : Transforms.Kinematic_Transform;
+      Start_Position      : Position;
       Reset_Command_Index : Boolean)
    is
       Motor_Map       : constant Transforms.Motor_Position_Map := Transforms.Transform_Linear_Map (Transform);
@@ -965,11 +966,11 @@ package body Prunt.Controller is
       Primary_Started : Boolean := False;
       Pause_Started   : Boolean := False;
    begin
-      My_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
+      My_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map, Start_Position);
       Primary_Started := True;
-      My_Pause_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map);
+      My_Pause_Motion_Planner.Runner.Setup (Limited_Params, Motor_Map, Start_Position);
       Pause_Started := True;
-      My_Step_Generator.Runner.Setup (Transform, Reset_Command_Index);
+      My_Step_Generator.Runner.Setup (Transform, Start_Position, Reset_Command_Index);
    exception
       when others =>
          --  Pipeline_Is_Set_Up is still false on partial startup. Stop every planner that did start before the caller
@@ -1156,7 +1157,11 @@ package body Prunt.Controller is
          Current_Kinematic_Transform := Startup_Transform;
          --  Hardware command history starts over on a reload. Startup's empty homing-update block must not wait
          --  for the last command from the previous run before the G-code processor can start.
-         Setup_Planner_Runners (Startup_Parameters, Current_Kinematic_Transform, Reset_Command_Index => True);
+         Setup_Planner_Runners
+           (Startup_Parameters,
+            Current_Kinematic_Transform,
+            Start_Position      => Startup_Position,
+            Reset_Command_Index => True);
          --  Track the running worker before the first hardware call, so a startup communications failure still
          --  halts it before shutdown tries to execute operations on the stopped worker.
          Pipeline_Is_Set_Up := True;
@@ -2262,7 +2267,10 @@ package body Prunt.Controller is
          Last_Command_Executed.Reset (Current_Position);
          Idle_Notification_State.Abandon_Activities (Last_Command_Executed.Get);
 
-         Setup_Planner_Runners (Params, Current_Kinematic_Transform, Reset_Command_Index => False);
+         --  The planners and the step generator restart where the machine stopped, so the next move, or a pause
+         --  before it, does not start from the origin.
+         Setup_Planner_Runners
+           (Params, Current_Kinematic_Transform, Start_Position => Current_Position, Reset_Command_Index => False);
 
          Primary_Planner_State.Set_Last_Position (Current_Position);
          Pause_Planner_State.Set_Last_Position (Current_Position);

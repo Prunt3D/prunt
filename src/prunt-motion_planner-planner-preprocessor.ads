@@ -35,9 +35,9 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
    pragma Unsuppress (Range_Check);
    pragma Unsuppress (Division_Check);
 
-   procedure Setup (Initial_Parameters : Kinematic_Parameters);
-   --  Initialise the preprocessor with the initial kinematic parameters. This must be called before any other
-   --  operations.
+   procedure Setup (Initial_Parameters : Kinematic_Parameters; Start_Position : Position := Initial_Position);
+   --  Initialise the preprocessor with the initial kinematic parameters and the position the first block starts at.
+   --  This must be called before any other operations.
 
    procedure Enqueue
      (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null);
@@ -107,7 +107,7 @@ private
      (No_Homing_Boundary, Waiting_For_Tail_Offset, Tail_Offset_Available, Position_Available);
 
    protected Command_Queue is
-      procedure Setup (Initial_Parameters : Kinematic_Parameters);
+      procedure Setup (Initial_Parameters : Kinematic_Parameters; Start_Position : Position);
       entry Enqueue
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
       with Pre => (if Comm.Kind = Corner_Extra_Data_Kind then Extra /= null else Extra = null);

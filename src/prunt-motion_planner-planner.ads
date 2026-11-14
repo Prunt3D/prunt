@@ -397,7 +397,11 @@ package Prunt.Motion_Planner.Planner is
    task Runner
      with CPU => Runner_CPU, Storage_Size => 32 * 1024 * 1024 is
       --  TODO: We can probably lower Storage_Size now that the step rate limiter is gone.
-      entry Setup (In_Params : Kinematic_Parameters; In_Motor_Map : Motor_Position_Map);
+      entry Setup
+        (In_Params         : Kinematic_Parameters;
+         In_Motor_Map      : Motor_Position_Map;
+         In_Start_Position : Position := Initial_Position);
+      --  Start planning. The first block starts at In_Start_Position, which must be where the machine is stopped.
       entry Reset_Do_Not_Call_From_Other_Packages;
       --  Call the Reset procedure rather than this entry to stop dequeueing and reset the preprocessor.
       --  TODO: There must be some way to hide this while still exposing the task.

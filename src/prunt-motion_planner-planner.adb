@@ -4711,13 +4711,17 @@ package body Prunt.Motion_Planner.Planner is
       Next_Block_Start  : Position := Initial_Position;
    begin
       loop
-         accept Setup (In_Params : Kinematic_Parameters; In_Motor_Map : Motor_Position_Map) do
+         accept Setup
+           (In_Params         : Kinematic_Parameters;
+            In_Motor_Map      : Motor_Position_Map;
+            In_Start_Position : Position := Initial_Position)
+         do
             if not Tail_Atomics.Is_Lock_Free (Blocks (Block_Index'First).Choice) then
                raise Program_Error with "Inter-block publication requires lock-free atomic exchange.";
             end if;
-            My_Preprocessor.Setup (In_Params);
+            My_Preprocessor.Setup (In_Params, In_Start_Position);
             Current_Motor_Map := In_Motor_Map;
-            Next_Block_Start := Initial_Position;
+            Next_Block_Start := In_Start_Position;
             Block_Ring.Setup;
          end Setup;
 

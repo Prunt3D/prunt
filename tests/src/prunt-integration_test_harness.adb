@@ -144,6 +144,10 @@ package body Prunt.Integration_Test_Harness is
       procedure Record_Executed_Reset_Position (Pos : Motor_Position);
       function Current_Time return Long_Float;
       function Current_Position return Axis_Position;
+      function Max_Position_Offset return Axis_Position;
+      --  Largest distance, per axis, between the reported position and where the motors really are, at any executed
+      --  command or now. A position reset never moves the motors, so a reset away from the current position offsets
+      --  every later command until another reset undoes it. Homing that sets a new position offsets it too.
       function Last_Executed return Command_Index;
       function Sample_Count return Natural;
       function Event_Count return Natural;
@@ -164,6 +168,8 @@ package body Prunt.Integration_Test_Harness is
       Last_Command           : Command_Index := 0;
       Has_Pending_Loop_Setup : Boolean := False;
       Pending_Loop_Setup     : Loop_Move_Setup := (others => <>);
+      Position_Offset        : Axis_Position := [others => 0.0];
+      Max_Command_Offset     : Axis_Position := [others => 0.0];
       Samples                : Sample_Vectors.Vector;
       Events                 : Event_Vectors.Vector;
    end Machine;
@@ -349,6 +355,8 @@ package body Prunt.Integration_Test_Harness is
          Last_Command := 0;
          Has_Pending_Loop_Setup := False;
          Pending_Loop_Setup := (others => <>);
+         Position_Offset := [others => 0.0];
+         Max_Command_Offset := [others => 0.0];
          Samples.Clear;
          Events.Clear;
       end Clear;
@@ -411,6 +419,7 @@ package body Prunt.Integration_Test_Harness is
          Now_S := Now_S + Sample_Period_S;
 
          for Axis in Axis_Name loop
+            Max_Command_Offset (Axis) := Long_Float'Max (Max_Command_Offset (Axis), abs Position_Offset (Axis));
             New_Vel (Axis) := (New_Pos (Axis) - Last_Pos (Axis)) / Sample_Period_S;
             New_Accel (Axis) := (New_Vel (Axis) - Last_Vel (Axis)) / Sample_Period_S;
             New_Jerk (Axis) := (New_Accel (Axis) - Last_Accel (Axis)) / Sample_Period_S;
@@ -479,8 +488,13 @@ package body Prunt.Integration_Test_Harness is
       end Record_Executed_Loop_Command;
 
       procedure Record_Executed_Reset_Position (Pos : Motor_Position) is
+         New_Pos : constant Axis_Position := To_Axis_Position (Pos);
       begin
-         Last_Pos := To_Axis_Position (Pos);
+         for Axis in Axis_Name loop
+            Position_Offset (Axis) := @ + New_Pos (Axis) - Last_Pos (Axis);
+         end loop;
+
+         Last_Pos := New_Pos;
          Last_Motor_Pos := Pos;
          Last_Vel := [others => 0.0];
          Last_Accel := [others => 0.0];
@@ -498,6 +512,11 @@ package body Prunt.Integration_Test_Harness is
       begin
          return Last_Pos;
       end Current_Position;
+
+      function Max_Position_Offset return Axis_Position is
+      begin
+         return [for Axis in Axis_Name => Long_Float'Max (Max_Command_Offset (Axis), abs Position_Offset (Axis))];
+      end Max_Position_Offset;
 
       function Last_Executed return Command_Index is
       begin
@@ -1425,6 +1444,31 @@ package body Prunt.Integration_Test_Harness is
             Machine.Snapshot (Samples, Events);
             pragma Unreferenced (Events);
             Expect.Get ("max_sample_position").Map_JSON_Object (Check_Axis'Access);
+         end;
+      end if;
+
+      if Expect.Has_Field ("max_position_offset") then
+         declare
+            Offset : constant Axis_Position := Machine.Max_Position_Offset;
+
+            procedure Check_Axis (Name : Virtual_String; Value : JSON_Value);
+
+            procedure Check_Axis (Name : Virtual_String; Value : JSON_Value) is
+               Name_String : constant String := VSS.Strings.Conversions.To_UTF_8_String (Name);
+               Max_Value   : constant Long_Float := Value.Get;
+               Actual      : constant Long_Float := Axis_Value (Offset, Name_String);
+            begin
+               Assert
+                 (Actual <= Max_Value,
+                  "Axis "
+                  & Name_String
+                  & " position resets offset the reported position from the motors by more than "
+                  & Image (Max_Value)
+                  & ": "
+                  & Image (Actual));
+            end Check_Axis;
+         begin
+            Expect.Get ("max_position_offset").Map_JSON_Object (Check_Axis'Access);
          end;
       end if;
 

@@ -291,7 +291,7 @@ package body Prunt.Step_Generator_Timing_Test is
          Pause_Planner.Runner.Setup (Params, Motor_Map);
          Planner.Enqueue_Move (End_Pos, Feedrate, Ignore_Bounds => True);
          Planner.Enqueue_Flush (False);
-         Stepgen.Runner.Setup (False, True);
+         Stepgen.Runner.Setup (False, [others => 0.0 * mm], True);
          select
             Completion.Wait;
          or
@@ -569,7 +569,7 @@ package body Prunt.Step_Generator_Timing_Test is
             end if;
          end loop;
          Planner.Enqueue_Flush (False);
-         Stepgen.Runner.Setup (False, True);
+         Stepgen.Runner.Setup (False, [others => 0.0 * mm], True);
          select
             Completion.Wait;
          or

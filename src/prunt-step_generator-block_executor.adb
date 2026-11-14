@@ -368,6 +368,10 @@ package body Prunt.Step_Generator.Block_Executor is
         (Resetting_Data     => Active_Planner.Flush_Resetting_Data (Block),
          Next_Block_Pos     => Transform_To_Motor_Position (Active_Planner.Next_Block_Pos (Block), Transform),
          Last_Command_Index => Commands.Current_Command_Index);
+
+      --  The next block starts from Next_Block_Pos, which is not the last queued command after a position reset or a
+      --  homing move. A pause before that block pauses there.
+      Commands.Last_Queued_Position := Active_Planner.Next_Block_Pos (Block);
    end Execute_Block;
 
 end Prunt.Step_Generator.Block_Executor;

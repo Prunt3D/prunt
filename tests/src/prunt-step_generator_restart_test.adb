@@ -345,7 +345,7 @@ package body Prunt.Step_Generator_Restart_Test is
             Primary_Running := True;
             Pause_Planner.Runner.Setup (Params, Motor_Map);
             Pause_Running := True;
-            Stepgen.Runner.Setup (False, Reset_Command_Index);
+            Stepgen.Runner.Setup (False, [others => 0.0 * mm], Reset_Command_Index);
          end Setup;
 
          procedure Reset_Planners (Include_Pause : Boolean := True) is
@@ -773,7 +773,7 @@ package body Prunt.Step_Generator_Restart_Test is
             Planner.Enqueue_Move ([X_Axis => 1.0 * mm, others => 0.0 * mm], 10.0 * mm / s, Ignore_Bounds => True);
             Planner.Enqueue_Corner_Extra_Data ((Ada.Finalization.Controlled with Inject_Failure => True));
             Planner.Enqueue_Flush (False);
-            Stepgen.Runner.Setup (False, Reset_Command_Index => True);
+            Stepgen.Runner.Setup (False, [others => 0.0 * mm], Reset_Command_Index => True);
             select
                Hardware.Wait_For_Stop (Expected_Index);
             or
@@ -802,7 +802,307 @@ package body Prunt.Step_Generator_Restart_Test is
       end loop;
    end Test_Halt_With_Cleanup_Failure;
 
+   procedure Test_Pause_Position_Between_Blocks (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      declare
+         type Motor_Name is (X_Motor);
+         type Motor_Position is array (Motor_Name) of Dimensionless;
+         type Motor_Position_Map is array (Axis_Name, Motor_Name) of Curvature;
+         type Motor_Delta_Limits is array (Motor_Name) of Dimensionless;
+
+         package Planner is new
+           Motion_Planner.Planner
+             (Motor_Name                        => Motor_Name,
+              Motor_Position_Map                => Motor_Position_Map,
+              Motor_Delta_Limits                => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command        => [others => 1.0],
+              Flush_Resetting_Data_Type         => Boolean,
+              Flush_Resetting_Data_Type_Default => False,
+              Corner_Extra_Data_Type            => Boolean,
+              Home_Move_Minimum_Coast_Time      => 0.005 * s,
+              Home_Move_Maximum_Tail_Time       => 1.0 * s,
+              Interpolation_Time                => 0.001 * s,
+              Max_Corners                       => 10,
+              Max_Corners_Extra_Data_Count      => 10,
+              Max_Corners_Extra_Data_Storage    => 1_024,
+              Input_Queue_Length                => 10,
+              Allow_Blended_Entry               => Block_Allows_Blended_Entry);
+
+         package Pause_Planner is new
+           Motion_Planner.Planner
+             (Motor_Name                        => Motor_Name,
+              Motor_Position_Map                => Motor_Position_Map,
+              Motor_Delta_Limits                => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command        => [others => 1.0],
+              Flush_Resetting_Data_Type         => Boolean,
+              Flush_Resetting_Data_Type_Default => False,
+              Corner_Extra_Data_Type            => Boolean,
+              Home_Move_Minimum_Coast_Time      => 0.005 * s,
+              Home_Move_Maximum_Tail_Time       => 1.0 * s,
+              Interpolation_Time                => 0.001 * s,
+              Max_Corners                       => 10,
+              Max_Corners_Extra_Data_Count      => 10,
+              Max_Corners_Extra_Data_Storage    => 1_024,
+              Input_Queue_Length                => 10,
+              Allow_Blended_Entry               => Block_Allows_Blended_Entry);
+
+         protected Recorder is
+            procedure Record_Pause (Pos : Position);
+            entry Wait_For_Pause (Pos : out Position);
+            procedure Record_Command (Pos : Position);
+            procedure Clear_Commands;
+            function Lowest_Command_X return Length;
+            function Command_Count return Natural;
+            procedure Record_Block;
+            entry Wait_For_Block;
+         private
+            Has_Pause      : Boolean := False;
+            Pause_Pos      : Position := [others => 0.0 * mm];
+            Commands       : Natural := 0;
+            Lowest_X       : Length := Length'Last;
+            Block_Finished : Boolean := False;
+         end Recorder;
+
+         protected body Recorder is
+            procedure Record_Pause (Pos : Position) is
+            begin
+               Pause_Pos := Pos;
+               Has_Pause := True;
+            end Record_Pause;
+
+            entry Wait_For_Pause (Pos : out Position) when Has_Pause is
+            begin
+               Pos := Pause_Pos;
+               Has_Pause := False;
+            end Wait_For_Pause;
+
+            procedure Record_Command (Pos : Position) is
+            begin
+               Commands := @ + 1;
+               Lowest_X := Length'Min (Lowest_X, Pos (X_Axis));
+            end Record_Command;
+
+            procedure Clear_Commands is
+            begin
+               Commands := 0;
+               Lowest_X := Length'Last;
+            end Clear_Commands;
+
+            function Lowest_Command_X return Length
+            is (Lowest_X);
+
+            function Command_Count return Natural
+            is (Commands);
+
+            procedure Record_Block is
+            begin
+               Block_Finished := True;
+            end Record_Block;
+
+            entry Wait_For_Block when Block_Finished is
+            begin
+               Block_Finished := False;
+            end Wait_For_Block;
+         end Recorder;
+
+         function Affects_Axis (Transform : Boolean; Motor : Motor_Name; Axis : Axis_Name) return Boolean is
+            pragma Unreferenced (Transform, Motor);
+         begin
+            return Axis = X_Axis;
+         end Affects_Axis;
+
+         procedure Enqueue_Command
+           (Pos             : Position;
+            Motor_Pos       : Motor_Position;
+            Index           : Command_Index;
+            Safe_Stop_After : Boolean;
+            Vel_Ratio       : Dimensionless)
+         is
+            pragma Unreferenced (Motor_Pos, Index, Safe_Stop_After, Vel_Ratio);
+         begin
+            Recorder.Record_Command (Pos);
+         end Enqueue_Command;
+
+         function Extrusion_Is_Allowed return Boolean
+         is (True);
+
+         procedure Finish_Block (Data : Boolean; Pos : Motor_Position; Index : Command_Index) is
+            pragma Unreferenced (Data, Pos, Index);
+         begin
+            Recorder.Record_Block;
+         end Finish_Block;
+
+         procedure Handle_Pause (Pos : Position; Index : Command_Index) is
+            pragma Unreferenced (Index);
+         begin
+            Recorder.Record_Pause (Pos);
+            --  Like the controller, start the pause plan by resetting the pause planner to the pause position.
+            Pause_Planner.Enqueue_Flush_And_Reset_Position (True, Pos, Ignore_Bounds => True);
+         end Handle_Pause;
+
+         procedure Handle_Resume (Pos : Position; Index : Command_Index) is
+            pragma Unreferenced (Pos, Index);
+         begin
+            Pause_Planner.Enqueue_Flush (True);
+         end Handle_Resume;
+
+         procedure Finish_Pause_Block (Data : Boolean; Pos : Motor_Position; Index : Command_Index) is null;
+
+         function Is_Pause_Plan_Done (Data : Boolean) return Boolean
+         is (Data);
+
+         function Pin_Motor (Data, Transform : Boolean; Motor : Motor_Name) return Boolean is
+            pragma Unreferenced (Data, Transform, Motor);
+         begin
+            return False;
+         end Pin_Motor;
+
+         procedure Setup_Loop_Move (Data : Boolean) is null;
+         procedure Start_Block (Data : Boolean; Index : Command_Index) is null;
+         procedure Start_Corner (Index : Command_Index; Data : Boolean) is null;
+         procedure Wait_Until_Idle (Index : Command_Index) is null;
+
+         function To_Motor (Pos : Position; Transform : Boolean) return Motor_Position is
+            pragma Unreferenced (Transform);
+         begin
+            return [X_Motor => Pos (X_Axis) / mm];
+         end To_Motor;
+
+         package Stepgen is new
+           Step_Generator
+             (Planner                      => Planner,
+              Pause_Planner                => Pause_Planner,
+              Motor_Name                   => Motor_Name,
+              Motor_Position               => Motor_Position,
+              Kinematic_Transform          => Boolean,
+              Setup_Loop_Move              => Setup_Loop_Move,
+              Pin_Motor_To_Block_Start     => Pin_Motor,
+              Transform_To_Motor_Position  => To_Motor,
+              Transform_Motor_Affects_Axis => Affects_Axis,
+              Motor_Delta_Limits           => Motor_Delta_Limits,
+              Maximum_Deltas_Per_Command   => [others => 1.0],
+              Start_Planner_Block          => Start_Block,
+              Start_Pause_Planner_Block    => Start_Block,
+              Enqueue_Command              => Enqueue_Command,
+              Extrusion_Is_Allowed         => Extrusion_Is_Allowed,
+              Start_Corner                 => Start_Corner,
+              Start_Pause_Corner           => Start_Corner,
+              Finish_Planner_Block         => Finish_Block,
+              Finish_Pause_Planner_Block   => Finish_Pause_Block,
+              Is_Pause_Plan_Done           => Is_Pause_Plan_Done,
+              Handle_Pause                 => Handle_Pause,
+              Handle_Resume                => Handle_Resume,
+              Wait_Until_Idle              => Wait_Until_Idle,
+              Interpolation_Time           => 0.001 * s,
+              Runner_CPU                   => System.Multiprocessors.Not_A_Specific_CPU);
+
+         Params    : constant Motion_Planner.Kinematic_Parameters :=
+           (Tangential_Velocity_Max  => 10.0 * mm / s,
+            Axial_Velocity_Maxes     => [others => 10.0 * mm / s],
+            Axial_Acceleration_Maxes => [others => 100.0 * mm / s**2],
+            Axial_Jerk_Maxes         => [others => 1_000.0 * mm / s**3],
+            Axial_Snap_Maxes         => [others => 10_000.0 * mm / s**4],
+            Axial_Crackle_Maxes      => [others => 100_000.0 * mm / s**5],
+            others                   => <>);
+         Motor_Map : constant Motor_Position_Map := [X_Axis => [others => 1.0 / mm], others => [others => 0.0 / mm]];
+
+         function At_X (X : Length) return Position
+         is ([X_Axis => X, others => 0.0 * mm]);
+
+         procedure Setup (Start : Position) is
+         begin
+            Planner.Runner.Setup (Params, Motor_Map, Start);
+            Pause_Planner.Runner.Setup (Params, Motor_Map, Start);
+            Stepgen.Runner.Setup (False, Start, Reset_Command_Index => True);
+         end Setup;
+
+         procedure Reset_Runners is
+         begin
+            --  Match Cancel_Gcode: stop the step generator before the planners it borrows blocks from.
+            Stepgen.Reset;
+            Planner.Reset;
+            Pause_Planner.Reset;
+         end Reset_Runners;
+
+         procedure Wait_For_Block is
+         begin
+            select
+               Recorder.Wait_For_Block;
+            or
+               delay 5.0;
+               T.Fail ("Timed out waiting for a primary block to finish");
+            end select;
+         end Wait_For_Block;
+
+         procedure Check_Pause_Position (Expected : Position; Message : String) is
+            Pos : Position := [others => Length'Last];
+         begin
+            Stepgen.Pause;
+            select
+               Recorder.Wait_For_Pause (Pos);
+            or
+               delay 5.0;
+               T.Fail ("Timed out waiting for the pause plan: " & Message);
+               return;
+            end select;
+            T.Assert (Pos = Expected, Message & ", but paused at X =" & Pos (X_Axis)'Image);
+
+            --  Paused is already set once the pause plan has been requested.
+            T.Assert (Stepgen.Is_Paused, "The step generator must report the pause while running its plan");
+            Stepgen.Resume;
+            for Attempt in 1 .. 500 loop
+               exit when not Stepgen.Is_Paused;
+               delay 0.01;
+            end loop;
+            T.Assert (not Stepgen.Is_Paused, "Timed out waiting for the resume plan: " & Message);
+         end Check_Pause_Position;
+      begin
+         Setup (At_X (5.0 * mm));
+         Check_Pause_Position (At_X (5.0 * mm), "A pause before the first block must pause at the start position");
+
+         Planner.Enqueue_Move (At_X (6.0 * mm), 10.0 * mm / s, Ignore_Bounds => True);
+         Planner.Enqueue_Flush (False);
+         Wait_For_Block;
+         T.Assert (Recorder.Command_Count > 0, "The move must queue commands");
+         T.Assert
+           (Recorder.Lowest_Command_X >= 5.0 * mm,
+            "The first block must start at the start position, but X reached" & Recorder.Lowest_Command_X'Image);
+         Check_Pause_Position (At_X (6.0 * mm), "A pause after a move must pause at the move's end");
+
+         --  The next block starts from the reset position, and Finish_Block has told the hardware it is there.
+         Planner.Enqueue_Flush_And_Reset_Position (False, At_X (20.0 * mm), Ignore_Bounds => True);
+         Wait_For_Block;
+         Check_Pause_Position (At_X (20.0 * mm), "A pause after a position reset must pause at the reset position");
+
+         --  Cancellation restarts the pipeline wherever the machine stopped.
+         Reset_Runners;
+         Recorder.Clear_Commands;
+         Setup (At_X (7.0 * mm));
+         Check_Pause_Position (At_X (7.0 * mm), "A pause after a restart must pause at the new start position");
+
+         Planner.Enqueue_Move (At_X (8.0 * mm), 10.0 * mm / s, Ignore_Bounds => True);
+         Planner.Enqueue_Flush (False);
+         Wait_For_Block;
+         T.Assert
+           (Recorder.Lowest_Command_X >= 7.0 * mm,
+            "The first block after a restart must start at the new start position, but X reached"
+            & Recorder.Lowest_Command_X'Image);
+
+         Reset_Runners;
+         abort Stepgen.Runner, Planner.Runner, Pause_Planner.Runner;
+      exception
+         when others =>
+            --  The runners may be waiting anywhere, so do not wait for them to reset.
+            abort Stepgen.Runner, Planner.Runner, Pause_Planner.Runner;
+            raise;
+      end;
+   end Test_Pause_Position_Between_Blocks;
+
    function All_Tests return Trendy_Test.Test_Group
-   is ([Test_Command_Indices_After_Restart'Access, Test_Halt_With_Cleanup_Failure'Access]);
+   is ([Test_Command_Indices_After_Restart'Access,
+        Test_Halt_With_Cleanup_Failure'Access,
+        Test_Pause_Position_Between_Blocks'Access]);
 
 end Prunt.Step_Generator_Restart_Test;

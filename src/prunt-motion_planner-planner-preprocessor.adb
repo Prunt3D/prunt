@@ -28,14 +28,14 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
    pragma Extensions_Allowed (On);
 
    protected body Command_Queue is
-      procedure Setup (Initial_Parameters : Kinematic_Parameters) is
+      procedure Setup (Initial_Parameters : Kinematic_Parameters; Start_Position : Position) is
       begin
          if Setup_Done then
             raise Constraint_Error with "Setup already done.";
          end if;
 
          Current_Params := Initial_Parameters;
-         Queued_Position := Initial_Position;
+         Queued_Position := Start_Position;
          Homing_State := No_Homing_Boundary;
 
          Setup_Done := True;
@@ -423,9 +423,9 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       Command_Queue.Wait_For_Resolved_Homing_Position (Pos, Reset_Called);
    end Wait_For_Resolved_Homing_Position;
 
-   procedure Setup (Initial_Parameters : Kinematic_Parameters) is
+   procedure Setup (Initial_Parameters : Kinematic_Parameters; Start_Position : Position := Initial_Position) is
    begin
-      Command_Queue.Setup (Limit_Higher_Order_Params (Initial_Parameters));
+      Command_Queue.Setup (Limit_Higher_Order_Params (Initial_Parameters), Start_Position);
       Runner.Setup (Limit_Higher_Order_Params (Initial_Parameters));
    end Setup;
 
