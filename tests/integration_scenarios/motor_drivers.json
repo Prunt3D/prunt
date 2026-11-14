@@ -11,17 +11,17 @@
   "expect": {
     "event_counts": { "gcode": 5, "motor": 11 },
     "event_order": [
-      { "kind": "motor", "label": "enable", "value": "X_MOTOR" },
-      { "kind": "motor", "label": "enable", "value": "X_MOTOR" },
-      { "kind": "motor", "label": "enable", "value": "Y_MOTOR" },
-      { "kind": "motor", "label": "enable", "value": "Z_MOTOR" },
-      { "kind": "motor", "label": "enable", "value": "E_MOTOR" },
-      { "kind": "motor", "label": "disable", "value": "X_MOTOR" },
-      { "kind": "motor", "label": "disable", "value": "E_MOTOR" },
-      { "kind": "motor", "label": "disable", "value": "X_MOTOR" },
-      { "kind": "motor", "label": "disable", "value": "Y_MOTOR" },
-      { "kind": "motor", "label": "disable", "value": "Z_MOTOR" },
-      { "kind": "motor", "label": "disable", "value": "E_MOTOR" }
+      { "kind": "motor", "label": "enable", "target": "X_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "X_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "Y_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "Z_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "E_MOTOR" },
+      { "kind": "motor", "label": "disable", "target": "X_MOTOR" },
+      { "kind": "motor", "label": "disable", "target": "E_MOTOR" },
+      { "kind": "motor", "label": "disable", "target": "X_MOTOR" },
+      { "kind": "motor", "label": "disable", "target": "Y_MOTOR" },
+      { "kind": "motor", "label": "disable", "target": "Z_MOTOR" },
+      { "kind": "motor", "label": "disable", "target": "E_MOTOR" }
     ]
   }
 }
