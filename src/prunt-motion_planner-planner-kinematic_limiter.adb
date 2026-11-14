@@ -78,7 +78,9 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                Window : constant Profile_Window :=
                  (Start_Distance => (if I = Corner then Total - Width else 0.0 * mm), Distance => Width);
             begin
-               Limit := Constant_Speed_Axial_Ceiling (Block.Params, Extrusion_Bounds (Block'Access, I, Window), Limit);
+               Limit :=
+                 Constant_Speed_Axial_Ceiling
+                   (Segment_Params (Block'Access, I), Extrusion_Bounds (Block'Access, I, Window), Limit);
                Limit := Motor_Delta_Ceiling_For_Window (Block'Access, Motor_Map, I, Window, Limit);
             end;
          end loop;
@@ -211,7 +213,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
             for Costly in Boolean loop
                exit when Best >= Cap;
                declare
-                  Cells : constant Path_Cells :=
+                  Cells  : constant Path_Cells :=
                     (if Costly
                        and then (for some Eval of Evals => Eval.Cellular and then Admits (Eval))
                        and then Is_Cellular_Run (Block'Access, Finishing_Corner)
@@ -219,6 +221,7 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                        Timing_Run_Cells
                          (Block'Access, Motor_Map, Finishing_Corner, Timing_Feedrate (Block'Access, Finishing_Corner))
                      else [1 .. 0 => <>]);
+                  Params : constant Kinematic_Parameters := Segment_Params (Block'Access, Finishing_Corner);
                begin
                   for Eval of Evals loop
                      exit when Best >= Cap;
@@ -229,9 +232,8 @@ package body Prunt.Motion_Planner.Planner.Kinematic_Limiter is
                              (if Eval.Cellular
                               then
                                 Reachable_Cellular_Velocity
-                                  (Block.Params, Cells, Eval, Fixed_Vel, Forward, Floor => Best, Cap => Cap)
-                              else
-                                Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel, Floor => Best, Cap => Cap)));
+                                  (Params, Cells, Eval, Fixed_Vel, Forward, Floor => Best, Cap => Cap)
+                              else Reachable_Window_Velocity (Params, Eval, Fixed_Vel, Floor => Best, Cap => Cap)));
                      end if;
                   end loop;
                end;

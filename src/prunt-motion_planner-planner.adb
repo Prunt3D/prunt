@@ -374,7 +374,12 @@ package body Prunt.Motion_Planner.Planner is
      (Pos : Position; Feedrate : Velocity; Dwell_After : Time := 0.0 * s; Ignore_Bounds : Boolean := False) is
    begin
       My_Preprocessor.Enqueue
-        ((Kind => Move_Kind, Dwell_After => Dwell_After, Pos => Pos, Feedrate => Feedrate), Ignore_Bounds);
+        ((Kind        => Move_Kind,
+          Dwell_After => Dwell_After,
+          Pos         => Pos,
+          Feedrate    => Feedrate,
+          Move_Limits => No_Motion_Limits),
+         Ignore_Bounds);
    end Enqueue_Move;
 
    procedure Enqueue_Helix
@@ -391,7 +396,8 @@ package body Prunt.Motion_Planner.Planner is
           Pos         => Pos,
           Center      => Center,
           Clockwise   => Clockwise,
-          Feedrate    => Feedrate),
+          Feedrate    => Feedrate,
+          Move_Limits => No_Motion_Limits),
          Ignore_Bounds);
    end Enqueue_Helix;
 
@@ -442,6 +448,18 @@ package body Prunt.Motion_Planner.Planner is
       My_Preprocessor.Enqueue
         ((Kind => Flush_And_Change_Parameters_Kind, Flush_Resetting_Data => Data, New_Params => New_Params));
    end Enqueue_Flush_And_Change_Kinematic_Parameters;
+
+   procedure Enqueue_Change_Move_Limits (Limits : Motion_Limits) is
+   begin
+      --  Keep this check when assertions are disabled: an invalid cap would reach every later solve.
+      if not Motion_Limits_Are_Valid (Limits) then
+         raise Constraint_Error with "Move limits must be positive.";
+      end if;
+      My_Preprocessor.Change_Move_Limits (Limits);
+   end Enqueue_Change_Move_Limits;
+
+   function Get_Move_Limits return Motion_Limits
+   is (My_Preprocessor.Get_Move_Limits);
 
    procedure Dequeue (Block : in out Block_Handle; Timed_Out : out Boolean) is
    begin
@@ -865,6 +883,25 @@ package body Prunt.Motion_Planner.Planner is
        <= Negligible_Density_Change
           * Dimensionless'Max (abs Block.Extrusion_Densities (Corner), abs Block.Extrusion_Densities (Corner + 1)));
 
+   function Segment_Params
+     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
+      return Kinematic_Parameters
+   is (Capped_Parameters (Block.Params, Block.Segment_Limits (Finishing_Corner)));
+
+   function Corner_Params
+     (Block : not null access constant Execution_Block; Corner : Corners_Index) return Kinematic_Parameters
+   is (if Corner = Corners_Index'First
+       then Segment_Params (Block, Corner + 1)
+       elsif Corner = Block.N_Corners
+       then Segment_Params (Block, Corner)
+       else
+         Capped_Parameters
+           (Block.Params, Lower_Limits (Block.Segment_Limits (Corner), Block.Segment_Limits (Corner + 1))));
+
+   function Same_Segment_Limits
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Boolean
+   is (Block.Segment_Limits (Corner) = Block.Segment_Limits (Corner + 1));
+
    function Extrusion_Deviation (Params : Kinematic_Parameters) return Length
    is (if Params.Extrusion_Cornering.Kind /= Smooth_Deviation
        then 0.0 * mm
@@ -940,7 +977,7 @@ package body Prunt.Motion_Planner.Planner is
               Motor_Delta_Ceiling_For_Projection
                 (Block.Params,
                  Spatial_Motor_Map (Motor_Map),
-                 Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Limit));
+                 Constant_Speed_Axial_Ceiling (Corner_Params (Block, Corner), Bounds, Limit));
       end case;
    end Corner_Policy_Ceiling;
 
@@ -985,14 +1022,18 @@ package body Prunt.Motion_Planner.Planner is
          --  A stopped corner needs no transition.
          return 0.0 * mm;
       end if;
-      Fit
-        (Transition_Derivative_Maxima (1),
-         Dimensionless (Block.Params.Axial_Acceleration_Maxes (E_Axis) / (mm / s**2)),
-         2);
-      Fit (Transition_Derivative_Maxima (2), Dimensionless (Block.Params.Axial_Jerk_Maxes (E_Axis) / (mm / s**3)), 3);
-      Fit (Transition_Derivative_Maxima (3), Dimensionless (Block.Params.Axial_Snap_Maxes (E_Axis) / (mm / s**4)), 4);
-      Fit
-        (Transition_Derivative_Maxima (4), Dimensionless (Block.Params.Axial_Crackle_Maxes (E_Axis) / (mm / s**5)), 5);
+      declare
+         Limits : constant Kinematic_Parameters := Corner_Params (Block, Corner);
+         --  The transition spans both moves, so it fits the lower of their E limits.
+      begin
+         Fit
+           (Transition_Derivative_Maxima (1),
+            Dimensionless (Limits.Axial_Acceleration_Maxes (E_Axis) / (mm / s**2)),
+            2);
+         Fit (Transition_Derivative_Maxima (2), Dimensionless (Limits.Axial_Jerk_Maxes (E_Axis) / (mm / s**3)), 3);
+         Fit (Transition_Derivative_Maxima (3), Dimensionless (Limits.Axial_Snap_Maxes (E_Axis) / (mm / s**4)), 4);
+         Fit (Transition_Derivative_Maxima (4), Dimensionless (Limits.Axial_Crackle_Maxes (E_Axis) / (mm / s**5)), 5);
+      end;
       return Length'Min (Result, Widest);
    exception
       when Constraint_Error =>
@@ -1498,6 +1539,7 @@ package body Prunt.Motion_Planner.Planner is
         and then Block.Primitive_Distances (Corner + 1) > 0.0 * mm
         and then Slower > 0.0 * mm / s
         and then abs (Incoming - Outgoing) <= Timing_Run_Feedrate_Tolerance * Velocity'Max (Incoming, Outgoing)
+        and then Same_Segment_Limits (Block, Corner)
         and then Extrusion_Junction_Ceiling (Block, Corner, Slower) = Slower;
    end Joins_Timing_Run;
 
@@ -1516,7 +1558,8 @@ package body Prunt.Motion_Planner.Planner is
         and then Block.Corner_Dwell_Times (Corner) = 0.0 * s
         and then Segment_Total_Distance (Block, Corner) > 0.0 * mm
         and then Segment_Total_Distance (Block, Corner + 1) > 0.0 * mm
-        and then Velocity'Min (Incoming, Outgoing) > 0.0 * mm / s;
+        and then Velocity'Min (Incoming, Outgoing) > 0.0 * mm / s
+        and then Same_Segment_Limits (Block, Corner);
    end Can_Merge_Timing_Runs;
 
    procedure Assign_Timing_Runs (Block : aliased in out Execution_Block; Joins : Corner_Flags) is
@@ -1530,7 +1573,8 @@ package body Prunt.Motion_Planner.Planner is
       end if;
 
       for I in Finishing_Corners_Index'First .. Block.N_Corners loop
-         if I = Block.N_Corners or else not Joins (I) then
+         --  A run has one set of limits: every certificate of its profile uses its first segment's.
+         if I = Block.N_Corners or else not Joins (I) or else not Same_Segment_Limits (Block'Access, I) then
             for J in Start .. I loop
                Block.Timing_Run_Back (J) := J - Start;
                Block.Timing_Run_Ahead (J) := I - J;
@@ -1672,7 +1716,9 @@ package body Prunt.Motion_Planner.Planner is
          Bounds := Window_Axial_Derivative_Bounds (Block, Segment, Local);
          Ceiling :=
            Constant_Speed_Axial_Ceiling
-             (Block.Params, Bounds, Velocity'Min (Max_Vel, Block.Limited_Segment_Feedrates (Segment)));
+             (Segment_Params (Block, Segment),
+              Bounds,
+              Velocity'Min (Max_Vel, Block.Limited_Segment_Feedrates (Segment)));
          Ceiling := Motor_Delta_Ceiling_For_Window (Block, Motor_Map, Segment, Local, Ceiling);
          Count := Count + 1;
          Result (Count) :=
@@ -1880,12 +1926,17 @@ package body Prunt.Motion_Planner.Planner is
       --  cells. Each endpoint speed is admitted by the window's cells at that end only, so a low ceiling at one end
       --  does not cap the other; as for one segment, the junction limits admit the coasts outside the window.
       For_Each_Member (Merge_Member'Access);
-      Mixed :=
-        Mixed_Derivative_Limits
-          (Block.Params,
-           (Velocity => Bounds.Velocity, others => <>),
-           Max_Vel,
-           Scalar_Maxes => Tangential_Limits (Block, Block.Params, Run_First, Bounds.Velocity (E_Axis)));
+      declare
+         Params : constant Kinematic_Parameters := Segment_Params (Block, Run_First);
+         --  A run never spans a change of limits, so its first segment's limits are every member's.
+      begin
+         Mixed :=
+           Mixed_Derivative_Limits
+             (Params,
+              (Velocity => Bounds.Velocity, others => <>),
+              Max_Vel,
+              Scalar_Maxes => Tangential_Limits (Block, Params, Run_First, Bounds.Velocity (E_Axis)));
+      end;
       for Cell of Cells loop
          if Cell_Overlaps (Cell, Window.Start_Distance, Window_End) then
             if Cell.Start <= Window.Start_Distance then
@@ -2016,17 +2067,18 @@ package body Prunt.Motion_Planner.Planner is
       Window           : Profile_Window;
       Max_Vel          : Velocity) return Profile_Window_Evaluation
    is
+      Params  : constant Kinematic_Parameters := Segment_Params (Block, Finishing_Corner);
       Bounds  : constant Unit_Speed_Axial_Derivative_Bounds :=
         Window_Axial_Derivative_Bounds (Block, Finishing_Corner, Window);
       Mixed   : constant Mixed_Derivative_Limit_Result :=
         Mixed_Derivative_Limits
-          (Block.Params,
+          (Params,
            (Velocity => Bounds.Velocity, others => <>),
            Max_Vel,
-           Scalar_Maxes => Tangential_Limits (Block, Block.Params, Finishing_Corner, Bounds.Velocity (E_Axis)));
+           Scalar_Maxes => Tangential_Limits (Block, Params, Finishing_Corner, Bounds.Velocity (E_Axis)));
       Ceiling : constant Velocity :=
         Motor_Delta_Ceiling_For_Window
-          (Block, Motor_Map, Finishing_Corner, Window, Constant_Speed_Axial_Ceiling (Block.Params, Bounds, Max_Vel));
+          (Block, Motor_Map, Finishing_Corner, Window, Constant_Speed_Axial_Ceiling (Params, Bounds, Max_Vel));
       Result  : Profile_Window_Evaluation;
    begin
       Result :=
@@ -2320,7 +2372,13 @@ package body Prunt.Motion_Planner.Planner is
       begin
          if not Block.Params.Ignore_E_In_XYZE and then E_Bound > abs Block.Extrusion_Densities (Finishing_Corner) then
             --  The segment's feedrate converted the XYZE cap at its own density, which a transition can exceed.
-            Result := Velocity'Min (Result, Block.Params.Tangential_Velocity_Max * XYZE_Spatial_Scale (E_Bound));
+            Result :=
+              Velocity'Min
+                (Result,
+                 Velocity'Min
+                   (Block.Params.Tangential_Velocity_Max,
+                    Block.Segment_Limits (Finishing_Corner).Tangential_Velocity_Max)
+                 * XYZE_Spatial_Scale (E_Bound));
          end if;
          for M in Motor_Name loop
             if E_Bound > 0.0 and then Motor_Map (E_Axis, M) /= 0.0 / mm then
@@ -4319,6 +4377,7 @@ package body Prunt.Motion_Planner.Planner is
          Initialize_Scratch_Block (Geometry);
          Geometry.Params := Left.Params;
          Geometry.Primitives := [Left.Primitives (Left_Seam), Right.Primitives (2)];
+         Geometry.Segment_Limits := [Left.Segment_Limits (Left_Seam), Right.Segment_Limits (2)];
          Geometry.Extrusion_Densities := [Left.Extrusion_Densities (Left_Seam), Right.Extrusion_Densities (2)];
          Geometry.Corners :=
            [Primitive_Point_At_Distance (Left'Access, Left_Seam, Left_Start),
@@ -4540,6 +4599,7 @@ package body Prunt.Motion_Planner.Planner is
             if I > First then
                Target.Primitives (J) := Source.Primitives (I);
                Target.Original_Segment_Feedrates (J) := Source.Original_Segment_Feedrates (I);
+               Target.Segment_Limits (J) := Source.Segment_Limits (I);
                Target.Limited_Segment_Feedrates (J) := Source.Limited_Segment_Feedrates (I);
                Target.Corner_Dwell_Times (J) := Source.Corner_Dwell_Times (I);
                Target.Extrusion_Densities (J) := Source.Extrusion_Densities (I);
@@ -4590,6 +4650,7 @@ package body Prunt.Motion_Planner.Planner is
       Block.Corners := [others => [others => 0.0 * mm]];
       Block.Primitives := [others => Make_Line_Primitive];
       Block.Original_Segment_Feedrates := [others => 0.0 * mm / s];
+      Block.Segment_Limits := [others => No_Motion_Limits];
       Block.Limited_Segment_Feedrates := [others => 0.0 * mm / s];
       Block.Corner_Dwell_Times := [others => 0.0 * s];
       Clear_Planned_Fields (Block'Access);

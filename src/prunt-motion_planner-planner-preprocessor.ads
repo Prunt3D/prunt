@@ -45,6 +45,13 @@ package Prunt.Motion_Planner.Planner.Preprocessor is
    --  position bounds checking is bypassed for this command (useful for homing operations). May block if the queue is
    --  full or a homing boundary is pending. Returns without queueing anything while input is discarded.
 
+   procedure Change_Move_Limits (Limits : Motion_Limits);
+   --  Make Limits the caps that moves accepted from now on carry, until the next call or Reset. Never waits. Ignored
+   --  while input is discarded or before Setup.
+
+   function Get_Move_Limits return Motion_Limits;
+   --  Return the caps that a move accepted now would carry.
+
    procedure Wait_For_Input_Space
    with Pre => Input_Queue_Wait_Threshold <= Input_Queue_Length;
    --  Block until Input_Queue_Wait_Threshold commands can be enqueued without waiting for queue space or for a pending
@@ -115,6 +122,8 @@ private
         (Comm : Command; Ignore_Bounds : Boolean := False; Extra : access constant Corner_Extra_Data_Type := null)
       with Pre => (if Comm.Kind = Corner_Extra_Data_Kind then Extra /= null else Extra = null);
       entry Wait_For_Input_Space;
+      procedure Change_Move_Limits (Limits : Motion_Limits);
+      function Get_Move_Limits return Motion_Limits;
       procedure Discard_Input;
       entry Dequeue (Comm : out Command; Reset_Called : out Boolean);
       procedure Append_Extra_Data (Target : in out Corner_Extra_Data_Vectors.Vector; Reset_Called : out Boolean);
@@ -143,6 +152,8 @@ private
       Next_Read, Next_Write    : Count_Type := Command_Queue_Array_Type'First;
       Elements                 : Command_Queue_Array_Access := new Command_Queue_Array_Type;
       Current_Params           : Kinematic_Parameters;
+      Current_Move_Limits      : Motion_Limits := No_Motion_Limits;
+      --  The caps given to each accepted move.
       Extra_Data_Storage       : Corner_Extra_Data_Queue_Access := new Corner_Extra_Data_Queues.Queue;
       Retry_High_Priority      : Boolean := True;
       Last_Assigned_Corner_ID  : Planner_Corner_ID := 0;
@@ -157,6 +168,7 @@ private
    type Block_Plain_Corners_Access is access Block_Plain_Corners with Storage_Pool => Pool;
    type Block_Corner_Dwell_Times_Access is access Block_Corner_Dwell_Times with Storage_Pool => Pool;
    type Block_Segment_Feedrates_Access is access Block_Segment_Feedrates with Storage_Pool => Pool;
+   type Block_Segment_Limits_Access is access Block_Segment_Limits with Storage_Pool => Pool;
    type Block_Path_Primitives_Access is access Block_Path_Primitives with Storage_Pool => Pool;
    type Block_Corners_Extra_Data_End_Indices_Access is access Block_Corners_Extra_Data_End_Indices
    with Storage_Pool => Pool;
@@ -179,6 +191,8 @@ private
         new Block_Corner_Dwell_Times (2 .. Corners_Index'Last);
       Segment_Feedrates              : Block_Segment_Feedrates_Access :=
         new Block_Segment_Feedrates (2 .. Corners_Index'Last);
+      Segment_Limits                 : Block_Segment_Limits_Access :=
+        new Block_Segment_Limits (2 .. Corners_Index'Last);
       Primitives                     : Block_Path_Primitives_Access :=
         new Block_Path_Primitives (2 .. Corners_Index'Last);
       Corners_Extra_Data_End_Indices : Block_Corners_Extra_Data_End_Indices_Access :=

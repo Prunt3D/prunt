@@ -51,8 +51,9 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
             Velocity_Safety    : constant Dimensionless := (if Primitive_Distance > 0.0 * mm then 0.999 else 1.0);
             Offset             : constant Position_Offset := Block.Corners (I - 1) - Block.Corners (I);
             XYZ_Path_Length    : Length;
+            Limits             : constant Kinematic_Parameters := Segment_Params (Block'Access, I);
 
-            Tangential_Max : Velocity := Block.Params.Tangential_Velocity_Max;
+            Tangential_Max : Velocity := Limits.Tangential_Velocity_Max;
             Feedrate       : Velocity;
          begin
             case Primitive.Kind is
@@ -85,7 +86,7 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
                --  limits belong to the windows and junction coasts that actually overlap them.
                Feedrate :=
                  Velocity'Min
-                   (Feedrate, 0.999 * Block.Params.Axial_Velocity_Maxes (E_Axis) / abs Block.Extrusion_Densities (I));
+                   (Feedrate, 0.999 * Limits.Axial_Velocity_Maxes (E_Axis) / abs Block.Extrusion_Densities (I));
             end if;
 
             --  Enforce a minimum segment time to prevent any possible issues in the step generator.
@@ -98,8 +99,7 @@ package body Prunt.Motion_Planner.Planner.Early_Kinematic_Limiter is
             for A in Axis_Name loop
                if Bounds.Velocity (A) > 0.0 then
                   Feedrate :=
-                    Velocity'Min
-                      (Feedrate, Velocity_Safety * Block.Params.Axial_Velocity_Maxes (A) / Bounds.Velocity (A));
+                    Velocity'Min (Feedrate, Velocity_Safety * Limits.Axial_Velocity_Maxes (A) / Bounds.Velocity (A));
                end if;
             end loop;
 

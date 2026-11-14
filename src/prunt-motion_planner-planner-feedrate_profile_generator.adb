@@ -40,6 +40,8 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       End_Vel   : constant Velocity := Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Finishing_Corner));
       Total     : constant Length := Timing_Total_Distance (Block, Finishing_Corner);
       Feedrate  : constant Velocity := Timing_Feedrate (Block, Finishing_Corner);
+      Params    : constant Kinematic_Parameters := Segment_Params (Block, Finishing_Corner);
+      --  A timing run never spans a change of limits.
 
       Best_Found         : Boolean := False;
       Best_Time          : Time := 1.0E100 * s;
@@ -109,11 +111,10 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
       function Conservative_Evaluation (Eval : Profile_Window_Evaluation) return Profile_Window_Evaluation is
          Mixed  : constant Mixed_Derivative_Limit_Result :=
            Mixed_Derivative_Limits
-             (Block.Params,
+             (Params,
               Eval.Bounds,
               Feedrate,
-              Scalar_Maxes =>
-                Tangential_Limits (Block, Block.Params, Finishing_Corner, Eval.Bounds.Velocity (E_Axis)));
+              Scalar_Maxes => Tangential_Limits (Block, Params, Finishing_Corner, Eval.Bounds.Velocity (E_Axis)));
          Result : Profile_Window_Evaluation := Eval;
       begin
          --  Eval.Limits contains tangent-only budgets. Reconstruct the full mixed-limit certificate;
@@ -178,14 +179,14 @@ package body Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator is
 
       function Generate (Eval : Profile_Window_Evaluation; First, Last : Velocity) return Window_Profile_Result
       is (if Eval.Cellular
-          then Generate_Cellular_Profile (Block.Params, Cells, Eval, First, Last)
-          else Generate_Window_Profile (Block.Params, Eval, First, Last));
+          then Generate_Cellular_Profile (Params, Cells, Eval, First, Last)
+          else Generate_Window_Profile (Params, Eval, First, Last));
 
       function Reachable
         (Eval : Profile_Window_Evaluation; Fixed_Vel : Velocity; Forward : Boolean; Cap : Velocity) return Velocity
       is (if Eval.Cellular
-          then Reachable_Cellular_Velocity (Block.Params, Cells, Eval, Fixed_Vel, Forward, Cap => Cap)
-          else Reachable_Window_Velocity (Block.Params, Eval, Fixed_Vel, Cap => Cap));
+          then Reachable_Cellular_Velocity (Params, Cells, Eval, Fixed_Vel, Forward, Cap => Cap)
+          else Reachable_Window_Velocity (Params, Eval, Fixed_Vel, Cap => Cap));
 
       procedure Consider_Split_Profile (Conservative : Boolean; Accepted : out Boolean) is
          Split_Windows : constant Split_Profile_Windows := Timing_Split_Windows (Block, Finishing_Corner);

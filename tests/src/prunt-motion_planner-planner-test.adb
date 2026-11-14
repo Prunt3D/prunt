@@ -68,6 +68,7 @@ package body Prunt.Motion_Planner.Planner.Test is
    package Boundary_Preprocessor is new Preprocessor;
    package Reset_Preprocessor is new Preprocessor;
    package Natural_End_Preprocessor is new Preprocessor;
+   package Limits_Preprocessor is new Preprocessor;
 
    Identity_Tolerance_Factor : constant Long_Float := 32_768.0;
 
@@ -180,6 +181,7 @@ package body Prunt.Motion_Planner.Planner.Test is
       Block.Corners := [others => [others => 0.0 * mm]];
       Block.Primitives := [others => Make_Line_Primitive];
       Block.Original_Segment_Feedrates := [others => 0.0 * mm / s];
+      Block.Segment_Limits := [others => No_Motion_Limits];
       Block.First_Corner_ID := 0;
       Block.Associated_Overflow_Block := False;
       Block.Is_Homing_Move := False;
@@ -1091,7 +1093,8 @@ package body Prunt.Motion_Planner.Planner.Test is
              Pos         => Finish,
              Center      => Center,
              Clockwise   => False,
-             Feedrate    => 1.0 * mm / s));
+             Feedrate    => 1.0 * mm / s,
+             Move_Limits => No_Motion_Limits));
       exception
          when Out_Of_Bounds_Error =>
             Rejected := True;
@@ -1104,7 +1107,8 @@ package body Prunt.Motion_Planner.Planner.Test is
           Pos         => Finish,
           Center      => Center,
           Clockwise   => True,
-          Feedrate    => 1.0 * mm / s));
+          Feedrate    => 1.0 * mm / s,
+          Move_Limits => No_Motion_Limits));
       Tested_Preprocessor.Enqueue ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
       Tested_Preprocessor.Run (Block'Access, Extra_Data, Initial_Position, Reset_Called);
 
@@ -1806,7 +1810,11 @@ package body Prunt.Motion_Planner.Planner.Test is
          Radius  => 2.0 * mm);
       Boundary_Preprocessor.Setup (Params);
       Boundary_Preprocessor.Enqueue
-        ((Kind => Move_Kind, Dwell_After => 0.0 * s, Pos => Approach_End, Feedrate => 1.0 * mm / s),
+        ((Kind        => Move_Kind,
+          Dwell_After => 0.0 * s,
+          Pos         => Approach_End,
+          Feedrate    => 1.0 * mm / s,
+          Move_Limits => No_Motion_Limits),
          Ignore_Bounds => True);
       Boundary_Preprocessor.Enqueue
         ((Kind => Homing_Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
@@ -1831,7 +1839,8 @@ package body Prunt.Motion_Planner.Planner.Test is
           Pos         => Following_End,
           Center      => Following_Centre,
           Clockwise   => False,
-          Feedrate    => 1.0 * mm / s));
+          Feedrate    => 1.0 * mm / s,
+          Move_Limits => No_Motion_Limits));
       Boundary_Preprocessor.Enqueue ((Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default));
       Boundary_Preprocessor.Run (Following_Block'Access, Extra_Data, Stopped_Position, Reset_Called);
       T.Assert
@@ -4818,13 +4827,15 @@ package body Prunt.Motion_Planner.Planner.Test is
       is (Kind        => Move_Kind,
           Dwell_After => Dwell_After,
           Pos         => [X_Axis => X * mm, E_Axis => E * mm, others => 0.0 * mm],
-          Feedrate    => 1.0 * mm / s);
+          Feedrate    => 1.0 * mm / s,
+          Move_Limits => No_Motion_Limits);
 
       function Arc (X, Y, E : Dimensionless) return Command
       is (Kind        => Helix_Move_Kind,
           Dwell_After => 0.0 * s,
           Pos         => [X_Axis => X * mm, Y_Axis => Y * mm, E_Axis => E * mm, others => 0.0 * mm],
           Feedrate    => 1.0 * mm / s,
+          Move_Limits => No_Motion_Limits,
           Center      => Arc_Center,
           Clockwise   => False);
 
@@ -5545,25 +5556,31 @@ package body Prunt.Motion_Planner.Planner.Test is
    end Test_Blend_Seam_Retained_Primitives;
 
    procedure Prepare_Continuous_Line
-     (Block      : aliased out Execution_Block;
-      Work       : not null access Planning_Workspace;
-      Continuous : Boolean;
-      Slow_From  : Corners_Index'Base := Corners_Index'Base'Last;
-      Origin     : Position := [others => 0.0 * mm]);
+     (Block       : aliased out Execution_Block;
+      Work        : not null access Planning_Workspace;
+      Continuous  : Boolean;
+      Slow_From   : Corners_Index'Base := Corners_Index'Base'Last;
+      Origin      : Position := [others => 0.0 * mm];
+      Capped_From : Corners_Index'Base := Corners_Index'Base'Last;
+      Caps        : Motion_Limits := No_Motion_Limits);
    --  Plan a 15 mm extruding line along X from Origin, split evenly across Block's segments. Segments from Slow_From
-   --  on have half the feedrate. The slow derivative limits make each short segment's own ramp much slower than one
-   --  long ramp.
+   --  on have half the feedrate, and segments from Capped_From on carry Caps. The slow derivative limits make each
+   --  short segment's own ramp much slower than one long ramp.
 
    procedure Prepare_Continuous_Line
-     (Block      : aliased out Execution_Block;
-      Work       : not null access Planning_Workspace;
-      Continuous : Boolean;
-      Slow_From  : Corners_Index'Base := Corners_Index'Base'Last;
-      Origin     : Position := [others => 0.0 * mm])
+     (Block       : aliased out Execution_Block;
+      Work        : not null access Planning_Workspace;
+      Continuous  : Boolean;
+      Slow_From   : Corners_Index'Base := Corners_Index'Base'Last;
+      Origin      : Position := [others => 0.0 * mm];
+      Capped_From : Corners_Index'Base := Corners_Index'Base'Last;
+      Caps        : Motion_Limits := No_Motion_Limits)
    is
       Map : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
    begin
       Reset_Early_Limiter_Block (Block);
+      Block.Segment_Limits :=
+        [for I in Block.Segment_Limits'Range => (if I >= Capped_From then Caps else No_Motion_Limits)];
       Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
       Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
       Block.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s**2];
@@ -6681,10 +6698,249 @@ package body Prunt.Motion_Planner.Planner.Test is
       end;
    end Test_Tangential_Limits;
 
+   procedure Test_Per_Move_Limits (T : in out Trendy_Test.Operation'Class) is
+      Work    : aliased Planning_Workspace (Corners_Index'Last);
+      Map     : constant Motor_Position_Map := [others => [others => 0.0 / mm]];
+      Cap     : constant Acceleration := 100.0 * mm / s**2;
+      Capped  : constant Motion_Limits := (Tangential_Acceleration_Max => Cap, others => <>);
+      Axial   : constant Motion_Limits := (Axial_Acceleration_Maxes => [others => Cap], others => <>);
+      --  Along X a tangential cap and an X cap limit the same acceleration, but only an axial cap slows a corner.
+      Blended : Boolean;
+
+      procedure Set_Limits (Block : in out Execution_Block);
+      --  Block limits fast enough that acceleration alone binds the fixtures' ramps.
+
+      procedure Set_Limits (Block : in out Execution_Block) is
+      begin
+         Block.Params.Tangential_Velocity_Max := 100.0 * mm / s;
+         Block.Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+         Block.Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s**2];
+         Block.Params.Axial_Jerk_Maxes := [others => 100_000.0 * mm / s**3];
+         Block.Params.Axial_Snap_Maxes := [others => 10_000_000.0 * mm / s**4];
+         Block.Params.Axial_Crackle_Maxes := [others => 1_000_000_000.0 * mm / s**5];
+         Block.Original_Segment_Feedrates := [others => 100.0 * mm / s];
+      end Set_Limits;
+
+      procedure Prepare_Line
+        (Block : aliased out Execution_Block; Capped_From : Corners_Index'Base; Origin, Spacing : Length);
+      --  Plan an extruding line along X from Origin with corners Spacing apart. Segments from Capped_From on carry
+      --  Capped.
+
+      procedure Prepare_Line
+        (Block : aliased out Execution_Block; Capped_From : Corners_Index'Base; Origin, Spacing : Length) is
+      begin
+         Reset_Early_Limiter_Block (Block);
+         Set_Limits (Block);
+         Block.Blendable_End := True;
+         Block.Segment_Limits :=
+           [for I in Block.Segment_Limits'Range => (if I >= Capped_From then Capped else No_Motion_Limits)];
+         for I in Block.Corners'Range loop
+            Block.Corners (I) :=
+              [X_Axis => Origin + Spacing * Dimensionless (I - 1),
+               E_Axis => 0.05 * (Origin + Spacing * Dimensionless (I - 1)),
+               others => 0.0 * mm];
+         end loop;
+         Normalize_And_Blend (Block, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (Block, Map);
+         Plan_Kinematics (Block, Map, Work'Access);
+      end Prepare_Line;
+   begin
+      T.Register;
+
+      T.Assert (Motion_Limits_Are_Valid (No_Motion_Limits), "No caps are valid caps");
+      T.Assert
+        (not Motion_Limits_Are_Valid ((Axial_Jerk_Maxes => [others => 0.0 * mm / s**3], others => <>))
+         and then not Motion_Limits_Are_Valid ((Tangential_Velocity_Max => -1.0 * mm / s, others => <>)),
+         "Zero and negative caps are rejected");
+
+      declare
+         --  The last of three 10 mm segments carries the cap, so it alone has to stop at a low acceleration.
+         Line : aliased Execution_Block (4);
+      begin
+         Prepare_Line (Line, Capped_From => 4, Origin => 0.0 * mm, Spacing => 10.0 * mm);
+         T.Assert
+           (Line.Corner_Velocity_Limits (2) > 0.0 * mm / s and then Line.Corner_Velocity_Limits (3) > 0.0 * mm / s,
+            "A change of limits between moves does not stop");
+         T.Assert
+           (Line.Corner_Velocity_Limits (3) <= (2.0 * Cap * 10.0 * mm)**(1 / 2),
+            "The move before the capped one leaves no more speed than the cap can stop in its length");
+         T.Assert (Peak_Path_Acceleration (Line, 4, False) <= 1.001 * Cap, "The capped move keeps to its own cap");
+         T.Assert
+           (Peak_Path_Acceleration (Line, 2, False) > 3.0 * Cap
+            and then Peak_Path_Acceleration (Line, 3, False) > 3.0 * Cap,
+            "The uncapped moves keep the block's acceleration");
+      end;
+
+      declare
+         --  A rounded corner belongs to both moves, so its speed follows the lower limits of the two.
+         Corner  : aliased Execution_Block (3);
+         Ceiling : array (Boolean, Boolean) of Velocity;
+      begin
+         Reset_Early_Limiter_Block (Corner);
+         Set_Limits (Corner);
+         Corner.Corners :=
+           [[others => 0.0 * mm],
+            [X_Axis => 10.0 * mm, others => 0.0 * mm],
+            [X_Axis => 10.0 * mm, Y_Axis => 10.0 * mm, others => 0.0 * mm]];
+         Normalize_And_Blend (Corner, Map, Work'Access);
+         Tested_Early_Kinematic_Limiter.Run (Corner, Map);
+         T.Assert
+           (Policy (Corner.Corner_Transitions (2)) = Derivative_Bounded, "The fixture corner is a rounded transition");
+         for Incoming_Capped in Boolean loop
+            for Outgoing_Capped in Boolean loop
+               Corner.Segment_Limits :=
+                 [(if Incoming_Capped then Axial else No_Motion_Limits),
+                  (if Outgoing_Capped then Axial else No_Motion_Limits)];
+               Ceiling (Incoming_Capped, Outgoing_Capped) :=
+                 Corner_Policy_Ceiling
+                   (Corner'Access, Map, 2, Derivative_Bounds (Corner.Corner_Transitions (2)), 100.0 * mm / s);
+            end loop;
+         end loop;
+         T.Assert
+           (Ceiling (True, False) = Ceiling (True, True) and then Ceiling (False, True) = Ceiling (True, True),
+            "A cap on either move limits the corner as a cap on both does");
+         T.Assert (Ceiling (True, True) < Ceiling (False, False), "An axial cap lowers the rounded corner's speed");
+         Corner.Segment_Limits := [others => Capped];
+         T.Assert
+           (Corner_Policy_Ceiling
+              (Corner'Access, Map, 2, Derivative_Bounds (Corner.Corner_Transitions (2)), 100.0 * mm / s)
+            = Ceiling (False, False),
+            "A tangential cap leaves the rounded corner's speed alone");
+      end;
+
+      declare
+         --  Continuous timing joins the collinear segments into runs, but never across a change of limits.
+         Line     : aliased Execution_Block (5);
+         Uncapped : aliased Execution_Block (5);
+      begin
+         Prepare_Continuous_Line (Uncapped, Work'Access, Continuous => True);
+         T.Assert (Timing_Run_Last (Uncapped'Access, 2) = 5, "Without caps the collinear segments form one run");
+         Prepare_Continuous_Line (Line, Work'Access, Continuous => True, Capped_From => 4, Caps => Capped);
+         T.Assert
+           (Timing_Run_Last (Line'Access, 2) = 3 and then Timing_Run_First (Line'Access, 5) = 4,
+            "Runs split exactly where the limits change");
+         T.Assert (Line.Corner_Velocity_Limits (3) > 0.0 * mm / s, "The split is passed while moving");
+      end;
+
+      declare
+         --  Blocks that differ only in their moves' caps still blend, and each side keeps its own limits.
+         Left, Right : aliased Execution_Block (6);
+      begin
+         Prepare_Line (Left, Capped_From => Corners_Index'Base'Last, Origin => 0.0 * mm, Spacing => 1.0 * mm);
+         Prepare_Line (Right, Capped_From => 2, Origin => 5.0 * mm, Spacing => 1.0 * mm);
+         T.Assert (Blendable_Boundary (Left, Right), "Caps do not make a block boundary a stop");
+         Blend_Blocks (Left, Right, Map, Blended);
+         T.Assert (Blended and then Left.Corner_Velocity_Limits (6) > 0.0 * mm / s, "The seam keeps moving");
+         T.Assert
+           ((for all I in Right.Segment_Limits'Range => Right.Segment_Limits (I) = Capped)
+            and then (for all I in Left.Segment_Limits'Range => Left.Segment_Limits (I) = No_Motion_Limits),
+            "Blending keeps each block's limits");
+         for I in Right.Primitives'Range loop
+            T.Assert
+              (Peak_Path_Acceleration (Right, I, False) <= 1.001 * Cap, "The replanned capped moves keep to the cap");
+         end loop;
+      end;
+   end Test_Per_Move_Limits;
+
+   procedure Test_Preprocessor_Move_Limits (T : in out Trendy_Test.Operation'Class) is
+      Block        : aliased Execution_Block;
+      Extra_Data   : Corner_Extra_Data_Vectors.Vector;
+      Reset_Called : Boolean;
+      Params       : Kinematic_Parameters := (others => <>);
+      Flush        : constant Command :=
+        (Kind => Flush_Kind, Flush_Resetting_Data => Flush_Resetting_Data_Type_Default);
+      Last_X       : Dimensionless := 0.0;
+
+      function Accelerations_Are (Limits : Motion_Limits; Value : Acceleration) return Boolean
+      is (for all Axis in Limits.Axial_Acceleration_Maxes'Range => Limits.Axial_Acceleration_Maxes (Axis) = Value);
+
+      procedure Plan_Move;
+      --  Preprocess one move, which Block then holds as its only segment.
+
+      procedure Plan_Move is
+         Start : constant Position := [X_Axis => Last_X * mm, others => 0.0 * mm];
+      begin
+         Last_X := Last_X + 1.0;
+         Limits_Preprocessor.Enqueue
+           ((Kind        => Move_Kind,
+             Dwell_After => 0.0 * s,
+             Pos         => [X_Axis => Last_X * mm, others => 0.0 * mm],
+             Feedrate    => 10.0 * mm / s,
+             Move_Limits => No_Motion_Limits));
+         Limits_Preprocessor.Enqueue (Flush);
+         Limits_Preprocessor.Run (Block'Access, Extra_Data, Start, Reset_Called);
+         T.Assert (not Reset_Called and then Block.N_Corners = 2, "The move is planned on its own");
+      end Plan_Move;
+   begin
+      T.Register;
+      Params.Bounds := Rectangular_Bounds ([others => -1.0E100 * mm], [others => 1.0E100 * mm]);
+      Params.Tangential_Velocity_Max := 100.0 * mm / s;
+      Params.Axial_Velocity_Maxes := [others => 100.0 * mm / s];
+      Params.Axial_Acceleration_Maxes := [others => 1_000.0 * mm / s**2];
+      Params.Axial_Jerk_Maxes := [others => 100_000.0 * mm / s**3];
+      Params.Axial_Snap_Maxes := [others => 10_000_000.0 * mm / s**4];
+      Params.Axial_Crackle_Maxes := [others => 1_000_000_000.0 * mm / s**5];
+      Limits_Preprocessor.Setup (Params);
+
+      Plan_Move;
+      T.Assert (Block.Segment_Limits (2) = Parameter_Limits (Params), "A move without caps has the block's limits");
+
+      Limits_Preprocessor.Change_Move_Limits
+        ((Tangential_Acceleration_Max => 5.0 * mm / s**2,
+          Axial_Acceleration_Maxes    => [others => 5.0 * mm / s**2],
+          others                      => <>));
+      T.Assert
+        (Limits_Preprocessor.Get_Move_Limits.Tangential_Acceleration_Max = 5.0 * mm / s**2,
+         "The queue reports the caps that the next move will carry");
+      Plan_Move;
+      T.Assert
+        (Accelerations_Are (Block.Segment_Limits (2), 5.0 * mm / s**2)
+         and then Block.Segment_Limits (2).Axial_Velocity_Maxes = Params.Axial_Velocity_Maxes,
+         "A capped move has the capped acceleration and the block's other limits");
+      T.Assert
+        (Block.Segment_Limits (2).Axial_Jerk_Maxes (X_Axis) = 5.0 * mm / s**2 / Interpolation_Time
+         and then Block.Segment_Limits (2).Tangential_Acceleration_Max = 5.0 * mm / s**2
+         and then Block.Segment_Limits (2).Tangential_Jerk_Max = 5.0 * mm / s**2 / Interpolation_Time,
+         "Capped limits are limited like any parameters, so jerk follows the lower acceleration");
+      T.Assert (Block.Params = Params, "Caps leave the block's parameters unchanged");
+
+      Limits_Preprocessor.Enqueue
+        ((Kind                 => Flush_And_Change_Parameters_Kind,
+          Flush_Resetting_Data => Flush_Resetting_Data_Type_Default,
+          New_Params           => (Params with delta Axial_Acceleration_Maxes => [others => 3.0 * mm / s**2])));
+      Limits_Preprocessor.Run (Block'Access, Extra_Data, [X_Axis => Last_X * mm, others => 0.0 * mm], Reset_Called);
+      Plan_Move;
+      T.Assert
+        (Accelerations_Are (Block.Segment_Limits (2), 3.0 * mm / s**2),
+         "Caps survive a parameter change, and parameters below them still apply");
+
+      Limits_Preprocessor.Change_Move_Limits (No_Motion_Limits);
+      Limits_Preprocessor.Enqueue
+        ((Kind                 => Flush_And_Change_Parameters_Kind,
+          Flush_Resetting_Data => Flush_Resetting_Data_Type_Default,
+          New_Params           => Params));
+      Limits_Preprocessor.Run (Block'Access, Extra_Data, [X_Axis => Last_X * mm, others => 0.0 * mm], Reset_Called);
+      Plan_Move;
+      T.Assert (Block.Segment_Limits (2) = Parameter_Limits (Params), "No_Motion_Limits removes every cap");
+
+      Limits_Preprocessor.Change_Move_Limits ((Axial_Acceleration_Maxes => [others => 5.0 * mm / s**2], others => <>));
+      Limits_Preprocessor.Reset;
+      Limits_Preprocessor.Setup (Params);
+      Last_X := 0.0;
+      Plan_Move;
+      T.Assert
+        (Block.Segment_Limits (2) = Parameter_Limits (Params)
+         and then Limits_Preprocessor.Get_Move_Limits = No_Motion_Limits,
+         "Reset removes every cap");
+      Limits_Preprocessor.Reset;
+   end Test_Preprocessor_Move_Limits;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
         [Test_Tangential_Limits'Unrestricted_Access,
+         Test_Per_Move_Limits'Unrestricted_Access,
+         Test_Preprocessor_Move_Limits'Unrestricted_Access,
          Test_Continuous_Passthrough_Timing'Unrestricted_Access,
          Test_Continuous_Profile_Window_Handoff'Unrestricted_Access,
          Test_Prepared_Timing_Evaluation'Unrestricted_Access,

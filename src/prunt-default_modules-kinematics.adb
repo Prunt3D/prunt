@@ -18,6 +18,7 @@
 --------------------------------------------------
 
 with Ada.Numerics.Generic_Elementary_Functions;
+with Prunt.JSON;
 with Prunt.Default_Modules.Kinematics.Config_Paths;
 
 package body Prunt.Default_Modules.Kinematics is
@@ -764,5 +765,142 @@ package body Prunt.Default_Modules.Kinematics is
         (Params     => New_Params,
          Extra_Data => Kinematics_Config_Update'(Module_Instance_Ref => Self_Ref, Updates => Updates));
    end Set_Dynamic_Kinematic_Limits;
+
+   function Updated_Move_Limits
+     (Current : Motion_Planner.Motion_Limits; A, J, S, C : Gcode_Optional_Float; X, Y, Z, E : Gcode_Optional_String)
+      return Motion_Planner.Motion_Limits
+   is
+      use type JSON.JSON_Value_Type;
+
+      Result  : Motion_Planner.Motion_Limits := Current;
+      Updated : Boolean := False;
+
+      function Cap (Value : Dimensionless; Name : String) return Dimensionless;
+      --  The cap for a given Value: itself, or the largest representable value, which removes the cap, for zero.
+
+      procedure Update_Axis (Axis : Axis_Name; Value : Gcode_Optional_String);
+      --  Apply the caps in the axis's JSON object, if it was given.
+
+      function Cap (Value : Dimensionless; Name : String) return Dimensionless is
+      begin
+         if Value = 0.0 then
+            return Dimensionless'Last;
+         elsif not (Value in 1.0E-6 .. 1.0E100) then
+            --  Written as a negated membership so NaN fails as well.
+            raise Gcode_Bad_Inputs_Error with Name & " cap must be zero or between 1.0E-6 and 1.0E100.";
+         end if;
+         return Value;
+      end Cap;
+
+      procedure Update_Axis (Axis : Axis_Name; Value : Gcode_Optional_String) is
+         JSON_Result : JSON.Read_Result;
+         Payload     : JSON.JSON_Value;
+
+         procedure Check_Field (Name : Virtual_String; Field_Value : JSON.JSON_Value);
+         --  Apply one field of Payload.
+
+         procedure Check_Field (Name : Virtual_String; Field_Value : JSON.JSON_Value) is
+            Label : constant String := Axis'Image & " " & Conversions.To_UTF_8_String (Name);
+            Raw   : Dimensionless;
+         begin
+            if Field_Value.Kind not in JSON.JSON_Int_Type | JSON.JSON_Float_Type then
+               raise Gcode_Bad_Inputs_Error with Label & " must be a number.";
+            end if;
+            Raw := Cap (Field_Value.Get, Label);
+            if Name = "Velocity" then
+               Result.Axial_Velocity_Maxes (Axis) := Raw * mm / Prunt.s;
+            elsif Name = "Acceleration" then
+               Result.Axial_Acceleration_Maxes (Axis) := Raw * mm / Prunt.s**2;
+            elsif Name = "Jerk" then
+               Result.Axial_Jerk_Maxes (Axis) := Raw * mm / Prunt.s**3;
+            elsif Name = "Snap" then
+               Result.Axial_Snap_Maxes (Axis) := Raw * mm / Prunt.s**4;
+            elsif Name = "Crackle" then
+               Result.Axial_Crackle_Maxes (Axis) := Raw * mm / Prunt.s**5;
+            else
+               raise Gcode_Bad_Inputs_Error
+                 with
+                   "JSON for "
+                   & Axis'Image
+                   & " contains unknown field """
+                   & Conversions.To_UTF_8_String (Name)
+                   & """.";
+            end if;
+         end Check_Field;
+      begin
+         if not Value.Present then
+            return;
+         end if;
+
+         JSON_Result := JSON.Read (Value.Value);
+         if not JSON_Result.Success then
+            raise Gcode_Bad_Inputs_Error
+              with
+                "Invalid JSON for "
+                & Axis'Image
+                & " at"
+                & JSON_Result.Error.Line'Image
+                & ":"
+                & JSON_Result.Error.Column'Image
+                & ": "
+                & Conversions.To_UTF_8_String (JSON_Result.Error.Message);
+         end if;
+
+         Payload := JSON_Result.Value;
+         if Payload.Kind /= JSON.JSON_Object_Type then
+            raise Gcode_Bad_Inputs_Error with "JSON for " & Axis'Image & " must be an object.";
+         end if;
+         Payload.Map_JSON_Object (Check_Field'Access);
+         Updated := True;
+      end Update_Axis;
+   begin
+      if A.Present then
+         Result.Tangential_Acceleration_Max := Cap (A.Value, "Tangential acceleration") * mm / Prunt.s**2;
+         Updated := True;
+      end if;
+      if J.Present then
+         Result.Tangential_Jerk_Max := Cap (J.Value, "Tangential jerk") * mm / Prunt.s**3;
+         Updated := True;
+      end if;
+      if S.Present then
+         Result.Tangential_Snap_Max := Cap (S.Value, "Tangential snap") * mm / Prunt.s**4;
+         Updated := True;
+      end if;
+      if C.Present then
+         Result.Tangential_Crackle_Max := Cap (C.Value, "Tangential crackle") * mm / Prunt.s**5;
+         Updated := True;
+      end if;
+      Update_Axis (X_Axis, X);
+      Update_Axis (Y_Axis, Y);
+      Update_Axis (Z_Axis, Z);
+      Update_Axis (E_Axis, E);
+
+      if not Updated then
+         raise Gcode_Bad_Inputs_Error with "Provide at least one cap.";
+      end if;
+      return Result;
+   end Updated_Move_Limits;
+
+   procedure Set_Move_Limits
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      P       : Virtual_String;
+      A       : Gcode_Optional_Float;
+      J       : Gcode_Optional_Float;
+      S       : Gcode_Optional_Float;
+      C       : Gcode_Optional_Float;
+      X       : Gcode_Optional_String;
+      Y       : Gcode_Optional_String;
+      Z       : Gcode_Optional_String;
+      E       : Gcode_Optional_String)
+   is
+      pragma Unreferenced (This);
+   begin
+      if P /= "Prunt" then
+         raise Gcode_Bad_Inputs_Error with "The P parameter must be set to ""Prunt"".";
+      end if;
+
+      Planner.Change_Move_Limits (Updated_Move_Limits (Planner.Get_Move_Limits, A, J, S, C, X, Y, Z, E));
+   end Set_Move_Limits;
 
 end Prunt.Default_Modules.Kinematics;

@@ -112,6 +112,91 @@ package body Prunt.Motion_Planner is
          return False;
    end Profile_Is_Valid;
 
+   function Motion_Limits_Are_Valid (Limits : Motion_Limits) return Boolean is
+   begin
+      --  Written as negated comparisons so NaN fails as well.
+      if not (Limits.Tangential_Velocity_Max > 0.0 * mm / s
+              and then Limits.Tangential_Acceleration_Max > 0.0 * mm / s**2
+              and then Limits.Tangential_Jerk_Max > 0.0 * mm / s**3
+              and then Limits.Tangential_Snap_Max > 0.0 * mm / s**4
+              and then Limits.Tangential_Crackle_Max > 0.0 * mm / s**5)
+      then
+         return False;
+      end if;
+      for Axis in Axis_Name loop
+         if not (Limits.Axial_Velocity_Maxes (Axis) > 0.0 * mm / s
+                 and then Limits.Axial_Acceleration_Maxes (Axis) > 0.0 * mm / s**2
+                 and then Limits.Axial_Jerk_Maxes (Axis) > 0.0 * mm / s**3
+                 and then Limits.Axial_Snap_Maxes (Axis) > 0.0 * mm / s**4
+                 and then Limits.Axial_Crackle_Maxes (Axis) > 0.0 * mm / s**5)
+         then
+            return False;
+         end if;
+      end loop;
+      return True;
+   end Motion_Limits_Are_Valid;
+
+   function Capped_Parameters (Params : Kinematic_Parameters; Limits : Motion_Limits) return Kinematic_Parameters is
+   begin
+      --  The planner calls this for every profile window it evaluates, so cap the copy in place rather than building
+      --  intermediate limit records.
+      return Result : Kinematic_Parameters := Params do
+         Result.Tangential_Velocity_Max :=
+           Velocity'Min (Params.Tangential_Velocity_Max, Limits.Tangential_Velocity_Max);
+         Result.Tangential_Acceleration_Max :=
+           Acceleration'Min (Params.Tangential_Acceleration_Max, Limits.Tangential_Acceleration_Max);
+         Result.Tangential_Jerk_Max := Jerk'Min (Params.Tangential_Jerk_Max, Limits.Tangential_Jerk_Max);
+         Result.Tangential_Snap_Max := Snap'Min (Params.Tangential_Snap_Max, Limits.Tangential_Snap_Max);
+         Result.Tangential_Crackle_Max := Crackle'Min (Params.Tangential_Crackle_Max, Limits.Tangential_Crackle_Max);
+         for Axis in Axis_Name loop
+            Result.Axial_Velocity_Maxes (Axis) :=
+              Velocity'Min (Params.Axial_Velocity_Maxes (Axis), Limits.Axial_Velocity_Maxes (Axis));
+            Result.Axial_Acceleration_Maxes (Axis) :=
+              Acceleration'Min (Params.Axial_Acceleration_Maxes (Axis), Limits.Axial_Acceleration_Maxes (Axis));
+            Result.Axial_Jerk_Maxes (Axis) :=
+              Jerk'Min (Params.Axial_Jerk_Maxes (Axis), Limits.Axial_Jerk_Maxes (Axis));
+            Result.Axial_Snap_Maxes (Axis) :=
+              Snap'Min (Params.Axial_Snap_Maxes (Axis), Limits.Axial_Snap_Maxes (Axis));
+            Result.Axial_Crackle_Maxes (Axis) :=
+              Crackle'Min (Params.Axial_Crackle_Maxes (Axis), Limits.Axial_Crackle_Maxes (Axis));
+         end loop;
+      end return;
+   end Capped_Parameters;
+
+   function Parameter_Limits (Params : Kinematic_Parameters) return Motion_Limits
+   is (Tangential_Velocity_Max     => Params.Tangential_Velocity_Max,
+       Tangential_Acceleration_Max => Params.Tangential_Acceleration_Max,
+       Tangential_Jerk_Max         => Params.Tangential_Jerk_Max,
+       Tangential_Snap_Max         => Params.Tangential_Snap_Max,
+       Tangential_Crackle_Max      => Params.Tangential_Crackle_Max,
+       Axial_Velocity_Maxes        => Params.Axial_Velocity_Maxes,
+       Axial_Acceleration_Maxes    => Params.Axial_Acceleration_Maxes,
+       Axial_Jerk_Maxes            => Params.Axial_Jerk_Maxes,
+       Axial_Snap_Maxes            => Params.Axial_Snap_Maxes,
+       Axial_Crackle_Maxes         => Params.Axial_Crackle_Maxes);
+
+   function Lower_Limits (Left, Right : Motion_Limits) return Motion_Limits is
+   begin
+      return Result : Motion_Limits := Left do
+         Result.Tangential_Velocity_Max := Velocity'Min (Left.Tangential_Velocity_Max, Right.Tangential_Velocity_Max);
+         Result.Tangential_Acceleration_Max :=
+           Acceleration'Min (Left.Tangential_Acceleration_Max, Right.Tangential_Acceleration_Max);
+         Result.Tangential_Jerk_Max := Jerk'Min (Left.Tangential_Jerk_Max, Right.Tangential_Jerk_Max);
+         Result.Tangential_Snap_Max := Snap'Min (Left.Tangential_Snap_Max, Right.Tangential_Snap_Max);
+         Result.Tangential_Crackle_Max := Crackle'Min (Left.Tangential_Crackle_Max, Right.Tangential_Crackle_Max);
+         for Axis in Axis_Name loop
+            Result.Axial_Velocity_Maxes (Axis) :=
+              Velocity'Min (Left.Axial_Velocity_Maxes (Axis), Right.Axial_Velocity_Maxes (Axis));
+            Result.Axial_Acceleration_Maxes (Axis) :=
+              Acceleration'Min (Left.Axial_Acceleration_Maxes (Axis), Right.Axial_Acceleration_Maxes (Axis));
+            Result.Axial_Jerk_Maxes (Axis) := Jerk'Min (Left.Axial_Jerk_Maxes (Axis), Right.Axial_Jerk_Maxes (Axis));
+            Result.Axial_Snap_Maxes (Axis) := Snap'Min (Left.Axial_Snap_Maxes (Axis), Right.Axial_Snap_Maxes (Axis));
+            Result.Axial_Crackle_Maxes (Axis) :=
+              Crackle'Min (Left.Axial_Crackle_Maxes (Axis), Right.Axial_Crackle_Maxes (Axis));
+         end loop;
+      end return;
+   end Lower_Limits;
+
    function XY_Position_Is_In_Bounds (Pos : Position; Params : Kinematic_Parameters) return Boolean is
    begin
       case Params.Bounds.Kind is

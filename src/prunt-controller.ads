@@ -1166,6 +1166,14 @@ private
    --  Queue a flush that changes the selected planner's kinematic parameters for subsequent motion.
 
    overriding
+   procedure Change_Move_Limits (This : Planner_Wrapper; Limits : Motion_Planner.Motion_Limits);
+   --  Cap the limits of subsequent moves on the selected planner without flushing.
+
+   overriding
+   function Get_Move_Limits (This : Planner_Wrapper) return Motion_Planner.Motion_Limits;
+   --  Return the selected planner's current move caps.
+
+   overriding
    procedure Flush_And_Reset_Position
      (This          : Planner_Wrapper;
       New_Position  : Position;

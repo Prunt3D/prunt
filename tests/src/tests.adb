@@ -36,6 +36,7 @@ with Prunt.Default_Modules.Machine_Idle_Timeout.Test;
 with Prunt.Default_Modules.Motor_Drivers;
 with Prunt.Default_Modules.Motor_Drivers.Test;
 with Prunt.Default_Modules.Kinematics;
+with Prunt.Default_Modules.Kinematics.Test;
 with Prunt.Default_Modules.Motion;
 with Prunt.Default_Modules.Motion.Test;
 with Prunt.Default_Modules.Power_Control;
@@ -151,6 +152,7 @@ procedure Tests is
        (Transforms           => Excessive_Extrusion_Transforms,
         Config_Saving_Module => Machine_Idle_Timeout_Test_Config_Saving,
         Motor_Drivers_Module => Excessive_Extrusion_Motor_Drivers);
+   package Kinematics_Test is new Excessive_Extrusion_Kinematics.Test;
    package Excessive_Extrusion_Motion is new
      Machine_Idle_Timeout_Test_Default_Modules.Motion
        (Config_Saving_Module       => Machine_Idle_Timeout_Test_Config_Saving,
@@ -286,6 +288,7 @@ begin
    Trendy_Test.Register (Smart_Plugs_Test.All_Tests);
    Trendy_Test.Register (Power_Control_Test.All_Tests);
    Trendy_Test.Register (Motor_Drivers_Test.All_Tests);
+   Trendy_Test.Register (Kinematics_Test.All_Tests);
    Trendy_Test.Register (Prunt.Smart_Plugs.Test.All_Tests);
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);

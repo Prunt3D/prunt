@@ -36,7 +36,9 @@ pragma Check_Float_Overflow;
 --  1. Preprocessor:
 --
 --     The preprocessor is responsible for taking the incoming commands and converting them in to a series of corners
---     that can be used by the later stages.
+--     that can be used by the later stages. Each segment also gets its own velocity and derivative limits: the
+--     block's parameters lowered by the caps that Enqueue_Change_Move_Limits set before its move was queued. Every
+--     later stage plans a segment with its own limits, and a corner with the lower limits of its two segments.
 --
 --  2. Extrusion_Density_Normalizer:
 --
@@ -346,6 +348,19 @@ package Prunt.Motion_Planner.Planner is
      (Data : Flush_Resetting_Data_Type; New_Params : Kinematic_Parameters);
    --  End the current input block and make New_Params apply to subsequently queued motion.
 
+   procedure Enqueue_Change_Move_Limits (Limits : Motion_Limits)
+   with Pre => Motion_Limits_Are_Valid (Limits);
+   --  Cap the velocity and derivative limits of moves queued after this call at Limits, until the next call or Reset.
+   --  Caps only lower the block's Kinematic_Parameters and survive Enqueue_Flush_And_Change_Kinematic_Parameters;
+   --  No_Motion_Limits removes them. This does not end the block or wait for queue space: moves either side of a
+   --  change are planned together, and each segment's profile keeps to its own move's limits. A corner transition
+   --  keeps to the lower limits of the two moves it joins, and a continuous timing run never spans a change. Ignored
+   --  while input is discarded.
+
+   function Get_Move_Limits return Motion_Limits;
+   --  Return the caps that a move queued now would carry: those of the last Enqueue_Change_Move_Limits since the last
+   --  Reset, or No_Motion_Limits.
+
    procedure Wait_For_Input_Space
    with Pre => Input_Queue_Wait_Threshold <= Input_Queue_Length;
    --  Block until Input_Queue_Wait_Threshold commands can be enqueued without waiting for queue space or for a homing
@@ -455,6 +470,8 @@ private
             Dwell_After : Time := 0.0 * s;
             Pos         : Position;
             Feedrate    : Velocity;
+            Move_Limits : Motion_Limits := No_Motion_Limits;
+            --  Set by the preprocessor's queue to the caps in effect when the move is accepted.
             case Kind is
                when Helix_Move_Kind =>
                   Center    : Position;
@@ -493,6 +510,7 @@ private
 
    type Block_Plain_Corners is array (Corners_Index range <>) of Position;
    type Block_Segment_Feedrates is array (Corners_Index range <>) of Velocity;
+   type Block_Segment_Limits is array (Corners_Index range <>) of Motion_Limits;
    type Block_Corners_Extra_Data_End_Indices is
      array (Corners_Index range <>) of Corner_Extra_Data_Vectors.Extended_Index;
    type Block_Corner_Dwell_Times is array (Corners_Index range <>) of Time;
@@ -764,6 +782,22 @@ private
    --  curved junction (Can_Merge_Timing_Runs), again with the outer junctions fixed, and keeps only certified, faster
    --  runs of at most Blend_Radius segments.
    --  Homing bypasses selection. These local searches need not find the best combination of corner policies.
+
+   function Segment_Params
+     (Block : not null access constant Execution_Block; Finishing_Corner : Finishing_Corners_Index)
+      return Kinematic_Parameters;
+   --  Block.Params with the velocity and derivative limits of the segment ending at Finishing_Corner. Every profile,
+   --  reach and ceiling of the segment, and of a timing run starting at it, uses these.
+
+   function Corner_Params
+     (Block : not null access constant Execution_Block; Corner : Corners_Index) return Kinematic_Parameters;
+   --  Block.Params with the lower limits of the segments either side of Corner: the limits of a transition, which
+   --  belongs to both moves, and of the coast through it at the junction speed. A block's end corners have only one
+   --  segment.
+
+   function Same_Segment_Limits
+     (Block : not null access constant Execution_Block; Corner : Finishing_Corners_Index) return Boolean;
+   --  Whether the segments either side of interior Corner have identical limits, so that one timing run may span it.
 
    Negligible_Density_Change : constant Dimensionless := 1.0E-12;
    --  Relative density changes this small are roundoff between nominally equal densities, as when commanded E is not
@@ -1370,6 +1404,10 @@ private
       Corners                        : Block_Plain_Corners (1 .. N_Corners);
       Primitives                     : Block_Path_Primitives (2 .. N_Corners);
       Original_Segment_Feedrates     : Block_Segment_Feedrates (2 .. N_Corners);
+      Segment_Limits                 : Block_Segment_Limits (2 .. N_Corners);
+      --  The limits of each segment's move: Params lowered by its caps, as limited by the preprocessor. Planning reads
+      --  them only through Segment_Params and Corner_Params, which also cap them by Params, so a scratch block whose
+      --  entries were never assigned plans with Params itself.
       Corner_Dwell_Times             : Block_Corner_Dwell_Times (2 .. N_Corners);
 
       --  Extrusion_Density_Normalizer

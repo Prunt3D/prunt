@@ -364,6 +364,14 @@ package Prunt.Module_Types is
    is abstract;
    --  Flush pending motion, process Extra_Data, and make Params apply to subsequently planned motion.
 
+   procedure Change_Move_Limits (This : Planner_Interface; Limits : Motion_Planner.Motion_Limits) is abstract;
+   --  Cap the velocity and derivative limits of moves queued after this on This's planner, until the next change or a
+   --  planner reset. Caps only lower the configured limits and do not flush, so motion continues through the change.
+   --  Motion_Planner.No_Motion_Limits removes them. Raises Constraint_Error unless every cap is positive.
+
+   function Get_Move_Limits (This : Planner_Interface) return Motion_Planner.Motion_Limits is abstract;
+   --  Return the caps that a move queued now on This's planner would carry.
+
    procedure Flush_And_Reset_Position
      (This          : Planner_Interface;
       New_Position  : Position;

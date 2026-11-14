@@ -204,6 +204,37 @@ package Prunt.Motion_Planner is
       --  by piece, is faster. Feedrate changes, stops, dwells and binding corners remain junctions.
    end record;
 
+   type Motion_Limits is record
+      Tangential_Velocity_Max     : Velocity := Velocity'Last;
+      Tangential_Acceleration_Max : Acceleration := Acceleration'Last;
+      Tangential_Jerk_Max         : Jerk := Jerk'Last;
+      Tangential_Snap_Max         : Snap := Snap'Last;
+      Tangential_Crackle_Max      : Crackle := Crackle'Last;
+      Axial_Velocity_Maxes        : Axial_Velocities := [others => Velocity'Last];
+      Axial_Acceleration_Maxes    : Axial_Accelerations := [others => Acceleration'Last];
+      Axial_Jerk_Maxes            : Axial_Jerks := [others => Jerk'Last];
+      Axial_Snap_Maxes            : Axial_Snaps := [others => Snap'Last];
+      Axial_Crackle_Maxes         : Axial_Crackles := [others => Crackle'Last];
+   end record;
+   --  Caps on the velocity and derivative limits of Kinematic_Parameters for individual moves. A cap only ever lowers
+   --  the matching parameter, so the defaults leave every limit as configured. Every other parameter, including the
+   --  workspace, cornering, extrusion handling and input shapers, still applies to whole blocks.
+
+   No_Motion_Limits : constant Motion_Limits := (others => <>);
+
+   function Motion_Limits_Are_Valid (Limits : Motion_Limits) return Boolean;
+   --  Whether every cap is positive. NaN caps are not.
+
+   function Capped_Parameters (Params : Kinematic_Parameters; Limits : Motion_Limits) return Kinematic_Parameters
+   with Inline;
+   --  Params with each velocity and derivative limit lowered to its cap in Limits.
+
+   function Parameter_Limits (Params : Kinematic_Parameters) return Motion_Limits;
+   --  The velocity and derivative limits of Params, as caps that leave Params unchanged.
+
+   function Lower_Limits (Left, Right : Motion_Limits) return Motion_Limits;
+   --  The lower of each pair of caps.
+
    function XY_Position_Is_In_Bounds (Pos : Position; Params : Kinematic_Parameters) return Boolean;
    --  Return whether the X/Y components of Pos are within the workspace.
 

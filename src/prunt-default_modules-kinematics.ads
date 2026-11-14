@@ -602,6 +602,54 @@ private
    --  This command differs significantly from `M205` in Marlin, so `P"Prunt"` must always be present to prevent
    --  conflicts.
 
+   function Updated_Move_Limits
+     (Current : Motion_Planner.Motion_Limits; A, J, S, C : Gcode_Optional_Float; X, Y, Z, E : Gcode_Optional_String)
+      return Motion_Planner.Motion_Limits;
+   --  The move caps that `M204` with these arguments leaves: Current with each given cap replaced, or removed where it
+   --  is zero. Raises Gcode_Bad_Inputs_Error for any invalid argument, or if none is given.
+
+   procedure Set_Move_Limits
+     (This    : Module_Instance;
+      Planner : Planner_Interface'Class;
+      P       : Virtual_String;
+      --  Must be set to `"Prunt"` to prevent conflicts with Marlin g-code.
+      A       : Gcode_Optional_Float;
+      --  Tangential acceleration cap in mm/s². Zero removes the cap.
+      J       : Gcode_Optional_Float;
+      --  Tangential jerk cap in mm/s³. Zero removes the cap.
+      S       : Gcode_Optional_Float;
+      --  Tangential snap cap in mm/s⁴. Zero removes the cap.
+      C       : Gcode_Optional_Float;
+      --  Tangential crackle cap in mm/s⁵. Zero removes the cap.
+      X       : Gcode_Optional_String;
+      --  JSON object of caps for the X axis.
+      Y       : Gcode_Optional_String;
+      --  JSON object of caps for the Y axis.
+      Z       : Gcode_Optional_String;
+      --  JSON object of caps for the Z axis.
+      E       : Gcode_Optional_String
+      --  JSON object of caps for the E axis.
+      )
+   with Annotate => (Prunt_Config, Gcode_Command, "M204");
+   --  Cap the kinematic limits of the moves that follow, without stopping. Caps only ever lower the limits set by the
+   --  configuration, `M203` or `M205`, which still apply where they are lower. A cap that is not specified keeps its
+   --  current value, and a cap of zero removes it. Caps are not saved by `M500` and are removed when g-code is
+   --  cancelled.
+   --
+   --  `A`, `J`, `S` and `C` cap the tangential acceleration, jerk, snap and crackle: how quickly the speed along the
+   --  path changes, measured like the maximum tangential velocity. They do not slow corners.
+   --
+   --  Each axis parameter must be a JSON object inside a G-code string, with any of the fields `Velocity`,
+   --  `Acceleration`, `Jerk`, `Snap` and `Crackle` in mm/s through mm/s⁵. Use single quotes around the whole JSON
+   --  payload so normal JSON double quotes can be used inside it, for example `X'{"Acceleration": 1500}'`. Axial caps
+   --  also slow the corners that use that axis.
+   --
+   --  Each move keeps to its own caps. A rounded corner keeps to the lower caps of the two moves it joins, so changing
+   --  caps between moves never stops the machine.
+   --
+   --  This command differs significantly from `M204` in Marlin, so `P"Prunt"` must always be present to prevent
+   --  conflicts.
+
    protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
       procedure Initialize
         (Config_In                            : User_Config;

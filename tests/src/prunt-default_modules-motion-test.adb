@@ -110,6 +110,11 @@ package body Prunt.Default_Modules.Motion.Test is
       Extra_Data : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
    is null;
    overriding
+   procedure Change_Move_Limits (This : Mock_Planner; Limits : Motion_Planner.Motion_Limits) is null;
+   overriding
+   function Get_Move_Limits (This : Mock_Planner) return Motion_Planner.Motion_Limits
+   is (Motion_Planner.No_Motion_Limits);
+   overriding
    procedure Flush_And_Reset_Position
      (This          : Mock_Planner;
       New_Position  : Position;

@@ -934,6 +934,25 @@ package body Prunt.Controller is
    end Flush_And_Change_Kinematic_Parameters;
 
    overriding
+   procedure Change_Move_Limits (This : Planner_Wrapper; Limits : Motion_Planner.Motion_Limits) is
+   begin
+      --  Caps only lower parameters that Apply_Global_Delta_Velocity_Limit already limited, so they need no transform.
+      case This.Target is
+         when Primary_Planner_Target =>
+            My_Motion_Planner.Enqueue_Change_Move_Limits (Limits);
+
+         when Pause_Planner_Target   =>
+            My_Pause_Motion_Planner.Enqueue_Change_Move_Limits (Limits);
+      end case;
+   end Change_Move_Limits;
+
+   overriding
+   function Get_Move_Limits (This : Planner_Wrapper) return Motion_Planner.Motion_Limits
+   is (case This.Target is
+         when Primary_Planner_Target => My_Motion_Planner.Get_Move_Limits,
+         when Pause_Planner_Target   => My_Pause_Motion_Planner.Get_Move_Limits);
+
+   overriding
    procedure Flush_And_Reset_Position
      (This          : Planner_Wrapper;
       New_Position  : Position;
@@ -2342,6 +2361,8 @@ package body Prunt.Controller is
       Pause_Planner_State.Set_Homed_Axes (Homed_Axes);
       Pause_Default_State.Set_Homed_Axes (Homed_Axes);
       Pause_Planner.Flush_And_Change_Kinematic_Parameters (Params);
+      --  Caps sent during an earlier pause must not carry over to this one.
+      Pause_Planner.Change_Move_Limits (Motion_Planner.No_Motion_Limits);
       Pause_Planner.Flush_And_Reset_Position (Pause_Position);
 
       Pause_Handler_Instances.Snapshot (Handlers);

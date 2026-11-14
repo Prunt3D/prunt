@@ -35,6 +35,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          end if;
 
          Current_Params := Initial_Parameters;
+         Current_Move_Limits := No_Motion_Limits;
          Queued_Position := Start_Position;
          Homing_State := No_Homing_Boundary;
 
@@ -65,6 +66,9 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       procedure Append_To_Queue (Comm : Command) is
       begin
          Elements (Next_Write) := Comm;
+         if Comm.Kind in Move_Kind | Helix_Move_Kind then
+            Elements (Next_Write).Move_Limits := Current_Move_Limits;
+         end if;
 
          if Next_Write = Elements.all'Last then
             Next_Write := Elements.all'First;
@@ -92,6 +96,18 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
       begin
          null;
       end Wait_For_Input_Space;
+
+      procedure Change_Move_Limits (Limits : Motion_Limits) is
+      begin
+         if Setup_Done and then not Discarding_Input then
+            Current_Move_Limits := Limits;
+         end if;
+      end Change_Move_Limits;
+
+      function Get_Move_Limits return Motion_Limits is
+      begin
+         return Current_Move_Limits;
+      end Get_Move_Limits;
 
       procedure Discard_Input is
       begin
@@ -362,6 +378,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Extra_Data_Storage.all.Clear;
          Retry_High_Priority := True;
          Has_Current_Corner_ID := False;
+         Current_Move_Limits := No_Motion_Limits;
          Queued_Position := Initial_Position;
          Homing_State := No_Homing_Boundary;
       end Reset;
@@ -372,6 +389,14 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
    begin
       Command_Queue.Enqueue (Comm, Ignore_Bounds, Extra);
    end Enqueue;
+
+   procedure Change_Move_Limits (Limits : Motion_Limits) is
+   begin
+      Command_Queue.Change_Move_Limits (Limits);
+   end Change_Move_Limits;
+
+   function Get_Move_Limits return Motion_Limits
+   is (Command_Queue.Get_Move_Limits);
 
    procedure Wait_For_Input_Space is
    begin
@@ -467,6 +492,10 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Last_Run_Known               : Boolean := False;
          --  When Last_Run_Known, Last_Run is the run direction of the block's last segment. Segments are only judged
          --  once the block is near capacity, so the segment accepted before that is judged when it is first needed.
+         Last_Move_Limits             : Motion_Limits := No_Motion_Limits;
+         Last_Segment_Limits          : Motion_Limits := Parameter_Limits (Current_Params);
+         --  The limits of a segment whose move carries Last_Move_Limits: the block's parameters lowered by those caps,
+         --  then limited like any parameters. Consecutive moves usually carry the same caps.
 
          function Near_Capacity return Boolean
          is (N_Corners >= Natural_End_Corners
@@ -709,6 +738,13 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
                            Corners (N_Corners) := Next_Command.Pos;
                            Primitives (N_Corners) := Primitive;
                            Segment_Feedrates (N_Corners) := Next_Command.Feedrate;
+                           if Next_Command.Move_Limits /= Last_Move_Limits then
+                              Last_Move_Limits := Next_Command.Move_Limits;
+                              Last_Segment_Limits :=
+                                Parameter_Limits
+                                  (Limit_Higher_Order_Params (Capped_Parameters (Current_Params, Last_Move_Limits)));
+                           end if;
+                           Segment_Limits (N_Corners) := Last_Segment_Limits;
                            Corner_Dwell_Times (N_Corners) := Next_Command.Dwell_After;
 
                            Last_Pos := Next_Command.Pos;
@@ -761,6 +797,7 @@ package body Prunt.Motion_Planner.Planner.Preprocessor is
          Block.Primitives := Primitives (2 .. N_Corners);
          Block.Corners_Extra_Data_End_Indices := Corners_Extra_Data_End_Indices (1 .. N_Corners);
          Block.Original_Segment_Feedrates := Segment_Feedrates (2 .. N_Corners);
+         Block.Segment_Limits := Segment_Limits (2 .. N_Corners);
          Block.First_Corner_ID :=
            (if Is_Extra_Data_Overflow_Block then Previous_Output_Corner_ID else First_Corner_ID);
          Block.Associated_Overflow_Block := Associated_Overflow_Block;
