@@ -18,11 +18,90 @@
 --------------------------------------------------
 
 with Ada.Exceptions;
+with Ada.Strings.Fixed;
+with Ada.Strings.Unbounded;
 with Prunt.TMC2240_Test_UART;
+with VSS.Strings.Conversions;
 
 package body Prunt.Default_Modules.TMC2240_Drivers.Test is
 
    procedure Ignore_Config_Error (Path : Prunt.Config.Config_Path; Message : Virtual_String) is null;
+
+   procedure Test_Excessive_Hysteresis_Reports_Config_Error (T : in out Trendy_Test.Operation'Class) is
+      use Ada.Strings.Unbounded;
+
+      Realistic_Motor : constant User_Config_SpreadCycle_Derived :=
+        (Input_Voltage => 24.0 * volt, Phase_Inductance => 1.2 * millihenry, Phase_Resistance => 1.2 * ohm);
+      --  Optimize_Spreadcycle gives this motor a hysteresis sum of 20 at 1.5 A and IRUN 1.0.
+
+      procedure Check (Name : String; Config : User_Config_TMC2240; Expected_Error : String);
+      --  Expected_Error is a fragment of the hysteresis error, or empty if no error may be reported.
+
+      procedure Check (Name : String; Config : User_Config_TMC2240; Expected_Error : String) is
+         Errors : Unbounded_String;
+
+         procedure Record_Config_Error (Path : Prunt.Config.Config_Path; Message : Virtual_String) is
+            pragma Unreferenced (Path);
+         begin
+            Append (Errors, VSS.Strings.Conversions.To_UTF_8_String (Message) & ASCII.LF);
+         end Record_Config_Error;
+      begin
+         declare
+            Registers : constant TMC2240_Registers :=
+              Generate_Default_Registers
+                (Config              => Config,
+                 Motor_Enabled       => True,
+                 Report_Config_Error => Record_Config_Error'Access,
+                 Motor               => Motor_Name'First,
+                 Distance_Per_Step   => 0.01 * mm);
+            pragma Unreferenced (Registers);
+         begin
+            null;
+         end;
+
+         if Expected_Error = "" then
+            T.Assert (Errors = "", Name & ": no error expected, got: " & To_String (Errors));
+         else
+            T.Assert
+              (Ada.Strings.Fixed.Index (To_String (Errors), Expected_Error) /= 0,
+               Name & ": expected an error containing '" & Expected_Error & "', got: " & To_String (Errors));
+         end if;
+      exception
+         when E : Constraint_Error =>
+            T.Fail (Name & ": the reported config error must not be followed by an exception: "
+                    & Ada.Exceptions.Exception_Message (E));
+      end Check;
+   begin
+      T.Register;
+
+      Check
+        ("default Derived parameters",
+         (IRUN => 1.0, others => <>),
+         "Automatically computed hysteresis sum is too high. Check that motor parameters are correct. If parameters "
+         & "are correct then decrease TBL, decrease IRUN, or use manual tuning." & ASCII.LF);
+      Check
+        ("realistic Derived motor at full scale",
+         (Run_Current => 1.5 * amp,
+          IRUN        => 1.0,
+          CHM         => (Kind => SpreadCycle, SpreadCycle => (Kind => Derived, Derived => Realistic_Motor)),
+          others      => <>),
+         "A very small reduction of IRUN to 0.97");
+      Check
+        ("realistic Derived motor below full scale",
+         (Run_Current        => 1.5 * amp,
+          IRUN               => 0.97,
+          IRUN_During_Homing => 0.97,
+          CHM                => (Kind => SpreadCycle, SpreadCycle => (Kind => Derived, Derived => Realistic_Motor)),
+          others             => <>),
+         "");
+      Check
+        ("Manual HSTRT + HEND above 14",
+         (IRUN   => 1.0,
+          CHM    =>
+            (Kind => SpreadCycle, SpreadCycle => (Kind => Manual, Manual => (HSTRT => 8, HEND => 12))),
+          others => <>),
+         "HSTRT + HEND must be less than 15");
+   end Test_Excessive_Hysteresis_Reports_Config_Error;
 
    procedure Test_Disable_After_Manager_Termination (T : in out Trendy_Test.Operation'Class) is
       Motor        : constant Motor_Name := Motor_Name'First;
@@ -85,6 +164,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers.Test is
    end Test_Disable_After_Manager_Termination;
 
    function All_Tests return Trendy_Test.Test_Group
-   is (Trendy_Test.Test_Group'[Test_Disable_After_Manager_Termination'Unrestricted_Access]);
+   is (Trendy_Test.Test_Group'
+         [Test_Disable_After_Manager_Termination'Unrestricted_Access,
+          Test_Excessive_Hysteresis_Reports_Config_Error'Unrestricted_Access]);
 
 end Prunt.Default_Modules.TMC2240_Drivers.Test;

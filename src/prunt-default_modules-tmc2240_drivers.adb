@@ -167,7 +167,11 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       Motor_Enabled       : Boolean;
       Report_Config_Error : access procedure (Path : Prunt.Config.Config_Path; Message : Virtual_String);
       Motor               : Motor_Name;
-      Distance_Per_Step   : Length) return TMC2240_Registers is
+      Distance_Per_Step   : Length) return TMC2240_Registers
+   is
+      Hysteresis_Error_Reported : Boolean := False;
+      --  Report_Config_Error only records the error, so the final hysteresis check needs to know whether an error
+      --  covering the register values has already been reported.
    begin
       if Motor_Hardware (Motor).TMC2240_Diag_0_Push_Pull
         and then
@@ -370,6 +374,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                   "HSTRT + HEND must be less than 15 unless IRUN is reduced to 0.97 or below as otherwise the "
                   & "hysteresis start setting will be greater than the full scale current, leading to incorrect "
                   & "operation.");
+               Hysteresis_Error_Reported := True;
             end if;
          elsif Config.CHM.Kind = SpreadCycle and then Config.CHM.SpreadCycle.Kind = Derived then
             Result.CHOPCONF.CHM := SpreadCycle_Mode;
@@ -400,6 +405,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                      "Automatically computed hysteresis sum is too high. Check that motor parameters are "
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning.");
+                  Hysteresis_Error_Reported := True;
                elsif Sum_Too_High_For_Full_Scale and then Result.IHOLD_IRUN.I_Run = 31 then
                   Report_Config_Error
                     (My_Config_Paths.Root.Motors (Motor).TMC2240_Parameters.CHM.SpreadCycle.Derived.Path,
@@ -407,6 +413,7 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                      & "correct. If parameters are correct then decrease TBL, decrease IRUN, or use manual "
                      & "tuning. A very small reduction of IRUN to 0.97 will allow the computed parameters "
                      & "to be used.");
+                  Hysteresis_Error_Reported := True;
                end if;
 
                if Excessive_Heating then
@@ -430,7 +437,8 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          --  The TMC2240 datasheet says that the maximum here is 15 rather than 14, but that looks to be an
          --  off-by-one error as the default sine wave peak is 248. 248 + 16/2 = 256 but the maximum is
          --  probably actually 255.
-         if Result.CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode
+         if not Hysteresis_Error_Reported
+           and then Result.CHOPCONF.CHM = TMC_Types.TMC2240.SpreadCycle_Mode
            and then
              (Dimensionless (Result.CHOPCONF.HEND_OFFSET) - 3.0 + Dimensionless (Result.CHOPCONF.HSTRT_TFD210) + 1.0
               > 14.0)
