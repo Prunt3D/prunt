@@ -50,7 +50,8 @@ package body Prunt.Input_Shapers.Pressure_Advance_Shapers is
 
    overriding
    function Do_Step (This : in out Pressure_Advance_Shaper; Step : Length) return Length is
-      Vel : constant Velocity := abs ((Step - This.Previous_Input) / This.Interpolation_Time);
+      Vel : constant Velocity := (Step - This.Previous_Input) / This.Interpolation_Time;
+      --  Signed so that a retraction is advanced backwards rather than starting with a forward extrusion.
    begin
       This.Previous_Input := Step;
       if This.Smooth_Added_Part_Only then

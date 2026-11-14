@@ -51,6 +51,7 @@ with Prunt.Gcode_Arguments.Test;
 with Prunt.Gcode_Queues.Test;
 with Prunt.Generic_Lock.Test;
 with Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test;
+with Prunt.Input_Shapers.Pressure_Advance_Shapers.Test;
 with Prunt.Integration_Config_Overlays.Test;
 with Prunt.Kinematic_Transforms_Test;
 with Prunt.Kinematic_Transforms;
@@ -301,6 +302,7 @@ begin
    Trendy_Test.Register (Prunt.Gcode_Arguments.Test.All_Tests);
    Trendy_Test.Register (Prunt.Gcode_Queues.Test.All_Tests);
    Trendy_Test.Register (Prunt.Indefinite_Ordered_Maps_With_Insertion_Order_Test.All_Tests);
+   Trendy_Test.Register (Prunt.Input_Shapers.Pressure_Advance_Shapers.Test.All_Tests);
    Trendy_Test.Register (Prunt.Integration_Config_Overlays.Test.All_Tests);
    Trendy_Test.Register (Prunt.Kinematic_Transforms_Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Corner_Transitions.Test.All_Tests);
