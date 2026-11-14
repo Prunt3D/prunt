@@ -91,11 +91,11 @@ project Prunt_Simulator is
            "-gnatw.u",   --  Treat enumerations as unordered without ordered clause
            "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
            "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
-   end Compiler;
 
-   package Builder is
-      for Global_Configuration_Pragmas use "gnat.adc";
-   end Builder;
+      --  Local rather than global so the pragmas do not reach dependencies. Alire shares their builds between
+      --  crates and worktrees, and a changed global pragmas file recompiles them.
+      for Local_Configuration_Pragmas use "gnat.adc";
+   end Compiler;
 
    package Binder is
       case Prunt_Simulator_Config.Build_Profile is

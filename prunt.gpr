@@ -25,9 +25,19 @@ project Prunt is
       "gnatcoll_modifications_src/",
       "lapack_src/");
 
-   for Object_Dir use "obj/" & Build_Profile;
+   --  The test crate builds Prunt with mocked sources, so it gets separate object and library directories. Sharing them
+   --  would mix mocked and passthrough objects and recompile units on each switch between the two builds.
+   Build_Variant := "";
+   case Prunt_Config.Enable_Test_Mocks is
+      when "False" =>
+         null;
+      when "True" =>
+         Build_Variant := "-mocked";
+   end case;
+
+   for Object_Dir use "obj/" & Build_Profile & Build_Variant;
    for Create_Missing_Dirs use "True";
-   for Library_Dir use "lib/" & Build_Profile;
+   for Library_Dir use "lib/" & Build_Profile & Build_Variant;
 
    type Library_Type_Type is ("relocatable", "static", "static-pic");
    Library_Type : Library_Type_Type :=
@@ -141,16 +151,16 @@ project Prunt is
          when others =>
             null;
       end case;
+
+      --  Local rather than global so the pragmas do not reach dependencies. Alire shares their builds between
+      --  crates and worktrees, and a changed global pragmas file recompiles them.
+      for Local_Configuration_Pragmas use "gnat.adc";
    end Compiler;
 
    package Naming is
       for Implementation_Exceptions ("Fortran") use
         ("lapack_free.f90");
    end Naming;
-
-   package Builder is
-      for Global_Configuration_Pragmas use "gnat.adc";
-   end Builder;
 
    package Binder is
       --  TODO: Do these propagate out or are they useless here?
