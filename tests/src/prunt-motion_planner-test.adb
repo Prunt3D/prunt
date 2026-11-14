@@ -159,6 +159,174 @@ package body Prunt.Motion_Planner.Test is
          "Distance in Coast should be > Accel distance");
    end Test_Distance_At_Time_Phases;
 
+   procedure Test_Distance_At_Time_Is_Monotone (T : in out Trendy_Test.Operation'Class) is
+      --  The distance is evaluated at adjacent machine numbers of time around every stage boundary and at times
+      --  inside the stages. It must never decrease, and a prepared ramp must give the same distance to the last bit.
+
+      Steps : constant := 40;
+      --  How many machine numbers on each side of a time are evaluated.
+
+      type Boundary_Times is array (0 .. 15) of Time;
+
+      function Boundaries (Times : Feedrate_Profile_Times) return Boundary_Times is
+         T1 : constant Time := Times (1);
+         T2 : constant Time := Times (2);
+         T3 : constant Time := Times (3);
+         T4 : constant Time := Times (4);
+      begin
+         return
+           [0  => 0.0 * s,
+            1  => T1,
+            2  => T1 + T2,
+            3  => 2.0 * T1 + T2,
+            4  => 2.0 * T1 + T2 + T3,
+            5  => 3.0 * T1 + T2 + T3,
+            6  => 3.0 * T1 + 2.0 * T2 + T3,
+            7  => 4.0 * T1 + 2.0 * T2 + T3,
+            8  => 4.0 * T1 + 2.0 * T2 + T3 + T4,
+            9  => 5.0 * T1 + 2.0 * T2 + T3 + T4,
+            10 => 5.0 * T1 + 3.0 * T2 + T3 + T4,
+            11 => 6.0 * T1 + 3.0 * T2 + T3 + T4,
+            12 => 6.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4,
+            13 => 7.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4,
+            14 => 7.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4,
+            15 => Total_Time (Times)];
+      end Boundaries;
+
+      generic
+         with function Distance (At_Time : Time) return Length;
+         with function Same_Distance (At_Time : Time) return Length;
+         Total : Time;
+         Name : String;
+      procedure Walk_Around (Centre : Time);
+      --  Compares Distance at the machine numbers around Centre with the one before, and with Same_Distance.
+
+      procedure Walk_Around (Centre : Time) is
+         At_Time     : Time := Time'Min (Time'Max (Centre, 0.0 * s), Total);
+         Previous    : Length := 0.0 * mm;
+         Have        : Boolean := False;
+         Decreases   : Natural := 0;
+         Differences : Natural := 0;
+      begin
+         for I in 1 .. Steps loop
+            exit when At_Time <= 0.0 * s;
+            At_Time := Time'Pred (At_Time);
+         end loop;
+         for I in 1 .. 2 * Steps + 1 loop
+            exit when At_Time > Total;
+            declare
+               D : constant Length := Distance (At_Time);
+            begin
+               if Have and then D < Previous then
+                  Decreases := @ + 1;
+               end if;
+               if Same_Distance (At_Time) /= D then
+                  Differences := @ + 1;
+               end if;
+               Previous := D;
+               Have := True;
+            end;
+            At_Time := Time'Succ (At_Time);
+         end loop;
+         T.Assert (Decreases = 0, Name & ": the distance decreases around " & Centre'Image);
+         T.Assert (Differences = 0, Name & ": the prepared distance differs around " & Centre'Image);
+      end Walk_Around;
+
+      procedure Check_Ramp (Name : String; Times : Feedrate_Profile_Times; Cm : Crackle; Start_Vel : Velocity) is
+         Ramp : constant Prepared_Ramp := Prepare (Times, Cm, Start_Vel);
+
+         function Distance (At_Time : Time) return Length
+         is (Distance_At_Time (Times, At_Time, Cm, Start_Vel));
+
+         function Same_Distance (At_Time : Time) return Length
+         is (Distance_At_Time (Ramp, At_Time));
+
+         procedure Walk is new Walk_Around (Distance, Same_Distance, Total_Time (Times), Name);
+      begin
+         T.Assert (Distance (0.0 * s) = 0.0 * mm, Name & ": the distance does not start at zero");
+         for Centre of Boundaries (Times) loop
+            Walk (Centre);
+         end loop;
+         for I in 1 .. 15 loop
+            Walk (Dimensionless (I) / 16.0 * Total_Time (Times));
+         end loop;
+      end Check_Ramp;
+
+      procedure Check_Both (Name : String; Times : Feedrate_Profile_Times; Cm : Crackle) is
+      begin
+         Check_Ramp (Name & " from rest", Times, Cm, 0.0 * mm / s);
+         Check_Ramp (Name & " from a speed", Times, Cm, 12.5 * mm / s);
+         Check_Ramp (Name & " to rest", Times, -Cm, Fast_Velocity_At_Max_Time (Times, Cm, 0.0 * mm / s));
+         Check_Ramp (Name & " to a speed", Times, -Cm, Fast_Velocity_At_Max_Time (Times, Cm, 3.0 * mm / s));
+      end Check_Both;
+
+      procedure Check_Profile (Name : String; Profile : Feedrate_Profile; Cm : Crackle; Start_Vel : Velocity) is
+         Accel_Time : constant Time := Total_Time (Profile.Accel);
+
+         function Distance (At_Time : Time) return Length
+         is (Distance_At_Time (Profile, At_Time, Cm, Start_Vel));
+
+         procedure Walk is new Walk_Around (Distance, Distance, Total_Time (Profile), Name);
+      begin
+         T.Assert (Distance (0.0 * s) = 0.0 * mm, Name & ": the distance does not start at zero");
+         for Centre of Boundaries (Profile.Accel) loop
+            Walk (Centre);
+         end loop;
+         Walk (Accel_Time + 0.5 * Profile.Coast);
+         for Centre of Boundaries (Profile.Decel) loop
+            Walk (Accel_Time + Profile.Coast + Centre);
+         end loop;
+         Walk (Total_Time (Profile));
+      end Check_Profile;
+
+      Typical : constant Feedrate_Profile_Times :=
+        Optimal_Profile_For_Delta_V
+          (150.0 * mm / s, 2.0E4 * mm / s**2, 2.0E6 * mm / s**3, 5.0E8 * mm / s**4, 3.0E11 * mm / s**5);
+      Short   : constant Feedrate_Profile_Times :=
+        Optimal_Profile_For_Delta_V
+          (0.02 * mm / s, 2.0E4 * mm / s**2, 2.0E6 * mm / s**3, 5.0E8 * mm / s**4, 3.0E11 * mm / s**5);
+   begin
+      T.Register;
+
+      Check_Both ("Typical ramp", Typical, 3.0E11 * mm / s**5);
+      Check_Both ("Short ramp", Short, 3.0E11 * mm / s**5);
+      Check_Both ("Every phase", [1.0E-3 * s, 2.0E-3 * s, 5.0E-3 * s, 1.0E-2 * s], 1.0E9 * mm / s**5);
+      Check_Both ("Crackle only", [1.0E-3 * s, 0.0 * s, 0.0 * s, 0.0 * s], 1.0E9 * mm / s**5);
+      Check_Both ("No snap phase", [2.0E-4 * s, 0.0 * s, 3.0E-3 * s, 7.0E-2 * s], 1.0E10 * mm / s**5);
+      Check_Both ("No time", [others => 0.0 * s], 1.0E9 * mm / s**5);
+
+      --  A first phase far shorter than the spacing of the times around it. The closed form from which a later
+      --  stage starts then lies below the end of the stage before it, by rounding.
+      Check_Both
+        ("Stage below the time spacing",
+         [3.0784685220292232E-15 * s, 3.0181441583048523 * s, 0.0 * s, 7.6360268771757524E+02 * s],
+         2.3124836011992973E+10 * mm / s**5);
+      Check_Both
+        ("Stage below the time spacing, shorter",
+         [2.6443312065444899E-16 * s, 7.0908082192697564E-01 * s, 0.0 * s, 0.0 * s],
+         3.9508230754068771E+10 * mm / s**5);
+      Check_Ramp
+        ("Long deceleration",
+         [1.4628193371879255E-13 * s, 2.3846047049232819 * s, 0.0 * s, 8.1876974977224410E+04 * s],
+         -2.8661547523909659E+09 * mm / s**5,
+         1.9552094257722112E+02 * mm / s);
+
+      Check_Profile
+        ("Profile between speeds", (Accel => Typical, Coast => 0.25 * s, Decel => Typical), 3.0E11 * mm / s**5,
+         2.0 * mm / s);
+      Check_Profile
+        ("Profile between rests", (Accel => Typical, Coast => 0.25 * s, Decel => Typical), 3.0E11 * mm / s**5,
+         0.0 * mm / s);
+      Check_Profile
+        ("Profile with no coast", (Accel => Typical, Coast => 0.0 * s, Decel => Short), 3.0E11 * mm / s**5,
+         0.0 * mm / s);
+      Check_Profile
+        ("Profile with no acceleration",
+         (Accel => [others => 0.0 * s], Coast => 0.0 * s, Decel => Typical),
+         3.0E11 * mm / s**5,
+         Fast_Velocity_At_Max_Time (Typical, 3.0E11 * mm / s**5, 0.0 * mm / s));
+   end Test_Distance_At_Time_Is_Monotone;
+
    procedure Test_Mixed_Derivative_Straight_Line (T : in out Trendy_Test.Operation'Class) is
       Params : Kinematic_Parameters;
       Bounds : Unit_Speed_Axial_Derivative_Bounds;
@@ -2842,6 +3010,7 @@ package body Prunt.Motion_Planner.Test is
    begin
       return
         [Test_Distance_At_Time_Phases'Access,
+         Test_Distance_At_Time_Is_Monotone'Access,
          Test_Profile_Degenerate_Limits'Access,
          Test_Mixed_Derivative_Straight_Line'Access,
          Test_Mixed_Derivative_Time_Scale'Access,

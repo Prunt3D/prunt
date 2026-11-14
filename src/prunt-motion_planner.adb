@@ -28,8 +28,6 @@ package body Prunt.Motion_Planner is
 
    pragma Extensions_Allowed (On);
 
-   type Feedrate_Profile_Stage_Index is range 1 .. 15;
-
    function Derivative_Limits_Are_Valid (Am : Acceleration; Jm : Jerk; Sm : Snap; Cm : Crackle) return Boolean
    is (Am >= 0.0 * mm / s**2
        and then Am <= Acceleration'Last
@@ -2246,114 +2244,281 @@ package body Prunt.Motion_Planner is
       end if;
    end Velocity_At_Time;
 
-   function Distance_At_Time
-     (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length
-   is
+   ------------------------------------------------------------------------------------------------------------------
+   --  Distance along a ramp
+   --
+   --  The distance of a ramp whose speeds are not negative never decreases as the time increases, to the last bit.
+   --  Rounding alone does not give that: adjacent times round differently wherever two expressions meet or large
+   --  terms cancel. So the evaluation is arranged as follows.
+   --
+   --  A ramp which slows down to a speed which is not negative is evaluated backwards: as the distance of the whole
+   --  ramp less the distance, in the time which is left, of the ramp which speeds up from the final speed. Nothing
+   --  large is then subtracted from Start_Vel * T.
+   --
+   --  The distance of a ramp which speeds up is Start_Vel * T plus a gain, and the gain is that of the same ramp
+   --  from rest. Within a stage the gain is the gain at the start of the stage plus a polynomial in the time into
+   --  the stage. The polynomial is evaluated to twice the working precision and rounded once: its exact value grows
+   --  by at least half a unit in its last place between adjacent times, so the rounded value does not decrease. The
+   --  time into the stage is at most the stage's length, and the gain is kept between the gain at the start of the
+   --  stage and the gain at the start of the next, which is what makes the stages join. The first, fourth, eighth
+   --  and twelfth stages start from closed forms, which avoid the rounding of the stages before them, and the
+   --  stages between start from the end of the stage before. Each such group of stages is kept between its own
+   --  closed form and that of the next group, which can otherwise lie below it when a stage is shorter than the
+   --  spacing of the times around it.
+   --
+   --  Distance_At_Time derives all of that from the ramp for every time. A Prepared_Ramp holds it for all fifteen
+   --  stages. The two must agree to the last bit, because the planner places the members of a run with one and
+   --  execution evaluates the run with the other. So every operation which rounds is in a subprogram both of them
+   --  call, and those are not inlined: a compiler which fuses a product and a sum then does so alike for both.
+   --
+   --  Those subprograms reach their results through sums, products and quotients by constants only, so an operation
+   --  which overflows, or meets a NaN, leaves a result which is not finite. They test their results once in place of
+   --  a check on each operation, as Fast_Distance_At_Max_Time does, and so raise for the same inputs.
+   ------------------------------------------------------------------------------------------------------------------
+
+   type Ramp_State is record
+      Sn   : Snap := 0.0 * mm / s**4;
+      Jr   : Jerk := 0.0 * mm / s**3;
+      Acc  : Acceleration := 0.0 * mm / s**2;
+      Vel  : Velocity := 0.0 * mm / s;
+      Dist : Length := 0.0 * mm;
+   end record;
+   --  A ramp which speeds up from rest, at the start of one of its stages.
+
+   function Stage_Crackle (Stage : Feedrate_Profile_Stage_Index; Cm : Crackle) return Crackle
+   is (case Stage is
+         when 1 | 7 | 11 | 13 => Cm,
+         when 3 | 5 | 9 | 15  => -Cm,
+         when others          => 0.0 * mm / s**5);
+
+   function Stage_Length (Stage : Feedrate_Profile_Stage_Index; Profile : Feedrate_Profile_Times) return Time
+   is (case Stage is
+         when 2 | 6 | 10 | 14 => Profile (2),
+         when 4 | 12          => Profile (3),
+         when 8               => Profile (4),
+         when others          => Profile (1));
+
+   function Ramp_Bounds (Profile : Feedrate_Profile_Times) return Ramp_Stage_Bounds
+   with No_Inline;
+   --  When every stage but the last ends: the sums with which the other evaluators compare the time, as they write
+   --  them. No bound is below the one before it, because each differs from it by a larger multiple of a phase time
+   --  or by one more term.
+
+   function Ramp_Bounds (Profile : Feedrate_Profile_Times) return Ramp_Stage_Bounds is
       T1 : constant Time := Profile (1);
       T2 : constant Time := Profile (2);
       T3 : constant Time := Profile (3);
       T4 : constant Time := Profile (4);
-      Cm : constant Crackle := Max_Crackle;
 
-      type Profile_State is record
-         Sn   : Snap;
-         Jr   : Jerk;
-         Acc  : Acceleration;
-         Vel  : Velocity;
-         Dist : Length;
-      end record;
+      pragma Suppress (Overflow_Check);
+      Result : constant Ramp_Stage_Bounds :=
+        [1  => T1,
+         2  => T1 + T2,
+         3  => 2.0 * T1 + T2,
+         4  => 2.0 * T1 + T2 + T3,
+         5  => 3.0 * T1 + T2 + T3,
+         6  => 3.0 * T1 + 2.0 * T2 + T3,
+         7  => 4.0 * T1 + 2.0 * T2 + T3,
+         8  => 4.0 * T1 + 2.0 * T2 + T3 + T4,
+         9  => 5.0 * T1 + 2.0 * T2 + T3 + T4,
+         10 => 5.0 * T1 + 3.0 * T2 + T3 + T4,
+         11 => 6.0 * T1 + 3.0 * T2 + T3 + T4,
+         12 => 6.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4,
+         13 => 7.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4,
+         14 => 7.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4];
+   begin
+      if not (for all Bound of Result => abs Bound <= Time'Last) then
+         raise Constraint_Error with "Unrepresentable ramp time.";
+      end if;
+      return Result;
+   end Ramp_Bounds;
 
-      Zero_State : constant Profile_State :=
-        (Sn => 0.0 * mm / s**4, Jr => 0.0 * mm / s**3, Acc => 0.0 * mm / s**2, Vel => 0.0 * mm / s, Dist => 0.0 * mm);
+   function Stage_At (Bounds : Ramp_Stage_Bounds; T : Time) return Feedrate_Profile_Stage_Index;
+   --  The stage which contains T: the first which T is before the end of, as the other evaluators select it.
 
-      function Local_Distance (State : Profile_State; DT : Time; Stage_Crackle : Crackle) return Length;
-      --  Return the distance contribution beyond Start_Vel * T from State after DT.
+   function Stage_At (Bounds : Ramp_Stage_Bounds; T : Time) return Feedrate_Profile_Stage_Index is
+      --  One more than how many bounds T has reached, by bisection.
+      Reached : Feedrate_Profile_Stage_Index'Base := (if T >= Bounds (8) then 8 else 0);
+   begin
+      if T >= Bounds (Reached + 4) then
+         Reached := Reached + 4;
+      end if;
+      if T >= Bounds (Reached + 2) then
+         Reached := Reached + 2;
+      end if;
+      if Reached < 14 and then T >= Bounds (Reached + 1) then
+         Reached := Reached + 1;
+      end if;
+      return Reached + 1;
+   end Stage_At;
 
-      function Local_Velocity (State : Profile_State; DT : Time; Stage_Crackle : Crackle) return Velocity;
-      --  Return the velocity contribution from State after DT.
+   function Stage_End_Distance (State : Ramp_State; DT : Time; Stage_Crackle : Crackle) return Length
+   with No_Inline;
+   --  The gain at the end of a stage of duration DT and constant crackle Stage_Crackle which starts at State. It is
+   --  never below the gain at the start.
 
-      procedure Advance (State : in out Profile_State; DT : Time; Stage_Crackle : Crackle);
-      --  Advance State through a complete stage of duration DT and constant crackle Stage_Crackle.
+   function Stage_End_Distance (State : Ramp_State; DT : Time; Stage_Crackle : Crackle) return Length is
+      pragma Suppress (Overflow_Check);
+      Local  : constant Length :=
+        DT
+        * (State.Vel
+           + DT * (State.Acc / 2.0 + DT * (State.Jr / 6.0 + DT * (State.Sn / 24.0 + DT * Stage_Crackle / 120.0))));
+      --  How far the stage gets in DT.
+      Result : constant Length := State.Dist + Length'Max (0.0 * mm, Local);
+   begin
+      if not (abs Local <= Length'Last and then abs Result <= Length'Last) then
+         raise Constraint_Error with "Unrepresentable ramp distance.";
+      end if;
+      return Result;
+   end Stage_End_Distance;
 
-      function Stage_Crackle_For (Stage : Feedrate_Profile_Stage_Index) return Crackle;
-      --  Return the constant crackle for Stage.
+   function Advance (State : Ramp_State; DT : Time; Stage_Crackle : Crackle) return Ramp_State
+   with No_Inline;
+   --  State after a complete stage of duration DT and constant crackle Stage_Crackle.
 
-      function Checkpoint_4 return Profile_State;
-      --  Return the state at the start of stage 4.  This avoids cancellation from stages 1..3.
+   function Advance (State : Ramp_State; DT : Time; Stage_Crackle : Crackle) return Ramp_State is
+      pragma Suppress (Overflow_Check);
+      Result : constant Ramp_State :=
+        (Dist => Stage_End_Distance (State, DT, Stage_Crackle),
+         Vel  =>
+           State.Vel + DT * (State.Acc + DT * (State.Jr / 2.0 + DT * (State.Sn / 6.0 + DT * Stage_Crackle / 24.0))),
+         Acc  => State.Acc + DT * (State.Jr + DT * (State.Sn / 2.0 + DT * Stage_Crackle / 6.0)),
+         Jr   => State.Jr + DT * (State.Sn + DT * Stage_Crackle / 2.0),
+         Sn   => State.Sn + DT * Stage_Crackle);
+   begin
+      if not (abs Result.Vel <= Velocity'Last
+              and then abs Result.Acc <= Acceleration'Last
+              and then abs Result.Jr <= Jerk'Last
+              and then abs Result.Sn <= Snap'Last)
+      then
+         raise Constraint_Error with "Unrepresentable ramp state.";
+      end if;
+      return Result;
+   end Advance;
 
-      function Checkpoint_8 return Profile_State;
-      --  Return the state at the start of stage 8.  This avoids cancellation from stages 1..7.
+   function Checkpoint_4_Distance (T1, T2 : Time; Cm : Crackle) return Length
+   with No_Inline;
 
-      function Checkpoint_12 return Profile_State;
-      --  Return the state at the start of stage 12.  This avoids cancellation from stages 8..11.
+   function Checkpoint_8_Distance (T1, T2, T3 : Time; Cm : Crackle) return Length
+   with No_Inline;
 
-      function Local_Distance (State : Profile_State; DT : Time; Stage_Crackle : Crackle) return Length is
-      begin
-         return
-           DT
-           * (State.Vel
-              + DT * (State.Acc / 2.0 + DT * (State.Jr / 6.0 + DT * (State.Sn / 24.0 + DT * Stage_Crackle / 120.0))));
-      end Local_Distance;
+   function Checkpoint_12_Distance (T1, T2, T3, T4 : Time; Cm : Crackle) return Length
+   with No_Inline;
+   --  The gain at the start of stage 4, 8 or 12, in closed form.
 
-      function Local_Velocity (State : Profile_State; DT : Time; Stage_Crackle : Crackle) return Velocity is
-      begin
-         return DT * (State.Acc + DT * (State.Jr / 2.0 + DT * (State.Sn / 6.0 + DT * Stage_Crackle / 24.0)));
-      end Local_Velocity;
+   function Checkpoint_4 (T1, T2 : Time; Cm : Crackle; Dist : Length) return Ramp_State
+   with No_Inline;
+   --  The state at the start of stage 4, with Dist for Checkpoint_4_Distance. This avoids cancellation from stages
+   --  1 .. 3.
 
-      procedure Advance (State : in out Profile_State; DT : Time; Stage_Crackle : Crackle) is
-         Old : constant Profile_State := State;
-      begin
-         State.Dist := Old.Dist + Local_Distance (Old, DT, Stage_Crackle);
-         State.Vel := Old.Vel + Local_Velocity (Old, DT, Stage_Crackle);
-         State.Acc := Old.Acc + DT * (Old.Jr + DT * (Old.Sn / 2.0 + DT * Stage_Crackle / 6.0));
-         State.Jr := Old.Jr + DT * (Old.Sn + DT * Stage_Crackle / 2.0);
-         State.Sn := Old.Sn + DT * Stage_Crackle;
-      end Advance;
+   function Checkpoint_8 (T1, T2, T3 : Time; Cm : Crackle; Dist : Length) return Ramp_State
+   with No_Inline;
+   --  The state at the start of stage 8. This avoids cancellation from stages 1 .. 7.
 
-      function Stage_Crackle_For (Stage : Feedrate_Profile_Stage_Index) return Crackle is
-      begin
-         case Stage is
-            when 1 | 7 | 11 | 13 =>
-               return Cm;
+   function Checkpoint_12 (T1, T2, T3, T4 : Time; Cm : Crackle; Dist : Length) return Ramp_State
+   with No_Inline;
+   --  The state at the start of stage 12. This avoids cancellation from stages 8 .. 11.
 
-            when 3 | 5 | 9 | 15  =>
-               return -Cm;
+   function Checkpoint_4_Distance (T1, T2 : Time; Cm : Crackle) return Length is
+      pragma Suppress (Overflow_Check);
+      Result : constant Length := Cm * T1 * (T1 + T2) * (2.0 * T1 + T2) * (3.0 * T1**2 + 3.0 * T1 * T2 + T2**2) / 24.0;
+   begin
+      if not (abs Result <= Length'Last) then
+         raise Constraint_Error with "Unrepresentable ramp distance.";
+      end if;
+      return Result;
+   end Checkpoint_4_Distance;
 
-            when others          =>
-               return 0.0 * mm / s**5;
-         end case;
-      end Stage_Crackle_For;
+   function Checkpoint_8_Distance (T1, T2, T3 : Time; Cm : Crackle) return Length is
+      pragma Suppress (Overflow_Check);
+      Result : constant Length :=
+        Cm
+        * T1
+        * (T1 + T2)
+        * (2.0 * T1 + T2 + T3)
+        * (27.0 * T1**2 + 27.0 * T1 * T2 + 14.0 * T1 * T3 + 7.0 * T2**2 + 7.0 * T2 * T3 + 2.0 * T3**2)
+        / 12.0;
+   begin
+      if not (abs Result <= Length'Last) then
+         raise Constraint_Error with "Unrepresentable ramp distance.";
+      end if;
+      return Result;
+   end Checkpoint_8_Distance;
 
-      function Checkpoint_4 return Profile_State is
-      begin
-         return
-           (Sn   => 0.0 * mm / s**4,
+   function Checkpoint_12_Distance (T1, T2, T3, T4 : Time; Cm : Crackle) return Length is
+      pragma Suppress (Overflow_Check);
+      Result : constant Length :=
+        Cm
+        * T1
+        * (T1 + T2)
+        * (390.0 * T1**3 + 585.0 * T1**2 * T2 + 302.0 * T1**2 * T3 + 192.0 * T1**2 * T4 + 293.0 * T1 * T2**2
+           + 302.0 * T1 * T2 * T3
+           + 192.0 * T1 * T2 * T4
+           + 60.0 * T1 * T3**2
+           + 120.0 * T1 * T3 * T4
+           + 24.0 * T1 * T4**2
+           + 49.0 * T2**3
+           + 76.0 * T2**2 * T3
+           + 48.0 * T2**2 * T4
+           + 30.0 * T2 * T3**2
+           + 60.0 * T2 * T3 * T4
+           + 12.0 * T2 * T4**2
+           + 4.0 * T3**3
+           + 12.0 * T3**2 * T4
+           + 12.0 * T3 * T4**2)
+        / 24.0;
+   begin
+      if not (abs Result <= Length'Last) then
+         raise Constraint_Error with "Unrepresentable ramp distance.";
+      end if;
+      return Result;
+   end Checkpoint_12_Distance;
+
+   function Checked (State : Ramp_State) return Ramp_State;
+   --  State, which was computed without a check on each operation.
+
+   function Checked (State : Ramp_State) return Ramp_State is
+   begin
+      if not (abs State.Vel <= Velocity'Last
+              and then abs State.Acc <= Acceleration'Last
+              and then abs State.Jr <= Jerk'Last
+              and then abs State.Sn <= Snap'Last)
+      then
+         raise Constraint_Error with "Unrepresentable ramp state.";
+      end if;
+      return State;
+   end Checked;
+
+   function Checkpoint_4 (T1, T2 : Time; Cm : Crackle; Dist : Length) return Ramp_State is
+      pragma Suppress (Overflow_Check);
+   begin
+      return
+        Checked
+          ((Sn   => 0.0 * mm / s**4,
             Jr   => Cm * T1 * (T1 + T2),
             Acc  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2) / 2.0,
             Vel  => Cm * T1 * (T1 + T2) * (7.0 * T1**2 + 7.0 * T1 * T2 + 2.0 * T2**2) / 12.0,
-            Dist => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2) * (3.0 * T1**2 + 3.0 * T1 * T2 + T2**2) / 24.0);
-      end Checkpoint_4;
+            Dist => Dist));
+   end Checkpoint_4;
 
-      function Checkpoint_8 return Profile_State is
-      begin
-         return
-           (Sn   => 0.0 * mm / s**4,
+   function Checkpoint_8 (T1, T2, T3 : Time; Cm : Crackle; Dist : Length) return Ramp_State is
+      pragma Suppress (Overflow_Check);
+   begin
+      return
+        Checked
+          ((Sn   => 0.0 * mm / s**4,
             Jr   => 0.0 * mm / s**3,
             Acc  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3),
             Vel  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + T3) * (4.0 * T1 + 2.0 * T2 + T3) / 2.0,
-            Dist =>
-              Cm
-              * T1
-              * (T1 + T2)
-              * (2.0 * T1 + T2 + T3)
-              * (27.0 * T1**2 + 27.0 * T1 * T2 + 14.0 * T1 * T3 + 7.0 * T2**2 + 7.0 * T2 * T3 + 2.0 * T3**2)
-              / 12.0);
-      end Checkpoint_8;
+            Dist => Dist));
+   end Checkpoint_8;
 
-      function Checkpoint_12 return Profile_State is
-      begin
-         return
-           (Sn   => 0.0 * mm / s**4,
+   function Checkpoint_12 (T1, T2, T3, T4 : Time; Cm : Crackle; Dist : Length) return Ramp_State is
+      pragma Suppress (Overflow_Check);
+   begin
+      return
+        Checked
+          ((Sn   => 0.0 * mm / s**4,
             Jr   => -Cm * T1 * (T1 + T2),
             Acc  => Cm * T1 * (T1 + T2) * (2.0 * T1 + T2 + 2.0 * T3) / 2.0,
             Vel  =>
@@ -2365,131 +2530,361 @@ package body Prunt.Motion_Planner is
                  + 6.0 * T3**2
                  + 12.0 * T3 * T4)
               / 12.0,
-            Dist =>
-              Cm
-              * T1
-              * (T1 + T2)
-              * (390.0 * T1**3 + 585.0 * T1**2 * T2 + 302.0 * T1**2 * T3 + 192.0 * T1**2 * T4 + 293.0 * T1 * T2**2
-                 + 302.0 * T1 * T2 * T3
-                 + 192.0 * T1 * T2 * T4
-                 + 60.0 * T1 * T3**2
-                 + 120.0 * T1 * T3 * T4
-                 + 24.0 * T1 * T4**2
-                 + 49.0 * T2**3
-                 + 76.0 * T2**2 * T3
-                 + 48.0 * T2**2 * T4
-                 + 30.0 * T2 * T3**2
-                 + 60.0 * T2 * T3 * T4
-                 + 12.0 * T2 * T4**2
-                 + 4.0 * T3**3
-                 + 12.0 * T3**2 * T4
-                 + 12.0 * T3 * T4**2)
-              / 24.0);
-      end Checkpoint_12;
+            Dist => Dist));
+   end Checkpoint_12;
 
-      Stage : Feedrate_Profile_Stage_Index := 1;
-      DT    : Time := 0.0 * s;
-      State : Profile_State := Zero_State;
+   function Make_Stage
+     (State : Ramp_State; Start, Len : Time; Stage_Crackle : Crackle; Lo, Hi : Length) return Ramp_Stage
+   with No_Inline;
+   --  The stage which starts at State at time Start and nominally lasts Len, in a group of stages whose gain is to
+   --  stay between Lo and Hi.
 
+   function Make_Stage
+     (State : Ramp_State; Start, Len : Time; Stage_Crackle : Crackle; Lo, Hi : Length) return Ramp_Stage
+   is
+      pragma Suppress (Overflow_Check);
+      --  A finite value divided by a constant above one is finite.
+   begin
+      return
+        (Start => Start,
+         Len   => Len,
+         Vel   => State.Vel,
+         Acc_2 => State.Acc / 2.0,
+         Jr_6  => State.Jr / 6.0,
+         Sn_24 => State.Sn / 24.0,
+         C_120 => Stage_Crackle / 120.0,
+         Dist  => State.Dist,
+         Lo    => Length'Min (Length'Max (State.Dist, Lo), Hi),
+         Hi    => Length'Min (Length'Max (Stage_End_Distance (State, Len, Stage_Crackle), Lo), Hi));
+   end Make_Stage;
+
+   function Rising_Stage
+     (Profile : Feedrate_Profile_Times; Cm : Crackle; Bounds : Ramp_Stage_Bounds; Stage : Feedrate_Profile_Stage_Index)
+      return Ramp_Stage;
+   --  The stage Stage of the ramp which speeds up from rest with crackle Cm, started as described above.
+
+   function Rising_Stage
+     (Profile : Feedrate_Profile_Times; Cm : Crackle; Bounds : Ramp_Stage_Bounds; Stage : Feedrate_Profile_Stage_Index)
+      return Ramp_Stage
+   is
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
+
+      Zero : constant Crackle := 0.0 * mm / s**5;
+
+      State  : Ramp_State;
+      Lo, Hi : Length;
+   begin
+      case Stage is
+         when 1 .. 3   =>
+            Lo := 0.0 * mm;
+            Hi := Checkpoint_4_Distance (T1, T2, Cm);
+            if Stage >= 2 then
+               State := Advance (State, T1, Cm);
+            end if;
+            if Stage >= 3 then
+               State := Advance (State, T2, Zero);
+            end if;
+
+         when 4 .. 7   =>
+            Lo := Checkpoint_4_Distance (T1, T2, Cm);
+            Hi := Checkpoint_8_Distance (T1, T2, T3, Cm);
+            State := Checkpoint_4 (T1, T2, Cm, Lo);
+            if Stage >= 5 then
+               State := Advance (State, T3, Zero);
+            end if;
+            if Stage >= 6 then
+               State := Advance (State, T1, -Cm);
+            end if;
+            if Stage >= 7 then
+               State := Advance (State, T2, Zero);
+            end if;
+
+         when 8 .. 11  =>
+            Lo := Checkpoint_8_Distance (T1, T2, T3, Cm);
+            Hi := Length'Max (Checkpoint_12_Distance (T1, T2, T3, T4, Cm), Lo);
+            State := Checkpoint_8 (T1, T2, T3, Cm, Lo);
+            if Stage >= 9 then
+               State := Advance (State, T4, Zero);
+            end if;
+            if Stage >= 10 then
+               State := Advance (State, T1, -Cm);
+            end if;
+            if Stage >= 11 then
+               State := Advance (State, T2, Zero);
+            end if;
+
+         when 12 .. 15 =>
+            Hi := Length'Last;
+            State := Checkpoint_12 (T1, T2, T3, T4, Cm, Checkpoint_12_Distance (T1, T2, T3, T4, Cm));
+            Lo := Length'Max (State.Dist, Checkpoint_8_Distance (T1, T2, T3, Cm));
+            if Stage >= 13 then
+               State := Advance (State, T3, Zero);
+            end if;
+            if Stage >= 14 then
+               State := Advance (State, T1, Cm);
+            end if;
+            if Stage = 15 then
+               State := Advance (State, T2, Zero);
+            end if;
+      end case;
+
+      return
+        Make_Stage
+          (State,
+           (if Stage = 1 then 0.0 * s else Bounds (Stage - 1)),
+           Stage_Length (Stage, Profile),
+           Stage_Crackle (Stage, Cm),
+           Lo,
+           Hi);
+   end Rising_Stage;
+
+   Splitter : constant Dimensionless := 134_217_729.0;
+   --  2**27 + 1. A number times this, less what that product exceeds the number by, is the number rounded to its
+   --  upper 26 bits, and the rest of the number then also has at most 26 bits. Products of such halves are exact.
+
+   function High_Half (A : Dimensionless) return Dimensionless
+   with Inline_Always;
+   --  A rounded to its upper 26 bits.
+
+   function Product_Error (A, A_High, X, X_High, Product : Dimensionless) return Dimensionless
+   with Inline_Always;
+   --  What the rounding of A * X to Product lost, exactly, from the halves of A and X.
+
+   function Sum_Error (A, B, Sum : Dimensionless) return Dimensionless
+   with Inline_Always;
+   --  What the rounding of A + B to Sum lost, exactly.
+
+   function Compensated_Local (Stage : Ramp_Stage; X : Time) return Length;
+   --  X * (Vel + X * (Acc_2 + X * (Jr_6 + X * (Sn_24 + X * C_120)))) by the Horner scheme, with the rounding error
+   --  of every product and sum carried along in a second Horner scheme and added at the end. The error of a product
+   --  is exact from the halves of its factors, with no fused multiply-add, so every target computes the same value.
+
+   function High_Half (A : Dimensionless) return Dimensionless is
+      pragma Suppress (Overflow_Check);
+      Wide : constant Dimensionless := Splitter * A;
+   begin
+      return Wide - (Wide - A);
+   end High_Half;
+
+   function Product_Error (A, A_High, X, X_High, Product : Dimensionless) return Dimensionless is
+      pragma Suppress (Overflow_Check);
+      A_Low : constant Dimensionless := A - A_High;
+      X_Low : constant Dimensionless := X - X_High;
+   begin
+      return A_Low * X_Low - (((Product - A_High * X_High) - A_Low * X_High) - A_High * X_Low);
+   end Product_Error;
+
+   function Sum_Error (A, B, Sum : Dimensionless) return Dimensionless is
+      pragma Suppress (Overflow_Check);
+      Other : constant Dimensionless := Sum - A;
+   begin
+      return (A - (Sum - Other)) + (B - Other);
+   end Sum_Error;
+
+   function Compensated_Local (Stage : Ramp_Stage; X : Time) return Length is
+      pragma Suppress (Overflow_Check);
+      --  An operation below which overflows, or meets a NaN, leaves a result which is not finite: every later
+      --  operation is a sum or a product. Testing the result once therefore raises wherever a check on each
+      --  operation of the plain scheme would.
+
+      Raw_X  : constant Dimensionless := X / s;
+      X_High : constant Dimensionless := High_Half (Raw_X);
+
+      C_5 : constant Dimensionless := Stage.C_120 / (mm / s**5);
+      C_4 : constant Dimensionless := Stage.Sn_24 / (mm / s**4);
+      C_3 : constant Dimensionless := Stage.Jr_6 / (mm / s**3);
+      C_2 : constant Dimensionless := Stage.Acc_2 / (mm / s**2);
+      C_1 : constant Dimensionless := Stage.Vel / (mm / s);
+
+      --  P is a product by X and S the sum of it and the next coefficient, both rounded. R is what the scheme has
+      --  lost so far, itself carried by the Horner scheme.
+      P_4 : constant Dimensionless := C_5 * Raw_X;
+      S_4 : constant Dimensionless := P_4 + C_4;
+      R_4 : constant Dimensionless :=
+        Product_Error (C_5, High_Half (C_5), Raw_X, X_High, P_4) + Sum_Error (P_4, C_4, S_4);
+
+      P_3 : constant Dimensionless := S_4 * Raw_X;
+      S_3 : constant Dimensionless := P_3 + C_3;
+      R_3 : constant Dimensionless :=
+        R_4 * Raw_X + (Product_Error (S_4, High_Half (S_4), Raw_X, X_High, P_3) + Sum_Error (P_3, C_3, S_3));
+
+      P_2 : constant Dimensionless := S_3 * Raw_X;
+      S_2 : constant Dimensionless := P_2 + C_2;
+      R_2 : constant Dimensionless :=
+        R_3 * Raw_X + (Product_Error (S_3, High_Half (S_3), Raw_X, X_High, P_2) + Sum_Error (P_2, C_2, S_2));
+
+      P_1 : constant Dimensionless := S_2 * Raw_X;
+      S_1 : constant Dimensionless := P_1 + C_1;
+      R_1 : constant Dimensionless :=
+        R_2 * Raw_X + (Product_Error (S_2, High_Half (S_2), Raw_X, X_High, P_1) + Sum_Error (P_1, C_1, S_1));
+
+      P_0    : constant Dimensionless := S_1 * Raw_X;
+      Result : constant Dimensionless :=
+        P_0 + (R_1 * Raw_X + Product_Error (S_1, High_Half (S_1), Raw_X, X_High, P_0));
+   begin
+      if not (abs Result <= Dimensionless'Last) then
+         raise Constraint_Error with "Unrepresentable ramp distance.";
+      end if;
+      return Result * mm;
+   end Compensated_Local;
+
+   function Stage_Gain (Stage : Ramp_Stage; T : Time) return Length
+   with No_Inline;
+   --  The gain at T, which Stage contains.
+
+   function Stage_Gain (Stage : Ramp_Stage; T : Time) return Length is
+   begin
+      return
+        Length'Min
+          (Length'Max (Stage.Dist + Compensated_Local (Stage, Time'Min (T - Stage.Start, Stage.Len)), Stage.Lo),
+           Stage.Hi);
+   end Stage_Gain;
+
+   Rest_Tolerance : constant Dimensionless := 2.0**(-20);
+   --  A ramp which was solved to end at rest has a final speed within a far smaller fraction of its starting speed
+   --  than this of zero, on either side. A final speed this little below zero is taken for rest.
+
+   function Shape_Of (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Ramp_Shape
+   with No_Inline;
+
+   function Shape_Of (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Ramp_Shape
+   is
+   begin
+      if Max_Crackle >= 0.0 * mm / s**5 then
+         return (Kind => Speeds_Up, Vel => Start_Vel, Total => Total_Time (Profile), Whole => 0.0 * mm);
+      end if;
+      declare
+         End_Vel : constant Velocity := Fast_Velocity_At_Max_Time (Profile, Max_Crackle, Start_Vel);
+      begin
+         if End_Vel < -Rest_Tolerance * abs Start_Vel then
+            --  The ramp turns back, so its distance is not monotone and nothing is gained by evaluating it
+            --  backwards.
+            return (Kind => Turns_Back, Vel => Start_Vel, Total => Total_Time (Profile), Whole => 0.0 * mm);
+         end if;
+         declare
+            Final : constant Velocity := Velocity'Max (0.0 * mm / s, End_Vel);
+         begin
+            return
+              (Kind  => Slows_Down,
+               Vel   => Final,
+               Total => Total_Time (Profile),
+               Whole => Fast_Distance_At_Max_Time (Profile, -Max_Crackle, Final));
+         end;
+      end;
+   end Shape_Of;
+
+   function Rising_Time (Shape : Ramp_Shape; T : Time) return Time
+   is (if Shape.Kind = Slows_Down then Time'Max (0.0 * s, Shape.Total - T) else T);
+   --  The time at which the ramp which speeds up from rest is evaluated for the distance at T.
+
+   function Ramp_Distance (Shape : Ramp_Shape; T, Rising_T : Time; Gain : Length) return Length
+   with No_Inline;
+   --  The distance at T, from the gain at Rising_T of the ramp which speeds up from rest.
+
+   function Ramp_Distance (Shape : Ramp_Shape; T, Rising_T : Time; Gain : Length) return Length is
+   begin
+      case Shape.Kind is
+         when Speeds_Up  =>
+            return Shape.Vel * T + Gain;
+
+         when Turns_Back =>
+            return Shape.Vel * T - Gain;
+
+         when Slows_Down =>
+            if T <= 0.0 * s then
+               return 0.0 * mm;
+            end if;
+            --  Whole is not the backwards ramp's own distance at its end, so the difference can be just below zero.
+            return Length'Max (0.0 * mm, Shape.Whole - (Shape.Vel * Rising_T + Gain));
+      end case;
+   end Ramp_Distance;
+
+   function Distance_At_Time
+     (Profile : Feedrate_Profile_Times; T : Time; Max_Crackle : Crackle; Start_Vel : Velocity) return Length
+   is
+      Shape    : constant Ramp_Shape := Shape_Of (Profile, Max_Crackle, Start_Vel);
+      Rising_T : constant Time := Rising_Time (Shape, T);
+      Bounds   : constant Ramp_Stage_Bounds := Ramp_Bounds (Profile);
    begin
       pragma Assert (T <= Total_Time (Profile));
       pragma Assert (T >= 0.0 * s);
 
-      if T < T1 then
-         Stage := 1;
-         DT := T;
-      elsif T < T1 + T2 then
-         Stage := 2;
-         DT := T - T1;
-      elsif T < 2.0 * T1 + T2 then
-         Stage := 3;
-         DT := T - (T1 + T2);
-      elsif T < 2.0 * T1 + T2 + T3 then
-         Stage := 4;
-         DT := T - (2.0 * T1 + T2);
-      elsif T < 3.0 * T1 + T2 + T3 then
-         Stage := 5;
-         DT := T - (2.0 * T1 + T2 + T3);
-      elsif T < 3.0 * T1 + 2.0 * T2 + T3 then
-         Stage := 6;
-         DT := T - (3.0 * T1 + T2 + T3);
-      elsif T < 4.0 * T1 + 2.0 * T2 + T3 then
-         Stage := 7;
-         DT := T - (3.0 * T1 + 2.0 * T2 + T3);
-      elsif T < 4.0 * T1 + 2.0 * T2 + T3 + T4 then
-         Stage := 8;
-         DT := T - (4.0 * T1 + 2.0 * T2 + T3);
-      elsif T < 5.0 * T1 + 2.0 * T2 + T3 + T4 then
-         Stage := 9;
-         DT := T - (4.0 * T1 + 2.0 * T2 + T3 + T4);
-      elsif T < 5.0 * T1 + 3.0 * T2 + T3 + T4 then
-         Stage := 10;
-         DT := T - (5.0 * T1 + 2.0 * T2 + T3 + T4);
-      elsif T < 6.0 * T1 + 3.0 * T2 + T3 + T4 then
-         Stage := 11;
-         DT := T - (5.0 * T1 + 3.0 * T2 + T3 + T4);
-      elsif T < 6.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4 then
-         Stage := 12;
-         DT := T - (6.0 * T1 + 3.0 * T2 + T3 + T4);
-      elsif T < 7.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4 then
-         Stage := 13;
-         DT := T - (6.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4);
-      elsif T < 7.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4 then
-         Stage := 14;
-         DT := T - (7.0 * T1 + 3.0 * T2 + 2.0 * T3 + T4);
-      else
-         Stage := 15;
-         DT := T - (7.0 * T1 + 4.0 * T2 + 2.0 * T3 + T4);
-      end if;
+      return
+        Ramp_Distance
+          (Shape,
+           T,
+           Rising_T,
+           Stage_Gain (Rising_Stage (Profile, abs Max_Crackle, Bounds, Stage_At (Bounds, Rising_T)), Rising_T));
+   end Distance_At_Time;
 
-      case Stage is
-         when 1 .. 3   =>
-            State := Zero_State;
-            if Stage >= 2 then
-               Advance (State, T1, Cm);
-            end if;
-            if Stage >= 3 then
-               Advance (State, T2, 0.0 * mm / s**5);
-            end if;
+   function Prepare
+     (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Prepared_Ramp
+   is
+      T1 : constant Time := Profile (1);
+      T2 : constant Time := Profile (2);
+      T3 : constant Time := Profile (3);
+      T4 : constant Time := Profile (4);
+      Cm : constant Crackle := abs Max_Crackle;
 
-         when 4 .. 7   =>
-            State := Checkpoint_4;
-            if Stage >= 5 then
-               Advance (State, T3, 0.0 * mm / s**5);
-            end if;
-            if Stage >= 6 then
-               Advance (State, T1, -Cm);
-            end if;
-            if Stage >= 7 then
-               Advance (State, T2, 0.0 * mm / s**5);
-            end if;
+      Bounds : constant Ramp_Stage_Bounds := Ramp_Bounds (Profile);
+      D4     : constant Length := Checkpoint_4_Distance (T1, T2, Cm);
+      D8     : constant Length := Checkpoint_8_Distance (T1, T2, T3, Cm);
+      D12    : constant Length := Checkpoint_12_Distance (T1, T2, T3, T4, Cm);
+      Late   : constant Length := Length'Max (D12, D8);
 
-         when 8 .. 11  =>
-            State := Checkpoint_8;
-            if Stage >= 9 then
-               Advance (State, T4, 0.0 * mm / s**5);
-            end if;
-            if Stage >= 10 then
-               Advance (State, T1, -Cm);
-            end if;
-            if Stage >= 11 then
-               Advance (State, T2, 0.0 * mm / s**5);
-            end if;
+      State  : Ramp_State;
+      Stages : Ramp_Stage_Array;
+   begin
+      --  Every stage as Rising_Stage makes it, with each state taken from the stage before in place of a new start
+      --  from the closed form of its group.
+      for Stage in Feedrate_Profile_Stage_Index loop
+         case Stage is
+            when 1      =>
+               null;
 
-         when 12 .. 15 =>
-            State := Checkpoint_12;
-            if Stage >= 13 then
-               Advance (State, T3, 0.0 * mm / s**5);
-            end if;
-            if Stage >= 14 then
-               Advance (State, T1, Cm);
-            end if;
-            if Stage = 15 then
-               Advance (State, T2, 0.0 * mm / s**5);
-            end if;
-      end case;
+            when 4      =>
+               State := Checkpoint_4 (T1, T2, Cm, D4);
 
-      return Start_Vel * T + State.Dist + Local_Distance (State, DT, Stage_Crackle_For (Stage));
+            when 8      =>
+               State := Checkpoint_8 (T1, T2, T3, Cm, D8);
+
+            when 12     =>
+               State := Checkpoint_12 (T1, T2, T3, T4, Cm, D12);
+
+            when others =>
+               State := Advance (State, Stage_Length (Stage - 1, Profile), Stage_Crackle (Stage - 1, Cm));
+         end case;
+         Stages (Stage) :=
+           Make_Stage
+             (State,
+              (if Stage = 1 then 0.0 * s else Bounds (Stage - 1)),
+              Stage_Length (Stage, Profile),
+              Stage_Crackle (Stage, Cm),
+              (case Stage is
+                 when 1 .. 3   => 0.0 * mm,
+                 when 4 .. 7   => D4,
+                 when 8 .. 11  => D8,
+                 when 12 .. 15 => Late),
+              (case Stage is
+                 when 1 .. 3   => D4,
+                 when 4 .. 7   => D8,
+                 when 8 .. 11  => Late,
+                 when 12 .. 15 => Length'Last));
+      end loop;
+      return (Shape => Shape_Of (Profile, Max_Crackle, Start_Vel), Bounds => Bounds, Stages => Stages);
+   end Prepare;
+
+   function Distance_At_Time (Ramp : Prepared_Ramp; T : Time) return Length is
+      Rising_T : constant Time := Rising_Time (Ramp.Shape, T);
+   begin
+      pragma Assert (T <= Ramp.Shape.Total);
+      pragma Assert (T >= 0.0 * s);
+
+      return
+        Ramp_Distance (Ramp.Shape, T, Rising_T, Stage_Gain (Ramp.Stages (Stage_At (Ramp.Bounds, Rising_T)), Rising_T));
    end Distance_At_Time;
 
    function Crackle_At_Time (Profile : Feedrate_Profile; T : Time; Max_Crackle : Crackle) return Crackle is

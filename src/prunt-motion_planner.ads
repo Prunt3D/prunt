@@ -405,7 +405,20 @@ package Prunt.Motion_Planner is
    --  phase. For an acceleration phase Max_Crackle should be positive and for a deceleration phase Max_Crackle
    --  should be negative.
    --
-   --  The return value may be negative.
+   --  For a phase whose speeds are not negative the distance never decreases as T increases, to the last bit. A
+   --  deceleration phase whose final speed is negative only by rounding is evaluated as ending at rest. One which
+   --  really turns back is not, and its return value may be negative.
+
+   type Prepared_Ramp is private;
+   --  An acceleration or deceleration phase with everything Distance_At_Time derives from it before it looks at
+   --  the time.
+
+   function Prepare
+     (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Prepared_Ramp;
+
+   function Distance_At_Time (Ramp : Prepared_Ramp; T : Time) return Length;
+   --  Distance_At_Time (Profile, T, Max_Crackle, Start_Vel) for the arguments Ramp was prepared from: the same
+   --  value to the last bit, for a fraction of the work. Preparing costs about as much as ten evaluations.
 
    function Total_Time (Profile : Feedrate_Profile) return Time;
    --  Calculates the total duration of a complete feedrate profile. This is not equivalent to the sum of components as
@@ -487,6 +500,45 @@ package Prunt.Motion_Planner is
 private
 
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+
+   type Feedrate_Profile_Stage_Index is range 1 .. 15;
+
+   type Ramp_Stage is record
+      Start, Len : Time := 0.0 * s;
+      --  When the stage starts and how long it nominally lasts.
+      Vel        : Velocity := 0.0 * mm / s;
+      Acc_2      : Acceleration := 0.0 * mm / s**2;
+      Jr_6       : Jerk := 0.0 * mm / s**3;
+      Sn_24      : Snap := 0.0 * mm / s**4;
+      C_120      : Crackle := 0.0 * mm / s**5;
+      --  The coefficients of the distance gained within the stage, as a polynomial in the time into it.
+      Dist       : Length := 0.0 * mm;
+      --  The distance gained before the stage.
+      Lo, Hi     : Length := 0.0 * mm;
+      --  What the distance gained by a time in the stage is kept between. Hi of a stage is at most Lo of the next.
+   end record;
+   --  One of the fifteen stages of constant crackle of a ramp which speeds up from rest.
+
+   type Ramp_Stage_Bounds is array (Feedrate_Profile_Stage_Index range 1 .. 14) of Time;
+   type Ramp_Stage_Array is array (Feedrate_Profile_Stage_Index) of Ramp_Stage;
+
+   type Ramp_Kind is (Speeds_Up, Slows_Down, Turns_Back);
+
+   type Ramp_Shape is record
+      Kind  : Ramp_Kind;
+      Vel   : Velocity;
+      --  The final speed of a ramp which slows down, and the starting speed of any other.
+      Total : Time;
+      Whole : Length;
+      --  The time of the whole ramp and, for a ramp which slows down, its distance.
+   end record;
+   --  How the distance of a ramp follows from that of the ramp which speeds up from rest with its phase times.
+
+   type Prepared_Ramp is record
+      Shape  : Ramp_Shape;
+      Bounds : Ramp_Stage_Bounds;
+      Stages : Ramp_Stage_Array;
+   end record;
 
    type Constraint_Region is (Region_1, Region_2, Region_3, Region_4, Region_5);
 
