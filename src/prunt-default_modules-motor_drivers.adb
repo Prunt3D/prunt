@@ -181,9 +181,8 @@ package body Prunt.Default_Modules.Motor_Drivers is
                          Requested_Axes (Requested_Axis) and then Motor_Axes (Requested_Axis, Motor))))];
       end Affected_Axes;
 
-      procedure Disable_Selected (Requested_Axes : Axis_Selection; Invalidated_Axes : out Axis_Selection) is
-         Disable_All    : constant Boolean := (for all Selected of Requested_Axes => not Selected);
-         Disabled_Motor : array (Motor_Name) of Boolean := [others => False];
+      procedure Disable_Selected (Requested_Axes : Axis_Selection) is
+         Disable_All : constant Boolean := (for all Selected of Requested_Axes => not Selected);
       begin
          for Motor in Motor_Name loop
             if Config.Motors (Motor).Enabled
@@ -196,16 +195,24 @@ package body Prunt.Default_Modules.Motor_Drivers is
                begin
                   Handler.Disable_Motor;
                end;
-               Disabled_Motor (Motor) := True;
             end if;
          end loop;
-
-         Invalidated_Axes :=
-           [for Axis in Axis_Name =>
-              (for some Motor in Motor_Name => Disabled_Motor (Motor) and then Motor_Axes (Axis, Motor))];
       end Disable_Selected;
 
    end Module_Instance;
+
+   overriding
+   procedure Process_After_Block (This : Motor_Power_Event; Context : Block_End_Context'Class) is
+      Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
+   begin
+      Context.Wait_For_Idle;
+
+      if This.Enable then
+         Instance.Enable_Selected (This.Requested_Axes);
+      else
+         Instance.Disable_Selected (This.Requested_Axes);
+      end if;
+   end Process_After_Block;
 
    procedure Enable_Steppers
      (This     : Module_Instance;
@@ -216,10 +223,14 @@ package body Prunt.Default_Modules.Motor_Drivers is
       Z        : Gcode_Optional_No_Value;
       E        : Gcode_Optional_No_Value)
    is
-      Instance : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
+      Requested_Axes : constant Axis_Selection :=
+        [X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present];
    begin
-      pragma Unreferenced (This, Planner);
-      Instance.Enable_Selected ([X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present]);
+      pragma Unreferenced (This);
+
+      --  Queued behind preceding motion like M18 and M84, so an earlier queued release cannot overtake this command.
+      Planner.Flush
+        (Motor_Power_Event'(Module_Instance_Ref => Self_Ref, Requested_Axes => Requested_Axes, Enable => True));
    end Enable_Steppers;
 
    procedure Disable_Steppers
@@ -234,17 +245,20 @@ package body Prunt.Default_Modules.Motor_Drivers is
       Instance         : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Requested_Axes   : constant Axis_Selection :=
         [X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present];
-      Invalidated_Axes : Axis_Selection;
+      Invalidated_Axes : constant Axis_Selection := Instance.Affected_Axes (Requested_Axes);
    begin
       pragma Unreferenced (This);
 
-      --  Marking the axes unhomed flushes and waits for all preceding motion. Motors are only released after every
-      --  affected axis has reached that synchronization point.
-      Invalidated_Axes := Instance.Affected_Axes (Requested_Axes);
-      for Axis in Axis_Name when Invalidated_Axes (Axis) loop
+      --  Each call waits for preceding motion. X, Y and Z are marked unhomed before their motors are queued for
+      --  release, so they stay unhomed even if cancellation cuts that wait short. The extruder origin is arbitrary and
+      --  has no homing procedure to restore it, so E stays homed.
+      for Axis in Axis_Name when Axis /= E_Axis and then Invalidated_Axes (Axis) loop
          Planner.Mark_Axis_Unhomed (Axis);
       end loop;
-      Instance.Disable_Selected (Requested_Axes, Invalidated_Axes);
+
+      --  The block-end event waits for preceding motion itself, which matters when no axis was unhomed (M84 E).
+      Planner.Flush
+        (Motor_Power_Event'(Module_Instance_Ref => Self_Ref, Requested_Axes => Requested_Axes, Enable => False));
    end Disable_Steppers;
 
    procedure Disable_Steppers_M84

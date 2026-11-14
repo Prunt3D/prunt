@@ -34,6 +34,7 @@ with Prunt.Default_Modules.Idle_Emitter;
 with Prunt.Default_Modules.Machine_Idle_Timeout;
 with Prunt.Default_Modules.Machine_Idle_Timeout.Test;
 with Prunt.Default_Modules.Motor_Drivers;
+with Prunt.Default_Modules.Motor_Drivers.Test;
 with Prunt.Default_Modules.Kinematics;
 with Prunt.Default_Modules.Motion;
 with Prunt.Default_Modules.Motion.Test;
@@ -125,6 +126,7 @@ procedure Tests is
         Blocking_Tracker_Module => Cold_Extrusion_Blocking_Tracker);
    package Cold_Extrusion_Test is new Cold_Extrusion_Heaters.Test (Heater_Disable_Count, Fail_Heater_Start);
    package Excessive_Extrusion_Motor_Drivers is new Machine_Idle_Timeout_Test_Default_Modules.Motor_Drivers;
+   package Motor_Drivers_Test is new Excessive_Extrusion_Motor_Drivers.Test;
    package TMC2240_Test_Drivers is new
      Machine_Idle_Timeout_Test_Default_Modules.TMC2240_Drivers
        (Motor_Hardware       =>
@@ -282,6 +284,7 @@ begin
    Trendy_Test.Register (Trendy_Test.Test_Group'[Test_Smart_Plugs_Gcode_Routing'Unrestricted_Access]);
    Trendy_Test.Register (Smart_Plugs_Test.All_Tests);
    Trendy_Test.Register (Power_Control_Test.All_Tests);
+   Trendy_Test.Register (Motor_Drivers_Test.All_Tests);
    Trendy_Test.Register (Prunt.Smart_Plugs.Test.All_Tests);
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);

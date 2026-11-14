@@ -263,7 +263,8 @@ private
       --  Enable every configured motor affecting the E axis.
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M17");
-   --  Enable the configured motors affecting the selected axes. With no axis arguments, enable every configured motor.
+   --  Enable the configured motors affecting the selected axes after queued motion stops. With no axis arguments,
+   --  enable every configured motor.
 
    procedure Disable_Steppers
      (This     : Module_Instance;
@@ -280,7 +281,8 @@ private
       )
    with Annotate => (Prunt_Config, Gcode_Command, "M18");
    --  Disable the configured motors affecting the selected axes after queued motion stops. With no arguments, disable
-   --  every configured motor. Every axis affected by a disabled motor is marked unhomed.
+   --  every configured motor. Every X, Y or Z axis affected by a disabled motor is marked unhomed. E stays homed
+   --  because its origin is arbitrary and it has no homing procedure.
 
    procedure Disable_Steppers_M84
      (This     : Module_Instance;
@@ -333,7 +335,7 @@ private
 
       function Affected_Axes (Requested_Axes : Axis_Selection) return Axis_Selection;
 
-      procedure Disable_Selected (Requested_Axes : Axis_Selection; Invalidated_Axes : out Axis_Selection);
+      procedure Disable_Selected (Requested_Axes : Axis_Selection);
 
    private
       Config                 : User_Config;
@@ -343,5 +345,16 @@ private
       Motor_Axes             : Motor_Axis_Map := [others => [others => False]];
       Motor_Handlers         : Motor_Handler_Maps.Map;
    end Module_Instance;
+
+   type Motor_Power_Event is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Requested_Axes      : Axis_Selection;
+      Enable              : Boolean;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Motor_Power_Event; Context : Block_End_Context'Class);
+   --  Wait for preceding motion to stop, then enable or disable the motors affecting Requested_Axes. M17, M18 and M84
+   --  all go through this event so that they take effect in G-code order.
 
 end Prunt.Default_Modules.Motor_Drivers;
