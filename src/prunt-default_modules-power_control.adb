@@ -98,6 +98,13 @@ package body Prunt.Default_Modules.Power_Control is
 
    procedure Power_Off (Planner : Planner_Interface'Class) is
    begin
+      --  The supply may also power the motors, so the axes can move freely once it is off. Unlike M81 P, this does not
+      --  restart the controller, so the homed state must be invalidated here as Disable_Steppers does. Each call waits
+      --  for preceding motion. The extruder origin is arbitrary and has no homing procedure to restore it.
+      for Axis in Axis_Name when Axis /= E_Axis loop
+         Planner.Mark_Axis_Unhomed (Axis);
+      end loop;
+
       Planner.Flush (Power_State_Change_Event'(Turn_On => False));
    end Power_Off;
 

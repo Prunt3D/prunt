@@ -85,7 +85,7 @@ private
 
    procedure Power_Off (Planner : Planner_Interface'Class)
    with Annotate => (Prunt_Config, Gcode_Command, "M81");
-   --  Turn off the power supply.
+   --  Turn off the power supply. The X, Y and Z axes are marked unhomed first.
 
    protected type Module_Instance is new My_Modules.Module_Instance with
       overriding

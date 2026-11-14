@@ -38,6 +38,7 @@ with Prunt.Default_Modules.Kinematics;
 with Prunt.Default_Modules.Motion;
 with Prunt.Default_Modules.Motion.Test;
 with Prunt.Default_Modules.Power_Control;
+with Prunt.Default_Modules.Power_Control.Test;
 with Prunt.Default_Modules.Smart_Plugs;
 with Prunt.Default_Modules.Smart_Plugs.Test;
 with Prunt.Default_Modules.TMC2240_Drivers;
@@ -184,6 +185,7 @@ procedure Tests is
      Machine_Idle_Timeout_Test_Default_Modules.Smart_Plugs
        (Request_Smart_Plug_Shutdown => Request_Smart_Plug_Shutdown);
    package Smart_Plugs_Test is new Smart_Plugs_Module.Test (Power_Trace);
+   package Power_Control_Test is new Power_Control_Module.Test (Power_Trace);
    package Dispatch_Helpers is new Prunt.Controller_Helpers (Machine_Idle_Timeout_Test_Controller_Types);
 
    procedure Test_Smart_Plugs_Gcode_Routing (T : in out Trendy_Test.Operation'Class) is
@@ -279,6 +281,7 @@ procedure Tests is
 begin
    Trendy_Test.Register (Trendy_Test.Test_Group'[Test_Smart_Plugs_Gcode_Routing'Unrestricted_Access]);
    Trendy_Test.Register (Smart_Plugs_Test.All_Tests);
+   Trendy_Test.Register (Power_Control_Test.All_Tests);
    Trendy_Test.Register (Prunt.Smart_Plugs.Test.All_Tests);
    Trendy_Test.Register (Generic_Lock_Test.All_Tests);
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);
