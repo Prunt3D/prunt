@@ -149,55 +149,99 @@ package body Prunt.Default_Modules.Motor_Drivers is
          return Distance_Per_Unit (Motor, Motor_Configs (Motor).Microsteps);
       end Distance_Per_Unit;
 
-      procedure Enable_Selected (Axes : Axis_Selection) is
-         Enable_All : constant Boolean := (for all Selected of Axes => not Selected);
+      function Selected_Motors (Requested_Axes : Axis_Selection) return My_Modules.Motor_Selection is
+         Select_All : constant Boolean := (for all Selected of Requested_Axes => not Selected);
       begin
-         for Motor in Motor_Name loop
-            if Config.Motors (Motor).Enabled
+         return
+           [for Motor in Motor_Name =>
+              Config.Motors (Motor).Enabled
               and then
-                (Enable_All or else (for some Axis in Axis_Name => Axes (Axis) and then Motor_Axes (Axis, Motor)))
-            then
-               declare
-                  Handler : Motor_Handler'Class renames Motor_Handlers.Reference (Motor);
-               begin
-                  Handler.Enable_Motor;
-               end;
-            end if;
-         end loop;
-      end Enable_Selected;
+                (Select_All
+                 or else
+                   (for some Axis in Requested_Axes'Range => Requested_Axes (Axis) and then Motor_Axes (Axis, Motor)))];
+      end Selected_Motors;
 
       function Affected_Axes (Requested_Axes : Axis_Selection) return Axis_Selection is
-         Affect_All : constant Boolean := (for all Selected of Requested_Axes => not Selected);
+         Motors : constant My_Modules.Motor_Selection := Selected_Motors (Requested_Axes);
       begin
          return
            [for Axis in Axis_Name =>
-              (for some Motor in Motor_Name =>
-                 Config.Motors (Motor).Enabled
-                 and then Motor_Axes (Axis, Motor)
-                 and then
-                   (Affect_All
-                    or else
-                      (for some Requested_Axis in Requested_Axes'Range =>
-                         Requested_Axes (Requested_Axis) and then Motor_Axes (Requested_Axis, Motor))))];
+              (for some Motor in Motor_Name => Motors (Motor) and then Motor_Axes (Axis, Motor))];
       end Affected_Axes;
 
-      procedure Disable_Selected (Requested_Axes : Axis_Selection) is
-         Disable_All : constant Boolean := (for all Selected of Requested_Axes => not Selected);
+      procedure Plan_Power (Motors : My_Modules.Motor_Selection; Enable : Boolean) is
+      begin
+         for Motor in Motor_Name when Motors (Motor) loop
+            Planned_On (Motor) := Enable;
+         end loop;
+      end Plan_Power;
+
+      procedure Claim_Motors_To_Enable
+        (Moving_Motors : My_Modules.Motor_Selection;
+         Pause_Motion  : Boolean;
+         To_Enable     : out My_Modules.Motor_Selection) is
       begin
          for Motor in Motor_Name loop
-            if Config.Motors (Motor).Enabled
+            To_Enable (Motor) :=
+              Moving_Motors (Motor)
+              and then Config.Motors (Motor).Enabled
               and then
-                (Disable_All
-                 or else (for some Axis in Axis_Name => Requested_Axes (Axis) and then Motor_Axes (Axis, Motor)))
-            then
-               declare
-                  Handler : Motor_Handler'Class renames Motor_Handlers.Reference (Motor);
-               begin
-                  Handler.Disable_Motor;
-               end;
+                (if Pause_Motion
+                 then not Current_On (Motor) and then not Pause_Enable_Queued (Motor)
+                 else not Planned_On (Motor));
+         end loop;
+
+         for Motor in Motor_Name when To_Enable (Motor) loop
+            if Pause_Motion then
+               Pause_Enable_Queued (Motor) := True;
+            else
+               Planned_On (Motor) := True;
             end if;
          end loop;
-      end Disable_Selected;
+      end Claim_Motors_To_Enable;
+
+      procedure Release_Claim (Motors : My_Modules.Motor_Selection; Pause_Motion : Boolean) is
+      begin
+         for Motor in Motor_Name when Motors (Motor) loop
+            --  Only motors that were planned or known to be off are claimed, so off is the state to restore.
+            if Pause_Motion then
+               Pause_Enable_Queued (Motor) := False;
+            else
+               Planned_On (Motor) := False;
+            end if;
+         end loop;
+      end Release_Claim;
+
+      procedure Apply_Power (Motors : My_Modules.Motor_Selection; Enable : Boolean) is
+      begin
+         for Motor in Motor_Name when Motors (Motor) and then Config.Motors (Motor).Enabled loop
+            declare
+               Handler : Motor_Handler'Class renames Motor_Handlers.Reference (Motor);
+            begin
+               if Enable then
+                  Handler.Enable_Motor;
+               else
+                  Handler.Disable_Motor;
+               end if;
+            end;
+
+            Current_On (Motor) := Enable;
+            if Enable then
+               Pause_Enable_Queued (Motor) := False;
+            end if;
+         end loop;
+      end Apply_Power;
+
+      procedure Handle_Cancel
+        (Executed_Corner_ID      : Planner_Corner_ID;
+         Cancellation_Barrier_ID : Planner_Corner_ID;
+         Current_Position        : Position)
+      is
+         pragma Unreferenced (Executed_Corner_ID, Cancellation_Barrier_ID, Current_Position);
+      begin
+         Planned_On := Current_On;
+         Pause_Enable_Queued := [others => False];
+      end Handle_Cancel;
 
    end Module_Instance;
 
@@ -205,13 +249,11 @@ package body Prunt.Default_Modules.Motor_Drivers is
    procedure Process_After_Block (This : Motor_Power_Event; Context : Block_End_Context'Class) is
       Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
    begin
-      Context.Wait_For_Idle;
-
-      if This.Enable then
-         Instance.Enable_Selected (This.Requested_Axes);
-      else
-         Instance.Disable_Selected (This.Requested_Axes);
+      if not This.Enable then
+         Context.Wait_For_Idle;
       end if;
+
+      Instance.Apply_Power (This.Motors, This.Enable);
    end Process_After_Block;
 
    procedure Enable_Steppers
@@ -223,14 +265,17 @@ package body Prunt.Default_Modules.Motor_Drivers is
       Z        : Gcode_Optional_No_Value;
       E        : Gcode_Optional_No_Value)
    is
-      Requested_Axes : constant Axis_Selection :=
-        [X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present];
+      Instance : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
+      Motors   : constant My_Modules.Motor_Selection :=
+        Instance.Selected_Motors
+          ([X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present]);
    begin
       pragma Unreferenced (This);
 
       --  Queued behind preceding motion like M18 and M84, so an earlier queued release cannot overtake this command.
-      Planner.Flush
-        (Motor_Power_Event'(Module_Instance_Ref => Self_Ref, Requested_Axes => Requested_Axes, Enable => True));
+      --  The motors only count as planned on once the enable is queued.
+      Planner.Flush (Motor_Power_Event'(Module_Instance_Ref => Self_Ref, Motors => Motors, Enable => True));
+      Instance.Plan_Power (Motors, Enable => True);
    end Enable_Steppers;
 
    procedure Disable_Steppers
@@ -245,6 +290,7 @@ package body Prunt.Default_Modules.Motor_Drivers is
       Instance         : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
       Requested_Axes   : constant Axis_Selection :=
         [X_Axis => X.Present, Y_Axis => Y.Present, Z_Axis => Z.Present, E_Axis => E.Present];
+      Motors           : constant My_Modules.Motor_Selection := Instance.Selected_Motors (Requested_Axes);
       Invalidated_Axes : constant Axis_Selection := Instance.Affected_Axes (Requested_Axes);
    begin
       pragma Unreferenced (This);
@@ -256,9 +302,10 @@ package body Prunt.Default_Modules.Motor_Drivers is
          Planner.Mark_Axis_Unhomed (Axis);
       end loop;
 
-      --  The block-end event waits for preceding motion itself, which matters when no axis was unhomed (M84 E).
-      Planner.Flush
-        (Motor_Power_Event'(Module_Instance_Ref => Self_Ref, Requested_Axes => Requested_Axes, Enable => False));
+      --  The block-end event waits for preceding motion itself, which matters when no axis was unhomed (M84 E). A move
+      --  queued after this sees the motors as off and queues an enable in front of itself.
+      Instance.Plan_Power (Motors, Enable => False);
+      Planner.Flush (Motor_Power_Event'(Module_Instance_Ref => Self_Ref, Motors => Motors, Enable => False));
    end Disable_Steppers;
 
    procedure Disable_Steppers_M84
@@ -272,5 +319,32 @@ package body Prunt.Default_Modules.Motor_Drivers is
    begin
       Disable_Steppers (This, Self_Ref, Planner, X, Y, Z, E);
    end Disable_Steppers_M84;
+
+   overriding
+   procedure Prepare_For_Motion
+     (This          : Module_Instance;
+      Self_Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner       : Planner_Interface'Class;
+      Moving_Motors : My_Modules.Motor_Selection;
+      Pause_Motion  : Boolean)
+   is
+      Instance  : Module_Instance renames Module_Instance (Self_Ref.Get.Element.all);
+      To_Enable : My_Modules.Motor_Selection;
+   begin
+      pragma Unreferenced (This);
+
+      --  The claim is made and released in short protected calls. Planner.Flush can block on a full queue until the
+      --  executor has applied earlier power changes, which needs this instance's lock.
+      Instance.Claim_Motors_To_Enable (Moving_Motors, Pause_Motion, To_Enable);
+      if (for some Motor in Motor_Name => To_Enable (Motor)) then
+         begin
+            Planner.Flush (Motor_Power_Event'(Module_Instance_Ref => Self_Ref, Motors => To_Enable, Enable => True));
+         exception
+            when others =>
+               Instance.Release_Claim (To_Enable, Pause_Motion);
+               raise;
+         end;
+      end if;
+   end Prepare_For_Motion;
 
 end Prunt.Default_Modules.Motor_Drivers;

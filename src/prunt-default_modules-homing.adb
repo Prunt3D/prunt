@@ -886,6 +886,11 @@ package body Prunt.Default_Modules.Homing is
 
          Planner.Mark_Axis_Unhomed (Axis);
 
+         --  Homing moves turn their motors on themselves, but Set_To_Value homing need not move at all. A homed axis
+         --  should always have its motors on, so prepare the axis for every method. Anything this queues is processed
+         --  ahead of the homing work, so before the axis is marked homed.
+         Planner.Prepare_Axis_For_Motion (Axis);
+
          case Axis_Config.Homing_Method.Kind is
             when Set_To_Value     =>
                Planner.Flush_And_Reset_Position

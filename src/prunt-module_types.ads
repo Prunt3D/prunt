@@ -316,6 +316,11 @@ package Prunt.Module_Types is
    --  Preflight user-command extrusion before changing motion state or queuing any part of a compound move.  Zero
    --  displacement and machines without an extruder motor do not require a setpoint check.
 
+   procedure Prepare_Axis_For_Motion (This : Planner_Interface; Axis : Axis_Name) is null;
+   --  Let modules prepare Axis as they would before a move on it is queued, for example by turning its motors on.
+   --  Moves do this themselves. Homing calls this for every axis it homes, so that an axis homed without moving also
+   --  has its motors on.
+
    procedure Add_Corner
      (This          : Planner_Interface;
       Pos           : Position;

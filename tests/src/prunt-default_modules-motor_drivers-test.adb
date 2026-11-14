@@ -32,6 +32,9 @@ package body Prunt.Default_Modules.Motor_Drivers.Test is
    Pending : Event_Vectors.Vector;
    --  Block-end events flushed to the mock planner that the executor has not reached yet.
 
+   Fail_Flush : Boolean := False;
+   --  Makes the mock planner's Flush raise, as it does when cancellation or shutdown releases a blocked planner call.
+
    type Line_Array is array (Positive range <>) of Virtual_String;
 
    type Mock_Planner is new Planner_Interface with null record;
@@ -116,6 +119,10 @@ package body Prunt.Default_Modules.Motor_Drivers.Test is
    is
       pragma Unreferenced (This);
    begin
+      if Fail_Flush then
+         raise Program_Error with "Planner flush released.";
+      end if;
+
       Trace.Append ("flush;");
       Pending.Append (Extra_Data);
    end Flush;
@@ -168,7 +175,8 @@ package body Prunt.Default_Modules.Motor_Drivers.Test is
    end Disable_Motor;
 
    function Create_Instance (Motor_Axis : Axis_Name) return My_Modules.Module_Instance_Shared_Pointers.Ref;
-   --  Create an instance where every motor is enabled and drives only Motor_Axis.
+   --  Create an instance where every motor is enabled and drives only Motor_Axis. Pending is shared and the test
+   --  order varies, so this also discards any events an earlier test left queued.
 
    function Create_Instance (Motor_Axis : Axis_Name) return My_Modules.Module_Instance_Shared_Pointers.Ref is
       function Create return My_Modules.Module_Instance_Parent'Class;
@@ -189,6 +197,7 @@ package body Prunt.Default_Modules.Motor_Drivers.Test is
          end return;
       end Create;
    begin
+      Pending.Clear;
       return Result : My_Modules.Module_Instance_Shared_Pointers.Ref do
          Result.Set (Create'Access);
       end return;
@@ -283,16 +292,162 @@ package body Prunt.Default_Modules.Motor_Drivers.Test is
       T.Assert (Dispatch_Trace (Extruder, "M84 E") = "flush;", "M84 E must queue the extruder release");
       T.Assert (Dispatch_Trace (Extruder, "M17 E") = "flush;", "M17 E must queue behind the pending M84 E");
       T.Assert
-        (Process_Pending_Trace = "idle;disable;idle;enable;",
+        (Process_Pending_Trace = "idle;disable;enable;",
          "M17 E after M84 E must leave the extruder motor enabled");
    end Test_Enable_Follows_Queued_Disable;
+
+   function Prepare_Trace
+     (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref; Pause_Motion : Boolean := False) return Virtual_String;
+   --  Prepare a move of every motor and return what it traced before the executor reaches any queued event.
+
+   function Prepare_Trace
+     (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref; Pause_Motion : Boolean := False) return Virtual_String
+   is
+      Planner : constant Mock_Planner := (null record);
+   begin
+      Trace := "";
+      Prepare_For_Motion
+        (Module_Instance (Instance.Get.Element.all),
+         Instance,
+         Planner,
+         Moving_Motors => [others => True],
+         Pause_Motion  => Pause_Motion);
+      return Trace;
+   end Prepare_Trace;
+
+   procedure Cancel (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref);
+   --  Discard the queued events and run the cancellation handler, as a cancellation barrier does.
+
+   procedure Cancel (Instance : My_Modules.Module_Instance_Shared_Pointers.Ref) is
+      Target : Module_Instance renames Module_Instance (Instance.Get.Element.all);
+   begin
+      Pending.Clear;
+      Target.Handle_Cancel
+        (Executed_Corner_ID => 0, Cancellation_Barrier_ID => 0, Current_Position => [others => 0.0 * mm]);
+   end Cancel;
+
+   procedure Test_Motion_Turns_Motors_On (T : in out Trendy_Test.Operation'Class);
+
+   procedure Test_Motion_Turns_Motors_On (T : in out Trendy_Test.Operation'Class) is
+      Extruder : constant My_Modules.Module_Instance_Shared_Pointers.Ref := Create_Instance (E_Axis);
+   begin
+      T.Register (Parallelize => False);
+
+      --  The startup state is not known, so the first move turns the motors on.
+      T.Assert (Prepare_Trace (Extruder) = "flush;", "the first move must queue its motors to be turned on");
+      T.Assert (Prepare_Trace (Extruder) = "", "a move after a queued enable must not queue another one");
+      T.Assert
+        (Process_Pending_Trace = "enable;",
+         "turning motors on must not wait for idle, as nothing queued can step a motor that is off");
+      T.Assert (Prepare_Trace (Extruder) = "", "a move must not turn on motors that are already on");
+
+      T.Assert (Dispatch_Trace (Extruder, "M84 E") = "flush;", "M84 E must queue the extruder release");
+      T.Assert (Prepare_Trace (Extruder) = "flush;", "a move after a queued M84 E must queue its own enable");
+      T.Assert
+        (Process_Pending_Trace = "idle;disable;enable;",
+         "the enable must run after the release queued in front of it");
+
+      T.Assert (Dispatch_Trace (Extruder, "M17 E") = "flush;", "M17 E must queue an enable");
+      T.Assert (Prepare_Trace (Extruder) = "", "a move after M17 E must rely on the enable it queued");
+      T.Assert (Process_Pending_Trace = "enable;", "M17 E must turn the extruder on");
+   end Test_Motion_Turns_Motors_On;
+
+   procedure Test_Pause_Motion_Uses_Current_State (T : in out Trendy_Test.Operation'Class);
+
+   procedure Test_Pause_Motion_Uses_Current_State (T : in out Trendy_Test.Operation'Class) is
+      Extruder : constant My_Modules.Module_Instance_Shared_Pointers.Ref := Create_Instance (E_Axis);
+   begin
+      T.Register (Parallelize => False);
+
+      T.Assert (Prepare_Trace (Extruder) = "flush;", "the first move must queue its motors to be turned on");
+      T.Assert (Process_Pending_Trace = "enable;", "the queued enable must turn the extruder on");
+
+      --  Pause motion runs before queued primary work, so a release that has not run yet still leaves the motor on.
+      T.Assert (Dispatch_Trace (Extruder, "M84 E") = "flush;", "M84 E must queue the extruder release");
+      T.Assert
+        (Prepare_Trace (Extruder, Pause_Motion => True) = "",
+         "pause motion must not turn on a motor whose queued release has not run yet");
+      T.Assert (Process_Pending_Trace = "idle;disable;", "the queued release must turn the extruder off");
+
+      T.Assert
+        (Prepare_Trace (Extruder, Pause_Motion => True) = "flush;",
+         "pause motion must turn on a motor that is currently off");
+      T.Assert
+        (Prepare_Trace (Extruder, Pause_Motion => True) = "",
+         "pause motion must not queue a second enable while one is pending");
+      T.Assert (Process_Pending_Trace = "enable;", "the pause enable must turn the extruder on");
+      T.Assert
+        (Prepare_Trace (Extruder, Pause_Motion => True) = "",
+         "pause motion must not turn on a motor that is already on");
+   end Test_Pause_Motion_Uses_Current_State;
+
+   procedure Test_Cancel_Restores_Current_State (T : in out Trendy_Test.Operation'Class);
+
+   procedure Test_Cancel_Restores_Current_State (T : in out Trendy_Test.Operation'Class) is
+      Extruder : constant My_Modules.Module_Instance_Shared_Pointers.Ref := Create_Instance (E_Axis);
+   begin
+      T.Register (Parallelize => False);
+
+      --  A cancelled enable never ran, so the motor is still off and the next move must turn it on.
+      T.Assert (Dispatch_Trace (Extruder, "M17 E") = "flush;", "M17 E must queue an enable");
+      Cancel (Extruder);
+      T.Assert (Prepare_Trace (Extruder) = "flush;", "a cancelled M17 E must not count as turning the motor on");
+      T.Assert (Process_Pending_Trace = "enable;", "the move's own enable must turn the extruder on");
+
+      --  A cancelled release never ran either, so the motor is still on.
+      T.Assert (Dispatch_Trace (Extruder, "M84 E") = "flush;", "M84 E must queue the extruder release");
+      Cancel (Extruder);
+      T.Assert (Prepare_Trace (Extruder) = "", "a cancelled M84 E must leave the motor counted as on");
+
+      --  A pending pause enable is discarded with the rest of the queue.
+      T.Assert (Dispatch_Trace (Extruder, "M84 E") = "flush;", "M84 E must queue the extruder release");
+      T.Assert (Process_Pending_Trace = "idle;disable;", "the queued release must turn the extruder off");
+      T.Assert (Prepare_Trace (Extruder, Pause_Motion => True) = "flush;", "pause motion must queue an enable");
+      Cancel (Extruder);
+      T.Assert
+        (Prepare_Trace (Extruder, Pause_Motion => True) = "flush;",
+         "a cancelled pause enable must not count as turning the motor on");
+   end Test_Cancel_Restores_Current_State;
+
+   procedure Test_Failed_Flush_Releases_Claim (T : in out Trendy_Test.Operation'Class);
+
+   procedure Test_Failed_Flush_Releases_Claim (T : in out Trendy_Test.Operation'Class) is
+      Extruder : constant My_Modules.Module_Instance_Shared_Pointers.Ref := Create_Instance (E_Axis);
+   begin
+      T.Register (Parallelize => False);
+
+      for Pause_Motion in Boolean loop
+         Fail_Flush := True;
+         begin
+            declare
+               Unused : constant Virtual_String := Prepare_Trace (Extruder, Pause_Motion);
+            begin
+               T.Fail ("a failed flush must propagate");
+            end;
+         exception
+            when Program_Error =>
+               null;
+         end;
+         Fail_Flush := False;
+
+         T.Assert
+           (Prepare_Trace (Extruder, Pause_Motion) = "flush;",
+            "an enable that could not be queued must not count as queued");
+         Pending.Clear;
+         Cancel (Extruder);
+      end loop;
+   end Test_Failed_Flush_Releases_Claim;
 
    function All_Tests return Test_Group is
    begin
       return
         [Test_Disabling_Extruder_Keeps_E_Homed'Unrestricted_Access,
          Test_Disabling_Positioning_Motor_Unhomes_Axis'Unrestricted_Access,
-         Test_Enable_Follows_Queued_Disable'Unrestricted_Access];
+         Test_Enable_Follows_Queued_Disable'Unrestricted_Access,
+         Test_Motion_Turns_Motors_On'Unrestricted_Access,
+         Test_Pause_Motion_Uses_Current_State'Unrestricted_Access,
+         Test_Cancel_Restores_Current_State'Unrestricted_Access,
+         Test_Failed_Flush_Releases_Claim'Unrestricted_Access];
    end All_Tests;
 
 end Prunt.Default_Modules.Motor_Drivers.Test;

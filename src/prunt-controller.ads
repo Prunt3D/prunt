@@ -889,6 +889,7 @@ private
    Cancellation_Handler_Instances  : Handler_Instances;
    Idle_Notification_Instances     : Handler_Instances;
    Extrusion_Validator_Instances   : Handler_Instances;
+   Motion_Preparer_Instances       : Handler_Instances;
    --  We use these wrappers because the instances need to be accessed from multiple threads.
 
    protected Gcode_Cancellation_Barrier is
@@ -1082,6 +1083,17 @@ private
    overriding
    procedure Validate_Extrusion (This : Planner_Wrapper; E_Delta : Length);
    --  Check queued heater setpoints before accepting user extrusion commands.
+
+   type Moving_Axis_Array is array (Axis_Name) of Boolean;
+
+   procedure Prepare_Motors_For_Motion (This : Planner_Wrapper; Moving_Axes : Moving_Axis_Array);
+   --  Pass the motors that a move changing Moving_Axes steps to every Motion_Preparer module, which may queue
+   --  block-end work such as turning motors on ahead of the move. Call this after the move's checks and before it is
+   --  queued.
+
+   overriding
+   procedure Prepare_Axis_For_Motion (This : Planner_Wrapper; Axis : Axis_Name);
+   --  Prepare the motors that move Axis as a move on Axis would.
 
    overriding
    procedure Add_Corner

@@ -639,6 +639,33 @@ package body Prunt.Controller is
       end loop;
    end Validate_Extrusion;
 
+   procedure Prepare_Motors_For_Motion (This : Planner_Wrapper; Moving_Axes : Moving_Axis_Array) is
+      Moving_Motors : constant My_Modules.Motor_Selection :=
+        [for Motor in Motor_Name =>
+           (for some Axis in Moving_Axes'Range =>
+              Moving_Axes (Axis) and then Transforms.Motor_Affects_Axis (Current_Kinematic_Transform, Motor, Axis))];
+      Handlers      : Module_Instance_Vectors.Vector;
+   begin
+      if not (for some Motor in Motor_Name => Moving_Motors (Motor)) then
+         return;
+      end if;
+
+      Motion_Preparer_Instances.Snapshot (Handlers);
+      for Instance of Handlers loop
+         My_Modules.Motion_Preparer'Class (Instance.Get.Element.all).Prepare_For_Motion
+           (Self_Ref      => Instance,
+            Planner       => This,
+            Moving_Motors => Moving_Motors,
+            Pause_Motion  => This.Target = Pause_Planner_Target);
+      end loop;
+   end Prepare_Motors_For_Motion;
+
+   overriding
+   procedure Prepare_Axis_For_Motion (This : Planner_Wrapper; Axis : Axis_Name) is
+   begin
+      This.Prepare_Motors_For_Motion ([for Moving_Axis in Axis_Name => Moving_Axis = Axis]);
+   end Prepare_Axis_For_Motion;
+
    overriding
    procedure Add_Corner
      (This          : Planner_Wrapper;
@@ -660,6 +687,9 @@ package body Prunt.Controller is
             end if;
          end loop;
       end if;
+
+      --  Anything this queues is processed before any of the move's commands are queued.
+      This.Prepare_Motors_For_Motion ([for Axis in Axis_Name => Pos (Axis) /= Last_Position (Axis)]);
 
       case This.Target is
          when Primary_Planner_Target =>
@@ -697,6 +727,10 @@ package body Prunt.Controller is
             end if;
          end loop;
       end if;
+
+      --  A full circle returns to its start but still moves X and Y.
+      This.Prepare_Motors_For_Motion
+        ([for Axis in Axis_Name => Axis in X_Axis | Y_Axis or else Pos (Axis) /= Last_Position (Axis)]);
 
       case This.Target is
          when Primary_Planner_Target =>
@@ -1170,6 +1204,12 @@ package body Prunt.Controller is
                       Active_Module_Instances
                       when Instance.Get.Element.all in Extrusion_Setpoint_Validator'Class =>
                     Instance]);
+            Motion_Preparer_Instances.Load
+              (Module_Instance_Vectors.Vector'
+                 [for Instance of
+                      Active_Module_Instances
+                      when Instance.Get.Element.all in My_Modules.Motion_Preparer'Class =>
+                    Instance]);
             Pause_Handler_Instances.Load
               (Module_Instance_Vectors.Vector'
                  [for Instance of Active_Module_Instances when Instance.Get.Element.all in Pause_Handler'Class =>
@@ -1230,6 +1270,7 @@ package body Prunt.Controller is
          Failed : Boolean := False;
       begin
          Extrusion_Validator_Instances.Clear;
+         Motion_Preparer_Instances.Clear;
          Pause_Handler_Instances.Clear;
          Planner_State_Handler_Instances.Clear;
          Config_Save_Preparer_Instances.Clear;

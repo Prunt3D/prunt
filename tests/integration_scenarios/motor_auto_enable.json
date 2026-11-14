@@ -1,0 +1,35 @@
+{
+  "description": "Turn a motor on once when the first move that needs it is queued, again after M84 turns it off, and when homing an axis even if homing only sets its position.",
+  "actions": [
+    { "kind": "submit_gcode", "command": "G1 E1 F600" },
+    { "kind": "submit_gcode", "command": "G1 E2 F600" },
+    { "kind": "wait_idle", "timeout_s": 5.0 },
+    { "kind": "submit_gcode", "command": "M84 E" },
+    { "kind": "submit_gcode", "command": "G1 E3 F600" },
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "wait_idle", "timeout_s": 5.0 },
+    { "kind": "submit_gcode", "command": "G1 X10 F3000" },
+    { "kind": "submit_gcode", "command": "G1 X20 F3000" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 20.0, "Y": 0.0, "Z": 0.0, "E": 3.0 },
+    "position_tolerance": 0.05,
+    "event_counts": { "gcode": 7, "motor": 6 },
+    "events": [
+      { "kind": "motor", "label": "enable", "target": "E_MOTOR", "count": 2 },
+      { "kind": "motor", "label": "disable", "target": "E_MOTOR", "count": 1 },
+      { "kind": "motor", "label": "enable", "target": "X_MOTOR", "count": 1 },
+      { "kind": "motor", "label": "enable", "target": "Y_MOTOR", "count": 1 },
+      { "kind": "motor", "label": "enable", "target": "Z_MOTOR", "count": 1 }
+    ],
+    "event_order": [
+      { "kind": "motor", "label": "enable", "target": "E_MOTOR" },
+      { "kind": "motor", "label": "disable", "target": "E_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "E_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "X_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "Y_MOTOR" },
+      { "kind": "motor", "label": "enable", "target": "Z_MOTOR" }
+    ]
+  }
+}

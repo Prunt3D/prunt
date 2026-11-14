@@ -163,6 +163,25 @@ package Prunt.Modules is
    --  Config_Data values share the underlying module configuration state, so copies may be kept after this function
    --  returns to be used in g-code commands.
 
+   type Motor_Selection is array (Motor_Name) of Boolean;
+
+   type Motion_Preparer is synchronized interface;
+
+   procedure Prepare_For_Motion
+     (This          : Motion_Preparer;
+      Self_Ref      : Module_Instance_Shared_Pointers.Ref;
+      Planner       : Planner_Interface'Class;
+      Moving_Motors : Motor_Selection;
+      Pause_Motion  : Boolean)
+   is abstract;
+   --  Called before a move that steps Moving_Motors is queued on Planner, after the move has passed the homing checks.
+   --  Self_Ref refers to This. Pause_Motion is True when Planner is a pause plan, which runs before any primary work
+   --  that is still queued. An implementation may queue block-end work ahead of the move with Planner.Flush, which is
+   --  processed before any of the move's commands are queued, or reject the move with Gcode_Bad_Inputs_Error.
+   --
+   --  This is called from inside other modules' protected operations, and Planner.Flush can block until the executor
+   --  drains the queue, so implement it outside any protected action and do not hold a lock across Planner.Flush.
+
 private
 
    type Module is abstract tagged null record;

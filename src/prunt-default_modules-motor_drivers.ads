@@ -102,7 +102,9 @@ package Prunt.Default_Modules.Motor_Drivers is
    procedure Set_Motor_Axis_Map (This : in out Module_Instance_Interface; Map : Motor_Axis_Map) is abstract;
    --  Provide the axes affected by each motor. Kinematics provides this after it resolves the configured motor map.
 
-   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface with private;
+   type Module_Instance (<>) is synchronized new My_Modules.Module_Instance and Module_Instance_Interface
+     and My_Modules.Motion_Preparer
+     and Cancellation_Handler with private;
 
    overriding
    procedure Finalize (This : in out Module_Instance) is null;
@@ -115,6 +117,17 @@ package Prunt.Default_Modules.Motor_Drivers is
       Planner            : Planner_Interface'Class;
       Command_Identifier : Gcode_Command_Identifier);
    --  Dispatch a G-code command.
+
+   overriding
+   procedure Prepare_For_Motion
+     (This          : Module_Instance;
+      Self_Ref      : My_Modules.Module_Instance_Shared_Pointers.Ref;
+      Planner       : Planner_Interface'Class;
+      Moving_Motors : My_Modules.Motor_Selection;
+      Pause_Motion  : Boolean);
+   --  Turn on any configured motor in Moving_Motors that is not already on or queued to be turned on, at the block
+   --  boundary in front of the move. Motors are treated as off until Prunt has turned them on, as their state at
+   --  startup is not known.
 
 private
 
@@ -282,7 +295,8 @@ private
    with Annotate => (Prunt_Config, Gcode_Command, "M18");
    --  Disable the configured motors affecting the selected axes after queued motion stops. With no arguments, disable
    --  every configured motor. Every X, Y or Z axis affected by a disabled motor is marked unhomed. E stays homed
-   --  because its origin is arbitrary and it has no homing procedure.
+   --  because its origin is arbitrary and it has no homing procedure. A later move or homing move that needs a
+   --  disabled motor turns it back on first.
 
    procedure Disable_Steppers_M84
      (This     : Module_Instance;
@@ -305,7 +319,9 @@ private
    package Motor_Handler_Maps is new
      Ada.Containers.Indefinite_Ordered_Maps (Key_Type => Motor_Name, Element_Type => Motor_Handler'Class);
 
-   protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface with
+   protected type Module_Instance is new My_Modules.Module_Instance and Module_Instance_Interface
+     and My_Modules.Motion_Preparer
+     and Cancellation_Handler with
       procedure Initialize (Config_In : User_Config);
 
       overriding
@@ -331,11 +347,34 @@ private
       overriding
       function Distance_Per_Unit (Motor : Motor_Name; Microsteps : Dimensionless) return Length;
 
-      procedure Enable_Selected (Axes : Axis_Selection);
+      function Selected_Motors (Requested_Axes : Axis_Selection) return My_Modules.Motor_Selection;
+      --  Return the configured motors affecting Requested_Axes, or every configured motor when none is requested.
 
       function Affected_Axes (Requested_Axes : Axis_Selection) return Axis_Selection;
 
-      procedure Disable_Selected (Requested_Axes : Axis_Selection);
+      procedure Plan_Power (Motors : My_Modules.Motor_Selection; Enable : Boolean);
+      --  Record that M17, M18 or M84 has queued Motors to be turned on or off.
+
+      procedure Claim_Motors_To_Enable
+        (Moving_Motors : My_Modules.Motor_Selection;
+         Pause_Motion  : Boolean;
+         To_Enable     : out My_Modules.Motor_Selection);
+      --  Return the configured motors in Moving_Motors that still need a queued enable before moving, and record that
+      --  one is queued for them. Primary motion compares against the state queued so far. Pause motion runs before
+      --  queued primary work, so it compares against the current state and enables already queued by pause motion.
+
+      procedure Release_Claim (Motors : My_Modules.Motor_Selection; Pause_Motion : Boolean);
+      --  Undo Claim_Motors_To_Enable when its enable could not be queued.
+
+      procedure Apply_Power (Motors : My_Modules.Motor_Selection; Enable : Boolean);
+      --  Turn Motors on or off and record their current state.
+
+      overriding
+      procedure Handle_Cancel
+        (Executed_Corner_ID      : Planner_Corner_ID;
+         Cancellation_Barrier_ID : Planner_Corner_ID;
+         Current_Position        : Position);
+      --  Queued power changes are discarded at a cancellation barrier, so the current state becomes the planned one.
 
    private
       Config                 : User_Config;
@@ -344,17 +383,25 @@ private
       Motor_Configs_Provided : Motor_Configuration_Provided_Array := [others => False];
       Motor_Axes             : Motor_Axis_Map := [others => [others => False]];
       Motor_Handlers         : Motor_Handler_Maps.Map;
+      Current_On             : My_Modules.Motor_Selection := [others => False];
+      --  Motors Prunt has turned on and not turned off since. The state at startup is not known, so it starts off.
+      Planned_On             : My_Modules.Motor_Selection := [others => False];
+      --  Current_On after every power change queued on the primary planner has been applied.
+      Pause_Enable_Queued    : My_Modules.Motor_Selection := [others => False];
+      --  Motors with an enable queued by pause motion that has not been applied yet.
    end Module_Instance;
 
    type Motor_Power_Event is new Extra_Block_Resetting_Data with record
       Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
-      Requested_Axes      : Axis_Selection;
+      Motors              : My_Modules.Motor_Selection;
       Enable              : Boolean;
    end record;
 
    overriding
    procedure Process_After_Block (This : Motor_Power_Event; Context : Block_End_Context'Class);
-   --  Wait for preceding motion to stop, then enable or disable the motors affecting Requested_Axes. M17, M18 and M84
-   --  all go through this event so that they take effect in G-code order.
+   --  Turn Motors on or off at the end of the preceding motion. M17, M18, M84 and the enables queued by
+   --  Prepare_For_Motion all go through this event so that they take effect in G-code order. Disabling waits for the
+   --  preceding motion to finish executing first. Enabling does not need to, because no queued step can be for a motor
+   --  that is off, and the next block's commands are only queued after this returns.
 
 end Prunt.Default_Modules.Motor_Drivers;

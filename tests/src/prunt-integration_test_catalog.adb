@@ -97,6 +97,8 @@ package body Prunt.Integration_Test_Catalog is
        To_Unbounded_String ("integration_scenarios/motion_pause_absolute_raise_park.json")),
       (To_Unbounded_String ("integration.motion_pause_absolute_relative_z_park"),
        To_Unbounded_String ("integration_scenarios/motion_pause_absolute_relative_z_park.json")),
+      (To_Unbounded_String ("integration.motor_auto_enable"),
+       To_Unbounded_String ("integration_scenarios/motor_auto_enable.json")),
       (To_Unbounded_String ("integration.motor_drivers"),
        To_Unbounded_String ("integration_scenarios/motor_drivers.json")),
       (To_Unbounded_String ("integration.power_control"),
