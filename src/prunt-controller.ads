@@ -1103,7 +1103,8 @@ private
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True);
+      Require_Homed : Boolean := True;
+      Ignore_Bounds : Boolean := False);
    --  Queue a linear move on This's selected planner and update its tracked endpoint.
 
    overriding
@@ -1166,9 +1167,10 @@ private
 
    overriding
    procedure Flush_And_Reset_Position
-     (This         : Planner_Wrapper;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record));
+     (This          : Planner_Wrapper;
+      New_Position  : Position;
+      Extra_Data    : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Ignore_Bounds : Boolean := False);
    --  Queue a flush that resets the selected planner's tracked and planned position to New_Position.
 
    Shutdown_In_Progress        : Boolean := False

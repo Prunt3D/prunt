@@ -56,7 +56,8 @@ package body Prunt.Default_Modules.Heaters.Test is
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True)
+      Require_Homed : Boolean := True;
+      Ignore_Bounds : Boolean := False)
    is null;
    overriding
    procedure Add_Helix
@@ -83,9 +84,10 @@ package body Prunt.Default_Modules.Heaters.Test is
    is null;
    overriding
    procedure Flush_And_Reset_Position
-     (This         : Mock_Planner;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+     (This          : Mock_Planner;
+      New_Position  : Position;
+      Extra_Data    : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Ignore_Bounds : Boolean := False)
    is null;
 
    overriding

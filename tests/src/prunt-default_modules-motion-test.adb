@@ -85,7 +85,8 @@ package body Prunt.Default_Modules.Motion.Test is
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True);
+      Require_Homed : Boolean := True;
+      Ignore_Bounds : Boolean := False);
    overriding
    procedure Add_Helix
      (This          : Mock_Planner;
@@ -110,9 +111,10 @@ package body Prunt.Default_Modules.Motion.Test is
    is null;
    overriding
    procedure Flush_And_Reset_Position
-     (This         : Mock_Planner;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+     (This          : Mock_Planner;
+      New_Position  : Position;
+      Extra_Data    : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Ignore_Bounds : Boolean := False)
    is null;
 
    overriding
@@ -121,9 +123,10 @@ package body Prunt.Default_Modules.Motion.Test is
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True)
+      Require_Homed : Boolean := True;
+      Ignore_Bounds : Boolean := False)
    is
-      pragma Unreferenced (Dwell_After, Require_Homed);
+      pragma Unreferenced (Dwell_After, Require_Homed, Ignore_Bounds);
    begin
       This.Data.Pos := Pos;
       This.Data.Count := @ + 1;

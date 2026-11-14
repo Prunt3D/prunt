@@ -326,9 +326,12 @@ package Prunt.Module_Types is
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True)
+      Require_Homed : Boolean := True;
+      Ignore_Bounds : Boolean := False)
    is abstract;
-   --  Append a linear move to Pos, optionally requiring every moving axis to have been homed.
+   --  Append a linear move to Pos, optionally requiring every moving axis to have been homed. Unless Ignore_Bounds is
+   --  True, a Pos outside the workspace raises an error that stops the machine, so callers must check Pos first.
+   --  Homing sets Ignore_Bounds for moves in homing coordinates, which are not workspace coordinates.
 
    procedure Add_Helix
      (This          : Planner_Interface;
@@ -362,10 +365,12 @@ package Prunt.Module_Types is
    --  Flush pending motion, process Extra_Data, and make Params apply to subsequently planned motion.
 
    procedure Flush_And_Reset_Position
-     (This         : Planner_Interface;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record))
+     (This          : Planner_Interface;
+      New_Position  : Position;
+      Extra_Data    : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Ignore_Bounds : Boolean := False)
    is abstract;
-   --  Flush pending motion, process Extra_Data, and reset the subsequent planner position to New_Position.
+   --  Flush pending motion, process Extra_Data, and reset the subsequent planner position to New_Position. Unless
+   --  Ignore_Bounds is True, New_Position must be inside the workspace, as for Add_Corner.
 
 end Prunt.Module_Types;

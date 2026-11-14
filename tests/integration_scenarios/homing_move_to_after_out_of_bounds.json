@@ -1,0 +1,23 @@
+{
+  "description": "Reject G28 when a post-homing position is outside the workspace, without moving there or stopping the machine. Homing X alone then still works.",
+  "config": {
+    "Homing": {
+      "Homing": {
+        "Axes": {
+          "Y_AXIS": { "Move_To_After": -5.0 }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "submit_gcode", "command": "G28 X" },
+    { "kind": "submit_gcode", "command": "G1 X10 F600" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 10.0, "Y": 0.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "description": "Home a delta whose Z workspace starts above the homing start coordinate 0. The homing moves run in homing coordinates outside the workspace, which must not stop the machine. The final move needs homed axes, and the harness reports tower carriage heights: at the centre each is Z + sqrt(250^2 - 100^2) for the default arm length and delta radius.",
+  "config": {
+    "Input Switches": {
+      "Switches": {
+        "DUMMY_INPUT_SWITCH": { "Enabled": true }
+      }
+    },
+    "Kinematics": {
+      "Kinematics": {
+        "Workspace_Bounds": {
+          "Lower_Z": 5.0,
+          "Kind": {
+            "Selected": "Circular",
+            "Children": {
+              "Circular": { "Radius": 50.0 }
+            }
+          }
+        },
+        "Kinematics_Kind": {
+          "Kind": {
+            "Selected": "Linear_Delta",
+            "Children": {
+              "Linear_Delta": {
+                "Linear_Delta": {
+                  "Motors": {
+                    "X_MOTOR": "TOWER_A",
+                    "Y_MOTOR": "TOWER_A",
+                    "Z_MOTOR": "TOWER_B",
+                    "E_MOTOR": "TOWER_C"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Homing": {
+      "Homing": {
+        "Linear_Delta_Homing": {
+          "Home_Z": 200.0,
+          "Move_To_After": 150.0,
+          "Tower_A": {
+            "Kind": {
+              "Selected": "Input_Switch",
+              "Children": { "Input_Switch": { "Switch": "DUMMY_INPUT_SWITCH" } }
+            }
+          },
+          "Tower_B": {
+            "Kind": {
+              "Selected": "Input_Switch",
+              "Children": { "Input_Switch": { "Switch": "DUMMY_INPUT_SWITCH" } }
+            }
+          },
+          "Tower_C": {
+            "Kind": {
+              "Selected": "Input_Switch",
+              "Children": { "Input_Switch": { "Switch": "DUMMY_INPUT_SWITCH" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "submit_gcode", "command": "G1 Z100 F600" },
+    { "kind": "wait_idle", "timeout_s": 20.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 329.128784747792, "Y": 329.128784747792, "Z": 329.128784747792, "E": 329.128784747792 },
+    "position_tolerance": 0.05,
+    "min_samples": 1,
+    "event_counts": { "gcode": 2 }
+  }
+}

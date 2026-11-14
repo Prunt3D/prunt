@@ -356,7 +356,7 @@ private
 
       Move_To_After : Length range -1.0E100 * mm .. 1.0E100 * mm := 0.0 * mm;
       --  Immediately after the homing procedure for this axis is complete, the axis will move to this position. This
-      --  position must be within the machine's travel limits.
+      --  position must be within the machine's travel limits, or homing fails.
 
       Prerequisites : User_Config_Homing_Prereq_Array := [others => <>];
       --  Define the required state of each other axis before this axis can be homed.

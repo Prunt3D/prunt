@@ -672,7 +672,8 @@ package body Prunt.Controller is
       Pos           : Position;
       Feedrate      : Velocity;
       Dwell_After   : Time := 0.0 * s;
-      Require_Homed : Boolean := True)
+      Require_Homed : Boolean := True;
+      Ignore_Bounds : Boolean := False)
    is
       Last_Position : constant Position := This.Get_Last_Position;
    begin
@@ -693,11 +694,13 @@ package body Prunt.Controller is
 
       case This.Target is
          when Primary_Planner_Target =>
-            My_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
+            My_Motion_Planner.Enqueue_Move
+              (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After, Ignore_Bounds => Ignore_Bounds);
             Primary_Planner_State.Set_Last_Position (Pos);
 
          when Pause_Planner_Target   =>
-            My_Pause_Motion_Planner.Enqueue_Move (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After);
+            My_Pause_Motion_Planner.Enqueue_Move
+              (Pos => Pos, Feedrate => Feedrate, Dwell_After => Dwell_After, Ignore_Bounds => Ignore_Bounds);
             Pause_Planner_State.Set_Last_Position (Pos);
       end case;
    end Add_Corner;
@@ -932,19 +935,20 @@ package body Prunt.Controller is
 
    overriding
    procedure Flush_And_Reset_Position
-     (This         : Planner_Wrapper;
-      New_Position : Position;
-      Extra_Data   : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record)) is
+     (This          : Planner_Wrapper;
+      New_Position  : Position;
+      Extra_Data    : Extra_Block_Resetting_Data'Class := Extra_Block_Resetting_Data'(null record);
+      Ignore_Bounds : Boolean := False) is
    begin
       case This.Target is
          when Primary_Planner_Target =>
             My_Motion_Planner.Enqueue_Flush_And_Reset_Position
-              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position);
+              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position, Ignore_Bounds => Ignore_Bounds);
             Primary_Planner_State.Set_Last_Position (New_Position);
 
          when Pause_Planner_Target   =>
             My_Pause_Motion_Planner.Enqueue_Flush_And_Reset_Position
-              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position);
+              (Data => Build_Block_End_Data (This, Extra_Data), Pos => New_Position, Ignore_Bounds => Ignore_Bounds);
             Pause_Planner_State.Set_Last_Position (New_Position);
       end case;
    end Flush_And_Reset_Position;

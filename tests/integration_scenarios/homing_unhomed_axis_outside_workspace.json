@@ -1,0 +1,34 @@
+{
+  "description": "Home with a Y workspace that excludes the startup and Set_To_Value coordinate 0. X is reset and moved while unhomed Y is still at 0, outside the workspace, and Y then moves from 0 into the workspace. Neither may stop the machine.",
+  "config": {
+    "Kinematics": {
+      "Kinematics": {
+        "Workspace_Bounds": {
+          "Kind": {
+            "Children": {
+              "Rectangular": { "Lower_Y": 5.0 }
+            }
+          }
+        }
+      }
+    },
+    "Homing": {
+      "Homing": {
+        "Axes": {
+          "X_AXIS": { "Move_To_After": 5.0 },
+          "Y_AXIS": { "Move_To_After": 10.0 }
+        }
+      }
+    }
+  },
+  "actions": [
+    { "kind": "submit_gcode", "command": "G28" },
+    { "kind": "submit_gcode", "command": "G1 X10 Y20 F600" },
+    { "kind": "wait_idle", "timeout_s": 5.0 }
+  ],
+  "expect": {
+    "final_position": { "X": 10.0, "Y": 20.0, "Z": 0.0, "E": 0.0 },
+    "position_tolerance": 0.05,
+    "min_samples": 1
+  }
+}

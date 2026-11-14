@@ -810,6 +810,36 @@ package body Prunt.Default_Modules.Homing is
          end loop;
       end Abandon_Homing;
 
+      procedure Check_Homed_Axis_Target (Axis : Axis_Name; Target : Length);
+      --  Raise Gcode_Bad_Inputs_Error unless moving the homed Axis to Target, with no other axis moving, ends inside
+      --  the workspace. The move can then be queued with Ignore_Bounds, because unhomed axes are not checked here.
+
+      procedure Check_Homed_Axis_Target (Axis : Axis_Name; Target : Length) is
+         use type Motion_Planner.Workspace_Bounds_Kind;
+
+         Params      : constant Motion_Planner.Kinematic_Parameters := Planner.Get_Last_Kinematic_Parameters;
+         Rectangular : constant Boolean := Params.Bounds.Kind = Motion_Planner.Rectangular_Workspace;
+         Check_Pos   : Position := [Planner.Get_Last_Position with delta Axis => Target];
+      begin
+         --  An unhomed axis may still be at a coordinate outside the workspace, from startup or from an interrupted
+         --  homing sequence, and that is not where the machine is. Check the homed axes as if each unhomed axis were
+         --  at a coordinate inside the workspace.
+         for Other_Axis in Axis_Name when Other_Axis /= Axis and then not Planner.Axis_Is_Homed (Other_Axis) loop
+            Check_Pos (Other_Axis) :=
+              (case Other_Axis is
+                 when X_Axis => (if Rectangular then Params.Bounds.Lower_X else 0.0 * mm),
+                 when Y_Axis => (if Rectangular then Params.Bounds.Lower_Y else 0.0 * mm),
+                 when Z_Axis => Params.Bounds.Lower_Z,
+                 when E_Axis => Params.Bounds.Lower_E);
+         end loop;
+
+         if not Motion_Planner.Position_Is_In_Bounds (Check_Pos, Params) then
+            raise Gcode_Bad_Inputs_Error
+              with "Homing would move " & Axis'Image & " outside the workspace (" & Axis'Image & " = " & Target'Image
+              & ").";
+         end if;
+      end Check_Homed_Axis_Target;
+
       procedure Home_Axis (Axis : Axis_Name);
       procedure Home_Delta_Group;
 
@@ -901,9 +931,11 @@ package body Prunt.Default_Modules.Homing is
                   when Must_Be_At_Position =>
                      Home_Axis (Prereq_Axis);
 
+                     Check_Homed_Axis_Target (Prereq_Axis, Prereq.Must_Be_At_Position.Position);
                      Planner.Add_Corner
                        ([Planner.Get_Last_Position with delta Prereq_Axis => Prereq.Must_Be_At_Position.Position],
-                        Feedrate => Config.Homing.Axes (Prereq_Axis).Motion.Slow_Approach_Velocity);
+                        Feedrate      => Config.Homing.Axes (Prereq_Axis).Motion.Slow_Approach_Velocity,
+                        Ignore_Bounds => True);
                      Planner.Flush;
                end case;
             end;
@@ -916,12 +948,15 @@ package body Prunt.Default_Modules.Homing is
          --  ahead of the homing work, so before the axis is marked homed.
          Planner.Prepare_Axis_For_Motion (Axis);
 
+         --  Until Axis is marked homed below, it moves in homing coordinates, which may lie outside the workspace, so
+         --  these moves skip the planner's workspace check. Unhomed axes that do not move may be outside it too.
          case Axis_Config.Homing_Method.Kind is
             when Set_To_Value     =>
                Planner.Flush_And_Reset_Position
-                 (New_Position =>
+                 (New_Position  =>
                     [Planner.Get_Last_Position with delta Axis => Axis_Config.Homing_Method.Set_To_Value.Position],
-                  Extra_Data   => Axis_Finish_Event'(Module_Instance_Ref => Self_Ref, Axis => Axis));
+                  Extra_Data    => Axis_Finish_Event'(Module_Instance_Ref => Self_Ref, Axis => Axis),
+                  Ignore_Bounds => True);
 
             when Home_To_Detector =>
                declare
@@ -949,15 +984,17 @@ package body Prunt.Default_Modules.Homing is
                   end loop;
 
                   Planner.Flush_And_Reset_Position
-                    (New_Position => Initial_Position,
-                     Extra_Data   => Axis_Start_Event'(Module_Instance_Ref => Self_Ref, Axis => Axis));
+                    (New_Position  => Initial_Position,
+                     Extra_Data    => Axis_Start_Event'(Module_Instance_Ref => Self_Ref, Axis => Axis),
+                     Ignore_Bounds => True);
 
                   if Any_Initially_Active then
                      Planner.Add_Corner
                        ([Initial_Position with delta
                            Axis => Directed_Length (Method.Move_Towards_Negative_Infinity, -Motion.Backoff_Distance)],
                         Feedrate      => Motion.Slow_Approach_Velocity,
-                        Require_Homed => False);
+                        Require_Homed => False,
+                        Ignore_Bounds => True);
                      Planner.Flush
                        (Check_Released_Event'
                           (Module_Instance_Ref => Self_Ref, Axis => Axis, Loop_Setup => Fast_Setup));
@@ -969,7 +1006,8 @@ package body Prunt.Default_Modules.Homing is
                           Planner.Get_Last_Position (Axis)
                           + Directed_Length (Method.Move_Towards_Negative_Infinity, Motion.Maximum_Overtravel)],
                      Feedrate      => Motion.Fast_Approach_Velocity,
-                     Require_Homed => False);
+                     Require_Homed => False,
+                     Ignore_Bounds => True);
 
                   Flush_And_Resolve_Homing_Move (Home_Position, Fast_Setup, Axis_Loop_Move_Event'(null record));
 
@@ -979,7 +1017,8 @@ package body Prunt.Default_Modules.Homing is
                           Method.Home_Position
                           + Directed_Length (Method.Move_Towards_Negative_Infinity, -Motion.Backoff_Distance)],
                      Feedrate      => Motion.Slow_Approach_Velocity,
-                     Require_Homed => False);
+                     Require_Homed => False,
+                     Ignore_Bounds => True);
                   Planner.Flush
                     (Check_Released_Event'(Module_Instance_Ref => Self_Ref, Axis => Axis, Loop_Setup => Fast_Setup));
 
@@ -989,7 +1028,8 @@ package body Prunt.Default_Modules.Homing is
                           Planner.Get_Last_Position (Axis)
                           + Directed_Length (Method.Move_Towards_Negative_Infinity, Motion.Maximum_Overtravel)],
                      Feedrate      => Motion.Slow_Approach_Velocity,
-                     Require_Homed => False);
+                     Require_Homed => False,
+                     Ignore_Bounds => True);
 
                   Flush_And_Resolve_Homing_Move
                     (Home_Position, Slow_Setup, Axis_Finish_Event'(Module_Instance_Ref => Self_Ref, Axis => Axis));
@@ -1001,12 +1041,15 @@ package body Prunt.Default_Modules.Homing is
 
          Planner.Mark_Axis_Homed (Axis);
 
+         --  Checked even without a move, so a Set_To_Value axis is never left homed outside the workspace.
+         Check_Homed_Axis_Target (Axis, Axis_Config.Move_To_After);
          if Axis_Config.Homing_Method.Kind = Home_To_Detector
            or else Planner.Get_Last_Position (Axis) /= Axis_Config.Move_To_After
          then
             Planner.Add_Corner
               ([Planner.Get_Last_Position with delta Axis => Axis_Config.Move_To_After],
-               Feedrate => Axis_Config.Motion.Slow_Approach_Velocity);
+               Feedrate      => Axis_Config.Motion.Slow_Approach_Velocity,
+               Ignore_Bounds => True);
             Planner.Flush;
          end if;
 
@@ -1124,7 +1167,8 @@ package body Prunt.Default_Modules.Homing is
               ([Planner.Get_Last_Position with delta
                   Z_Axis => Planner.Get_Last_Position (Z_Axis) - Delta_Config.Motion.Backoff_Distance],
                Feedrate      => Delta_Config.Motion.Slow_Approach_Velocity,
-               Require_Homed => False);
+               Require_Homed => False,
+               Ignore_Bounds => True);
             Planner.Flush
               (Check_Released_Event'(Module_Instance_Ref => Self_Ref, Axis => Z_Axis, Loop_Setup => Setup));
          end Back_Off_And_Check_Released;
@@ -1135,7 +1179,8 @@ package body Prunt.Default_Modules.Homing is
               ([Planner.Get_Last_Position with delta
                   Z_Axis => Planner.Get_Last_Position (Z_Axis) - Delta_Config.Motion.Backoff_Distance],
                Feedrate      => Delta_Config.Motion.Slow_Approach_Velocity,
-               Require_Homed => False);
+               Require_Homed => False,
+               Ignore_Bounds => True);
             Loop_Move_Planner.Flush_Motor_Move
               (Motor      => Representative_Motor (Tower),
                Extra_Data =>
@@ -1150,7 +1195,8 @@ package body Prunt.Default_Modules.Homing is
               ([Planner.Get_Last_Position with delta
                   Z_Axis => Planner.Get_Last_Position (Z_Axis) + Delta_Config.Motion.Maximum_Overtravel],
                Feedrate      => Approach_Velocity,
-               Require_Homed => False);
+               Require_Homed => False,
+               Ignore_Bounds => True);
             Tail_Offset := Flush_Configured_Loop_Move (Setup, Delta_Loop_Move_Event'(null record));
             Planner.Resolve_Homing_Move (Home_Position + Tail_Offset);
          end Perform_Pass;
@@ -1164,7 +1210,8 @@ package body Prunt.Default_Modules.Homing is
               ([Planner.Get_Last_Position with delta
                   Z_Axis => Planner.Get_Last_Position (Z_Axis) + Delta_Config.Motion.Maximum_Overtravel],
                Feedrate      => Approach_Velocity,
-               Require_Homed => False);
+               Require_Homed => False,
+               Ignore_Bounds => True);
             Tail_Offset := Flush_Configured_Motor_Loop_Move (Motor, Setup, Delta_Loop_Move_Event'(null record));
             Planner.Resolve_Homing_Move (Home_Position + Tail_Offset);
          end Perform_Motor_Pass;
@@ -1193,7 +1240,9 @@ package body Prunt.Default_Modules.Homing is
             end;
          end loop;
 
-         Planner.Flush_And_Reset_Position (Initial_Position, Delta_Setup_Event'(Module_Instance_Ref => Self_Ref));
+         --  As for Home_Axis, the homing moves are in homing coordinates until the towers are marked homed.
+         Planner.Flush_And_Reset_Position
+           (Initial_Position, Delta_Setup_Event'(Module_Instance_Ref => Self_Ref), Ignore_Bounds => True);
 
          if Any_Initially_Active then
             Back_Off_And_Check_Released (Fast_Setup);
