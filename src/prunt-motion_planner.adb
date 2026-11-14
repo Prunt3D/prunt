@@ -2839,9 +2839,11 @@ package body Prunt.Motion_Planner is
            Stage.Hi);
    end Stage_Gain;
 
-   Rest_Tolerance : constant Dimensionless := 2.0**(-20);
-   --  A ramp which was solved to end at rest has a final speed within a far smaller fraction of its starting speed
-   --  than this of zero, on either side. A final speed this little below zero is taken for rest.
+   Rest_Tolerance : constant Dimensionless := 2.0**(-40);
+   --  A ramp which was solved to end at rest has a final speed within a few units in the last place of its starting
+   --  speed of zero, on either side, which is hundreds of times less than this fraction of it. A final speed this
+   --  little below zero is taken for rest, which lengthens the distance at a time by at most that speed times the
+   --  time. A ramp which ends further below zero is taken to turn back.
 
    function Shape_Of (Profile : Feedrate_Profile_Times; Max_Crackle : Crackle; Start_Vel : Velocity) return Ramp_Shape
    with No_Inline;
