@@ -162,6 +162,7 @@ package body Prunt.Motion_Planner.Test is
    procedure Test_Distance_At_Time_Is_Monotone (T : in out Trendy_Test.Operation'Class) is
       --  The distance is evaluated at adjacent machine numbers of time around every stage boundary and at times
       --  inside the stages. It must never decrease, and a prepared ramp must give the same distance to the last bit.
+      --  The distance of a ramp which slows down must also be that of the same ramp evaluated forwards.
 
       Steps : constant := 40;
       --  How many machine numbers on each side of a time are evaluated.
@@ -232,6 +233,29 @@ package body Prunt.Motion_Planner.Test is
          T.Assert (Differences = 0, Name & ": the prepared distance differs around " & Centre'Image);
       end Walk_Around;
 
+      procedure Check_Values (Name : String; Times : Feedrate_Profile_Times; Cm : Crackle; Start_Vel : Velocity) is
+         --  The distance of a ramp which slows down, against the same ramp evaluated forwards: what it would cover
+         --  at its starting speed less the distance of the ramp which speeds up from rest. Monotonicity and equal
+         --  prepared values say nothing about whether the values are right.
+         Total     : constant Time := Total_Time (Times);
+         Tolerance : constant Length := 1.0E-12 * (abs Start_Vel * Total);
+         Wrong     : Natural := 0;
+      begin
+         for I in 0 .. 64 loop
+            declare
+               At_Time : constant Time := Dimensionless (I) / 64.0 * Total;
+               Forward : constant Length :=
+                 Start_Vel * At_Time - Distance_At_Time (Times, At_Time, abs Cm, 0.0 * mm / s);
+            begin
+               if not (abs (Distance_At_Time (Times, At_Time, Cm, Start_Vel) - Forward) <= Tolerance) then
+                  Wrong := @ + 1;
+               end if;
+            end;
+         end loop;
+         T.Assert
+           (Wrong = 0, Name & ": the distance is not that of the forward evaluation at" & Wrong'Image & " times");
+      end Check_Values;
+
       procedure Check_Ramp (Name : String; Times : Feedrate_Profile_Times; Cm : Crackle; Start_Vel : Velocity) is
          Ramp : constant Prepared_Ramp := Prepare (Times, Cm, Start_Vel);
 
@@ -250,6 +274,9 @@ package body Prunt.Motion_Planner.Test is
          for I in 1 .. 15 loop
             Walk (Dimensionless (I) / 16.0 * Total_Time (Times));
          end loop;
+         if Cm < 0.0 * mm / s**5 then
+            Check_Values (Name, Times, Cm, Start_Vel);
+         end if;
       end Check_Ramp;
 
       procedure Check_Both (Name : String; Times : Feedrate_Profile_Times; Cm : Crackle) is
@@ -260,13 +287,65 @@ package body Prunt.Motion_Planner.Test is
          Check_Ramp (Name & " to a speed", Times, -Cm, Fast_Velocity_At_Max_Time (Times, Cm, 3.0 * mm / s));
       end Check_Both;
 
+      procedure Check_Just_Below_Rest (Name : String; Times : Feedrate_Profile_Times; Cm : Crackle) is
+         --  A ramp which sheds a few units in the last place more speed than it starts with. It is evaluated as
+         --  ending at rest, so everything which holds for a ramp to rest holds for it.
+         Start_Vel : constant Velocity := (1.0 - 2.0**(-50)) * Fast_Velocity_At_Max_Time (Times, Cm, 0.0 * mm / s);
+      begin
+         T.Assert
+           (Fast_Velocity_At_Max_Time (Times, -Cm, Start_Vel) < 0.0 * mm / s,
+            Name & ": the final speed is not below zero");
+         Check_Ramp (Name, Times, -Cm, Start_Vel);
+      end Check_Just_Below_Rest;
+
+      procedure Check_Turns_Back (Name : String; Times : Feedrate_Profile_Times; Cm : Crackle) is
+         --  A ramp which slows down from a quarter of the speed it sheds. It turns back and ends behind its start,
+         --  so its distance is not monotone, but it is still the forward evaluation and the same when prepared.
+         Start_Vel : constant Velocity := 0.25 * Fast_Velocity_At_Max_Time (Times, Cm, 0.0 * mm / s);
+         Ramp      : constant Prepared_Ramp := Prepare (Times, -Cm, Start_Vel);
+         Total     : constant Time := Total_Time (Times);
+         Differ    : Natural := 0;
+      begin
+         T.Assert
+           (Distance_At_Time (Times, Total, -Cm, Start_Vel) < 0.0 * mm,
+            Name & ": the ramp does not end behind its start");
+         Check_Values (Name, Times, -Cm, Start_Vel);
+         for I in 0 .. 64 loop
+            declare
+               At_Time : constant Time := Dimensionless (I) / 64.0 * Total;
+            begin
+               if Distance_At_Time (Ramp, At_Time) /= Distance_At_Time (Times, At_Time, -Cm, Start_Vel) then
+                  Differ := @ + 1;
+               end if;
+            end;
+         end loop;
+         T.Assert (Differ = 0, Name & ": the prepared distance differs at" & Differ'Image & " times");
+      end Check_Turns_Back;
+
       procedure Check_Profile (Name : String; Profile : Feedrate_Profile; Cm : Crackle; Start_Vel : Velocity) is
          Accel_Time : constant Time := Total_Time (Profile.Accel);
 
          function Distance (At_Time : Time) return Length
          is (Distance_At_Time (Profile, At_Time, Cm, Start_Vel));
 
-         procedure Walk is new Walk_Around (Distance, Distance, Total_Time (Profile), Name);
+         Accel_Ramp : constant Prepared_Ramp := Prepare (Profile.Accel, Cm, Start_Vel);
+         Mid_Vel    : constant Velocity := Velocity_At_Time (Profile.Accel, Accel_Time, Cm, Start_Vel);
+         Decel_Ramp : constant Prepared_Ramp := Prepare (Profile.Decel, -Cm, Mid_Vel);
+         Accel_Dist : constant Length := Distance_At_Time (Accel_Ramp, Accel_Time);
+
+         function Prepared_Distance (At_Time : Time) return Length
+         is (if At_Time <= Accel_Time
+             then Distance_At_Time (Accel_Ramp, At_Time)
+             elsif At_Time < Accel_Time + Profile.Coast
+             then Accel_Dist + Mid_Vel * (At_Time - Accel_Time)
+             else
+               Accel_Dist
+               + Mid_Vel * Profile.Coast
+               + Distance_At_Time
+                   (Decel_Ramp, Time'Min (At_Time - (Accel_Time + Profile.Coast), Total_Time (Profile.Decel))));
+         --  The profile's distance as Distance_At_Time composes it, from prepared ramps.
+
+         procedure Walk is new Walk_Around (Distance, Prepared_Distance, Total_Time (Profile), Name);
       begin
          T.Assert (Distance (0.0 * s) = 0.0 * mm, Name & ": the distance does not start at zero");
          for Centre of Boundaries (Profile.Accel) loop
@@ -310,6 +389,12 @@ package body Prunt.Motion_Planner.Test is
          [1.4628193371879255E-13 * s, 2.3846047049232819 * s, 0.0 * s, 8.1876974977224410E+04 * s],
          -2.8661547523909659E+09 * mm / s**5,
          1.9552094257722112E+02 * mm / s);
+
+      Check_Just_Below_Rest ("Typical ramp to just below rest", Typical, 3.0E11 * mm / s**5);
+      Check_Just_Below_Rest ("Short ramp to just below rest", Short, 3.0E11 * mm / s**5);
+      Check_Turns_Back ("Typical ramp which turns back", Typical, 3.0E11 * mm / s**5);
+      Check_Turns_Back
+        ("Ramp of every phase which turns back", [1.0E-3 * s, 2.0E-3 * s, 5.0E-3 * s, 1.0E-2 * s], 1.0E9 * mm / s**5);
 
       Check_Profile
         ("Profile between speeds", (Accel => Typical, Coast => 0.25 * s, Decel => Typical), 3.0E11 * mm / s**5,
