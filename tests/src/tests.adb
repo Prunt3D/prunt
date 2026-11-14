@@ -40,6 +40,8 @@ with Prunt.Default_Modules.Motion.Test;
 with Prunt.Default_Modules.Power_Control;
 with Prunt.Default_Modules.Smart_Plugs;
 with Prunt.Default_Modules.Smart_Plugs.Test;
+with Prunt.Default_Modules.TMC2240_Drivers;
+with Prunt.Default_Modules.TMC2240_Drivers.Test;
 with Prunt.Smart_Plugs.Test;
 with Prunt.Dummy_Allocator.Test;
 with Prunt.Exception_Occurrence_Holders.Test;
@@ -62,6 +64,7 @@ with Prunt.Step_Generator_Restart_Test;
 with Prunt.Step_Generator_Shaping_Test;
 with Prunt.Step_Generator_Timing_Test;
 with Prunt.Thermistors.Test;
+with Prunt.TMC2240_Test_UART;
 with Trendy_Test.Reports;
 
 procedure Tests is
@@ -121,6 +124,20 @@ procedure Tests is
         Blocking_Tracker_Module => Cold_Extrusion_Blocking_Tracker);
    package Cold_Extrusion_Test is new Cold_Extrusion_Heaters.Test (Heater_Disable_Count, Fail_Heater_Start);
    package Excessive_Extrusion_Motor_Drivers is new Machine_Idle_Timeout_Test_Default_Modules.Motor_Drivers;
+   package TMC2240_Test_Drivers is new
+     Machine_Idle_Timeout_Test_Default_Modules.TMC2240_Drivers
+       (Motor_Hardware       =>
+          [others =>
+             (Kind                      => Prunt.TMC2240_UART_Kind,
+              Maximum_Delta_Per_Command => 1.0,
+              Double_Edge_Stepping      => False,
+              TMC2240_UART_Address      => 0,
+              TMC2240_Diag_0            => Machine_Idle_Timeout_Test_Name'First,
+              TMC2240_Diag_0_Push_Pull  => False,
+              TMC2240_UART_Write        => Prunt.TMC2240_Test_UART.Write'Access,
+              TMC2240_UART_Read         => Prunt.TMC2240_Test_UART.Read'Access)],
+        Motor_Drivers_Module => Excessive_Extrusion_Motor_Drivers);
+   package TMC2240_Drivers_Test is new TMC2240_Test_Drivers.Test;
    package Excessive_Extrusion_Transforms is new
      Prunt.Kinematic_Transforms
        (Machine_Idle_Timeout_Test_Name,
@@ -267,6 +284,7 @@ begin
    Trendy_Test.Register (Machine_Idle_Timeout_Test.All_Tests);
    Trendy_Test.Register (Cold_Extrusion_Test.All_Tests);
    Trendy_Test.Register (Excessive_Extrusion_Test.All_Tests);
+   Trendy_Test.Register (TMC2240_Drivers_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Float_Test.All_Tests);
    Trendy_Test.Register (Moving_Averages_Long_Float_Test.All_Tests);
    Trendy_Test.Register (Prunt.Bounded_Indefinite_Queues_Test.All_Tests);

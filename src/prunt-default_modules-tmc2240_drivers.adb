@@ -139,7 +139,15 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       case Object.Kind is
          when TMC2240_UART_Kind =>
             if not Object.UART.Is_Null then
-               Object.UART.Get.Stop;
+               begin
+                  Object.UART.Get.Stop;
+               exception
+                  when Tasking_Error =>
+                     --  An exception escaping an entry body, such as a TMC_UART_Error from an unconfirmed write,
+                     --  terminates the manager and is reported by the task termination handler. The manager no longer
+                     --  uses the UART, so the disable below must still be attempted.
+                     null;
+               end;
                while not Object.UART.Get.Element.all'Terminated loop
                   delay 0.001;
                end loop;
