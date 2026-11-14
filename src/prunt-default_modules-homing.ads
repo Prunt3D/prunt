@@ -555,6 +555,14 @@ private
    procedure Process_After_Block (This : Delta_Clear_Event; Context : Block_End_Context'Class);
    --  Notify subscribers that grouped delta homing has finished and restore all homing drivers.
 
+   type Homing_Abort_Event is new Extra_Block_Resetting_Data with record
+      Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;
+   end record;
+
+   overriding
+   procedure Process_After_Block (This : Homing_Abort_Event; Context : Block_End_Context'Class);
+   --  Restore all homing drivers once the motion queued by an abandoned homing sequence has stopped.
+
    procedure Auto_Home
      (This     : Module_Instance;
       Self_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref;

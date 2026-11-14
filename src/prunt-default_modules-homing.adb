@@ -268,6 +268,14 @@ package body Prunt.Default_Modules.Homing is
    end Process_After_Block;
 
    overriding
+   procedure Process_After_Block (This : Homing_Abort_Event; Context : Block_End_Context'Class) is
+      Instance : Module_Instance renames Module_Instance (This.Module_Instance_Ref.Get.Element.all);
+   begin
+      Context.Wait_For_Idle;
+      Restore_All_Homing_Drivers (Instance);
+   end Process_After_Block;
+
+   overriding
    function Initialize
      (This                : Module;
       Config_Data         : Config.Config_Data;
@@ -785,6 +793,23 @@ package body Prunt.Default_Modules.Homing is
          Planner.Resolve_Homing_Move (Detector_Hit_Position + Tail_Offset);
       end Flush_And_Resolve_Homing_Move;
 
+      procedure Abandon_Homing;
+
+      procedure Abandon_Homing is
+      begin
+         --  This runs on the G-code task, which only waits for planning, while homing blocks ignore pause and reset
+         --  requests. A loop move queued before the failure may still be driving its motors, and restoring the
+         --  drivers here would turn off the StallGuard output that stops it, so restore them only once the queued
+         --  motion has stopped. Cancellation discards this flush; the TMC2240 module then restores every driver
+         --  itself, after the step generator has paused and so after any homing block has finished.
+         Planner.Flush (Homing_Abort_Event'(Module_Instance_Ref => Self_Ref));
+
+         --  A partially completed homing sequence cannot leave cartesian axes trusted.
+         for Axis in Axis_Name when Axis /= E_Axis loop
+            Planner.Mark_Axis_Unhomed (Axis);
+         end loop;
+      end Abandon_Homing;
+
       procedure Home_Axis (Axis : Axis_Name);
       procedure Home_Delta_Group;
 
@@ -1223,17 +1248,10 @@ package body Prunt.Default_Modules.Homing is
       end loop;
    exception
       when Prunt.Motion_Planner.Homing_Move_Cancelled_Error =>
-         Restore_All_Homing_Drivers (This);
-         for Axis in Axis_Name when Axis /= E_Axis loop
-            Planner.Mark_Axis_Unhomed (Axis);
-         end loop;
+         Abandon_Homing;
 
       when others =>
-         Restore_All_Homing_Drivers (This);
-         --  A partially completed homing sequence cannot leave cartesian axes trusted.
-         for Axis in Axis_Name when Axis /= E_Axis loop
-            Planner.Mark_Axis_Unhomed (Axis);
-         end loop;
+         Abandon_Homing;
          raise;
    end Auto_Home;
 
