@@ -5174,20 +5174,35 @@ package body Prunt.Motion_Planner.Planner is
       Profile_Time : constant Time := Timing.Profile_Time;
       Suffix_Time  : constant Time := Timing.Suffix_Time;
       Motion_Time  : constant Time := Timing.Motion_Time;
+
+      --  The prefix, the central profile and the suffix are evaluated separately, and each ends within a few units
+      --  in the last place of where the next begins, on either side. So each is kept between the run's distances at
+      --  its two ends, which are put in order here. The run's distance then never decreases with time as long as
+      --  the distance of none of its profiles does, which the bisection of Assign_Timing_Members relies on.
+      Total       : constant Length := Timing.Total_Distance;
+      Window_End  : constant Length := Window.Start_Distance + Window.Distance;
+      Prefix_End  : constant Length := Length'Min (Window.Start_Distance, Total);
+      Central_End : constant Length := Length'Min (Length'Max (Window_End, Prefix_End), Total);
+
+      function Between (Distance, Low, High : Length) return Length
+      is (Length'Min (Length'Max (Distance, Low), High));
    begin
       if Run_Time >= Motion_Time then
-         return Timing.Total_Distance;
+         return Total;
       elsif Run_Time < Prefix_Time then
          return
-           (if Ends.Enabled
-            then
-              Profile_Distance_At_Time
-                (Ends.Prefix.Profile,
-                 Run_Time,
-                 Ends.Prefix.Max_Crackle,
-                 Ends.Prefix.Decel_Crackle,
-                 Block.Corner_Velocity_Limits (Run_First - 1))
-            else Block.Corner_Velocity_Limits (Run_First - 1) * Run_Time);
+           Between
+             ((if Ends.Enabled
+               then
+                 Profile_Distance_At_Time
+                   (Ends.Prefix.Profile,
+                    Run_Time,
+                    Ends.Prefix.Max_Crackle,
+                    Ends.Prefix.Decel_Crackle,
+                    Block.Corner_Velocity_Limits (Run_First - 1))
+               else Block.Corner_Velocity_Limits (Run_First - 1) * Run_Time),
+              0.0 * mm,
+              Prefix_End);
       elsif Run_Time < Prefix_Time + Profile_Time then
          declare
             Profile : constant Feedrate_Profile := Block.Feedrate_Profiles (Run_First);
@@ -5195,34 +5210,40 @@ package body Prunt.Motion_Planner.Planner is
          begin
             --  Each branch is the arithmetic of Profile_Distance_At_Time, so what was prepared changes no result.
             return
-              Window.Start_Distance
-              + (if Ramps /= null
-                 then Profile_Distance_At_Time (Profile, T, Ramps.all)
-                 elsif Timing.Has_Ramp_End and then T > Timing.Ramp_End.Accel_Time
-                 then Distance_After_Accel_Ramp (Profile, T, Block.Profile_Decel_Crackles (Run_First), Timing.Ramp_End)
-                 else
-                   Profile_Distance_At_Time
-                     (Profile,
-                      T,
-                      Block.Profile_Crackles (Run_First),
-                      Block.Profile_Decel_Crackles (Run_First),
-                      Central_Profile_Start_Velocity (Block, Run_First)));
+              Between
+                (Window.Start_Distance
+                 + (if Ramps /= null
+                    then Profile_Distance_At_Time (Profile, T, Ramps.all)
+                    elsif Timing.Has_Ramp_End and then T > Timing.Ramp_End.Accel_Time
+                    then
+                      Distance_After_Accel_Ramp (Profile, T, Block.Profile_Decel_Crackles (Run_First), Timing.Ramp_End)
+                    else
+                      Profile_Distance_At_Time
+                        (Profile,
+                         T,
+                         Block.Profile_Crackles (Run_First),
+                         Block.Profile_Decel_Crackles (Run_First),
+                         Central_Profile_Start_Velocity (Block, Run_First))),
+                 Prefix_End,
+                 Central_End);
          end;
       else
          return
-           Window.Start_Distance
-           + Window.Distance
-           + (if Ends.Enabled
-              then
-                Profile_Distance_At_Time
-                  (Ends.Suffix.Profile,
-                   Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time),
-                   Ends.Suffix.Max_Crackle,
-                   Ends.Suffix.Decel_Crackle,
-                   Ends.Suffix.Boundary_Velocity)
-              else
-                Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Run_First))
-                * Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time));
+           Between
+             (Window_End
+              + (if Ends.Enabled
+                 then
+                   Profile_Distance_At_Time
+                     (Ends.Suffix.Profile,
+                      Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time),
+                      Ends.Suffix.Max_Crackle,
+                      Ends.Suffix.Decel_Crackle,
+                      Ends.Suffix.Boundary_Velocity)
+                 else
+                   Block.Corner_Velocity_Limits (Timing_Run_Last (Block, Run_First))
+                   * Time'Min (Run_Time - (Prefix_Time + Profile_Time), Suffix_Time)),
+              Central_End,
+              Total);
       end if;
    end Timing_Distance_At_Time;
 

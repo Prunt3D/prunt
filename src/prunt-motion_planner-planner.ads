@@ -1094,6 +1094,8 @@ private
    function Timing_Distance_At_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)
       return Length;
+   --  How far the run has gone at Run_Time. It never decreases as Run_Time increases, across the joins of the run's
+   --  prefix, central profile and suffix too, as long as the distance of none of those profiles does.
 
    function Timing_Velocity_At_Time
      (Block : not null access constant Execution_Block; Run_First : Finishing_Corners_Index; Run_Time : Time)

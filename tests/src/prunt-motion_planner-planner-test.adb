@@ -5879,6 +5879,143 @@ package body Prunt.Motion_Planner.Planner.Test is
       Plan_Kinematics (Block, Map, Work);
    end Prepare_Gentle_Corners;
 
+   procedure Test_Run_Distance_Never_Decreases (T : in out Trendy_Test.Operation'Class) is
+      --  The prefix, the central profile and the suffix of a run are evaluated separately, and each ends within
+      --  rounding of where the next begins. The run's distance, as execution evaluates it, must not decrease where
+      --  one hands over to the next or where the run ends: Assign_Timing_Members bisects it for the member
+      --  boundaries. It is evaluated at the machine numbers around each join and at times across the run.
+      --
+      --  Rounding makes a piece overshoot only now and then, so each run is also evaluated with its window and its
+      --  whole distance shortened by a part in 1.0E9. Each of its pieces then ends well beyond where the next
+      --  begins.
+
+      Steps : constant := 40;
+      --  How many machine numbers on each side of a join are evaluated.
+
+      Shortened : constant Dimensionless := 1.0 - 1.0E-9;
+
+      Work    : aliased Planning_Workspace (Corners_Index'Last);
+      Corners : aliased Execution_Block (7);
+      Line    : aliased Execution_Block (12);
+
+      Runs, With_Prefix, With_Suffix                          : Natural := 0;
+      At_Prefix_End, At_Central_End, At_Run_End, Between_Them : Natural := 0;
+      --  How many times the distance decreased around each join and across the runs.
+
+      procedure Check_Run
+        (Block : aliased Execution_Block; Run_First : Finishing_Corners_Index; Timing : Timing_Evaluation);
+
+      procedure Check_Run
+        (Block : aliased Execution_Block; Run_First : Finishing_Corners_Index; Timing : Timing_Evaluation)
+      is
+         function Distance (Run_Time : Time) return Length
+         is (Timing_Distance_At_Time (Block'Access, Run_First, Run_Time, Timing));
+
+         procedure Walk_Around (Centre : Time; Decreases : in out Natural);
+
+         procedure Walk_Around (Centre : Time; Decreases : in out Natural) is
+            At_Time  : Time := Centre;
+            Previous : Length;
+         begin
+            for I in 1 .. Steps loop
+               exit when At_Time <= 0.0 * s;
+               At_Time := Time'Pred (At_Time);
+            end loop;
+            Previous := Distance (At_Time);
+            for I in 1 .. 2 * Steps loop
+               At_Time := Time'Succ (At_Time);
+               if Distance (At_Time) < Previous then
+                  Decreases := @ + 1;
+               end if;
+               Previous := Distance (At_Time);
+            end loop;
+         end Walk_Around;
+
+         Previous : Length := Distance (0.0 * s);
+      begin
+         if Timing.Prefix_Time > 0.0 * s then
+            Walk_Around (Timing.Prefix_Time, At_Prefix_End);
+         end if;
+         if Timing.Suffix_Time > 0.0 * s then
+            Walk_Around (Timing.Prefix_Time + Timing.Profile_Time, At_Central_End);
+         end if;
+         Walk_Around (Timing.Motion_Time, At_Run_End);
+         for K in 1 .. 1_000 loop
+            declare
+               Here : constant Length := Distance (Timing.Motion_Time * (Dimensionless (K) / 1_000.0));
+            begin
+               if Here < Previous then
+                  Between_Them := @ + 1;
+               end if;
+               Previous := Here;
+            end;
+         end loop;
+         T.Assert
+           (Distance (0.0 * s) = 0.0 * mm and then Distance (Timing.Motion_Time) = Timing.Total_Distance,
+            "Run" & Run_First'Image & " starts at zero and ends at its whole distance");
+      end Check_Run;
+
+      procedure Check (Block : aliased in out Execution_Block);
+
+      procedure Check (Block : aliased in out Execution_Block) is
+      begin
+         for Run_First in Block.Primitives'Range loop
+            if Timing_Run_First (Block'Access, Run_First) = Run_First then
+               declare
+                  Timing : constant Timing_Evaluation := Assigned_Timing_Evaluation (Block'Access, Run_First);
+                  Window : constant Profile_Window := Block.Profile_Windows (Run_First);
+               begin
+                  Runs := @ + 1;
+                  if Timing.Prefix_Time > 0.0 * s then
+                     With_Prefix := @ + 1;
+                  end if;
+                  if Timing.Suffix_Time > 0.0 * s then
+                     With_Suffix := @ + 1;
+                  end if;
+                  Check_Run (Block, Run_First, Timing);
+                  Block.Profile_Windows (Run_First) :=
+                    (Start_Distance => Shortened * Window.Start_Distance, Distance => Shortened * Window.Distance);
+                  Check_Run
+                    (Block,
+                     Run_First,
+                     (Has_Ramp_End   => False,
+                      Prefix_Time    => Timing.Prefix_Time,
+                      Profile_Time   => Timing.Profile_Time,
+                      Suffix_Time    => Timing.Suffix_Time,
+                      Motion_Time    => Timing.Motion_Time,
+                      Total_Distance => Shortened * Timing.Total_Distance));
+                  Block.Profile_Windows (Run_First) := Window;
+               end;
+            end if;
+         end loop;
+      end Check;
+   begin
+      T.Register;
+      for Continuous in Boolean loop
+         Prepare_Gentle_Corners (Corners, Work'Access, Continuous);
+         Check (Corners);
+         for Slow_From in Corners_Index range 3 .. 11 loop
+            if Slow_From mod 2 = 1 then
+               Prepare_Continuous_Line (Line, Work'Access, Continuous, Slow_From => Slow_From);
+               Check (Line);
+            end if;
+         end loop;
+      end loop;
+      T.Assert
+        (At_Prefix_End = 0 and then At_Central_End = 0 and then At_Run_End = 0 and then Between_Them = 0,
+         "The run distance decreases where the prefix, the central profile and the run end, and between:"
+         & At_Prefix_End'Image
+         & At_Central_End'Image
+         & At_Run_End'Image
+         & Between_Them'Image);
+      T.Assert
+        (Runs >= 50 and then With_Prefix >= 2 and then With_Suffix >= 2,
+         "The fixtures have runs, some with a prefix and some with a suffix:"
+         & Runs'Image
+         & With_Prefix'Image
+         & With_Suffix'Image);
+   end Test_Run_Distance_Never_Decreases;
+
    procedure Check_Sampled_Axial_Limits
      (Block : aliased Execution_Block; Name : String; T : in out Trendy_Test.Operation'Class);
    --  Sample the block as the executor does and bound each axis's velocity, acceleration, jerk and snap by central
@@ -6961,6 +7098,7 @@ package body Prunt.Motion_Planner.Planner.Test is
          Test_Continuous_Profile_Window_Handoff'Unrestricted_Access,
          Test_Prepared_Timing_Evaluation'Unrestricted_Access,
          Test_Continuous_Timing_Blend_Seams'Unrestricted_Access,
+         Test_Run_Distance_Never_Decreases'Unrestricted_Access,
          Test_Continuous_Curved_Merges'Unrestricted_Access,
          Test_Cellular_Certificate'Unrestricted_Access,
          Test_Cellular_Full_Cell_Stretch'Unrestricted_Access,
