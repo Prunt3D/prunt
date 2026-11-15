@@ -324,7 +324,7 @@ package body Prunt.Default_Modules.Kinematics is
                            if Min_Radicand <= 0.0 * mm**2 then
                               Min_Height := Length'Small;
                            else
-                              Min_Height := Min_Radicand**(1 / 2);
+                              Min_Height := Min_Radicand**0.5;
                            end if;
 
                            Delta_Params.Jacobian_Bounds (Motor, X_Axis) :=

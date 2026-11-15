@@ -499,7 +499,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
 
                   if Norm_Squared_Upper > 0.0 / mm**2 then
                      declare
-                        Norm_Upper : constant Curvature := Round_Curvature_Up (Norm_Squared_Upper**(1 / 2));
+                        Norm_Upper : constant Curvature := Round_Curvature_Up (Norm_Squared_Upper**0.5);
                         Allowable  : constant Length := Motor_Error_Fraction / Norm_Upper;
                      begin
                         Result := Length'Min (Result, Round_Length_Down_Nonnegative (Allowable));
@@ -615,7 +615,7 @@ package body Prunt.Motion_Planner.Planner.Corner_Blender is
                     Primitive_Direction_At_Distance (Block'Access, I + 1, 0.0 * mm);
                   Dot_Tangents     : constant Dimensionless :=
                     Clamp_Unit_Dot (Dot (Incoming_Tangent, Outgoing_Tangent));
-                  Secondary_Sine   : constant Dimensionless := ((1.0 - Dot_Tangents) / 2.0)**(1 / 2);
+                  Secondary_Sine   : constant Dimensionless := ((1.0 - Dot_Tangents) / 2.0)**0.5;
                begin
                   return
                     Angle_Elementary_Functions.Sin (90.0 * deg - 0.5 * Corner_Transition_Min_Corner_Angle)

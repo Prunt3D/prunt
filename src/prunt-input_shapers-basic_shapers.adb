@@ -25,7 +25,6 @@ package body Prunt.Input_Shapers.Basic_Shapers is
    pragma Extensions_Allowed (On);
 
    package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
-   use Dimensionless_Math;
 
    function Create
      (Parameters : Shaper_Parameters; Interpolation_Time : Time; Start_Position : Length) return Basic_Shaper
@@ -67,13 +66,13 @@ package body Prunt.Input_Shapers.Basic_Shapers is
             --  https://doi.org/10.1115/1.2894142
             declare
                K  : constant Dimensionless :=
-                 Exp
+                 Dimensionless_Math.Exp
                    (-Parameters.Zero_Vibration_Damping_Ratio * Pi
-                    / (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2));
+                    / (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**0.5);
                TD : constant Dimensionless :=
                  1.0
                  / (Parameters.Zero_Vibration_Frequency
-                    * (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**(1 / 2)
+                    * (1.0 - Parameters.Zero_Vibration_Damping_Ratio**2)**0.5
                     * Interpolation_Time);
                --  Note that the original paper uses rad/s, but we use hertz here so the 2 * pi term has been removed.
             begin
@@ -134,13 +133,13 @@ package body Prunt.Input_Shapers.Basic_Shapers is
             --  https://doi.org/10.1115/1.2801257
             declare
                K  : constant Dimensionless :=
-                 Exp
+                 Dimensionless_Math.Exp
                    (-Parameters.Extra_Insensitive_Damping_Ratio * Pi
-                    / (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**(1 / 2));
+                    / (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**0.5);
                TD : constant Dimensionless :=
                  1.0
                  / (Parameters.Extra_Insensitive_Frequency
-                    * (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**(1 / 2)
+                    * (1.0 - Parameters.Extra_Insensitive_Damping_Ratio**2)**0.5
                     * Interpolation_Time);
                --  Note that the original paper uses rad/s, but we use hertz here so the 2 * pi term has been removed.
 
@@ -162,7 +161,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
 
                   when 2 =>
                      declare
-                        X          : constant Dimensionless := (V**2 * ((1.0 - V**2)**(1 / 2) + 1.0))**(1 / 3);
+                        X          : constant Dimensionless := (V**2 * ((1.0 - V**2)**0.5 + 1.0))**(1.0 / 3.0);
                         A1         : constant Dimensionless := (3.0 * X**2 + 2.0 * X + 3.0 * V**2) / (16.0 * X);
                         A2         : constant Dimensionless := (0.5 - A1) * K;
                         A3         : constant Dimensionless := (0.5 - A1) * K**2;
@@ -178,8 +177,7 @@ package body Prunt.Input_Shapers.Basic_Shapers is
 
                   when 3 =>
                      declare
-                        A1         : constant Dimensionless :=
-                          (1.0 + 3.0 * V + 2.0 * (2.0 * (V**2 + V))**(1 / 2)) / 16.0;
+                        A1         : constant Dimensionless := (1.0 + 3.0 * V + 2.0 * (2.0 * (V**2 + V))**0.5) / 16.0;
                         A2         : constant Dimensionless := K * (1.0 - V) / 4.0;
                         A3         : constant Dimensionless := K**2 * (1.0 - 2.0 * (A1 + (1.0 - V) / 4.0));
                         A4         : constant Dimensionless := K**3 * (1.0 - V) / 4.0;

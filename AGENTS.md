@@ -5,3 +5,7 @@ Integration tests and coverage can take a long time and should not be run by def
 Perform a build using `alr build`. You do not need to build before running tests, it happens as part of the test runner.
 
 Run `alr build` and `./run_tests.sh` sequentially, never concurrently in the same checkout. The main build and test build share build artifacts, so overlapping them can cause linker failures.
+
+`alr build` and `./run_tests.sh` check dimensions automatically, you never need to run the dimension checker manually.
+
+Write roots as real exponents (`A ** 0.5`, `V ** (1.0 / 3.0)`), never as `** (1 / 2)`.

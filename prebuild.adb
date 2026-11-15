@@ -28,6 +28,7 @@ with Ada.Environment_Variables;
 with Ada.Exceptions;        use Ada.Exceptions;
 with Ada.Strings;
 with Ada.Strings.Fixed;     use Ada.Strings.Fixed;
+with Ada.Strings.Maps;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Streams;
 with Ada.Streams.Stream_IO;
@@ -420,9 +421,10 @@ procedure Prebuild is
       Prepend_To_File (Target, Pragma_1 & Pragma_2 & Pragma_3);
    end Build_Ada_Resources;
 
-   procedure Build_Config_Codegen is
-      Target                  : constant String :=
-        Join_Path ([Working_Dir, "config_codegen", "bin", "config_codegen"]);
+   procedure Build_Libadalang_Tool (Crate : String; Executables : String_Vectors.Vector; Cache_Variable : String) is
+      --  Build the executables of the Libadalang-based tool crate in directory `Crate`, such as config_codegen.
+
+      Target                  : constant String := Join_Path ([Working_Dir, Crate, "bin", Executables.First_Element]);
       Sources                 : String_Vectors.Vector;
       Src_Files               : String_Vectors.Vector;
       VSS_Extra_Old           : constant String := Getenv ("VSS_EXTRA_ALIRE_PREFIX").all;
@@ -435,16 +437,14 @@ procedure Prebuild is
       GNATCOLL_Minimal_Old    : constant String := Getenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX").all;
       GNAT_Native_Old         : constant String := Getenv ("GNAT_NATIVE_ALIRE_PREFIX").all;
 
-      --  Building config_codegen means linking two large executables against Libadalang, which dominates the build of
-      --  a fresh checkout. Its output depends only on its own sources, so built executables are kept in a cache shared
-      --  between checkouts, keyed by a hash of those sources. PRUNT_CONFIG_CODEGEN_CACHE overrides the cache directory,
-      --  or disables the cache when set to "off".
+      --  Building a tool means linking large executables against Libadalang, which dominates the build of a fresh
+      --  checkout. Their output depends only on their own sources, so built executables are kept in a cache shared
+      --  between checkouts, keyed by a hash of those sources. The environment variable `Cache_Variable` overrides the
+      --  cache directory, or disables the cache when set to "off".
 
       Cache_Format_Version : constant String := "1";
-      --  Bump this to invalidate existing cache entries, e.g. if the way config_codegen is built changes outside its
+      --  Bump this to invalidate existing cache entries, e.g. if the way the tools are built changes outside their
       --  hashed sources.
-
-      Executables : constant String_Vectors.Vector := ["config_codegen", "package_subprogram_audit"];
 
       Cache_Entries_To_Keep : constant := 4;
 
@@ -458,7 +458,8 @@ procedure Prebuild is
       --  A hash of the contents and checkout-relative paths of `Sources`.
 
       function Restore_From_Cache (Entry_Dir : String) return Boolean;
-      --  Copy cached executables into `config_codegen/bin`. Returns False if the entry is missing or unusable.
+      --  Copy cached executables into the `bin` directory of `Crate`. Returns False if the entry is missing or
+      --  unusable.
 
       procedure Store_In_Cache (Entry_Dir : String);
       --  Copy the freshly built executables into a new cache entry and drop the least recently used entries.
@@ -466,16 +467,16 @@ procedure Prebuild is
       function Cache_Dir return String is
          package Env renames Ada.Environment_Variables;
       begin
-         if Env.Exists ("PRUNT_CONFIG_CODEGEN_CACHE") then
+         if Env.Exists (Cache_Variable) then
             declare
-               Dir : constant String := Env.Value ("PRUNT_CONFIG_CODEGEN_CACHE");
+               Dir : constant String := Env.Value (Cache_Variable);
             begin
                return (if Dir = "off" then "" else Dir);
             end;
          elsif Env.Exists ("XDG_CACHE_HOME") and then Env.Value ("XDG_CACHE_HOME") /= "" then
-            return Join_Path ([Env.Value ("XDG_CACHE_HOME"), "prunt", "config_codegen"]);
+            return Join_Path ([Env.Value ("XDG_CACHE_HOME"), "prunt", Crate]);
          elsif Env.Exists ("HOME") and then Env.Value ("HOME") /= "" then
-            return Join_Path ([Env.Value ("HOME"), ".cache", "prunt", "config_codegen"]);
+            return Join_Path ([Env.Value ("HOME"), ".cache", "prunt", Crate]);
          else
             return "";
          end if;
@@ -491,7 +492,14 @@ procedure Prebuild is
          File   : Ada.Streams.Stream_IO.File_Type;
       begin
          Sorting.Sort (Sorted);
-         GNAT.SHA256.Update (Ctx, "prunt-config-codegen-cache-v" & Cache_Format_Version & ASCII.NUL);
+         --  For config_codegen this is "prunt-config-codegen-cache-v1", which keys its existing cache entries.
+         GNAT.SHA256.Update
+           (Ctx,
+            "prunt-"
+            & Translate (Crate, Ada.Strings.Maps.To_Mapping ("_", "-"))
+            & "-cache-v"
+            & Cache_Format_Version
+            & ASCII.NUL);
 
          for S of Sorted loop
             GNAT.SHA256.Update
@@ -509,7 +517,7 @@ procedure Prebuild is
       end Sources_Hash;
 
       function Restore_From_Cache (Entry_Dir : String) return Boolean is
-         Bin_Dir : constant String := Join_Path ([Working_Dir, "config_codegen", "bin"]);
+         Bin_Dir : constant String := Join_Path ([Working_Dir, Crate, "bin"]);
       begin
          for E of Executables loop
             if not Exists (Join_Path ([Entry_Dir, E])) then
@@ -537,17 +545,17 @@ procedure Prebuild is
 
          --  Mark the entry as recently used.
          Set_File_Last_Modify_Time_Stamp (Entry_Dir, Current_Time);
-         Put_Line ("Restored config_codegen from cache " & Entry_Dir'Image);
+         Put_Line ("Restored " & Crate & " from cache " & Entry_Dir'Image);
          return True;
       exception
          when Ex : others =>
             Put_Line
-              ("Ignoring unusable config_codegen cache entry " & Entry_Dir'Image & ": " & Exception_Message (Ex));
+              ("Ignoring unusable " & Crate & " cache entry " & Entry_Dir'Image & ": " & Exception_Message (Ex));
             return False;
       end Restore_From_Cache;
 
       procedure Store_In_Cache (Entry_Dir : String) is
-         Bin_Dir  : constant String := Join_Path ([Working_Dir, "config_codegen", "bin"]);
+         Bin_Dir  : constant String := Join_Path ([Working_Dir, Crate, "bin"]);
          Temp_Dir : constant String :=
            Entry_Dir & ".tmp-" & Trim (Integer'Image (Pid_To_Integer (Current_Process_Id)), Ada.Strings.Left);
 
@@ -574,7 +582,7 @@ procedure Prebuild is
                         Oldest := I;
                      end if;
                   end loop;
-                  Put_Line ("Dropping old config_codegen cache entry " & String'(Entries (Oldest))'Image);
+                  Put_Line ("Dropping old " & Crate & " cache entry " & String'(Entries (Oldest))'Image);
                   Delete_Tree (Entries (Oldest));
                   Entries.Delete (Oldest);
                end;
@@ -597,7 +605,7 @@ procedure Prebuild is
          --  Another checkout may have stored the same entry meanwhile, in which case the rename fails and ours goes.
          begin
             Rename (Temp_Dir, Entry_Dir);
-            Put_Line ("Stored config_codegen in cache " & Entry_Dir'Image);
+            Put_Line ("Stored " & Crate & " in cache " & Entry_Dir'Image);
          exception
             when Ada.Directories.Use_Error =>
                Delete_Tree (Temp_Dir);
@@ -606,20 +614,20 @@ procedure Prebuild is
          Drop_Old_Entries;
       exception
          when Ex : others =>
-            Put_Line ("Not caching config_codegen: " & Exception_Message (Ex));
+            Put_Line ("Not caching " & Crate & ": " & Exception_Message (Ex));
             if Exists (Temp_Dir) then
                Delete_Tree (Temp_Dir);
             end if;
       end Store_In_Cache;
    begin
-      Collect_Files (Join_Path ([Working_Dir, "config_codegen", "src"]), Src_Files, Recursive => True);
+      Collect_Files (Join_Path ([Working_Dir, Crate, "src"]), Src_Files, Recursive => True);
       for F of Src_Files loop
          if F'Length >= 4 and then F (F'Last - 3 .. F'Last) in ".adb" | ".ads" then
             Sources.Append (F);
          end if;
       end loop;
-      Sources.Append (Join_Path ([Working_Dir, "config_codegen", "alire.toml"]));
-      Sources.Append (Join_Path ([Working_Dir, "config_codegen", "config_codegen.gpr"]));
+      Sources.Append (Join_Path ([Working_Dir, Crate, "alire.toml"]));
+      Sources.Append (Join_Path ([Working_Dir, Crate, Crate & ".gpr"]));
 
       if not Needs_Rebuild (Target, Sources) then
          return;
@@ -652,7 +660,7 @@ procedure Prebuild is
       Setenv ("GNATCOLL_MINIMAL_ALIRE_PREFIX", "");
       --  The prebuilt Libadalang bundle may require a different compiler from Prunt.
       Setenv ("GNAT_NATIVE_ALIRE_PREFIX", "");
-      Run ("alr", ["--chdir=config_codegen", "build", "--development"]);
+      Run ("alr", ["--chdir=" & Crate, "build", "--development"]);
       Setenv ("VSS_EXTRA_ALIRE_PREFIX", VSS_Extra_Old);
       Setenv ("VSS_TEXT_ALIRE_PREFIX", VSS_Text_Old);
       Setenv ("XMLADA_ALIRE_PREFIX", XMLAda_Old);
@@ -666,7 +674,7 @@ procedure Prebuild is
       if Length (Cache_Entry) > 0 then
          Store_In_Cache (To_String (Cache_Entry));
       end if;
-   end Build_Config_Codegen;
+   end Build_Libadalang_Tool;
 
    procedure Run_Config_Codegen is
       Stamp   : constant String := Join_Path ([Working_Dir, ".config_codegen_stamp"]);
@@ -695,6 +703,43 @@ procedure Prebuild is
       end;
    end Run_Config_Codegen;
 
+   procedure Run_Dimension_Check is
+      --  The compiler does not check physical dimensions, so every build runs dimension_check over Prunt's sources
+      --  when they change. See dimension_check/README.md.
+
+      Stamp     : constant String := Join_Path ([Working_Dir, ".dimension_check_stamp"]);
+      Sources   : String_Vectors.Vector;
+      All_Files : String_Vectors.Vector;
+   begin
+      Sources.Append (Join_Path ([Working_Dir, "prunt.gpr"]));
+      Sources.Append (Join_Path ([Working_Dir, "alire.toml"]));
+      Sources.Append (Join_Path ([Working_Dir, "dimension_check", "bin", "dimension_check"]));
+      Collect_Files (Join_Path ([Working_Dir, "src"]), All_Files, Recursive => True);
+      Collect_Files (Join_Path ([Working_Dir, "generated_src_modules"]), All_Files, Recursive => True);
+      for F of All_Files loop
+         if F'Length >= 4 and then F (F'Last - 3 .. F'Last) in ".adb" | ".ads" then
+            Sources.Append (F);
+         end if;
+      end loop;
+
+      if not Needs_Rebuild (Stamp, Sources) then
+         return;
+      end if;
+
+      if Exists (Stamp) then
+         Delete_File (Stamp);
+      end if;
+
+      Run (Join_Path (["dimension_check", "bin", "dimension_check"]), ["-P", "prunt.gpr", "-j0"]);
+
+      declare
+         F : File_Type;
+      begin
+         Create (F, Out_File, Stamp);
+         Close (F);
+      end;
+   end Run_Dimension_Check;
+
 begin
    if Ada.Environment_Variables.Value ("PRUNT_SKIP_PRE_BUILD", "false") = "true" then
       Put_Line ("Skipping prebuild due to PRUNT_SKIP_PRE_BUILD=true");
@@ -705,6 +750,9 @@ begin
    Build_Html_Dist;
    Clean_Dist_Stale;
    Build_Ada_Resources;
-   Build_Config_Codegen;
+   Build_Libadalang_Tool
+     ("config_codegen", ["config_codegen", "package_subprogram_audit"], "PRUNT_CONFIG_CODEGEN_CACHE");
    Run_Config_Codegen;
+   Build_Libadalang_Tool ("dimension_check", ["dimension_check"], "PRUNT_DIMENSION_CHECK_CACHE");
+   Run_Dimension_Check;
 end Prebuild;

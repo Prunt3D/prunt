@@ -1,0 +1,36 @@
+with "libadalang.gpr";
+with "config/dimension_check_config.gpr";
+project Dimension_Check is
+
+   for Source_Dirs use ("src/", "config/");
+   for Object_Dir use "obj/" & Dimension_Check_Config.Build_Profile;
+   for Create_Missing_Dirs use "True";
+   for Exec_Dir use "bin";
+   for Main use ("dimension_check_main.adb");
+
+   package Builder is
+      for Executable ("dimension_check_main.adb") use "dimension_check";
+   end Builder;
+
+   package Compiler is
+      for Default_Switches ("Ada") use
+        Dimension_Check_Config.Ada_Compiler_Switches & ("-gnatyM119", "-gnat2022", "-gnaty-B", "-gnatW8");
+   end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-Es"); --  Symbolic traceback
+   end Binder;
+
+   package Linker is
+      --  The prebuilt Libadalang archives carry fat LTO objects. Linking them as plain objects avoids a slow serial LTO
+      --  link, and code generation speed does not matter here.
+      for Switches ("Ada") use ("-fno-lto");
+   end Linker;
+
+   package Format is
+      for Width ("Ada") use "119";
+      for Charset ("Ada") use "utf-8";
+      for Override_Layout ("Ada") use ("../formatting.json");
+   end Format;
+
+end Dimension_Check;

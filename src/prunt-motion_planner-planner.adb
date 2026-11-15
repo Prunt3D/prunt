@@ -736,8 +736,8 @@ package body Prunt.Motion_Planner.Planner is
       declare
          Start_Offset  : constant Position_Offset := Start_Point - Primitive.Center;
          End_Offset    : constant Position_Offset := End_Point - Primitive.Center;
-         Start_Radius  : constant Length := (Start_Offset (X_Axis)**2 + Start_Offset (Y_Axis)**2)**(1 / 2);
-         End_Radius    : constant Length := (End_Offset (X_Axis)**2 + End_Offset (Y_Axis)**2)**(1 / 2);
+         Start_Radius  : constant Length := (Start_Offset (X_Axis)**2 + Start_Offset (Y_Axis)**2)**0.5;
+         End_Radius    : constant Length := (End_Offset (X_Axis)**2 + End_Offset (Y_Axis)**2)**0.5;
          Theta_Start   : constant Dimensionless :=
            Dimensionless_Math.Arctan (Start_Offset (Y_Axis) / mm, Start_Offset (X_Axis) / mm);
          Two_Pi        : constant Dimensionless := 2.0 * Ada.Numerics.Pi;
@@ -791,7 +791,7 @@ package body Prunt.Motion_Planner.Planner is
 
          declare
             Axial_Per_Phase   : constant Position_Offset := Axial_Delta * (1.0 / Theta_Delta);
-            Length_Per_Radian : constant Length := (Start_Radius**2 + (abs Axial_Per_Phase)**2)**(1 / 2);
+            Length_Per_Radian : constant Length := (Start_Radius**2 + (abs Axial_Per_Phase)**2)**0.5;
          begin
             return
               (Kind              => Helix_Primitive_Kind,
@@ -2861,9 +2861,9 @@ package body Prunt.Motion_Planner.Planner is
                A_Max : constant Acceleration := Acceleration'Max (abs P.A, abs Q.A);
             begin
                if Accelerating then
-                  return Velocity'Min (Q.V, (P.V * P.V + 2.0 * A_Max * Length'Max (0.0 * mm, X - P.X))**(1 / 2));
+                  return Velocity'Min (Q.V, (P.V * P.V + 2.0 * A_Max * Length'Max (0.0 * mm, X - P.X))**0.5);
                else
-                  return Velocity'Min (P.V, (Q.V * Q.V + 2.0 * A_Max * Length'Max (0.0 * mm, Q.X - X))**(1 / 2));
+                  return Velocity'Min (P.V, (Q.V * Q.V + 2.0 * A_Max * Length'Max (0.0 * mm, Q.X - X))**0.5);
                end if;
             end;
          end if;

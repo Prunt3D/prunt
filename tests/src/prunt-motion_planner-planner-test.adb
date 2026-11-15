@@ -6751,7 +6751,7 @@ package body Prunt.Motion_Planner.Planner.Test is
                   Sum := Sum + (After (Axis) - 2.0 * Middle (Axis) + Before (Axis))**2;
                end if;
             end loop;
-            Peak := Acceleration'Max (Peak, Sum**(1 / 2) / Step**2);
+            Peak := Acceleration'Max (Peak, Sum**0.5 / Step**2);
          end;
          Sample := Sample + Step;
       end loop;
@@ -6915,7 +6915,7 @@ package body Prunt.Motion_Planner.Planner.Test is
            (Line.Corner_Velocity_Limits (2) > 0.0 * mm / s and then Line.Corner_Velocity_Limits (3) > 0.0 * mm / s,
             "A change of limits between moves does not stop");
          T.Assert
-           (Line.Corner_Velocity_Limits (3) <= (2.0 * Cap * 10.0 * mm)**(1 / 2),
+           (Line.Corner_Velocity_Limits (3) <= (2.0 * Cap * 10.0 * mm)**0.5,
             "The move before the capped one leaves no more speed than the cap can stop in its length");
          T.Assert (Peak_Path_Acceleration (Line, 4, False) <= 1.001 * Cap, "The capped move keeps to its own cap");
          T.Assert

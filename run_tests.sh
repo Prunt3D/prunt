@@ -34,6 +34,10 @@ build_tests() {
 [ "$PRUNT_DO_GNATCOV" = true ] && GPR_PROJECT_PATH="$GPR_PROJECT_PATH:./gnatcov_rts/share/gpr" build_tests --src-subdirs=gnatcov-instr --implicit-with=gnatcov_rts.gpr
 [ "$PRUNT_DO_GNATCOV" = true ] || build_tests
 
+# Prunt's pre-build step checks the physical dimensions of Prunt's own sources, which the compiler does not check.
+# Check the tests' sources here, after building them has configured Prunt with the mocked sources they need.
+alr exec -- ../dimension_check/bin/dimension_check -P tests.gpr -j0
+
 rm -f gnatcov_out/*.xcov
 rm -f gnatcov_out/*.html
 rm -f gnatcov_out/*.css

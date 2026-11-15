@@ -17,7 +17,6 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Ada.Numerics.Generic_Elementary_Functions;
 with Ada.Strings.Fixed;
 
 package body Prunt is
@@ -27,8 +26,7 @@ package body Prunt is
    --  Planner callers recover from overflow in these shared vector operations.
    pragma Unsuppress (Overflow_Check);
 
-   package Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
-   use Math;
+   use Dimensioned_Float_Math;
 
    function "*" (Left : Position; Right : Position_Scale) return Position is
    begin

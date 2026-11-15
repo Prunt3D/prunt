@@ -472,12 +472,12 @@ package body Prunt.Motion_Planner.Test is
         Velocity'Min
           (0.999 * Params.Axial_Velocity_Maxes (X_Axis) / Bounds.Velocity (X_Axis),
            Velocity'Min
-             (0.999 * (Params.Axial_Acceleration_Maxes (X_Axis) / Bounds.Acceleration (X_Axis))**(1 / 2),
+             (0.999 * (Params.Axial_Acceleration_Maxes (X_Axis) / Bounds.Acceleration (X_Axis))**0.5,
               Velocity'Min
-                (0.999 * (Params.Axial_Jerk_Maxes (X_Axis) / Bounds.Jerk (X_Axis))**(1 / 3),
+                (0.999 * (Params.Axial_Jerk_Maxes (X_Axis) / Bounds.Jerk (X_Axis))**(1.0 / 3.0),
                  Velocity'Min
-                   (0.999 * (Params.Axial_Snap_Maxes (X_Axis) / Bounds.Snap (X_Axis))**(1 / 4),
-                    0.999 * (Params.Axial_Crackle_Maxes (X_Axis) / Bounds.Crackle (X_Axis))**(1 / 5)))));
+                   (0.999 * (Params.Axial_Snap_Maxes (X_Axis) / Bounds.Snap (X_Axis))**(1.0 / 4.0),
+                    0.999 * (Params.Axial_Crackle_Maxes (X_Axis) / Bounds.Crackle (X_Axis))**(1.0 / 5.0)))));
 
       Ceiling := Constant_Speed_Axial_Ceiling (Params, Bounds, 1.0E6 * mm / s);
 
@@ -1445,7 +1445,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 1.0 * mm / s**3;
       Am : constant Acceleration := 0.01 * mm / s**2;
 
-      V_Bound_Top : constant Velocity := Am * (2.0 * (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) + Sm / Cm);
+      V_Bound_Top : constant Velocity := Am * (2.0 * (0.25 * Sm**2 / Cm**2 + Am / Sm)**0.5 + Sm / Cm);
       V_Bound_Bot : constant Velocity := 8.0 * Sm**4 / Cm**3;
 
       Check_Profile_For_Delta_V
@@ -1498,7 +1498,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 1.0 * mm / s**3;
       Am : constant Acceleration := 0.01 * mm / s**2;
 
-      V_Bound : constant Velocity := Am * (2.0 * (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) + Sm / Cm);
+      V_Bound : constant Velocity := Am * (2.0 * (0.25 * Sm**2 / Cm**2 + Am / Sm)**0.5 + Sm / Cm);
       Min_V   : constant Velocity := V_Bound;
       Max_V   : constant Velocity := V_Bound + 1.0 * mm / s;
 
@@ -1536,7 +1536,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 1.0 * mm / s**3;
       Am : constant Acceleration := 0.001 * mm / s**2;
 
-      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4 / 3);
+      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4.0 / 3.0);
 
       for I in 0 .. N_Boundary_Intervals loop
          Check_Profile_For_Delta_V
@@ -1573,7 +1573,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 1.0 * mm / s**3;
       Am : constant Acceleration := 0.001 * mm / s**2;
 
-      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4 / 3);
+      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4.0 / 3.0);
       Min_V   : constant Velocity := V_Bound;
       Max_V   : constant Velocity := V_Bound + 0.1 * mm / s;
 
@@ -1649,7 +1649,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 10.0 * mm / s**3;
       Am : constant Acceleration := 100.0 * mm / s**2;
 
-      V_Bound_Top : constant Velocity := Am * (Am / Jm + 2.0 * (Jm / Cm)**(1 / 2));
+      V_Bound_Top : constant Velocity := Am * (Am / Jm + 2.0 * (Jm / Cm)**0.5);
       V_Bound_Bot : constant Velocity := 8.0 * Jm**2 / Cm;
 
       Check_Profile_For_Delta_V
@@ -1703,7 +1703,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 10.0 * mm / s**3;
       Am : constant Acceleration := 100.0 * mm / s**2;
 
-      V_Bound : constant Velocity := Am * (Am / Jm + 2.0 * (Jm / Cm)**(1 / 2));
+      V_Bound : constant Velocity := Am * (Am / Jm + 2.0 * (Jm / Cm)**0.5);
       Min_V   : constant Velocity := V_Bound;
       Max_V   : constant Velocity := V_Bound + 1.0 * mm / s;
 
@@ -1742,7 +1742,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 10.0 * mm / s**3;
       Am : constant Acceleration := 10.0 * mm / s**2;
 
-      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4 / 3);
+      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4.0 / 3.0);
 
       for I in 0 .. N_Boundary_Intervals loop
          Check_Profile_For_Delta_V
@@ -1778,7 +1778,7 @@ package body Prunt.Motion_Planner.Test is
       Jm : constant Jerk := 10.0 * mm / s**3;
       Am : constant Acceleration := 10.0 * mm / s**2;
 
-      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4 / 3);
+      V_Bound : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4.0 / 3.0);
       Min_V   : constant Velocity := V_Bound;
       Max_V   : constant Velocity := V_Bound + 0.1 * mm / s;
 
@@ -2053,7 +2053,7 @@ package body Prunt.Motion_Planner.Test is
       Vs : constant Velocity := 0.0 * mm / s;
 
       P4    : constant Feedrate_Profile_Times :=
-        [Sm / Cm, (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s];
+        [Sm / Cm, (0.25 * Sm**2 / Cm**2 + Am / Sm)**0.5 - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
       P2    : constant Feedrate_Profile_Times := [Sm / Cm, 0.0 * s, 0.0 * s, 0.0 * s];
@@ -2110,7 +2110,7 @@ package body Prunt.Motion_Planner.Test is
       Vs : constant Velocity := 0.0 * mm / s;
 
       P4    : constant Feedrate_Profile_Times :=
-        [Sm / Cm, (0.25 * Sm**2 / Cm**2 + Am / Sm)**(1 / 2) - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s];
+        [Sm / Cm, (0.25 * Sm**2 / Cm**2 + Am / Sm)**0.5 - 1.5 * Sm / Cm, 0.0 * s, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
       Min_Dist : constant Length := Dist4;
@@ -2154,7 +2154,7 @@ package body Prunt.Motion_Planner.Test is
       Am : constant Acceleration := 0.001 * mm / s**2;
       Vs : constant Velocity := 0.0 * mm / s;
 
-      P4    : constant Feedrate_Profile_Times := [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s];
+      P4    : constant Feedrate_Profile_Times := [(0.5 * Am / Cm)**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
       for I in 0 .. N_Boundary_Intervals - 1 loop
@@ -2208,7 +2208,7 @@ package body Prunt.Motion_Planner.Test is
       Am : constant Acceleration := 0.001 * mm / s**2;
       Vs : constant Velocity := 0.0 * mm / s;
 
-      P4    : constant Feedrate_Profile_Times := [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s];
+      P4    : constant Feedrate_Profile_Times := [(0.5 * Am / Cm)**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
       Min_Dist : constant Length := Length'Adjacent (Dist4, Length'Last);
@@ -2252,7 +2252,7 @@ package body Prunt.Motion_Planner.Test is
       Am : constant Acceleration := 100.0 * mm / s**2;
       Vs : constant Velocity := 0.0 * mm / s;
 
-      P3    : constant Feedrate_Profile_Times := [(Jm / Cm)**(1 / 2), 0.0 * s, 0.0 * s, 0.0 * s];
+      P3    : constant Feedrate_Profile_Times := [(Jm / Cm)**0.5, 0.0 * s, 0.0 * s, 0.0 * s];
       Dist3 : constant Length := Fast_Distance_At_Max_Time (P3, Cm, Vs);
 
       for I in 0 .. N_Boundary_Intervals loop
@@ -2293,10 +2293,10 @@ package body Prunt.Motion_Planner.Test is
       Vs : constant Velocity := 0.0 * mm / s;
 
       P4    : constant Feedrate_Profile_Times :=
-        [(Jm / Cm)**(1 / 2), 0.0 * s, Am / Jm - 2.0 * (Jm / Cm)**(1 / 2), 0.0 * s];
+        [(Jm / Cm)**0.5, 0.0 * s, Am / Jm - 2.0 * (Jm / Cm)**0.5, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
-      P3    : constant Feedrate_Profile_Times := [(Jm / Cm)**(1 / 2), 0.0 * s, 0.0 * s, 0.0 * s];
+      P3    : constant Feedrate_Profile_Times := [(Jm / Cm)**0.5, 0.0 * s, 0.0 * s, 0.0 * s];
       Dist3 : constant Length := Fast_Distance_At_Max_Time (P3, Cm, Vs);
 
       Check_Profile_For_Distance
@@ -2350,7 +2350,7 @@ package body Prunt.Motion_Planner.Test is
       Vs : constant Velocity := 0.0 * mm / s;
 
       P4 : constant Feedrate_Profile_Times :=
-        [(Jm / Cm)**(1 / 2), 0.0 * s, Am / Jm - 2.0 * (Jm / Cm)**(1 / 2), 0.0 * s];
+        [(Jm / Cm)**0.5, 0.0 * s, Am / Jm - 2.0 * (Jm / Cm)**0.5, 0.0 * s];
 
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
@@ -2396,7 +2396,7 @@ package body Prunt.Motion_Planner.Test is
 
       Vs : constant Velocity := 0.0 * mm / s;
 
-      P4    : constant Feedrate_Profile_Times := [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s];
+      P4    : constant Feedrate_Profile_Times := [(Am / (2.0 * Cm))**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
       for I in 0 .. N_Boundary_Intervals loop
@@ -2436,7 +2436,7 @@ package body Prunt.Motion_Planner.Test is
       Am : constant Acceleration := 10.0 * mm / s**2;
       Vs : constant Velocity := 0.0 * mm / s;
 
-      P4    : constant Feedrate_Profile_Times := [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s];
+      P4    : constant Feedrate_Profile_Times := [(Am / (2.0 * Cm))**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s];
       Dist4 : constant Length := Fast_Distance_At_Max_Time (P4, Cm, Vs);
 
       Min_Dist : constant Length := Dist4;
@@ -2971,7 +2971,7 @@ package body Prunt.Motion_Planner.Test is
       Am       : constant Acceleration := 300.0 * mm / s**2;
       Jm       : constant Jerk := 1.0E5 * mm / s**3;
       Cm       : constant Crackle := 5.0E8 * mm / s**5;
-      Boundary : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4 / 3);
+      Boundary : constant Velocity := 8.0 * Cm * (0.5 * Am / Cm)**(4.0 / 3.0);
       type Snaps is array (Positive range <>) of Snap;
       type Velocities is array (Positive range <>) of Velocity;
       type Lengths is array (Positive range <>) of Length;

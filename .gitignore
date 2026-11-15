@@ -5,6 +5,7 @@
 /html/dist/
 /.dir-locals.el
 /.config_codegen_stamp
+/.dimension_check_stamp
 /tests/*.srctrace
 /benchmark_results/
 /prebuild

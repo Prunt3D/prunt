@@ -20,6 +20,7 @@
 pragma Extensions_Allowed (On);
 
 with Ada.Numerics;
+with Ada.Numerics.Generic_Elementary_Functions;
 with VSS.Strings; use VSS.Strings;
 with VSS.Strings.Conversions;
 
@@ -44,69 +45,70 @@ package Prunt is
 
    type Pin_State is (High_State, Low_State);
 
-   --  You may notice a lot of math similar to 5.0**(1/2) here when using the below types. This may seem like it should
-   --  be evaluated as 5.0**(1/2) = 5.0**0 = 1.0, which it would be under normal circumstances, but GNAT does some
-   --  magic to evaluate it as 5.0**0.5 and keeps the dimensions intact. If porting this to a different Ada compiler
-   --  then you will have to use ** from Ada.Numerics.Generic_Elementary_Functions and replace all the rationals with
-   --  floating point literals.
+   --  The physical dimensions of the types below are declared with Dimension_Check annotations and checked by
+   --  dimension_check (see dimension_check/README.md), not by the compiler. A root is written with a real exponent,
+   --  as in Area_Value ** 0.5 or Volume_Value ** (1.0 / 3.0), which calls the "**" declared below; dimension_check
+   --  evaluates the exponent exactly and requires it to be static when the base has dimensions.
    type Dimensioned_Float is new Long_Float
    with
-     Dimension_System =>
-       ((Unit_Name => Millimeter, Unit_Symbol => "mm", Dim_Symbol => "Length"),
-        (Unit_Name => Second, Unit_Symbol => "s", Dim_Symbol => "Time"),
-        (Unit_Name => Celsius, Unit_Symbol => "°C", Dim_Symbol => "Temperature"),
-        (Unit_Name => Amp, Unit_Symbol => "A", Dim_Symbol => "Current"),
-        (Unit_Name => Gram, Unit_Symbol => "g", Dim_Symbol => "Mass")),
-     Annotate         => (Prunt_Config, User_Config);
+     Annotate => (Dimension_Check, Dimension_System, "Millimeter", "Second", "Celsius", "Amp", "Gram"),
+     Annotate => (Prunt_Config, User_Config);
+
+   package Dimensioned_Float_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensioned_Float);
+
+   function "**" (Left, Right : Dimensioned_Float'Base) return Dimensioned_Float'Base
+   renames Dimensioned_Float_Math."**";
+   --  Return Left raised to the real power Right. dimension_check gives the result the dimensions of Left multiplied
+   --  by the value of Right.
 
    subtype Length is Dimensioned_Float
-   with Dimension => (Symbol => "mm", Millimeter => 1, others => 0), Annotate => (Prunt_Config, Unit, "mm");
+   with Annotate => (Dimension_Check, Dimension, "Millimeter", 1), Annotate => (Prunt_Config, Unit, "mm");
 
    subtype Time is Dimensioned_Float
-   with Dimension => (Symbol => "s", Second => 1, others => 0), Annotate => (Prunt_Config, Unit, "s");
+   with Annotate => (Dimension_Check, Dimension, "Second", 1), Annotate => (Prunt_Config, Unit, "s");
 
    subtype Temperature is Dimensioned_Float
-   with Dimension => (Symbol => "°C", Celsius => 1, others => 0), Annotate => (Prunt_Config, Unit, "celsius", "°C");
+   with Annotate => (Dimension_Check, Dimension, "Celsius", 1), Annotate => (Prunt_Config, Unit, "celsius", "°C");
 
    subtype Angle is Dimensioned_Float
-   with Dimension => (Symbol => "rad", others => 0), Annotate => (Prunt_Config, Unit, "deg", "°");
+   with Annotate => (Dimension_Check, Dimension), Annotate => (Prunt_Config, Unit, "deg", "°");
 
    subtype Dimensionless is Dimensioned_Float
-   with Dimension => (Symbol => "×", others => 0), Annotate => (Prunt_Config, Unit, "", "×");
+   with Annotate => (Dimension_Check, Dimension), Annotate => (Prunt_Config, Unit, "", "×");
 
    subtype Voltage is Dimensioned_Float
    with
-     Dimension => (Symbol => "nV", Gram => 1, Millimeter => 2, Second => -3, Amp => -1, others => 0),
-     Annotate  => (Prunt_Config, Unit, "volt", "V");
+     Annotate => (Dimension_Check, Dimension, "Gram", 1, "Millimeter", 2, "Second", -3, "Amp", -1),
+     Annotate => (Prunt_Config, Unit, "volt", "V");
 
    subtype Current is Dimensioned_Float
-   with Dimension => (Symbol => "A", Amp => 1, others => 0), Annotate => (Prunt_Config, Unit, "amp", "A");
+   with Annotate => (Dimension_Check, Dimension, "Amp", 1), Annotate => (Prunt_Config, Unit, "amp", "A");
 
    subtype Mass is Dimensioned_Float
-   with Dimension => (Symbol => "g", Gram => 1, others => 0), Annotate => (Prunt_Config, Unit, "gram", "g");
+   with Annotate => (Dimension_Check, Dimension, "Gram", 1), Annotate => (Prunt_Config, Unit, "gram", "g");
 
    subtype Resistance is Dimensioned_Float
    with
-     Dimension => (Symbol => "nohm", Gram => 1, Millimeter => 2, Second => -3, Amp => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "ohm", "Ω");
+     Annotate => (Dimension_Check, Dimension, "Gram", 1, "Millimeter", 2, "Second", -3, "Amp", -2),
+     Annotate => (Prunt_Config, Unit, "ohm", "Ω");
 
    subtype Power is Dimensioned_Float
    with
-     Dimension => (Symbol => "nW", Gram => 1, Millimeter => 2, Second => -3, others => 0),
-     Annotate  => (Prunt_Config, Unit, "watt", "W");
+     Annotate => (Dimension_Check, Dimension, "Gram", 1, "Millimeter", 2, "Second", -3),
+     Annotate => (Prunt_Config, Unit, "watt", "W");
 
    subtype Frequency is Dimensioned_Float
-   with Dimension => (Symbol => "Hz", Second => -1, others => 0), Annotate => (Prunt_Config, Unit, "hertz", "Hz");
+   with Annotate => (Dimension_Check, Dimension, "Second", -1), Annotate => (Prunt_Config, Unit, "hertz", "Hz");
 
    subtype Energy is Dimensioned_Float
    with
-     Dimension => (Symbol => "nJ", Gram => 1, Millimeter => 2, Second => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "joule", "J");
+     Annotate => (Dimension_Check, Dimension, "Gram", 1, "Millimeter", 2, "Second", -2),
+     Annotate => (Prunt_Config, Unit, "joule", "J");
 
    subtype Inductance is Dimensioned_Float
    with
-     Dimension => (Symbol => "nH", Gram => 1, Millimeter => 2, Second => -2, Amp => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "millihenry", "mH");
+     Annotate => (Dimension_Check, Dimension, "Gram", 1, "Millimeter", 2, "Second", -2, "Amp", -2),
+     Annotate => (Prunt_Config, Unit, "millihenry", "mH");
 
    subtype PWM_Scale is Dimensionless range 0.0 .. 1.0 with Annotate => (Prunt_Config, Unit, "", "×");
 
@@ -116,20 +118,19 @@ package Prunt is
       Numerator, Denominator : Dimensionless;
    end record;
 
-   pragma Warnings (Off, "assumed to be");
-   mm        : constant Length := 1.0;
-   s         : constant Time := 1.0;
-   celsius   : constant Temperature := 1.0;
-   radian    : constant Angle := 1.0;
-   nanovolt  : constant Voltage := 1.0;
-   amp       : constant Current := 1.0;
-   nanoohm   : constant Resistance := 1.0;
-   hertz     : constant Frequency := 1.0;
-   nanowatt  : constant Power := 1.0;
-   nanojoule : constant Energy := 1.0;
-   gram      : constant Mass := 1.0;
-   nanohenry : constant Inductance := 1.0;
-   pragma Warnings (On, "assumed to be");
+   --  The base units. A conversion gives a literal the dimensions of its target.
+   mm        : constant Length := Length (1.0);
+   s         : constant Time := Time (1.0);
+   celsius   : constant Temperature := Temperature (1.0);
+   radian    : constant Angle := Angle (1.0);
+   nanovolt  : constant Voltage := Voltage (1.0);
+   amp       : constant Current := Current (1.0);
+   nanoohm   : constant Resistance := Resistance (1.0);
+   hertz     : constant Frequency := Frequency (1.0);
+   nanowatt  : constant Power := Power (1.0);
+   nanojoule : constant Energy := Energy (1.0);
+   gram      : constant Mass := Mass (1.0);
+   nanohenry : constant Inductance := Inductance (1.0);
 
    volt       : constant Voltage := 1_000_000_000.0 * nanovolt;
    ohm        : constant Resistance := 1_000_000_000.0 * nanoohm;
@@ -143,56 +144,54 @@ package Prunt is
 
    subtype Velocity is Dimensioned_Float
    with
-     Dimension => (Symbol => "mm/s", Millimeter => 1, Second => -1, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s");
+     Annotate => (Dimension_Check, Dimension, "Millimeter", 1, "Second", -1),
+     Annotate => (Prunt_Config, Unit, "mm/s");
    subtype Acceleration is Dimensioned_Float
    with
-     Dimension => (Symbol => "mm/s²", Millimeter => 1, Second => -2, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**2", "mm/s²");
+     Annotate => (Dimension_Check, Dimension, "Millimeter", 1, "Second", -2),
+     Annotate => (Prunt_Config, Unit, "mm/s**2", "mm/s²");
    subtype Jerk is Dimensioned_Float
    with
-     Dimension => (Symbol => "mm/s³", Millimeter => 1, Second => -3, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**3", "mm/s³");
+     Annotate => (Dimension_Check, Dimension, "Millimeter", 1, "Second", -3),
+     Annotate => (Prunt_Config, Unit, "mm/s**3", "mm/s³");
    subtype Snap is Dimensioned_Float
    with
-     Dimension => (Symbol => "mm/s⁴", Millimeter => 1, Second => -4, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**4", "mm/s⁴");
+     Annotate => (Dimension_Check, Dimension, "Millimeter", 1, "Second", -4),
+     Annotate => (Prunt_Config, Unit, "mm/s**4", "mm/s⁴");
    subtype Crackle is Dimensioned_Float
    with
-     Dimension => (Symbol => "mm/s⁵", Millimeter => 1, Second => -5, others => 0),
-     Annotate  => (Prunt_Config, Unit, "mm/s**5", "mm/s⁵");
+     Annotate => (Dimension_Check, Dimension, "Millimeter", 1, "Second", -5),
+     Annotate => (Prunt_Config, Unit, "mm/s**5", "mm/s⁵");
 
-   subtype Area is Dimensioned_Float with Dimension => (Symbol => "mm²", Millimeter => 2, others => 0);
-   subtype Volume is Dimensioned_Float with Dimension => (Symbol => "mm³", Millimeter => 3, others => 0);
-   subtype Hypervolume is Dimensioned_Float with Dimension => (Symbol => "mm⁴", Millimeter => 4, others => 0);
+   subtype Area is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", 2);
+   subtype Volume is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", 3);
+   subtype Hypervolume is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", 4);
 
-   subtype Curvature is Dimensioned_Float with Dimension => (Symbol => "mm**(-1)", Millimeter => -1, others => 0);
-   subtype Curvature_To_2 is Dimensioned_Float with Dimension => (Symbol => "mm**(-2)", Millimeter => -2, others => 0);
-   subtype Curvature_To_3 is Dimensioned_Float with Dimension => (Symbol => "mm**(-3)", Millimeter => -3, others => 0);
-   subtype Curvature_To_4 is Dimensioned_Float with Dimension => (Symbol => "mm**(-4)", Millimeter => -4, others => 0);
-   subtype Curvature_To_5 is Dimensioned_Float with Dimension => (Symbol => "mm**(-5)", Millimeter => -5, others => 0);
+   subtype Curvature is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", -1);
+   subtype Curvature_To_2 is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", -2);
+   subtype Curvature_To_3 is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", -3);
+   subtype Curvature_To_4 is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", -4);
+   subtype Curvature_To_5 is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Millimeter", -5);
 
-   subtype Heat_Flux is Dimensioned_Float
-   with Dimension => (Symbol => "mW/mm**2", Gram => 1, Second => -3, others => 0);
+   subtype Heat_Flux is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Gram", 1, "Second", -3);
 
    subtype Heat_Transfer_Coefficient is Dimensioned_Float
-   with Dimension => (Symbol => "mW/(m**2 degC)", Gram => 1, Second => -3, Celsius => -1, others => 0);
+   with Annotate => (Dimension_Check, Dimension, "Gram", 1, "Second", -3, "Celsius", -1);
 
    subtype Thermal_Conductance is Dimensioned_Float
-   with Dimension => (Symbol => "nW/degC", Gram => 1, Millimeter => 2, Second => -3, Celsius => -1, others => 0);
+   with Annotate => (Dimension_Check, Dimension, "Gram", 1, "Millimeter", 2, "Second", -3, "Celsius", -1);
 
    subtype Heat_Capacity is Dimensioned_Float
-   with Dimension => (Symbol => "nJ/degC", Gram => 1, Millimeter => 2, Second => -2, Celsius => -1, others => 0);
+   with Annotate => (Dimension_Check, Dimension, "Gram", 1, "Millimeter", 2, "Second", -2, "Celsius", -1);
 
    subtype Specific_Heat_Capacity is Dimensioned_Float
-   with Dimension => (Symbol => "nJ/(g*degC)", Millimeter => 2, Second => -2, Celsius => -1, others => 0);
+   with Annotate => (Dimension_Check, Dimension, "Millimeter", 2, "Second", -2, "Celsius", -1);
 
-   subtype Inverse_Temperature is Dimensioned_Float
-   with Dimension => (Symbol => "degC**(-1)", Celsius => -1, others => 0);
+   subtype Inverse_Temperature is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Celsius", -1);
    subtype Time_Over_Temperature is Dimensioned_Float
-   with Dimension => (Symbol => "s/degC", Second => 1, Celsius => -1, others => 0);
+   with Annotate => (Dimension_Check, Dimension, "Second", 1, "Celsius", -1);
    subtype Frequency_Over_Temperature is Dimensioned_Float
-   with Dimension => (Symbol => "Hz/degC", Second => -1, Celsius => -1, others => 0);
+   with Annotate => (Dimension_Check, Dimension, "Second", -1, "Celsius", -1);
 
    type Axis_Name is (X_Axis, Y_Axis, Z_Axis, E_Axis) with Annotate => (Prunt_Config, User_Config);
    pragma Ordered (Axis_Name);  --  X_Axis .. Z_Axis selects the spatial axes.

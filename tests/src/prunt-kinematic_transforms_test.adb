@@ -52,9 +52,9 @@ package body Prunt.Kinematic_Transforms_Test is
       Result    : constant Test_Motor_Position :=
         To_Motor_Position
           ([X_Axis => 0.0 * mm, Y_Axis => 0.0 * mm, Z_Axis => 10.0 * mm, E_Axis => 3.0 * mm], Transform);
-      A_Height  : constant Length := 10.0 * mm + (250.0**2 - 100.0**2)**(1 / 2) * mm;
-      B_Height  : constant Length := 10.0 * mm + (251.0**2 - 100.0**2)**(1 / 2) * mm;
-      C_Height  : constant Length := 10.0 * mm + (249.0**2 - 100.0**2)**(1 / 2) * mm;
+      A_Height  : constant Length := 10.0 * mm + (250.0**2 - 100.0**2)**0.5 * mm;
+      B_Height  : constant Length := 10.0 * mm + (251.0**2 - 100.0**2)**0.5 * mm;
+      C_Height  : constant Length := 10.0 * mm + (249.0**2 - 100.0**2)**0.5 * mm;
    begin
       T.Register;
       T.Assert (Close (Result (A_Motor), A_Height / mm), "Tower A centre position");
@@ -120,7 +120,7 @@ package body Prunt.Kinematic_Transforms_Test is
       Pos         : constant Position :=
         [X_Axis => 20.0 * mm, Y_Axis => -15.0 * mm, Z_Axis => 7.0 * mm, E_Axis => -2.0 * mm];
       Result      : constant Test_Motor_Position := To_Motor_Position (Pos, Transform);
-      A_Height    : constant Length := 7.0 * mm + (250.0**2 - 80.0**2 - 15.0**2)**(1 / 2) * mm;
+      A_Height    : constant Length := 7.0 * mm + (250.0**2 - 80.0**2 - 15.0**2)**0.5 * mm;
    begin
       T.Register;
       T.Assert (Close (Result (A_Motor), A_Height / mm), "off-axis Tower A");

@@ -59,7 +59,7 @@ package body Prunt.Kinematic_Transforms is
                               raise Constraint_Error with "Delta position is outside the reachable workspace.";
                            end if;
 
-                           Carriage := Pos (Z_Axis) + Radicand**(1 / 2);
+                           Carriage := Pos (Z_Axis) + Radicand**0.5;
                            Result (Motor) := Carriage * Motor_Params.Units_Per_Distance;
                         end;
 

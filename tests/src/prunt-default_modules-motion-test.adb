@@ -294,7 +294,7 @@ package body Prunt.Default_Modules.Motion.Test is
       end Arc_Rejected;
    begin
       T.Register;
-      T.Assert (abs (Linear_XY_Distance (Start_Pos, Finish_Pos) - (200.0 * mm**2)**(1 / 2)) < 1.0E-10 * mm);
+      T.Assert (abs (Linear_XY_Distance (Start_Pos, Finish_Pos) - (200.0 * mm**2)**0.5) < 1.0E-10 * mm);
       T.Assert
         (abs (Helix_XY_Distance (Start_Pos, Finish_Pos, Center, False) - 5.0 * Ada.Numerics.Pi * mm) < 1.0E-10 * mm);
       T.Assert

@@ -1,0 +1,11 @@
+--  The sources of dimension_check's expectation tests; see tests/run_tests.py.
+project Cases is
+   for Source_Dirs use (".");
+   for Object_Dir use "../out/obj";
+
+   package Format is
+      for Width ("Ada") use "119";
+      for Charset ("Ada") use "utf-8";
+      for Override_Layout ("Ada") use ("../../../formatting.json");
+   end Format;
+end Cases;

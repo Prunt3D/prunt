@@ -618,7 +618,7 @@ private
 
    type Mixed_Derivative_Plain_Coefficient_Array is array (Axis_Name) of Mixed_Derivative_Plain_Coefficients;
 
-   subtype Time_Squared is Dimensioned_Float with Dimension => (Symbol => "s²", Second => 2, others => 0);
+   subtype Time_Squared is Dimensioned_Float with Annotate => (Dimension_Check, Dimension, "Second", 2);
 
    type Delta_V_Solver is record
       Limits_Valid      : Boolean := False;

@@ -3258,11 +3258,11 @@ package body Prunt.Motion_Planner is
                Cases :=
                  [
                   --  Reachable: Am (Test Case D3.4)
-                  4 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  4 => [(0.5 * Am / Cm)**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s],
                   --  Impossible case.
-                  3 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  3 => [(0.5 * Am / Cm)**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s],
                   --  Impossible case.
-                  2 => [(0.5 * Am / Cm)**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+                  2 => [(0.5 * Am / Cm)**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s],
                   --  Reachable: None (Test Case D3.1)
                   1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
             end if;
@@ -3287,11 +3287,11 @@ package body Prunt.Motion_Planner is
             Cases :=
               [
                --  Reachable: Am (Test Case D5.4)
-               4 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               4 => [(Am / (2.0 * Cm))**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               3 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               3 => [(Am / (2.0 * Cm))**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Impossible case.
-               2 => [(Am / (2.0 * Cm))**(1 / 3), 0.0 * s, 0.0 * s, 0.0 * s],
+               2 => [(Am / (2.0 * Cm))**(1.0 / 3.0), 0.0 * s, 0.0 * s, 0.0 * s],
                --  Reachable: None (Test Case D5.1)
                1 => [0.0 * s, 0.0 * s, 0.0 * s, 0.0 * s]];
          end if;
@@ -3574,7 +3574,7 @@ package body Prunt.Motion_Planner is
                   Solver.T2 := T2;
                else
                   Solver.Region := Region_3;
-                  Solver.T1 := (0.5 * Am / Cm)**(1 / 3);
+                  Solver.T1 := (0.5 * Am / Cm)**(1.0 / 3.0);
                end if;
             end if;
          else
@@ -3588,7 +3588,7 @@ package body Prunt.Motion_Planner is
                Solver.T3 := T3;
             else
                Solver.Region := Region_5;
-               Solver.T1 := (0.5 * Am / Cm)**(1 / 3);
+               Solver.T1 := (0.5 * Am / Cm)**(1.0 / 3.0);
             end if;
          end if;
       exception
@@ -3756,7 +3756,7 @@ package body Prunt.Motion_Planner is
          when Region_3 | Region_5 =>
             T4 := Vd / Am - 4.0 * T1;
             if T4 > 0.0 * s then
-               --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4 / 3)
+               --  Vd > 8.0 * Cm * (0.5 * Am / Cm) ** (4.0 / 3.0)
                --  Reachable: Am (Test Cases V3.4 and V5.4)
                return ([T1, 0.0 * s, 0.0 * s, T4], Region, 4);
             else

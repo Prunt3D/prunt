@@ -1,0 +1,27 @@
+name = "dimension_check"
+description = "Checks physical dimensions declared with Annotate aspects"
+version = "0.1.0-dev"
+
+authors = ["Liam Powell"]
+maintainers = ["Liam Powell <liam@liampll.com>"]
+maintainers-logins = ["liampwll"]
+licenses = "GPL-3.0-or-later"
+website = ""
+tags = []
+
+executables = ["dimension_check"]
+
+[[depends-on]]
+gnat_native = "~16.2.1007"
+# From here: https://github.com/Prunt3D/prunt_alire_index
+
+[[depends-on]]
+libadalang_prebuilt = "^26.0.1005"
+
+[build-switches]
+"*".style_checks = "No"
+
+[[pins]]
+gnat_native = "16.2.1007"
+gnat = "16.2.1007"
+libadalang_prebuilt = "26.0.1005"

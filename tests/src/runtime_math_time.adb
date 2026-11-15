@@ -36,17 +36,17 @@ procedure Runtime_Math_Time is
    Exponent_Mask : constant Float_Bits := 16#7FF0_0000_0000_0000#;
 
    function Half (X : Dimensionless) return Dimensionless
-   is (X**(1 / 2));
+   is (X**0.5);
    function Root (X : Dimensionless) return Dimensionless
    is (Dimensionless_Math.Sqrt (X));
    function Quarter (X : Dimensionless) return Dimensionless
-   is (X**(1 / 4));
+   is (X**(1.0 / 4.0));
    function Root_Twice (X : Dimensionless) return Dimensionless
    is (Dimensionless_Math.Sqrt (Dimensionless_Math.Sqrt (X)));
    function Third (X : Dimensionless) return Dimensionless
-   is (X**(1 / 3));
+   is (X**(1.0 / 3.0));
    function Fifth (X : Dimensionless) return Dimensionless
-   is (X**(1 / 5));
+   is (X**(1.0 / 5.0));
    function Exponent (X : Dimensionless) return Dimensionless
    is (Dimensionless (Dimensionless'Exponent (X)));
    function Fraction (X : Dimensionless) return Dimensionless
