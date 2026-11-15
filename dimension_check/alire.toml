@@ -12,7 +12,7 @@ tags = []
 executables = ["dimension_check"]
 
 [[depends-on]]
-gnat_native = "~16.2.1007"
+gnat_native = "~16.2.1009"
 # From here: https://github.com/Prunt3D/prunt_alire_index
 
 [[depends-on]]
@@ -22,6 +22,6 @@ libadalang_prebuilt = "^26.0.1005"
 "*".style_checks = "No"
 
 [[pins]]
-gnat_native = "16.2.1007"
-gnat = "16.2.1007"
+gnat_native = "16.2.1009"
+gnat = "16.2.1009"
 libadalang_prebuilt = "26.0.1005"
