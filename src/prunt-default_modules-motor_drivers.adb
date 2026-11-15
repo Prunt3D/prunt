@@ -158,7 +158,8 @@ package body Prunt.Default_Modules.Motor_Drivers is
               and then
                 (Select_All
                  or else
-                   (for some Axis in Requested_Axes'Range => Requested_Axes (Axis) and then Motor_Axes (Axis, Motor)))];
+                   (for some Axis in Requested_Axes'Range =>
+                      Requested_Axes (Axis) and then Motor_Axes (Axis, Motor)))];
       end Selected_Motors;
 
       function Affected_Axes (Requested_Axes : Axis_Selection) return Axis_Selection is
