@@ -5,7 +5,7 @@ version = "1.0.0"
 authors = ["Liam Powell"]
 maintainers = ["Liam Powell <liam@liampll.com>"]
 maintainers-logins = ["liampwll"]
-licenses = "MIT"
+licenses = "MIT AND BSD-3-Clause-Open-MPI"
 website = ""
 tags = []
 
@@ -54,10 +54,22 @@ vss_text = "^26.0.0"
 [[depends-on]]
 vss_extra = "^26.0.0"
 
+[[depends-on]]
+sparklib = "^16.1.0"
+# The ghost code of the SPARK units uses SPARKlib's exact reals and rounding lemmas. Ghost code is ignored when
+# compiling, so none of it is in the executable.
+
+[[depends-on]]
+gnatprove = "~16.2.1001"
+# Prunt's build of GNATprove, from https://github.com/Prunt3D/prunt_alire_index, with the front end of gnat_native
+# 16.2.1008. See prove.sh and gnatprove.sh.
+
 [[pins]]
 simple_components = { url = "https://github.com/Prunt3D/dak_simple_components.git", commit = "7d3e282ee8ab8c5a836944c80515bf85437425e5" }
 gnat_native = "16.2.1009"
 gnat = "16.2.1009"
+gnatprove = "16.2.1001"
+sparklib = "16.1.0"
 gnatcoll = "26.0.0"
 gnatcoll_minimal = "26.0.0"
 libgpr = { url = "https://github.com/Prunt3D/gprbuild.git", commit = "56139608315345ffe109bb98ecb3d3bfa27c036e" }

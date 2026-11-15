@@ -29,6 +29,7 @@ with Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer;
 with Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
 with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Preprocessor;
+with Prunt.Motion_Planner.Trajectory.Solvers.Estimates;
 
 package body Prunt.Motion_Planner.Planner is
 
@@ -2491,7 +2492,7 @@ package body Prunt.Motion_Planner.Planner is
       --  fits, to the last machine number unless a tolerance stops it earlier. A ramp to Start_Vel is empty. The
       --  speed gained by the optimal ramp over Distance is that speed up to rounding, so the search normally only
       --  has to settle the last few machine numbers around it.
-      Gain := Delta_V_Over_Distance (Solver, Start_Vel, Distance);
+      Gain := Trajectory.Solvers.Estimates.Delta_V_Over_Distance (Solver, Start_Vel, Distance);
       return
         Velocity'Max
           (Start_Vel,

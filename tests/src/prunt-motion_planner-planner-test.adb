@@ -27,6 +27,8 @@ with Prunt.Motion_Planner.Planner.Preprocessor;
 with Prunt.Motion_Planner.Planner.Kinematic_Limiter;
 with Prunt.Motion_Planner.Planner.Extrusion_Density_Normalizer;
 with Prunt.Motion_Planner.Planner.Feedrate_Profile_Generator;
+with Prunt.Motion_Planner.Trajectory.Profiles; use Prunt.Motion_Planner.Trajectory.Profiles;
+with Prunt.Motion_Planner.Trajectory.Solvers; use Prunt.Motion_Planner.Trajectory.Solvers;
 with Trendy_Test; use Trendy_Test;
 
 package body Prunt.Motion_Planner.Planner.Test is

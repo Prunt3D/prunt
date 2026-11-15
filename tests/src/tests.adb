@@ -56,6 +56,7 @@ with Prunt.Input_Shapers.Pressure_Advance_Shapers.Test;
 with Prunt.Integration_Config_Overlays.Test;
 with Prunt.Kinematic_Transforms_Test;
 with Prunt.Kinematic_Transforms;
+with Prunt.LAPACK.Test;
 with Prunt.Logger;
 with Prunt.Logger.Test_Control;
 with Prunt.Motion_Planner.Corner_Transitions.Test;
@@ -68,6 +69,7 @@ with Prunt.Step_Generator_Restart_Test;
 with Prunt.Step_Generator_Shaping_Test;
 with Prunt.Step_Generator_Timing_Test;
 with Prunt.Thermistors.Test;
+with Prunt.Motion_Planner.Trajectory.Test;
 with Prunt.TMC2240_Test_UART;
 with Trendy_Test.Reports;
 
@@ -308,6 +310,7 @@ begin
    Trendy_Test.Register (Prunt.Input_Shapers.Pressure_Advance_Shapers.Test.All_Tests);
    Trendy_Test.Register (Prunt.Integration_Config_Overlays.Test.All_Tests);
    Trendy_Test.Register (Prunt.Kinematic_Transforms_Test.All_Tests);
+   Trendy_Test.Register (Prunt.LAPACK.Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Corner_Transitions.Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Stereographic_Curves.Test.All_Tests);
    Trendy_Test.Register (Prunt.Motion_Planner.Planner_Primitive_Jet_Test.All_Tests);
@@ -317,6 +320,7 @@ begin
    Trendy_Test.Register (Prunt.Step_Generator_Shaping_Test.All_Tests);
    Trendy_Test.Register (Prunt.Step_Generator_Timing_Test.All_Tests);
    Trendy_Test.Register (Prunt.Thermistors.Test.All_Tests);
+   Trendy_Test.Register (Prunt.Motion_Planner.Trajectory.Test.All_Tests);
 
    if Is_Xcov_Dump then
       pragma Annotate (Xcov, Dump_Buffers, "individual_test-tests.(startup)");

@@ -17,11 +17,16 @@
 --  SOFTWARE.
 --------------------------------------------------
 
+with Ada.Numerics.Generic_Elementary_Functions;
+with Prunt.Motion_Planner.Trajectory.Profiles; use Prunt.Motion_Planner.Trajectory.Profiles;
+with Prunt.Motion_Planner.Trajectory.Solvers; use Prunt.Motion_Planner.Trajectory.Solvers;
 with Trendy_Test; use Trendy_Test;
 
 package body Prunt.Motion_Planner.Test is
 
    pragma Extensions_Allowed (On);
+
+   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
 
    procedure Check_Profile_For_Distance
      (Start_Vel   : Velocity;

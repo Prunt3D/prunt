@@ -12,7 +12,7 @@ project Prunt is
          Build_Profile := "release";
    end case;
 
-   for Languages use ("Ada", "Fortran", "C");
+   for Languages use ("Ada", "C");
 
    for Library_Name use "prunt";
    for Library_Version use Project'Library_Name & ".so." & Prunt_Config.Crate_Version;
@@ -22,8 +22,7 @@ project Prunt is
       "config/",
       "generated_src_html/",
       "generated_src_modules/",
-      "gnatcoll_modifications_src/",
-      "lapack_src/");
+      "gnatcoll_modifications_src/");
 
    --  The test crate builds Prunt with mocked sources, so it gets separate object and library directories. Sharing them
    --  would mix mocked and passthrough objects and recompile units on each switch between the two builds.
@@ -148,22 +147,10 @@ project Prunt is
            "-gnatw.w",   --  Disallow useless "pragma Warnings (Off, ...)"
            "-gnatw.x");  --  Disallow exceptions when exception propagation is disabled
 
-      case Build_Profile is
-         when "release" =>
-            for Default_Switches ("Fortran") use ("-O2");
-         when others =>
-            null;
-      end case;
-
       --  Local rather than global so the pragmas do not reach dependencies. Alire shares their builds between
       --  crates and worktrees, and a changed global pragmas file recompiles them.
       for Local_Configuration_Pragmas use "gnat.adc";
    end Compiler;
-
-   package Naming is
-      for Implementation_Exceptions ("Fortran") use
-        ("lapack_free.f90");
-   end Naming;
 
    package Binder is
       --  TODO: Do these propagate out or are they useless here?
@@ -246,6 +233,37 @@ project Prunt is
          "Prunt.Web_Server",
          "Prunt");
    end Coverage;
+
+   package Prove is
+      --  GNATprove analyses the SPARK units, which prove.sh names. See docs/spark_trajectory.md,
+      --  docs/spark_blender.md and docs/spark_lapack.md.
+      for Proof_Switches ("Ada") use ("--output-header", "--level=2");
+
+      --  These units are proved free of run-time errors by bounding every floating-point operation. COLIBRI settles
+      --  most of those bounds, which the three provers of level 2 do not all settle. In Stereographic_Curves the
+      --  subprograms marked Skip_Proof recover from floating-point overflow by handling Constraint_Error, which no
+      --  proof can show to be absent because it is meant to happen, or call such a subprogram; they are checked for
+      --  SPARK legality and data flow only, and docs/spark_blender.md lists them. The blender's construction returns
+      --  a curve only with the certificates of the proved units.
+      for Proof_Switches ("prunt-motion_planner-trajectory-searches-model.adb") use
+        ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-motion_planner-trajectory-solvers-estimates.adb") use
+        ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-motion_planner-stereographic_curves.adb") use
+        ("--prover=cvc5,z3,altergo,colibri", "--timeout=20");
+      --  Two postconditions of this unit, those of Create_Blend and Build_Ideal_Candidate, take a prover about ten
+      --  seconds on a busy machine, twice level 2's limit, so the unit gets a longer one.
+      for Proof_Switches ("prunt-motion_planner-stereographic_curves-geometry.adb") use
+        ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-balancing.adb") use ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-bounds.adb") use ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-eigenvalues.adb") use ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-hessenberg_qr.adb") use ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-hessenberg_reduction.adb") use ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-norms.adb") use ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-reflectors.adb") use ("--prover=cvc5,z3,altergo,colibri");
+      for Proof_Switches ("prunt-lapack-schur_blocks.adb") use ("--prover=cvc5,z3,altergo,colibri");
+   end Prove;
 
    package Pretty_Printer is
       for Default_Switches ("ada") use

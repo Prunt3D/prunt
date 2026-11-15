@@ -108,6 +108,8 @@ private with Prunt.Bounded_Indefinite_Vectors;
 private with Prunt.Cleanup_Exceptions;
 private with Prunt.Motion_Planner.Corner_Transitions;
 private with Prunt.Motion_Planner.Stereographic_Curves;
+private with Prunt.Motion_Planner.Trajectory.Profiles;
+private with Prunt.Motion_Planner.Trajectory.Solvers;
 private with System.Pool_Local;
 private with System.Atomic_Operations.Exchange;
 
@@ -490,6 +492,8 @@ private
 
    use Prunt.Motion_Planner.Stereographic_Curves;
    use Prunt.Motion_Planner.Corner_Transitions;
+   use Prunt.Motion_Planner.Trajectory.Profiles;
+   use Prunt.Motion_Planner.Trajectory.Solvers;
 
    Motor_Delta_Numerical_Safety_Factor : constant Dimensionless := 0.999;
    Maximum_Homing_Feedrate_Adjustments : constant Positive := 128;

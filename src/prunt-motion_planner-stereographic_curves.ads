@@ -22,12 +22,23 @@ pragma Unsuppress (Overflow_Check);
 pragma Unsuppress (Range_Check);
 pragma Unsuppress (Division_Check);
 
-with Ada.Numerics.Generic_Elementary_Functions;
 with Interfaces;
+
+with Prunt.Motion_Planner.Stereographic_Kernel.Certified_Evaluator;
+with Prunt.Motion_Planner.Stereographic_Kernel.Certified_Evaluator.Motion;
+with Prunt.Motion_Planner.Stereographic_Kernel.Certified_Geometry;
+with Prunt.Motion_Planner.Stereographic_Kernel.Elementary;
+with Prunt.Motion_Planner.Stereographic_Kernel.Finish_Correction;
+with Prunt.Motion_Planner.Stereographic_Kernel.Ideal_Geometry;
+with Prunt.Motion_Planner.Stereographic_Kernel.Intervals;
+with Prunt.Motion_Planner.Stereographic_Kernel.Retained_Tangent;
+with Prunt.Motion_Planner.Stereographic_Kernel.Sample_Nodes;
 
 pragma Extensions_Allowed (On);
 
-package Prunt.Motion_Planner.Stereographic_Curves is
+package Prunt.Motion_Planner.Stereographic_Curves
+  with SPARK_Mode => On
+is
    type Stereographic_Curve is private;
    --  A successfully constructed blend together with the certificates and construction data needed for later bounds
    --  queries. Use To_Evaluator when only realtime point evaluation and arc length are required.
@@ -74,7 +85,8 @@ package Prunt.Motion_Planner.Stereographic_Curves is
    --     T·T‴ + 3 T′·T″ = 0
    --
    --  Rejecting inconsistent endpoint data here prevents construction from treating an impossible tangent jet as
-   --  valid; residuals consistent with floating-point roundoff are accepted.
+   --  valid; residuals consistent with floating-point roundoff are accepted. So is no tangent with a component above
+   --  two in magnitude, and no derivative with a component above 2¹⁰⁰ in millimetres, which no machine has.
 
    type Endpoint_Tangent_Jet is record
       Tangent : Position_Scale := [X_Axis => 1.0, others => 0.0];
@@ -199,18 +211,91 @@ package Prunt.Motion_Planner.Stereographic_Curves is
    end record;
    --  A construction status with a curve payload only when construction succeeded.
 
-   function Create_Blend (Request : Blend_Request) return Blend_Result
-   with
-     Post =>
-       Create_Blend'Result.Kind /= Blend_Not_Attempted
-       and then
-         (if Create_Blend'Result.Kind = Blend_Success
-          then
-            Arc_Length (Create_Blend'Result.Curve) > 0.0 * mm
-            and then Arc_Length (Create_Blend'Result.Curve) <= Request.Maximum_Arc_Length);
+   function Geometry_Certificate
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Certified_Geometry.Certificate;
+   --  The proof-carrying certificate of the ideal tangent's geometry. Certified_Geometry states what it guarantees
+   --  at every point of the curve: Lemma_In_Cone, Lemma_Chord_Progress and Lemma_Unit_Speed.
+
+   function Certificate_Matches (Curve : Stereographic_Curve) return Boolean;
+   --  Whether the certificate was made for the frame and chart which this curve itself uses.
+
+   function Evaluator_Certificate
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Certified_Evaluator.Certificate;
+   --  The proof-carrying certificate of the tangent which the realtime evaluator integrates. Certified_Evaluator
+   --  and its child Motion state what it guarantees at every point of the curve.
+
+   function Evaluator_Matches (Curve : Stereographic_Curve) return Boolean;
+   --  Whether that certificate was made for the geometry certificate, the distance warp and the evaluator cache
+   --  which this curve itself uses.
+
+   function Finish_In_Millimetres
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Retained_Tangent.Dimensionless_Axis_Vector;
+   --  The finish point which the evaluator returns at the end of the curve.
+
+   function Uncorrected_Finish_In_Millimetres
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Retained_Tangent.Dimensionless_Axis_Vector;
+   --  Where the evaluator's integral of the retained tangent ends, before its endpoint correction.
+
+   function Length_In_Millimetres (Curve : Stereographic_Curve) return Dimensionless;
+   --  Arc_Length as a plain number.
+
+   function Executed_Tangent_Error_Bound (Curve : Stereographic_Curve) return Dimensionless;
+   --  A proved uniform bound on the Euclidean distance between the ideal unit tangent and the tangent of the
+   --  executed motion, endpoint correction included: Finish_Correction.Total_Tangent_Error_Bound of the
+   --  evaluator certificate's own bound. It equals Retained_Tangent_Error_Bound except where construction kept a
+   --  smaller bound from the Bernstein reconstruction, which is not proved.
+
+   package Certified_Construction is
+
+      pragma Assertion_Policy (Post => Ignore);
+      --  The postcondition of Create_Blend speaks of ghost functions, which are never compiled, so it is proved and
+      --  never executed, whatever the build profile. This package is only there to keep that policy from applying
+      --  to the other contracts of Stereographic_Curves, which are executed where assertions are enabled.
+
+      function Create_Blend (Request : Blend_Request) return Blend_Result
+      with
+        Post =>
+          Create_Blend'Result.Kind /= Blend_Not_Attempted
+          and then
+            (if Create_Blend'Result.Kind = Blend_Success
+             then
+               Arc_Length (Create_Blend'Result.Curve) > 0.0 * mm
+               and then Arc_Length (Create_Blend'Result.Curve) <= Request.Maximum_Arc_Length
+               and then Certificate_Matches (Create_Blend'Result.Curve)
+               and then
+                 (case Stereographic_Kernel.Certified_Geometry.Kind
+                         (Geometry_Certificate (Create_Blend'Result.Curve))
+                  is
+                    when Stereographic_Kernel.Certified_Geometry.Not_Certified  => False,
+                    when Stereographic_Kernel.Certified_Geometry.In_Cone        => True,
+                    when Stereographic_Kernel.Certified_Geometry.Chord_Progress => Request.Bulge /= Never)
+               and then Evaluator_Matches (Create_Blend'Result.Curve)
+               and then
+                 Stereographic_Kernel.Certified_Evaluator.Motion.Is_Evaluator
+                   (Evaluator_Certificate (Create_Blend'Result.Curve),
+                    Finish_In_Millimetres (Create_Blend'Result.Curve),
+                    Uncorrected_Finish_In_Millimetres (Create_Blend'Result.Curve),
+                    Length_In_Millimetres (Create_Blend'Result.Curve),
+                    Executed_Tangent_Error_Bound (Create_Blend'Result.Curve)));
+
+   end Certified_Construction;
+
+   function Create_Blend (Request : Blend_Request) return Blend_Result renames Certified_Construction.Create_Blend;
    --  Validate Request, solve the endpoint-closure problem, and compile the result into a bounded realtime
    --  representation. Failure is reported through the result kind; invalid input or an unsupported geometry does not
    --  raise an exception.
+   --
+   --  A successful result carries a certificate for its own ideal tangent: it stays in the cone of the endpoint
+   --  tangents, or, only when the request allows bulging, it never travels backwards along the chord. The
+   --  postcondition of Certified_Construction.Create_Blend, which states this, is proved without relying on the
+   --  construction itself being proved: Create_Blend returns a curve only after checking the certificate which the
+   --  proved certificate functions issued for it.
+   --
+   --  It also carries a certificate for the tangent which its realtime evaluator integrates, made for its own geometry
+   --  certificate, warp and cache, with a finite bound, Executed_Tangent_Error_Bound, on the distance between the
+   --  ideal tangent and the tangent of the executed motion. Stereographic_Kernel.Certified_Evaluator.Motion states
+   --  what follows: the executed motion stays in the cone, or progresses along the chord, up to that bound, and has
+   --  unit speed up to that bound and the frame's defect.
 
    function Derivative_Bounds (Curve : Stereographic_Curve) return Unit_Speed_Axial_Derivative_Bounds;
    --  Return certified absolute bounds for each machine-axis component of the tangent and its first four distance
@@ -297,7 +382,12 @@ package Prunt.Motion_Planner.Stereographic_Curves is
 
 private
 
-   package Dimensionless_Math is new Ada.Numerics.Generic_Elementary_Functions (Dimensionless);
+   use Stereographic_Kernel.Elementary;
+   --  The elementary functions, Dimensionless_Math, with what the proofs of this unit take on trust about them.
+
+   use Stereographic_Kernel.Ideal_Geometry;
+   use Stereographic_Kernel.Intervals;
+   use Stereographic_Kernel.Retained_Tangent;
 
    pragma
      Compile_Time_Error
@@ -307,39 +397,17 @@ private
    --  Ideal tangent
    ---------------------------------------------------------------------------
 
-   Fixed_Chart_Degree : constant := 8;
-   --  Degree of the polynomial chart. Degree eight provides nine coefficients: eight satisfy the tangent value and
-   --  first three derivatives at both endpoints, while the remaining mode is available to close the curve position.
-
    Maximum_Tangent_Numerator_Degree : constant := 2 * Fixed_Chart_Degree;
    --  Highest polynomial degree produced when the degree-eight chart is mapped back to a unit tangent through inverse
    --  stereographic projection.
-
-   subtype Chart_Coefficient_Index is Natural range 0 .. Fixed_Chart_Degree;
-   --  Index of a coefficient in the fixed degree-eight chart.
-
-   subtype Chart_Component_Index is Positive range 1 .. 3;
-   --  Index of one coordinate in the three-dimensional stereographic chart used to represent a unit tangent.
-
-   subtype Frame_Component_Index is Natural range 0 .. 3;
-   --  Index of a basis vector in the four-dimensional motion space. Component zero defines the axis opposite the
-   --  stereographic projection pole; components one through three correspond to Chart_Component_Index.
 
    type Chart_Vector is array (Chart_Component_Index) of Dimensionless;
    --  One point in the three-dimensional stereographic chart. Unlike Position_Scale, these components are chart
    --  coordinates rather than machine-axis components and are not constrained to form a unit vector.
 
-   type Bernstein_Chart is array (Chart_Coefficient_Index, Chart_Component_Index) of Dimensionless;
-   --  The three chart polynomials stored as Bernstein control coefficients. This basis is used while imposing endpoint
-   --  derivatives and adding the endpoint-invisible closure mode.
-
    type Power_Chart is array (Chart_Coefficient_Index, Chart_Component_Index) of Dimensionless;
    --  The same three chart polynomials stored as ordinary power coefficients for Horner evaluation. Keeping the power
    --  and Bernstein bases as distinct types makes an accidental basis mix-up a compile-time error.
-
-   type Frame_Vector_Array is array (Frame_Component_Index) of Position_Scale;
-   --  A complete orthonormal basis for the four machine axes. Each element is one unit basis vector expressed in
-   --  machine-axis coordinates.
 
    subtype Tangent_Numerator_Index is Natural range 0 .. Maximum_Tangent_Numerator_Degree;
    --  Index of a coefficient in a polynomial numerator produced by inverse stereographic projection.
@@ -390,17 +458,106 @@ private
    type Raw_Bernstein is array (Chart_Coefficient_Index) of Dimensionless;
    --  One scalar degree-eight Bernstein polynomial, used for basis conversion and the closure envelope.
 
-   type Interval is record
-      Lower : Dimensionless := 0.0;
-      --  Inclusive lower endpoint, rounded toward negative infinity.
+   ---------------------------------------------------------------------------
+   --  Magnitude limits of the construction
+   ---------------------------------------------------------------------------
+   --  The construction is free of run-time errors because each stage tests the numbers it is given, or the numbers
+   --  it has produced, against a limit before the next stage computes with them, and fails closed beyond it. Within
+   --  a stage the limits bound every sum, product and quotient far below the largest floating-point number. The
+   --  limits are far above anything a real machine's corner produces, so they change no result which matters; they
+   --  replace the handlers of Constraint_Error with which this code used to recover from overflow.
 
-      Upper : Dimensionless := 0.0;
-      --  Inclusive upper endpoint, rounded toward positive infinity.
+   Tame_Limit : constant := 2.0**100;
+   --  The magnitude within which the stages hand numbers to one another.
 
-      Valid : Boolean := True;
-      --  False when finite enclosing arithmetic could not be established.
-   end record;
-   --  A conservative floating-point enclosure used to certify bounds without trusting ordinary roundoff direction.
+   Unit_Component_Limit : constant := 2.0;
+   --  Above every component of a vector which is a unit vector to within rounding, such as a frame vector.
+
+   Jet_Derivative_Limit : constant := 2.0**100;
+   --  Largest magnitude, in millimetres, of a component of a requested tangent derivative.
+
+   Norm_Operand_Limit : constant := 2.0**500;
+   --  Largest magnitude of a component whose vector Safe_Norm measures.
+
+   Taylor_Operand_Limit : constant := 2.0**470;
+   Taylor_Product_Limit : constant := 2.0**942;
+   --  Largest magnitude of a coefficient of a factor of Raw_Taylor_Multiply, and of a coefficient of its product.
+
+   Taylor_Divisor_Limit    : constant := 2.0**110;
+   Taylor_Reciprocal_Limit : constant := 2.0**468;
+   --  Largest magnitude of a coefficient of a series which Raw_Taylor_Reciprocal inverts, and of a coefficient of its
+   --  reciprocal: each order multiplies by a coefficient and divides by the constant term again.
+
+   Chord_Length_Limit : constant Length := 2.0**102 * mm;
+   --  Above the distance between two points whose coordinates are within Coordinate_Limit.
+
+   Candidate_Component_Limit : constant := 16.0;
+   --  Largest magnitude of a component of a direction offered to Complete_Frame: a sum of a few unit vectors.
+
+   Chart_Build_Limit : constant := 2.0**560;
+   --  Above every coefficient of a chart built from jets, a length ratio and closure coefficients within Tame_Limit:
+   --  the cube of the length ratio and of the warp factor's reciprocal times a jet, with room for the sums.
+
+   Power_Basis_Limit : constant := 2.0**602;
+   --  Above every power coefficient of a chart within Chart_Build_Limit: an eighth difference times a binomial
+   --  coefficient.
+
+   Chart_Point_Limit : constant := 2.0**105;
+   --  Above a point of a chart whose coefficients are within Tame_Limit, and the largest magnitude of a chart
+   --  point which is mapped to the sphere.
+
+   Lambda_Limit : constant := 2.0**40;
+   --  Largest ratio of a curve's length to its chord which the closure solve considers.
+
+   Lambda_Terms_Limit : constant := 2.0**606;
+   --  Above every coefficient of the charts which multiply the powers of the length ratio: a power coefficient
+   --  less up to six times another.
+
+   Maximum_Panel_Count : constant := 64;
+   --  Largest number of quadrature panels of a closure residual.
+
+   Closure_Chart_Limit : constant := 2.0**224;
+   --  Above every power coefficient of the chart at a length ratio within Lambda_Limit, for terms and closure
+   --  coefficients within Tame_Limit: four terms times powers of the ratio up to its cube, and the closure mode.
+
+   Frame_Operand_Limit : constant := 2.0**800;
+   Frame_Product_Limit : constant := 2.0**804;
+   --  Largest magnitude of a component which is resolved in a frame, or out of one, and of the result.
+
+   function Within (Value : Position_Scale; Limit : Dimensionless) return Boolean
+   is (for all Axis in Axis_Name => abs Value (Axis) <= Limit);
+
+   function Within (Value : Raw_Taylor; Limit : Dimensionless) return Boolean
+   is (for all Order in Raw_Taylor'Range => abs Value (Order) <= Limit);
+
+   function Within (Value : Raw_Vector_3; Limit : Dimensionless) return Boolean
+   is (for all Component in Chart_Component_Index => abs Value (Component) <= Limit);
+
+   function Within (Value : Chart_Vector; Limit : Dimensionless) return Boolean
+   is (for all Component in Chart_Component_Index => abs Value (Component) <= Limit);
+
+   function Within (Value : Raw_Vector_4; Limit : Dimensionless) return Boolean
+   is (for all Component in Frame_Component_Index => abs Value (Component) <= Limit);
+
+   function Within (Value : Scaled_Tangent_Jet; Limit : Dimensionless) return Boolean
+   is (for all Order in Scaled_Tangent_Jet'Range => (for all Axis in Axis_Name => abs Value (Order) (Axis) <= Limit));
+
+   function Within (Value : Chart_Jet_Array; Limit : Dimensionless) return Boolean
+   is (for all Order in Chart_Jet_Array'Range =>
+         (for all Component in Chart_Component_Index => abs Value (Order) (Component) <= Limit));
+
+   function Within (Value : Frame_Vector_Array; Limit : Dimensionless) return Boolean
+   is (for all Component in Frame_Component_Index =>
+         (for all Axis in Axis_Name => abs Value (Component) (Axis) <= Limit));
+
+   function Within (Value : Bernstein_Chart; Limit : Dimensionless) return Boolean
+   is (for all Index in Chart_Coefficient_Index =>
+         (for all Component in Chart_Component_Index => abs Value (Index, Component) <= Limit));
+
+   function Within (Value : Power_Chart; Limit : Dimensionless) return Boolean
+   is (for all Index in Chart_Coefficient_Index =>
+         (for all Component in Chart_Component_Index => abs Value (Index, Component) <= Limit));
+   --  Whether every component is within Limit in magnitude, which no NaN is.
 
    type Interval_Position_Scale is array (Axis_Name) of Interval;
    --  One independently certified interval for each machine-axis component.
@@ -459,7 +616,17 @@ private
      array (Natural range 0 .. Maximum_Binomial_Degree, Natural range 0 .. Maximum_Binomial_Degree) of Dimensionless;
    --  Pascal's triangle through Maximum_Binomial_Degree. Entries outside the mathematical lower triangle remain zero.
 
-   function Build_Binomial_Table return Binomial_Table_Type;
+   Binomial_Limit : constant := 2.0**32;
+   --  Above every binomial coefficient of the table, whose largest is C(32, 16), about 2²⁹·².
+
+   function Build_Binomial_Table return Binomial_Table_Type
+   with
+     Post =>
+       (for all N in Binomial_Table_Type'Range (1) =>
+          (for all K in Binomial_Table_Type'Range (2) =>
+             Build_Binomial_Table'Result (N, K) >= 0.0
+             and then Build_Binomial_Table'Result (N, K) <= Binomial_Limit
+             and then (if K <= N then Build_Binomial_Table'Result (N, K) >= 1.0)));
    --  Construct Pascal's triangle once during package elaboration using exact additions of integer-valued
    --  coefficients.
 
@@ -472,10 +639,11 @@ private
    --  Search limits for log(W), where W is the positive distance-warp factor. Searching in logarithmic space treats a
    --  warp and its reciprocal symmetrically and guarantees that every proposed factor remains positive.
 
-   Minimum_Distance_Warp_Factor : constant Dimensionless := Dimensionless_Math.Exp (Distance_Warp_Log_Lower_Bound);
-   Maximum_Distance_Warp_Factor : constant Dimensionless := Dimensionless_Math.Exp (Distance_Warp_Log_Upper_Bound);
-   --  Inclusive factor bounds obtained from the logarithmic search interval. Keeping W inside this range bounds the
-   --  conditioning of the parameter transformation and its derivatives.
+   Minimum_Distance_Warp_Factor : constant Dimensionless := Stereographic_Kernel.Elementary.Warp_Factor_Min;
+   Maximum_Distance_Warp_Factor : constant Dimensionless := Stereographic_Kernel.Elementary.Warp_Factor_Max;
+   --  Inclusive factor bounds, the powers of two just outside the exponentials of the logarithmic search interval
+   --  (2⁻²⁴ and 2²⁴ for e⁻¹⁶ and e¹⁶). Keeping W inside this range bounds the conditioning of the parameter
+   --  transformation and its derivatives.
 
    subtype Distance_Warp_Factor is Dimensionless range Minimum_Distance_Warp_Factor .. Maximum_Distance_Warp_Factor;
    --  A positive, supported factor for the endpoint-preserving distance transformation.
@@ -500,9 +668,6 @@ private
    ---------------------------------------------------------------------------
    --  Compiled rational antiderivative
    ---------------------------------------------------------------------------
-
-   type Dimensionless_Axis_Vector is array (Axis_Name) of Dimensionless;
-   --  A unit-free vector indexed by machine axes, used for rational residues and displacements normalized by length.
 
    type Structural_Constant_Axis_Array is array (Axis_Name) of Boolean;
    --  Per-axis proof flags recording that the represented coordinate is algebraically constant.
@@ -543,69 +708,101 @@ private
        and then Left'Length > 0
        and then Right'Length > 0
        and then Left'Last + Right'Last <= Maximum_Derivative_Bernstein_Degree;
+   pragma Annotate (GNATprove, Skip_Proof, Multiply_Bernstein);
+   --  Not proved: this recovers from overflow by handling Constraint_Error, or calls what does.
    --  Multiply by convolving binomial-scaled controls. Fall back to individual enclosing weights when scaling
    --  cannot produce finite intervals, so intermediate overflow does not reject an otherwise certifiable product.
 
-   subtype Rational_Degree_Slot is Positive range 1 .. Maximum_Rational_Degree;
-   --  Index of storage associated with one real pole or one component of a complex-conjugate pair.
-
-   subtype Rational_Pair_Index is Positive range 1 .. Maximum_Rational_Degree / 2;
-   --  Index of a complex-conjugate pole pair in the compact antiderivative cache.
-
-   type Rational_Pole_Slot is record
-      Pole_Component : Dimensionless := 0.0;
-      --  A real pole, or one Cartesian component of a complex pole.
-
-      Residue_Component : Dimensionless_Axis_Vector := [others => 0.0];
-      --  Matching real residue, or one Cartesian component of a complex residue.
-   end record;
-   --  One real-valued storage slot. Complex poles and residues use two consecutive slots so runtime evaluation never
-   --  requires a complex numeric type.
-
-   type Rational_Pole_Slots is array (Rational_Degree_Slot) of Rational_Pole_Slot;
-   --  Fixed-capacity pole and residue storage, avoiding allocation in planner and realtime data.
-
-   type Rational_Antiderivative is record
-      Real_Pole_Count : Natural range 0 .. Maximum_Rational_Degree := 0;
-      --  Real poles occupy the leading slots, one slot each.
-
-      Pair_Count : Natural range 0 .. Maximum_Rational_Degree / 2 := 0;
-      --  Each conjugate pair occupies two slots after the real-pole prefix.
-
-      Constant_Tangent : Dimensionless_Axis_Vector := [others => 0.0];
-      --  Constant polynomial quotient. Its primitive is this value times normalised distance.
-
-      Pole_Slots : Rational_Pole_Slots := [others => <>];
-      --  A pair stores its real pole/residue components first and its positive-imaginary components in the following
-      --  slot.
-   end record;
-   --  An analytically integrable partial-fraction representation of the compiled tangent. Real poles contribute
-   --  logarithms; conjugate pairs contribute real logarithm and arctangent terms.
+   pragma
+     Compile_Time_Error
+       (Stereographic_Kernel.Retained_Tangent.Maximum_Rational_Degree /= Maximum_Rational_Degree,
+        "the retained tangent has another degree");
 
    function Complex_Pair_Real_Slot
      (Cache : Rational_Antiderivative; Pair : Rational_Pair_Index) return Rational_Degree_Slot
-   with Pre => Pair <= Cache.Pair_Count and then Cache.Real_Pole_Count + 2 * Natural (Pair) <= Maximum_Rational_Degree;
+   with
+     Pre  => Pair <= Cache.Pair_Count and then Cache.Real_Pole_Count + 2 * Natural (Pair) <= Maximum_Rational_Degree,
+     Post => Complex_Pair_Real_Slot'Result = Cache.Real_Pole_Count + 2 * Natural (Pair) - 1;
    --  Return the slot containing the real components of the selected conjugate pole and residue pair.
 
    function Complex_Pair_Imaginary_Slot
      (Cache : Rational_Antiderivative; Pair : Rational_Pair_Index) return Rational_Degree_Slot
-   with Pre => Pair <= Cache.Pair_Count and then Cache.Real_Pole_Count + 2 * Natural (Pair) <= Maximum_Rational_Degree;
+   with
+     Pre  => Pair <= Cache.Pair_Count and then Cache.Real_Pole_Count + 2 * Natural (Pair) <= Maximum_Rational_Degree,
+     Post => Complex_Pair_Imaginary_Slot'Result = Cache.Real_Pole_Count + 2 * Natural (Pair);
    --  Return the slot containing the positive-imaginary components of the selected conjugate pair.
 
-   function Rational_Antiderivative_Is_Well_Formed (Cache : Rational_Antiderivative) return Boolean;
-   --  Cheap structural check used by evaluator contracts: validate counts, slot layout, finiteness, and pole
-   --  conditions required on the unit interval.
+   ---------------------------------------------------------------------------
+   --  Magnitude limits of the evaluator
+   ---------------------------------------------------------------------------
+   --  The evaluator is free of run-time errors because every number it stores is tested against these limits when
+   --  the curve is constructed, before any arithmetic is done on it. A curve of a real machine is far inside all
+   --  of them; a curve outside them is not built.
 
-   function Rational_Antiderivative_Primitives_Are_Safe (Cache : Rational_Antiderivative) return Boolean;
-   --  Construction-only check that every retained primitive and accumulation has ample finite range. Keeping this
-   --  scan separate avoids repeating logarithms and arctangents in realtime assertion-policy builds.
+   Pole_Magnitude_Limit : constant := 2.0**100;
+   --  Largest magnitude of a pole component.
 
-   function Rational_Antiderivative_Is_Canonical_Zero (Cache : Rational_Antiderivative) return Boolean;
+   Residue_Magnitude_Limit : constant := 2.0**100;
+   --  Largest magnitude of a residue component and of a component of the constant tangent.
+
+   Pole_Clearance : constant := 2.0**(-100);
+   --  A pole is at least this far from the unit interval on its left side or, for a conjugate pair, above it.
+
+   Right_Of_Unit : constant := 1.0 + 2.0**(-52);
+   --  The smallest number above one: a pole on the right of the unit interval is at least this.
+
+   Coordinate_Limit : constant Length := 2.0**99 * mm;
+   --  Largest magnitude of a coordinate of an endpoint of a positive-length curve. The difference of two such
+   --  coordinates is within the common limit of the construction.
+
+   Arc_Length_Floor : constant Length := 2.0**(-100) * mm;
+   Arc_Length_Limit : constant Length := 2.0**104 * mm;
+   --  The length of a positive-length curve lies between these.
+
+   function Is_Clear_Of_Unit_Interval (Pole : Dimensionless) return Boolean
+   is (Pole <= -Pole_Clearance or else Pole >= Right_Of_Unit);
+   --  Whether a real pole, or the real part of a pair, lies outside the unit interval with the clearance above.
+
+   function Pair_Is_Clear (Pole_Real, Pole_Imaginary : Dimensionless) return Boolean
+   is (abs Pole_Real <= Pole_Magnitude_Limit
+       and then Pole_Imaginary > 0.0
+       and then Pole_Imaginary <= Pole_Magnitude_Limit
+       and then (Pole_Imaginary >= Pole_Clearance or else Is_Clear_Of_Unit_Interval (Pole_Real)));
+   --  Whether a conjugate pair of poles is within the magnitude limit and clear of the unit interval.
+
+   function Slot_Is_Tame (Slot : Rational_Pole_Slot) return Boolean
+   is (abs Slot.Pole_Component <= Pole_Magnitude_Limit
+       and then (for all Axis in Axis_Name => abs Slot.Residue_Component (Axis) <= Residue_Magnitude_Limit));
+
+   function Slot_Is_Zero (Slot : Rational_Pole_Slot) return Boolean
+   is (Slot.Pole_Component = 0.0 and then (for all Axis in Axis_Name => Slot.Residue_Component (Axis) = 0.0));
+
+   function Rational_Antiderivative_Is_Well_Formed (Cache : Rational_Antiderivative) return Boolean
+   is (Cache.Real_Pole_Count + 2 * Cache.Pair_Count <= Maximum_Rational_Degree
+       and then (for all Axis in Axis_Name => abs Cache.Constant_Tangent (Axis) <= Residue_Magnitude_Limit)
+       and then (for all Slot in Rational_Degree_Slot => Slot_Is_Tame (Cache.Pole_Slots (Slot)))
+       and then
+         (for all Slot in 1 .. Cache.Real_Pole_Count =>
+            Is_Clear_Of_Unit_Interval (Cache.Pole_Slots (Slot).Pole_Component))
+       and then
+         (for all Pair in 1 .. Cache.Pair_Count =>
+            Pair_Is_Clear
+              (Cache.Pole_Slots (Cache.Real_Pole_Count + 2 * Pair - 1).Pole_Component,
+               Cache.Pole_Slots (Cache.Real_Pole_Count + 2 * Pair).Pole_Component))
+       and then
+         (for all Slot in Rational_Degree_Slot =>
+            (if Slot > Cache.Real_Pole_Count + 2 * Cache.Pair_Count then Slot_Is_Zero (Cache.Pole_Slots (Slot)))));
+   --  What the evaluator needs of its cache, tested once during construction: the slots first hold the real poles
+   --  and then the real and imaginary records of each conjugate pair, with all unused slots zero; every stored
+   --  number is within the limits above (which no NaN or infinity is); and every pole is clear of the unit
+   --  interval. With this no logarithm, arctangent, product or sum of an evaluation can fail or overflow.
+
+   function Rational_Antiderivative_Is_Canonical_Zero (Cache : Rational_Antiderivative) return Boolean
+   is (Cache.Real_Pole_Count = 0
+       and then Cache.Pair_Count = 0
+       and then (for all Axis in Axis_Name => Cache.Constant_Tangent (Axis) = 0.0)
+       and then (for all Slot in Rational_Degree_Slot => Slot_Is_Zero (Cache.Pole_Slots (Slot))));
    --  Return True only for the unique all-zero cache used by a zero-length evaluator.
-
-   function Is_Finite (Value : Dimensionless) return Boolean;
-   --  Return True only for an ordinary finite floating-point value. The ordered comparisons used by the implementation
-   --  reject both infinities and NaNs without invoking the heavier runtime validity-classification helper.
 
    subtype Stored_Majorant_Order is Natural range 0 .. 4;
    --  Derivative orders retained in a curve certificate, from tangent order zero through order four.
@@ -704,8 +901,13 @@ private
             and then Stereographic_Curve_Evaluator.Uncorrected_Finish_Point = Stereographic_Curve_Evaluator.Start_Point
             and then Rational_Antiderivative_Is_Canonical_Zero (Stereographic_Curve_Evaluator.Antiderivative_Cache)
           else
-            Stereographic_Curve_Evaluator.Length_Value > 0.0 * mm
-            and then Stereographic_Curve_Evaluator.Length_Value <= Length'Last
+            Stereographic_Curve_Evaluator.Length_Value >= Arc_Length_Floor
+            and then Stereographic_Curve_Evaluator.Length_Value <= Arc_Length_Limit
+            and then
+              (for all Axis in Axis_Name =>
+                 abs Stereographic_Curve_Evaluator.Start_Point (Axis) <= Coordinate_Limit
+                 and then abs Stereographic_Curve_Evaluator.Finish_Point (Axis) <= Coordinate_Limit
+                 and then abs Stereographic_Curve_Evaluator.Uncorrected_Finish_Point (Axis) <= Coordinate_Limit)
             and then Rational_Antiderivative_Is_Well_Formed (Stereographic_Curve_Evaluator.Antiderivative_Cache)),
      Predicate_Failure => "a blend evaluator must contain a coherent zero or positive curve";
    --  Compact, allocation-free curve data retained in planner blocks and used for realtime position evaluation.
@@ -713,29 +915,86 @@ private
    function Finish_Correction_Interval (Evaluator : Stereographic_Curve_Evaluator; Axis : Axis_Name) return Interval;
    --  Enclose the endpoint correction for Axis without directly subtracting two potentially extreme coordinates.
 
-   function Stable_Complex_Log_Ratio
-     (Pole_Real, Pole_Imaginary, Normalized_Distance : Dimensionless) return Dimensionless;
-   --  Evaluate log (((U - A)**2 + B**2) / (A**2 + B**2)) without forming cancellation-prone square sums.
+   Log_Ratio_Limit : constant := 2.0 * Stereographic_Kernel.Elementary.Log_Magnitude_Max;
+   --  Largest magnitude of a logarithm of a ratio which the evaluator forms.
 
-   function Stable_Real_Log_Ratio (Pole, Normalized_Distance : Dimensionless) return Dimensionless;
-   --  Evaluate log (abs (U - Pole) / abs Pole) without rounding the argument to zero beside an endpoint pole.
+   Displacement_Limit : constant := 2.0**116;
+   --  Largest magnitude of a component of the normalized displacement: the constant tangent and sixteen slots,
+   --  each a residue times a primitive below 2¹¹.
 
-   function Stable_Complex_Angle_Delta
-     (Pole_Real, Pole_Imaginary, Normalized_Distance : Dimensionless) return Dimensionless;
-   --  Evaluate a conjugate-pair argument change using scaled cross and dot products to avoid overflow.
+   Uncorrected_Point_Limit : constant Length := 2.0**221 * mm;
+   --  Largest magnitude of a coordinate before the endpoint correction: a start coordinate plus the length times
+   --  the normalized displacement.
 
    function Stable_Log_One_Plus (Value : Dimensionless) return Dimensionless
-   with Pre => Value > -1.0 and then Is_Finite (Value);
-   --  Evaluate log(1 + Value) without losing the small increment when Value is close to zero.
+   with
+     Pre  => abs Value <= 0.125,
+     Post => abs Stable_Log_One_Plus'Result <= 0.5 and then (if Value = 0.0 then Stable_Log_One_Plus'Result = 0.0);
+   --  Evaluate log(1 + Value) for a small Value without losing the increment.
+
+   function Stable_Real_Log_Ratio (Pole, Normalized_Distance : Dimensionless) return Dimensionless
+   with
+     Pre  =>
+       abs Pole <= Pole_Magnitude_Limit
+       and then Is_Clear_Of_Unit_Interval (Pole)
+       and then Normalized_Distance >= 0.0
+       and then Normalized_Distance <= 1.0,
+     Post =>
+       abs Stable_Real_Log_Ratio'Result <= Log_Ratio_Limit
+       and then (if Normalized_Distance = 0.0 then Stable_Real_Log_Ratio'Result = 0.0);
+   --  Evaluate log (abs (U - Pole) / abs Pole) without rounding the argument to zero beside an endpoint pole.
+
+   function Stable_Complex_Log_Ratio
+     (Pole_Real, Pole_Imaginary, Normalized_Distance : Dimensionless) return Dimensionless
+   with
+     Pre  =>
+       Pair_Is_Clear (Pole_Real, Pole_Imaginary)
+       and then Normalized_Distance >= 0.0
+       and then Normalized_Distance <= 1.0,
+     Post =>
+       abs Stable_Complex_Log_Ratio'Result <= Log_Ratio_Limit
+       and then (if Normalized_Distance = 0.0 then Stable_Complex_Log_Ratio'Result = 0.0);
+   --  Evaluate log (((U - A)**2 + B**2) / (A**2 + B**2)) without cancelling a small change against one.
+
+   function Stable_Complex_Angle_Delta
+     (Pole_Real, Pole_Imaginary, Normalized_Distance : Dimensionless) return Dimensionless
+   with
+     Pre  =>
+       Pair_Is_Clear (Pole_Real, Pole_Imaginary)
+       and then Normalized_Distance >= 0.0
+       and then Normalized_Distance <= 1.0,
+     Post =>
+       abs Stable_Complex_Angle_Delta'Result <= Stereographic_Kernel.Elementary.Arctan_Magnitude_Max
+       and then (if Normalized_Distance = 0.0 then Stable_Complex_Angle_Delta'Result = 0.0);
+   --  Evaluate a conjugate pair's argument change from the cross and dot products of its endpoints.
 
    function Evaluate_Rational_Displacement
      (Cache : Rational_Antiderivative; Normalized_Distance : Dimensionless) return Dimensionless_Axis_Vector
    with
-     Pre =>
+     Pre  =>
        Rational_Antiderivative_Is_Well_Formed (Cache)
        and then Normalized_Distance >= 0.0
-       and then Normalized_Distance <= 1.0;
+       and then Normalized_Distance <= 1.0,
+     Post =>
+       (for all Axis in Axis_Name => abs Evaluate_Rational_Displacement'Result (Axis) <= Displacement_Limit)
+       and then
+         (if Normalized_Distance = 0.0
+          then (for all Axis in Axis_Name => Evaluate_Rational_Displacement'Result (Axis) = 0.0));
    --  Evaluate the dimensionless displacement from distance zero by analytically integrating the cached tangent.
+
+   function Evaluate_Uncorrected_Rational_Point
+     (Evaluator : Stereographic_Curve_Evaluator; Normalized_Distance : Dimensionless) return Position
+   with
+     Pre  =>
+       Evaluator.Kind = Positive_Curve_Kind and then Normalized_Distance >= 0.0 and then Normalized_Distance <= 1.0,
+     Post =>
+       (for all Axis in Axis_Name => abs Evaluate_Uncorrected_Rational_Point'Result (Axis) <= Uncorrected_Point_Limit)
+       and then
+         (if Normalized_Distance = 0.0
+          then
+            (for all Axis in Axis_Name =>
+               Evaluate_Uncorrected_Rational_Point'Result (Axis) = Evaluator.Start_Point (Axis)));
+   --  Scale and anchor the cached displacement, before the endpoint correction.
 
    function Evaluate_Rational_Point
      (Evaluator : Stereographic_Curve_Evaluator; Normalized_Distance : Dimensionless) return Position
@@ -744,11 +1003,17 @@ private
        Evaluator.Kind = Positive_Curve_Kind and then Normalized_Distance >= 0.0 and then Normalized_Distance <= 1.0,
      Post =>
        (if Normalized_Distance = 0.0
-        then Evaluate_Rational_Point'Result = Evaluator.Start_Point
-        elsif Normalized_Distance = 1.0
-        then Evaluate_Rational_Point'Result = Evaluator.Finish_Point);
-   --  Scale and anchor the cached displacement, then apply the endpoint-flat finish correction. The exact requested
-   --  endpoints are returned at normalized distances zero and one.
+        then (for all Axis in Axis_Name => Evaluate_Rational_Point'Result (Axis) = Evaluator.Start_Point (Axis)))
+       and then
+         (if Normalized_Distance = 1.0
+            and then
+              (for all Axis in Axis_Name =>
+                 Evaluate_Uncorrected_Rational_Point (Evaluator, 1.0) (Axis)
+                 = Evaluator.Uncorrected_Finish_Point (Axis))
+          then (for all Axis in Axis_Name => Evaluate_Rational_Point'Result (Axis) = Evaluator.Finish_Point (Axis)));
+   --  Scale and anchor the cached displacement, then apply the endpoint-flat finish correction. The start point is
+   --  returned exactly at normalized distance zero. So is the finish point at normalized distance one, for an
+   --  evaluator whose Uncorrected_Finish_Point is the uncorrected point there, which construction makes it.
 
    type Stereographic_Curve is record
       Evaluator_Data : Stereographic_Curve_Evaluator;
@@ -792,6 +1057,14 @@ private
       --  Retain the requests for on-demand endpoint diagnostics; construction does not measure this test-only report.
 
       Retained_Tangent_Certificate : Retained_Tangent_Bernstein_Certificate := (others => <>);
+
+      Geometry : Stereographic_Kernel.Certified_Geometry.Certificate;
+
+      Evaluator_Evidence : Stereographic_Kernel.Certified_Evaluator.Certificate;
+      --  Evidence that the retained tangent of Evaluator_Data's cache stays within a bound of the ideal tangent.
+      --  Create_Blend checks that it matches the cache before returning a curve.
+      --  Evidence that Frame and Coefficients passed the ideal-geometry certificates. Create_Blend checks that it
+      --  matches them before returning a curve.
       --  Rational Bernstein data for the Bernstein derivative certificate. It is valid only when the Bernstein
       --  reconstruction ran: construction normally certifies the tangent from samples instead, and keeps the data
       --  only when its whole-curve derivative bounds needed the Bernstein fallback. Range queries on other curves
@@ -898,7 +1171,11 @@ private
 
    subtype Tangent_Sample_Index is Positive range 1 .. Tangent_Sample_Count;
 
-   Tangent_Sample_Lebesgue_Bound : constant Dimensionless := 3.5;
+   pragma
+     Compile_Time_Error
+       (Stereographic_Kernel.Sample_Nodes.Sample_Count /= Tangent_Sample_Count, "the sample nodes do not match");
+
+   Tangent_Sample_Lebesgue_Bound : constant Dimensionless := Stereographic_Kernel.Sample_Nodes.Lebesgue_Bound;
    --  Upper bound on the Lebesgue constant of the sample nodes, which is 3.1885 for thirty-three Chebyshev nodes
    --  of the first kind. A polynomial of degree below Tangent_Sample_Count is bounded on [0, 1] by this factor
    --  times its largest magnitude at the nodes.
@@ -907,12 +1184,15 @@ private
    --  Return one sample node in the chart coordinate, exposed so tests can check the Lebesgue bound.
 
    function Sampled_Realtime_Tangent_Error
-     (Curve : Stereographic_Curve; Final_Cache : Rational_Antiderivative; Denominator_Scale : Dimensionless)
-      return Tangent_Certificate_Result;
+     (Curve             : Stereographic_Curve;
+      Final_Cache       : Rational_Antiderivative;
+      Denominator_Scale : Dimensionless;
+      Evidence          : out Stereographic_Kernel.Certified_Evaluator.Certificate) return Tangent_Certificate_Result
+   with Side_Effects;
    --  Bound the Euclidean difference between the ideal tangent of Curve's chart and the rational tangent of
    --  Final_Cache over the complete curve, from their values at the sample nodes alone. Denominator_Scale is the
-   --  ideal denominator at the start of the chart. The result is as rigorous as the Bernstein reconstruction of
-   --  the same difference; a failure only means that this cheaper proof did not apply.
+   --  ideal denominator at the start of the chart. Evidence is the proof-carrying form of a certified bound. A
+   --  failure only means that this proof did not apply.
 
    subtype Conjugate_Root_Index is Positive range 1 .. Maximum_Rational_Degree / 2;
    type Root_Polynomial is array (Natural range 0 .. Maximum_Rational_Degree) of Dimensionless;
@@ -920,10 +1200,9 @@ private
    type Conjugate_Root_Parts is array (Conjugate_Root_Index) of Dimensionless;
 
    function Iterate_Conjugate_Roots
-     (Coefficients                : Root_Polynomial;
-      Degree                      : Natural;
-      Real_Parts, Imaginary_Parts : out Conjugate_Root_Parts) return Boolean
-   with Pre => Degree <= Maximum_Rational_Degree;
+     (Coefficients : Root_Polynomial; Degree : Natural; Real_Parts, Imaginary_Parts : out Conjugate_Root_Parts)
+      return Boolean
+   with Side_Effects, Pre => Degree <= Maximum_Rational_Degree;
    --  Find all roots of a real polynomial without real roots by Aberth-Ehrlich iteration. The roots form conjugate
    --  pairs, so only the member of each pair in the upper half-plane is iterated, and its conjugate is implied:
    --  entries 1 .. Degree / 2 of the results hold those members, each with a positive imaginary part. False if the
@@ -949,9 +1228,9 @@ private
        not Closure_Seed.Valid
        or else
          (Closure_Seed.Lambda >= 1.0
-          and then Is_Finite (Closure_Seed.Lambda)
-          and then (for all Component in Chart_Component_Index => Is_Finite (Closure_Seed.C0 (Component)))),
-     Predicate_Failure => "a valid closure seed must contain finite values and lambda >= 1";
+          and then Closure_Seed.Lambda <= Lambda_Limit
+          and then (for all Component in Chart_Component_Index => abs Closure_Seed.C0 (Component) <= Tame_Limit)),
+     Predicate_Failure => "a valid closure seed must contain moderate values and lambda >= 1";
    --  An optional upstream closure solution passed into candidate construction. Build_Candidate treats a valid seed as
    --  final for the closure stage: it is neither replaced nor refined, but the resulting curve still has to pass
    --  endpoint, representation, and numerical-safety checks.
@@ -975,9 +1254,9 @@ private
        or else
          (not Closure_Solution.Numerically_Unsafe
           and then Closure_Solution.Lambda >= 1.0
-          and then Is_Finite (Closure_Solution.Lambda)
-          and then (for all Component in Chart_Component_Index => Is_Finite (Closure_Solution.C0 (Component)))),
-     Predicate_Failure => "a successful closure solution must contain finite values and lambda >= 1";
+          and then Closure_Solution.Lambda <= Lambda_Limit
+          and then (for all Component in Chart_Component_Index => abs Closure_Solution.C0 (Component) <= Tame_Limit)),
+     Predicate_Failure => "a successful closure solution must contain moderate values and lambda >= 1";
    --  Result of solving the four position-closure equations for curve-length ratio and the three interior chart
    --  adjustments. Numerically_Unsafe lets callers distinguish arithmetic failure from ordinary nonconvergence.
 
@@ -1021,18 +1300,29 @@ private
    --  Private construction operations
    ---------------------------------------------------------------------------
 
-   function Binomial (N, K : Natural) return Dimensionless;
+   function Binomial (N, K : Natural) return Dimensionless
+   with
+     Post =>
+       Binomial'Result >= 0.0
+       and then Binomial'Result <= Binomial_Limit
+       and then (if K <= N and then N <= Maximum_Binomial_Degree then Binomial'Result >= 1.0);
    --  Return the binomial coefficient "N choose K" from Binomial_Table. Requests with K greater than N or N beyond the
    --  stored degree return zero, which simplifies bounded polynomial summations.
 
-   function Closure_Envelope_Bernstein return Raw_Bernstein;
+   function Closure_Envelope_Bernstein return Raw_Bernstein
+   with
+     Post =>
+       (for all J in Raw_Bernstein'Range =>
+          Closure_Envelope_Bernstein'Result (J) >= 0.0 and then Closure_Envelope_Bernstein'Result (J) <= 4.0);
    --  Return the Bernstein coefficients of 256·U⁴·(1 - U)⁴. Its value and first three derivatives vanish at both
    --  endpoints, so scaling it can adjust interior geometry without changing either endpoint tangent jet.
 
-   function Closure_Envelope_Value (U : Dimensionless) return Dimensionless;
+   function Closure_Envelope_Value (U : Dimensionless) return Dimensionless
+   with Pre => U >= 0.0 and then U <= 1.0;
    --  Evaluate the endpoint-invisible closure envelope directly at U.
 
-   function Power_Basis (Coefficients : Bernstein_Chart) return Power_Chart;
+   function Power_Basis (Coefficients : Bernstein_Chart) return Power_Chart
+   with Pre => Within (Coefficients, Chart_Build_Limit), Post => Within (Power_Basis'Result, Power_Basis_Limit);
    --  Convert all three chart components from Bernstein controls to ordinary power coefficients using forward
    --  differences. The returned polynomial represents the same chart in a basis suited to Horner evaluation.
 
@@ -1054,26 +1344,18 @@ private
       Initial_Closure   : Closure_Seed) return Candidate_Result
    with
      Pre =>
-       Chord_Length > 0.0 * mm
-       and then Is_Finite (Dimensionless (Chord_Length / mm))
+       Chord_Length >= Arc_Length_Floor
+       and then Chord_Length <= Chord_Length_Limit
        and then Request.Maximum_Position_Error > 0.0 * mm
-       and then Is_Finite (Dimensionless (Request.Maximum_Position_Error / mm))
+       and then Request.Maximum_Position_Error <= Arc_Length_Limit
        and then Request.Maximum_Arc_Length >= Chord_Length
-       and then Is_Finite (Dimensionless (Request.Maximum_Arc_Length / mm))
+       and then Request.Maximum_Arc_Length <= Arc_Length_Limit
        and then Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
-       and then (for all Axis in Axis_Name => Is_Finite (Chord_Direction (Axis)))
-       and then
-         (for all Component in Frame_Component_Index =>
-            (for all Axis in Axis_Name => Is_Finite (Frame (Component) (Axis))))
-       and then
-         (for all Order in Start_Chart_Jets'Range =>
-            (for all Component in Chart_Component_Index =>
-               Is_Finite (Start_Chart_Jets (Order) (Component))
-               and then Is_Finite (Finish_Chart_Jets (Order) (Component))))
-       and then
-         (not Initial_Closure.Valid
-          or else Initial_Closure.Lambda <= Dimensionless (Request.Maximum_Arc_Length / Chord_Length));
+       and then Within (Chord_Direction, Candidate_Component_Limit)
+       and then Within (Frame, Unit_Component_Limit)
+       and then Within (Start_Chart_Jets, Tame_Limit)
+       and then Within (Finish_Chart_Jets, Tame_Limit);
    --  Attempt complete construction for one frame and its endpoint chart jets. Initial_Closure may provide a
    --  flat-planar solution discovered during warp selection; a valid seed is used without replacing or refining it,
    --  while an absent seed makes this stage solve closure itself.
@@ -1115,37 +1397,29 @@ private
       Warp_Factor       : Dimensionless;
       Initial_Closure   : Closure_Seed) return Ideal_Candidate
    with
-     Pre =>
-       Chord_Length > 0.0 * mm
-       and then Is_Finite (Dimensionless (Chord_Length / mm))
+     Pre  =>
+       Chord_Length >= Arc_Length_Floor
+       and then Chord_Length <= Chord_Length_Limit
        and then Request.Maximum_Position_Error > 0.0 * mm
-       and then Is_Finite (Dimensionless (Request.Maximum_Position_Error / mm))
+       and then Request.Maximum_Position_Error <= Arc_Length_Limit
        and then Request.Maximum_Arc_Length >= Chord_Length
-       and then Is_Finite (Dimensionless (Request.Maximum_Arc_Length / mm))
+       and then Request.Maximum_Arc_Length <= Arc_Length_Limit
        and then Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
-       and then (for all Axis in Axis_Name => Is_Finite (Chord_Direction (Axis)))
+       and then Within (Chord_Direction, Candidate_Component_Limit)
+       and then Within (Frame, Unit_Component_Limit)
+       and then Within (Start_Chart_Jets, Tame_Limit)
+       and then Within (Finish_Chart_Jets, Tame_Limit),
+     Post =>
+       Within (Build_Ideal_Candidate'Result.Coefficients, Tame_Limit)
+       and then Within (Build_Ideal_Candidate'Result.Effective_C0, Tame_Limit)
        and then
-         (for all Component in Frame_Component_Index =>
-            (for all Axis in Axis_Name => Is_Finite (Frame (Component) (Axis))))
-       and then
-         (for all Order in Start_Chart_Jets'Range =>
-            (for all Component in Chart_Component_Index =>
-               Is_Finite (Start_Chart_Jets (Order) (Component))
-               and then Is_Finite (Finish_Chart_Jets (Order) (Component))))
-       and then
-         (not Initial_Closure.Valid
-          or else Initial_Closure.Lambda <= Dimensionless (Request.Maximum_Arc_Length / Chord_Length));
+         (if Build_Ideal_Candidate'Result.Status = Candidate_Success
+          then
+            Build_Ideal_Candidate'Result.Length_Value >= Chord_Length
+            and then Build_Ideal_Candidate'Result.Length_Value <= Request.Maximum_Arc_Length);
    --  The closure solve, length clamp, chart construction and normal-mode canonicalization of Build_Candidate, which
    --  then compiles the realtime representation of this ideal curve.
-
-   function Ideal_Geometry_Is_Certified
-     (Frame           : Frame_Vector_Array;
-      Coefficients    : Bernstein_Chart;
-      Bulge_Allowed   : Boolean;
-      Chord_Direction : Position_Scale) return Boolean;
-   --  Certify that the ideal tangent stays inside the endpoint tangent cone or, where Bulge_Allowed, that its
-   --  projection onto the chord is nonnegative. Build_Candidate rejects a frame which fails this before compiling it.
 
    subtype Blend_Frame_Index is Positive range 1 .. 7;
    --  Create_Blend tries at most seven distinct stereographic projection poles.
@@ -1169,7 +1443,74 @@ private
    end record;
    --  Everything Create_Blend establishes before trying frames.
 
-   function Prepare_Blend (Request : Blend_Request) return Blend_Preparation;
+   function Arc_Length (Evaluator : Stereographic_Curve_Evaluator) return Length
+   is (if Evaluator.Kind = Zero_Curve_Kind then 0.0 * mm else Evaluator.Length_Value);
+
+   function Arc_Length (Curve : Stereographic_Curve) return Length
+   is (Arc_Length (Curve.Evaluator_Data));
+
+   function Geometry_Certificate
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Certified_Geometry.Certificate
+   is (Curve.Geometry);
+
+   function Certificate_Matches (Curve : Stereographic_Curve) return Boolean
+   is (Stereographic_Kernel.Ideal_Geometry."="
+         (Stereographic_Kernel.Certified_Geometry.Frame (Curve.Geometry), Curve.Frame)
+       and then
+         Stereographic_Kernel.Ideal_Geometry."="
+           (Stereographic_Kernel.Certified_Geometry.Coefficients (Curve.Geometry), Curve.Coefficients));
+
+   function Evaluator_Certificate
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Certified_Evaluator.Certificate
+   is (Curve.Evaluator_Evidence);
+
+   function In_Millimetres (Value : Position) return Stereographic_Kernel.Retained_Tangent.Dimensionless_Axis_Vector
+   is ([for Axis in Axis_Name => Dimensionless (Value (Axis) / mm)]);
+
+   function Finish_In_Millimetres
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Retained_Tangent.Dimensionless_Axis_Vector
+   is (In_Millimetres (Curve.Evaluator_Data.Finish_Point));
+
+   function Uncorrected_Finish_In_Millimetres
+     (Curve : Stereographic_Curve) return Stereographic_Kernel.Retained_Tangent.Dimensionless_Axis_Vector
+   is (In_Millimetres (Curve.Evaluator_Data.Uncorrected_Finish_Point));
+
+   function Length_In_Millimetres (Curve : Stereographic_Curve) return Dimensionless
+   is (Dimensionless (Curve.Evaluator_Data.Length_Value / mm));
+
+   function Executed_Tangent_Error_Bound (Curve : Stereographic_Curve) return Dimensionless
+   is (Stereographic_Kernel.Finish_Correction.Total_Tangent_Error_Bound
+         (Stereographic_Kernel.Certified_Evaluator.Tangent_Error (Curve.Evaluator_Evidence),
+          Finish_In_Millimetres (Curve),
+          Uncorrected_Finish_In_Millimetres (Curve),
+          Length_In_Millimetres (Curve)));
+
+   function Is_Prepared (Preparation : Blend_Preparation) return Boolean
+   is (Preparation.Chord_Length >= Arc_Length_Floor
+       and then Preparation.Chord_Length <= Chord_Length_Limit
+       and then Preparation.Selection.Status = Warp_Was_Selected
+       and then Within (Preparation.Chord_Direction, Unit_Component_Limit)
+       and then Within (Preparation.Start_Canonical, Tame_Limit)
+       and then Within (Preparation.Start_Canonical (0), 4.0)
+       and then Within (Preparation.Finish_Canonical, Tame_Limit)
+       and then Within (Preparation.Finish_Canonical (0), 4.0)
+       and then (for all I in Blend_Frame_Index => Within (Preparation.Directions (I), Unit_Component_Limit)));
+   --  What a successful preparation hands to the frame candidates: a chord and a warp within the limits of the
+   --  construction, canonical jets within the common limit whose tangents are unit vectors, and unit directions.
+
+   function Construct_Blend (Request : Blend_Request) return Blend_Result;
+   --  Everything Create_Blend does except the final check of the result's certificate.
+
+   function Prepare_Blend (Request : Blend_Request) return Blend_Preparation
+   with
+     Post =>
+       (if Prepare_Blend'Result.Status = Blend_Success
+        then
+          Is_Prepared (Prepare_Blend'Result)
+          and then Request.Maximum_Position_Error > 0.0 * mm
+          and then Request.Maximum_Position_Error <= Arc_Length_Limit
+          and then Request.Maximum_Arc_Length >= Prepare_Blend'Result.Chord_Length
+          and then Request.Maximum_Arc_Length <= Arc_Length_Limit);
    --  Validate Request, canonicalize its endpoint jets, select the distance warp and list the frame directions.
 
    function Frame_Candidate
@@ -1177,7 +1518,16 @@ private
       Index                     : Blend_Frame_Index;
       Frame                     : out Frame_Vector_Array;
       Start_Chart, Finish_Chart : out Chart_Jet_Array) return Boolean
-   with Pre => Preparation.Status = Blend_Success and then Index <= Preparation.Direction_Count;
+   with
+     Side_Effects,
+     Pre  =>
+       Preparation.Status = Blend_Success
+       and then Index <= Preparation.Direction_Count
+       and then Is_Prepared (Preparation),
+     Post =>
+       Within (Frame, Unit_Component_Limit)
+       and then Within (Start_Chart, Tame_Limit)
+       and then Within (Finish_Chart, Tame_Limit);
    --  Build the frame for one prepared direction and project both endpoint jets into its chart. False if the frame
    --  is degenerate or puts either endpoint tangent too close to the projection pole.
 
@@ -1190,6 +1540,7 @@ private
       Maximum_Position_Error : Length;
       Start_Jet, Finish_Jet  : Endpoint_Tangent_Jet) return Realtime_Compilation_Status
    with
+     Side_Effects,
      Pre =>
        Curve.Evaluator_Data.Kind = Positive_Curve_Kind
        and then Curve.Evaluator_Data.Length_Value > 0.0 * mm
@@ -1200,6 +1551,8 @@ private
        and then
          (for all Degree in Chart_Coefficient_Index =>
             (for all Component in Chart_Component_Index => Is_Finite (Power_Coefficients (Degree, Component))));
+   pragma Annotate (GNATprove, Skip_Proof, Build_Rational_Representation);
+   --  Not proved: this recovers from overflow by handling Constraint_Error, or calls what does.
    --  Convert the ideal rational tangent into the fixed-capacity partial-fraction evaluator, certify its tangent and
    --  position errors, and populate Curve's realtime and bound data. The tangent is certified from samples; only
    --  when that proof does not apply is the common-denominator Bernstein form reconstructed, and then retained.
@@ -1213,16 +1566,15 @@ private
       Coefficients            : out Bernstein_Chart;
       D_Lambda_Coefficients   : out Bernstein_Chart)
    with
-     Pre =>
+     Pre  =>
        Lambda >= 1.0
-       and then Is_Finite (Lambda)
+       and then Lambda <= Tame_Limit
        and then Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
-       and then (for all Component in Chart_Component_Index => Is_Finite (C0 (Component)))
-       and then
-         (for all Order in Start_Jets'Range =>
-            (for all Component in Chart_Component_Index =>
-               Is_Finite (Start_Jets (Order) (Component)) and then Is_Finite (Finish_Jets (Order) (Component))));
+       and then Within (C0, Tame_Limit)
+       and then Within (Start_Jets, Tame_Limit)
+       and then Within (Finish_Jets, Tame_Limit),
+     Post => Within (Coefficients, Chart_Build_Limit) and then Within (D_Lambda_Coefficients, Chart_Build_Limit);
    --  Construct the degree-eight Bernstein chart from the two endpoint jets, the curve-length ratio, and the three
    --  endpoint-invisible closure adjustments. D_Lambda_Coefficients contains the analytic change in every coefficient
    --  with respect to Lambda for use by the closure Jacobian.
@@ -1234,20 +1586,29 @@ private
       Warp_Factor             : Dimensionless;
       Coefficients            : out Bernstein_Chart)
    with
-     Pre =>
+     Pre  =>
        Lambda >= 1.0
-       and then Is_Finite (Lambda)
+       and then Lambda <= Tame_Limit
        and then Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
-       and then (for all Component in Chart_Component_Index => Is_Finite (C0 (Component)))
-       and then
-         (for all Order in Start_Jets'Range =>
-            (for all Component in Chart_Component_Index =>
-               Is_Finite (Start_Jets (Order) (Component)) and then Is_Finite (Finish_Jets (Order) (Component))));
+       and then Within (C0, Tame_Limit)
+       and then Within (Start_Jets, Tame_Limit)
+       and then Within (Finish_Jets, Tame_Limit),
+     Post => Within (Coefficients, Chart_Build_Limit);
    --  Build only the chart coefficients when the caller does not need the derivative with respect to Lambda.
 
    function Canonicalize_And_Validate_Jet
-     (Jet : Endpoint_Tangent_Jet; Chord_Length : Length; Canonical : out Scaled_Tangent_Jet) return Boolean;
+     (Jet : Endpoint_Tangent_Jet; Chord_Length : Length; Canonical : out Scaled_Tangent_Jet) return Boolean
+   with
+     Side_Effects,
+     Post =>
+       Within (Canonical, Tame_Limit)
+       and then Within (Canonical (0), 4.0)
+       and then
+         (if not Canonicalize_And_Validate_Jet'Result
+          then
+            (for all Order in Scaled_Tangent_Jet'Range =>
+               (for all Axis in Axis_Name => Canonical (Order) (Axis) = 0.0)));
    --  Convert the physical distance derivatives in Jet into factorial-scaled Taylor coefficients for the
    --  chord-normalised distance coordinate. The unit-tangent identities are checked first in physical units, making
    --  validity independent of chord length, and the accepted Taylor series is normalized onto the unit sphere. Return
@@ -1260,7 +1621,11 @@ private
    --     T·T‴ + 3·T′·T″ = 0.
 
    function Chart_From_Canonical_Jet
-     (Frame : Frame_Vector_Array; Jet : Scaled_Tangent_Jet; Result : out Chart_Jet_Array) return Boolean;
+     (Frame : Frame_Vector_Array; Jet : Scaled_Tangent_Jet; Result : out Chart_Jet_Array) return Boolean
+   with
+     Side_Effects,
+     Pre  => Within (Frame, Unit_Component_Limit) and then Within (Jet, Tame_Limit),
+     Post => Within (Result, Tame_Limit);
    --  Express the complete unit-tangent Taylor jet in Frame and apply inverse stereographic projection through third
    --  order. Each chart component is formed as Y(C) = T(C) / (1 + T(0)); Taylor-series division preserves the endpoint
    --  derivatives instead of projecting only the tangent value.
@@ -1269,7 +1634,8 @@ private
    --  too close to the projection pole, an input is non-finite, or the Taylor arithmetic is unsafe, Result is cleared
    --  to zero and the function returns False.
 
-   function Chart_Value (Coefficients : Bernstein_Chart; U : Dimensionless) return Chart_Vector;
+   function Chart_Value (Coefficients : Bernstein_Chart; U : Dimensionless) return Chart_Vector
+   with Pre => Within (Coefficients, Tame_Limit), Post => Within (Chart_Value'Result, Chart_Point_Limit);
    --  Evaluate the Bernstein chart at U. The implementation chooses its recurrence direction by interval half so it
    --  remains well conditioned near both endpoints.
 
@@ -1278,75 +1644,96 @@ private
       Start_Tangent   : Position_Scale;
       Finish_Tangent  : Position_Scale;
       Chord_Direction : Position_Scale;
-      Frame           : out Frame_Vector_Array) return Boolean;
+      Frame           : out Frame_Vector_Array) return Boolean
+   with
+     Side_Effects,
+     Pre  =>
+       Within (First, Candidate_Component_Limit)
+       and then Within (Start_Tangent, Candidate_Component_Limit)
+       and then Within (Finish_Tangent, Candidate_Component_Limit)
+       and then Within (Chord_Direction, Candidate_Component_Limit),
+     Post => Within (Frame, Unit_Component_Limit);
    --  Extend First into an orthonormal four-dimensional frame using the geometric directions and machine axes as
    --  candidates. Return False if stable Gram-Schmidt construction and its final orthogonality check cannot succeed.
 
-   function Down (Value : Dimensionless) return Dimensionless;
-   --  Move a finite value far enough downward to conservatively cover one rounded arithmetic operation.
+   Factorial_Limit : constant := 2.0**62;
+   --  Above the factorial of twenty, about 2⁶¹·¹.
 
-   function Factorial (N : Natural) return Dimensionless;
+   function Factorial (N : Natural) return Dimensionless
+   with Pre => N <= 20, Post => Factorial'Result >= 1.0 and then Factorial'Result <= Factorial_Limit;
    --  Return N factorial as Dimensionless for the small derivative orders used by chart construction.
 
    function Frame_Coordinate
-     (Frame : Frame_Vector_Array; Component : Frame_Component_Index; Value : Position_Scale) return Dimensionless;
+     (Frame : Frame_Vector_Array; Component : Frame_Component_Index; Value : Position_Scale) return Dimensionless
+   with
+     Pre  => Within (Frame (Component), Unit_Component_Limit) and then Within (Value, Frame_Operand_Limit),
+     Post =>
+       abs Frame_Coordinate'Result <= Frame_Product_Limit
+       and then (if Within (Value, Tame_Limit) then abs Frame_Coordinate'Result <= 8.0 * Tame_Limit)
+       and then (if Within (Value, Unit_Component_Limit) then abs Frame_Coordinate'Result <= 16.0);
    --  Return the coordinate of Value along one basis vector of Frame. For an orthonormal frame this dot product is the
    --  corresponding component of Value in local frame coordinates.
 
-   function Frame_Vector (Frame : Frame_Vector_Array; Components : Raw_Vector_4) return Position_Scale;
+   function Frame_Vector (Frame : Frame_Vector_Array; Components : Raw_Vector_4) return Position_Scale
+   with
+     Pre  => Within (Frame, Unit_Component_Limit) and then Within (Components, Frame_Operand_Limit),
+     Post =>
+       Within (Frame_Vector'Result, Frame_Product_Limit)
+       and then (if Within (Components, Tame_Limit) then Within (Frame_Vector'Result, 8.0 * Tame_Limit))
+       and then (if Within (Components, Unit_Component_Limit) then Within (Frame_Vector'Result, 16.0));
    --  Transform local frame Components back into a vector resolved on the machine axes.
 
    function Interval_Divide (Numerator, Denominator : Interval) return Interval;
    --  Enclose a quotient; an invalid interval or a denominator containing zero fails closed.
 
-   function Interval_Abs_Max (Value : Interval) return Dimensionless;
-   --  Return a conservative upper bound on the absolute value of every member of Value.
-
-   function Interval_Add (Left, Right : Interval) return Interval;
-   --  Enclose every sum formed by choosing one value from Left and one from Right.
-
-   function Checked_Interval (Lower, Upper : Dimensionless; Valid : Boolean := True) return Interval;
-   --  Construct an interval when its endpoints are finite and ordered; otherwise return the invalid full-range marker.
-
-   function Interval_Exact (Value : Dimensionless) return Interval;
-   --  Enclose one already-represented input value without adding uncertainty merely for loading it.
-
-   function Interval_Multiply (Left, Right : Interval) return Interval;
-   --  Enclose every product formed by choosing one value from each input interval.
-
-   function Certified_Upper_Square_Root (Value : Dimensionless) return Dimensionless;
-   --  Return an outward-proven upper bound on the square root of a finite nonnegative value, or Dimensionless'Last
-   --  when the elementary-function proposal cannot be certified by an outward-rounded division comparison.
-
-   function Interval_Negate (Value : Interval) return Interval;
-   --  Enclose the additive inverse of every member of Value.
-
-   function Interval_Subtract (Left, Right : Interval) return Interval;
-   --  Enclose every difference formed by choosing one value from Left and one from Right.
-
    function Is_Zero_Projection (Coefficients : Projection_Coefficients) return Boolean;
    --  Return True when every projection coefficient is exactly zero.
-   function Raw_Taylor_Multiply (Left, Right : Raw_Taylor) return Raw_Taylor;
+   function Raw_Taylor_Multiply (Left, Right : Raw_Taylor) return Raw_Taylor
+   with
+     Pre  => Within (Left, Taylor_Operand_Limit) and then Within (Right, Taylor_Operand_Limit),
+     Post => Within (Raw_Taylor_Multiply'Result, Taylor_Product_Limit);
    --  Multiply two cubic Taylor series using a Cauchy product and return the coefficients through degree three. Terms
    --  of degree four and above are intentionally discarded because no later operation consumes derivatives above
    --  third order.
 
-   function Raw_Taylor_Reciprocal (Value : Raw_Taylor) return Raw_Taylor;
+   function Raw_Taylor_Reciprocal (Value : Raw_Taylor) return Raw_Taylor
+   with
+     Pre  => abs Value (0) > Minimum_Safe_Reciprocal_Denominator and then Within (Value, Taylor_Divisor_Limit),
+     Post =>
+       Within (Raw_Taylor_Reciprocal'Result, Taylor_Reciprocal_Limit)
+       and then Raw_Taylor_Reciprocal'Result (0) = 1.0 / Value (0);
    --  Compute the truncated Taylor series for 1/Value. This solves the coefficient convolution that makes
    --  Value·Raw_Taylor_Reciprocal (Value) equal to 1 through degree three; it does not take the reciprocal of each
    --  array element independently.
    --
    --  Value contains the Taylor coefficients of the denominator. Its constant coefficient must be safely nonzero.
    --  The result contains the Taylor coefficients of the reciprocal through degree three.
-   --
-   --  Raises Constraint_Error when the constant coefficient is too close to zero for a stable reciprocal.
 
-   function Safe_Norm (Value : Position_Scale; Success : out Boolean) return Dimensionless;
+   function Safe_Norm (Value : Position_Scale; Success : out Boolean) return Dimensionless
+   with
+     Side_Effects,
+     Post =>
+       Safe_Norm'Result >= 0.0
+       and then Safe_Norm'Result <= 2.0 * Norm_Operand_Limit
+       and then (if Success then Within (Value, Safe_Norm'Result) else Safe_Norm'Result = 0.0)
+       and then (if Within (Value, Tame_Limit) then Safe_Norm'Result <= 2.0 * Tame_Limit);
    --  Compute the Euclidean norm of a dimensionless vector after scaling by its largest component. The scaling avoids
    --  overflow and underflow in the sum of squares. Success is False, and the returned norm is zero, when an input is
    --  non-finite or the calculation cannot be completed safely.
 
-   function Safe_Norm (Value : Position_Offset; Success : out Boolean) return Length;
+   function Safe_Norm (Value : Position_Offset; Success : out Boolean) return Length
+   with
+     Side_Effects,
+     Post =>
+       Safe_Norm'Result >= 0.0 * mm
+       and then Safe_Norm'Result <= 2.0 * Norm_Operand_Limit * mm
+       and then
+         (if Success
+          then (for all Axis in Axis_Name => abs Value (Axis) <= Safe_Norm'Result)
+          else Safe_Norm'Result = 0.0 * mm)
+       and then
+         (if (for all Axis in Axis_Name => abs Value (Axis) <= Tame_Limit * mm)
+          then Safe_Norm'Result <= 2.0 * Tame_Limit * mm);
    --  Compute the Euclidean norm of a physical position offset using the same scaled sum-of-squares algorithm. Success
    --  is False, and the returned length is zero, when an input is non-finite or the calculation cannot be completed
    --  safely.
@@ -1358,12 +1745,10 @@ private
    with
      Pre =>
        Maximum_Lambda >= 1.0
-       and then Is_Finite (Maximum_Lambda)
-       and then
-         (for all Axis in Axis_Name =>
-            Is_Finite (Chord_Direction (Axis))
-            and then Is_Finite (Start_Tangent (Axis))
-            and then Is_Finite (Finish_Tangent (Axis)));
+       and then Maximum_Lambda <= Lambda_Limit
+       and then Within (Chord_Direction, Unit_Component_Limit)
+       and then Within (Start_Tangent, 4.0)
+       and then Within (Finish_Tangent, 4.0);
    --  Select the endpoint-preserving transformation V(U) = W·U / (1 - U + W·U) used by every frame candidate.
    --  U measures normalized physical distance, while V locates the corresponding point in the polynomial tangent
    --  chart. W = 1 leaves the parameter unchanged, W < 1 allocates more physical distance near the start tangent, and
@@ -1375,22 +1760,29 @@ private
    --  within normalized arithmetic and stored-coordinate rounding uncertainty, it may also include a zero-bubble
    --  closure seed for the next construction stage.
 
-   function Stereographic (Y : Chart_Vector) return Raw_Vector_4;
+   function Stereographic (Y : Chart_Vector) return Raw_Vector_4
+   with
+     Pre  => Within (Y, Chart_Point_Limit),
+     Post => abs Stereographic'Result (0) <= 1.0 and then Within (Stereographic'Result, 2.0 * Chart_Point_Limit);
    --  Map a three-dimensional chart point onto the unit sphere in the four-dimensional local tangent frame. This
    --  rational map guarantees a unit tangent for every finite chart point.
 
-   function Stereographic_Jacobian (Y : Chart_Vector) return Raw_Stereo_Jacobian;
+   function Stereographic_Jacobian (Y : Chart_Vector) return Raw_Stereo_Jacobian
+   with Pre => Within (Y, Chart_Point_Limit);
    --  Return the analytic derivative of Stereographic with respect to the three chart coordinates.
 
    function Tangent_At
      (Frame : Frame_Vector_Array; Coefficients : Bernstein_Chart; Warp_Factor : Dimensionless; U : Dimensionless)
       return Position_Scale
    with
-     Pre =>
+     Pre  =>
        U >= 0.0
        and then U <= 1.0
        and then Warp_Factor >= Minimum_Distance_Warp_Factor
-       and then Warp_Factor <= Maximum_Distance_Warp_Factor;
+       and then Warp_Factor <= Maximum_Distance_Warp_Factor
+       and then Within (Frame, Unit_Component_Limit)
+       and then Within (Coefficients, Tame_Limit),
+     Post => Within (Tangent_At'Result, Frame_Product_Limit);
    --  Warp normalized physical distance into chart distance, evaluate the unit tangent in the local frame, and convert
    --  it back to machine-axis coordinates.
 
@@ -1405,6 +1797,8 @@ private
    --  Apply the monotone endpoint-preserving map from normalized physical distance U to polynomial chart coordinate V.
 
    function Strict_Bernstein_Nonnegative (Coefficients : Interval_Polynomial; Depth : Natural) return Boolean;
+   pragma Annotate (GNATprove, Skip_Proof, Strict_Bernstein_Nonnegative);
+   --  Not proved: this recovers from overflow by handling Constraint_Error, or calls what does.
    --  Whether the polynomial whose Bernstein controls Coefficients encloses is proved nonnegative on [0, 1], from
    --  the controls' lower bounds and up to Depth levels of bisection. False is not a proof of a negative value, except
    --  that an end control whose upper bound is negative is one.
@@ -1412,16 +1806,20 @@ private
    type Chart_Lambda_Terms is array (Raw_Taylor'Range) of Power_Chart;
    --  Element K holds the power coefficients which multiply λᴷ in the chart without its closure mode.
 
+   function Within (Value : Chart_Lambda_Terms; Limit : Dimensionless) return Boolean
+   is (for all Order in Raw_Taylor'Range =>
+         (for all Index in Chart_Coefficient_Index =>
+            (for all Component in Chart_Component_Index => abs Value (Order) (Index, Component) <= Limit)));
+
    function Build_Chart_Lambda_Terms
      (Start_Jets, Finish_Jets : Chart_Jet_Array; Warp_Factor : Dimensionless) return Chart_Lambda_Terms
    with
-     Pre =>
+     Pre  =>
        Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
-       and then
-         (for all Order in Start_Jets'Range =>
-            (for all Component in Chart_Component_Index =>
-               Is_Finite (Start_Jets (Order) (Component)) and then Is_Finite (Finish_Jets (Order) (Component))));
+       and then Within (Start_Jets, Tame_Limit)
+       and then Within (Finish_Jets, Tame_Limit),
+     Post => Within (Build_Chart_Lambda_Terms'Result, Lambda_Terms_Limit);
    --  Scaling the normalized distance by λ scales the kth endpoint derivative by λᵏ, and Build_Chart is linear in
    --  those scaled derivatives. The chart of any λ is therefore a cubic in λ whose four coefficient charts depend
    --  only on the endpoint jets and the warp, so the closure solve forms them once rather than rebuilding the
@@ -1431,7 +1829,10 @@ private
      (Terms                               : Chart_Lambda_Terms;
       Lambda                              : Dimensionless;
       C0                                  : Raw_Vector_3;
-      Coefficients, D_Lambda_Coefficients : out Power_Chart);
+      Coefficients, D_Lambda_Coefficients : out Power_Chart)
+   with
+     Pre  => Within (Terms, Tame_Limit) and then abs Lambda <= Lambda_Limit and then Within (C0, Tame_Limit),
+     Post => Within (Coefficients, Closure_Chart_Limit) and then Within (D_Lambda_Coefficients, Closure_Chart_Limit);
    --  The power-basis form of the chart which Build_Chart builds for Lambda and C0, with the rounding residue of its
    --  degree-seven Hermite part removed from V⁸, and the exact derivative of that chart with respect to Lambda.
 
@@ -1444,14 +1845,19 @@ private
       Initial                   : Closure_Solution;
       Panel_Count               : Positive := 1) return Closure_Solution
    with
-     Pre =>
+     Pre  =>
        Maximum_Lambda >= 1.0
-       and then Is_Finite (Maximum_Lambda)
+       and then Maximum_Lambda <= Lambda_Limit
        and then Tolerance > 0.0
-       and then Is_Finite (Tolerance)
        and then Warp_Factor >= Minimum_Distance_Warp_Factor
        and then Warp_Factor <= Maximum_Distance_Warp_Factor
-       and then (not Initial.Success or else Initial.Lambda <= Maximum_Lambda);
+       and then Panel_Count <= Maximum_Panel_Count
+       and then Within (Terms, Tame_Limit)
+       and then Within (Frame, Unit_Component_Limit)
+       and then Within (Chord_Direction, Candidate_Component_Limit)
+       and then (not Initial.Success or else Initial.Lambda <= Maximum_Lambda),
+     Post =>
+       (if Solve_Closure_From_Terms'Result.Success then Solve_Closure_From_Terms'Result.Lambda <= Maximum_Lambda);
    --  Solve the fixed-frame closure equations for the chart whose λ-dependence Terms describes, within the
    --  length-ratio and residual limits. Initial supplies the starting point, while Panel_Count selects the quadrature
    --  resolution used for each residual evaluation.
@@ -1464,9 +1870,6 @@ private
    --  Certify an upper bound on the absolute projected realtime tangent over a normalized-distance interval, including
    --  ideal-to-cache error and the continuous finish correction.
 
-   function Up (Value : Dimensionless) return Dimensionless;
-   --  Move a finite value far enough upward to conservatively cover one rounded arithmetic operation.
-
    --  A degree-seven Hermite chart matches the supplied tangent derivatives through order three. The
    --  endpoint-invisible degree-eight mode
    --
@@ -1476,6 +1879,8 @@ private
    --  distance, so asymmetric blends use the complete chart interval without increasing its degree.
 
    function Ideal_Point_At_Parameter (Curve : Stereographic_Curve; Parameter : Curve_Parameter) return Position;
+   pragma Annotate (GNATprove, Skip_Proof, Ideal_Point_At_Parameter);
+   --  Not proved: this recovers from overflow by handling Constraint_Error, or calls what does.
    --  Construction-only high-accuracy numerical evaluation of the ideal tangent integral. Realtime code uses
    --  Point_At_Parameter instead.
 
@@ -1488,12 +1893,16 @@ private
      (Evaluator            : Stereographic_Curve_Evaluator;
       Requested_Start_Jet  : Endpoint_Tangent_Jet;
       Requested_Finish_Jet : Endpoint_Tangent_Jet;
-      Error_Bounds         : out Endpoint_Jet_Error_Bounds) return Boolean;
+      Error_Bounds         : out Endpoint_Jet_Error_Bounds) return Boolean
+   with Side_Effects;
    --  Outward-enclose retained endpoint tangent-jet errors through normalized derivative order three. False reports
    --  that at least one finite enclosure was unavailable; Error_Bounds is then saturated.
 
    function Pole_Taylor_Tangent_Range_Majorants
-     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Sharp : out Boolean) return Axis_Majorants;
+     (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Sharp : out Boolean) return Axis_Majorants
+   with Side_Effects;
+   pragma Annotate (GNATprove, Skip_Proof, Pole_Taylor_Tangent_Range_Majorants);
+   --  Not proved: this recovers from overflow by handling Constraint_Error, or calls what does.
    --  Bound the retained tangent and its first four derivatives directly from the pole/residue evaluator. Each cell
    --  of an adaptive partition uses a fifth-order Taylor expansion about its centre with a rigorous sixth-order
    --  remainder, and cells are trisected until their bound is within half a percent of an attained value. This is
@@ -1505,7 +1914,7 @@ private
    --  visible part of some bound; Bernstein_Tangent_Range_Majorants may then prove a smaller one.
 
    function Retain_Bernstein_Tangent_Certificate (Curve : in out Stereographic_Curve) return Boolean
-   with Pre => Curve.Evaluator_Data.Kind = Positive_Curve_Kind;
+   with Side_Effects, Pre => Curve.Evaluator_Data.Kind = Positive_Curve_Kind;
    --  Reconstruct the retained tangent in common-denominator Bernstein form and store it in Curve. Construction
    --  normally certifies the tangent from samples and skips this far costlier reconstruction, so it is run on
    --  demand by the Bernstein derivative fallback. False, with Curve unchanged, if the reconstruction cannot prove
@@ -1513,7 +1922,9 @@ private
 
    function Bernstein_Tangent_Range_Majorants
      (Curve : Stereographic_Curve; Start_U, End_U : Dimensionless; Success : out Boolean) return Axis_Majorants
-   with Pre => Start_U >= 0.0 and then Start_U <= End_U and then End_U <= 1.0;
+   with Side_Effects, Pre => Start_U >= 0.0 and then Start_U <= End_U and then End_U <= 1.0;
+   pragma Annotate (GNATprove, Skip_Proof, Bernstein_Tangent_Range_Majorants);
+   --  Not proved: this recovers from overflow by handling Constraint_Error, or calls what does.
    --  Reconstruct factorial-scaled retained-tangent derivatives from the stored common-denominator Bernstein form.
    --  Exact binomial ratios and outward-rounded interval operations keep coefficient conversions enclosing, while
    --  bounded De Casteljau subdivision tightens the range hull. Success is False when the curve retains no

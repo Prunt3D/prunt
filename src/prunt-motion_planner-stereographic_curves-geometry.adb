@@ -24,7 +24,9 @@ pragma Unsuppress (Division_Check);
 
 pragma Extensions_Allowed (On);
 
-package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
+package body Prunt.Motion_Planner.Stereographic_Curves.Geometry
+  with SPARK_Mode => On
+is
 
    pragma
      Compile_Time_Error
@@ -33,6 +35,18 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
    --  The public answers are only as trustworthy as their smallest distance calculation. These helpers therefore carry
    --  an interval through every add, multiply, divide, and square root. Invalid or overflowing arithmetic becomes an
    --  uninformative interval; it is never converted into a plausible-looking scalar distance.
+
+   procedure Lemma_Fraction_Is_Parameter (Index : Natural; Count : Positive)
+   with
+     Ghost,
+     Pre  => Index < Count and then Count <= Maximum_Lipschitz_Segments,
+     Post =>
+       Dimensionless (Index) / Dimensionless (Count) >= 0.0
+       and then Dimensionless (Index) / Dimensionless (Count) <= 1.0;
+   --  A proper fraction of two counts, as computed, is a curve parameter. Stated on its own, away from the code
+   --  which divides, the provers settle it quickly.
+
+   procedure Lemma_Fraction_Is_Parameter (Index : Natural; Count : Positive) is null;
 
    function Square_Interval (Value : Interval) return Interval is
    begin
@@ -43,6 +57,12 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
          --  fictitious subnormal upper endpoint.
          return Interval_Exact (0.0);
       elsif Value.Lower <= 0.0 and then Value.Upper >= 0.0 then
+         if Value.Lower < -Stereographic_Kernel.Intervals.Product_Operand_Limit
+           or else Value.Upper > Stereographic_Kernel.Intervals.Product_Operand_Limit
+         then
+            --  A square could overflow. Interval_Multiply gives up at the same magnitude.
+            return Invalid_Geometry_Interval;
+         end if;
          declare
             Maximum : constant Dimensionless :=
               Dimensionless'Max (Value.Lower * Value.Lower, Value.Upper * Value.Upper);
@@ -52,9 +72,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       else
          return Interval_Multiply (Value, Value);
       end if;
-   exception
-      when Constraint_Error =>
-         return Invalid_Geometry_Interval;
    end Square_Interval;
 
    function Square_Root_Interval (Value : Interval) return Interval is
@@ -82,6 +99,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
             --  and prove the enclosure by squaring it with our outward-rounded interval arithmetic. Repeated widening
             --  handles a correctly rounded result which happens to land on the wrong side by a few ulps.
             for Attempt in 1 .. 8 loop
+               pragma Loop_Invariant (Lower_Root >= 0.0 and then Upper_Root >= 0.0);
                if not Lower_Is_Proven then
                   declare
                      Square : constant Interval := Square_Interval (Interval_Exact (Lower_Root));
@@ -115,9 +133,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
             return Checked_Interval (Lower_Root, Upper_Root, Lower_Is_Proven and Upper_Is_Proven);
          end;
       end if;
-   exception
-      when Constraint_Error =>
-         return Invalid_Geometry_Interval;
    end Square_Root_Interval;
 
    function Norm_Interval (Value : Interval_Position_Scale) return Interval is
@@ -167,11 +182,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       elsif Value >= Length'Last then
          return Length'Last;
       else
-         return Length'Max (0.0 * mm, Length'Adjacent (Value, Length'First));
+         return Length'Max (0.0 * mm, Length'Pred (Value));
       end if;
-   exception
-      when Constraint_Error =>
-         return 0.0 * mm;
    end Round_Down_Nonnegative;
 
    function Round_Up (Value : Length) return Length is
@@ -183,34 +195,26 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       elsif Value >= Length'Last then
          return Length'Last;
       else
-         return Length'Adjacent (Value, Length'Last);
+         return Length'Succ (Value);
       end if;
-   exception
-      when Constraint_Error =>
-         return Length'Last;
    end Round_Up;
 
    function Round_Curvature_Up (Value : Curvature) return Curvature is
       Inflation : Curvature;
       Candidate : Curvature;
    begin
-      if not (Value >= 0.0 / mm and then Value < Curvature'Last) then
+      if not (Value >= 0.0 / mm and then Value <= Curvature'Last / 2.0) then
+         --  Above half of the largest number the inflated value might not be representable.
          return Curvature'Last;
       end if;
       Inflation := Curvature'Max (Dimensionless'Model_Small / mm, 2.0 * Dimensionless'Model_Epsilon * Value);
-      if Inflation > Curvature'Last - Value then
-         return Curvature'Last;
-      end if;
       Candidate := Value + Inflation;
-      return (if Candidate > Value then Candidate else Curvature'Adjacent (Value, Curvature'Last));
-   exception
-      when Constraint_Error =>
-         return Curvature'Last;
+      return (if Candidate > Value then Candidate else Curvature'Succ (Value));
    end Round_Curvature_Up;
 
    function To_Distance_Interval (Value : Interval) return Distance_Interval is
       Maximum_Raw : constant Dimensionless := Dimensionless (Length'Last / mm);
-      Result      : Distance_Interval;
+      Result      : Unordered_Bounds;
    begin
       if not Value.Valid or else Value.Upper < 0.0 then
          return Unbounded_Distance;
@@ -233,16 +237,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       if not (Result.Lower <= Result.Upper) then
          return Unbounded_Distance;
       end if;
-      return Result;
-   exception
-      when Constraint_Error =>
-         return Unbounded_Distance;
+      return (Lower => Result.Lower, Upper => Result.Upper);
    end To_Distance_Interval;
 
    function Add_Upper (Left, Right : Length) return Length is
       Maximum_Raw : constant Dimensionless := Dimensionless (Length'Last / mm);
    begin
-      if Left >= Length'Last or else Right >= Length'Last then
+      if Left >= Length'Last / 2.0 or else Right >= Length'Last / 2.0 then
+         --  The sum might not be representable. This includes the bound which stands for no bound, Length'Last.
          return Length'Last;
       elsif Left <= 0.0 * mm then
          return Length'Max (0.0 * mm, Right);
@@ -259,9 +261,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
             end if;
          end;
       end if;
-   exception
-      when Constraint_Error =>
-         return Length'Last;
    end Add_Upper;
 
    function Subtract_Lower_Nonnegative (Left, Right : Length) return Length is
@@ -278,9 +277,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
             return Round_Down_Nonnegative (Down (Difference) * mm);
          end;
       end if;
-   exception
-      when Constraint_Error =>
-         return 0.0 * mm;
    end Subtract_Lower_Nonnegative;
 
    function Valid_Error (Value : Length) return Boolean is
@@ -290,9 +286,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
    end Valid_Error;
 
    function Point_To_Point_Distance_Upper (Left, Right : Position) return Length is
-      Maximum_Raw : constant Dimensionless := Dimensionless (Length'Last / mm);
-      Square_Sum  : Dimensionless := 0.0;
-      Result      : Dimensionless;
+      Maximum_Raw      : constant Dimensionless := Dimensionless (Length'Last / mm);
+      Coordinate_Limit : constant Length := 2.0**400 * mm;
+      Square_Limit     : constant Dimensionless := 2.0**802;
+      --  The largest square of a difference of two coordinates within Coordinate_Limit.
+      Root_Limit       : constant Dimensionless := Dimensionless'Last / 4.0;
+      Square_Sum       : Dimensionless := 0.0;
+      Root             : Dimensionless;
+      Result           : Dimensionless;
    begin
       if Left = Right then
          return 0.0 * mm;
@@ -301,8 +302,16 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       --  four nonnegative squares adds 3u and the square root halves the total and adds u: the computed norm is
       --  below the true one by less than 4u, which the factor 1 + 2⁻⁴⁹ = 1 + 16u repays. A square which
       --  underflows errs by less than 2⁻¹⁰⁷⁴ instead, which moves the norm by less than 2⁻⁵³⁵; the padding covers
-      --  all four. Overflow raises, because this unit keeps overflow checks.
+      --  all four.
       for Axis in Axis_Name loop
+         pragma
+           Loop_Invariant
+             (Square_Sum >= 0.0 and then Square_Sum <= Dimensionless (Axis_Name'Pos (Axis)) * Square_Limit);
+         --  Coordinates beyond any machine get no finite bound. Below the limit no difference, square or sum of
+         --  squares overflows.
+         if abs Left (Axis) > Coordinate_Limit or else abs Right (Axis) > Coordinate_Limit then
+            return Length'Last;
+         end if;
          declare
             Difference : constant Dimensionless :=
               Dimensionless (Left (Axis) / mm) - Dimensionless (Right (Axis) / mm);
@@ -310,14 +319,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
             Square_Sum := Square_Sum + Difference * Difference;
          end;
       end loop;
-      Result := Dimensionless_Math.Sqrt (Square_Sum) * (1.0 + 2.0**(-49)) + 2.0**(-530);
+      Root := Dimensionless_Math.Sqrt (Square_Sum);
+      if not (Root <= Root_Limit) then
+         return Length'Last;
+      end if;
+      Result := Root * (1.0 + 2.0**(-49)) + 2.0**(-530);
       if not (Result < Maximum_Raw) then
          return Length'Last;
       end if;
       return Result * mm;
-   exception
-      when Constraint_Error =>
-         return Length'Last;
    end Point_To_Point_Distance_Upper;
 
    function Point_To_Point_Distance (Left, Right : Position) return Distance_Interval is
@@ -374,7 +384,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
                    (Dimensionless'Max (0.0, Dimensionless'Min (1.0, Along.Lower)),
                     Dimensionless'Max (0.0, Dimensionless'Min (1.0, Along.Upper)));
                Residual       : Interval_Position_Scale;
-               Result         : Distance_Interval;
+               Result         : Unordered_Bounds;
                Endpoint_Upper : constant Length := Length'Min (To_Start.Upper, To_End.Upper);
             begin
                if not Clamped.Valid then
@@ -385,12 +395,15 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
                   Residual (Axis) := Interval_Subtract (From_Start (Axis), Interval_Multiply (Clamped, Offset (Axis)));
                end loop;
 
-               Result := To_Distance_Interval (Norm_Interval (Residual));
-               Result.Upper := Length'Min (Result.Upper, Endpoint_Upper);
+               declare
+                  Norm : constant Distance_Interval := To_Distance_Interval (Norm_Interval (Residual));
+               begin
+                  Result := (Lower => Norm.Lower, Upper => Length'Min (Norm.Upper, Endpoint_Upper));
+               end;
                if not (Result.Lower <= Result.Upper) then
                   return Endpoint_Only_Bound;
                end if;
-               return Result;
+               return (Lower => Result.Lower, Upper => Result.Upper);
             end;
          end;
       end;
@@ -428,9 +441,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
          end;
       end loop;
       return Maximum;
-   exception
-      when Constraint_Error =>
-         return Dimensionless'Last;
    end Maximum_Half_Parameter_Gap;
 
    function Lipschitz_Half_Gap_Upper
@@ -443,9 +453,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
            Interval_Exact (Half_Gap));
    begin
       return To_Distance_Interval (Spatial).Upper;
-   exception
-      when Constraint_Error =>
-         return Length'Last;
    end Lipschitz_Half_Gap_Upper;
 
    function Curvature_Norm_Upper (Curve : Stereographic_Curve) return Curvature is
@@ -468,9 +475,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       begin
          return (if Norm.Valid then Norm.Upper / mm else Curvature'Last);
       end;
-   exception
-      when Constraint_Error =>
-         return Curvature'Last;
    end Curvature_Norm_Upper;
 
    function Curvature_Capsule_Radius
@@ -500,9 +504,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
             return To_Distance_Interval (Radius).Upper;
          end;
       end;
-   exception
-      when Constraint_Error =>
-         return Length'Last;
    end Curvature_Capsule_Radius;
 
    function Make_Capsule
@@ -518,7 +519,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       Curvature_Radius   : constant Length :=
         Curvature_Capsule_Radius (Curve, Start_Parameter, End_Parameter, Curvature_Upper);
       Radius             : constant Length := Add_Upper (Curvature_Radius, Endpoint_Error_Max);
-      Result             : Capsule := (Lower => 0.0 * mm, Upper => Length'Last);
+      Result             : Unordered_Bounds;
    begin
       case Kind is
          when Point_Minimum       =>
@@ -599,16 +600,17 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       if not (Result.Lower <= Result.Upper) then
          return (Lower => 0.0 * mm, Upper => Length'Last);
       end if;
-      return Result;
+      return (Lower => Result.Lower, Upper => Result.Upper);
    end Make_Capsule;
 
    function Global_Interval (Kind : Metric_Kind; Capsules : Capsule_Array) return Distance_Interval is
-      Result : Distance_Interval :=
+      Result : Unordered_Bounds :=
         (if Kind = Point_Minimum
          then (Lower => Length'Last, Upper => Length'Last)
          else (Lower => 0.0 * mm, Upper => 0.0 * mm));
    begin
       for I in Capsules'Range loop
+         pragma Loop_Invariant (Result.Lower >= 0.0 * mm);
          case Kind is
             when Point_Minimum       =>
                Result.Lower := Length'Min (Result.Lower, Capsules (I).Lower);
@@ -623,14 +625,14 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       if not (Result.Lower <= Result.Upper) then
          return Unbounded_Distance;
       end if;
-      return Result;
+      return (Lower => Result.Lower, Upper => Result.Upper);
    end Global_Interval;
 
    function Widen_Capsule_For_Executed_Position
      (Kind : Metric_Kind; Value : Distance_Interval; Error : Length) return Distance_Interval
    is
       Nonnegative_Error : constant Length := Length'Max (0.0 * mm, Error);
-      Result            : Distance_Interval := Value;
+      Result            : Unordered_Bounds := (Lower => Value.Lower, Upper => Value.Upper);
    begin
       --  Capsule construction already uses evaluator samples for an attained side of the global extremum. Only the
       --  opposite, unobserved side needs the final ideal-to-executed position allowance.
@@ -645,7 +647,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       if not (Result.Lower <= Result.Upper) then
          return Unbounded_Distance;
       end if;
-      return Result;
+      return (Lower => Result.Lower, Upper => Result.Upper);
    end Widen_Capsule_For_Executed_Position;
 
    function Bound
@@ -664,19 +666,27 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       --  and Position_Error_Bound is exactly zero by the core-package contract.
       if Curve.Evaluator_Data.Kind = Zero_Curve_Kind or else Total <= 0.0 * mm then
          declare
+            Error : constant Length := Position_Error_Bound (Curve);
             Ideal : constant Distance_Interval :=
               (case Kind is
                  when Point_Minimum       => Point_To_Point_Distance (Curve.Evaluator_Data.Start_Point, Point),
                  when Line_Corner_Maximum =>
                    Corner_Distance (Curve.Evaluator_Data.Start_Point, Start, Corner, Finish));
          begin
+            if not Valid_Error (Error) then
+               return Unbounded_Distance;
+            end if;
             --  Even this closed form passes through directed-rounding distance operations; a rounded scalar is not
             --  treated as an exact real result merely because the curve is constant.
-            return Widen_Capsule_For_Executed_Position (Kind, Ideal, Position_Error_Bound (Curve));
+            return Widen_Capsule_For_Executed_Position (Kind, Ideal, Error);
          end;
       end if;
 
       Speed_Upper := Frame_Speed_Upper (Curve);
+      if not (Speed_Upper >= 0.0 and then Is_Finite (Speed_Upper)) then
+         --  Without a speed bound nothing follows from samples.
+         return Unbounded_Distance;
+      end if;
       Fixed_Lipschitz_Half_Gap := Lipschitz_Half_Gap_Upper (Curve, Speed_Upper, Fixed_Lipschitz_Segments);
       Use_Fixed_Lipschitz := Maximum_Interval_Width >= Fixed_Lipschitz_Half_Gap;
 
@@ -686,14 +696,18 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
       if Maximum_Interval_Width >= Capsule_Precision_Threshold or else Use_Fixed_Lipschitz then
          declare
             Error       : constant Length := Position_Error_Bound (Curve);
-            Twice_Error : constant Length := Add_Upper (Error, Error);
+            Twice_Error : Length;
             Segments    : Positive :=
               (if Use_Fixed_Lipschitz then Fixed_Lipschitz_Segments else Maximum_Lipschitz_Segments);
          begin
             if not Valid_Error (Error) then
                return Unbounded_Distance;
             end if;
-            if not Use_Fixed_Lipschitz and then Maximum_Interval_Width > Twice_Error then
+            Twice_Error := Add_Upper (Error, Error);
+            if not Use_Fixed_Lipschitz
+              and then Maximum_Interval_Width > Twice_Error
+              and then Maximum_Interval_Width <= Length'Last / 2.0
+            then
                declare
                   Available_Length : constant Length := Round_Down_Nonnegative (Maximum_Interval_Width - Twice_Error);
                   Available        : constant Dimensionless := Dimensionless (Available_Length / mm);
@@ -704,27 +718,32 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
                   Needed           : constant Dimensionless :=
                     (if Needed_Interval.Valid then Needed_Interval.Upper else Dimensionless'Last);
                begin
-                  if Is_Finite (Needed) and then Needed < Dimensionless (Maximum_Lipschitz_Segments) then
-                     Segments := Positive'Max (1, Positive (Dimensionless'Ceiling (Needed)));
+                  --  A count which is not positive would not convert to Positive, and the sampling limit stands.
+                  if Needed > 0.0 then
+                     if Is_Finite (Needed) and then Needed < Dimensionless (Maximum_Lipschitz_Segments) then
+                        Segments := Positive'Max (1, Positive (Dimensionless'Ceiling (Needed)));
+                     end if;
+                     while Segments < Maximum_Lipschitz_Segments
+                       and then Lipschitz_Half_Gap_Upper (Curve, Speed_Upper, Segments) > Available_Length
+                     loop
+                        pragma Loop_Variant (Increases => Segments);
+                        Segments := Segments + 1;
+                     end loop;
                   end if;
-                  while Segments < Maximum_Lipschitz_Segments
-                    and then Lipschitz_Half_Gap_Upper (Curve, Speed_Upper, Segments) > Available_Length
-                  loop
-                     Segments := Segments + 1;
-                  end loop;
-               exception
-                  when Constraint_Error =>
-                     Segments := Maximum_Lipschitz_Segments;
                end;
             end if;
 
             declare
-               Samples : Distance_Interval :=
+               Samples : Unordered_Bounds :=
                  (if Kind = Point_Minimum
                   then (Lower => Length'Last, Upper => Length'Last)
                   else (Lower => 0.0 * mm, Upper => 0.0 * mm));
             begin
                for I in 0 .. Segments loop
+                  pragma Loop_Invariant (Samples.Lower >= 0.0 * mm and then Samples.Upper >= 0.0 * mm);
+                  if I < Segments then
+                     Lemma_Fraction_Is_Parameter (I, Segments);
+                  end if;
                   declare
                      U      : constant Curve_Parameter :=
                        (if I = Segments then 1.0 else Curve_Parameter (Dimensionless (I) / Dimensionless (Segments)));
@@ -749,7 +768,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
                declare
                   Allowance : constant Length :=
                     Add_Upper (Lipschitz_Half_Gap_Upper (Curve, Speed_Upper, Segments), Twice_Error);
-                  Result    : Distance_Interval;
+                  Result    : Unordered_Bounds;
                begin
                   case Kind is
                      when Point_Minimum       =>
@@ -762,7 +781,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
                   if not (Result.Lower <= Result.Upper) then
                      return Unbounded_Distance;
                   end if;
-                  return Result;
+                  return (Lower => Result.Lower, Upper => Result.Upper);
                end;
             end;
          end;
@@ -783,6 +802,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Geometry is
          end if;
 
          for I in 1 .. Fixed_Capsule_Segments loop
+            pragma
+              Loop_Invariant (Previous_Parameter = Dimensionless (I - 1) / Dimensionless (Fixed_Capsule_Segments));
             declare
                End_Parameter : constant Curve_Parameter :=
                  (if I = Fixed_Capsule_Segments

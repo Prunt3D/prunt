@@ -22,7 +22,9 @@ pragma Unsuppress (Overflow_Check);
 pragma Unsuppress (Range_Check);
 pragma Unsuppress (Division_Check);
 
-package Prunt.Motion_Planner.Stereographic_Curves.Geometry is
+package Prunt.Motion_Planner.Stereographic_Curves.Geometry
+  with SPARK_Mode => On
+is
    type Distance_Interval is record
       Lower : Length := 0.0 * mm;
       --  Proven lower bound on the requested distance.
@@ -83,8 +85,13 @@ package Prunt.Motion_Planner.Stereographic_Curves.Geometry is
    function Round_Scalar_Up (Value : Dimensionless) return Dimensionless;
    --  Shared directed rounding for finite dimensionless values.
 
-   function Round_Down_Nonnegative (Value : Length) return Length;
-   function Round_Up (Value : Length) return Length;
+   function Round_Down_Nonnegative (Value : Length) return Length
+   with
+     Post =>
+       Round_Down_Nonnegative'Result >= 0.0 * mm
+       and then (if Value >= 0.0 * mm then Round_Down_Nonnegative'Result <= Value);
+   function Round_Up (Value : Length) return Length
+   with Post => Round_Up'Result >= 0.0 * mm;
    --  Round nonnegative lengths outward, saturating unsafe upper bounds and clamping lower bounds to zero.
 
    function Round_Curvature_Up (Value : Curvature) return Curvature;
@@ -136,6 +143,14 @@ private
    type Capsule_Array is array (Capsule_Index) of Capsule;
    --  Fixed-capacity storage for all fine-partition capsule results.
 
+   type Unordered_Bounds is record
+      Lower : Length := 0.0 * mm;
+      Upper : Length := Length'Last;
+   end record;
+   --  A lower and an upper bound which have not been compared yet. A Distance_Interval or a Capsule is ordered
+   --  wherever it exists, so bounds which are computed separately are held in this type until they are found to
+   --  be ordered, and discarded otherwise.
+
    Invalid_Geometry_Interval : constant Interval :=
      (Lower => -Dimensionless'Last, Upper => Dimensionless'Last, Valid => False);
    --  Marker returned by private interval arithmetic when a finite enclosure cannot be established.
@@ -147,7 +162,8 @@ private
    function Square_Interval (Value : Interval) return Interval;
    --  Conservatively enclose the square of every value in Value, accounting for an interval that crosses zero.
 
-   function Square_Root_Interval (Value : Interval) return Interval;
+   function Square_Root_Interval (Value : Interval) return Interval
+   with Post => (if Square_Root_Interval'Result.Valid then Square_Root_Interval'Result.Upper >= 0.0);
    --  Enclose the nonnegative square root of Value, rejecting an interval that is wholly negative or invalid.
 
    function Norm_Interval (Value : Interval_Position_Scale) return Interval;
@@ -163,14 +179,15 @@ private
    --  Return the conservative distance interval used when no useful finite upper bound can be proved.
 
    function Add_Upper (Left, Right : Length) return Length
-   with Pre => Left >= 0.0 * mm and then Right >= 0.0 * mm;
+   with Pre => Left >= 0.0 * mm and then Right >= 0.0 * mm, Post => Add_Upper'Result >= 0.0 * mm;
    --  Add nonnegative upper bounds with upward rounding and saturation at Length'Last.
 
    function Subtract_Lower_Nonnegative (Left, Right : Length) return Length
-   with Pre => Left >= 0.0 * mm and then Right >= 0.0 * mm;
+   with Pre => Left >= 0.0 * mm and then Right >= 0.0 * mm, Post => Subtract_Lower_Nonnegative'Result >= 0.0 * mm;
    --  Subtract an error allowance from a lower bound, rounding downward and clamping the result to zero.
 
-   function Valid_Error (Value : Length) return Boolean;
+   function Valid_Error (Value : Length) return Boolean
+   with Post => (if Valid_Error'Result then Value >= 0.0 * mm and then Value < Length'Last);
    --  Return True when Value is a finite, nonnegative error radius suitable for widening a certificate.
 
    ---------------------------------------------------------------------------
@@ -183,17 +200,19 @@ private
    function Corner_Distance (Point, Start, Corner, Finish : Position) return Distance_Interval;
    --  Certify the distance from Point to the union of the Start-to-Corner and Corner-to-Finish line segments.
 
-   function Curvature_Norm_Upper (Curve : Stereographic_Curve) return Curvature;
+   function Curvature_Norm_Upper (Curve : Stereographic_Curve) return Curvature
+   with Post => Curvature_Norm_Upper'Result >= 0.0 / mm;
    --  Combine the curve's per-axis derivative certificate into an upper bound on Euclidean curvature magnitude.
 
    function Curvature_Capsule_Radius
      (Curve : Stereographic_Curve; Start_Parameter, End_Parameter : Curve_Parameter; Curvature_Upper : Curvature)
       return Length
    with
-     Pre =>
+     Pre  =>
        Start_Parameter <= End_Parameter
        and then Curvature_Upper >= 0.0 / mm
-       and then Is_Finite (Dimensionless (Curvature_Upper / (1.0 / mm)));
+       and then Is_Finite (Dimensionless (Curvature_Upper / (1.0 / mm))),
+     Post => Curvature_Capsule_Radius'Result >= 0.0 * mm;
    --  Bound the maximum departure of a unit-speed, curvature-limited curve segment from its endpoint chord.
 
    function Frame_Speed_Upper (Curve : Stereographic_Curve) return Dimensionless;
@@ -204,7 +223,9 @@ private
 
    function Lipschitz_Half_Gap_Upper
      (Curve : Stereographic_Curve; Speed_Upper : Dimensionless; Segments : Positive) return Length
-   with Pre => Speed_Upper >= 0.0 and then Is_Finite (Speed_Upper);
+   with
+     Pre  => Speed_Upper >= 0.0 and then Is_Finite (Speed_Upper),
+     Post => Lipschitz_Half_Gap_Upper'Result >= 0.0 * mm;
    --  Convert the maximum parameter sampling gap into a physical position-error allowance using the speed bound.
 
    function Make_Capsule

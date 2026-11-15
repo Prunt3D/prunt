@@ -18,8 +18,11 @@
 --------------------------------------------------
 
 with Ada.Numerics;
+with Prunt.Motion_Planner.Stereographic_Kernel.Square_Roots;
+use Prunt.Motion_Planner.Stereographic_Kernel.Square_Roots;
 with Prunt.Motion_Planner.Stereographic_Curves.Geometry;
-with Trendy_Test; use Trendy_Test;
+with Trendy_Test;
+use Trendy_Test;
 
 package body Prunt.Motion_Planner.Stereographic_Curves.Test is
 
@@ -869,8 +872,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          end loop;
       end loop;
 
-      --  The result is representable even when input scaling or the scaled convolution overflows. Both cases must fall
-      --  back to the weighted-product path instead of rejecting a finite certificate.
+      --  The result is representable even when input scaling or the scaled convolution overflows. The proved interval
+      --  product of Stereographic_Kernel.Intervals refuses an operand above 2**511 instead of multiplying it, and
+      --  every route to these products needs one, so they may be invalid, but must never be wrong.
       for Case_Index in 1 .. 2 loop
          declare
             Left_Value  : constant Dimensionless := (if Case_Index = 1 then 1.0E300 else 1.0E160);
@@ -882,7 +886,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
             Expected    : constant Long_Long_Float := Long_Long_Float (Left_Value) * Long_Long_Float (Right_Value);
          begin
             for K in Product'Range loop
-               Assert_Contains (Product (K), Expected, "Overflow fallback product" & Case_Index'Image & K'Image);
+               if Product (K).Valid then
+                  Assert_Contains (Product (K), Expected, "Overflow fallback product" & Case_Index'Image & K'Image);
+               end if;
             end loop;
          end;
       end loop;
@@ -1056,7 +1062,6 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Base_Square          : Dimensionless := A * A + B * B;
       Unstable_Change      : Dimensionless;
       Displacement         : Dimensionless_Axis_Vector;
-      Huge_Displacement    : Dimensionless_Axis_Vector;
       Huge_B               : constant Dimensionless := 2.0 * Dimensionless_Math.Sqrt (Dimensionless'Last);
       pragma Volatile (Base_Square);
       pragma Volatile (Unstable_Change);
@@ -1074,40 +1079,46 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       Cache.Pole_Slots (1).Residue_Component (X_Axis) := 1.0;
       Cache.Pole_Slots (2).Pole_Component := B;
       T.Assert
-        (Rational_Antiderivative_Is_Well_Formed (Cache) and then Rational_Antiderivative_Primitives_Are_Safe (Cache),
+        (Rational_Antiderivative_Is_Well_Formed (Cache),
          "Cancellation-prone complex pole is structurally valid and safe to evaluate");
 
       Displacement := Evaluate_Rational_Displacement (Cache, U);
-      T.Assert
-        (Is_Finite (Displacement (X_Axis)), "Scaled complex-pole primitive remains finite at its closest point");
+      T.Assert (Is_Finite (Displacement (X_Axis)), "Complex-pole primitive remains finite at its closest point");
       T.Assert
         (abs (Displacement (X_Axis) - Expected) <= Tolerance,
-         "Scaled complex-pole primitive matches the analytical logarithm");
+         "Complex-pole primitive matches the analytical logarithm");
       T.Assert
         ((for all Axis in Axis_Name => (if Axis = X_Axis then True else Displacement (Axis) = 0.0)),
          "Zero complex residues leave every other axis unchanged");
 
+      --  The evaluator's cache is tested against magnitude limits when a curve is constructed, so that no evaluation
+      --  can overflow. A pole or a residue beyond them, or a pole on the unit interval, is not well formed.
       Huge_Pole_Cache.Pair_Count := 1;
       Huge_Pole_Cache.Pole_Slots (1).Pole_Component := 0.0;
       Huge_Pole_Cache.Pole_Slots (2).Pole_Component := Huge_B;
       Huge_Pole_Cache.Pole_Slots (2).Residue_Component (X_Axis) := 1.0;
       T.Assert
-        (Rational_Antiderivative_Is_Well_Formed (Huge_Pole_Cache)
-         and then Rational_Antiderivative_Primitives_Are_Safe (Huge_Pole_Cache),
-         "A complex pole whose unscaled square overflows remains safely evaluable");
-      Huge_Displacement := Evaluate_Rational_Displacement (Huge_Pole_Cache, 1.0);
+        (not Rational_Antiderivative_Is_Well_Formed (Huge_Pole_Cache),
+         "A complex pole beyond the magnitude limit is rejected during construction");
+      Huge_Pole_Cache.Pole_Slots (2).Pole_Component := 2.0**100;
       T.Assert
-        ((for all Axis in Axis_Name => Is_Finite (Huge_Displacement (Axis))),
-         "Scaled complex angle evaluation remains finite for a huge imaginary pole");
+        (Rational_Antiderivative_Is_Well_Formed (Huge_Pole_Cache)
+         and then
+           (for all Axis in Axis_Name => Is_Finite (Evaluate_Rational_Displacement (Huge_Pole_Cache, 1.0) (Axis))),
+         "A complex pole at the magnitude limit remains safely evaluable");
+      Huge_Pole_Cache.Pole_Slots (1).Pole_Component := 0.5;
+      Huge_Pole_Cache.Pole_Slots (2).Pole_Component := 2.0**(-101);
+      T.Assert
+        (not Rational_Antiderivative_Is_Well_Formed (Huge_Pole_Cache),
+         "A complex pole closer to the unit interval than the clearance is rejected during construction");
 
       Unsafe_Residue_Cache.Pair_Count := 1;
       Unsafe_Residue_Cache.Pole_Slots (1).Pole_Component := 0.5;
       Unsafe_Residue_Cache.Pole_Slots (1).Residue_Component (X_Axis) := Dimensionless'Last;
       Unsafe_Residue_Cache.Pole_Slots (2).Pole_Component := 0.25;
       T.Assert
-        (Rational_Antiderivative_Is_Well_Formed (Unsafe_Residue_Cache)
-         and then not Rational_Antiderivative_Primitives_Are_Safe (Unsafe_Residue_Cache),
-         "A structurally valid finite residue whose primitive product can overflow is rejected during construction");
+        (not Rational_Antiderivative_Is_Well_Formed (Unsafe_Residue_Cache),
+         "A finite residue whose primitive product could overflow is rejected during construction");
    end Test_Complex_Pole_Primitive_Cancellation;
 
    procedure Test_Default_And_Zero_State (T : in out Trendy_Test.Operation'Class) is
@@ -2204,7 +2215,7 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
                  Successful_Curve.Warp_Factor,
                  (others => <>));
             Bad_Seed      : constant Closure_Seed :=
-              (Valid => True, Lambda => Request.Maximum_Arc_Length / Chord_Length, C0 => [others => 1.0E100]);
+              (Valid => True, Lambda => Request.Maximum_Arc_Length / Chord_Length, C0 => [others => 1.0E30]);
             From_Bad_Seed : constant Candidate_Result :=
               Build_Candidate
                 (Request,
@@ -2387,8 +2398,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
       end Observed_Tangent_Error;
 
       procedure Assert_Sound (Curve : Stereographic_Curve; Cache : Rational_Antiderivative; Name : String) is
+         Evidence    : Stereographic_Kernel.Certified_Evaluator.Certificate;
          Certificate : constant Tangent_Certificate_Result :=
-           Sampled_Realtime_Tangent_Error (Curve, Cache, Start_Denominator (Curve));
+           Sampled_Realtime_Tangent_Error (Curve, Cache, Start_Denominator (Curve), Evidence);
          Observed    : constant Dimensionless := Observed_Tangent_Error (Curve, Cache);
       begin
          if Certificate.Status = Tangent_Was_Certified then
@@ -2419,8 +2431,9 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          declare
             Curve       : Stereographic_Curve renames Result.Curve;
             Cache       : Rational_Antiderivative renames Curve.Evaluator_Data.Antiderivative_Cache;
+            Evidence    : Stereographic_Kernel.Certified_Evaluator.Certificate;
             Certificate : constant Tangent_Certificate_Result :=
-              Sampled_Realtime_Tangent_Error (Curve, Cache, Start_Denominator (Curve));
+              Sampled_Realtime_Tangent_Error (Curve, Cache, Start_Denominator (Curve), Evidence);
             Reference   : Stereographic_Curve := Curve;
          begin
             T.Assert (Certified_From_Samples (Curve), Name & " construction used the sampled certificate alone");
@@ -2730,9 +2743,8 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
    end Test_Conjugate_Root_Iteration;
 
    procedure Test_Pair_Primitive_Fast_Paths (T : in out Trendy_Test.Operation'Class) is
-      --  Both primitives are invariant under scaling the pole and the distance together. Scaling by 2⁴⁵⁰ is exact and
-      --  takes every input out of the moderate range, so the scaled formulas evaluate the same value.
-      Scale     : constant Dimensionless := 2.0**450;
+      --  Compare both pair primitives with their defining formulas, evaluated directly: the logarithm of the ratio
+      --  of the squared distances, and the difference of the arguments of U - p and of -p.
       Tolerance : constant Dimensionless := 256.0 * Dimensionless'Model_Epsilon;
       Checked   : Natural := 0;
    begin
@@ -2743,28 +2755,32 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
             for U of Dimensionless_Axis_Vector'[0.01, 0.37, 0.5, 1.0] loop
                declare
                   Fast_Log     : constant Dimensionless := Stable_Complex_Log_Ratio (A, B, U);
-                  Scaled_Log   : constant Dimensionless := Stable_Complex_Log_Ratio (A * Scale, B * Scale, U * Scale);
+                  Direct_Log   : constant Dimensionless :=
+                    Dimensionless_Math.Log (((U - A) * (U - A) + B * B) / (A * A + B * B));
                   Fast_Angle   : constant Dimensionless := Stable_Complex_Angle_Delta (A, B, U);
-                  Scaled_Angle : constant Dimensionless :=
-                    Stable_Complex_Angle_Delta (A * Scale, B * Scale, U * Scale);
+                  Direct_Angle : constant Dimensionless :=
+                    Dimensionless_Math.Arctan (-B, U - A) - Dimensionless_Math.Arctan (-B, -A);
                   Change       : constant Dimensionless := U * (U - 2.0 * A) / (A * A + B * B);
                begin
-                  --  Where the scaled path forms the ratio of the sums of squares beside one, it is the less accurate
-                  --  of the two, so only compare where both use the same branch.
-                  if U <= Dimensionless'Max (abs A, B) or else abs Change > 0.2 then
+                  --  Beside one the direct ratio of the sums of squares is the less accurate of the two, so only
+                  --  compare the logarithms where the ratio is away from one.
+                  if abs Change > 0.2 then
                      Checked := Checked + 1;
                      T.Assert
-                       (abs (Fast_Log - Scaled_Log) <= Tolerance * abs Scaled_Log,
-                        "Log ratio fast path:" & A'Image & B'Image & U'Image & Fast_Log'Image & Scaled_Log'Image);
+                       (abs (Fast_Log - Direct_Log) <= Tolerance * abs Direct_Log,
+                        "Log ratio:" & A'Image & B'Image & U'Image & Fast_Log'Image & Direct_Log'Image);
                   end if;
+                  --  The angle swept from -p to U - p is the direct difference up to a whole turn, and its magnitude
+                  --  is below half a turn because the pole is above the real axis.
                   T.Assert
-                    (abs (Fast_Angle - Scaled_Angle) <= Tolerance * abs Scaled_Angle,
-                     "Angle fast path:" & A'Image & B'Image & U'Image & Fast_Angle'Image & Scaled_Angle'Image);
+                    (abs (Fast_Angle - Direct_Angle) <= 16.0 * Tolerance
+                     or else abs (abs (Fast_Angle - Direct_Angle) - 2.0 * Ada.Numerics.Pi) <= 16.0 * Tolerance,
+                     "Angle:" & A'Image & B'Image & U'Image & Fast_Angle'Image & Direct_Angle'Image);
                end;
             end loop;
          end loop;
       end loop;
-      T.Assert (Checked >= 32, "The log ratio comparison covers most inputs:" & Checked'Image);
+      T.Assert (Checked >= 24, "The log ratio comparison covers many inputs:" & Checked'Image);
    end Test_Pair_Primitive_Fast_Paths;
 
    procedure Test_Geometry_Zero_And_Degenerate_References (T : in out Trendy_Test.Operation'Class) is
@@ -3404,10 +3420,90 @@ package body Prunt.Motion_Planner.Stereographic_Curves.Test is
          "A control beyond the safe magnitude proves nothing");
    end Test_Strict_Bernstein_Nonnegative;
 
+   procedure Test_Elementary_Bounds (T : in out Trendy_Test.Operation'Class) is
+      --  Stereographic_Kernel.Elementary states a few facts about the mathematical library without proof, on which the
+      --  proofs of the construction code rest. Check each of them where it is tightest and over a sweep.
+      package Elementary renames Prunt.Motion_Planner.Stereographic_Kernel.Elementary;
+      Bound    : Dimensionless := Elementary.Root_Bound_Min;
+      Argument : Dimensionless := Dimensionless'Succ (0.0);
+   begin
+      T.Register;
+
+      --  The square root of a rounded square is the number which was squared, so the root of anything at most
+      --  that square is at most the number, and the root of anything at least that square is at least it.
+      while Bound <= Elementary.Root_Bound_Max loop
+         declare
+            Square : constant Dimensionless := Bound * Bound;
+         begin
+            T.Assert
+              (Dimensionless_Math.Sqrt (Square) = Bound
+               and then Dimensionless_Math.Sqrt (Dimensionless'Pred (Square)) <= Bound
+               and then Dimensionless_Math.Sqrt (Dimensionless'Succ (Square)) >= Bound,
+               "The square root inverts a rounded square at" & Bound'Image);
+         end;
+         Bound := Bound * 1.732_050_807_568_877_2;
+      end loop;
+
+      --  The logarithm of every positive number, from the smallest to the largest.
+      while Argument < Dimensionless'Last / 3.0 loop
+         T.Assert
+           (abs Dimensionless_Math.Log (Argument) <= Elementary.Log_Magnitude_Max,
+            "The logarithm is within its limit at" & Argument'Image);
+         Argument := Argument * 2.718_281_828_459_045;
+      end loop;
+      T.Assert
+        (abs Dimensionless_Math.Log (Dimensionless'Last) <= Elementary.Log_Magnitude_Max
+         and then abs Dimensionless_Math.Log (Dimensionless'Succ (0.0)) <= Elementary.Log_Magnitude_Max,
+         "The logarithm is within its limit at both ends of the positive numbers");
+
+      --  The two-argument arctangent, around the whole circle and at its branch cut.
+      for Step in 0 .. 720 loop
+         declare
+            Angle : constant Dimensionless := Dimensionless (Step) * Ada.Numerics.Pi / 360.0;
+            Y     : constant Dimensionless := Dimensionless_Math.Sin (Angle);
+            X     : constant Dimensionless := Dimensionless_Math.Cos (Angle);
+         begin
+            if X /= 0.0 or else Y /= 0.0 then
+               T.Assert
+                 (abs Dimensionless_Math.Arctan (Y, X) <= Elementary.Arctan_Magnitude_Max,
+                  "The arctangent is within its limit at step" & Step'Image);
+            end if;
+         end;
+      end loop;
+      T.Assert
+        (abs Dimensionless_Math.Arctan (0.0, -1.0) <= Elementary.Arctan_Magnitude_Max
+         and then abs Dimensionless_Math.Arctan (-Dimensionless'Succ (0.0), -1.0) <= Elementary.Arctan_Magnitude_Max
+         and then abs Dimensionless_Math.Arctan (Dimensionless'Last, -Dimensionless'Last)
+                  <= Elementary.Arctan_Magnitude_Max,
+         "The arctangent is within its limit on the negative real axis");
+
+      --  The exponential over both stated ranges.
+      for Step in -640 .. 640 loop
+         declare
+            X     : constant Dimensionless := Dimensionless (Step) / 10.0;
+            Value : constant Dimensionless := Elementary.Bounded_Exp (X);
+         begin
+            T.Assert
+              (Value = Dimensionless_Math.Exp (X)
+               and then Value >= Elementary.Exp_Result_Min
+               and then Value <= Elementary.Exp_Result_Max,
+               "The exponential is within its limits at" & X'Image);
+            if abs X <= Elementary.Warp_Log_Max then
+               T.Assert
+                 (Elementary.Warp_Exp (X) = Value
+                  and then Value >= Elementary.Warp_Factor_Min
+                  and then Value <= Elementary.Warp_Factor_Max,
+                  "The exponential of a warp logarithm is within the warp limits at" & X'Image);
+            end if;
+         end;
+      end loop;
+   end Test_Elementary_Bounds;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
         [Test_Chart_Lambda_Terms'Access,
+         Test_Elementary_Bounds'Access,
          Test_Closure_On_Length_Cap'Access,
          Test_Flat_Line_Blend_Miss_Ratio'Access,
          Test_Strict_Bernstein_Nonnegative'Access,

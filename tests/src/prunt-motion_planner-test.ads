@@ -21,11 +21,15 @@ pragma Extensions_Allowed (On);
 
 with Trendy_Test;
 
+private with Prunt.Motion_Planner.Trajectory.Solvers;
+
 package Prunt.Motion_Planner.Test is
 
    function All_Tests return Trendy_Test.Test_Group;
 
 private
+
+   use Prunt.Motion_Planner.Trajectory.Solvers;
 
    N_Kinematic_Check_Steps : constant := 1000;
    N_Boundary_Intervals    : constant := 1000;
