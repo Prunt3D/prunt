@@ -3780,6 +3780,144 @@ package body Prunt.Config.Test is
          "Migrated file exposes override");
    end Test_Config_Overrides_Prune_During_Migration;
 
+   procedure Test_Config_Overrides_Removed_Restores_Defaults (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Filename : constant String := Next_Test_Filename;
+      Content  : constant String :=
+        "{"
+        & """Prunt config version"": 1,"
+        & """Config"": {"
+        & "   ""M"": {"
+        & "      ""Version"": 1,"
+        & "      ""Config"": {""s"": {""i"": 3, ""j"": 4}}"
+        & "   }"
+        & "}"
+        & "}";
+
+      declare
+         F : Mockable.Text_IO.File_Type;
+      begin
+         Mockable.Text_IO.Create (F, Mockable.Text_IO.Out_File, Filename);
+         Mockable.Text_IO.Put_Line (F, Content);
+         Mockable.Text_IO.Close (F);
+      end;
+
+      declare
+         File : constant Config_File := Create (Filename, Override_Test_Schemas, Override_I)
+         with Unreferenced;
+      begin
+         null;
+      end;
+
+      T.Assert
+        (not Read_Test_File (Filename).Get ("Config").Get ("M").Get ("Config").Get ("s").Has_Field ("i"),
+         "Config file exposes override");
+
+      declare
+         File : constant Config_File := Create (Filename, Override_Test_Schemas);
+         Data : Config_Data := File.Get_Data ("M");
+
+         Stored_JSON : constant JSON_Value := Read (File.Get_Data_String);
+         Schema_JSON : constant JSON_Value := Read (File.Get_Schema_String);
+         Disk_JSON   : constant JSON_Value := Read_Test_File (Filename);
+      begin
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["s", "i"])) = Long_Long_Integer'(1), "Removed override not default");
+         T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "j"])) = Long_Long_Integer'(4), "Stored value lost");
+         T.Assert
+           (Stored_JSON.Get ("Config").Get ("M").Get ("Config").Get ("s").Get ("i").Get = Long_Long_Integer'(1),
+            "Stored config lacks restored field");
+         T.Assert
+           (Schema_JSON.Get ("Config").Get ("M").Get ("Config").Get ("s").Get ("Children").Has_Field ("i"),
+            "Schema hides removed override");
+         T.Assert
+           (Disk_JSON.Get ("Config").Get ("M").Get ("Config").Get ("s").Get ("i").Get = Long_Long_Integer'(1),
+            "Config file lacks restored field");
+      end;
+   end Test_Config_Overrides_Removed_Restores_Defaults;
+
+   procedure Test_Config_Overrides_Active_Does_Not_Rewrite_File (T : in out Trendy_Test.Operation'Class) is
+   begin
+      T.Register;
+
+      Filename : constant String := Next_Test_Filename;
+      Content  : constant String :=
+        "{"
+        & """Prunt config version"": 1,"
+        & """Config"": {"
+        & "   ""M"": {"
+        & "      ""Version"": 1,"
+        & "      ""Config"": {""s"": {""j"": 4}}"
+        & "   }"
+        & "}"
+        & "}";
+
+      declare
+         F : Mockable.Text_IO.File_Type;
+      begin
+         Mockable.Text_IO.Create (F, Mockable.Text_IO.Out_File, Filename);
+         Mockable.Text_IO.Put_Line (F, Content);
+         Mockable.Text_IO.Close (F);
+      end;
+
+      declare
+         File : constant Config_File := Create (Filename, Override_Test_Schemas, Override_I);
+         Data : Config_Data := File.Get_Data ("M");
+      begin
+         T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "i"])) = Long_Long_Integer'(7), "Override not live");
+         T.Assert (Data.Get (Config_Data_Paths.Vector'(["s", "j"])) = Long_Long_Integer'(4), "Stored value lost");
+      end;
+
+      declare
+         F         : Mockable.Text_IO.File_Type;
+         Disk_Text : Unbounded_String;
+      begin
+         Mockable.Text_IO.Open (F, Mockable.Text_IO.In_File, Filename);
+         while not Mockable.Text_IO.End_Of_File (F) loop
+            Append (Disk_Text, Mockable.Text_IO.Get_Line (F));
+         end loop;
+         Mockable.Text_IO.Close (F);
+
+         T.Assert (To_String (Disk_Text) = Content, "File rewritten while override still hides its field");
+      end;
+   end Test_Config_Overrides_Active_Does_Not_Rewrite_File;
+
+   procedure Test_Add_Missing_Defaults (T : in out Trendy_Test.Operation'Class) is
+      Defaults : constant JSON_Value := Read ("{""a"": 1, ""s"": {""b"": 2, ""c"": 3}}");
+   begin
+      T.Register;
+
+      T.Assert (not Add_Missing_Defaults (Create (Long_Long_Integer'(5)), Defaults), "Non-object target changed");
+      T.Assert (not Add_Missing_Defaults (Create_Object, Create (Long_Long_Integer'(5))), "Non-object defaults used");
+
+      declare
+         Target : constant JSON_Value := Read ("{""a"": 9, ""s"": {""b"": 8}}");
+      begin
+         T.Assert (Add_Missing_Defaults (Target, Defaults), "Nested missing member not reported");
+         T.Assert (Target.Get ("a").Get = Long_Long_Integer'(9), "Existing member replaced");
+         T.Assert (Target.Get ("s").Get ("b").Get = Long_Long_Integer'(8), "Existing nested member replaced");
+         T.Assert (Target.Get ("s").Get ("c").Get = Long_Long_Integer'(3), "Nested member not added");
+         T.Assert (not Add_Missing_Defaults (Target, Defaults), "Complete target reported as changed");
+      end;
+
+      declare
+         Target : constant JSON_Value := Read ("{""a"": 9, ""s"": 7}");
+      begin
+         T.Assert (not Add_Missing_Defaults (Target, Defaults), "Mismatched member reported as changed");
+         T.Assert (Target.Get ("s").Get = Long_Long_Integer'(7), "Mismatched member replaced");
+      end;
+
+      declare
+         Target : constant JSON_Value := Create_Object;
+      begin
+         T.Assert (Add_Missing_Defaults (Target, Defaults), "Missing members not reported");
+         Defaults.Get ("s").Set_Field ("b", Create (Long_Long_Integer'(6)));
+         T.Assert (Target.Get ("s").Get ("b").Get = Long_Long_Integer'(2), "Added member shares defaults");
+      end;
+   end Test_Add_Missing_Defaults;
+
    procedure Test_Config_Override_Helper_Edges (T : in out Trendy_Test.Operation'Class) is
       Helper_Schemas : constant Config_Schema_Maps.Map :=
         ["M" =>
@@ -4694,6 +4832,9 @@ package body Prunt.Config.Test is
          Test_Config_Overrides_Hide_Whole_Nodes'Access,
          Test_Config_Overrides_Invalid'Access,
          Test_Config_Overrides_Prune_During_Migration'Access,
+         Test_Config_Overrides_Removed_Restores_Defaults'Access,
+         Test_Config_Overrides_Active_Does_Not_Rewrite_File'Access,
+         Test_Add_Missing_Defaults'Access,
          Test_Config_Override_Helper_Edges'Access,
          Test_Config_Path_Selected_Variant'Access,
          Test_Config_Path_Unselected_Variant_Does_Not_Report'Access,

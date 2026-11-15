@@ -1016,6 +1016,29 @@ package body Prunt.Config is
       end if;
    end Merge_Default_JSON_Node;
 
+   function Add_Missing_Defaults (Target : JSON_Value; Defaults : JSON_Value) return Boolean is
+      Changed : Boolean := False;
+
+      procedure Add_Member (Name : Virtual_String; Default_Value : JSON_Value);
+      --  Adds one member of Defaults to Target, or descends into it when Target already has it.
+
+      procedure Add_Member (Name : Virtual_String; Default_Value : JSON_Value) is
+      begin
+         if not Target.Has_Field (Name) then
+            Target.Set_Field (Name, Clone (Default_Value));
+            Changed := True;
+         elsif Add_Missing_Defaults (Target.Get (Name), Default_Value) then
+            Changed := True;
+         end if;
+      end Add_Member;
+   begin
+      if Target.Kind = JSON_Object_Type and then Defaults.Kind = JSON_Object_Type then
+         Defaults.Map_JSON_Object (Add_Member'Access);
+      end if;
+
+      return Changed;
+   end Add_Missing_Defaults;
+
    procedure Apply_Overrides_To_Config
      (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector)
    is
@@ -1416,6 +1439,23 @@ package body Prunt.Config is
                      Live_Config.Get ("Config").Get (Module_Name).Set_Field
                        ("Version", Integer (Module_Schema.Version));
                      Write_Required := True;
+                  else
+                     --  A field hidden by an override is absent from the file, so it is missing again once that
+                     --  override is removed. Restore such fields from the defaults. Fields which are still
+                     --  overridden are taken out of the defaults first so that they are not added only to be pruned
+                     --  again below, which would rewrite the file on every start.
+                     declare
+                        Defaults : constant JSON_Value := Create_Default_Module_Config (Module_Schema.Top_Level_Items);
+                        Pruned   : constant Boolean :=
+                          Prune_Overrides_From_Module_Config
+                            (Module_Name, Defaults, Module_Schema.Top_Level_Items, Overrides)
+                        with Unreferenced;
+                     begin
+                        if Add_Missing_Defaults (Live_Config.Get ("Config").Get (Module_Name).Get ("Config"), Defaults)
+                        then
+                           Write_Required := True;
+                        end if;
+                     end;
                   end if;
                else
                   Live_Config.Get ("Config").Set_Field (Module_Name, Create_Object);

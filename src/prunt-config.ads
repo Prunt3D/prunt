@@ -379,7 +379,8 @@ package Prunt.Config is
    --      - Checks "Version".
    --      - If File.Version < Schema.Version, Migrate is called.
    --      - If File.Version > Schema.Version, raises Constraint_Error.
-   --      - If Versions match, structure is validated against Schema.
+   --      - If Versions match, fields missing from the file are filled with defaults (this restores a field hidden
+   --        by an override that has since been removed) and structure is validated against Schema.
    --    - If missing in file, it is initialized with defaults.
    --  - If the file contains modules NOT in Schemas, Constraint_Error is raised.
    --  - If the file does not exist, it is created with default values for all modules in Schemas.
@@ -649,6 +650,10 @@ private
 
    procedure Merge_Default_JSON_Node (Root : JSON_Value; Path : Config_Data_Paths.Vector; Default_Value : JSON_Value);
    --  Ensure Path contains Default_Value's structure while preserving any compatible existing object members.
+
+   function Add_Missing_Defaults (Target : JSON_Value; Defaults : JSON_Value) return Boolean;
+   --  Copy each member of Defaults that Target lacks into Target, descending into members that are objects in both.
+   --  Existing members are never replaced. Returns True when Target changed.
 
    type Migration_Status is new Ada.Finalization.Controlled with record
       Active : Boolean := False;
