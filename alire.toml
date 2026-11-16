@@ -65,14 +65,13 @@ gnatprove = "~16.2.1001"
 # 16.2.1008. See prove.sh and gnatprove.sh.
 
 [[pins]]
-simple_components = { url = "https://github.com/Prunt3D/dak_simple_components.git", commit = "7d3e282ee8ab8c5a836944c80515bf85437425e5" }
+simple_components = "4.81.1001"
 gnat_native = "16.2.1009"
 gnat = "16.2.1009"
 gnatprove = "16.2.1001"
 sparklib = "16.1.0"
 gnatcoll = "26.0.0"
 gnatcoll_minimal = "26.0.0"
-libgpr = { url = "https://github.com/Prunt3D/gprbuild.git", commit = "56139608315345ffe109bb98ecb3d3bfa27c036e" }
 xmlada = "26.0.0"
 utilada = "2.9.0"
 utilada_curl = "2.9.0"
