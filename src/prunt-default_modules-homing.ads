@@ -168,6 +168,8 @@ private
    type User_Config_Homing_StallGuard2 is record
       --  StallGuard2 is used with SpreadCycle. The homing module temporarily installs these settings before motion
       --  and restores the driver's normal settings after homing succeeds, fails, or is cancelled.
+      --
+      --  While homing, StealthChop2 is disabled and the selected motor's THIGH setting is ignored.
 
       Motor : Motor_Name := First_StallGuard_Motor with
         Annotate =>
@@ -191,6 +193,9 @@ private
    type User_Config_Homing_StallGuard4 is record
       --  StallGuard4 is used with StealthChop. The homing module temporarily installs these settings before motion
       --  and restores the driver's normal settings after homing succeeds, fails, or is cancelled.
+      --
+      --  StealthChop2 must be enabled in the selected motor's driver settings. While homing, the driver stays in
+      --  StealthChop2 at every velocity, regardless of that motor's TPWMTHRS and THIGH settings.
 
       Motor : Motor_Name := First_StallGuard_Motor with
         Annotate =>

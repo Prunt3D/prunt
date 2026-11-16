@@ -61,6 +61,13 @@ package body Prunt.TMC2240_Test_UART is
       return Frame.Content.CHOPCONF_Data;
    end CHOPCONF;
 
+   function Last_Write (Register : UART_Register_Address) return UART_Data_Message is
+      Frame : UART_Data_Message;
+   begin
+      Frame.Bytes := Stored (Register);
+      return Frame;
+   end Last_Write;
+
    procedure Write (Message : UART_Data_Byte_Array) is
       Frame : UART_Data_Message;
    begin

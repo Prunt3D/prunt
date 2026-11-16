@@ -621,6 +621,71 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       end;
    end Read;
 
+   function Registers_For_Homing
+     (Normal : Homing_Registers; Parameters : Homing_Driver_Parameters; IRUN_During_Homing : Dimensionless)
+      return Homing_Registers is
+   begin
+      return Result : Homing_Registers := Normal do
+         Result.GCONF.Diag0_Stall := True;
+         Result.IHOLD_IRUN.I_Run :=
+           TMC_Types.Unsigned_5 (Dimensionless'Max (0.0, Dimensionless'Floor (IRUN_During_Homing * 32.0 - 1.0)));
+
+         --  Stall detection is off below the TCOOLTHRS velocity and in the high-velocity mode above the THIGH
+         --  velocity, so remove both limits.
+         Result.TCOOLTHRS.T_Cool_Thrs := TMC_Types.Unsigned_20'Last;
+         Result.THIGH.T_High := 0;
+
+         case Parameters.Kind is
+            when No_Homing_Detector          =>
+               null;
+
+            when StallGuard2_Homing_Detector =>
+               --  StallGuard2 does not work in StealthChop2.
+               Result.GCONF.En_PWM_Mode := False;
+               Result.COOLCONF.SGT := TMC_Types.Unsigned_7 (Parameters.SG2_Threshold mod 128);
+               Result.COOLCONF.SFILT := TMC_Boolean (Parameters.Enable_Filter);
+
+            when StallGuard4_Homing_Detector =>
+               --  StallGuard4 only works in StealthChop2. The driver leaves StealthChop2 above the TPWMTHRS velocity,
+               --  so remove that limit too.
+               Result.GCONF.En_PWM_Mode := True;
+               Result.TPWMTHRS.T_PWM_Thrs := 0;
+               Result.SG4_THRS.SG4_Thrs := TMC_Types.Unsigned_8 (Parameters.SG4_Threshold);
+               Result.SG4_THRS.SG4_Filt_En := TMC_Boolean (Parameters.Enable_Filter);
+         end case;
+      end return;
+   end Registers_For_Homing;
+
+   procedure Write_Homing_Registers (Registers : Homing_Registers; Motor : Motor_Name) is
+   begin
+      Write_And_Validate
+        ((Bytes_Mode => False, Content => (Register => GCONF_Address, GCONF_Data => Registers.GCONF, others => <>)),
+         Motor);
+      Write_And_Validate
+        ((Bytes_Mode => False,
+          Content    => (Register => IHOLD_IRUN_Address, IHOLD_IRUN_Data => Registers.IHOLD_IRUN, others => <>)),
+         Motor);
+      Write_And_Validate
+        ((Bytes_Mode => False,
+          Content    => (Register => TPWMTHRS_Address, TPWMTHRS_Data => Registers.TPWMTHRS, others => <>)),
+         Motor);
+      Write_And_Validate
+        ((Bytes_Mode => False,
+          Content    => (Register => TCOOLTHRS_Address, TCOOLTHRS_Data => Registers.TCOOLTHRS, others => <>)),
+         Motor);
+      Write_And_Validate
+        ((Bytes_Mode => False, Content => (Register => THIGH_Address, THIGH_Data => Registers.THIGH, others => <>)),
+         Motor);
+      Write_And_Validate
+        ((Bytes_Mode => False,
+          Content    => (Register => COOLCONF_Address, COOLCONF_Data => Registers.COOLCONF, others => <>)),
+         Motor);
+      Write_And_Validate
+        ((Bytes_Mode => False,
+          Content    => (Register => SG4_THRS_Address, SG4_THRS_Data => Registers.SG4_THRS, others => <>)),
+         Motor);
+   end Write_Homing_Registers;
+
    overriding
    procedure Enable_Motor (This : in out UART_Motor_Handler) is
    begin
@@ -957,13 +1022,6 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
 
       procedure Configure_Homing (Parameters : Homing_Driver_Parameters) is
          Motor : Motor_Name;
-
-         procedure Write_Register (Message : TMC_Types.TMC2240.UART_Data_Message);
-
-         procedure Write_Register (Message : TMC_Types.TMC2240.UART_Data_Message) is
-         begin
-            Write_And_Validate (Message, Motor);
-         end Write_Register;
       begin
          if Parameters.Kind = No_Homing_Detector then
             return;
@@ -974,63 +1032,29 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
             raise Constraint_Error with "StallGuard homing requires a TMC2240 motor.";
          end if;
 
+         if Parameters.Kind = StallGuard4_Homing_Detector and then not StealthChop2_Is_Enabled_In_Config (Motor) then
+            raise Constraint_Error with "StallGuard4 homing requires StealthChop2 to be enabled for the motor.";
+         end if;
+
          if not Saved_Homing (Motor).Valid then
             Saved_Homing (Motor) :=
               (Valid     => True,
                Registers =>
                  (GCONF      => Read (GCONF_Address, Motor).Content.GCONF_Data,
                   IHOLD_IRUN => Read (IHOLD_IRUN_Address, Motor).Content.IHOLD_IRUN_Data,
+                  TPWMTHRS   => Read (TPWMTHRS_Address, Motor).Content.TPWMTHRS_Data,
                   TCOOLTHRS  => Read (TCOOLTHRS_Address, Motor).Content.TCOOLTHRS_Data,
+                  THIGH      => Read (THIGH_Address, Motor).Content.THIGH_Data,
                   COOLCONF   => Read (COOLCONF_Address, Motor).Content.COOLCONF_Data,
                   SG4_THRS   => Read (SG4_THRS_Address, Motor).Content.SG4_THRS_Data));
          end if;
 
-         declare
-            Original  : constant Saved_Homing_Registers := Saved_Homing (Motor).Registers;
-            GCONF_Reg : TMC_Types.TMC2240.GCONF := Original.GCONF;
-            IRUN_Reg  : TMC_Types.TMC2240.IHOLD_IRUN := Original.IHOLD_IRUN;
-            TCOOL_Reg : TMC_Types.TMC2240.TCOOLTHRS := Original.TCOOLTHRS;
-            COOL_Reg  : TMC_Types.TMC2240.COOLCONF := Original.COOLCONF;
-            SG4_Reg   : TMC_Types.TMC2240.SG4_THRS := Original.SG4_THRS;
-         begin
-            GCONF_Reg.Diag0_Stall := True;
-            IRUN_Reg.I_Run :=
-              TMC_Types.Unsigned_5
-                (Dimensionless'Max
-                   (0.0,
-                    Dimensionless'Floor (Config.Motors (Motor).TMC2240_Parameters.IRUN_During_Homing * 32.0 - 1.0)));
-            TCOOL_Reg.T_Cool_Thrs := TMC_Types.Unsigned_20'Last;
-
-            case Parameters.Kind is
-               when No_Homing_Detector          =>
-                  null;
-
-               when StallGuard2_Homing_Detector =>
-                  GCONF_Reg.En_PWM_Mode := False;
-                  COOL_Reg.SGT := TMC_Types.Unsigned_7 (Parameters.SG2_Threshold mod 128);
-                  COOL_Reg.SFILT := TMC_Boolean (Parameters.Enable_Filter);
-
-               when StallGuard4_Homing_Detector =>
-                  GCONF_Reg.En_PWM_Mode := True;
-                  SG4_Reg.SG4_Thrs := TMC_Types.Unsigned_8 (Parameters.SG4_Threshold);
-                  SG4_Reg.SG4_Filt_En := TMC_Boolean (Parameters.Enable_Filter);
-            end case;
-
-            Write_Register
-              ((Bytes_Mode => False, Content => (Register => GCONF_Address, GCONF_Data => GCONF_Reg, others => <>)));
-            Write_Register
-              ((Bytes_Mode => False,
-                Content    => (Register => IHOLD_IRUN_Address, IHOLD_IRUN_Data => IRUN_Reg, others => <>)));
-            Write_Register
-              ((Bytes_Mode => False,
-                Content    => (Register => TCOOLTHRS_Address, TCOOLTHRS_Data => TCOOL_Reg, others => <>)));
-            Write_Register
-              ((Bytes_Mode => False,
-                Content    => (Register => COOLCONF_Address, COOLCONF_Data => COOL_Reg, others => <>)));
-            Write_Register
-              ((Bytes_Mode => False,
-                Content    => (Register => SG4_THRS_Address, SG4_THRS_Data => SG4_Reg, others => <>)));
-         end;
+         Write_Homing_Registers
+           (Registers_For_Homing
+              (Normal             => Saved_Homing (Motor).Registers,
+               Parameters         => Parameters,
+               IRUN_During_Homing => Config.Motors (Motor).TMC2240_Parameters.IRUN_During_Homing),
+            Motor);
       end Configure_Homing;
 
       procedure Restore_After_Homing (Parameters : Homing_Driver_Parameters) is
@@ -1042,36 +1066,20 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          Restore_Motor_After_Homing (Parameters.Motor);
       end Restore_After_Homing;
 
+      function StealthChop2_Is_Enabled_In_Config (Motor : Motor_Name) return Boolean is
+      begin
+         return
+           Config.Motors (Motor).Fixed_Kind = TMC2240_UART_Kind
+           and then Config.Motors (Motor).TMC2240_Parameters.StealthChop2.Kind = Enabled;
+      end StealthChop2_Is_Enabled_In_Config;
+
       procedure Restore_Motor_After_Homing (Motor : Motor_Name) is
       begin
          if not Saved_Homing (Motor).Valid then
             return;
          end if;
 
-         declare
-            Original : constant Saved_Homing_Registers := Saved_Homing (Motor).Registers;
-         begin
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => GCONF_Address, GCONF_Data => Original.GCONF, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => IHOLD_IRUN_Address, IHOLD_IRUN_Data => Original.IHOLD_IRUN, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => TCOOLTHRS_Address, TCOOLTHRS_Data => Original.TCOOLTHRS, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => COOLCONF_Address, COOLCONF_Data => Original.COOLCONF, others => <>)),
-               Motor);
-            Write_And_Validate
-              ((Bytes_Mode => False,
-                Content    => (Register => SG4_THRS_Address, SG4_THRS_Data => Original.SG4_THRS, others => <>)),
-               Motor);
-         end;
+         Write_Homing_Registers (Saved_Homing (Motor).Registers, Motor);
          Saved_Homing (Motor) := (Valid => False);
       end Restore_Motor_After_Homing;
 

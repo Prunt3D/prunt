@@ -38,6 +38,11 @@ package Prunt.TMC2240_Test_UART is
    with Pre => Was_Written (TMC_Types.TMC2240.CHOPCONF_Address);
    --  Return the last value written to CHOPCONF.
 
+   function Last_Write
+     (Register : TMC_Types.TMC2240.UART_Register_Address) return TMC_Types.TMC2240.UART_Data_Message
+   with Pre => Was_Written (Register);
+   --  Return the last write frame stored for Register.
+
    procedure Write (Message : TMC_Types.TMC2240.UART_Data_Byte_Array);
    --  Store a register write frame.
 

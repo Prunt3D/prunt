@@ -61,6 +61,11 @@ package Prunt.Default_Modules.TMC2240_Drivers is
    procedure Restore_After_Homing (This : in out Module_Instance_Interface; Parameters : Homing_Driver_Parameters)
    is abstract;
 
+   function StealthChop2_Is_Enabled_In_Config (This : Module_Instance_Interface; Motor : Motor_Name) return Boolean
+   is abstract;
+   --  Return whether Motor is a TMC2240 motor whose configuration enables StealthChop2. StallGuard4 only works in
+   --  StealthChop2.
+
    type Module is new My_Modules.Module with null record;
 
    overriding
@@ -214,6 +219,9 @@ private
       --  This is the velocity threshold at which the driver will switch from StealthChop2 to the chopper mode selected
       --  in the CHM section (usually SpreadCycle). This allows for quiet operation at low speeds and high-torque
       --  operation at high speeds. The default value of 1E100 will cause StealthChop2 to always be active.
+      --
+      --  While this motor's StallGuard4 output is the homing detector, this threshold is ignored and StealthChop2 stays
+      --  active at every velocity, as StallGuard4 only works in StealthChop2.
 
       PWM_OFS : TMC_Types.Unsigned_8 := 29;
       --  This setting defines the fixed part of the maximum PWM amplitude in StealthChop2. It's generally recommended
@@ -275,6 +283,9 @@ private
       --  TMC2240 stepper drivers that allows for extremely quiet stepper motor operation, especially at low speeds.
       --  While it can make your printer nearly silent, it may also have less torque than SpreadCycle, especially at
       --  higher speeds.
+      --
+      --  StealthChop2 must be enabled to use this motor for StallGuard4 homing. To use SpreadCycle for normal motion
+      --  while still using StallGuard4 for homing, enable StealthChop2 and lower TPWMTHRS.
 
       case Kind is
          when Disabled =>
@@ -330,6 +341,9 @@ private
       --  This velocity threshold is used to switch the driver into a high-velocity mode controlled by VHIGHFS and
       --  VHIGHCHM. It also serves as an upper velocity limit for features CoolStep and StealthChop2, if they are
       --  enabled.
+      --
+      --  This threshold is ignored while this motor's StallGuard output is the homing detector, as the high-velocity
+      --  mode would disable stall detection.
 
       SLOPE_CONTROL : TMC_Types.TMC2240.Slope_Control_Type := Slope_400V_Per_us;
       --  This setting controls the slew rate of the driver's output. A higher slew rate can reduce power dissipation,
@@ -662,13 +676,28 @@ private
    with Annotate => (Prunt_Config, Gcode_Command, "M920");
    --  Set TMC homing current values.
 
-   type Saved_Homing_Registers is record
+   type Homing_Registers is record
       GCONF      : TMC_Types.TMC2240.GCONF;
       IHOLD_IRUN : TMC_Types.TMC2240.IHOLD_IRUN;
+      TPWMTHRS   : TMC_Types.TMC2240.TPWMTHRS;
       TCOOLTHRS  : TMC_Types.TMC2240.TCOOLTHRS;
+      THIGH      : TMC_Types.TMC2240.THIGH;
       COOLCONF   : TMC_Types.TMC2240.COOLCONF;
       SG4_THRS   : TMC_Types.TMC2240.SG4_THRS;
    end record;
+   --  The registers that homing temporarily changes.
+
+   function Registers_For_Homing
+     (Normal : Homing_Registers; Parameters : Homing_Driver_Parameters; IRUN_During_Homing : Dimensionless)
+      return Homing_Registers
+   with Pre => Parameters.Kind /= No_Homing_Detector;
+   --  Return Normal with the changes that route the StallGuard output selected by Parameters to DIAG0 and keep that
+   --  detector active at every homing velocity: the chopper is forced into the mode the detector works in, and
+   --  the velocity thresholds that would switch it out of that mode or disable stall detection are overridden.
+
+   procedure Write_Homing_Registers (Registers : Homing_Registers; Motor : Motor_Name)
+   with Pre => Motor_Hardware (Motor).Kind = TMC2240_UART_Kind;
+   --  Write and validate every register in Registers.
 
    type Saved_Homing_Register_State (Valid : Boolean := False) is record
       case Valid is
@@ -676,7 +705,7 @@ private
             null;
 
          when True =>
-            Registers : Saved_Homing_Registers;
+            Registers : Homing_Registers;
       end case;
    end record;
    --  Registers captured before temporary homing configuration is applied. Valid is False when no restoration is
@@ -706,6 +735,9 @@ private
 
       overriding
       procedure Restore_After_Homing (Parameters : Homing_Driver_Parameters);
+
+      overriding
+      function StealthChop2_Is_Enabled_In_Config (Motor : Motor_Name) return Boolean;
 
       overriding
       procedure Handle_Cancel

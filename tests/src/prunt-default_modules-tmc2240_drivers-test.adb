@@ -244,10 +244,119 @@ package body Prunt.Default_Modules.TMC2240_Drivers.Test is
       end;
    end Test_Supply_Voltage_Check;
 
+   procedure Test_Homing_Keeps_StallGuard_Active (T : in out Trendy_Test.Operation'Class) is
+      Motor : constant Motor_Name := Motor_Name'First;
+
+      SG4 : constant Homing_Driver_Parameters :=
+        (Kind => StallGuard4_Homing_Detector, Motor => Motor, Enable_Filter => True, SG4_Threshold => 100);
+      SG2 : constant Homing_Driver_Parameters :=
+        (Kind => StallGuard2_Homing_Detector, Motor => Motor, Enable_Filter => True, SG2_Threshold => -3);
+
+      function Normal_Registers (Config : User_Config_TMC2240) return Homing_Registers;
+      --  Return the homing registers as initialization leaves them for Config.
+
+      function Normal_Registers (Config : User_Config_TMC2240) return Homing_Registers is
+         Defaults : constant TMC2240_Registers :=
+           Generate_Default_Registers
+             (Config              => Config,
+              Motor_Enabled       => True,
+              Report_Config_Error => Ignore_Config_Error'Access,
+              Motor               => Motor,
+              Distance_Per_Step   => 0.01 * mm);
+      begin
+         return
+           (GCONF      => Defaults.GCONF,
+            IHOLD_IRUN => Defaults.IHOLD_IRUN,
+            TPWMTHRS   => Defaults.TPWMTHRS,
+            TCOOLTHRS  => Defaults.TCOOLTHRS,
+            THIGH      => Defaults.THIGH,
+            COOLCONF   =>
+              (SEMIN      => 0,
+               Reserved_1 => 0,
+               SEUP       => 0,
+               Reserved_2 => 0,
+               SEMAX      => 0,
+               Reserved_3 => 0,
+               SEDN       => 0,
+               SEIMIN     => 0,
+               SGT        => 5,
+               Reserved_4 => 0,
+               SFILT      => TMC_Types.False,
+               Reserved_5 => 0),
+            SG4_THRS   =>
+              (SG4_Thrs => 7, SG4_Filt_En => TMC_Types.False, SG_Angle_Offset => TMC_Types.False, Reserved_2 => 0));
+      end Normal_Registers;
+
+      --  THIGH is 50 mm/s and TPWMTHRS is 20 mm/s, both well below a typical homing velocity.
+      SpreadCycle_Normal : constant Homing_Registers :=
+        Normal_Registers ((IRUN => 0.5, IRUN_During_Homing => 0.25, THIGH => 50.0 * mm / s, others => <>));
+      Hybrid_Normal      : constant Homing_Registers :=
+        Normal_Registers
+          ((IRUN               => 0.5,
+            IRUN_During_Homing => 0.25,
+            THIGH              => 50.0 * mm / s,
+            StealthChop2       => (Kind => Enabled, Parameters => (TPWMTHRS => 20.0 * mm / s, others => <>)),
+            others             => <>));
+   begin
+      T.Register (Parallelize => False);
+
+      T.Assert
+        (SpreadCycle_Normal.TPWMTHRS.T_PWM_Thrs = TMC_Types.Unsigned_20'Last
+         and then SpreadCycle_Normal.THIGH.T_High /= 0
+         and then Hybrid_Normal.TPWMTHRS.T_PWM_Thrs /= 0,
+         "the normal registers limit StealthChop2 and stall detection by velocity");
+
+      declare
+         Homing : constant Homing_Registers := Registers_For_Homing (SpreadCycle_Normal, SG4, 0.25);
+      begin
+         T.Assert (Homing.GCONF.En_PWM_Mode = TMC_Types.True, "StallGuard4 homing enables StealthChop2");
+         T.Assert
+           (Homing.TPWMTHRS.T_PWM_Thrs = 0, "StallGuard4 homing keeps StealthChop2 active at every velocity");
+         T.Assert (Homing.THIGH.T_High = 0, "StallGuard4 homing disables the high-velocity mode");
+         T.Assert (Homing.TCOOLTHRS.T_Cool_Thrs = TMC_Types.Unsigned_20'Last, "stall detection has no lower limit");
+         T.Assert (Homing.GCONF.Diag0_Stall = TMC_Types.True, "the stall output is routed to DIAG0");
+         T.Assert (Homing.IHOLD_IRUN.I_Run = 7, "the homing run current is installed");
+         T.Assert
+           (Homing.SG4_THRS.SG4_Thrs = 100 and then Homing.SG4_THRS.SG4_Filt_En = TMC_Types.True,
+            "the StallGuard4 threshold and filter are installed");
+         T.Assert (Homing.COOLCONF = SpreadCycle_Normal.COOLCONF, "StallGuard4 homing leaves COOLCONF unchanged");
+      end;
+
+      T.Assert
+        (Registers_For_Homing (Hybrid_Normal, SG4, 0.25).TPWMTHRS.T_PWM_Thrs = 0,
+         "StallGuard4 homing overrides a finite TPWMTHRS");
+
+      declare
+         Homing : constant Homing_Registers := Registers_For_Homing (Hybrid_Normal, SG2, 0.25);
+      begin
+         T.Assert (Homing.GCONF.En_PWM_Mode = TMC_Types.False, "StallGuard2 homing disables StealthChop2");
+         T.Assert (Homing.THIGH.T_High = 0, "StallGuard2 homing disables the high-velocity mode");
+         T.Assert
+           (Homing.TPWMTHRS = Hybrid_Normal.TPWMTHRS, "StallGuard2 homing has no reason to change TPWMTHRS");
+         T.Assert
+           (Homing.COOLCONF.SGT = 125 and then Homing.COOLCONF.SFILT = TMC_Types.True,
+            "the StallGuard2 threshold and filter are installed");
+         T.Assert (Homing.SG4_THRS = Hybrid_Normal.SG4_THRS, "StallGuard2 homing leaves SG4_THRS unchanged");
+      end;
+
+      TMC2240_Test_UART.Reset;
+      Write_Homing_Registers (Registers_For_Homing (Hybrid_Normal, SG4, 0.25), Motor);
+      T.Assert
+        (TMC2240_Test_UART.Last_Write (TPWMTHRS_Address).Content.TPWMTHRS_Data.T_PWM_Thrs = 0
+         and then TMC2240_Test_UART.Last_Write (THIGH_Address).Content.THIGH_Data.T_High = 0,
+         "configuring homing writes the overridden velocity thresholds");
+      Write_Homing_Registers (Hybrid_Normal, Motor);
+      T.Assert
+        (TMC2240_Test_UART.Last_Write (TPWMTHRS_Address).Content.TPWMTHRS_Data = Hybrid_Normal.TPWMTHRS
+         and then TMC2240_Test_UART.Last_Write (THIGH_Address).Content.THIGH_Data = Hybrid_Normal.THIGH,
+         "restoring after homing writes the normal velocity thresholds back");
+   end Test_Homing_Keeps_StallGuard_Active;
+
    function All_Tests return Trendy_Test.Test_Group
    is (Trendy_Test.Test_Group'
          [Test_Disable_After_Manager_Termination'Unrestricted_Access,
           Test_Excessive_Hysteresis_Reports_Config_Error'Unrestricted_Access,
-          Test_Supply_Voltage_Check'Unrestricted_Access]);
+          Test_Supply_Voltage_Check'Unrestricted_Access,
+          Test_Homing_Keeps_StallGuard_Active'Unrestricted_Access]);
 
 end Prunt.Default_Modules.TMC2240_Drivers.Test;

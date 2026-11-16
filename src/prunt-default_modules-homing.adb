@@ -297,6 +297,22 @@ package body Prunt.Default_Modules.Homing is
         Kinematics_Instance.Get_Homing_Configuration;
       TMC2240_Drivers_Module_Instance_Ref : My_Modules.Module_Instance_Shared_Pointers.Ref :=
         My_Modules.Module_Instance_Shared_Pointers.Null_Ref;
+      StallGuard4_Without_StealthChop2    : constant Virtual_String :=
+        "StallGuard4 only works in StealthChop2, which is disabled for the selected motor. Enable StealthChop2 in "
+        & "that motor's driver settings or use StallGuard2.";
+
+      function StealthChop2_Is_Disabled (Motor : Motor_Name) return Boolean;
+      --  Return whether Motor is a TMC2240 motor whose configuration disables StealthChop2.
+
+      function StealthChop2_Is_Disabled (Motor : Motor_Name) return Boolean is
+      begin
+         return
+           TMC2240_Drivers_Module.Motor_Hardware (Motor).Kind = TMC2240_UART_Kind
+           and then
+             not TMC2240_Drivers_Module.Module_Instance_Interface'Class
+                   (TMC2240_Drivers_Module_Instance_Ref.Get.Element.all)
+                   .StealthChop2_Is_Enabled_In_Config (Motor);
+      end StealthChop2_Is_Disabled;
 
       procedure Validate_Loop_Count (Maximum_Travel : Length; Approach_Velocity : Velocity; Path : Config.Config_Path);
 
@@ -380,6 +396,11 @@ package body Prunt.Default_Modules.Homing is
                               end if;
                               if TMC2240_Drivers_Module.Motor_Hardware (Detector_Motor).Kind /= TMC2240_UART_Kind then
                                  Report_Detector_Error (Tower, "The selected motor does not support StallGuard.");
+                              end if;
+                              if Configured_Detector.Kind = StallGuard4
+                                and then StealthChop2_Is_Disabled (Detector_Motor)
+                              then
+                                 Report_Detector_Error (Tower, StallGuard4_Without_StealthChop2);
                               end if;
                            end;
                      end case;
@@ -521,6 +542,15 @@ package body Prunt.Default_Modules.Homing is
                                       .Detector
                                       .Kind,
                                     "The selected motor does not support StallGuard.");
+                              end if;
+                              if Method.Detector.Kind = StallGuard4 and then StealthChop2_Is_Disabled (Motor) then
+                                 Report_Config_Error
+                                   (My_Config_Paths.Root.Homing.Axes (Axis)
+                                      .Homing_Method
+                                      .Home_To_Detector
+                                      .Detector
+                                      .Kind,
+                                    StallGuard4_Without_StealthChop2);
                               end if;
                            end;
                      end case;
