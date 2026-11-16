@@ -19,12 +19,15 @@
 
 pragma Extensions_Allowed (On);
 
+with Ada.Containers.Doubly_Linked_Lists;
+with Ada.Containers.Ordered_Sets;
 with Ada.Directories;
 with Ada.Exceptions;                                    use Ada.Exceptions;
 with Ada.Real_Time;
 with Ada.Streams;                                       use Ada.Streams;
 with Ada.Streams.Stream_IO;                             use Ada.Streams.Stream_IO;
 with Ada.Strings.Bounded;
+with Ada.Strings.Unbounded;
 with Ada.Task_Termination;
 with GNAT.Sockets;                                      use GNAT.Sockets;
 with GNAT.Sockets.Connection_State_Machine.HTTP_Server; use GNAT.Sockets.Connection_State_Machine.HTTP_Server;
@@ -232,14 +235,70 @@ private
       WebSocket_Speed_Divisor : WebSocket_Message_Index_Type := 20;
    end record;
 
-   task Server is
-      entry Register_WebSocket_Receiver (Client : in out Prunt_Client);
-      entry Remove_WebSocket_Receiver (Client : in out Prunt_Client);
-      entry Log_To_WebSocket_Receivers (Message : Virtual_String);
-      entry Gcode_Command_Update_To_WebSocket_Receivers
-        (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String);
-      entry Reset_Server_Start_Time;
-   end Server;
+   function Checked_Self_Access (Client : in out Prunt_Client) return Prunt_Client_Access;
+   --  Return an access value designating Client, raising Constraint_Error if Client is a copy of the record that the
+   --  factory allocated.
+
+   function Server_Start_Time_JSON (Start_Time : Ada.Real_Time.Time) return String;
+   --  Return the WebSocket message that tells a browser when the server started.
+
+   package WebSocket_Receiver_Sets is new Ada.Containers.Ordered_Sets (Prunt_Client_Access);
+
+   package WebSocket_Message_Lists is new
+     Ada.Containers.Doubly_Linked_Lists (Ada.Strings.Unbounded.Unbounded_String, Ada.Strings.Unbounded."=");
+
+   type WebSocket_Job is record
+      Greeted : Prunt_Client_Access;
+      --  The newly registered receiver to send Message to, or null to send Message to every receiver.
+      Message : Ada.Strings.Unbounded.Unbounded_String;
+   end record;
+
+   protected WebSocket_Receivers is
+      --  The server task sends to WebSocket receivers from outside the socket server's worker task, so a send can wait
+      --  until the worker has written what it queued for that client. The worker must therefore never wait for the
+      --  server task: everything here except Remove returns at once, and Remove only waits while the server task is
+      --  sending to the client being removed, a send that ends promptly because the socket server disables the client
+      --  before removing it.
+
+      procedure Register (Client : Prunt_Client_Access);
+      --  Add Client to the receivers and queue its greeting with the server start time.
+
+      entry Remove (Client : Prunt_Client_Access);
+      --  Remove Client from the receivers and return once the server task is not sending to it.
+
+      procedure Broadcast (Message : String);
+      --  Queue Message for every receiver, or drop it when there are none.
+
+      procedure Reset_Server_Start_Time;
+      --  Restart the server uptime counter and queue the new start time for every receiver.
+
+      entry Next_Job (Job : out WebSocket_Job);
+      --  Wait for a queued greeting or broadcast, greetings first. A greeted client counts as being sent to until
+      --  End_Send is called.
+
+      procedure Next_Receiver (Client : in out Prunt_Client_Access);
+      --  Replace Client, which is null to start, by the receiver after it in address order, or by null after the last
+      --  receiver, and record the result as the client being sent to.
+
+      procedure End_Send;
+      --  Record that the server task is not sending to any client.
+
+      procedure Stop;
+      --  Drop every receiver and queued message and ignore later registrations, for when the server task stops.
+   private
+      entry Wait_For_Send_End;
+
+      Receivers         : WebSocket_Receiver_Sets.Set;
+      Ungreeted         : WebSocket_Receiver_Sets.Set;
+      Broadcasts        : WebSocket_Message_Lists.List;
+      Sending_To        : Prunt_Client_Access := null;
+      Removing          : Prunt_Client_Access := null;
+      Stopped           : Boolean := False;
+      Server_Start_Time : Ada.Real_Time.Time := Ada.Real_Time.Clock;
+      --  Used by client to force a reload if the server has been restarted.
+   end WebSocket_Receivers;
+
+   task Server;
 
    overriding
    procedure Reply_HTML

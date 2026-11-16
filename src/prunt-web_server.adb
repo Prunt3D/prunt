@@ -17,7 +17,6 @@
 --  SOFTWARE.
 --------------------------------------------------
 
-with Ada.Containers.Ordered_Sets;
 with Ada.Directories; use Ada.Directories;
 with Ada.Exceptions.Is_Null_Occurrence;
 with Ada.Real_Time;   use Ada.Real_Time;
@@ -888,10 +887,21 @@ package body Prunt.Web_Server is
       end if;
    end Do_Body;
 
+   function Checked_Self_Access (Client : in out Prunt_Client) return Prunt_Client_Access is
+   begin
+      if Client.Content.Self_Access /= Client'Unrestricted_Access then
+         raise Constraint_Error with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
+      end if;
+      --  It seems like this never occurs, but it's better to have it in case the library changes. I would prefer to
+      --  avoid Unrestricted_Access completely, but that is not possible with how the library is designed.
+
+      return Client'Unrestricted_Access;
+   end Checked_Self_Access;
+
    overriding
    procedure WebSocket_Finalize (Client : in out Prunt_Client) is
    begin
-      Server.Remove_WebSocket_Receiver (Client);
+      WebSocket_Receivers.Remove (Checked_Self_Access (Client));
    end WebSocket_Finalize;
 
    overriding
@@ -908,7 +918,10 @@ package body Prunt.Web_Server is
       --  TODO: Implement M122 TMC register reporting as a HTTP request so it will not generate a large log message
       --  which overruns the buffer.
 
-      Server.Register_WebSocket_Receiver (Client);
+      WebSocket_Receivers.Register (Checked_Self_Access (Client));
+      --  The greeting is sent by the server task. Sending it here would wait forever, as this task only becomes the
+      --  socket's sending context when it receives a frame, so the send would wait for this task to write the queued
+      --  101 response.
    end WebSocket_Initialize;
 
    overriding
@@ -970,14 +983,127 @@ package body Prunt.Web_Server is
    procedure Reset is
    begin
       Startup_Manager.Clear_Startup_Done;
-      Server.Reset_Server_Start_Time;
+      WebSocket_Receivers.Reset_Server_Start_Time;
    end Reset;
 
    procedure Publish_Gcode_Command_Update
-     (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String := "") is
+     (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String := "")
+   is
+      Kind_Name     : constant String :=
+        (case Kind is
+           when Running   => "Running",
+           when Output    => "Output",
+           when Completed => "Completed",
+           when Cancelled => "Cancelled",
+           when Failed    => "Failed");
+      Message_Field : constant String :=
+        (if Kind in Output | Failed
+         then ",""Message"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Message))
+         else "");
    begin
-      Server.Gcode_Command_Update_To_WebSocket_Receivers (Command_ID, Kind, Message);
+      --  The controller's step generator tasks start before this package's body is elaborated and can reach this
+      --  procedure, so GNAT's static elaboration model warns that these calls may fail an elaboration check. They only
+      --  publish once G-code is running, which is long after elaboration, and the check stays in place.
+      pragma Warnings (Off, "cannot call * before body seen");
+      WebSocket_Receivers.Broadcast
+        ("{""Gcode_Command"":{""ID"":"""
+         & Trim (Command_ID'Image)
+         & """,""Kind"":"""
+         & Kind_Name
+         & """"
+         & Message_Field
+         & "}}");
+      pragma Warnings (On, "cannot call * before body seen");
    end Publish_Gcode_Command_Update;
+
+   function Server_Start_Time_JSON (Start_Time : Ada.Real_Time.Time) return String is
+   begin
+      return "{""Server_Start_Time"":""" & Start_Time'Image & """}";
+   end Server_Start_Time_JSON;
+
+   protected body WebSocket_Receivers is
+      procedure Register (Client : Prunt_Client_Access) is
+      begin
+         if not Stopped then
+            Receivers.Insert (Client);
+            Ungreeted.Insert (Client);
+         end if;
+      end Register;
+
+      entry Remove (Client : Prunt_Client_Access) when Removing = null is
+      begin
+         Receivers.Exclude (Client);
+         Ungreeted.Exclude (Client);
+
+         if Sending_To = Client then
+            --  The socket server disables the client before calling WebSocket_Finalize, which ends a send that is
+            --  waiting for the worker task, so this wait is short.
+            Removing := Client;
+            requeue Wait_For_Send_End;
+         end if;
+      end Remove;
+
+      entry Wait_For_Send_End when Sending_To /= Removing is
+      begin
+         Removing := null;
+      end Wait_For_Send_End;
+
+      procedure Broadcast (Message : String) is
+      begin
+         if not Receivers.Is_Empty then
+            Broadcasts.Append (Ada.Strings.Unbounded.To_Unbounded_String (Message));
+         end if;
+      end Broadcast;
+
+      procedure Reset_Server_Start_Time is
+      begin
+         Server_Start_Time := Clock;
+         Broadcast (Server_Start_Time_JSON (Server_Start_Time));
+      end Reset_Server_Start_Time;
+
+      entry Next_Job (Job : out WebSocket_Job) when not Ungreeted.Is_Empty or else not Broadcasts.Is_Empty is
+      begin
+         if Ungreeted.Is_Empty then
+            Job := (Greeted => null, Message => Broadcasts.First_Element);
+            Broadcasts.Delete_First;
+         else
+            --  The start time is read now rather than at registration, so a browser never receives an older start
+            --  time after a newer one.
+            Job :=
+              (Greeted => Ungreeted.First_Element,
+               Message => Ada.Strings.Unbounded.To_Unbounded_String (Server_Start_Time_JSON (Server_Start_Time)));
+            Ungreeted.Delete_First;
+            Sending_To := Job.Greeted;
+         end if;
+      end Next_Job;
+
+      procedure Next_Receiver (Client : in out Prunt_Client_Access) is
+         use WebSocket_Receiver_Sets;
+
+         Position : Cursor := Receivers.Ceiling (Client);
+      begin
+         if Has_Element (Position) and then Element (Position) = Client then
+            Next (Position);
+         end if;
+
+         Client := (if Has_Element (Position) then Element (Position) else null);
+         Sending_To := Client;
+      end Next_Receiver;
+
+      procedure End_Send is
+      begin
+         Sending_To := null;
+      end End_Send;
+
+      procedure Stop is
+      begin
+         Stopped := True;
+         Receivers.Clear;
+         Ungreeted.Clear;
+         Broadcasts.Clear;
+         Sending_To := null;
+      end Stop;
+   end WebSocket_Receivers;
 
    task body Server is
       Factory :
@@ -989,36 +1115,46 @@ package body Prunt.Web_Server is
 
       Next_Status_Send : Ada.Real_Time.Time := Clock;
 
-      package WebSocket_Receiver_Sets is new Ada.Containers.Ordered_Sets (Prunt_Client_Access);
-      WebSocket_Receivers : WebSocket_Receiver_Sets.Set;
-      Sockets_Server      : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port)
+      Sockets_Server : GNAT.Sockets.Server.Connections_Server (Factory'Access, Port)
       with Unreferenced;
 
       WebSocket_Message_Index : WebSocket_Message_Index_Type := 0;
 
+      Job : WebSocket_Job;
+
+      procedure Send_To_WebSocket_Receiver (Client : Prunt_Client_Access; Message : String);
       procedure Send_To_All_WebSocket_Receivers (Message : String; Ignore_Divisors : Boolean);
       procedure Logger_Receiver (Message : Virtual_String);
       function Server_Exception_JSON return String;
 
+      procedure Send_To_WebSocket_Receiver (Client : Prunt_Client_Access; Message : String) is
+      begin
+         WebSocket_Send (Client.all, Message);
+      exception
+         when E : others =>
+            Trace_Error (Factory, "Send_To_WebSocket_Receiver", E);
+            Client.Shutdown;
+            --  Force the socket to close after the send syscall blocks due to buffer overrun, or after the peer has
+            --  reset or closed the connection. A failed send to one client must never propagate out of this task, as
+            --  that would end status broadcasts for every other client.
+            --
+            --  TODO: Is there a better way to do this?
+      end Send_To_WebSocket_Receiver;
+
       procedure Send_To_All_WebSocket_Receivers (Message : String; Ignore_Divisors : Boolean) is
+         Client : Prunt_Client_Access := null;
       begin
          if not Ignore_Divisors then
             WebSocket_Message_Index := @ + 1;
          end if;
 
-         for C of WebSocket_Receivers loop
-            begin
-               if Ignore_Divisors or else WebSocket_Message_Index mod C.all.WebSocket_Speed_Divisor = 0 then
-                  WebSocket_Send (C.all, Message);
-               end if;
-            exception
-               when E : others =>
-                  Trace_Error (Factory, "Send_To_All_WebSocket_Receivers", E);
-                  C.Shutdown;
-                  --  Force the socket to close after the send syscall blocks due to buffer overrun.
-                  --
-                  --  TODO: Is there a better way to do this?
-            end;
+         loop
+            WebSocket_Receivers.Next_Receiver (Client);
+            exit when Client = null;
+
+            if Ignore_Divisors or else WebSocket_Message_Index mod Client.WebSocket_Speed_Divisor = 0 then
+               Send_To_WebSocket_Receiver (Client, Message);
+            end if;
          end loop;
       end Send_To_All_WebSocket_Receivers;
 
@@ -1026,7 +1162,8 @@ package body Prunt.Web_Server is
 
       procedure Logger_Receiver (Message : Virtual_String) is
       begin
-         Server.Log_To_WebSocket_Receivers (Message);
+         WebSocket_Receivers.Broadcast
+           ("{""Log"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Message)) & "}");
       end Logger_Receiver;
 
       function Server_Exception_JSON return String is
@@ -1048,10 +1185,6 @@ package body Prunt.Web_Server is
            & "}";
       end Server_Exception_JSON;
 
-      Server_Start_Time : Ada.Real_Time.Time := Clock;
-      --  Used by client to force a reload if the server has been restarted.
-
-      New_Client : Prunt_Client_Access;
    begin
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_Decoded, Sent => GNAT.Sockets.Server.Trace_Decoded);
       --  Trace_On (Factory, Received => GNAT.Sockets.Server.Trace_None, Sent => GNAT.Sockets.Server.Trace_None);
@@ -1073,71 +1206,15 @@ package body Prunt.Web_Server is
 
       loop
          select
-            accept Register_WebSocket_Receiver (Client : in out Prunt_Client) do
-               if Client.Content.Self_Access /= Client'Unrestricted_Access then
-                  raise Constraint_Error
-                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
-               end if;
-               --  It seems like this never occurs, but it's better to have it in case the library changes. I
-               --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
-               --  library is designed.
+            WebSocket_Receivers.Next_Job (Job);
 
-               New_Client := Client'Unrestricted_Access;
-               WebSocket_Receivers.Insert (New_Client);
-            end Register_WebSocket_Receiver;
-
-            WebSocket_Send (New_Client.all, "{""Server_Start_Time"":""" & Server_Start_Time'Image & """}");
-         or
-            accept Remove_WebSocket_Receiver (Client : in out Prunt_Client) do
-               if Client.Content.Self_Access /= Client'Unrestricted_Access then
-                  raise Constraint_Error
-                    with "Client record was copied at some point. Unrestricted_Access may be unsafe.";
-               end if;
-               --  It seems like this never occurs, but it's better to have it in case the library changes. I
-               --  would prefer to avoid Unrestricted_Access completely, but that is not possible with how the
-               --  library is designed.
-
-               WebSocket_Receivers.Delete (Client'Unrestricted_Access);
-            end Remove_WebSocket_Receiver;
-         or
-            accept Log_To_WebSocket_Receivers (Message : Virtual_String) do
+            if Job.Greeted = null then
                Send_To_All_WebSocket_Receivers
-                 ("{""Log"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Message)) & "}",
-                  Ignore_Divisors => True);
-            end Log_To_WebSocket_Receivers;
-         or
-            accept Gcode_Command_Update_To_WebSocket_Receivers
-              (Command_ID : Gcode_Command_ID; Kind : Gcode_Command_Update_Kind; Message : Virtual_String)
-            do
-               declare
-                  Kind_Name     : constant String :=
-                    (case Kind is
-                       when Running   => "Running",
-                       when Output    => "Output",
-                       when Completed => "Completed",
-                       when Cancelled => "Cancelled",
-                       when Failed    => "Failed");
-                  Message_Field : constant String :=
-                    (if Kind in Output | Failed
-                     then ",""Message"":" & Conversions.To_UTF_8_String (JSON.Escape_String (Message))
-                     else "");
-               begin
-                  Send_To_All_WebSocket_Receivers
-                    ("{""Gcode_Command"":{""ID"":"""
-                     & Trim (Command_ID'Image)
-                     & """,""Kind"":"""
-                     & Kind_Name
-                     & """"
-                     & Message_Field
-                     & "}}",
-                     Ignore_Divisors => True);
-               end;
-            end Gcode_Command_Update_To_WebSocket_Receivers;
-         or
-            accept Reset_Server_Start_Time;
-            Server_Start_Time := Clock;
-            Send_To_All_WebSocket_Receivers
-              ("{""Server_Start_Time"":""" & Server_Start_Time'Image & """}", Ignore_Divisors => True);
+                 (Ada.Strings.Unbounded.To_String (Job.Message), Ignore_Divisors => True);
+            else
+               Send_To_WebSocket_Receiver (Job.Greeted, Ada.Strings.Unbounded.To_String (Job.Message));
+               WebSocket_Receivers.End_Send;
+            end if;
          or
             delay until Next_Status_Send;
 
@@ -1168,6 +1245,12 @@ package body Prunt.Web_Server is
             --  Try to keep to a 50 millisecond interval, but if we can not keep up then avoid building up a backlog.
          end select;
       end loop;
+   exception
+      when others =>
+         WebSocket_Receivers.Stop;
+         --  Otherwise a worker task removing the client this task was sending to would wait forever, and so would
+         --  this task when it finalizes the socket server.
+         raise;
    end Server;
 
 end Prunt.Web_Server;
