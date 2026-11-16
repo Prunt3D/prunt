@@ -904,88 +904,75 @@ package body Prunt.Config is
       end if;
    end Unset_JSON_Node;
 
-   function Path_Without_Last (Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector is
-      use type Ada.Containers.Count_Type;
-
-      Result : Config_Data_Paths.Vector;
-   begin
-      if Path.Length < 2 then
-         return Result;
-      end if;
-
-      for I in Path.First_Index .. Path.Last_Index - 1 loop
-         Result.Append (Path.Element (I));
-      end loop;
-
-      return Result;
-   end Path_Without_Last;
-
-   function Selected_Variant_Default
-     (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector; Default_Value : out JSON_Value)
-      return Boolean
-   is
-      use type Ada.Containers.Count_Type;
-
-      Current_Schema : Config_Property_Maps.Map := Schema;
-      I              : Positive;
-   begin
-      Default_Value := JSON_Null;
-
-      if Path.Length < 2 or else Path.Last_Element /= "Selected" then
-         return False;
-      end if;
-
-      I := Path.First_Index;
-      loop
-         if not Current_Schema.Contains (Path.Element (I)) then
-            return False;
-         end if;
-
-         declare
-            Property : constant Config_Property_Parameters'Class := Current_Schema.Element (Path.Element (I));
-         begin
-            if I = Path.Last_Index - 1 then
-               if Property in Config_Property_Parameters_Variant then
-                  Default_Value := Create_Default_Property_Config (Property);
-                  return True;
-               else
-                  return False;
-               end if;
-            elsif Property in Config_Property_Parameters_Sequence then
-               Current_Schema := Config_Property_Parameters_Sequence (Property).Children;
-               I := I + 1;
-            elsif Property in Config_Property_Parameters_Variant then
-               declare
-                  Variant : constant Config_Property_Parameters_Variant :=
-                    Config_Property_Parameters_Variant (Property);
-               begin
-                  if Path.Element (I + 1) /= "Children"
-                    or else I + 2 > Path.Last_Index - 1
-                    or else not Variant.Children.Contains (Path.Element (I + 2))
-                  then
-                     return False;
-                  end if;
-
-                  Current_Schema := Variant.Children;
-                  I := I + 2;
-               end;
-            else
-               return False;
-            end if;
-         end;
-      end loop;
-   end Selected_Variant_Default;
-
    function Prune_Path_For_Override
      (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector
    is
-      Default_Value : JSON_Value;
+      function Hidden_Last_In_Map (Map : Config_Property_Maps.Map; Index : Positive) return Natural;
+      --  Returns the index in Path of the last component of the path to hide, given that Path (Index) names a member
+      --  of Map. Returns 0 when Path does not address the schema.
+
+      function Hidden_Last_In_Property
+        (Property : Config_Property_Parameters'Class; Index : Positive; Anchor : Positive) return Natural;
+      --  As Hidden_Last_In_Map, for the Property addressed by the components of Path before Index. Anchor is the
+      --  index in Path of the innermost map member containing Property. Map members are the only schema entries that
+      --  can be removed on their own: Selected and Children have no entries in a variant's schema, a variant's
+      --  Selected value may name any of its options, and Numerator and Denominator have no entries in a ratio's
+      --  schema.
+
+      function Hidden_Last_In_Map (Map : Config_Property_Maps.Map; Index : Positive) return Natural is
+      begin
+         if Map.Contains (Path.Element (Index)) then
+            return Hidden_Last_In_Property (Map (Path.Element (Index)), Index + 1, Index);
+         else
+            return 0;
+         end if;
+      end Hidden_Last_In_Map;
+
+      function Hidden_Last_In_Property
+        (Property : Config_Property_Parameters'Class; Index : Positive; Anchor : Positive) return Natural is
+      begin
+         if Index > Path.Last_Index then
+            return Anchor;
+         elsif Property in Config_Property_Parameters_Sequence then
+            return Hidden_Last_In_Map (Config_Property_Parameters_Sequence (Property).Children, Index);
+         elsif Property in Config_Property_Parameters_Variant then
+            declare
+               Children : Config_Property_Maps.Map renames Config_Property_Parameters_Variant (Property).Children;
+            begin
+               if Path.Element (Index) = "Children" and then Index < Path.Last_Index then
+                  if Children.Contains (Path.Element (Index + 1)) then
+                     return Hidden_Last_In_Property (Children (Path.Element (Index + 1)), Index + 2, Anchor);
+                  else
+                     return 0;
+                  end if;
+               elsif Path.Element (Index) = "Selected" or else Path.Element (Index) = "Children" then
+                  return Anchor;
+               else
+                  return 0;
+               end if;
+            end;
+         elsif Property in Config_Property_Parameters_Float_Ratio then
+            if Path.Element (Index) = "Numerator" or else Path.Element (Index) = "Denominator" then
+               return Anchor;
+            else
+               return 0;
+            end if;
+         else
+            return 0;
+         end if;
+      end Hidden_Last_In_Property;
+
+      Hidden_Last : constant Natural := (if Path.Is_Empty then 0 else Hidden_Last_In_Map (Schema, Path.First_Index));
    begin
-      if Selected_Variant_Default (Schema, Path, Default_Value) then
-         return Path_Without_Last (Path);
-      else
+      if Hidden_Last = 0 then
          return Path;
       end if;
+
+      return Result : Config_Data_Paths.Vector do
+         for I in Path.First_Index .. Hidden_Last loop
+            Result.Append (Path.Element (I));
+         end loop;
+      end return;
    end Prune_Path_For_Override;
 
    function Try_Get_JSON_Node
@@ -1030,20 +1017,28 @@ package body Prunt.Config is
    end Merge_Default_JSON_Node;
 
    procedure Apply_Overrides_To_Config
-     (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector) is
+     (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector)
+   is
+      use type Config_Data_Paths.Vector;
    begin
+      --  The stored config has nothing for a field hidden by an override inside it, so the rest of that field comes
+      --  from the schema defaults.
       for Override of Overrides loop
          if Schemas.Contains (Override.Owner) then
             declare
+               Hidden_Path   : constant Config_Data_Paths.Vector :=
+                 Prune_Path_For_Override (Schemas (Override.Owner).Element.Top_Level_Items, Override.Path);
                Default_Value : JSON_Value;
             begin
-               if Selected_Variant_Default
-                    (Schemas (Override.Owner).Element.Top_Level_Items, Override.Path, Default_Value)
+               if Hidden_Path /= Override.Path
+                 and then
+                   Try_Get_JSON_Node
+                     (Create_Default_Module_Config (Schemas (Override.Owner).Element.Top_Level_Items),
+                      Hidden_Path,
+                      Default_Value)
                then
                   Merge_Default_JSON_Node
-                    (Config.Get ("Config").Get (Override.Owner).Get ("Config"),
-                     Path_Without_Last (Override.Path),
-                     Default_Value);
+                    (Config.Get ("Config").Get (Override.Owner).Get ("Config"), Hidden_Path, Default_Value);
                end if;
             end;
          end if;
@@ -1114,27 +1109,21 @@ package body Prunt.Config is
       begin
          if Property in Config_Property_Parameters_Sequence then
             Remove_From_Schema_Map (Config_Property_Parameters_Sequence (Property).Children, Path, Index);
-         elsif Property in Config_Property_Parameters_Variant then
+         elsif Property in Config_Property_Parameters_Variant
+           and then Path.Element (Index) = "Children"
+           and then Index + 1 < Path.Last_Index
+         then
+            --  Prune_Path_For_Override never ends a path at an option, so the entry is inside the option.
             declare
                Variant : Config_Property_Parameters_Variant renames Config_Property_Parameters_Variant (Property);
             begin
-               if Path.Element (Index) = "Selected" then
-                  Variant.Children := [];
-               elsif Path.Element (Index) = "Children" then
-                  if Index = Path.Last_Index then
-                     Variant.Children := [];
-                  elsif Variant.Children.Contains (Path.Element (Index + 1)) then
-                     if Index + 1 = Path.Last_Index then
-                        Variant.Children.Delete (Path.Element (Index + 1));
-                     else
-                        declare
-                           Child : Config_Property_Parameters'Class renames
-                             Variant.Children.Reference (Path.Element (Index + 1));
-                        begin
-                           Remove_From_Property (Child, Path, Index + 2);
-                        end;
-                     end if;
-                  end if;
+               if Variant.Children.Contains (Path.Element (Index + 1)) then
+                  declare
+                     Child : Config_Property_Parameters'Class renames
+                       Variant.Children.Reference (Path.Element (Index + 1));
+                  begin
+                     Remove_From_Property (Child, Path, Index + 2);
+                  end;
                end if;
             end;
          end if;
@@ -1147,32 +1136,25 @@ package body Prunt.Config is
       begin
          if not Schema.Contains (Key) then
             return;
-         end if;
-
-         if Index = Path.Last_Index then
+         elsif Index = Path.Last_Index then
             Schema.Delete (Key);
-            return;
+         else
+            declare
+               Property : Config_Property_Parameters'Class renames Schema.Reference (Key);
+            begin
+               Remove_From_Property (Property, Path, Index + 1);
+            end;
          end if;
-
-         if Schema.Element (Key) in Config_Property_Parameters_Variant and then Path.Element (Index + 1) = "Selected"
-         then
-            Schema.Delete (Key);
-            return;
-         end if;
-
-         declare
-            Property : Config_Property_Parameters'Class renames Schema.Reference (Key);
-         begin
-            Remove_From_Property (Property, Path, Index + 1);
-         end;
       end Remove_From_Schema_Map;
    begin
       for Override of Overrides loop
          if Result.Contains (Override.Owner) and then not Override.Path.Is_Empty then
             declare
                Module_Schema : Versioned_Config_Schema'Class := Result.Element (Override.Owner);
+               Hidden_Path   : constant Config_Data_Paths.Vector :=
+                 Prune_Path_For_Override (Schemas (Override.Owner).Element.Top_Level_Items, Override.Path);
             begin
-               Remove_From_Schema_Map (Module_Schema.Top_Level_Items, Override.Path, Override.Path.First_Index);
+               Remove_From_Schema_Map (Module_Schema.Top_Level_Items, Hidden_Path, Hidden_Path.First_Index);
                Result.Replace (Override.Owner, Module_Schema);
             end;
          end if;
@@ -1566,15 +1548,21 @@ package body Prunt.Config is
             raise Constraint_Error with "Invalid path (error in module).";
          end if;
 
-         if Path_Overlaps_Overrides (Owner, Path, Overrides) then
-            raise Constraint_Error
-              with
-                "Config field is overridden and cannot be changed (Module: "
-                & Conversions.To_UTF_8_String (Owner)
-                & ", Path: "
-                & Path'Image
-                & ").";
-         end if;
+         for Override of Overrides loop
+            --  The pruned path covers both the override and the rest of the field that is hidden with it.
+            if Override.Owner = Owner
+              and then
+                Paths_Overlap (Path, Prune_Path_For_Override (Schemas (Owner).Element.Top_Level_Items, Override.Path))
+            then
+               raise Constraint_Error
+                 with
+                   "Config field is overridden and cannot be changed (Module: "
+                   & Conversions.To_UTF_8_String (Owner)
+                   & ", Path: "
+                   & Path'Image
+                   & ").";
+            end if;
+         end loop;
 
          if not Update_Deltas.Contains (Owner) then
             Update_Deltas.Insert (Owner, Create_Object);

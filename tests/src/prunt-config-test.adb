@@ -3490,6 +3490,184 @@ package body Prunt.Config.Test is
       end;
    end Test_Config_Overrides_Variant_Selected_Rehydrates_Defaults;
 
+   function Override_Shape_Schemas return Config_Schema_Maps.Map is
+      function Int (Default : Long_Long_Integer) return Config_Property_Parameters_Integer
+      is (Category     => <>,
+          Experimental => False,
+          Present_When => P,
+          Description  => "",
+          Min          => 0,
+          Max          => 10,
+          Unit         => "",
+          Default      => Default);
+
+      function Seq (Children : Config_Property_Maps.Map) return Config_Property_Parameters_Sequence
+      is (Category     => <>,
+          Experimental => False,
+          Present_When => P,
+          Description  => "",
+          Tabbed       => False,
+          Children     => Children);
+   begin
+      return
+        ["M" =>
+           Versioned_Config_Schema'
+             (Version             => 1,
+              Module_Instance_Tag => <>,
+              Top_Level_Items     =>
+                ["k" => Int (5),
+                 "r" =>
+                   Config_Property_Parameters_Float_Ratio'
+                     (Category     => <>,
+                      Experimental => False,
+                      Present_When => P,
+                      Description  => "",
+                      Min          => 0.0,
+                      Max          => 2.0,
+                      Default      => (Numerator => 1.0, Denominator => 2.0)),
+                 "v" =>
+                   Config_Property_Parameters_Variant'
+                     (Category     => <>,
+                      Experimental => False,
+                      Present_When => P,
+                      Description  => "",
+                      Default      => "a",
+                      Children     =>
+                        ["a" => Seq (["x" => Int (1)]),
+                         "b" => Seq (["y" => Int (2)]),
+                         "w" =>
+                           Config_Property_Parameters_Variant'
+                             (Category     => <>,
+                              Experimental => False,
+                              Present_When => P,
+                              Description  => "",
+                              Default      => "p",
+                              Children     => ["p" => Int (3), "q" => Int (4)])])])];
+   end Override_Shape_Schemas;
+
+   procedure Test_Config_Overrides_Hide_Whole_Nodes (T : in out Trendy_Test.Operation'Class) is
+      function Module_M (Root : JSON_Value) return JSON_Value
+      is (Root.Get ("Config").Get ("M").Get ("Config"));
+
+      procedure Check
+        (Selected : String;
+         Path     : Config_Data_Paths.Vector;
+         Value    : JSON_Value;
+         Hidden   : Virtual_String;
+         Sibling  : Config_Data_Paths.Vector;
+         Message  : String);
+      --  Starts from a stored config which selects Selected in "v" and overrides Path with Value. Checks that the
+      --  top-level field Hidden is removed from both the stored config and the schema, and that Sibling, which is
+      --  inside Hidden but not inside Path, cannot be set.
+
+      procedure Check
+        (Selected : String;
+         Path     : Config_Data_Paths.Vector;
+         Value    : JSON_Value;
+         Hidden   : Virtual_String;
+         Sibling  : Config_Data_Paths.Vector;
+         Message  : String)
+      is
+         Filename : constant String := Next_Test_Filename;
+         Content  : constant String :=
+           "{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": {"
+           & """k"": 6, ""r"": {""Numerator"": 1, ""Denominator"": 4}, ""v"": {""Selected"": """
+           & Selected
+           & """, ""Children"": {""a"": {""x"": 1}, ""b"": {""y"": 2}, "
+           & """w"": {""Selected"": ""p"", ""Children"": {""p"": 3, ""q"": 4}}}}}}}}";
+         F        : Mockable.Text_IO.File_Type;
+      begin
+         Mockable.Text_IO.Create (F, Mockable.Text_IO.Out_File, Filename);
+         Mockable.Text_IO.Put_Line (F, Content);
+         Mockable.Text_IO.Close (F);
+
+         declare
+            File : constant Config_File :=
+              Create
+                (Filename, Override_Shape_Schemas, [Config_Override'(Owner => "M", Path => Path, Value => Value)]);
+            Data : Config_Data := File.Get_Data ("M");
+
+            Stored_JSON : constant JSON_Value := Module_M (Read (File.Get_Data_String));
+            Schema_JSON : constant JSON_Value := Module_M (Read (File.Get_Schema_String));
+            Disk_JSON   : constant JSON_Value := Module_M (Read_Test_File (Filename));
+         begin
+            T.Assert (not Stored_JSON.Has_Field (Hidden), Message & ": stored config exposes override");
+            T.Assert (not Disk_JSON.Has_Field (Hidden), Message & ": config file exposes override");
+            T.Assert (not Schema_JSON.Has_Field (Hidden), Message & ": schema exposes override");
+            T.Assert (Stored_JSON.Has_Field ("k") and then Schema_JSON.Has_Field ("k"), Message & ": k hidden");
+            T.Assert (Data.Get (Config_Data_Paths.Vector'([1 => "k"])) = Long_Long_Integer'(6), Message & ": k lost");
+
+            begin
+               Data.Set (Sibling, Long_Long_Integer'(1));
+               T.Fail (Message & ": hidden field should reject Config_Data.Set.");
+            exception
+               when Constraint_Error =>
+                  null;
+            end;
+         end;
+      end Check;
+   begin
+      T.Register;
+
+      --  (a) Overriding a variant's children leaves no options for the stored Selected value to name.
+      Check
+        ("b",
+         ["v", "Children"],
+         Read
+           (+("{""a"": {""x"": 7}, ""b"": {""y"": 8}, "
+              & """w"": {""Selected"": ""q"", ""Children"": {""p"": 3, ""q"": 9}}}")),
+         "v",
+         ["v", "Selected"],
+         "Children override");
+
+      --  (b) Overriding the default or stored option must not leave Selected naming a missing option.
+      Check ("a", ["v", "Children", "a"], Read ("{""x"": 9}"), "v", ["v", "Selected"], "Default option override");
+      Check ("b", ["v", "Children", "b"], Read ("{""y"": 9}"), "v", ["v", "Selected"], "Stored option override");
+
+      --  (c) The halves of a ratio cannot be hidden on their own.
+      Check ("a", ["r", "Numerator"], Create (Long_Float'(1.5)), "r", ["r", "Denominator"], "Ratio numerator");
+      Check ("a", ["r", "Denominator"], Create (Long_Float'(1.0)), "r", ["r", "Numerator"], "Ratio denominator");
+
+      --  (d) A variant which is an option of another variant is hidden with the outer variant.
+      Check ("b", ["v", "Children", "w", "Selected"], Create (+"q"), "v", ["v", "Selected"], "Nested Selected");
+      Check
+        ("a",
+         ["v", "Children", "w", "Children", "q"],
+         Create (Long_Long_Integer'(8)),
+         "v",
+         ["v", "Children", "w", "Selected"],
+         "Nested option");
+
+      --  Live values come from the schema defaults of the hidden node with the override applied on top.
+      declare
+         Filename : constant String := Next_Test_Filename;
+         File     : constant Config_File :=
+           Create
+             (Filename,
+              Override_Shape_Schemas,
+              [Config_Override'(Owner => "M", Path => ["r", "Numerator"], Value => Create (Long_Float'(1.5))),
+               Config_Override'(Owner => "M", Path => ["v", "Children", "w", "Selected"], Value => Create (+"q")),
+               Config_Override'(Owner => "M", Path => ["v", "Children", "b"], Value => Read ("{""y"": 9}"))]);
+         Data     : constant Config_Data := File.Get_Data ("M");
+         Ratio    : constant Dimensionless_Ratio := Data.Get (Config_Data_Paths.Vector'([1 => "r"]));
+      begin
+         T.Assert (Ratio.Numerator = 1.5 and then Ratio.Denominator = 2.0, "Ratio not rehydrated");
+         T.Assert (Data.Get (Config_Data_Paths.Vector'(["v", "Selected"])) = "a", "Outer variant not rehydrated");
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["v", "Children", "a", "x"])) = Long_Long_Integer'(1),
+            "Default option not rehydrated");
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["v", "Children", "b", "y"])) = Long_Long_Integer'(9),
+            "Option override not live");
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["v", "Children", "w", "Selected"])) = "q",
+            "Nested Selected override not live");
+         T.Assert
+           (Data.Get (Config_Data_Paths.Vector'(["v", "Children", "w", "Children", "q"])) = Long_Long_Integer'(4),
+            "Nested option not rehydrated");
+      end;
+   end Test_Config_Overrides_Hide_Whole_Nodes;
+
    procedure Test_Config_Overrides_Invalid (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -3682,10 +3860,16 @@ package body Prunt.Config.Test is
                                       Unit         => "",
                                       Default      => 2)])])])];
       Helper_Schema  : constant Config_Property_Maps.Map := Helper_Schemas.Element ("M").Top_Level_Items;
-      Default_Value  : JSON_Value;
+      Shape_Schema   : constant Config_Property_Maps.Map := Override_Shape_Schemas.Element ("M").Top_Level_Items;
       Reported       : Boolean := False;
       Reported_Path  : Config_Data_Paths.Vector;
       use type Config_Data_Paths.Vector;
+
+      function Prunes_To
+        (Path     : Config_Data_Paths.Vector;
+         Expected : Config_Data_Paths.Vector;
+         Schema   : Config_Property_Maps.Map := Helper_Schema) return Boolean
+      is (Prune_Path_For_Override (Schema, Path) = Expected);
 
       procedure Report (Path : Config_Data_Paths.Vector; Message : Virtual_String) is
          pragma Unreferenced (Message);
@@ -3712,39 +3896,35 @@ package body Prunt.Config.Test is
          T.Assert (not Root.Get ("s").Has_Field ("i"));
       end;
 
-      T.Assert (Path_Without_Last (Config_Data_Paths.Vector'([1 => "x"])).Is_Empty);
-      T.Assert (Path_Without_Last (Config_Data_Paths.Vector'(["x", "y"])) = Config_Data_Paths.Vector'([1 => "x"]));
+      --  Paths which do not address the schema are returned as is.
+      T.Assert (Prunes_To (Config_Data_Paths.Empty_Vector, Config_Data_Paths.Empty_Vector));
+      T.Assert (Prunes_To ([1 => "Selected"], [1 => "Selected"]));
+      T.Assert (Prunes_To (["v", "Wrong"], ["v", "Wrong"]));
+      T.Assert (Prunes_To (["missing", "Selected"], ["missing", "Selected"]));
+      T.Assert (Prunes_To (["s", "Selected"], ["s", "Selected"]));
+      T.Assert (Prunes_To (["i", "child", "Selected"], ["i", "child", "Selected"]));
+      T.Assert (Prunes_To (["v", "Wrong", "child", "Selected"], ["v", "Wrong", "child", "Selected"]));
+      T.Assert (Prunes_To (["v", "Children", "Selected"], ["v", "Children", "Selected"]));
+      T.Assert (Prunes_To (["v", "Children", "missing", "Selected"], ["v", "Children", "missing", "Selected"]));
+      T.Assert (Prunes_To (["r", "Bad"], ["r", "Bad"], Shape_Schema));
 
-      T.Assert
-        (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'([1 => "Selected"]), Default_Value));
-      T.Assert
-        (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["v", "Wrong"]), Default_Value));
-      T.Assert
-        (not Selected_Variant_Default
-               (Helper_Schema, Config_Data_Paths.Vector'(["missing", "Selected"]), Default_Value));
-      T.Assert
-        (not Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["s", "Selected"]), Default_Value));
-      T.Assert
-        (not Selected_Variant_Default
-               (Helper_Schema, Config_Data_Paths.Vector'(["i", "child", "Selected"]), Default_Value));
-      T.Assert
-        (not Selected_Variant_Default
-               (Helper_Schema, Config_Data_Paths.Vector'(["v", "Wrong", "child", "Selected"]), Default_Value));
-      T.Assert
-        (not Selected_Variant_Default
-               (Helper_Schema, Config_Data_Paths.Vector'(["v", "Children", "Selected"]), Default_Value));
-      T.Assert
-        (not Selected_Variant_Default
-               (Helper_Schema, Config_Data_Paths.Vector'(["v", "Children", "missing", "Selected"]), Default_Value));
-      T.Assert (Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["v", "Selected"]), Default_Value));
-      T.Assert (Default_Value.Get ("Selected").Get = "a");
-      T.Assert
-        (Selected_Variant_Default (Helper_Schema, Config_Data_Paths.Vector'(["s", "v", "Selected"]), Default_Value));
-      T.Assert (Default_Value.Get ("Selected").Get = "a");
-      T.Assert
-        (Selected_Variant_Default
-           (Helper_Schema, Config_Data_Paths.Vector'(["v", "Children", "child", "Selected"]), Default_Value));
-      T.Assert (Default_Value.Get ("Selected").Get = "leaf");
+      --  Top-level and sequence fields are hidden on their own, including inside an option.
+      T.Assert (Prunes_To ([1 => "i"], [1 => "i"]));
+      T.Assert (Prunes_To ([1 => "v"], [1 => "v"]));
+      T.Assert (Prunes_To (["s", "v"], ["s", "v"]));
+      T.Assert (Prunes_To ([1 => "r"], [1 => "r"], Shape_Schema));
+      T.Assert (Prunes_To (["v", "Children", "a", "x"], ["v", "Children", "a", "x"], Shape_Schema));
+
+      --  Anything else is hidden with the innermost top-level or sequence field containing it.
+      T.Assert (Prunes_To (["v", "Selected"], [1 => "v"]));
+      T.Assert (Prunes_To (["v", "Children"], [1 => "v"]));
+      T.Assert (Prunes_To (["v", "Children", "a"], [1 => "v"]));
+      T.Assert (Prunes_To (["s", "v", "Selected"], ["s", "v"]));
+      T.Assert (Prunes_To (["s", "v", "Children", "a"], ["s", "v"]));
+      T.Assert (Prunes_To (["v", "Children", "child", "Selected"], [1 => "v"]));
+      T.Assert (Prunes_To (["v", "Children", "child", "Children", "leaf"], [1 => "v"]));
+      T.Assert (Prunes_To (["r", "Numerator"], [1 => "r"], Shape_Schema));
+      T.Assert (Prunes_To (["r", "Denominator"], [1 => "r"], Shape_Schema));
 
       declare
          Root   : JSON_Value := Read ("{""v"": {""Selected"": ""b"", ""Children"": {""b"": 6}}, ""leaf"": 1}");
@@ -4511,6 +4691,7 @@ package body Prunt.Config.Test is
          Test_Config_Overrides_Reject_Writes'Access,
          Test_Config_Overrides_Reset_Reapplies_Overrides'Access,
          Test_Config_Overrides_Variant_Selected_Rehydrates_Defaults'Access,
+         Test_Config_Overrides_Hide_Whole_Nodes'Access,
          Test_Config_Overrides_Invalid'Access,
          Test_Config_Overrides_Prune_During_Migration'Access,
          Test_Config_Override_Helper_Edges'Access,

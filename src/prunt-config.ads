@@ -385,7 +385,9 @@ package Prunt.Config is
    --  - If the file does not exist, it is created with default values for all modules in Schemas.
    --  - Overrides are module-local paths and JSON values which are validated against Schemas at startup.
    --  - Overrides are applied to the live configuration only. Overridden fields are removed from the stored
-   --    configuration and generated schema, and attempts to modify them are rejected.
+   --    configuration and generated schema, and attempts to modify them are rejected. Overriding a variant's
+   --    Selected or Children field, one of its options, or part of a ratio hides the whole variant or ratio (or the
+   --    variant it is an option of), and the rest of its live value comes from the schema defaults.
 
    function Stored_Snapshot (This : Config_File) return Config_File;
    --  Returns an isolated, read-only in-memory copy of the stored configuration, with overrides applied to its
@@ -602,7 +604,9 @@ private
 
    procedure Apply_Overrides_To_Config
      (Config : JSON_Value; Schemas : Config_Schema_Maps.Map; Overrides : Config_Override_Vectors.Vector);
-   --  Applies Overrides to the live/effective configuration object. Override values are cloned into Config.
+   --  Applies Overrides to the live/effective configuration object. Override values are cloned into Config. When
+   --  Prune_Path_For_Override hides more than an override's path, the rest of the hidden field is first filled from
+   --  the schema defaults.
 
    function Prune_Overrides_From_Module_Config
      (Owner         : Virtual_String;
@@ -632,17 +636,12 @@ private
       Report    : access procedure (Path : Config_Data_Paths.Vector; Message : Virtual_String));
    --  Reports every overridden path touched by an untrusted patch for Owner.
 
-   function Path_Without_Last (Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector;
-   --  Return Path without its final component, or an empty path when Path has fewer than two components.
-
-   function Selected_Variant_Default
-     (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector; Default_Value : out JSON_Value)
-      return Boolean;
-   --  Return True and the enclosing variant's default object when Path selects that variant's Selected field.
-
    function Prune_Path_For_Override
      (Schema : Config_Property_Maps.Map; Path : Config_Data_Paths.Vector) return Config_Data_Paths.Vector;
-   --  Return the schema path whose complete value must be hidden when Path is overridden.
+   --  Return the path whose complete value must be hidden from the stored config and the schema when Path is
+   --  overridden. This is the innermost top-level or sequence field containing Path, as only those fields have schema
+   --  entries that can be removed on their own: a variant's Selected value may name any of its options, and a ratio's
+   --  Numerator and Denominator have no entries of their own. Paths which do not address Schema are returned as is.
 
    function Try_Get_JSON_Node
      (Root : JSON_Value; Path : Config_Data_Paths.Vector; Result : out JSON_Value) return Boolean;
