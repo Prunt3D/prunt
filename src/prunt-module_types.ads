@@ -60,6 +60,10 @@ package Prunt.Module_Types is
    --  controller will flush already-accepted planner work and retry the same line later unless cancellation interrupts
    --  the retry.
 
+   Hardware_Config_Mismatch_Error : exception;
+   --  Raised by a module's Start when the connected hardware does not match the configuration. The controller reports
+   --  this as a recoverable error, so the configuration can be corrected and reloaded without restarting Prunt.
+
    type Gcode_Command_Identifier is record
       Argument : Gcode_Identifier_Argument_Index;
       Number   : Gcode_Arguments.Argument_Integer;

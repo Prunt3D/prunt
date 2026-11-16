@@ -163,9 +163,91 @@ package body Prunt.Default_Modules.TMC2240_Drivers.Test is
         (TMC2240_Test_UART.CHOPCONF.TOFF = Disable_Driver, "cleanup disables the driver after the manager terminates");
    end Test_Disable_After_Manager_Termination;
 
+   procedure Test_Supply_Voltage_Check (T : in out Trendy_Test.Operation'Class) is
+      Motor : constant Motor_Name := Motor_Name'First;
+
+      Derived_24V : constant User_Config_TMC2240 :=
+        (CHM    =>
+           (Kind        => SpreadCycle,
+            SpreadCycle => (Kind => Derived, Derived => (Input_Voltage => 24.0 * volt, others => <>))),
+         others => <>);
+
+      function Reading (Volts : Dimensionless) return ADC_V_Supply_Volts_Type
+      is (ADC_V_Supply_Volts_Type (Volts));
+
+      procedure Check
+        (Name           : String;
+         Config         : User_Config_TMC2240;
+         Enabled        : Boolean;
+         Supply         : Dimensionless;
+         Expected_Error : String);
+      --  A negative Supply leaves ADC_VSUPPLY_AIN without a reply, so the check must not read it. Expected_Error is
+      --  a fragment of the mismatch error, or empty if the check must pass.
+
+      procedure Check
+        (Name           : String;
+         Config         : User_Config_TMC2240;
+         Enabled        : Boolean;
+         Supply         : Dimensionless;
+         Expected_Error : String) is
+      begin
+         TMC2240_Test_UART.Reset;
+         if Supply >= 0.0 then
+            TMC2240_Test_UART.Set_Supply_Voltage (Reading (Supply));
+         end if;
+
+         Check_Supply_Voltages
+           ((Motors => [others => (Fixed_Kind => TMC2240_UART_Kind, TMC2240_Parameters => Config)]),
+            [others => Enabled]);
+         T.Assert (Expected_Error = "", Name & ": expected an error containing '" & Expected_Error & "'");
+      exception
+         when E : Hardware_Config_Mismatch_Error =>
+            T.Assert
+              (Expected_Error /= ""
+               and then Ada.Strings.Fixed.Index (Ada.Exceptions.Exception_Message (E), Expected_Error) /= 0,
+               Name & ": unexpected error: " & Ada.Exceptions.Exception_Message (E));
+         when E : TMC_UART_Error =>
+            T.Fail (Name & ": unexpected UART failure: " & Ada.Exceptions.Exception_Message (E));
+      end Check;
+   begin
+      T.Register (Parallelize => False);
+
+      Check ("matching supply", Derived_24V, True, 24.1, "");
+      Check ("supply 9% low", Derived_24V, True, 21.84, "");
+      Check ("supply 9% high", Derived_24V, True, 26.16, "");
+      Check ("supply 11% low", Derived_24V, True, 21.36, "Input_Voltage is 24.00 V");
+      Check ("supply 11% high", Derived_24V, True, 26.64, "Input_Voltage is 24.00 V");
+      Check ("12 V supply", Derived_24V, True, 12.0, "Motor " & Motor'Image & " supply voltage is 12.0");
+      Check ("disabled motor", Derived_24V, False, -1.0, "");
+      Check
+        ("manual SpreadCycle",
+         (CHM => (Kind => SpreadCycle, SpreadCycle => (Kind => Manual, Manual => <>)), others => <>),
+         True,
+         -1.0,
+         "");
+      Check
+        ("constant off-time",
+         (CHM => (Kind => Constant_Off_Time, Constant_Off_Time => <>), others => <>),
+         True,
+         -1.0,
+         "");
+
+      TMC2240_Test_UART.Reset;
+      begin
+         Check_Supply_Voltages
+           ((Motors => [others => (Fixed_Kind => TMC2240_UART_Kind, TMC2240_Parameters => Derived_24V)]),
+            [others => True]);
+         T.Fail ("a missing supply reading must not pass the check");
+      exception
+         when TMC_UART_Error =>
+            null;
+      end;
+   end Test_Supply_Voltage_Check;
+
    function All_Tests return Trendy_Test.Test_Group
    is (Trendy_Test.Test_Group'
          [Test_Disable_After_Manager_Termination'Unrestricted_Access,
-          Test_Excessive_Hysteresis_Reports_Config_Error'Unrestricted_Access]);
+          Test_Excessive_Hysteresis_Reports_Config_Error'Unrestricted_Access,
+          Test_Supply_Voltage_Check'Unrestricted_Access]);
 
 end Prunt.Default_Modules.TMC2240_Drivers.Test;

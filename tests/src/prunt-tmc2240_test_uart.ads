@@ -28,6 +28,9 @@ package Prunt.TMC2240_Test_UART is
    procedure Drop_Next_Readback (Register : TMC_Types.TMC2240.UART_Register_Address);
    --  Report the next read of Register as missing. Writes still update the register.
 
+   procedure Set_Supply_Voltage (Reading : TMC_Types.TMC2240.ADC_V_Supply_Volts_Type);
+   --  Report Reading from ADC_VSUPPLY_AIN until the next Reset. Until then that register has no reply.
+
    function Was_Written (Register : TMC_Types.TMC2240.UART_Register_Address) return Boolean;
    --  Return whether Register has been written since the last Reset.
 

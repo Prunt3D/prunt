@@ -18,6 +18,8 @@
 --------------------------------------------------
 
 with Ada.Real_Time;
+with Ada.Strings.Fixed;
+with Ada.Strings.Unbounded;
 
 with Prunt.Default_Modules.TMC2240_Drivers.Config_Paths;
 
@@ -449,6 +451,59 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
       end return;
    end Generate_Default_Registers;
 
+   procedure Check_Supply_Voltages (Config : User_Config; Motor_Enabled : Motor_Flags) is
+      type Display_Volts is delta 0.01 digits 5;
+
+      function Image (Value : Voltage) return String
+      is (Ada.Strings.Fixed.Trim
+            (Display_Volts'Image (Display_Volts'Round (Dimensionless (Value / volt))), Ada.Strings.Both));
+
+      Mismatch_Count : Natural := 0;
+      First_Mismatch : Ada.Strings.Unbounded.Unbounded_String;
+      --  GNAT truncates exception messages to 200 characters, so only the first mismatch goes in the exception.
+   begin
+      for M in Motor_Name loop
+         if Config.Motors (M).Fixed_Kind = TMC2240_UART_Kind
+           and then Motor_Enabled (M)
+           and then Config.Motors (M).TMC2240_Parameters.CHM.Kind = SpreadCycle
+           and then Config.Motors (M).TMC2240_Parameters.CHM.SpreadCycle.Kind = Derived
+         then
+            declare
+               Expected : constant Voltage :=
+                 Config.Motors (M).TMC2240_Parameters.CHM.SpreadCycle.Derived.Input_Voltage;
+               Measured : constant Voltage :=
+                 Dimensionless (Read (ADC_VSUPPLY_AIN_Address, M).Content.ADC_VSUPPLY_AIN_Data.ADC_V_Supply) * volt;
+            begin
+               if abs (Measured - Expected) > 0.1 * Expected then
+                  declare
+                     Message : constant String :=
+                       "Motor "
+                       & M'Image
+                       & " supply voltage is "
+                       & Image (Measured)
+                       & " V, but Input_Voltage is "
+                       & Image (Expected)
+                       & " V. Derived SpreadCycle settings require these to agree within 10%.";
+                  begin
+                     My_Logger.Log (+Message);
+                     if Mismatch_Count = 0 then
+                        First_Mismatch := Ada.Strings.Unbounded.To_Unbounded_String (Message);
+                     end if;
+                     Mismatch_Count := @ + 1;
+                  end;
+               end if;
+            end;
+         end if;
+      end loop;
+
+      if Mismatch_Count > 0 then
+         raise Hardware_Config_Mismatch_Error
+           with
+             Ada.Strings.Unbounded.To_String (First_Mismatch)
+             & (if Mismatch_Count > 1 then " Other motors also differ, see the log." else "");
+      end if;
+   end Check_Supply_Voltages;
+
    function MRES_To_Dimensionless (MRES : TMC_Types.TMC2240.Microstep_Resolution_Type) return Dimensionless is
    begin
       case MRES is
@@ -853,10 +908,11 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
                   --  We have to provide the motor config before creating the default registers as we need to get back
                   --  distance per unit.
 
+                  Motor_Enabled (M) := Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M);
                   Registers (M) :=
                     Generate_Default_Registers
                       (Config.Motors (M).TMC2240_Parameters,
-                       Motor_Drivers_Module_Instance.Motor_Is_Enabled_In_Config (M),
+                       Motor_Enabled (M),
                        Report_Config_Error,
                        M,
                        Motor_Drivers_Module_Instance.Distance_Per_Unit (M));
@@ -876,6 +932,10 @@ package body Prunt.Default_Modules.TMC2240_Drivers is
          for Manager of Managers loop
             Manager.Started := True;
          end loop;
+
+         --  Check every driver before writing any registers, so chopper settings derived for the wrong voltage never
+         --  drive a motor. The manager tasks are still waiting for Setup, so nothing else is using the UART.
+         Check_Supply_Voltages (Config, Motor_Enabled);
 
          for M in Motor_Name loop
             case Managers (M).Kind is

@@ -38,6 +38,19 @@ package body Prunt.TMC2240_Test_UART is
       Dropped (Register) := True;
    end Drop_Next_Readback;
 
+   procedure Set_Supply_Voltage (Reading : ADC_V_Supply_Volts_Type) is
+      Frame : constant UART_Data_Message :=
+        (Bytes_Mode => False,
+         Content    =>
+           (Register             => ADC_VSUPPLY_AIN_Address,
+            Node                 => 0,
+            CRC                  => 0,
+            ADC_VSUPPLY_AIN_Data => (ADC_V_Supply => Reading, ADC_AIN => 0.0, Reserved_1 => 0, Reserved_2 => 0),
+            others               => <>));
+   begin
+      Write (Frame.Bytes);
+   end Set_Supply_Voltage;
+
    function Was_Written (Register : UART_Register_Address) return Boolean
    is (Written (Register));
 

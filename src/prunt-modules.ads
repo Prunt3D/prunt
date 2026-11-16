@@ -144,6 +144,9 @@ package Prunt.Modules is
    --  Access to a planner is provided here mainly for setting kinematic limits, motion should not be generated during
    --  startup.
    --
+   --  Checks that need the hardware cannot run in the initialize procedure, so they run here and raise
+   --  Hardware_Config_Mismatch_Error when the hardware does not match the configuration.
+   --
    --  TODO: Default to null if this GCC bug is ever fixed: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124418
 
    function Initialize

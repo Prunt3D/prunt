@@ -419,6 +419,13 @@ private
 
    type Motor_Registers_Map is array (Motor_Name) of TMC2240_Registers;
 
+   type Motor_Flags is array (Motor_Name) of Boolean;
+
+   procedure Check_Supply_Voltages (Config : User_Config; Motor_Enabled : Motor_Flags);
+   --  Read the supply voltage of every enabled motor whose SpreadCycle settings are derived from Input_Voltage. Log
+   --  each motor whose reading differs from its Input_Voltage by more than 10%, then raise
+   --  Hardware_Config_Mismatch_Error if there were any. Call this before the derived registers are written.
+
    function Build_Schema return Config.Config_Property_Maps.Map;
    --  Build the configuration schema.
 
@@ -710,6 +717,7 @@ private
       procedure Restore_Motor_After_Homing (Motor : Motor_Name);
 
       Config         : User_Config;
+      Motor_Enabled  : Motor_Flags := [others => False];
       Registers      : Motor_Registers_Map;
       Managers       : Motor_Manager_Map;
       Self_Ref       : My_Modules.Module_Instance_Shared_Pointers.Weak_Ref;

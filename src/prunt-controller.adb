@@ -1289,6 +1289,10 @@ package body Prunt.Controller is
             --  The adapter has already reported the error. Use the common shutdown path even if startup only
             --  configured part of the hardware.
             Started := False;
+         when E : Hardware_Config_Mismatch_Error =>
+            --  The configuration can be corrected and reloaded in-process, which a fatal error would not allow.
+            Report_External_Error (E, Is_Fatal => False);
+            Started := False;
          when E : others =>
             Report_External_Error (E);
             Started := False;
