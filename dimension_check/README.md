@@ -118,7 +118,9 @@ Build it in this directory with `alr build`, then run it in the Alire environmen
 project file, so that its dependencies resolve. Prunt's pre-build step (`prebuild.adb`) builds it, caching the executable like config_codegen's in
 `~/.cache/prunt/dimension_check` (`PRUNT_DIMENSION_CHECK_CACHE` overrides the directory, or disables the cache when set
 to "off"), and runs it over `prunt.gpr` whenever Prunt's sources change, so `alr build` fails on a dimension error.
-`run_tests.sh` checks `tests.gpr` after building the tests. To run it by hand from the repository root:
+The simulator's pre-build step, which Alire runs after Prunt's, checks `prunt_simulator.gpr` the same way whenever its
+sources or Prunt's change. `run_tests.sh` checks `tests.gpr` after building the tests. To run it by hand from the
+repository root:
 
 ```bash
 alr exec -- dimension_check/bin/dimension_check -P prunt.gpr -j 8

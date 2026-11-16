@@ -5,6 +5,7 @@
 /extras/dist/
 /generated_src_extras/
 /prebuild
+/.dimension_check_stamp
 /b~prebuild.*
 /prebuild.ali
 /prebuild.o
