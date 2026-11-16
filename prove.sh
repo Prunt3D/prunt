@@ -19,7 +19,9 @@
 # Without -f, only changed units are analysed again, and in them every goal which an earlier run settled is taken
 # from its session in obj/development/gnatprove instead of being proved again, also when an edit only moved it to
 # other lines. A goal which failed is retried only with more provers or a longer timeout than before (a higher
-# --level, or --timeout). Pass -f for a run which reuses nothing. Other arguments are passed to GNATprove too.
+# --level, or --timeout). Proofs are shared with the other checkouts of Prunt too, through ~/.cache/prunt/gnatprove
+# (gnatprove.sh describes how), so a new worktree takes what another has proved. Pass -f for a run which reuses
+# nothing. Other arguments are passed to GNATprove too.
 set -eo pipefail
 cd "$(dirname "$0")"
 

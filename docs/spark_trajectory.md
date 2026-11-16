@@ -343,7 +343,19 @@ Without `-f` a run is incremental, and usually much faster: unchanged units are 
 every goal an earlier run settled is taken from its session in `obj/development/gnatprove`, also after an edit
 which only moves code to other lines. Only new or changed goals go to the provers. A goal which failed is retried
 only with more provers or a longer timeout than before (`--level`, `--timeout`). After a spurious timeout on a
-loaded machine, retry just that check with `-f --limit-line=FILE:LINE`, not every unit with `-f`.
+loaded machine, retry just that check with a longer timeout, as in `--timeout=30 --limit-line=FILE:LINE`, and
+without `-f`: `-f` starts the entity from an empty session, which then holds only the proofs of that line, and the
+next run proves the rest of the entity again.
+
+Proofs are shared between checkouts (worktrees) in `~/.cache/prunt/gnatprove` (`PROVE_CACHE` overrides the
+directory, or shares nothing when set to "off"), so a new worktree does not prove again what another has proved. It
+holds GNATprove's file cache (`--memcached-server=file:DIR`), which keeps the output of each gnatwhy3 run and each
+prover call under a hash of its exact input, and the latest session of each entity (subprogram or package). An entity
+whose Why3 input is unchanged is taken from the cache without running gnatwhy3. An edit which moves code to other
+lines changes the input of every entity after it, and then gnatwhy3 takes the proved goals from the shared session,
+which `gnatprove.sh` gives to every entity that has none in the checkout. Outputs which leave a check unproved are not
+kept, so a failure is retried as above. `gnatprove.sh` describes the details; `-f` neither uses nor fills either
+store.
 
 The unit tests of `Prunt.Motion_Planner.Trajectory.Test` check the trusted statements by running them: the bit-pattern
 facts on random and extreme patterns, the bounds of the logarithm, the exponential, the fifth power and the fifth
