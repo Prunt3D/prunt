@@ -68,6 +68,17 @@ procedure Prebuild is
    procedure Prepend_To_File (Path : String; Prefix : String);
    --  Prepend `Prefix` to the file at `Path`.
 
+   procedure Replace_File (Source : String; Target : String);
+   --  Move the complete file `Source` to `Target`, replacing any existing `Target`. An interruption leaves `Target`
+   --  either as it was, missing, or replaced, never partially written.
+
+   procedure Copy_Into_Place (Source : String; Target : String);
+   --  Copy `Source` to `Target` with a fresh modification time. The copy is written under a temporary name next to
+   --  `Target` first, so an interrupted copy cannot leave a truncated `Target` that looks newer than `Source`.
+
+   procedure Write_Stamp (Path : String);
+   --  Create the empty stamp file at `Path`, which records that a step finished at its modification time.
+
    function Join_Path (Parts : String_Vectors.Vector) return String is
       Result : Unbounded_String;
    begin
@@ -229,6 +240,29 @@ procedure Prebuild is
       Close (File);
    end Prepend_To_File;
 
+   procedure Replace_File (Source : String; Target : String) is
+   begin
+      --  Ada.Directories.Rename does not overwrite an existing file.
+      if Exists (Target) then
+         Delete_File (Target);
+      end if;
+      Rename (Source, Target);
+   end Replace_File;
+
+   procedure Copy_Into_Place (Source : String; Target : String) is
+      Temp : constant String := Target & ".tmp";
+   begin
+      Copy_File (Source, Temp, "mode=overwrite,preserve=no_attributes");
+      Replace_File (Temp, Target);
+   end Copy_Into_Place;
+
+   procedure Write_Stamp (Path : String) is
+      File : File_Type;
+   begin
+      Create (File, Out_File, Path);
+      Close (File);
+   end Write_Stamp;
+
    procedure Ensure_Submodules is
       procedure Ensure_Submodule (Path : String; Required_Files : String_Vectors.Vector);
 
@@ -270,11 +304,14 @@ procedure Prebuild is
    end Ensure_Submodules;
 
    procedure Build_Html_Dist is
-      Src_Base  : constant String := Join_Path ([Working_Dir, "html", "src"]);
-      Dist_Base : constant String := Join_Path ([Working_Dir, "html", "dist"]);
-      Src_Dirs  : String_Vectors.Vector;
-      Src_Files : String_Vectors.Vector;
-      Ts_Files  : String_Vectors.Vector;
+      Src_Base   : constant String := Join_Path ([Working_Dir, "html", "src"]);
+      Dist_Base  : constant String := Join_Path ([Working_Dir, "html", "dist"]);
+      Tsc_Stamp  : constant String := Join_Path ([Working_Dir, ".tsc_stamp"]);
+      Src_Dirs   : String_Vectors.Vector;
+      Src_Files  : String_Vectors.Vector;
+      Ts_Files   : String_Vectors.Vector;
+      Ts_Outputs : String_Vectors.Vector;
+      Run_Tsc    : Boolean;
    begin
       if not Exists (Dist_Base) then
          Create_Directory (Dist_Base);
@@ -282,6 +319,9 @@ procedure Prebuild is
 
       Collect_Directories (Src_Base, Src_Dirs, Recursive => True);
       Collect_Files (Src_Base, Src_Files, Recursive => True);
+
+      --  Files are copied with Copy_Into_Place. A temporary file that an interrupted copy leaves in html/dist has no
+      --  source, so Clean_Dist_Stale deletes it before it can be embedded.
 
       for S of Src_Dirs loop
          declare
@@ -305,10 +345,15 @@ procedure Prebuild is
             if not Exists (Dest) or else Modification_Time (S) > Modification_Time (Dest) then
                Create_Path (Containing_Directory (Dest));
                Put_Line ("Copying " & Rel);
-               Copy_File (S, Dest);
+               Copy_Into_Place (S, Dest);
             end if;
             if Rel'Length >= 3 and then Rel (Rel'Last - 2 .. Rel'Last) = ".ts" then
                Ts_Files.Append (S);
+               --  Declaration files have no outputs.
+               if Rel'Length < 5 or else Rel (Rel'Last - 4 .. Rel'Last) /= ".d.ts" then
+                  Ts_Outputs.Append (Join_Path ([Dist_Base, Rel (Rel'First .. Rel'Last - 3) & ".js"]));
+                  Ts_Outputs.Append (Join_Path ([Dist_Base, Rel (Rel'First .. Rel'Last - 3) & ".js.map"]));
+               end if;
             end if;
          end;
       end loop;
@@ -316,8 +361,23 @@ procedure Prebuild is
       Ts_Files.Append (Join_Path ([Working_Dir, "html", "tsconfig.json"]));
       Ts_Files.Append (Join_Path ([Working_Dir, "html", "uplot", "dist", "uPlot.d.ts"]));
 
-      if Needs_Rebuild (Join_Path ([Dist_Base, "main.js"]), Ts_Files) then
+      --  tsc writes its outputs one at a time, and still writes them when it reports errors, so an output newer than
+      --  every source does not show that a run finished. A stamp written after a successful run is checked instead.
+      Run_Tsc := Needs_Rebuild (Tsc_Stamp, Ts_Files);
+      for O of Ts_Outputs loop
+         exit when Run_Tsc;
+         if not Exists (O) then
+            Put_Line ("Rebuilding because tsc output does not exist: " & O'Image);
+            Run_Tsc := True;
+         end if;
+      end loop;
+
+      if Run_Tsc then
+         if Exists (Tsc_Stamp) then
+            Delete_File (Tsc_Stamp);
+         end if;
          Run ("tsc", [], Dir => Join_Path ([Working_Dir, "html"]));
+         Write_Stamp (Tsc_Stamp);
       end if;
 
       if not Exists (Join_Path ([Dist_Base, "uPlot.esm.js"]))
@@ -326,7 +386,7 @@ procedure Prebuild is
           > Modification_Time (Join_Path ([Dist_Base, "uPlot.esm.js"]))
       then
          Put_Line ("Copying uPlot.esm.js");
-         Copy_File
+         Copy_Into_Place
            (Join_Path ([Working_Dir, "html", "uplot", "dist", "uPlot.esm.js"]),
             Join_Path ([Dist_Base, "uPlot.esm.js"]));
       end if;
@@ -394,13 +454,17 @@ procedure Prebuild is
    end Clean_Dist_Stale;
 
    procedure Build_Ada_Resources is
-      Target   : constant String := Join_Path ([Working_Dir, "generated_src_html", "prunt-web_server_resources.adb"]);
-      Sources  : String_Vectors.Vector;
-      Pragma_1 : constant String :=
+      Unit_File : constant String := "prunt-web_server_resources";
+      Output    : constant String := Join_Path ([Working_Dir, "generated_src_html"]);
+      Target    : constant String := Join_Path ([Output, Unit_File & ".adb"]);
+      Temp_Rel  : constant String := Join_Path (["obj", "web_server_resources"]);
+      Temp      : constant String := Join_Path ([Working_Dir, Temp_Rel]);
+      Sources   : String_Vectors.Vector;
+      Pragma_1  : constant String :=
         "pragma Warnings (Off, ""array aggregate using () is an obsolescent syntax, use [] instead"");" & ASCII.LF;
-      Pragma_2 : constant String :=
+      Pragma_2  : constant String :=
         "pragma Warnings (Off, ""subprogram body """"Get_Content"""" not in alphabetical order"");" & ASCII.LF;
-      Pragma_3 : constant String := "pragma Style_Checks (Off);" & ASCII.LF;
+      Pragma_3  : constant String := "pragma Style_Checks (Off);" & ASCII.LF;
    begin
       Collect_Files (Join_Path ([Working_Dir, "html", "dist"]), Sources, Recursive => True);
       Sources.Append (Join_Path ([Working_Dir, "html", "package.xml"]));
@@ -409,16 +473,29 @@ procedure Prebuild is
          return;
       end if;
 
+      --  If this is interrupted, a partial or unprefixed body newer than every source would be skipped by
+      --  Needs_Rebuild on every later run. The files are therefore generated in a scratch directory and moved into
+      --  place once complete, with the body last so that a body newer than its sources is always complete.
+      if Exists (Temp) then
+         Delete_Tree (Temp);
+      end if;
+      Create_Path (Temp);
+
       Run
         ("are",
          ["--lang=Ada",
           "-o",
-          "generated_src_html",
+          Temp_Rel,
+          "--tmp=" & Join_Path ([Temp_Rel, "are-generator"]),
           "--content-only",
           "--name-access",
           "--rule=" & Join_Path (["html", "package.xml"]),
           Join_Path (["html", "dist"])]);
-      Prepend_To_File (Target, Pragma_1 & Pragma_2 & Pragma_3);
+      Prepend_To_File (Join_Path ([Temp, Unit_File & ".adb"]), Pragma_1 & Pragma_2 & Pragma_3);
+
+      Replace_File (Join_Path ([Temp, Unit_File & ".ads"]), Join_Path ([Output, Unit_File & ".ads"]));
+      Replace_File (Join_Path ([Temp, Unit_File & ".adb"]), Target);
+      Delete_Tree (Temp);
    end Build_Ada_Resources;
 
    procedure Build_Libadalang_Tool (Crate : String; Executables : String_Vectors.Vector; Cache_Variable : String) is
@@ -536,10 +613,7 @@ procedure Prebuild is
                --  looks up to date.
                Copy_File (Join_Path ([Entry_Dir, E]), Temp, "mode=overwrite,preserve=no_attributes");
                Set_Executable (Temp);
-               if Exists (Dest) then
-                  Delete_File (Dest);
-               end if;
-               Rename (Temp, Dest);
+               Replace_File (Temp, Dest);
             end;
          end loop;
 
@@ -694,13 +768,7 @@ procedure Prebuild is
       end if;
 
       Run (Join_Path (["config_codegen", "bin", "config_codegen"]), ["-P", "prunt.gpr"]);
-
-      declare
-         F : File_Type;
-      begin
-         Create (F, Out_File, Stamp);
-         Close (F);
-      end;
+      Write_Stamp (Stamp);
    end Run_Config_Codegen;
 
    procedure Run_Dimension_Check is
@@ -731,13 +799,7 @@ procedure Prebuild is
       end if;
 
       Run (Join_Path (["dimension_check", "bin", "dimension_check"]), ["-P", "prunt.gpr", "-j0"]);
-
-      declare
-         F : File_Type;
-      begin
-         Create (F, Out_File, Stamp);
-         Close (F);
-      end;
+      Write_Stamp (Stamp);
    end Run_Dimension_Check;
 
 begin

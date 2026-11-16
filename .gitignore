@@ -6,6 +6,7 @@
 /.dir-locals.el
 /.config_codegen_stamp
 /.dimension_check_stamp
+/.tsc_stamp
 /tests/*.srctrace
 /benchmark_results/
 /prebuild
