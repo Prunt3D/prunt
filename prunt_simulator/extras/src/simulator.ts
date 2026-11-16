@@ -2,6 +2,7 @@ import uPlot from "./uPlot.esm.js";
 
 type AxisName = "X" | "Y" | "Z" | "E";
 type SampleResponse = {
+  epoch: number;
   axes: AxisName[];
   dt_s: number;
   first_sequence: number;
@@ -322,7 +323,9 @@ async function pollSamples() {
     const response = await fetch("/extras/position_samples.json", { cache: "no-store" });
     const text = await response.text();
     const data = JSON.parse(text.trim()) as SampleResponse;
-    const snapshotKey = `${data.first_sequence}:${data.last_sequence}:${data.samples}`;
+    // Sequence numbers restart at 0 on every reset, so a snapshot from a new epoch can repeat the last one's
+    // counts while holding a different position.
+    const snapshotKey = `${data.epoch}:${data.first_sequence}:${data.last_sequence}:${data.samples}`;
     if (snapshotKey !== lastSnapshotKey) {
       lastSnapshotKey = snapshotKey;
       updatePlots(data);
