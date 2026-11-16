@@ -408,24 +408,42 @@ package Prunt.Config is
    --  Returns the JSON string representation of the stored configuration.
 
    procedure Apply_Untrusted_Patch
-     (This   : Config_File;
-      Value  : Virtual_String;
-      Result : out Virtual_String;
-      Errors : out Config_Error_Vectors.Vector);
+     (This     : Config_File;
+      Value    : Virtual_String;
+      Result   : out Virtual_String;
+      Revision : out Virtual_String;
+      Errors   : out Config_Error_Vectors.Vector;
+      Conflict : out Boolean);
    --  Applies a JSON patch to the configuration.
    --
    --  The Value string must be a JSON object following the top-level structure:
    --    {
    --       "Prunt config version": 1,
+   --       "Base revision": "...",
    --       "Config": {
    --          "ModuleName": { "Version": N, "Config": { ... } }
    --       }
    --    }
    --
-   --  It performs a recursive merge and calls Report for any validation errors encountered (e.g. unknown modules,
-   --  extra fields, type mismatches). If any part of the validation fails then no part of the patch is applied.
+   --  It performs a recursive merge and appends any validation errors encountered (e.g. unknown modules, extra
+   --  fields, type mismatches) to Errors. If any part of the validation fails then no part of the patch is applied.
    --
-   --  Value is always set to the contents of the stored config.
+   --  "Base revision" is optional. When present, the patch is applied only if it equals the revision of the stored
+   --  configuration at the time of the patch. Otherwise nothing is applied, Conflict is True and Errors holds a
+   --  single error at ["Base revision"]. A value of just {"Base revision": "..."} checks the revision without
+   --  patching. Without the field, the patch is merged over whatever is stored.
+   --
+   --  Result is always set to the contents of the stored config and Revision to its revision, both taken in the same
+   --  protected action as the patch. The revision is a digest of the stored config, so it changes whenever any module
+   --  saves a different stored config and stays the same across restarts while the stored config is unchanged.
+
+   procedure Apply_Untrusted_Patch
+     (This   : Config_File;
+      Value  : Virtual_String;
+      Result : out Virtual_String;
+      Errors : out Config_Error_Vectors.Vector);
+   --  The same as the procedure above, without returning the revision or the conflict flag. A revision conflict is
+   --  still reported in Errors.
 
    procedure Reset_Live_To_Stored (This : Config_File);
    --  Discard all pending changes in the live configuration and revert to the version stored on disk.
@@ -485,6 +503,10 @@ private
    --
    --  If Full_Join is False then no keys which only exist in Right will be added to Left.
 
+   function Config_Revision (Serialized_Config : Virtual_String) return Virtual_String;
+   --  Returns the revision of a stored configuration from its serialized JSON: the hexadecimal SHA-256 digest of its
+   --  UTF-8 encoding.
+
    type Snapshot_State is record
       Stored_Config   : JSON_Value;
       Schemas         : Config_Schema_Maps.Map;
@@ -528,12 +550,15 @@ private
       --  Owner specifies the module triggering the save.
 
       procedure Apply_Untrusted_Patch
-        (Value  : Virtual_String;
-         Result : out Virtual_String;
-         Errors : out Config_Error_Vectors.Vector;
-         Lock   : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
+        (Value    : Virtual_String;
+         Result   : out Virtual_String;
+         Revision : out Virtual_String;
+         Errors   : out Config_Error_Vectors.Vector;
+         Conflict : out Boolean;
+         Lock     : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock);
       --  Applies a JSON patch to the configuration. Checks for validation errors before applying and does not apply
-      --  any changes if validation fails. Patches which touch overridden fields are rejected.
+      --  any changes if validation fails. Patches which touch overridden fields are rejected, as are patches whose
+      --  "Base revision" is not the revision of the stored configuration.
 
       function Get_Stored_Config return Virtual_String;
       --  Returns the JSON string of the stored configuration.

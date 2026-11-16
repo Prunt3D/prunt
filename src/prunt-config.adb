@@ -20,6 +20,7 @@
 with Ada.Exceptions;
 with Ada.IO_Exceptions;
 with Ada.Strings.Fixed;
+with GNAT.SHA256;
 with Prunt.Mockable.Directories;
 with Prunt.Mockable.Text_IO;
 with Prunt.Mockable.Text_IO.Unbounded_IO;
@@ -1669,10 +1670,12 @@ package body Prunt.Config is
       end Save;
 
       procedure Apply_Untrusted_Patch
-        (Value  : Virtual_String;
-         Result : out Virtual_String;
-         Errors : out Config_Error_Vectors.Vector;
-         Lock   : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock)
+        (Value    : Virtual_String;
+         Result   : out Virtual_String;
+         Revision : out Virtual_String;
+         Errors   : out Config_Error_Vectors.Vector;
+         Conflict : out Boolean;
+         Lock     : File_Access_Lock.Lock_Holder := File_Access_Lock.Lock)
       is
          pragma Unreferenced (Lock);
 
@@ -1689,12 +1692,22 @@ package body Prunt.Config is
             Errors.Append (Config_Error'(Path, Message));
             Error_Reported := True;
          end Report;
+
+         procedure Return_Stored_Config;
+         --  Set Result and Revision from the stored config as it is now.
+
+         procedure Return_Stored_Config is
+         begin
+            Result := Get_Stored_Config;
+            Revision := Config_Revision (Result);
+         end Return_Stored_Config;
       begin
          if Read_Only then
             raise Ada.IO_Exceptions.Use_Error with "Configuration snapshot is read-only.";
          end if;
 
          Errors := [];
+         Conflict := False;
 
          declare
             JSON_Result : constant Read_Result := Read (Value);
@@ -1713,19 +1726,41 @@ package body Prunt.Config is
                         & JSON_Result.Error.Column'Image
                         & ": ")
                      & JSON_Result.Error.Message);
-                  Result := Get_Stored_Config;
+                  Return_Stored_Config;
                   return;
             end case;
          end;
 
+         if Patch.Kind = JSON_Object_Type and then Patch.Has_Field ("Base revision") then
+            declare
+               Base_Revision : constant JSON_Value := Patch.Get ("Base revision");
+            begin
+               if Base_Revision.Kind /= JSON_String_Type then
+                  Report (["Base revision"], "Field must be string.");
+               elsif Base_Revision.Get /= Config_Revision (Get_Stored_Config) then
+                  Conflict := True;
+                  Report
+                    (["Base revision"],
+                     "The stored configuration has changed since this patch was made. Nothing was applied.");
+               end if;
+            end;
+
+            if Error_Reported then
+               Return_Stored_Config;
+               return;
+            end if;
+
+            Patch.Unset_Field ("Base revision");
+         end if;
+
          if Patch.Is_Empty then
-            Result := Get_Stored_Config;
+            Return_Stored_Config;
             return;
          end if;
 
          Validate_Outer_Config_Structure (Patch, Report'Access);
          if Error_Reported then
-            Result := Get_Stored_Config;
+            Return_Stored_Config;
             return;
          end if;
 
@@ -1783,7 +1818,7 @@ package body Prunt.Config is
          end;
 
          if Error_Reported then
-            Result := Get_Stored_Config;
+            Return_Stored_Config;
             return;
          end if;
 
@@ -1795,7 +1830,7 @@ package body Prunt.Config is
             Stored_Config := Candidate;
          end;
 
-         Result := Get_Stored_Config;
+         Return_Stored_Config;
       end Apply_Untrusted_Patch;
 
       function Get_Stored_Config return Virtual_String is
@@ -1978,12 +2013,26 @@ package body Prunt.Config is
    end Get_Data_String;
 
    procedure Apply_Untrusted_Patch
+     (This     : Config_File;
+      Value    : Virtual_String;
+      Result   : out Virtual_String;
+      Revision : out Virtual_String;
+      Errors   : out Config_Error_Vectors.Vector;
+      Conflict : out Boolean) is
+   begin
+      This.Internal.Get.Apply_Untrusted_Patch (Value, Result, Revision, Errors, Conflict);
+   end Apply_Untrusted_Patch;
+
+   procedure Apply_Untrusted_Patch
      (This   : Config_File;
       Value  : Virtual_String;
       Result : out Virtual_String;
-      Errors : out Config_Error_Vectors.Vector) is
+      Errors : out Config_Error_Vectors.Vector)
+   is
+      Ignored_Revision : Virtual_String;
+      Ignored_Conflict : Boolean;
    begin
-      This.Internal.Get.Apply_Untrusted_Patch (Value, Result, Errors);
+      This.Apply_Untrusted_Patch (Value, Result, Ignored_Revision, Errors, Ignored_Conflict);
    end Apply_Untrusted_Patch;
 
    function Last_Save (This : Config_File) return Save_Counter is
@@ -2186,5 +2235,10 @@ package body Prunt.Config is
 
       pragma Unreferenced (Start_Object); --  in out parameter
    end Recursive_Left_Merge;
+
+   function Config_Revision (Serialized_Config : Virtual_String) return Virtual_String is
+   begin
+      return Conversions.To_Virtual_String (GNAT.SHA256.Digest (Conversions.To_UTF_8_String (Serialized_Config)));
+   end Config_Revision;
 
 end Prunt.Config;

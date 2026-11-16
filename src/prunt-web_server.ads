@@ -37,7 +37,11 @@ with Prunt.Update_Checker;
 generic
    with
      procedure Apply_Config_Patch
-       (Value : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
+       (Value    : Virtual_String;
+        Result   : out Virtual_String;
+        Revision : out Virtual_String;
+        Errors   : out Config.Config_Error_Vectors.Vector;
+        Conflict : out Boolean);
    with package My_Logger is new Prunt.Logger (<>);
    with package My_Update_Checker is new Prunt.Update_Checker (<>);
    with
@@ -55,6 +59,7 @@ generic
    Status_Schema_String : Virtual_String;
    Gcode_JSON_String : Virtual_String;
    with function Get_Status_Values_String return Virtual_String;
+   with function Get_Config_Save_Count return Config.Save_Counter;
    with function Get_Smart_Plug return Virtual_String;
    with procedure Switch_Smart_Plug (Enabled : Boolean; Accepted : out Boolean);
    Port : GNAT.Sockets.Port_Type;
@@ -87,8 +92,9 @@ private
    function Starts_With (Source, Pattern : String) return Boolean;
    --  Return True when Pattern is a prefix of Source.
 
-   function Patch_Config_Values (Patch : String) return Virtual_String;
-   --  Apply a JSON configuration patch and return the resulting values together with any validation errors as JSON.
+   function Patch_Config_Values (Patch : String; Conflict : out Boolean) return Virtual_String;
+   --  Apply a JSON configuration patch and return the resulting values, their revision, and any validation errors as
+   --  JSON. Conflict is True when the patch named a base revision that is no longer stored, so nothing was applied.
 
    protected Startup_Manager is
       entry Wait_For_Update_Allowed;

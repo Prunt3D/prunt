@@ -6,7 +6,17 @@ export async function fetchConfigSchema() {
     return await res.json();
 }
 
-export async function fetchConfigValues() {
+/** The stored configuration together with its revision and the errors found in it, all taken at the same moment. */
+export type StoredConfigResponse = {
+    Values: any;
+    /** Changes whenever the stored configuration changes, from any source. Send it back as "Base revision". */
+    Revision: string;
+    /** True when a patch was rejected because its "Base revision" was no longer stored. Nothing was applied. */
+    Conflict: boolean;
+    Errors: any[];
+};
+
+export async function fetchConfigValues(): Promise<StoredConfigResponse> {
     const res = await fetch(`${API_BASE}/config/values`);
     if (!res.ok) throw new Error("Failed to fetch config values");
     return await res.json();
@@ -18,12 +28,14 @@ export async function fetchGcodeSchema() {
     return await res.json();
 }
 
-export async function patchConfigValues(values: any) {
+/** Apply a patch. A 409 response still carries the stored configuration, with Conflict set. */
+export async function patchConfigValues(values: any): Promise<StoredConfigResponse> {
     const res = await fetch(`${API_BASE}/config/values`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values)
     });
+    if (!res.ok && res.status !== 409) throw new Error(`Failed to save config values (${res.status})`);
     return await res.json();
 }
 

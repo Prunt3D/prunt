@@ -221,12 +221,13 @@ package body Prunt.Web_Server is
       null;
    end Write;
 
-   function Patch_Config_Values (Patch : String) return Virtual_String is
+   function Patch_Config_Values (Patch : String; Conflict : out Boolean) return Virtual_String is
       Patch_Errors : Config.Config_Error_Vectors.Vector;
       Result       : Virtual_String;
+      Revision     : Virtual_String;
       Errors       : Virtual_String := "[";
    begin
-      Apply_Config_Patch (Conversions.To_Virtual_String (Patch), Result, Patch_Errors);
+      Apply_Config_Patch (Conversions.To_Virtual_String (Patch), Result, Revision, Patch_Errors, Conflict);
 
       for Error of Patch_Errors loop
          if Errors /= "[" then
@@ -250,7 +251,16 @@ package body Prunt.Web_Server is
          Errors.Append ("],""Message"":" & JSON.Escape_String (Error.Message) & "}");
       end loop;
 
-      return "{""Values"":" & Result & ",""Errors"":" & Errors & "]}";
+      return
+        "{""Values"":"
+        & Result
+        & ",""Revision"":"
+        & JSON.Escape_String (Revision)
+        & ",""Conflict"":"
+        & Virtual_String'(if Conflict then "true" else "false")
+        & ",""Errors"":"
+        & Errors
+        & "]}";
    end Patch_Config_Values;
 
    overriding
@@ -391,7 +401,11 @@ package body Prunt.Web_Server is
          if Status.File = "config/schema" then
             Reply_JSON (Client, 200, "OK", Config_Schema_String, Get);
          elsif Status.File = "config/values" then
-            Reply_JSON (Client, 200, "OK", Patch_Config_Values ("{}"), Get);
+            declare
+               Ignored_Conflict : Boolean;
+            begin
+               Reply_JSON (Client, 200, "OK", Patch_Config_Values ("{}", Ignored_Conflict), Get);
+            end;
          elsif Status.File = "status/schema" then
             Reply_JSON (Client, 200, "OK", Status_Schema_String, Get);
          elsif Status.File = "status/values" then
@@ -662,12 +676,17 @@ package body Prunt.Web_Server is
                end if;
             end;
          elsif Status.File = "config/values" then
-            Reply_JSON
-              (Client,
-               200,
-               "OK",
-               Patch_Config_Values (Post_Bodies.To_String (Client.Content.Post_Content.Content)),
-               True);
+            declare
+               Conflict : Boolean;
+               Response : constant Virtual_String :=
+                 Patch_Config_Values (Post_Bodies.To_String (Client.Content.Post_Content.Content), Conflict);
+            begin
+               if Conflict then
+                  Reply_JSON (Client, 409, "Conflict", Response, True);
+               else
+                  Reply_JSON (Client, 200, "OK", Response, True);
+               end if;
+            end;
          elsif Status.File = "run-file" then
             if Kind ("uploads") /= Directory then
                Reply_Text
@@ -1127,6 +1146,8 @@ package body Prunt.Web_Server is
                & Conversions.To_UTF_8_String (Get_Status_Values_String)
                & ", ""Smart_Plug"":"
                & Conversions.To_UTF_8_String (Get_Smart_Plug)
+               & ", ""Config_Save_Count"":"
+               & Trim (Config.Save_Counter'Image (Get_Config_Save_Count))
                & ", ""Server_Exception"":"
                & Server_Exception_JSON
                & ", ""Startup"": """

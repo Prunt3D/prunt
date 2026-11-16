@@ -2106,7 +2106,11 @@ package body Prunt.Controller is
 
    protected body Patch_Processor is
       procedure Apply
-        (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector)
+        (Patch    : Virtual_String;
+         Result   : out Virtual_String;
+         Revision : out Virtual_String;
+         Errors   : out Config.Config_Error_Vectors.Vector;
+         Conflict : out Boolean)
       is
          use type Config.Save_Counter;
 
@@ -2119,36 +2123,60 @@ package body Prunt.Controller is
       begin
          if Has_Cache and then Patch.Is_Empty and then Cached_Save_Counter = Active_Config_File.Last_Save then
             Result := Cached_Result;
+            Revision := Cached_Revision;
             Errors := Cached_Errors;
+            Conflict := False;
          else
-            Active_Config_File.Apply_Untrusted_Patch (Patch, Result, Errors);
+            Active_Config_File.Apply_Untrusted_Patch (Patch, Result, Revision, Errors, Conflict);
             --  We apply the patch to the active config file so it will be used by the next reset and won't be
             --  overwritten by modules. Temporary modules validate a snapshot of stored values without acquiring
             --  another writer lease or changing the active modules' live configuration.
             if Errors.Is_Empty then
+               --  There is no point trying to load the modules if there are errors when testing against the schema
+               --  as no patch is applied in that case.
                declare
-                  --  There is no point trying to load the modules if there are errors when testing against the schema
-                  --  as no patch is applied in that case.
-                  My_Config_File             : constant Config.Config_File := Active_Config_File.Stored_Snapshot;
-                  Temporary_Module_Instances : Module_Instance_Maps.Map :=
-                    Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File);
+                  My_Config_File : constant Config.Config_File := Active_Config_File.Stored_Snapshot;
                begin
-                  Temporary_Module_Instances.Reverse_Clear;
+                  --  A module may save (M500) between the patch and the snapshot. The errors and the cache must
+                  --  describe Result, so in that case return no module errors and leave the cache alone. The client
+                  --  sees the save counter change and fetches the newer config with its own errors.
+                  if My_Config_File.Get_Data_String = Result then
+                     declare
+                        Temporary_Module_Instances : Module_Instance_Maps.Map :=
+                          Recursive_Module_Initialization (Report_Config_Error'Access, My_Config_File);
+                     begin
+                        Temporary_Module_Instances.Reverse_Clear;
+                     end;
+
+                     Cached_Result := Result;
+                     Cached_Revision := Revision;
+                     Cached_Errors := Errors;
+                     Cached_Save_Counter := My_Config_File.Last_Save;
+                     Has_Cache := True;
+                  end if;
                end;
             end if;
-
-            Cached_Result := Result;
-            Cached_Errors := Errors;
-            Cached_Save_Counter := Active_Config_File.Last_Save;
-            Has_Cache := True;
          end if;
       end Apply;
    end Patch_Processor;
 
    procedure Apply_Untrusted_Config_Patch
-     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector) is
+     (Patch    : Virtual_String;
+      Result   : out Virtual_String;
+      Revision : out Virtual_String;
+      Errors   : out Config.Config_Error_Vectors.Vector;
+      Conflict : out Boolean) is
    begin
-      Patch_Processor.Apply (Patch, Result, Errors);
+      Patch_Processor.Apply (Patch, Result, Revision, Errors, Conflict);
+   end Apply_Untrusted_Config_Patch;
+
+   procedure Apply_Untrusted_Config_Patch
+     (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector)
+   is
+      Ignored_Revision : Virtual_String;
+      Ignored_Conflict : Boolean;
+   begin
+      Patch_Processor.Apply (Patch, Result, Ignored_Revision, Errors, Ignored_Conflict);
    end Apply_Untrusted_Config_Patch;
 
    function Get_Config_Schema_String return Virtual_String is

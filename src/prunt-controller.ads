@@ -217,8 +217,17 @@ package Prunt.Controller is
    --  Return True once the G-code processor task is running and ready to consume queued commands/files.
 
    procedure Apply_Untrusted_Config_Patch
+     (Patch    : Virtual_String;
+      Result   : out Virtual_String;
+      Revision : out Virtual_String;
+      Errors   : out Config.Config_Error_Vectors.Vector;
+      Conflict : out Boolean);
+   --  Apply the same validated configuration patch format used by the web UI. See Config.Apply_Untrusted_Patch for
+   --  the meaning of Revision and Conflict. Errors also holds errors found by loading the modules on the result.
+
+   procedure Apply_Untrusted_Config_Patch
      (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
-   --  Apply the same validated configuration patch format used by the web UI.
+   --  The same as the procedure above, without returning the revision or the conflict flag.
 
    function Get_Config_Schema_String return Virtual_String;
    --  Return the JSON configuration schema currently used by this controller instance.
@@ -721,6 +730,10 @@ private
    is (My_Status_Data.JSON_Data);
    --  Return the current status values encoded as JSON for the web server.
 
+   function Get_Config_Save_Count return Config.Save_Counter
+   is (Active_Config_File.Last_Save);
+   --  Return a counter that changes whenever the stored configuration is written, so web clients know to refetch it.
+
    Active_Module_Gcode_Dispatch_Map : constant Gcode_Dispatch_Maps.Map := Build_Gcode_Dispatch_Map (Active_Modules);
 
    Active_Module_Gcode_JSON_String : constant Virtual_String := Build_Gcode_JSON (Active_Modules).Write;
@@ -742,6 +755,7 @@ private
         Status_Schema_String        => My_Status_Data.JSON_Schema,
         Gcode_JSON_String           => Active_Module_Gcode_JSON_String,
         Get_Status_Values_String    => Get_Status_Values_String,
+        Get_Config_Save_Count       => Get_Config_Save_Count,
         Get_Smart_Plug              => Smart_Plug_Control.Status_JSON,
         Switch_Smart_Plug           => Switch_Smart_Plug,
         Port                        => Web_Server_Port);
@@ -754,9 +768,14 @@ private
 
    protected Patch_Processor is
       procedure Apply
-        (Patch : Virtual_String; Result : out Virtual_String; Errors : out Config.Config_Error_Vectors.Vector);
+        (Patch    : Virtual_String;
+         Result   : out Virtual_String;
+         Revision : out Virtual_String;
+         Errors   : out Config.Config_Error_Vectors.Vector;
+         Conflict : out Boolean);
    private
       Cached_Result       : Virtual_String;
+      Cached_Revision     : Virtual_String;
       Cached_Errors       : Config.Config_Error_Vectors.Vector;
       Cached_Save_Counter : Config.Save_Counter;
       Has_Cache           : Boolean := False;

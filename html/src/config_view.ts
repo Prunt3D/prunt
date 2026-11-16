@@ -2,6 +2,7 @@ import { fetchConfigSchema, fetchConfigValues, patchConfigValues } from './api.j
 import { renderDescription } from './description_markup.js';
 import { ConfigCategory, configCategoriesFromSchema, configCategoryForProperty, matchesConfigSearch } from './config_browser.js';
 import { revealConfigElement } from './navigation.js';
+import { wsClient } from './ws.js';
 import {
     onLocaleChange,
     t,
@@ -13,7 +14,11 @@ import {
 } from './localization.js';
 
 let currentSchema: any = null;
+// The form's working copy. Rendered inputs hold the newest values; this holds everything else, such as hidden fields.
 let currentValues: any = null;
+// The stored configuration the working copy was taken from, and its revision. See "Changes made elsewhere" below.
+let baseValues: any = null;
+let baseRevision = '';
 let currentErrors: any[] = [];
 let dynamicPresentationControllerPaths = new Set<string>();
 
@@ -40,7 +45,7 @@ function groupContainsError(group: HTMLElement, path: string[]): boolean {
 
 export async function initConfigView() {
     const btnSave = document.getElementById('btn-save-config');
-    btnSave?.addEventListener('click', saveConfiguration);
+    btnSave?.addEventListener('click', () => void saveConfiguration());
 
     const updateRealtimeFrontendErrors = () => {
         const container = document.getElementById('config-form');
@@ -190,16 +195,19 @@ export async function initConfigView() {
         }
     });
 
+    initStoredChangesUI();
+    wsClient.on('tick', (message: any) => {
+        if (typeof message?.Config_Save_Count === 'number') noteConfigSaveCount(message.Config_Save_Count);
+    });
+
     try {
         currentSchema = await fetchConfigSchema();
         dynamicPresentationControllerPaths = collectDynamicPresentationControllerPaths(currentSchema);
-        const res = await fetchConfigValues();
-        currentValues = res.Values || res;
-        renderConfigForm();
-        if (res.Errors && res.Errors.length > 0) {
-            currentErrors = res.Errors;
-            handleErrors(res.Errors);
-        }
+        await runConfigRequest(async () => {
+            const res = await fetchConfigValues();
+            latestStored = { values: res.Values, revision: res.Revision, errors: res.Errors ?? [] };
+            showStoredConfig(latestStored);
+        });
     } catch (e) {
         console.error("Failed to init config", e);
     }
@@ -222,12 +230,7 @@ function collectDynamicPresentationControllerPaths(schema: any): Set<string> {
 }
 
 function valueAtConfigPath(owner: string, path: string[]): any {
-    let value = currentValues?.Config?.[owner]?.Config;
-    for (const segment of path) {
-        if (value === undefined || value === null) return undefined;
-        value = value[segment];
-    }
-    return value;
+    return valueAt(currentValues, ['Config', owner, 'Config', ...path]);
 }
 
 function isDynamicallyPresented(schema: any): boolean {
@@ -379,6 +382,14 @@ function updateCategoryErrorIndicators() {
     }
 }
 
+function configBreadcrumb(path: string[]): string {
+    return path
+        .map((segment, index) => ({ segment, index }))
+        .filter(({ segment, index }) => !(segment === 'Config' && (index === 0 || index === 2)) && segment !== 'Children' && segment !== 'Selected')
+        .map(({ segment, index }) => translateConfigLabel(path.slice(0, index + 1), segment))
+        .join(' › ');
+}
+
 type FieldRenderOptions = {
     showLabel?: boolean;
     redundantTitleContext?: string | null;
@@ -420,11 +431,7 @@ function createField(
     if (schema.Kind !== 'Sequence') {
         fieldDiv.dataset.searchLabel = translateConfigLabel(path, name || path[path.length - 1]);
         fieldDiv.dataset.searchDescription = translateConfigDescription(path, schema.Description || '');
-        fieldDiv.dataset.searchBreadcrumb = path
-            .map((segment, index) => ({ segment, index }))
-            .filter(({ segment, index }) => !(segment === 'Config' && (index === 0 || index === 2)) && segment !== 'Children' && segment !== 'Selected')
-            .map(({ segment, index }) => translateConfigLabel(path.slice(0, index + 1), segment))
-            .join(' › ');
+        fieldDiv.dataset.searchBreadcrumb = configBreadcrumb(path);
     }
 
     if (name && options.showLabel !== false) {
@@ -804,7 +811,7 @@ function createSequenceInput(
         let hasAnyTab = false;
         for (const [childName, childSchema] of Object.entries(schema.Children)) {
             const childVal = value ? value[childName] : undefined;
-            
+
             const pane = document.createElement('div');
             const f = createField(childName, childSchema, childVal, [...path, childName], {
                 showLabel: false,
@@ -931,81 +938,569 @@ function scrapeFormValues(): any | null {
     return patchPayload;
 }
 
-function populateFormValues(newValues: any) {
-    if (!newValues) return;
+// -------------------------------------------------------------
+// Changes made elsewhere
+// -------------------------------------------------------------
+// The form edits a copy of the stored configuration. baseValues and baseRevision record the stored configuration
+// that copy was taken from. Saving sends only the settings that differ from baseValues, and the server applies them
+// only while baseRevision is still the stored revision. A save therefore never overwrites a change made elsewhere,
+// such as by M500 or another browser tab, without this page first showing it to the user.
+//
+// The server reports a save counter in every status message. When it changes, this page fetches the stored
+// configuration: without unsaved edits it simply shows the new values, otherwise it asks the user to review them.
+// The review dialog's buttons act on exactly the stored configuration it lists. If more changes arrive while it is
+// open, it says so instead of redrawing, and a save from it is still based on the listed revision, so the server
+// rejects it and the dialog reopens with only the changes the user has not seen.
+//
+// Every request to config/values goes through runConfigRequest, which runs them one at a time and handles each
+// response before the next request starts. A response can then never be applied over a newer one.
 
-    const container = document.getElementById('config-form');
-    if (!container) return;
+type ConfigChange = { path: string[]; before: any; after: any };
 
-    const bools = Array.from(container.querySelectorAll('.config-input-bool')) as HTMLInputElement[];
-    const strings = Array.from(container.querySelectorAll('.config-input-string')) as HTMLInputElement[];
-    const ints = Array.from(container.querySelectorAll('.config-input-int')) as HTMLInputElement[];
-    const floats = Array.from(container.querySelectorAll('.config-input-float')) as HTMLInputElement[];
-    const discretes = Array.from(container.querySelectorAll('.config-input-discrete')) as HTMLSelectElement[];
-    const variants = Array.from(container.querySelectorAll('.config-input-variant')) as HTMLSelectElement[];
-    const ratioNums = Array.from(container.querySelectorAll('.config-input-ratio-num')) as HTMLInputElement[];
-    const ratioDens = Array.from(container.querySelectorAll('.config-input-ratio-den')) as HTMLInputElement[];
+// A stored configuration as the server returned it. Errors is null when the response did not include them.
+type StoredConfig = { values: any; revision: string; errors: any[] | null };
 
-    const getValue = (pathStr: string) => {
-        const path = JSON.parse(pathStr);
-        let cur = newValues;
-        for (let i = 0; i < path.length; i++) {
-            if (cur === undefined || cur === null) return undefined;
-            cur = cur[path[i]];
-        }
-        return cur;
-    };
+type ChangesDialogMode = 'save' | 'review' | 'notice';
 
-    bools.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined) el.checked = !!val;
-    });
+type ShownChanges = {
+    mode: ChangesDialogMode;
+    // The stored configuration the dialog's buttons act on. Null for a notice, which has nothing to act on.
+    stored: StoredConfig | null;
+    // The stored revision the listed changes lead to. Newer changes than this have not been shown.
+    revision: string;
+    // Identifies each listed change, so changes that are new when the list is updated can be marked.
+    keys: Set<string>;
+};
 
-    strings.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined) el.value = val;
-    });
+let configRequestChain: Promise<unknown> = Promise.resolve();
+// The newest stored configuration the server has reported. Responses are handled in order, so it is never older than
+// baseValues.
+let latestStored: StoredConfig | null = null;
+// A stored configuration newer than baseValues that the user has unsaved edits against.
+let pendingStored: StoredConfig | null = null;
+// When newer values were loaded automatically because there were no unsaved edits, the base from before they were
+// loaded, so the notice can list every change since. Null once the user dismisses the notice.
+let noticeFrom: any | null = null;
+let lastConfigSaveCount: number | null = null;
+let storedCheckQueued = false;
+let saving = false;
+// What the open changes dialog lists, or null when it is closed.
+let shownChanges: ShownChanges | null = null;
 
-    ints.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined) el.value = val.toString();
-    });
-
-    floats.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined) el.value = val.toString();
-    });
-
-    discretes.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined) el.value = val;
-    });
-
-    ratioNums.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined) el.value = val.toString();
-    });
-
-    ratioDens.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined) el.value = val.toString();
-    });
-
-    variants.forEach(el => {
-        const val = getValue(el.dataset.path!);
-        if (val !== undefined && el.value !== val) {
-            el.value = val;
-            // Trigger change event to re-render variant children
-            el.dispatchEvent(new Event('change'));
-        }
-    });
+function runConfigRequest<T>(request: () => Promise<T>): Promise<T> {
+    const result = configRequestChain.then(request);
+    configRequestChain = result.catch(() => undefined);
+    return result;
 }
 
-async function saveConfiguration() {
-    if (!currentSchema || !currentValues) return;
+function cloneJSON<T>(value: T): T {
+    return value === undefined ? value : JSON.parse(JSON.stringify(value));
+}
+
+function isJSONObject(value: any): value is Record<string, any> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sameJSON(a: any, b: any): boolean {
+    if (a === b) return true;
+    if (Array.isArray(a) || Array.isArray(b)) {
+        return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameJSON(item, b[i]));
+    }
+    if (!isJSONObject(a) || !isJSONObject(b)) return false;
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length
+        && keys.every(key => Object.prototype.hasOwnProperty.call(b, key) && sameJSON(a[key], b[key]));
+}
+
+function valueAt(root: any, path: string[]): any {
+    let value = root;
+    for (const segment of path) {
+        if (!isJSONObject(value)) return undefined;
+        value = value[segment];
+    }
+    return value;
+}
+
+/** The schema of the setting at a full configuration path, or null when the path is not a setting. */
+function schemaAtPath(path: string[]): any | null {
+    if (path.length < 4 || path[0] !== 'Config' || path[2] !== 'Config') return null;
+    let schema = currentSchema?.Config?.[path[1]]?.Config?.[path[3]];
+    for (let i = 4; schema && i < path.length; i++) {
+        if (schema.Kind === 'Sequence') schema = schema.Children?.[path[i]];
+        else if (schema.Kind === 'Variant' && path[i] === 'Children') schema = schema.Children?.[path[++i]];
+        else return null;
+    }
+    return schema ?? null;
+}
+
+/** Every setting that differs between two copies of the configuration. A ratio counts as one setting. */
+function configChanges(before: any, after: any, path: string[] = [], changes: ConfigChange[] = []): ConfigChange[] {
+    if (sameJSON(before, after)) return changes;
+    if (isJSONObject(before) && isJSONObject(after) && schemaAtPath(path)?.Kind !== 'Float_Ratio') {
+        for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+            configChanges(before[key], after[key], [...path, key], changes);
+        }
+    } else {
+        changes.push({ path, before, after });
+    }
+    return changes;
+}
+
+/** The smallest object that the server merges into base to get edited. Ratios are always sent whole. */
+function patchBetween(base: any, edited: any, path: string[]): any {
+    if (!isJSONObject(base) || !isJSONObject(edited) || schemaAtPath(path)?.Kind === 'Float_Ratio') {
+        return cloneJSON(edited);
+    }
+    const patch: Record<string, any> = {};
+    for (const [key, value] of Object.entries(edited)) {
+        if (!sameJSON(base[key], value)) patch[key] = patchBetween(base[key], value, [...path, key]);
+    }
+    return patch;
+}
+
+/** The module entries of a patch that turns base into edited. Modules without changes are left out. */
+function modulePatches(base: any, edited: any): Record<string, any> {
+    const patches: Record<string, any> = {};
+    for (const [module, value] of Object.entries<any>(edited?.Config ?? {})) {
+        const baseModule = base?.Config?.[module];
+        if (sameJSON(baseModule?.Config, value?.Config)) continue;
+        patches[module] = {
+            Version: baseModule?.Version ?? value.Version,
+            Config: patchBetween(baseModule?.Config, value.Config, ['Config', module, 'Config'])
+        };
+    }
+    return patches;
+}
+
+/** Merge patch into target the same way the server merges a patch into the stored configuration. */
+function mergePatch(target: Record<string, any>, patch: Record<string, any>) {
+    for (const [key, value] of Object.entries(patch)) {
+        if (isJSONObject(target[key]) && isJSONObject(value)) mergePatch(target[key], value);
+        else target[key] = cloneJSON(value);
+    }
+}
+
+/** The working copy as it would be saved. Edits under variant options that are not selected are not saved. */
+function workingValues(): any | null {
+    const values = scrapeFormValues();
+    const container = document.getElementById('config-form');
+    if (!values || !container) return values;
+    for (const select of Array.from(container.querySelectorAll<HTMLSelectElement>('.config-input-variant'))) {
+        if (!select.dataset.path) continue;
+        const variantPath: string[] = JSON.parse(select.dataset.path).slice(0, -1);
+        const children = valueAt(values, [...variantPath, 'Children']);
+        if (!isJSONObject(children)) continue;
+        const baseChildren = valueAt(baseValues, [...variantPath, 'Children']);
+        for (const option of Object.keys(children)) {
+            if (option === select.value) continue;
+            if (isJSONObject(baseChildren) && option in baseChildren) children[option] = cloneJSON(baseChildren[option]);
+            else delete children[option];
+        }
+    }
+    return values;
+}
+
+function unsavedChanges(): ConfigChange[] {
+    const working = workingValues();
+    return working && baseValues ? configChanges(baseValues, working) : [];
+}
+
+function showErrors(errors: any[]) {
+    currentErrors = errors;
+    handleErrors(currentErrors);
+    // handleErrors clears every outline, so let the realtime validation restore the outlines for invalid inputs.
+    document.getElementById('config-form')?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** Make stored both the base and the working copy, discarding any unsaved edits. */
+function showStoredConfig(stored: StoredConfig) {
+    baseValues = stored.values;
+    baseRevision = stored.revision;
+    pendingStored = null;
+    currentValues = cloneJSON(stored.values);
+    renderConfigForm();
+    showErrors(stored.errors ?? currentErrors);
+}
+
+/** Apply the unsaved edits on top of stored and make stored the new base. */
+function keepEditsOn(stored: StoredConfig) {
+    const working = workingValues();
+    const merged = cloneJSON(stored.values);
+    if (working) {
+        for (const [module, patch] of Object.entries<any>(modulePatches(baseValues, working))) {
+            const target = merged?.Config?.[module]?.Config;
+            if (isJSONObject(target)) mergePatch(target, patch.Config);
+        }
+    }
+    baseValues = stored.values;
+    baseRevision = stored.revision;
+    pendingStored = null;
+    currentValues = merged;
+    renderConfigForm();
+    showErrors(stored.errors ?? currentErrors);
+}
+
+function noteConfigSaveCount(count: number) {
+    if (count === lastConfigSaveCount) return;
+    lastConfigSaveCount = count;
+    void checkStoredConfig();
+}
+
+async function checkStoredConfig() {
+    // One queued check is enough: it fetches whatever is stored when it runs.
+    if (storedCheckQueued) return;
+    storedCheckQueued = true;
+    try {
+        await runConfigRequest(async () => {
+            storedCheckQueued = false;
+            if (!baseValues) return;
+            const res = await fetchConfigValues();
+            latestStored = { values: res.Values, revision: res.Revision, errors: res.Errors ?? [] };
+            handleStoredConfig(latestStored);
+        });
+    } catch (e) {
+        storedCheckQueued = false;
+        console.error("Failed to check the stored config", e);
+    }
+}
+
+function handleStoredConfig(stored: StoredConfig) {
+    if (stored.revision === baseRevision) {
+        pendingStored = null;
+        if (stored.errors && !sameJSON(stored.errors, currentErrors)) showErrors(stored.errors);
+    } else if (pendingStored && stored.revision === pendingStored.revision) {
+        if (stored.errors) pendingStored.errors = stored.errors;
+    } else if (configChanges(baseValues, stored.values).length === 0) {
+        // The same values under another revision, so there is nothing to show.
+        baseValues = stored.values;
+        baseRevision = stored.revision;
+        pendingStored = null;
+        if (stored.errors) showErrors(stored.errors);
+    } else if (unsavedChanges().length === 0) {
+        const from = noticeFrom ?? baseValues;
+        showStoredConfig(stored);
+        noticeFrom = configChanges(from, stored.values).length > 0 ? from : null;
+    } else {
+        pendingStored = stored;
+    }
+    updateStoredChangesUI();
+}
+
+/** After the user acted on the stored configuration a dialog listed, catch up with anything newer. */
+function catchUpAfterReview(acted: StoredConfig, fetchErrors: boolean) {
+    if (latestStored && latestStored.revision !== acted.revision) handleStoredConfig(latestStored);
+    // A conflict reply carries no errors, so fetch the errors for the configuration now shown.
+    else if (fetchErrors && !acted.errors) void checkStoredConfig();
+}
+
+function initStoredChangesUI() {
+    document.getElementById('btn-config-review-changes')?.addEventListener('click', () => {
+        openChangesDialog(pendingStored ? 'review' : 'notice');
+    });
+    document.getElementById('btn-config-dismiss-changes')?.addEventListener('click', () => {
+        noticeFrom = null;
+        updateStoredChangesUI();
+    });
+    document.getElementById('btn-config-changes-update')?.addEventListener('click', () => {
+        const previous = shownChanges;
+        if (!previous) return;
+        if (pendingStored) {
+            renderChangesDialog(previous.mode === 'save' ? 'save' : 'review', { previousKeys: previous.keys });
+        } else if (noticeFrom && previous.mode === 'notice') {
+            renderChangesDialog('notice', { previousKeys: previous.keys });
+        } else {
+            // The stored configuration changed back to this page's copy, so nothing is left to review.
+            (document.getElementById('config-changes-dialog') as HTMLDialogElement | null)?.close();
+            return;
+        }
+        document.getElementById('config-changes-body')?.focus();
+    });
+    const dialog = document.getElementById('config-changes-dialog') as HTMLDialogElement | null;
+    dialog?.addEventListener('close', () => {
+        shownChanges = null;
+        updateStoredChangesUI();
+    });
+    onLocaleChange(() => updateStoredChangesUI());
+}
+
+function updateStoredChangesUI() {
+    const banner = document.getElementById('config-stored-changes');
+    const message = document.getElementById('config-stored-changes-message');
+    const review = document.getElementById('btn-config-review-changes');
+    const dismiss = document.getElementById('btn-config-dismiss-changes');
+    if (banner && message && review && dismiss) {
+        if (pendingStored) noticeFrom = null;
+        banner.hidden = !pendingStored && !noticeFrom;
+        banner.classList.toggle('is-notice', !pendingStored);
+        message.textContent = pendingStored
+            ? t('ui.config.changes.pendingBanner', 'The stored configuration was changed elsewhere after this page loaded it. Your edits are not saved.')
+            : t('ui.config.changes.loadedBanner', 'The stored configuration was changed elsewhere. You had no unsaved edits, so this page now shows the new values.');
+        review.textContent = pendingStored
+            ? t('ui.config.changes.review', 'Review changes')
+            : t('ui.config.changes.show', 'Show changes');
+        dismiss.hidden = !!pendingStored;
+        dismiss.textContent = t('ui.config.changes.dismiss', 'Dismiss');
+    }
+
+    // An open dialog keeps listing what its buttons act on. It only says that newer changes exist.
+    const update = document.getElementById('config-changes-update');
+    const updateMessage = document.getElementById('config-changes-update-message');
+    const updateButton = document.getElementById('btn-config-changes-update');
+    if (update && updateMessage && updateButton) {
+        const newest = latestStored?.revision ?? baseRevision;
+        update.hidden = !shownChanges || newest === shownChanges.revision;
+        updateMessage.textContent = shownChanges?.stored
+            ? t('ui.config.changes.moreWhileOpen', 'More changes were saved elsewhere while this was open, and they are not in this list. If you save, they are shown to you before anything is saved.')
+            : t('ui.config.changes.moreWhileOpenNotice', 'More changes were saved elsewhere while this was open, and they are not in this list.');
+        updateButton.textContent = t('ui.config.changes.showNew', 'Show the new changes');
+    }
+}
+
+function formatConfigValue(path: string[], value: any): string {
+    if (value === undefined) return t('ui.config.changes.notSet', '(not set)');
+    if (path[path.length - 1] === 'Selected' && schemaAtPath(path.slice(0, -1))?.Kind === 'Variant') {
+        return translateConfigLabel([...path.slice(0, -1), 'Children', String(value)], String(value));
+    }
+    const schema = schemaAtPath(path);
+    switch (schema?.Kind) {
+        case 'Boolean':
+            return value ? t('ui.config.changes.on', 'On') : t('ui.config.changes.off', 'Off');
+        case 'Integer':
+        case 'Float':
+            return schema.Unit ? `${value} ${translateConfigUnit(path, schema.Unit)}` : String(value);
+        case 'Discrete':
+            return translateConfigOption(path, String(value), String(value));
+        case 'Float_Ratio':
+            return `${value?.Numerator} : ${value?.Denominator}`;
+        case 'String':
+            return value === '' ? t('ui.config.changes.empty', '(empty)') : String(value);
+    }
+    return isJSONObject(value) || Array.isArray(value) ? JSON.stringify(value) : String(value);
+}
+
+function pathsOverlap(a: string[], b: string[]): boolean {
+    const length = Math.min(a.length, b.length);
+    for (let i = 0; i < length; i++) if (a[i] !== b[i]) return false;
+    return true;
+}
+
+type ChangeNote = { text: string; kind: 'conflict' | 'related' };
+
+function changeKey(change: ConfigChange): string {
+    return `${JSON.stringify(change.path)}=${JSON.stringify(change.after)}`;
+}
+
+function changeListItem(change: ConfigChange, note: ChangeNote | null, isNew = false): HTMLLIElement {
+    const item = document.createElement('li');
+    item.className = 'config-change';
+    const setting = document.createElement('span');
+    setting.className = 'config-change-setting';
+    if (isNew) {
+        item.classList.add('is-new');
+        const tag = document.createElement('span');
+        tag.className = 'config-change-tag';
+        tag.textContent = t('ui.config.changes.newTag', 'New');
+        setting.appendChild(tag);
+    }
+    setting.append(configBreadcrumb(change.path));
+    const values = document.createElement('span');
+    values.className = 'config-change-values';
+    const before = document.createElement('span');
+    before.className = 'config-change-before';
+    before.textContent = formatConfigValue(change.path, change.before);
+    const arrow = document.createElement('span');
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = ' → ';
+    const spoken = document.createElement('span');
+    spoken.className = 'sr-only';
+    spoken.textContent = ` ${t('ui.config.changes.changedTo', 'changed to')} `;
+    const after = document.createElement('span');
+    after.className = 'config-change-after';
+    after.textContent = formatConfigValue(change.path, change.after);
+    values.append(before, arrow, spoken, after);
+    item.append(setting, values);
+    if (note) {
+        item.classList.add(note.kind === 'conflict' ? 'is-conflict' : 'is-related');
+        const noteElement = document.createElement('span');
+        noteElement.className = 'config-change-note';
+        noteElement.textContent = note.text;
+        item.appendChild(noteElement);
+    }
+    return item;
+}
+
+function changeSection(title: string, items: HTMLLIElement[]): HTMLElement {
+    const section = document.createElement('section');
+    const heading = document.createElement('h4');
+    heading.textContent = `${title} (${items.length})`;
+    const list = document.createElement('ul');
+    list.className = 'config-change-list';
+    list.append(...items);
+    section.append(heading, list);
+    return section;
+}
+
+type ChangesDialogOptions = {
+    // The save was made from this dialog and met still more changes.
+    again?: boolean;
+    // The changes listed before the list was updated, so the others can be marked as new.
+    previousKeys?: Set<string>;
+};
+
+function openChangesDialog(mode: ChangesDialogMode, options: ChangesDialogOptions = {}) {
+    const dialog = document.getElementById('config-changes-dialog') as HTMLDialogElement | null;
+    if (!dialog) return;
+    renderChangesDialog(mode, options);
+    if (!dialog.open) dialog.showModal();
+    // Start on the list rather than a button, so Enter cannot act on changes before they are read.
+    document.getElementById('config-changes-body')?.focus();
+}
+
+function renderChangesDialog(mode: ChangesDialogMode, options: ChangesDialogOptions = {}) {
+    const title = document.getElementById('config-changes-title');
+    const body = document.getElementById('config-changes-body');
+    const actions = document.getElementById('config-changes-actions');
+    const dialog = document.getElementById('config-changes-dialog') as HTMLDialogElement | null;
+    if (!title || !body || !actions || !dialog) return;
+
+    const stored = mode === 'notice' ? null : pendingStored;
+    if (mode === 'notice' ? !noticeFrom : !stored) return;
+
+    const elsewhere = stored ? configChanges(baseValues, stored.values) : configChanges(noticeFrom, baseValues);
+    const edits = stored ? unsavedChanges() : [];
+    shownChanges = { mode, stored, revision: stored ? stored.revision : baseRevision, keys: new Set(elsewhere.map(changeKey)) };
+
+    const intro = document.createElement('p');
+    switch (mode) {
+        case 'save':
+            title.textContent = options.again
+                ? t('ui.config.changes.saveAgainTitle', 'Not saved: more changes elsewhere')
+                : t('ui.config.changes.saveTitle', 'Not saved: configuration changed elsewhere');
+            intro.textContent = options.again
+                ? t('ui.config.changes.saveAgainIntro',
+                    'More changes were saved elsewhere while you were reviewing, so nothing was saved. Only the changes you have not seen yet are listed. Your edits already include the changes you kept.')
+                : t('ui.config.changes.saveIntro',
+                    'The stored configuration changed after this page loaded it, so nothing was saved. Settings are also saved by G-code such as M500 and by other browser tabs. Keep your edits on top of the changes below, or discard your edits.');
+            break;
+        case 'review':
+            title.textContent = t('ui.config.changes.reviewTitle', 'Configuration changed elsewhere');
+            intro.textContent = t('ui.config.changes.reviewIntro',
+                'The stored configuration changed after this page loaded it, and your edits are not saved. Keep your edits on top of the changes below, or discard your edits.');
+            break;
+        case 'notice':
+            title.textContent = t('ui.config.changes.noticeTitle', 'Configuration changed elsewhere');
+            intro.textContent = t('ui.config.changes.noticeIntro',
+                'The stored configuration changed after this page loaded it. You had no unsaved edits, so this page now shows these values.');
+            break;
+    }
+
+    const editedModules = new Set(edits.map(edit => edit.path[1]));
+    let overlapCount = 0;
+    const elsewhereItems = elsewhere.map(change => {
+        const isNew = !!options.previousKeys && !options.previousKeys.has(changeKey(change));
+        const overlapping = edits.filter(edit => pathsOverlap(edit.path, change.path));
+        if (overlapping.length > 0) {
+            if (overlapping.every(edit => sameJSON(edit.after, valueAt(stored!.values, edit.path)))) {
+                return changeListItem(change, { kind: 'related', text: t('ui.config.changes.sameEdit', 'You made the same edit.') }, isNew);
+            }
+            overlapCount++;
+            return changeListItem(change, {
+                kind: 'conflict',
+                text: t('ui.config.changes.conflict', 'You also edited this, to {value}. Keeping your edits replaces the stored value.', {
+                    value: overlapping.map(edit => formatConfigValue(edit.path, edit.after)).join(', ')
+                })
+            }, isNew);
+        }
+        if (change.path[0] === 'Config' && editedModules.has(change.path[1])) {
+            return changeListItem(change, {
+                kind: 'related',
+                text: t('ui.config.changes.related', 'You edited other settings in {module}. Check that they still fit with this change.', {
+                    module: translateConfigLabel(change.path.slice(0, 2), change.path[1])
+                })
+            }, isNew);
+        }
+        return changeListItem(change, null, isNew);
+    });
+    const editItems = edits.map(edit => {
+        const overlapping = elsewhere.some(change => pathsOverlap(edit.path, change.path));
+        const storedValue = valueAt(stored!.values, edit.path);
+        return changeListItem(edit, overlapping && !sameJSON(edit.after, storedValue)
+            ? { kind: 'conflict', text: t('ui.config.changes.conflictEdit', 'Also changed elsewhere, to {value}.', { value: formatConfigValue(edit.path, storedValue) }) }
+            : null);
+    });
+
+    body.replaceChildren(intro);
+    if (elsewhere.length > 0 && edits.length > 0) {
+        // Settings that differ can still depend on each other in ways the schema does not show, so always warn.
+        const warning = document.createElement('div');
+        warning.className = 'config-changes-warning';
+        const overlap = document.createElement('p');
+        overlap.textContent = overlapCount > 0
+            ? t('ui.config.changes.overlapCount', 'Settings edited both here and elsewhere: {count}. Keeping your edits replaces their stored values.', { count: overlapCount })
+            : t('ui.config.changes.noOverlap', 'None of these settings were also edited here.');
+        const interaction = document.createElement('p');
+        interaction.textContent = t('ui.config.changes.interaction',
+            "Changes to different settings can still conflict. Check that your edits still make sense with these changes. Keep my edits puts them on top of these changes in the form without saving, so you can check the result first.");
+        warning.append(overlap, interaction);
+        body.appendChild(warning);
+    }
+    body.appendChild(changeSection(t('ui.config.changes.elsewhere', 'Changed elsewhere'), elsewhereItems));
+    if (stored) body.appendChild(changeSection(t('ui.config.changes.yourEdits', 'Your unsaved edits'), editItems));
+    body.scrollTop = 0;
+
+    const button = (label: string, className: string, onClick: () => void) => {
+        const element = document.createElement('button');
+        element.type = 'button';
+        element.className = `btn ${className}`;
+        element.textContent = label;
+        element.addEventListener('click', onClick);
+        return element;
+    };
+    const close = () => dialog.close();
+    if (!stored) {
+        actions.replaceChildren(button(t('ui.config.changes.close', 'Close'), 'btn-primary', () => {
+            // Keep the notice if newer changes arrived that this list did not show.
+            if ((latestStored?.revision ?? baseRevision) === shownChanges?.revision) noticeFrom = null;
+            close();
+        }));
+    } else {
+        const discard = button(t('ui.config.changes.discard', 'Discard my edits'), 'btn-danger', () => {
+            showStoredConfig(stored);
+            close();
+            catchUpAfterReview(stored, true);
+        });
+        const keep = button(t('ui.config.changes.keep', 'Keep my edits'), mode === 'save' ? 'btn-secondary' : 'btn-primary', () => {
+            keepEditsOn(stored);
+            close();
+            catchUpAfterReview(stored, true);
+        });
+        const cancel = button(mode === 'save' ? t('ui.config.changes.cancel', 'Cancel') : t('ui.config.changes.close', 'Close'), 'btn-secondary', close);
+        if (mode === 'save') {
+            actions.replaceChildren(cancel, discard, keep, button(t('ui.config.changes.keepAndSave', 'Keep my edits and save'), 'btn-primary', () => {
+                keepEditsOn(stored);
+                close();
+                catchUpAfterReview(stored, false);
+                // Based on the revision just reviewed, so the server refuses it if anything newer was stored.
+                void saveConfiguration({ afterReview: true });
+            }));
+        } else {
+            actions.replaceChildren(cancel, discard, keep);
+        }
+    }
+    updateStoredChangesUI();
+}
+
+function setSaveBusy(busy: boolean) {
+    const button = document.getElementById('btn-save-config') as HTMLButtonElement | null;
+    if (!button) return;
+    button.disabled = busy;
+    button.setAttribute('aria-busy', String(busy));
+}
+
+async function saveConfiguration(options: { afterReview?: boolean } = {}) {
+    if (!currentSchema || !baseValues || saving) return;
 
     const container = document.getElementById('config-form');
-    let validationFailed = false;
     if (container) {
         const inputs = Array.from(container.querySelectorAll('input, select')) as (HTMLInputElement | HTMLSelectElement)[];
         for (const input of inputs) {
@@ -1014,84 +1509,65 @@ async function saveConfiguration() {
                 revealConfigElement(input.closest<HTMLElement>('.form-group') || input);
                 input.focus();
                 input.reportValidity();
-                validationFailed = true;
-                break;
+                alert(t('ui.config.validationFailed', 'Validation failed. Please correct the highlighted fields.'));
+                return;
             }
-        }
-        if (validationFailed) {
-            alert(t('ui.config.validationFailed', 'Validation failed. Please correct the highlighted fields.'));
-            return;
         }
     }
 
-    const patchPayload = scrapeFormValues();
-    if (!patchPayload) return;
-
-    if (container) {
-        const variants = Array.from(container.querySelectorAll('.config-input-variant')) as HTMLSelectElement[];
-        variants.forEach(el => {
-            if (!el.dataset.path) return;
-            const path = JSON.parse(el.dataset.path);
-            const prefix = path.slice(0, -1);
-            let cur = patchPayload;
-            for (const segment of prefix) {
-                if (!cur) break;
-                cur = cur[segment];
+    saving = true;
+    setSaveBusy(true);
+    try {
+        await runConfigRequest(async () => {
+            // Read the form inside the request queue, so the base it is compared with cannot change before sending.
+            const working = workingValues();
+            const patches = working ? modulePatches(baseValues, working) : {};
+            if (!working || Object.keys(patches).length === 0) {
+                alert(t('ui.config.noChanges', 'There are no unsaved edits.'));
+                return;
             }
-            if (cur && cur.Children) {
-                const selected = el.value;
-                for (const key of Object.keys(cur.Children)) {
-                    if (key !== selected) {
-                        delete cur.Children[key];
-                    }
-                }
+
+            const sentRevision = baseRevision;
+            const response = await patchConfigValues({
+                'Prunt config version': baseValues['Prunt config version'],
+                'Base revision': sentRevision,
+                Config: patches
+            });
+
+            if (response.Conflict) {
+                latestStored = { values: response.Values, revision: response.Revision, errors: null };
+                pendingStored = latestStored;
+                noticeFrom = null;
+                openChangesDialog('save', { again: options.afterReview });
+                return;
+            }
+
+            // The response is the stored configuration immediately after this patch, so it becomes the base. Edits
+            // made while the request was in flight stay in the form and remain unsaved.
+            const applied = response.Revision !== sentRevision;
+            latestStored = { values: response.Values, revision: response.Revision, errors: response.Errors ?? [] };
+            baseValues = response.Values;
+            baseRevision = response.Revision;
+            pendingStored = null;
+            noticeFrom = null;
+            currentValues = working;
+            showErrors(response.Errors ?? []);
+            updateStoredChangesUI();
+
+            if (!applied) {
+                alert(t('ui.config.notSaved', 'The configuration was not saved. Please correct the highlighted errors.'));
+            } else if (currentErrors.length > 0) {
+                alert(t('ui.config.savedWithErrors', 'Saved with errors. Please check the notifications.'));
+            } else {
+                alert(t('ui.config.saved', 'Configuration saved successfully!'));
             }
         });
-    }
-
-    // Clear previous errors
-    document.querySelectorAll('.error-message').forEach((el: any) => {
-        el.classList.add('d-none');
-        el.classList.remove('d-block');
-        el.innerText = '';
-        el.classList.remove('server-error');
-    });
-    const globalErrors = document.getElementById('config-global-errors');
-    if (globalErrors) {
-        globalErrors.classList.remove('active', 'server-error');
-        globalErrors.innerHTML = '';
-    }
-
-    try {
-        const response = await patchConfigValues(patchPayload);
-        if (response.Values) {
-            currentValues = response.Values;
-            populateFormValues(currentValues);
-        }
-
-        if (response.Errors && response.Errors.length > 0) {
-            currentErrors = response.Errors;
-            handleErrors(response.Errors);
-            alert(t('ui.config.savedWithErrors', 'Saved with errors. Please check the notifications.'));
-        } else {
-            alert(t('ui.config.saved', 'Configuration saved successfully!'));
-            // Clear server errors from DOM since the save successfully passed
-            currentErrors = [];
-            handleErrors(currentErrors);
-
-            // Refresh with accepted values
-            const res = await fetchConfigValues();
-            currentValues = res.Values || res;
-            currentErrors = res.Errors || [];
-            populateFormValues(currentValues);
-            if (currentErrors.length > 0) handleErrors(currentErrors);
-        }
-
-        // Let the realtime frontend validation run again so frontend error borders are restored and checked
-        if (container) container.dispatchEvent(new Event('input', { bubbles: true }));
     } catch (e) {
         console.error("Save failed", e);
         alert(t('ui.config.saveFailed', 'Failed to save configuration. Network error.'));
+    } finally {
+        saving = false;
+        setSaveBusy(false);
     }
 }
 

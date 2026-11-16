@@ -618,6 +618,13 @@ input:focus-visible + .slider { outline: 2px solid var(--focus); outline-offset:
 .global-errors.server-error { border: var(--stroke-frame) dashed var(--caution); background: var(--caution-soft); }
 .global-errors.active { display: block; }
 
+.config-stored-changes {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-6);
+  padding: var(--space-3) var(--space-4); border: var(--stroke-frame) solid var(--caution); background: var(--caution-soft);
+}
+.config-stored-changes.is-notice { border-color: var(--ink); background: var(--ref-soft); }
+.config-stored-changes p { flex: 1 1 280px; margin: 0; line-height: 1.5; }
+
 /* ---------- G-code explorer ---------- */
 
 .gcode-group-control { display: flex; align-items: center; gap: var(--space-3); cursor: pointer; }
@@ -673,6 +680,38 @@ input:focus-visible + .slider { outline: 2px solid var(--focus); outline-offset:
 .modal-header h3 { margin: 0; font-size: 24px; line-height: 1.1; letter-spacing: .02em; }
 .firmware-update-modal { max-width: 520px; }
 .firmware-update-body { min-height: 0; overflow-y: auto; padding: var(--space-6); line-height: 1.6; }
+.config-changes-modal { max-width: 720px; }
+.config-changes-body { min-height: 0; overflow-y: auto; padding: var(--space-6); line-height: 1.5; }
+.config-changes-body > p { margin: 0 0 var(--space-4); }
+.config-changes-body h4 {
+  margin: var(--space-6) 0 var(--space-2); font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--ink-muted);
+}
+.config-change-list { margin: 0; padding: 0; list-style: none; border-top: var(--stroke-frame) solid var(--ink); }
+.config-change { display: grid; gap: 2px; padding: var(--space-2) 0; border-bottom: var(--stroke-hair) solid var(--construction); }
+.config-change.is-conflict { padding-left: var(--space-3); border-left: var(--stroke-frame) solid var(--caution); }
+.config-change.is-related { padding-left: var(--space-3); border-left: var(--stroke-frame) dashed var(--caution); }
+.config-change-tag {
+  display: inline-block; margin-right: var(--space-2); padding: 0 6px; background: var(--ink); color: var(--paper);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+}
+.config-changes-body:focus { outline: none; }
+.config-changes-warning {
+  margin: 0 0 var(--space-4); padding: var(--space-3) var(--space-4); border: var(--stroke-frame) solid var(--caution);
+  background: var(--caution-soft);
+}
+.config-changes-warning p { margin: 0; }
+.config-changes-warning p + p { margin-top: var(--space-2); }
+.config-changes-update {
+  display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-6); border-top: var(--stroke-frame) solid var(--caution); background: var(--caution-soft);
+}
+.config-changes-update[hidden] { display: none; }
+.config-changes-update p { flex: 1 1 260px; margin: 0; line-height: 1.5; }
+.config-change-setting { font-weight: 600; overflow-wrap: anywhere; }
+.config-change-values { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; }
+.config-change-before { color: var(--ink-muted); text-decoration: line-through; }
+.config-change-note { font-size: 13px; color: var(--caution); }
 .modal-footer { flex-shrink: 0; padding: var(--space-3) var(--space-6); border-top: var(--stroke-hair) solid var(--construction); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 
 .theme-select { font-size: 14px; }

@@ -35,6 +35,20 @@
         </div>
     </dialog>
 
+    <dialog id="config-changes-dialog" class="modal config-changes-modal" aria-labelledby="config-changes-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="config-changes-title">Configuration changed elsewhere</h3>
+            </div>
+            <div id="config-changes-body" class="config-changes-body" tabindex="-1"></div>
+            <div id="config-changes-update" class="config-changes-update" role="alert" hidden>
+                <p id="config-changes-update-message"></p>
+                <button type="button" id="btn-config-changes-update" class="btn btn-sm btn-secondary">Show the new changes</button>
+            </div>
+            <div id="config-changes-actions" class="modal-footer"></div>
+        </div>
+    </dialog>
+
     <header class="topbar">
         <div class="brand-controls">
             <button type="button" id="btn-toggle-navigation" class="btn btn-secondary navigation-toggle" aria-expanded="false" aria-controls="primary-navigation">
@@ -138,6 +152,11 @@
                         </label>
                         <button id="btn-save-config" class="btn btn-primary" data-i18n="ui.config.saveChanges">Save Changes</button>
                     </div>
+                </div>
+                <div id="config-stored-changes" class="config-stored-changes" role="status" hidden>
+                    <p id="config-stored-changes-message"></p>
+                    <button type="button" id="btn-config-review-changes" class="btn btn-sm btn-secondary">Review changes</button>
+                    <button type="button" id="btn-config-dismiss-changes" class="btn btn-sm btn-secondary">Dismiss</button>
                 </div>
                 <!-- Schema errors holder -->
                 <div id="config-global-errors" class="global-errors"></div>

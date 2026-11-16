@@ -234,25 +234,25 @@ package body Prunt.Config.Test is
          Output : Virtual_String;
       begin
 
-         File.Internal.Get.Apply_Untrusted_Patch ("{", Output, Errors);
+         File.Apply_Untrusted_Patch ("{", Output, Errors);
          T.Assert (not Errors.Is_Empty, "Should report invalid JSON");
          Errors.Clear;
 
-         File.Internal.Get.Apply_Untrusted_Patch ("{""Config"": {""Unknown"": {}}}", Output, Errors);
+         File.Apply_Untrusted_Patch ("{""Config"": {""Unknown"": {}}}", Output, Errors);
          T.Assert (not Errors.Is_Empty, "Should report unknown module");
          Errors.Clear;
 
-         File.Internal.Get.Apply_Untrusted_Patch
+         File.Apply_Untrusted_Patch
            ("{""Config"": {""M"": {""Version"": 2, ""Config"": {}}}}", Output, Errors);
          T.Assert (not Errors.Is_Empty, "Should report wrong version");
          Errors.Clear;
 
-         File.Internal.Get.Apply_Untrusted_Patch
+         File.Apply_Untrusted_Patch
            ("{""Config"": {""M"": {""Version"": 1, ""Config"": {}, ""Extra"": 1}}}", Output, Errors);
          T.Assert (not Errors.Is_Empty, "Should report extra field in module wrapper");
          Errors.Clear;
 
-         File.Internal.Get.Apply_Untrusted_Patch
+         File.Apply_Untrusted_Patch
            ("{""Config"": {""M"": {""Version"": 1, ""Config"": {""i"": 5}}}, ""Prunt config version"": 1}",
             Output,
             Errors);
@@ -1883,7 +1883,7 @@ package body Prunt.Config.Test is
 
          T.Assert (Data.Get ([1 => "b"]) = False);
 
-         File.Internal.Get.Apply_Untrusted_Patch
+         File.Apply_Untrusted_Patch
            ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": {""b"": true}}}}",
             Output,
             Errors);
@@ -1910,7 +1910,7 @@ package body Prunt.Config.Test is
 
       Output : Virtual_String;
 
-      File.Internal.Get.Apply_Untrusted_Patch
+      File.Apply_Untrusted_Patch
         ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 2, ""Config"": {}}}}", Output, Errors);
       T.Assert (not Errors.Is_Empty, "Should report error for wrong version");
    end Test_Patch_Wrong_Version;
@@ -4737,12 +4737,113 @@ package body Prunt.Config.Test is
       T.Assert (Reopened.Last_Save = 0, "Snapshot must not retain the source writer lease.");
    end Test_Stored_Snapshot_Ownership;
 
+   procedure Test_Patch_Base_Revision (T : in out Trendy_Test.Operation'Class) is
+      use type Config_Data_Paths.Vector;
+      use type Ada.Containers.Count_Type;
+
+      Filename : constant String := Next_Test_Filename;
+
+      function Patch_I (Value : Natural; Base_Revision : Virtual_String) return Virtual_String
+      is ("{""Prunt config version"": 1, ""Base revision"": """
+          & Base_Revision
+          & """, ""Config"": {""M"": {""Version"": 1, ""Config"": {""i"": "
+          & Conversions.To_Virtual_String (Ada.Strings.Fixed.Trim (Value'Image, Ada.Strings.Both))
+          & "}}}}");
+
+      function Stored_I (Stored : Virtual_String) return Long_Long_Integer
+      is (Read (Stored).Get ("Config").Get ("M").Get ("Config").Get ("i").Get);
+
+      Loaded_Revision : Virtual_String;
+      Revision        : Virtual_String;
+   begin
+      T.Register;
+
+      declare
+         File     : constant Config_File := Create (Filename, Persistence_Schemas);
+         Data     : Config_Data := File.Get_Data ("M");
+         Result   : Virtual_String;
+         Errors   : Config_Error_Vectors.Vector;
+         Conflict : Boolean;
+      begin
+         File.Apply_Untrusted_Patch ("{}", Result, Loaded_Revision, Errors, Conflict);
+         T.Assert (Errors.Is_Empty and then not Conflict, "Fetching the stored config must succeed.");
+         T.Assert (Result = File.Get_Data_String, "Result must be the stored config.");
+
+         File.Apply_Untrusted_Patch
+           ("{""Base revision"": """ & Loaded_Revision & """}", Result, Revision, Errors, Conflict);
+         T.Assert (Errors.Is_Empty and then not Conflict, "Checking the current revision must succeed.");
+         T.Assert (Revision = Loaded_Revision, "Checking a revision must not change it.");
+
+         --  A module saves after the client loaded the stored config, as M500 does.
+         Data.Set ([1 => "i"], Long_Long_Integer'(3));
+         Data.Save;
+
+         declare
+            Saves_Before_Patch : constant Save_Counter := File.Last_Save;
+         begin
+            File.Apply_Untrusted_Patch (Patch_I (5, Loaded_Revision), Result, Revision, Errors, Conflict);
+            T.Assert (Conflict, "A patch based on an older revision must conflict.");
+            T.Assert
+              (Errors.Length = 1 and then Errors.First_Element.Path = [1 => "Base revision"],
+               "A conflict must be reported at the base revision.");
+            T.Assert (File.Last_Save = Saves_Before_Patch, "A conflicting patch must not write the file.");
+            T.Assert (Stored_I (Result) = 3, "A conflicting patch must not overwrite the module's save.");
+            T.Assert (Result = File.Get_Data_String, "Result must be the stored config after a conflict.");
+            T.Assert (Revision /= Loaded_Revision, "A module save must change the revision.");
+
+            File.Apply_Untrusted_Patch
+              ("{""Base revision"": """ & Loaded_Revision & """}", Result, Revision, Errors, Conflict);
+            T.Assert (Conflict, "Checking an older revision must conflict.");
+            T.Assert (File.Last_Save = Saves_Before_Patch, "Checking a revision must not write the file.");
+         end;
+
+         Loaded_Revision := Revision;
+         File.Apply_Untrusted_Patch (Patch_I (5, Loaded_Revision), Result, Revision, Errors, Conflict);
+         T.Assert (Errors.Is_Empty and then not Conflict, "A patch based on the current revision must apply.");
+         T.Assert (Stored_I (Result) = 5, "The returned config must include the patch.");
+         T.Assert (Revision /= Loaded_Revision, "Applying a patch must change the revision.");
+         Loaded_Revision := Revision;
+
+         File.Apply_Untrusted_Patch (Patch_I (6, Revision & "0"), Result, Revision, Errors, Conflict);
+         T.Assert (Conflict and then Stored_I (Result) = 5, "An unknown revision must conflict.");
+
+         File.Apply_Untrusted_Patch
+           ("{""Base revision"": 1, ""Prunt config version"": 1, ""Config"": {}}", Result, Revision, Errors, Conflict);
+         T.Assert
+           (not Conflict and then Errors.Length = 1 and then Errors.First_Element.Path = [1 => "Base revision"],
+            "A base revision that is not a string must be an error, not a conflict.");
+         T.Assert (Revision = Loaded_Revision, "A rejected patch must not change the revision.");
+
+         File.Apply_Untrusted_Patch
+           ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": {""i"": 7}}}}",
+            Result,
+            Revision,
+            Errors,
+            Conflict);
+         T.Assert
+           (Errors.Is_Empty and then not Conflict and then Stored_I (Result) = 7,
+            "A patch without a base revision must still apply.");
+         Loaded_Revision := Revision;
+      end;
+
+      declare
+         Reopened : constant Config_File := Create (Filename, Persistence_Schemas);
+         Result   : Virtual_String;
+         Errors   : Config_Error_Vectors.Vector;
+         Conflict : Boolean;
+      begin
+         Reopened.Apply_Untrusted_Patch ("{}", Result, Revision, Errors, Conflict);
+         T.Assert (Revision = Loaded_Revision, "The revision must survive a restart while the config is unchanged.");
+      end;
+   end Test_Patch_Base_Revision;
+
    function All_Tests return Trendy_Test.Test_Group is
    begin
       return
         [Test_Stored_Snapshot_Isolation'Access,
          Test_Stored_Snapshot_Overrides'Access,
          Test_Stored_Snapshot_Ownership'Access,
+         Test_Patch_Base_Revision'Access,
          Test_Config_Initial_Write_Interruptions'Access,
          Test_Config_Failed_Patch_And_Validation'Access,
          Test_Migration_Copy_Rejected'Access,
