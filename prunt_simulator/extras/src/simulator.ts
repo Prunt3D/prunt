@@ -38,6 +38,7 @@ const derivativeUnits: Record<DerivativeName, string> = {
 const axisColors = ["#116b5f", "#7b4ca0", "#c2701e", "#3869b1"];
 const commandForm = document.querySelector<HTMLFormElement>("#command-form")!;
 const commandInput = document.querySelector<HTMLInputElement>("#command-input")!;
+const commandStatus = document.querySelector<HTMLElement>("#command-status")!;
 const sampleSummary = document.querySelector<HTMLElement>("#sample-summary")!;
 const xySummary = document.querySelector<HTMLElement>("#xy-summary")!;
 const xyPlotElement = document.querySelector<HTMLElement>("#xy-plot")!;
@@ -328,9 +329,18 @@ async function pollSamples() {
     }
   } catch (error) {
     sampleSummary.textContent = error instanceof Error ? error.message : String(error);
+    // Without this, a good reply with the same samples as before the error would leave the error showing.
+    lastSnapshotKey = "";
   }
 }
 
+function showCommandStatus(text: string, isError: boolean) {
+  commandStatus.textContent = text;
+  commandStatus.classList.toggle("error", isError);
+}
+
+// The reply to a submit goes in its own line rather than the sample summary, which every poll that sees new samples
+// rewrites. A command is rejected while a file is running, which is exactly when the samples keep changing.
 commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const command = commandInput.value.trim();
@@ -340,13 +350,24 @@ commandForm.addEventListener("submit", async (event) => {
 
   const submitButton = commandForm.querySelector<HTMLButtonElement>("button")!;
   submitButton.disabled = true;
+  showCommandStatus(`Sending ${command}`, false);
   try {
     const response = await fetch("/run-command", { method: "POST", body: command });
+    const text = (await response.text()).trim();
     if (!response.ok) {
-      throw new Error(await response.text());
+      showCommandStatus(`Rejected ${command}: ${text || `${response.status} ${response.statusText}`}`, true);
+      return;
     }
+
+    let id: string | undefined;
+    try {
+      id = (JSON.parse(text) as { ID?: string }).ID;
+    } catch {
+      id = undefined;
+    }
+    showCommandStatus(id === undefined ? `Accepted ${command}` : `Accepted ${command} as command ${id}`, false);
   } catch (error) {
-    sampleSummary.textContent = error instanceof Error ? error.message : String(error);
+    showCommandStatus(`Could not send ${command}: ${error instanceof Error ? error.message : String(error)}`, true);
   } finally {
     submitButton.disabled = false;
   }
