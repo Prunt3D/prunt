@@ -27,8 +27,8 @@ project Prunt_Simulator is
             "-fstack-check", --  Enable stack overflow checks
             "-gnateF",       --  Check for all floating point overflow
             "-gnata",        --  Enable assertions and contracts
-            "-gnatVaIM",     --  Enable all validity checks except for parameters
-            "-gnateV",       --  Enable validity checks of default parameters
+            "-gnatVaIM",     --  Enable all validity checks except for parameters. -gnateV is left out because it
+                             --  checks them anyway, as contracts on every subprogram.
             "-gnato11",      --  Strict overflow checking
             "-gnatwe");      --  Warnings as errors
 
@@ -40,8 +40,8 @@ project Prunt_Simulator is
             "-fstack-check", --  Enable stack overflow checks
             "-gnateF",       --  Check for all floating point overflow
             "-gnata",        --  Enable assertions and contracts
-            "-gnatVaIM",     --  Enable all validity checks except for parameters
-            "-gnateV",       --  Enable validity checks of default parameters
+            "-gnatVaIM",     --  Enable all validity checks except for parameters. -gnateV is left out because it
+                             --  checks them anyway, as contracts on every subprogram.
             "-gnato11");     --  Strict overflow checking
    end case;
 
