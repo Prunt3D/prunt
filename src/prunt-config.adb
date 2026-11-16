@@ -265,6 +265,17 @@ package body Prunt.Config is
          end Validate;
 
          procedure Validate (Property : Config_Property_Parameters_Float_Ratio) is
+            function Ratio_In_Range (Numerator, Denominator : Dimensionless) return Boolean;
+            --  Whether Numerator / Denominator lies in Property.Min .. Property.Max. Denominator must be nonzero.
+
+            function Ratio_In_Range (Numerator, Denominator : Dimensionless) return Boolean is
+            begin
+               return Numerator / Denominator in Property.Min .. Property.Max;
+            exception
+               when Constraint_Error =>
+                  --  The quotient overflowed, so its magnitude is beyond every Dimensionless bound.
+                  return False;
+            end Ratio_In_Range;
          begin
             if Value.Kind not in JSON_Object_Type then
                Report (Path, "Value type should be object.");
@@ -289,7 +300,7 @@ package body Prunt.Config is
                   end if;
                elsif Value.Get ("Denominator") = Dimensionless'(0.0) then
                   Report (Path & "Denominator", "Denominator must not be zero.");
-               elsif Value.Get ("Numerator") / Value.Get ("Denominator") not in Property.Min .. Property.Max then
+               elsif not Ratio_In_Range (Value.Get ("Numerator"), Value.Get ("Denominator")) then
                   Report
                     (Path,
                      Conversions.To_Virtual_String

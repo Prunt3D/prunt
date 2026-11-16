@@ -281,6 +281,45 @@ package body Prunt.Config.Test is
       T.Assert (Errors.Is_Empty, "Should not report error");
    end Test_Apply_Untrusted_Patch_Empty;
 
+   procedure Test_Apply_Untrusted_Patch_Float_Ratio_Overflow (T : in out Trendy_Test.Operation'Class) is
+      use type Config_Data_Paths.Vector;
+   begin
+      T.Register;
+
+      Schemas : constant Config_Schema_Maps.Map :=
+        ["M" =>
+           Versioned_Config_Schema'
+             (Version             => 1,
+              Module_Instance_Tag => <>,
+              Top_Level_Items     =>
+                ["r" =>
+                   Config_Property_Parameters_Float_Ratio'
+                     (Category     => <>,
+                      Experimental => False,
+                      Present_When => P,
+                      Description  => "",
+                      Min          => 0.0,
+                      Max          => 2.0,
+                      Default      => (Numerator => 1.0, Denominator => 2.0))])];
+      File    : constant Config_File := Create (Next_Test_Filename, Schemas);
+      Before  : constant Virtual_String := File.Get_Data_String;
+      Output  : Virtual_String;
+      Errors  : Config_Error_Vectors.Vector;
+
+      --  Both values are valid numbers, but their quotient overflows Dimensionless.
+      File.Apply_Untrusted_Patch
+        ("{""Prunt config version"": 1, ""Config"": {""M"": {""Version"": 1, ""Config"": "
+         & "{""r"": {""Numerator"": 1e308, ""Denominator"": 1e-308}}}}}",
+         Output,
+         Errors);
+      T.Assert (Natural (Errors.Length) = 1, "Overflowing ratio should be reported as one error.");
+      T.Assert
+        (Errors.First_Element.Path = Config_Data_Paths.Vector'(["Config", "M", "Config", "r"]),
+         "Error should be reported at the ratio.");
+      T.Assert (Output = Before, "Rejected patch should return the unchanged stored config.");
+      T.Assert (File.Get_Data_String = Before, "Rejected patch must not change the stored config.");
+   end Test_Apply_Untrusted_Patch_Float_Ratio_Overflow;
+
    procedure Test_Apply_Untrusted_Patch_Invalid_Module (T : in out Trendy_Test.Operation'Class) is
    begin
       T.Register;
@@ -2658,6 +2697,22 @@ package body Prunt.Config.Test is
            ("{""fr"": {""Numerator"": -3, ""Denominator"": 1}}", Schema, Check_For_Missing_Fields => True),
          "Float_Ratio out of range.");
       T.Assert
+        (Reports_Error_Module_Config_To_Schema
+           ("{""fr"": {""Numerator"": 1e308, ""Denominator"": 1e-308}}", Schema, Check_For_Missing_Fields => True),
+         "Float_Ratio with overflowing quotient out of range.");
+      T.Assert
+        (Reports_Error_Module_Config_To_Schema
+           ("{""fr"": {""Numerator"": -1e308, ""Denominator"": 1e-308}}", Schema, Check_For_Missing_Fields => True),
+         "Float_Ratio with negative overflowing quotient out of range.");
+      T.Assert
+        (Reports_Error_Module_Config_To_Schema
+           ("{""fr"": {""Numerator"": 1e308, ""Denominator"": -1e-308}}", Schema, Check_For_Missing_Fields => True),
+         "Float_Ratio with negative overflowing quotient out of range.");
+      T.Assert
+        (not Reports_Error_Module_Config_To_Schema
+               ("{""fr"": {""Numerator"": 1e-308, ""Denominator"": 1e308}}", Schema, Check_For_Missing_Fields => True),
+         "Float_Ratio with underflowing quotient should not cause error.");
+      T.Assert
         (not Reports_Error_Module_Config_To_Schema
                ("{""fr"": {""Numerator"": 1, ""Denominator"": 1}}", Schema, Check_For_Missing_Fields => True),
          "Valid object should not cause error.");
@@ -4852,6 +4907,7 @@ package body Prunt.Config.Test is
          Test_Reset_Discards_Deltas'Access,
          Test_Apply_Patch_Errors'Access,
          Test_Apply_Untrusted_Patch_Empty'Access,
+         Test_Apply_Untrusted_Patch_Float_Ratio_Overflow'Access,
          Test_Apply_Untrusted_Patch_Invalid_Module'Access,
          Test_Apply_Untrusted_Patch_Invalid_Module_Structure'Access,
          Test_Apply_Untrusted_Patch_No_Config'Access,
