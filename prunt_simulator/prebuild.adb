@@ -135,6 +135,11 @@ procedure Prebuild is
       Search    : Search_Type;
       Ent       : Directory_Entry_Type;
    begin
+      --  Everything in the dist directory is regenerated on every run and all of it is embedded, so start from an empty
+      --  directory to avoid embedding files whose sources have been removed or renamed.
+      if Exists (Dist_Base) then
+         Delete_Tree (Dist_Base);
+      end if;
       Create_Path (Dist_Base);
       Start_Search
         (Search => Search, Directory => Src_Base, Pattern => "", Filter => [Ordinary_File => True, others => False]);
