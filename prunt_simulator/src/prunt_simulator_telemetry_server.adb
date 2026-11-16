@@ -350,12 +350,25 @@ package body Prunt_Simulator_Telemetry_Server is
       end if;
 
       declare
-         Port_Image : constant String := Trim (Ada.Environment_Variables.Value (Environment_Name), Both);
-         Port       : constant Port_Type := Port_Type'Value (Port_Image);
+         Port_Image    : constant String := Trim (Ada.Environment_Variables.Value (Environment_Name), Both);
+         Range_Message : constant String :=
+           Environment_Name & " must be an integer in the range 1 .. 65535, not """ & Port_Image & """.";
+         Port_Value    : Integer;
+         Port          : Port_Type;
       begin
-         if Port = 0 then
-            raise Constraint_Error with Environment_Name & " must be in the range 1 .. 65535.";
+         begin
+            Port_Value := Integer'Value (Port_Image);
+         exception
+            when Constraint_Error =>
+               raise Constraint_Error with Range_Message;
+         end;
+
+         --  This must be an explicit test. Release builds use -gnatp, which suppresses the range check on a conversion
+         --  to Port_Type, and GNAT.Sockets would then silently bind to the low 16 bits of an out-of-range value.
+         if Port_Value not in 1 .. 65_535 then
+            raise Constraint_Error with Range_Message;
          end if;
+         Port := Port_Type (Port_Value);
 
          Create_Socket (Listener, Family_Inet, Socket_Stream);
          Set_Socket_Option (Listener, Socket_Level, (Name => Reuse_Address, Enabled => True));
